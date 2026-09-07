@@ -1,7 +1,6 @@
 /* Casino settings, prize text/costs and coin-purchase offers from CASINO.res.
  * Original RES_* symbols: slus-20469-412d448de315 / ov11:0x00a00998..0x00a00a58.
- * See config/res-context.json for binary hashes and reports/readability-semantics.md
- * for asset/consumer evidence. The historical expansion of RES is not attested.
+ * See reports/readability-semantics.md for asset/consumer evidence.
  */
 #include "xeno/casino/res.h"
 

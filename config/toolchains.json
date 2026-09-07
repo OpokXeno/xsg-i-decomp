@@ -54,7 +54,7 @@
     },
     {
       "path": "tools/inventory.py",
-      "sha256": "ab0beddf8bd4f0e75dbc0a7c4bc9d957e0ee8f4cc69c23ed02cb043314452d05"
+      "sha256": "df72a86b5560ad3935851d01f258991ec786d30133e557656dfd8c2cbd46ef35"
     }
   ],
   "host_libraries": [

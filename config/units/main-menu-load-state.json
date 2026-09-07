@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "revision": "slus-20469-412d448de315",
+  "unit": "main",
+  "binaries": {
+    "main": {
+      "path": "game/extracted-iso/SLUS_204.69",
+      "sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2"
+    }
+  },
+  "source": {
+    "path": "src/menu/load_state.c",
+    "staged_path": "src/menu/load_state.c",
+    "sha256": "5d9d72400c9758b1fc06e6a61cbd6a1b29b02ab9fa1878a9ef1a3a8475973e2d"
+  },
+  "headers": [],
+  "text": {
+    "va": "0x002751d0",
+    "size": 16,
+    "sha256": "5f0032a54d91a710065822c474a1c03d5c7c3e82311095a19a43c7d1f26e3886"
+  },
+  "functions": [
+    {
+      "name": "MenuLoadSync",
+      "va": "0x002751d0",
+      "size": 8
+    },
+    {
+      "name": "MenuLoadInit",
+      "va": "0x002751d8",
+      "size": 8
+    }
+  ],
+  "references": {
+    "MenuLoadCount": {
+      "unit": "main",
+      "va": "0x004da870",
+      "size": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "symbols": [
+        "MenuLoadCount"
+      ],
+      "binding_section": ".sdata"
+    },
+    "_gp": {
+      "unit": "main",
+      "va": "0x004dfb70",
+      "size": 4,
+      "sha256": null,
+      "symbols": [
+        "_gp"
+      ]
+    }
+  },
+  "generated_data": [],
+  "flags": [
+    "-O2",
+    "-G8"
+  ]
+}

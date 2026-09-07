@@ -11,7 +11,7 @@
   "source": {
     "path": "src/casino/res.c",
     "staged_path": "src/casino/res.c",
-    "sha256": "1d8ae068b6cbdcc4df68b7639f8dd406d62baba9532b64f3c3cf7fdcdcc222cb"
+    "sha256": "bf097e8197f3b84310f79edc4be6129994e5c5923c5180100f725f5cf6c678eb"
   },
   "headers": [{
     "path": "include/xeno/casino/res.h",

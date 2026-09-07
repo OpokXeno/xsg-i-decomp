@@ -11,7 +11,7 @@ The goal is readable C source that reproduces the original machine code.
 
 | Version | Target | Bytes | Progress |
 | --- | --- | ---: | ---: |
-| NTSC-U | `SLUS_204.69` | 0 / 1,279,344 | 0.000% |
+| NTSC-U | `SLUS_204.69` | 1,052 / 1,279,344 | 0.082% |
 | NTSC-U | `OV01.OVL` | 0 / 238,124 | 0.000% |
 | NTSC-U | `OV02.OVL` | 0 / 62,868 | 0.000% |
 | NTSC-U | `OV10.OVL` | 0 / 269,564 | 0.000% |

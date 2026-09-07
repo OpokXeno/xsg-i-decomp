@@ -2,7 +2,7 @@
   "schema_version": 1,
   "revision": "slus-20469-412d448de315",
   "compiler_lock": "config/toolchains.json",
-  "compiler_lock_sha256": "48d5fe8d05d9b8be5d0274e77760eb78e623aaf1a5dbf4e7c10accd3de0006c8",
+  "compiler_lock_sha256": "fff5964e84c339986451a3a0b306804a99dc3c7227ddefdc206a8291dc05d1a4",
   "selected": "ee-gcc2_96",
   "default_flags": [
     "-O2",

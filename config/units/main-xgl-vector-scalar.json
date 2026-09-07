@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "revision": "slus-20469-412d448de315",
+  "unit": "main",
+  "binaries": {
+    "main": {
+      "path": "game/extracted-iso/SLUS_204.69",
+      "sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2"
+    }
+  },
+  "source": {
+    "path": "src/math/xgl_vector_scalar.c",
+    "staged_path": "src/math/xgl_vector_scalar.c",
+    "sha256": "145d7bee212acd3ebc181e6c5aa3f78e444a15acf7fad5ba2a927e2125291397"
+  },
+  "headers": [
+    {
+      "path": "src/math/xgl_vector_scalar.h",
+      "staged_path": "src/math/xgl_vector_scalar.h",
+      "sha256": "985d1236592d4cee4c03dd49d6ab80df9742867bd73ddeb17b9c85e72168b0f9"
+    }
+  ],
+  "text": {
+    "va": "0x002293f8",
+    "size": 852,
+    "sha256": "79e1fabe469a20fd2ac792f896e6a7f1da605cd626dca6a3b728fd7ea0965ae3"
+  },
+  "functions": [
+    {"name": "xglVectorScale", "va": "0x002293f8", "size": 52},
+    {"name": "xglVectorScaleXYZ", "va": "0x00229430", "size": 48},
+    {"name": "xglVectorScaleAdd", "va": "0x00229460", "size": 84},
+    {"name": "xglVectorScaleAddXYZ", "va": "0x002294b8", "size": 72},
+    {"name": "xglVectorScaleSub", "va": "0x00229500", "size": 84},
+    {"name": "xglVectorScaleSubXYZ", "va": "0x00229558", "size": 72},
+    {"name": "xglVectorInter", "va": "0x002295a0", "size": 100},
+    {"name": "xglVectorInterXYZ", "va": "0x00229608", "size": 84},
+    {"name": "xglVectorInner", "va": "0x00229660", "size": 60},
+    {"name": "xglVectorInner4", "va": "0x002296a0", "size": 64},
+    {"name": "xglVectorOuter", "va": "0x002296e0", "size": 108}
+  ],
+  "references": {},
+  "generated_data": [],
+  "flags": ["-O2", "-G0"]
+}

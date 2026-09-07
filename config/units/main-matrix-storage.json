@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "revision": "slus-20469-412d448de315",
+  "unit": "main",
+  "binaries": {
+    "main": {
+      "path": "game/extracted-iso/SLUS_204.69",
+      "sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2"
+    }
+  },
+  "source": {
+    "path": "src/math/matrix_storage.c",
+    "staged_path": "src/math/matrix_storage.c",
+    "sha256": "6ad26b1a6c9c7e37e2760ce7478a65e61d86ea60d5f8107c9b9ba322bb55cc9e"
+  },
+  "headers": [],
+  "text": {
+    "va": "0x0026def8",
+    "size": 172,
+    "sha256": "a36dac9a1a2ab375c7cfcf84399a0828a3741ba568310cd488f44a26b1aab4bb"
+  },
+  "functions": [
+    {
+      "name": "MATRIX_identity",
+      "va": "0x0026def8",
+      "size": 84
+    },
+    {
+      "name": "MATRIX_identity4s",
+      "va": "0x0026df50",
+      "size": 84
+    }
+  ],
+  "references": {},
+  "generated_data": [],
+  "flags": [
+    "-O2",
+    "-G0"
+  ]
+}
