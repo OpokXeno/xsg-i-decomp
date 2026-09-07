@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "revision": "slus-20469-412d448de315",
+  "profile": "ee-gcc2_96",
+  "variants": [
+    {
+      "command": [
+        ".work/toolchains/compiler-variants/ee-gcc2.96/ee-gcc",
+        "-B.work/toolchains/compiler-variants/ee-gcc2.96/",
+        "-nostdinc",
+        "-fno-builtin",
+        "-S"
+      ],
+      "flags": [
+        "-O2",
+        "-G0"
+      ],
+      "id": "ee-gcc2_96"
+    }
+  ],
+  "tools": {
+    "assembler": ".work/toolchains/ee-legacy-binutils/bin/ee-as",
+    "linker": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-ld",
+    "objdump": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-objdump"
+  },
+  "pins": [
+    {
+      "path": ".work/toolchains/compiler-variants/ee-gcc2.96/cc1",
+      "sha256": "59ec92b3f9f3513e0633331af304733e3094de30884e662a8cb584a51c1c42b5"
+    },
+    {
+      "path": ".work/toolchains/compiler-variants/ee-gcc2.96/cpp0",
+      "sha256": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9"
+    },
+    {
+      "path": ".work/toolchains/compiler-variants/ee-gcc2.96/ee-gcc",
+      "sha256": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
+    },
+    {
+      "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-ld",
+      "sha256": "3976bb46002eb27075c5bed00d6f7364db80dce650fc2be3f1c472fe799ddbf9"
+    },
+    {
+      "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-objdump",
+      "sha256": "237c8e42b3e6d786f7c252533128073f3264c44795d38fae7a9920aef53a0c0f"
+    },
+    {
+      "path": ".work/toolchains/ee-legacy-binutils/bin/ee-as",
+      "sha256": "8cf3508116e85cacf62e1958c9a1592df4e7761363c3ea5efe47ca5f7fab1f20"
+    },
+    {
+      "path": "tools/compiler_calibrate.py",
+      "sha256": "9a19ca75da71760f41fd17a9053110e032af42463c90373e8d74e0e0b7945786"
+    },
+    {
+      "path": "tools/inventory.py",
+      "sha256": "ab0beddf8bd4f0e75dbc0a7c4bc9d957e0ee8f4cc69c23ed02cb043314452d05"
+    }
+  ],
+  "host_libraries": [
+    {
+      "path": "lib/ld-linux.so.2",
+      "sha256": "682e96735c55f0f01c8adc9a07c53915067f8062b5656b1814a42751f56ef2a1"
+    },
+    {
+      "path": "lib/libc.so.6",
+      "sha256": "e54850449979d729dbde29c4a1917feb488ae9ea237b60c4cda617d1f6552b08"
+    },
+    {
+      "path": "lib64/ld-linux-x86-64.so.2",
+      "sha256": "b966441c957740d86720a56fe42c799d99a5bc89746cb8c93ef07632768a13f2"
+    },
+    {
+      "path": "lib64/libc.so.6",
+      "sha256": "f99d03c52abeb1b99049ce482a6ea77fc12e20ab7391d8df0fd58f3c039871c1"
+    },
+    {
+      "path": "lib64/libzstd.so.1",
+      "sha256": "70ec54d150f4052f28fb1e8f8a1c6ca35e1a499e4744c6f6d9d783537618f80b"
+    },
+    {
+      "path": "lib64/libgcc_s.so.1",
+      "sha256": "f074f38f6ac503e67c5d28abad0265f4a8d8e07fab11a556af89d96fcbd1b27f"
+    }
+  ],
+  "compiler": {
+    "version": "GNU 2.96-ee-001003-1",
+    "catalog": "https://github.com/decompme/compilers",
+    "catalog_revision": "0884197d3e4a27ee0e274f17ca5b03d8bee94d0a",
+    "original_distribution_proven": false
+  },
+  "ee_binutils": {
+    "repository": "https://github.com/ps2dev/binutils-gdb.git",
+    "commit": "616e51fa6ed9d1e8f4bda7d0087fac30c5398aa9",
+    "license": "GPL-3.0-or-later (binutils); bundled components have additional licenses",
+    "tools": {
+      "ar": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-ar",
+        "sha256": "fc16930c09871dfe4e3aea57c23f6292204dec8cdf3452cb856049f60992a909",
+        "version": "GNU ar (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      },
+      "as": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-as",
+        "sha256": "6c4ee9ee347c647b2e034ba77009901bd04b6ba20c26cfd0d833a1c86e08d037",
+        "version": "GNU assembler (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or later.\nThis program has absolutely no warranty.\nThis assembler was configured for a target of `mips64r5900el-ps2-elf'.\n"
+      },
+      "ld": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-ld",
+        "sha256": "3976bb46002eb27075c5bed00d6f7364db80dce650fc2be3f1c472fe799ddbf9",
+        "version": "GNU ld (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) a later version.\nThis program has absolutely no warranty.\n"
+      },
+      "nm": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-nm",
+        "sha256": "2cc86d93cdfada77e3f6fa41d82962d01399da0c655eb44e9386aba04d7fd532",
+        "version": "GNU nm (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      },
+      "objcopy": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-objcopy",
+        "sha256": "89b15547b76feac27ea599f5ac213873611185528802908f69081e8cc7f32ac0",
+        "version": "GNU objcopy (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      },
+      "objdump": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-objdump",
+        "sha256": "237c8e42b3e6d786f7c252533128073f3264c44795d38fae7a9920aef53a0c0f",
+        "version": "GNU objdump (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      },
+      "ranlib": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-ranlib",
+        "sha256": "1d27cdb07f5dc77a3a8cc4a5639f212314f250c81ac505222dcd799310fad4cc",
+        "version": "GNU ranlib (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      },
+      "readelf": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-readelf",
+        "sha256": "6679cdf406060a0bcf0ef09cc5373698ef4a250c7e05ae7c286f424891c7e99d",
+        "version": "GNU readelf (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      },
+      "strip": {
+        "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-strip",
+        "sha256": "3364f7f72ca5dbb7a9332e27b4103da6c5a0e64b80d2c195ddeb4cf093d27a06",
+        "version": "GNU strip (GNU Binutils) 2.45.1\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty.\n"
+      }
+    }
+  },
+  "ee_legacy_assembler": {
+    "path": ".work/toolchains/ee-legacy-binutils/bin/ee-as",
+    "sha256": "8cf3508116e85cacf62e1958c9a1592df4e7761363c3ea5efe47ca5f7fab1f20",
+    "version": "GNU assembler 2.9-ee-991111\nCopyright 1997 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License.  This program has absolutely no warranty.\nThis assembler was configured for a target of `ee'.\n"
+  },
+  "main_linker": {
+    "sha256": "2cbf1432cbdaed624d5c8b93494ab7015e40b6cff65b1893a0271f595d69f7e4",
+    "version": "GNU ld 2.9-ee-991111\nCopyright 1997 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License.  This program has absolutely no warranty.\n  Supported emulations:\n   elf32l5900\n",
+    "repository": "https://github.com/SSXModding/ps2-ee-toolchain.git",
+    "commit": "b595ded606227e93b8c4a447446c1d2ac093827d",
+    "license": "GPL-2.0-or-later; bundled component notices retained in archive"
+  },
+  "split": {
+    "distributions": [
+      {
+        "name": "colorama",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+            "hashes": {
+              "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl"
+        },
+        "version": "0.4.6"
+      },
+      {
+        "name": "crunch64",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=b764cc500cb1cab9bcc6d5683e1adbce4eb857abf31218d311aed7d53bfc96ee",
+            "hashes": {
+              "sha256": "b764cc500cb1cab9bcc6d5683e1adbce4eb857abf31218d311aed7d53bfc96ee"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/7a/e7/9788e5a4a1b86e905378a09534dc7a5d4a4ba8ad38b1aedfa3a645470086/crunch64-0.6.2-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+        },
+        "version": "0.6.2"
+      },
+      {
+        "name": "intervaltree",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=902b1b88936918f9b2a19e0e5eb7ccb430ae45cde4f39ea4b36932920d33952d",
+            "hashes": {
+              "sha256": "902b1b88936918f9b2a19e0e5eb7ccb430ae45cde4f39ea4b36932920d33952d"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/50/fb/396d568039d21344639db96d940d40eb62befe704ef849b27949ded5c3bb/intervaltree-3.1.0.tar.gz"
+        },
+        "version": "3.1.0"
+      },
+      {
+        "name": "n64img",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=5db569e3300f3404b875a319822221704ffaf7c1d8f1db874b85702a16947921",
+            "hashes": {
+              "sha256": "5db569e3300f3404b875a319822221704ffaf7c1d8f1db874b85702a16947921"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/87/6d/9480bcb7a31d6e96a0a8923c9b64812db0e480921bc988fcbfbce3ddf7a4/n64img-0.3.3-py3-none-any.whl"
+        },
+        "version": "0.3.3"
+      },
+      {
+        "name": "pip",
+        "source": {
+          "archive_info": {
+            "hashes": {
+              "blake2b_256": "def0c81e05b613866b76d2d1066490adf1a3dbc4ee9d9c839961c3fc8a6997af",
+              "md5": "081fecbf1d611c25d80665627988f83f",
+              "sha256": "bdb1b08f4274833d62c1aa29e20907365a2ceb950410df15fc9521bad440122b"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/de/f0/c81e05b613866b76d2d1066490adf1a3dbc4ee9d9c839961c3fc8a6997af/pip-26.0.1-py3-none-any.whl"
+        },
+        "version": "26.0.1"
+      },
+      {
+        "name": "pygfxd",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=2907678612b087e06c9aaf2306cc1791c07ecf956a18615fa6e460a9f8bb94f2",
+            "hashes": {
+              "sha256": "2907678612b087e06c9aaf2306cc1791c07ecf956a18615fa6e460a9f8bb94f2"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/04/71/3675d5d47bdf779d2c53119f5a88904d1a14e749083ff3e4cf9fa61bb9b8/pygfxd-1.0.5-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+        },
+        "version": "1.0.5"
+      },
+      {
+        "name": "pylibyaml",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=3b58dea061903c04689e35fab63ec149f7cf5e82f0808bd3425fb3ab3950623e",
+            "hashes": {
+              "sha256": "3b58dea061903c04689e35fab63ec149f7cf5e82f0808bd3425fb3ab3950623e"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/c9/1a/3ae773a0d4cc0b787d1b7307786c666de0729df2c4159ec964e8ba45d06d/pylibyaml-0.1.0.tar.gz"
+        },
+        "version": "0.1.0"
+      },
+      {
+        "name": "pypng",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=4a43e969b8f5aaafb2a415536c1a8ec7e341cd6a3f957fd5b5f32a4cfeed902c",
+            "hashes": {
+              "sha256": "4a43e969b8f5aaafb2a415536c1a8ec7e341cd6a3f957fd5b5f32a4cfeed902c"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/3e/b9/3766cc361d93edb2ce81e2e1f87dd98f314d7d513877a342d31b30741680/pypng-0.20220715.0-py3-none-any.whl"
+        },
+        "version": "0.20220715.0"
+      },
+      {
+        "name": "pyyaml",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5",
+            "hashes": {
+              "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/88/f9/16491d7ed2a919954993e48aa941b200f38040928474c9e85ea9e64222c3/pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+        },
+        "version": "6.0.3"
+      },
+      {
+        "name": "rabbitizer",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=eafe91e07c9f400d2abc44c029c3b380cb68e65d2c32eb7e2015d391a51d2182",
+            "hashes": {
+              "sha256": "eafe91e07c9f400d2abc44c029c3b380cb68e65d2c32eb7e2015d391a51d2182"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/0a/d8/0e8e996904e7295f968512281cd7079c80c39f7d4f51c3956e1669ef6cfa/rabbitizer-1.16.2-cp34-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl"
+        },
+        "version": "1.16.2"
+      },
+      {
+        "name": "sortedcontainers",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0",
+            "hashes": {
+              "sha256": "a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl"
+        },
+        "version": "2.4.0"
+      },
+      {
+        "name": "spimdisasm",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=816111a7d80a9037029a8fff0b12eec5a55358a52407f85498aa9b14e9e69a5f",
+            "hashes": {
+              "sha256": "816111a7d80a9037029a8fff0b12eec5a55358a52407f85498aa9b14e9e69a5f"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/3f/c4/20a1e2966a536c3ab3882acec2c42a08c0f8a06c5ec906c51c886363c0bc/spimdisasm-1.42.4-py3-none-any.whl"
+        },
+        "version": "1.42.4"
+      },
+      {
+        "name": "splat64",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=fc9b70d67d63b57e8e6318340a4ccf6bd95617ffb2e72803cd86a676aeeca6a9",
+            "hashes": {
+              "sha256": "fc9b70d67d63b57e8e6318340a4ccf6bd95617ffb2e72803cd86a676aeeca6a9"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/d7/dd/6ecb161d61c7f60c4478588e448b347055d183d7fb07c8ef1ac9cc27d253/splat64-0.50.0-py3-none-any.whl"
+        },
+        "version": "0.50.0"
+      },
+      {
+        "name": "tqdm",
+        "source": {
+          "archive_info": {
+            "hash": "sha256=26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2",
+            "hashes": {
+              "sha256": "26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2"
+            }
+          },
+          "url": "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
+        },
+        "version": "4.67.1"
+      }
+    ]
+  },
+  "iop_reader": {
+    "schema_version": 1,
+    "role": "generic_elf_reader_not_iop_compiler",
+    "path": ".work/toolchains/ee-binutils/bin/mips64r5900el-ps2-elf-readelf",
+    "sha256": "6679cdf406060a0bcf0ef09cc5373698ef4a250c7e05ae7c286f424891c7e99d",
+    "version": "GNU readelf (GNU Binutils) 2.45.1",
+    "repository": "https://github.com/ps2dev/binutils-gdb.git",
+    "commit": "616e51fa6ed9d1e8f4bda7d0087fac30c5398aa9",
+    "license": "GPL-3.0-or-later (binutils); bundled components have additional licenses",
+    "iop_compiler_selected": false
+  }
+}

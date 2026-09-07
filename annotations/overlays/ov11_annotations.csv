@@ -1,0 +1,139 @@
+0x00A00000, Init - Initializes an external render context, sets camera transform fields, and submits the resulting configuration.
+0x00A00070, TanakaTest - Initializes controller and minigame state, runs frames until completion, then performs final engine updates.
+0x00A00100, dprintf - Forwards variadic arguments to the print callback stored in the global runtime context.
+0x00A00168, MakeSprite - Emits a textured quad packet from sprite and rectangle records, selecting primitive state by sprite mode.
+0x00A004D0, SetDrawStatus - Emits GS state commands configuring alpha blending and tests from a status code and optional value.
+0x00A00680, SetTest - Emits a packet that writes the caller supplied value to the GS TEST register.
+0x00A00710, SetRegAD - Emits one arbitrary GS register and value pair into the supplied packet buffer.
+0x00A007A0, ResetRGBA - Resets all four shared untextured box color components to 0x80.
+0x00A007E0, SetRGBA - Stores four caller supplied components in the shared untextured box color state.
+0x00A00800, MakeBoxPos - Converts a rectangle to four fixed point GS vertices and stores them in shared box state.
+0x00A00878, DrawNonTextureBox - Computes box vertices and emits an untextured quad using the shared RGBA color.
+0x00A00998, RES_IsDebugMode - Returns the debug mode word at offset 0x1D3C in the loaded resource table.
+0x00A009A8, RES_GetBonusTime - Returns the first word of the loaded resource table as the bonus duration.
+0x00A009B8, RES_GetRealSpeed - Returns the reel speed word at offset four in the loaded resource table.
+0x00A009C8, RES_ShopDataInfo - Returns the information text pointer within the indexed 0x7C byte shop record.
+0x00A009E8, RES_ShopDataCoin - Returns the coin price word from the indexed 0x7C byte shop record.
+0x00A00A08, RES_ShopDataName - Returns the name text pointer within the indexed 0x7C byte shop record.
+0x00A00A28, RES_Coin_Rate - Returns the conversion rate word from the indexed 0x20 byte coin record.
+0x00A00A40, RES_Coin_Info - Returns the information text pointer for the indexed 0x20 byte coin record.
+0x00A00A58, RES_SoundEffect - Looks up a resource sound identifier and forwards the play request through dprintf.
+0x00A00AA8, RES_SoundEffectStop - Looks up a resource sound identifier and forwards the stop request through dprintf.
+0x00A00AF0, RES_Load - Loads the casino resource table at 0x01000000 and records that address globally.
+0x00A00B28, AddCoin - Adds saved coins, caps the balance at 9,999,999, and passes overflow to an external converter.
+0x00A00BA0, SlGetPic - Resolves a slot symbol from reel position, row offset, reel index, and active reel table.
+0x00A00C10, SlRealDraw - Advances wrapped reel positions, draws five symbols per reel, then overlays windows and a dark box.
+0x00A00DE0, decprint - Draws a decimal value right to left with automatic or fixed digit count.
+0x00A00F68, SlCashPrint - Draws the saved coin balance and current slot payout at fixed screen positions.
+0x00A00FB0, pay_print - Draws the five per-line slot stake values at their fixed table positions.
+0x00A01060, total_pay_print - Draws the three digit total slot stake at its fixed screen position.
+0x00A01088, check_mode - Returns one when any of the three reel state words equals one, otherwise zero.
+0x00A010D0, SlPayWindowPrint - Draws five pay window cells using the active or inactive texture selected by reel state.
+0x00A01160, check_spin - Tracks reel activity transitions and returns zero idle, one newly active, or two continuing.
+0x00A011B0, SpinBtnPrint - Selects and animates the spin button sprite from the tracked reel activity state.
+0x00A01278, SlStopBtnPrint - Draws each reel stop button using a texture selected from its current state.
+0x00A01330, SlDecPrintSmall - Draws a value with small decimal sprites, caller controlled spacing, and automatic digit count.
+0x00A014B8, SlRateTableDraw - Draws slot payout icons and regular or doubled rate values according to bonus state.
+0x00A01750, SlResultDraw - Draws winning rows, multipliers, total payout, and line markers derived from result globals.
+0x00A01A90, SlModePrint - Draws slot mode indicators and bonus gauge while advancing the bonus countdown state.
+0x00A01CA8, SlGuidPrint - Draws the next animated guidance frame at the indexed point and advances its sequence.
+0x00A01D20, point_control - Draws the context guidance pointer and changes the selected reel from directional input.
+0x00A01E28, SlBgDraw - Configures background draw state and emits the fixed slot background sprite.
+0x00A01E68, SlCoinEntry - Handles payline and stake input, enforces available coins, and recomputes all line costs.
+0x00A02068, SlPrizeCheck - Evaluates one result line with wildcard handling and stores its payout multiplier and bonus code.
+0x00A02260, SlLineCheck - Resolves five result lines, evaluates selected lines, accumulates payout, and records the strongest bonus.
+0x00A02460, check_real - Runs the complete slot line evaluation and returns whether the resulting payout is nonzero.
+0x00A02488, paid_action - Credits the pending slot payout incrementally or immediately, stopping sound when payment completes.
+0x00A02590, linepay_check - Clears line stakes whose cumulative cost exceeds the current saved coin balance.
+0x00A02630, slot_key - Drives slot betting, spinning, reel stopping, result checking, payout, and menu return from input.
+0x00A02938, SlPrizeEffect - Advances a four phase prize overlay animation, emits its sprite, and reports whether still active.
+0x00A02D28, SlChangeRealEffect - Animates three reel covers, selects the alternate reel set, and updates bonus mode state.
+0x00A03150, SlEvent - Dispatches the active slot event animation and applies its bonus, payout, or mode transition on completion.
+0x00A032C0, SlHelpMode - Configures overlay draw state and emits the fixed slot help panel sprite.
+0x00A03380, slot_main - Renders the complete slot frame, advances events, handles input when idle, and optionally draws help.
+0x00A034D8, init_slot - Loads five slot texture resources into fixed rendering buffers through the resource loader.
+0x00A03578, NgTimePrint - Clamps time to 900 and draws a bar whose width is proportional to remaining time.
+0x00A03610, NgPaidPrint - Draws the pending nine-reel payout after multiplying it by the current power-of-two streak factor.
+0x00A03668, NgGetsDownBtnPrint - Draws the cash-out button state and advances its temporary pressed-frame countdown.
+0x00A03710, NgSpinBtnPrint - Draws the spin button state and advances its temporary pressed-frame countdown.
+0x00A037B8, NgLamp - Draws one lamp per streak level and animates the next rate window.
+0x00A038C0, NineGameBG_Draw - Selects the nine-reel background buffer, configures GS state, and emits its fixed sprite.
+0x00A03910, NgStopGuidPt - Draws an animated guidance marker at the currently selected nine-reel position.
+0x00A039B0, NgFwdGuidPt - Advances selection to the next running reel, wrapping to an available action option.
+0x00A03A80, NgStopBtnPrint - Draws nine reel buttons using textures selected from each reel's stop state.
+0x00A03B90, NgAllStop - Moves every running reel into forced-stop state and stops the reel sound effect.
+0x00A03BE0, NgCheckReal - Tests a settled reel symbol, increasing the streak on success or resetting and stopping all reels.
+0x00A03CA0, get_ngreal_shape - Copies the texture record for a wrapped symbol index from the selected reel strip.
+0x00A03D58, DrawNgPanel - Draws a scrolling reel panel from the current and adjacent symbol texture records.
+0x00A03EB0, NgReal - Draws active nine-reel panels, advances running positions, and checks reels when stopping completes.
+0x00A03FC0, NgGame_GetsDown - Converts the streak into a power-of-two payout multiplier, resets it, and stops all reels.
+0x00A04040, NgGame_Select - Toggles spin or cash-out selection, starts all reels, handles cash-out, and toggles help.
+0x00A04188, NgGame_Key - Moves the reel cursor, schedules the selected reel stop, or triggers immediate cash-out.
+0x00A04360, NgGame_Paid - Credits pending nine-reel winnings incrementally or all at once before returning to slot mode.
+0x00A04410, NgHelpMode - Configures overlay draw state and emits both fixed nine-reel help panel sprites.
+0x00A04560, NineGameMain - Renders nine-reel state, dispatches select, stop, or payout input, and enforces the timer.
+0x00A046D0, init_ninegame - Resets nine-reel state, assigns unique random strips, sets the timer, and initializes button animations.
+0x00A04828, PoMoneyPrint - Draws a framed poker coin value right to left with automatic digit count.
+0x00A04A08, PoCurDraw - Positions and draws the next frame of the animated poker cursor sprite.
+0x00A04AC8, PoWindowMessage - Builds a message window sized by line width and renders the supplied text inside it.
+0x00A04BE0, PoDialog - Handles two or three option dialog input, draws its cursor, and returns selection or cancellation.
+0x00A04DC0, PoBgDraw - Selects the poker background buffer, configures draw state, and emits its fixed sprite.
+0x00A04E20, PoCardDraw - Draws five cards from the appropriate one of four texture buffers based on card ranges.
+0x00A04F60, PoCardDrawAnime - Animates five face-down cards upward, waits at destination, and reports completion.
+0x00A05180, PoBonusCardAnime - Animates the selected bonus card upward, then replaces it with a special card value.
+0x00A05358, PoRateTableDraw - Emits the single fixed poker payout table sprite.
+0x00A05380, PoBonusBGDraw - Draws the bonus background, completed markers, and a pulsing pointer for the current round.
+0x00A05528, PoResetCard - Clears poker deck work, marks all five cards hidden, and resets their selection flags.
+0x00A05598, PoShuffleCard - Periodically assigns unique cards to selected positions, using random or predetermined bonus values.
+0x00A05758, PoSelectMarkDraw - Draws five hold-state selectors and the fixed selection instruction marker.
+0x00A05818, PoKey - Handles hold toggles, cursor movement, and confirmation between card selection and completion controls.
+0x00A059B8, PoCardFlip - Hides held cards and enables deterministic bonus dealing after all remain hidden for 32 frames.
+0x00A05A78, PoGetMark - Maps card indices below 52 through a jump table to their suit identifier.
+0x00A05AC8, PoGetBase - Maps suit identifiers zero through three to card base offsets 0, 13, 26, or 39.
+0x00A05B10, PoSortCard - Copies the five dealt cards into a work array and bubble sorts them ascending.
+0x00A05BF0, PoMultiChk - Counts equal ranks across suit offsets and converts pair connections into a multiplicity category.
+0x00A05D68, PoFlushChk - Returns one only when all five sorted cards map to the same suit identifier.
+0x00A05DE0, PoChk1 - Returns category one when the rank multiplicity classifier reports one matching pair connection.
+0x00A05E20, PoChk2 - Returns category two when the rank multiplicity classifier reports two matching pair connections.
+0x00A05E60, PoChk3 - Returns category three when the rank multiplicity classifier reports three matching pair connections.
+0x00A05EA0, PoChk4 - Removes suit bases, sorts five ranks, and returns category four for consecutive values.
+0x00A05FB0, PoChk5 - Returns category five when all five sorted cards have the same suit.
+0x00A05FE8, PoChk6 - Returns category six when the multiplicity classifier reports four matching pair connections.
+0x00A06028, PoChk7 - Returns category seven when the multiplicity classifier reports the four-card connection count.
+0x00A06068, PoChk8 - Returns category eight when all five cards share a suit and have consecutive indices.
+0x00A060E8, PoChk9 - Returns category nine for a same-suit sequence spanning base and offsets nine through twelve.
+0x00A06190, PoCardCheck - Sorts cards, checks categories from nine downward, and plays a sound tier for the result.
+0x00A062B8, PoResultLamp - Draws the result lamp at the rectangle indexed by the poker category.
+0x00A06308, PoSeqChange - Stores the caller supplied poker sequence state in the global state word.
+0x00A06318, PokerReadyMes - Selects level-specific ready text and width, then forwards both to the message window renderer.
+0x00A063A0, PokerMain - Drives poker betting, dealing, holds, hand evaluation, bonus rounds, payout, rendering, and exit.
+0x00A06C08, PoInitWork - Resets the main poker sequence, display flags, bonus mode, and bonus round index.
+0x00A06C28, PokerInit - Loads six poker texture resources into fixed rendering buffers through the resource loader.
+0x00A06CE0, GameModeChange - Resets mode-specific slot or poker state, initializes nine-reel mode, and stores the new mode.
+0x00A06DF0, sub_window - Configures overlay draw state and emits a fixed-size submenu window at the supplied position.
+0x00A06E50, submenu_select - Draws submenu entries and cursor, wraps directional selection, and reports confirm input.
+0x00A07000, level_select - Draws a four-choice submenu bound directly to the shared game level selection.
+0x00A07060, exchange_select - Draws a three-choice submenu bound directly to the shared exchange mode selection.
+0x00A070C0, menu_mode - Handles main menu navigation, opens exchange or level submenus, changes modes, and reports exit.
+0x00A07410, init_menu_mode - Loads two menu texture resources and resets menu mode and game level selection.
+0x00A07470, init_test_mode - Loads the test screen texture resource into its fixed rendering buffer.
+0x00A074A0, test_mode - Lazily loads the test texture once, then draws its fixed full-screen sprite each frame.
+0x00A07528, DecPrint2 - Draws decimal digits right to left and optionally appends a marker sprite.
+0x00A076E0, UtlCurPrint - Draws an eight-frame animated utility cursor at the supplied screen coordinates.
+0x00A077A0, coin_main - Renders coin conversion options, processes purchases and balance caps, and returns to the menu.
+0x00A07C38, init_coin - Loads the shared utility texture and coin screen texture into fixed rendering buffers.
+0x00A07C80, init_shop - Loads the shop screen texture and shared utility texture into fixed rendering buffers.
+0x00A07CC8, init_shpmenu - Builds the purchasable item list from ownership bytes and progression checks in save state.
+0x00A07E08, shop_main - Renders shop inventory, handles scrolling and purchases, applies item effects, refunds failures, and exits.
+0x00A083F8, VW_Init - Loads the viewer interface and sample thumbnail texture resources into fixed rendering buffers.
+0x00A08440, VW_SamlistInit - Scans thirty save flags, stores unlocked sample indices, and returns the resulting count.
+0x00A08498, VW_ViewModeInit - Loads two or four image layers for a changed sample and resets pan offsets.
+0x00A08650, VW_ViewMode - Draws sample image layers, pans them from analog input within bounds, and reports cancellation.
+0x00A08960, VW_SamMode - Displays unlocked samples with title, information, thumbnail, scrolling selection, and selected index return.
+0x00A08CE0, VW_Main - Switches between sample list and image view modes, or exits the viewer to the menu.
+0x00A08DC0, MUSIC_CALL - On a changed request, stops streams, loads music assets, starts playback, and waits for transfers.
+0x00A08F40, InitWork - Resets global modes, loads resources and music, applies debug unlocks, and initializes slot stakes.
+0x00A09020, MiniG_Init - Logs the configured heap address and delegates all casino state initialization to InitWork.
+0x00A09048, MiniG_Main - Lazily initializes and dispatches the active casino mode, draws common output, and reports menu exit.
+0x00A091F8, Cajino_GetTitle - Returns the title pointer from the indexed eight-byte viewer text record.
+0x00A09210, Cajino_GetInfo - Returns the information pointer from the indexed eight-byte viewer text record.

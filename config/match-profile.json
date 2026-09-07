@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "revision": "slus-20469-412d448de315",
+  "compiler_lock": "config/toolchains.json",
+  "compiler_lock_sha256": "48d5fe8d05d9b8be5d0274e77760eb78e623aaf1a5dbf4e7c10accd3de0006c8",
+  "selected": "ee-gcc2_96",
+  "default_flags": [
+    "-O2",
+    "-G0"
+  ],
+  "permitted_flags": [
+    [
+      "-O2",
+      "-G0"
+    ],
+    [
+      "-O2",
+      "-G8"
+    ]
+  ],
+  "timeout_seconds": 30,
+  "qualification": "Compatible EE compiler profile; original distribution and whole-game compatibility are not proven."
+}

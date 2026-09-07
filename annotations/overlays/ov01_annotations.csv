@@ -1,0 +1,1081 @@
+0x00A00000, YamamotoTest - Initializes four test globals, starts battle systems, then endlessly runs debug configuration, test drawing, and battle processing.
+0x00A00088, testScreen - Builds and submits horizontal and vertical F2 grid-line GS packets, skipping coordinates 0, 0x1C0, and 0x200.
+0x00A00218, objInit - Clears the object-task pointer table, initializes engine task state, then clears all 60 object work slots.
+0x00A00280, objExec - Executes the primary object-task list rooted at global address 0x00A55930.
+0x00A002A0, objExecSub - Tail-calls engine routine 0x0021C730 to execute the supplied object-task list.
+0x00A002B8, objExec2 - Traverses the secondary object-task list, calling each nonnull callback while preserving the next task pointer.
+0x00A00308, objEntry - Appends an object task to the primary list and allocates its work block.
+0x00A00330, objEntry2 - Appends an object task, then stores its callback at task offset 0x18.
+0x00A00378, objEntrySub - Inserts a task at either list end, allocates its work block, and initializes offsets 0x10 and 0x18.
+0x00A00408, objEntryRev - Prepends an object task to the primary list and allocates its work block.
+0x00A00430, objEntry2Rev - Prepends an object task, then stores its callback at task offset 0x18.
+0x00A00478, objRemove - Clears a task callback, frees its work block, and unlinks it through engine routine 0x0021C6B0.
+0x00A004C8, objEntryPure - Allocates a pure object through engine allocator 0x0021c638 using pool 0xA55930 and current DAT_00A55938 index.
+0x00A00518, objRemovePure - Unlinks a nonnull object task through engine routine 0x0021C6B0, reporting null inputs through 0x0032F070.
+0x00A00548, objWorkInit - Clears the allocation word of all 60 object work slots, each separated by 0x110 bytes.
+0x00A00580, objWorkGet - Finds the first free one of 60 object work slots, sets allocation bit zero, and returns its pointer.
+0x00A005E8, objWorkFree - Clears a work-pool slot within 0x00A51970-0x00A55930; reports pointers outside that range.
+0x00A00638, objStdInit - Zeroes 0x80 bytes of object transform state, initializes unit scales, and clears its command queue.
+0x00A00698, objStdMove - Integrates three-axis velocity and acceleration toward target coordinates, clamps overshoot, and reports when all axes arrive.
+0x00A00950, objHatoVec - Derives three-axis velocity toward the target over a duration, snapping coordinate differences below one half.
+0x00A00AE8, objCmdClear - Follows object offset 0x10, clears command indices 0x68-0x74, and removes flag bit 1.
+0x00A00B18, objCmdPtrGet - Returns work base plus current command index times 0x14 plus command-data offset four.
+0x00A00B38, objCmdTailGet - Returns work base plus queued command count times 0x14 plus command-data offset four.
+0x00A00B58, objCmdPush - Increments nested command count 0x6C and returns the new 0x14-byte slot; clamps at four on overflow.
+0x00A00BB8, objCmdPop - Decrements nested command count 0x6C and returns the previous 0x14-byte slot; clamps to zero on underflow.
+0x00A00C10, objCmdNext - Increments current command index 0x68, clears fields 0x70 and 0x74, or clears commands when exhausted.
+0x00A00C60, fifoInit - Initializes FIFO start, end, read, and write pointers from base and byte-size arguments, with count zero.
+0x00A00C80, fifoPush - Increments FIFO count and write cursor, wraps past the end to start, and returns minus one on overflow.
+0x00A00CE8, fifoPop - Decrements FIFO count and advances the read cursor with wraparound; logs underflow and returns minus one.
+0x00A00D48, fifoEdGet - Returns the FIFO write cursor stored directly at structure offset 0x0C.
+0x00A00D50, fifoStGet - Returns the FIFO read cursor stored directly at structure offset 0x08.
+0x00A00D58, fifoNumGet - Returns the current FIFO element count stored directly at structure offset 0x10.
+0x00A00D60, unitInit - Clears the 32-byte unit table region and resets both player and enemy unit counts.
+0x00A00D98, unitTblGet - Returns player, enemy, or combined unit table base through the output pointer, with counts three, five, or eight.
+0x00A00DE8, unitTblSet - Inserts a unit into the first empty player or enemy table slot and increments the corresponding count.
+0x00A00EA0, unitTblRemove - Clears the matching pointer among eight unitTbl slots and decrements the corresponding player or enemy count.
+0x00A00F18, unitTblChg - Replaces the matching pointer among all eight unitTbl slots and reports whether a match was found.
+0x00A00F58, unitNumGet - Returns player count for selector zero, enemy count for one, or their sum otherwise.
+0x00A00FA0, unitLiveNumGet - Counts nonnull units whose object at offset 0x10 has dead flag 0x80 clear.
+0x00A01000, unitLiveNumGet2 - Counts nonnull units lacking object flag 0x80 and status bit 0x2000 in both status groups zero and four.
+0x00A010C0, unitCidGet - Returns a unit character ID, overriding it with 0x14 or 0x15 according to status-group-seven bits.
+0x00A01138, unitPlCreate - Creates, registers, and loads a player unit; AGWS characters also receive a linked pilot calculation record.
+0x00A01218, unitEnCreate - Creates an enemy unit, registers it in the enemy table, and loads its character resources.
+0x00A01278, unitAgwsPilotGet - Searches player origin records one through sixteen for the pilot whose equipped AGWS ID matches the argument.
+0x00A012D8, unitCreate - Allocates and initializes a unit task and actor, places it from the position table, and configures character-specific rendering flags.
+0x00A01590, unitRemoveActor - Destroys three attached actor models when no face model occupies unit field 0x2C.
+0x00A01610, unitRemove - Removes a unit's actors and task, then releases character models, sound registration, and referenced effect resources when no longer shared.
+0x00A01870, unitLoad - Loads the unit's character or enemy model resources, unit files, and registered sound-effect banks.
+0x00A01928, unitActupdate - Unless disabled by flag 8, updates the actor animation and increments the frame counter at unit offset 0xE0.
+0x00A01998, unitActdraw - Applies actor opacity and enables translucent drawing whenever the alpha value at offset 0xC0 is below one.
+0x00A019F0, unitParaInit - Assigns calculation data, character ID, wait counters, weapon attributes, command defaults, and the initial player or enemy state.
+0x00A01B00, unitPlInit - Creates one player unit for each of the three party slots whose plTbl character identifier is nonzero.
+0x00A01B50, unitEnInit - Creates at most six enemies from eight-byte definitions until a zero identifier, logging an overlong list.
+0x00A01BB8, unitClipSet - Sets actor clipping bit 0x200 for removed units or character 0xB4, clearing it otherwise.
+0x00A01C28, unitPlFunc - Executes the current player command, updates status effects, and synchronizes the actor clipping flag.
+0x00A01C58, unitEnFunc - Executes the current enemy command, updates status effects, and synchronizes the actor clipping flag.
+0x00A01C88, unitCmdClear - Clears the unit's object command queue and resets work field 4 to zero.
+0x00A01CB8, unitCmdTailGet - Returns the tail command from the supplied unit's underlying object command queue.
+0x00A01CD0, unitCmdPtrGet - Returns the current command pointer from the supplied unit's underlying object command queue.
+0x00A01CE8, unitCmdNext - Advances the supplied unit's underlying object command queue to its next command.
+0x00A01D00, unitCmdSet - Pushes and copies a 20-byte unit command, clears command timers, and marks the object busy for nonzero commands.
+0x00A01D78, unitCmdExec - Dispatches the current command through unitCmdTbl, optionally logs its start, and increments elapsed frames while it remains active.
+0x00A01E08, unitCmdFree - Returns constant 0; no battle unit state or external routine is accessed.
+0x00A01E28, unitCmdAtk - On its first frame, resolves an attack, spends EP, records boost use, and increments the learned special's use count.
+0x00A01EF8, unitCmdAtkSub - Initializes attack scenario state and dispatches technique job types zero through seven, reporting invalid job types.
+0x00A01F80, unitJobTypeAtk - Calculates each target's hit and damage result, records scenario destinations and source, and adds the technique's agility modifier.
+0x00A02160, unitCmdAtkEnd - Clears attack commands, restores standing or recovery animation, resets face motion, and handles weapon recovery for motion 0x20.
+0x00A02220, unitCmdDeadSet - Queues command 0x0C for an active unit whose calculation record has zero HP, returning whether queued.
+0x00A02290, unitCmdEther - Resolves and charges an ether command unless sealed, then disables one-use ether slots marked by attribute 0x2000.
+0x00A023D0, unitCmdItem - Resolves the item command and its selected target only on the command's first active frame.
+0x00A02450, unitCmdItemSub - Calculates item hit and damage for every target, records scenario results and source metadata, and links each target to the user.
+0x00A025F8, unitCmdMove - Initializes destination and velocity, then jumps or warps the unit there before advancing its command.
+0x00A02728, unitCmdGuard - Starts the guard animation and flag, then restores standing and advances after animation completion.
+0x00A027D0, unitCmdAgws - Clears statuses, queues AGWS transition commands, plays transformation effects and sounds, then advances the current command.
+0x00A028C8, unitCmdUnitChange - Teleports out, replaces the unit while preserving calculation and queued-command state, reloads resources, then queues reentry.
+0x00A02CC0, unitCmdStand - Restores the standing motion, clears object flag 2, and immediately advances the command queue.
+0x00A02D20, unitCmdEnd - Finishes the current unit command by restoring standing state and advancing the command queue.
+0x00A02D38, unitCmdDmg - Plays damage motion, face, and sound; knockback moves frontline units backward before restoring standing state.
+0x00A02EC0, unitCmdEva - Plays evasion motion 0x1A, waits for its completion flag, then restores standing and advances.
+0x00A02F48, unitCmdDef - Plays defense and optional guard motions sequentially, then restores standing and advances after animation completion.
+0x00A03018, unitCmdDead - Runs the multi-stage death sequence, clears most statuses, handles enemy teleport removal, and releases ordinary enemy units.
+0x00A032E8, unitDeadSpecChk - Returns false only for enemy character IDs requiring special retention during the death sequence.
+0x00A03340, unitCmdMot - Plays the requested motion until either its duration expires or animation completes, processing motion-trigger data each frame.
+0x00A033F8, unitCmdTgtSet - Resolves and stores the command's first target; cancels the command list when no valid target exists.
+0x00A034A8, unitCmdTurn - Turns toward a target unit, position-table coordinate, or opposing group's centroid, then advances when rotation finishes.
+0x00A03680, unitCmdTurnSub - Computes the shortest facing rotation toward stored coordinates, advances it over character-dependent frames, and reports completion.
+0x00A03B58, unitCmdTurnSubInit - Copies command position offsets 0x90 and 0x98 into 0xE0 and 0xE8, optionally reflecting them around actor coordinates.
+0x00A03BC0, unitCmdMoveCha - Chooses walking, running, jumping, hovering, warping, or floating movement toward another character from the unit's movement type.
+0x00A03DA0, unitCmdMoveNext - Restores canonical facing, optionally stores the reached position and standing motion, then advances the command queue.
+0x00A03E50, unitCmdMoveChaNorm - Runs until 255 units from the target character, then jumps the remaining distance and completes movement.
+0x00A03F88, unitCmdMoveChaRun - Runs toward the target character with movement mode one, then finalizes the command on arrival.
+0x00A03FD0, unitCmdMoveChaJump - Jumps toward the target character with movement mode three, then finalizes the command on landing.
+0x00A04018, unitCmdMoveChaHover - Hovers toward the target character with movement mode five, then finalizes the command on arrival.
+0x00A04060, unitCmdMoveChaWarp - Warps toward the target character with movement mode seven, then finalizes the command on arrival.
+0x00A040A8, unitCmdMoveChaJump2 - Covers the target distance in three sequential jumps, recalculating each segment before finalizing movement.
+0x00A041C0, unitCmdMoveChaHover2 - Jumps toward the target character with movement mode nine, then finalizes the command on landing.
+0x00A04208, unitCmdMoveChaFloat - Floats toward the target character with movement mode 0x0B, then finalizes the command on arrival.
+0x00A04250, unitCmdMoveChaHover3 - Jumps toward the target character with movement mode 0x0D, then finalizes the command on landing.
+0x00A04298, unitCmdMovePos - Chooses walking, running, jumping, hovering, warping, or floating movement toward a position from the unit's movement type.
+0x00A04478, unitCmdMovePosNorm - Jumps most of a long route, then runs to the selected position and stores it as the unit's location.
+0x00A045E8, unitCmdMovePosRun - Runs toward the selected position with movement mode two, then stores the destination and finalizes the command.
+0x00A04630, unitCmdMovePosJump - Jumps toward the selected position with movement mode four, then stores the destination and finalizes the command.
+0x00A04678, unitCmdMovePosHover - Hovers toward the selected position with movement mode six, then stores the destination and finalizes the command.
+0x00A046C0, unitCmdMovePosWarp - Warps toward the selected position with movement mode eight, then stores the destination and finalizes the command.
+0x00A04708, unitCmdMovePosHover2 - Jumps toward the selected position with movement mode ten, then stores the destination and finalizes the command.
+0x00A04750, unitCmdMovePosFloat - Floats toward the selected position with movement mode 0x0C, then stores the destination and finalizes the command.
+0x00A04798, unitCmdMovePosHover3 - Jumps toward the selected position with movement mode 0x0E, then stores the destination and finalizes the command.
+0x00A047E0, unitCmdDirAdj - Faces along or opposite the movement destination vector according to side and movement mode.
+0x00A048B8, unitCmdPosAdj - Applies character- and motion-specific movement distance corrections from player or enemy adjustment tables.
+0x00A04B30, unitCmdRun - Runs a staged ground movement with turning, size-based speed, footsteps, dust effects, coordinate integration, and landing motion.
+0x00A04DE8, unitCmdJump - Runs a staged jump with takeoff and landing motions, sound and dust effects, facing adjustment, interpolation, and destination correction.
+0x00A053B0, unitCmdHover - Runs a staged hovering movement with takeoff effects, turning, spline traversal, flight motion, landing, and destination correction.
+0x00A055E0, unitCmdFloat - Runs a staged floating movement along a five-point spline, adjusting altitude and interpolation before settling at the destination.
+0x00A05880, unitCmdWarp - Restores standing, teleports the unit out, moves its actor directly to destination, then teleports it back in.
+0x00A05958, unitCmdDstSet - Resolves movement destination from a target unit, position-table entry, or explicit command coordinates and stores XYZ in work offsets 0x90-0x98.
+0x00A05A60, unitCmdDirSet - Computes actor facing from command coordinates 0x90 and 0x98, stores radians at actor offset 0x54, and returns it.
+0x00A05B18, unitCmdLenGet - Returns immediately without changing state; unitCmdFloat invokes it as a placeholder hook.
+0x00A05BA8, unitCmdDivSet - Interpolates command coordinates 0x90 and 0x98 toward actor offsets 0x10 and 0x18 by the supplied ratio.
+0x00A05BF8, unitCmdVASet - Derives travel duration, velocity, acceleration, and optional five-point spline controls from distance and movement mode.
+0x00A06068, unitCmdMoveCalc - Integrates actor XYZ velocities and accelerations toward stored destination coordinates, clamps overshoot, and reports when all three axes arrive.
+0x00A06448, unitTelIn - Raises actor fade field 0xC0 by 0xD0 toward one, clears hidden bit 3, and reports completion.
+0x00A064B8, unitTelOut - Lowers actor fade field 0xC0 by 0xD0 toward zero, sets hidden bit 3, and reports completion.
+0x00A06520, unitCmdBtst - Waits a command-defined delay, starts battle-entry motion and weapon animation, processes triggers, then restores standing and advances.
+0x00A06718, unitCmdBted - Plays battle-end body, weapon, and face motions for ordinary actors, hides status effects, then advances after animation completion.
+0x00A068D8, unitMtdProc - Reads motion triggers two, three, six, and seven to show or hide default and secondary weapon actors.
+0x00A069C0, unitCmdRec - Optionally restores standing motion on the first frame, then advances the current command immediately.
+0x00A06A20, unitCmdWake - Plays wake motion and sound, clears removed flag 0x80 after completion, restores standing, and advances.
+0x00A06AD0, unitCmdStat - Optionally restores standing motion on the first frame, then advances the status command immediately.
+0x00A06B30, unitCmdReadWait - Waits until the requested CD operation count completes, finalizes unit-file relocation, then advances the command.
+0x00A06BC8, unitCmdAgws2 - Plays the character or AGWS transformation effect, restores standing, teleports in, then advances the command.
+0x00A06C88, unitCmdEscape - Teleports the unit out, marks it removed, and destroys enemy units after removing their table entry.
+0x00A06D48, unitCmdFadeIn - Teleports the unit in, restores linked and local status-effect display, then advances the command.
+0x00A06E18, unitCmdFadeOut - Hides linked and local status effects, teleports the unit out, then advances the command.
+0x00A06EE0, unitMotSet - Starts the requested unit motion through unitMotSetEx with interpolation mode zero.
+0x00A06EF8, unitMotSetEx - Validates and starts an actor animation, derives playback flags from motion and unit state, and synchronizes linked-effect visibility.
+0x00A07158, unitSetInterp - Follows object offset 0x10 and sets interpolation-enable field 0x100 to one.
+0x00A07168, unitSetInterpTime - Follows actor pointer at offset 0x14 and stores interpolation time at actor offset 0x714.
+0x00A07178, unitWpnMotSet - Selects one of three weapon actors and requests animation index type times 0x100 plus motion minus one.
+0x00A07208, unitFaceMotSet - Requests the face actor animation at motion index minus one and reports whether the request failed.
+0x00A07290, unitMotGet - Follows actor pointer at offset 0x14, reads animation index at 0xF0, and returns index plus one.
+0x00A072A0, unitMotStandSet - Chooses normal, alternate idle, or guarded standing motion from unit flags and idol state, then starts it.
+0x00A07328, unitNoGet - Searches all eight unitTbl pointers for the supplied unit and returns its index, or minus one.
+0x00A07388, unitPtrGet - Returns unitTbl[index] for indices below eight; logs invalid indices and returns null.
+0x00A073D8, unitDispOn - Clears hidden bit 3 in each nonnull actor flags word reached through unit offset 0x14.
+0x00A07430, unitDispOff - Sets hidden bit 3 in each nonnull actor flags word reached through unit offset 0x14.
+0x00A07488, unitColiGet - Adds two unit collision-height fields and returns the sum scaled by one hundred.
+0x00A074F8, unitAgwsChk - Returns whether the selected unit table contains at least one unit with AGWS capability flag 0x40.
+0x00A07588, unitIdChk - Returns whether the selected unit table contains at least one calculation record with the requested character ID.
+0x00A07628, unitDispOnAll - Enables actor display for every active unit through unitDispOnOff mode zero.
+0x00A07640, unitDispOffAll - Disables actor display for every active unit through unitDispOnOff mode one.
+0x00A07658, unitDispOnOff - Shows or hides every unit actor, linked actor, and status-effect object according to the supplied mode.
+0x00A07770, battleInit - Resets object, unit, AI, input, scenario, reward, audio, menu, manager, cursor, and global battle-control state.
+0x00A078B8, battleMain - Marks battle processing active, handles control and execution for one frame, then evaluates battle completion.
+0x00A078E8, battleAfter - Starts victory poses and camera after a win, then waits for confirmation and unit completion or handles nonvictory results.
+0x00A07A60, battleCtrl - Coordinates help and boosts, selects the next actor, dispatches manual, AI, confusion, or junk turns, and restores the camera.
+0x00A07D38, battleCtrlConfusion - Enumerates valid weapon and technique targets for a confused unit, queues one random attack, then ends its turn.
+0x00A08020, battleCtrlJunk - Displays the power-loss movement warning and queues a turn-ending command for the disabled unit.
+0x00A080C8, actStockInit - Resets action-stock cursors, mode, temporary actors, and entries, deriving capacity from the active battle-unit count.
+0x00A08150, actStockMaxGet - Returns half the active battle-unit count rounded up, capped at four, for the action-stock capacity.
+0x00A08230, actStockMake - Fills action stock with battle-ready units whose wait counters expire, marking each selected unit and logging the resulting order.
+0x00A08420, actStockPick - Selects the next valid queued actor, prioritizing boost and forced entries, rebuilding the stock when exhausted.
+0x00A08598, actStockRemove - Removes a unit from pending boost actors and action-stock entries, returning its stock index and whether any match existed.
+0x00A08638, actStockGet - Returns the address of the global queued-action array actStock.
+0x00A08648, battleCtrlHelp - Advances helpFlag modulo three to select the next battle-help page, then returns one.
+0x00A08678, battleCtrlHelpGet - Returns global helpFlag, which battle control uses to track help handling.
+0x00A08688, battleCtrlBoostPl - Displays player boost selection while held, maps face buttons to party slots, validates the chosen unit, and activates boost.
+0x00A087A0, battleCtrlBoostEn - Gives the first eligible enemy a random boost using its configured probability, returning whether one boosted.
+0x00A088B8, battleCtrlMan - Initializes manual targeting, processes menu input, queues the selected action or turn end, and consumes weapon ammunition and AP.
+0x00A08A58, manInput - Runs the manual battle-input state machine for command menus, ether, items, target cursors, movement, AGWS, and confirmation.
+0x00A09498, camEventTurnStartSet - Starts camera event six using the acting unit, selected target, and actor's player-or-enemy side flag.
+0x00A09500, cmdListPtrGet - Writes the addresses of fifoCmd and cmdList into the two caller output pointers.
+0x00A09520, cmdListSet - Appends a unit pointer and 20-byte command record to the global battle-command FIFO.
+0x00A095A8, cmdListChange - Replaces the unit pointer and 20-byte command record at the battle-command FIFO head.
+0x00A09628, convKey2unit - Converts a selected battle-menu command into unit command type, technique, target, weapon, or item fields.
+0x00A097C0, unitCmdListSet - Expands attacks and movement into setup commands, updates position-state flags, then appends the requested unit command.
+0x00A099B8, cmdListCansel - Removes leading commands belonging to the supplied unit until another unit or protected command type eight is reached.
+0x00A09A48, battleCtrlThink - Enables the menu map layer, executes enemy AI attack selection for the unit, and returns zero.
+0x00A09A80, battleExec - Advances the battle execution state machine across normal actions, scenario playback, status phases, deaths, and busy-unit waits.
+0x00A09C90, battleExecNorm - Dequeues one executable battle command, updates status display ownership, dispatches it to the unit, and closes completed turns.
+0x00A09E18, battleExecDead - Removes defeated units from action stock, queues deaths, accumulates enemy rewards, records special kills, and starts death cameras.
+0x00A0A120, stat1Proc - Applies periodic HP and EP status effects, queues result animations and numbers, preserves one HP, and triggers forced unit changes.
+0x00A0A5A0, stat2Proc - Revives eligible removed units, consumes revival statuses, handles enemy item transformations, and queues recovery animation and damage numbers.
+0x00A0A8C0, keyCmdGet - Buffers pad input, recognizes character or AGWS command sequences, validates target usability, and returns command or cancellation code.
+0x00A0AA40, keyCmdApGet - Returns a command's AP cost from character mappings, equipped AGWS weapon attributes, or fixed special-command costs.
+0x00A0ABA0, keyCmdChk - Rejects commands blocked by unit type, seals, equipment, AP, target rules, pursuit requirements, or unavailable special techniques.
+0x00A0AEE8, keyCmd2tid - Resolves an input command to its character technique or equipped weapon technique, including alternate and double-action attacks.
+0x00A0B098, keyCmd2wno - Maps an input command to weapon slot zero through two, rejecting unavailable equipment and unsupported commands.
+0x00A0B168, keyBuffClear - Clears the 32-byte buffered-input array and resets its global write index to zero.
+0x00A0B198, keyBuffIdxGet - Returns global keyBuffIdx, the current buffered battle-input count and insertion index.
+0x00A0B1A8, keyBuffSet - Appends a valid character or AGWS key token to the eight-entry input buffer and reports success.
+0x00A0B270, keyBuffChk - Matches the buffered key sequence against character or AGWS command tables and returns its command plus weapon attribute.
+0x00A0B3E8, busyUnitChk - Counts units whose object flags reached through offset 0x10 have busy bit 1 set.
+0x00A0B448, actUnitTblMake - Copies active, visible units from the selected unit table into an optional output array and returns their count.
+0x00A0B4D0, tgtUnitPick - Returns a random pointer from the supplied table and count, or null when the count is zero.
+0x00A0B518, battleEndChk - Detects party defeat, enemy defeat, or escape after units become idle and sets the corresponding battle result code.
+0x00A0B5F0, battleRetCodeGet - Returns global batRetCode, consumed by battle phase transitions and shutdown processing.
+0x00A0B600, battleRetCodeSet - Stores the supplied battle result code directly into global batRetCode.
+0x00A0B610, thinkNoGet - Returns global thinkNo, the currently selected battle AI script identifier.
+0x00A0B620, thinkNoSet - Stores the supplied battle AI script identifier directly into global thinkNo.
+0x00A0B630, plUnitTblGet - Copies three party character and position pairs from persistent party data into plTbl, then returns plTbl.
+0x00A0B688, plUnitTblSet - Writes one party character and position pair to persistent party data and mirrored plTbl entries.
+0x00A0B6F8, monsSetNoGet - Returns the persistent enemy-set identifier stored at address 0x00362610.
+0x00A0B708, monsSetNoSet - Stores the supplied enemy-set identifier at persistent address 0x00362610.
+0x00A0B718, mapNoGet - Returns the persistent battle map identifier stored at address 0x00362612.
+0x00A0B728, mapNoSet - Stores the supplied battle map identifier at persistent address 0x00362612.
+0x00A0B738, cfEncountGet - Returns the encounter configuration byte stored at persistent address 0x00362616.
+0x00A0B748, cfEncountSet - Stores the supplied encounter configuration byte at persistent address 0x00362616.
+0x00A0B758, cfEventGet - Returns the battle event configuration byte stored at persistent address 0x00362617.
+0x00A0B768, cfEventSet - Stores the supplied battle event configuration byte at persistent address 0x00362617.
+0x00A0B778, actUnitGet - Returns global pActUnit, the unit currently executing a battle action.
+0x00A0B788, lastUnitGet - Returns global pLastUnit, the unit that most recently acted.
+0x00A0B798, tgtUnitAdrGet - Returns pTgtUnit2 for manual modes 6, 7, 9-11; otherwise returns the pTgtUnit address.
+0x00A0B7F8, tgtUnitGet - Dereferences the pointer from tgtUnitAdrGet and returns the currently selected target unit.
+0x00A0B818, tgtUnitSet - Stores the supplied unit pointer in the global target-unit slot returned by tgtUnitAdrGet.
+0x00A0B840, manWorkGet - Returns the address of global manual-control work structure manWk.
+0x00A0B850, menuChk - Returns true when menuOpenChkBat is nonzero or the global menu flag equals one.
+0x00A0B888, batCtrlGet - Returns the address of global battle-control structure batCtrl.
+0x00A0B898, scenarioPtrFuncSet - Stores the scenario phase callback in DAT_00A57B68 and resets its state counter DAT_00A57B6C.
+0x00A0B8B0, scenarioBatInit - Initializes scenario audio, source and destination pointers, counters, busy state, and the phase-10 callback.
+0x00A0B900, scenarioSrcSet - Copies the supplied 20-byte scenario record into the current source record and returns one.
+0x00A0B938, scenarioDstSet - Appends a 40-byte scenario record while scenarioPtr is below thirteen, then increments scenarioPtr.
+0x00A0B9D0, scenarioSrcGet - Returns DAT_00A57B64, the pointer to the current source scenario record.
+0x00A0B9E0, scenarioDstGet - Returns the destination record at base plus 0x28 times source-offset index when in both bounds; otherwise null.
+0x00A0BA30, scenarioBatNext - Advances the scenario destination index by the current source stride; clamps at the queued scenario count.
+0x00A0BA70, scenarioCam - Selects and starts item, physical, or ether attack cameras from source, destination, technique attributes, and hit result.
+0x00A0BBE8, scenarioBatExec - Executes the current scenario phase callback while destinations remain, then finalizes the scenario when all records are consumed.
+0x00A0BC50, scenarioBatDataSync - Waits for auxiliary and CD reads to finish, then loads the scenario sound-effect bank and reports completion.
+0x00A0BC98, etehrCVGet - Maps unit character and technique identifiers to voice category four, five, or six.
+0x00A0BD78, hairWindOn - Configures global wind and sets actor flag 0x100000 on every player unit except the supplied source.
+0x00A0BE38, hairWindOff - Stops global wind and clears actor flag 0x100000 on every player unit except the supplied source.
+0x00A0BEB8, scenarioBatExecPhase10 - Hides source status effects, starts the attack camera, requests animation data, loads missing sounds, and enters scenario phase 20.
+0x00A0BF98, scenarioBatExecPhase20 - Prepares physical, ether, item, or special attack motions and resources, waits for loading and animation triggers, then advances.
+0x00A0C450, scenarioBatExecPhase25 - For three cinematic techniques, hides the scene, plays a movie, reloads the map, fades in, then resumes phase 30.
+0x00A0C618, scenarioBatExecPhase30 - Starts source body and weapon attacks, loads special motions, plays sounds, launches destination effects, and enters impact processing.
+0x00A0C920, scenarioBatExecPhase40 - Processes attack triggers and special flows until complete, retracts temporary weapons, restores the attacker, and enters recovery.
+0x00A0CB60, scenarioBatExecPhase50 - Waits for attack resources to finish, restores source status effects, starts the recovery camera, and advances the scenario.
+0x00A0CBF8, scenarioBatExecMain - Processes each destination when its hit trigger fires, queues result commands, plays impact sounds, displays damage, and marks completion.
+0x00A0CE20, nusumeSet - Stores the supplied steal-operation state directly into global nusumuFlag.
+0x00A0CE30, nusumeGet - Returns global nusumuFlag, the current steal-operation state consumed by special-flow processing.
+0x00A0CE40, flowSpecProcInit - Initializes technique-specific escape, steal, analysis, body-change, status-clearing, battle-capacity, and summon state before special-flow execution.
+0x00A0D078, flowSpecProc - Dispatches summon, transformation, prayer, steal, analysis, and other technique-specific flows, returning when their asynchronous work completes.
+0x00A0D3E0, syoukanFadeOut - Clears every other active player unit's commands and queues command 0x30 to fade them out for summoning.
+0x00A0D490, syoukanFadeIn - Clears every other active player unit's commands and queues command 0x2F to restore them after summoning.
+0x00A0D540, syoukan1Sub - Replaces the summoner's queue with unit-change, attack-setup, standing, and delayed commands selected from the technique's range flags.
+0x00A0D600, syoukan2Sub - Replaces the summoner's queue with unit-change, delayed, and fade-in commands using its linked replacement character and position.
+0x00A0D698, specSyoukanProc - Runs summon fade-out, teleport, scenario, replacement, and fade-in stages while temporarily hiding status effects.
+0x00A0D810, specHensinProc - Runs transformation teleport and command replacement, optionally plays a movie and reloads the map, then restores display.
+0x00A0DA28, specAnalyzeProc - Builds and displays an enemy analysis panel containing name, HP, level, reward values, experience, and both drop entries.
+0x00A0DB30, specEscapeProc - Sets global escapeFlag to one for the special escape action.
+0x00A0DB40, specInoriProc - Randomly selects an item from four weighted prayer reward groups and displays its acquired-item battle message.
+0x00A0DC48, specNusumuProc - Selects primary or secondary enemy steal rewards by chance and prior flags, grants valid loot, and formats success or failure messages.
+0x00A0DE48, itemNameGet - Returns an item, weapon, belt, or accessory name pointer according to group selector, logging unsupported groups.
+0x00A0DF00, battleMsg - Displays the supplied battle message at coordinates 0x10, 0x15C for 30 frames.
+0x00A0DF28, scenarioBatExecDst - Converts scenario result types into unit commands 9-11 or 0x27-0x29, clears the target queue, and enqueues the result.
+0x00A0E028, decoEffCall - Maps generic or character-specific effect selectors to concrete effect IDs, then dispatches the resolved nonzero effect.
+0x00A0E178, decoEffCallSub - Updates the active unit effect control fields selected through calcUPGet for effect dispatch.
+0x00A0E200, scenarioEffCall - Builds source, target, character, attribute, result, weapon, status, and event parameters, then launches one or two attack effects.
+0x00A0E408, scenarioMtd - Responds to motion triggers by showing or hiding primary and secondary weapons, linked models, and ether hair wind.
+0x00A0E550, spWepDispOn - Shows the appropriate normal or special weapon actor, handling dual models and character-specific attachment presentation.
+0x00A0E6A8, spWepDispOnSub - Reveals the selected weapon actor immediately or starts its translucent fade-in transition.
+0x00A0E6F8, spWepDispOff - Hides the appropriate normal or special weapon actor, handling dual models and character-specific attachment presentation.
+0x00A0E8A8, spWepDispOffSub - Hides the selected weapon actor immediately or starts its translucent fade-out transition.
+0x00A0E8F8, transWepIn - Selects weapon actor pointer at unit offset 0x1C, clears fade and hidden bit, and installs transWepInDraw.
+0x00A0E938, transWepInDraw - Draws a transitioning weapon while increasing opacity by one tenth each frame, then stops at fully visible.
+0x00A0E990, transWepOut - Selects weapon actor pointer at unit offset 0x1C, sets fade 0xC0 to one, and installs transWepOutDraw.
+0x00A0E9C8, transWepOutDraw - Draws a transitioning weapon while decreasing opacity by one tenth each frame, then hides it at zero.
+0x00A0EA28, scenarioSrcEndChk - Reports source completion from special-flow state, effect loading, or attack animation triggers according to action type.
+0x00A0EB00, scenarioBatEnd - Applies queued damage, item, status, revival, wait-time, AI response, and counterattack results to every scenario destination.
+0x00A0ED80, counterProc - Attempts an eligible technique counter, spending battle points or activating boost, and records the original attacker when successful.
+0x00A0EEA0, dmgValPut - Creates damage-number objects for source and target as required, then logs the result category, flags, and value.
+0x00A0F110, monsGainPtrGet - Returns the address of global enemy reward accumulator monsGain.
+0x00A0F120, monsGainInit - Zeroes the global 0x58-byte monster reward and drop accumulator at address 0x00A57B90.
+0x00A0F148, monsGainSet - Accumulates defeated-enemy experience, money, points, time bonuses, and chance-based primary or secondary item drops.
+0x00A0F378, itemGrpChk - Tests an item identifier against group-specific upper bounds 0x49, 0x74, 0xB3, or 0xB5.
+0x00A0F3D0, statEffProc - Reconciles eight visible status-effect categories against active status bits, creating or destroying effects and adjusting actor face and flags.
+0x00A0F620, statEffOn - Clears hidden bit 0x100 on each of the unit's eight active status-effect objects.
+0x00A0F6A8, statEffOff - Sets hidden bit 0x100 on each of the unit's eight active status-effect objects.
+0x00A0F720, objEnCurCreate - Creates and initializes an enemy-cursor object with supplied coordinates and selector, active flag, and cleared animation state.
+0x00A0F7B8, objCurRemove - Removes the active enemy-cursor task when present and clears its global task pointer.
+0x00A0F7F8, objCur - Executes cursor movement or tracking commands, updates model coordinates for visible targets, and clears active movement when complete.
+0x00A0F8C0, objCurDraw - Skips hidden cursors, then dispatches player or enemy cursor rendering according to object side flag 0x40.
+0x00A0F900, curCmdSet - Copies a twenty-byte cursor command to the queue tail, resets interpolation fields, and marks nonzero commands active.
+0x00A0F978, curSel - Cycles the selection index from directional input, wraps within available entries, moves the cursor, and plays sound ten on change.
+0x00A0FA80, curGrpSel - Toggles target group zero or one when either supplied direction mask is pressed and plays sound ten.
+0x00A0FB00, curMove2Pos - Sets cursor destination from selected unit coordinates or formation position, chooses height, initializes hidden position, and queues movement.
+0x00A0FC38, curEnProcInit - Builds a cursor list of visible units in the requested side table, preserves current selection, and initializes cursor movement.
+0x00A0FD80, curEnProc - Processes unit-target navigation, returns the selected unit, and queues a tracking command whenever cursor movement is idle.
+0x00A0FE38, curPosProcInit - Builds selectable unoccupied formation positions valid for the unit and movement mode, preserving the current-position index.
+0x00A10010, curPosProc - Processes formation-position navigation, returns the selected position, and queues movement whenever the cursor is idle.
+0x00A100F8, curTgtProcInit - Builds player- or enemy-group target candidates from targeting flags, restores prior selection, and initializes cursor movement.
+0x00A102E8, curTgtProc - Navigates individual targets or automatically cycles all-target tracking every four frames, returning selection changes only in individual mode.
+0x00A104B8, curSelGrpSet - Sets cursor group directly for values below two or derives it from target bits 3 and 6, then invalidates oldCurGrp.
+0x00A10508, curSelGrpGet - Returns DAT_00A57C48, the currently selected target cursor group.
+0x00A10518, objDispPlCur - Returns immediately without changing state; objCurDraw invokes it as a placeholder hook.
+0x00A10520, objDispEnCur - Uploads cursor textures, draws cursor and acting-unit marker, then displays the selected target's name when allowed.
+0x00A10670, objDispCur - Chooses cursor palette and invalid-line marker from target state, draws enemy and rotating cursor geometry, then submits the packet.
+0x00A10750, objDispCurSubPl - Returns immediately without changing state; objDispCur invokes it as a placeholder hook.
+0x00A10758, objDispCurSubEn - Projects the cursor billboard and draws one of six animated 0x24-by-0x32 frames with valid or invalid color.
+0x00A108E0, curPutSub - Temporarily configures rotating cursor object scale and matrix, emits its textured FT4 geometry, then restores the object's transform state.
+0x00A10A80, curTexTrans - Uploads cursor texture file slot two, emits GS FINISH register 0x3F value one, and submits the packet.
+0x00A10AC8, curEnvMake - Writes cursor GIF environment registers using texture address 0x0F and palette address 0x10 or 0x12.
+0x00A10BB8, calcCopyParaMake - Copies origin parameters into calculation storage, then merges linked pilot, AGWS frame, and engine contributions when applicable.
+0x00A10DD0, calcPara2Org - Copies current player HP and EP back to origin records, including linked pilots and AGWS pilot EP synchronization.
+0x00A10F00, calcPara2OrgSub - Copies current HP and EP from a unit's calculation record into its persistent origin record.
+0x00A10F40, calcDeadReset - Ensures every populated player origin has at least one HP when its battle object is removed, hidden, or already zero.
+0x00A11010, calcUPGet - Follows the pointer at unit offset 0x10, then returns its calculation-parameter pointer at nested offset 0x84.
+0x00A11020, calcHpDmg - Applies HP or EP damage, healing, or absorption between source and target according to result types one through ten.
+0x00A11108, calcTotalParaMenu - Recalculates menu-visible totals for the supplied player calculation record through calcTotalParaMenuSub.
+0x00A11128, calcTotalParaMenuSub - Builds menu calculation parameters, applies skills, clamps persistent HP and EP, and optionally returns three attacks plus physical and magical defense.
+0x00A11220, calcTakeEpGetMenu - Builds temporary menu parameters and returns the selected ether technique's adjusted EP cost.
+0x00A11270, calcUseEtherMenu - Applies a menu ether technique to one or all targets using temporary battle parameters, then deducts adjusted EP cost.
+0x00A114C0, calcUseItemMenu - Applies a menu item to one or all targets using temporary battle parameters while preserving unrelated origin fields.
+0x00A11668, calcUseItem - Applies an item's flagged HP, EP, status, attribute, experience, stat-growth, battle-count, escape, and special effects to its target.
+0x00A11C98, calcSkillInit - Applies skills granted by three equipped accessories and three direct skill slots to the unit's calculation parameters.
+0x00A11D58, calcSkillInitSub - Applies one skill's status protection, persistent status, flat stat additions, or percentage HP and EP bonuses with caps.
+0x00A12008, calcSkill - Sums matching skill magnitudes across three accessory-granted skills and three directly equipped skills.
+0x00A12108, calcSkillSub - Returns a skill's seven-bit magnitude when both requested flag masks match its two descriptor words; otherwise zero.
+0x00A12188, calcAccEquChk - Returns whether the unit has the requested accessory identifier in any of its three equipment slots.
+0x00A12200, calcSkillEquChk - Returns whether a skill identifier is provided by any of three equipped accessories or three direct skill slots.
+0x00A122C0, calcSkillEquChkAll - Returns whether any player unit or its linked pilot has the requested skill equipped.
+0x00A123B8, calcAp - Adds the signed AP delta to calculation offset 0x3A, clamps at six, and rejects unaffordable negative deltas.
+0x00A12428, calcHp - Applies a signed HP delta clamped between zero and maximum unless the corresponding player or enemy invincibility cheat is active.
+0x00A12508, calcEp - Adds the delta to current EP at offset 0x36, clamps between zero and maximum offset 0x02, then returns one.
+0x00A12590, calcBp - Accumulates boost progress while below maximum, converts each fifty points into one boost counter, and resets progress at maximum.
+0x00A12648, calcBp2Tid - Awards player boost progress by technique category, tripling it during event slot two; enemies receive none.
+0x00A126E8, calcBc - Adds the delta to boost counter 0x3C, clamps between zero and maximum 0x3B, then returns one.
+0x00A12770, calcCounter - Rolls the unit's counter chance plus matching skill bonus, capped at 100, unless the technique forbids counters.
+0x00A127F0, calcBoostChk - Validates actor state, action-slot vacancy, life, AGWS equipment, boost stock, and blocking statuses before allowing boost.
+0x00A128F8, calcBoost - Optionally consumes one boost counter, marks the actor boosting, assigns its action slot, and plays effect and sound.
+0x00A12968, calcIdol2Chk - Returns one when a visible unit has current HP below one fifth of maximum HP.
+0x00A129E0, calcTuigekiChk - Returns whether calcStatGet reports the follow-up-attack status bit for the supplied unit.
+0x00A12A08, calcSpecChk - Enforces technique 0x34 dead-target availability and status prerequisites for techniques 0x59 and 0x5A.
+0x00A12AA8, calcDItemChk - Allows duplicate item use only with six AP, a single-target item, quantity above one, and item flag bit zero.
+0x00A12B28, calcTurnStart - Grants AP from statuses and clears pending-action flag 0x800, inserting command 0x0D when its queue is empty.
+0x00A12C40, calcTurnEnd - Clears transient action flags, calculates current and baseline wait counters, resets accumulated wait modifier, and advances status durations.
+0x00A12CB8, calcWct - Calculates wait time from accumulated modifier and agility, then applies haste, quarter-speed, and half-speed status adjustments.
+0x00A12DE0, calcWctDec - Decrements a battle-enabled unit's wait counter by one or randomly two, clamps at zero, and returns it.
+0x00A12E50, calcHitMotChk - Returns a matching hit-motion event only for command types one through three; nonexact MTD matches return zero.
+0x00A12EA8, calcHitDmg - Initializes result fields, calculates hit and damage, applies event immunity, and enforces the player instant-kill cheat when enabled.
+0x00A12FD8, calcHitRate - Compares adjusted attacker hit and target evasion with random rolls, technique flags, life, and statuses to return hit quality.
+0x00A13190, calcHitParaGet - Returns the attacker's hit parameter, halving it under penalties or increasing it by one quarter under a bonus status.
+0x00A13240, calcHit - Converts technique job type, attributes, target flags, and hit-rate result into the encoded hit-result category and modifiers.
+0x00A13398, calcWpnAtkGet - Returns selected weapon or attachment attack power, applies temporary percentage modification, and supports character base-attack substitution.
+0x00A13518, calcPhyDefGet - Sums physical defense from three equipped accessories and three weapon records for the supplied unit.
+0x00A135D8, calcMagDefGet - Sums magical defense byte values from the unit's three equipped accessory records.
+0x00A13658, calcPowLevGet - Returns technique power level plus learned-special growth and special character counter bonuses when applicable.
+0x00A13770, calcPlusAglGet - Returns technique agility modifier plus the matching learned-special record's agility bonus for eligible player specials.
+0x00A13850, calcDmg - Calculates bounded technique damage from attack, defense, power, attributes, statuses, criticals, line position, protections, and random variance.
+0x00A145E8, futtobiChk - Allows knockback only for flagged normal characters in front positions without an occupied destination three rows behind.
+0x00A14708, calcStat - Modifies hit and damage for defensive statuses, clears wake-up and transient statuses, and handles random recovery after physical hits.
+0x00A14998, calcStatAtk - Resolves technique or weapon status payload, validates unit compatibility and protection, rolls application chance, and records successful status.
+0x00A14CB0, calcStatClr - For status-clearing techniques, records group and mask to remove and clears target readiness when no longer battle-enabled.
+0x00A14D58, calcCrit - Calculates critical chance from event, attribute, status, technique, and skill bonuses, then multiplies damage and marks the result.
+0x00A15080, calcSpec - Applies attribute absorption or resistance, reverses hit mode, reduces damage through defensive skills, and records special result flags.
+0x00A15458, calcLinePos - Reduces physical damage by one fifth against eligible normal characters standing on formation line two.
+0x00A15568, calcRevHit - Swaps low-byte hit modes one with two and three with four while preserving the second byte.
+0x00A155D0, calcAtrChg - Replaces attribute bits 0-4 with 0x10, 8, or 4 according to three status masks.
+0x00A15670, calcTakeEpGet - Adjusts technique EP cost for double, half, free slot-A, and other cost statuses, then caps it at 99.
+0x00A15738, calcSlotAChk - Returns whether either of the unit's two slot-A ether identifiers matches the requested identifier.
+0x00A157B0, calcAttWpnChk - Returns whether the selected weapon record has a nonzero byte at offset 0x10.
+0x00A157D8, calcHitItem - Converts item effect flags and target capability or reversal statuses into the encoded healing, damage, status, or utility hit mode.
+0x00A158F0, calcDmgItem - Calculates item magnitude from fixed values or maximum HP, applying poison, defense, reversal, immunity, and one-HP effects.
+0x00A15AE8, tgtFindFirst - Builds the technique or item's valid target list from targeting flags and unit state, then returns its first target.
+0x00A15EB0, tgtFindChk - Returns one for target mode three; otherwise returns calcAtkChk for the candidate unit.
+0x00A15EE8, tgtFindNext - Returns tgtTbl[tgtIdx] and increments tgtIdx while below tgtNum; returns null after exhaustion.
+0x00A15F28, calcMoveChk - Returns one for unrestricted actors or when the requested position appears among five character movement slots.
+0x00A15FE8, calcAtkChk - Validates technique target capability, blocking status, attacker and target formation lines, and unrestricted-range flags.
+0x00A16100, calcA2Chk - For position eight, rejects action while an active ally occupies positions one through six; otherwise allows it.
+0x00A161C0, calcLineChk - Returns false when an active ally occupies a formation line ahead of the supplied unit.
+0x00A16288, calcBackLineChk - Returns false when a farther-back ally with the required shield flag or character ID six blocks the unit.
+0x00A163D8, calcWpnEnableChk - Allows a weapon slot when equipped, sufficiently stocked if ammunition-based, affordable in AP, and within current EP.
+0x00A164A8, calcWpnUse - Consumes one ammunition from an attachment weapon slot, preserving infinite value 0xFF and clamping underflow to zero.
+0x00A16538, calcWpnEquipOrg - For character indices below 0x21 and weapon slots below three, writes weapon ID at 0x5E and hand byte at 0x5A.
+0x00A165B8, calcAccEquipOrg - For character indices below 0x21 and accessory slots below three, writes accessory ID at origin offset 0x64.
+0x00A16620, calcAttEquipOrg - For character indices below 0x21 and attachment slots below three, writes attachment ID at origin offset 0x6A.
+0x00A16688, calcSpecEquipOrg - For character indices below 0x21 and special slots below six, writes special ID at origin offset 0x82.
+0x00A166F0, calcEtherEquipOrg - For character indices below 0x21 and ether slots below twelve, writes ether ID at origin offset 0x8E.
+0x00A16758, calcSkillEquipOrg - For character indices below 0x21 and skill slots below three, writes skill ID at origin offset 0xA6.
+0x00A167C0, calcAgwsEquipOrg - For player origins below 0x11 and AGWS IDs 0x11-0x20, stores AGWS ID at offset 0x54.
+0x00A16818, calcEngineEquipOrg - Writes engine ID at origin offset 0x56 only when equipment capability bit 0x40 at 0x1C is set.
+0x00A16858, calcFrameEquipOrg - Writes frame ID at origin offset 0x58 only when equipment capability bit 0x40 at 0x1C is set.
+0x00A16898, calcDblActChk - Allows double action when both command weapons match, AP equals six, and the weapon needs no ammunition or has stock.
+0x00A16940, calcSameWpnChk - Compares the unit weapon slots selected by the command and reports whether both weapon identifiers match.
+0x00A16AF0, calcEthEnableChk - Validates ether targets, EP cost, event restrictions, special statuses, and per-slot disable flags before allowing use.
+0x00A16C88, calcItmEnableChk - Allows an item when its target flags select at least one unit and event restrictions permit item 0x10.
+0x00A16CF8, calcTgtUnitTbl - Collects targetable units by side, alive or removed state, and AGWS exclusion flags, or returns the acting unit directly.
+0x00A16E68, calcDeadUnitNum - Counts removed units in the player or enemy table selected from the current targeting flags.
+0x00A16ED0, calcBattleChk - Returns one only for a living unit lacking status 0x2000 in groups 0, 1, 4, and 5 and status 0x4000 in group 5.
+0x00A16F80, calcTrg2PE - Converts target flags 0x08, 0x40, and 0x80 and actor side bit 0x40 into player/enemy selector 0-2.
+0x00A16FD8, calcStatTurn - Decrements finite duration bytes for active statuses across eight groups and clears each status when one turn remains.
+0x00A170C0, calcStatProtectGet - Returns whether calculation status-protection word at offset 0x24 plus twice the group index contains the requested mask.
+0x00A17100, calcStatProtectSet - ORs the supplied protection mask into calculation status-protection word at offset 0x24 plus twice the group index.
+0x00A17148, calcStatGet - Returns matching permanent or temporary status bits, with two party-wide status masks scanned across player units.
+0x00A17260, calcStatGetNorm - Returns matching permanent status bits only, with two party-wide masks scanned across player units.
+0x00A17350, calcStatSetChk - Rejects status groups incompatible with unit capabilities, protected masks, and blocking status 0x2000 unless bypass is requested.
+0x00A17420, calcStatSet - Validates and sets a status with duration, clears mutually exclusive statuses, and handles persistent versus temporary masks.
+0x00A17918, calcStatReset - Clears a permanent status and its duration byte or clears the corresponding temporary status mask.
+0x00A179B8, calcStatDefTurnGet - Returns default status duration, extending group-seven status bits zero and one for low current HP.
+0x00A17AA0, calcStatBit2Idx - Returns the index of the lowest set status bit among bits zero through fifteen.
+0x00A17AE8, calcStatIdx2Bit - Returns one shifted by the status index masked to five bits.
+0x00A17AF8, calcStatResetCha - Clears status mask 0x7FFF from unit status groups zero through three.
+0x00A17B60, calcStatResetAll - Clears status mask 0x7FFF from all seven unit status groups.
+0x00A17C08, calcResult - Distributes battle rewards, applies experience and level gains to active and reserve characters, records learned specials, and returns active-player count.
+0x00A18078, calcResultSub - Divides four reward totals among participants, applies skill percentage bonuses, caps accumulated values, and records each awarded amount.
+0x00A18290, calcLvUp - Consumes experience across levels, learns eligible specials, interpolates eight character attributes toward level-100 targets, and reports any level gained.
+0x00A18620, calcCfEncount - Applies encounter flags by clearing party wait values, selecting event timer one, or incrementing party counters.
+0x00A18680, calcPartyStat - Clears wait value or increments encounter count for every populated unit in the selected side table.
+0x00A18740, calcEtherDisableGet - Returns the selected bit from the unit's 16-bit disabled-ether mask at calculation offset 0x14C.
+0x00A18778, calcEtherDisableSet - Sets the selected bit in the unit's 16-bit disabled-ether mask at calculation offset 0x14C.
+0x00A187B0, rnd - Returns the engine random value modulo the supplied inclusive maximum plus one.
+0x00A187E8, calcSplineInit - Initializes a five-word spline descriptor with start, end, duration, midpoint 0.5, and zero progress.
+0x00A18818, calcSpline - Evaluates linear, B-spline, Bezier, or Hermite interpolation at current progress, advances time, and clamps to the endpoint.
+0x00A18A98, calcLinerSub - Linearly interpolates three coordinates between adjacent path points selected by segment index and ratio.
+0x00A18B38, calcBezierSub - Evaluates a cubic Bezier segment from four three-coordinate control points into the output vector.
+0x00A18C98, calcSplineSub - Evaluates a uniform cubic B-spline segment from four three-coordinate control points into the output vector.
+0x00A18F18, calcHermiteSub - Evaluates successive Hermite path segments into the output vector using position and tangent control records.
+0x00A19100, calcNormal - Normalizes a three-float vector in place, writing three zeroes when its reciprocal length is zero.
+0x00A191C0, dataUnitOrgGet - Returns unit-origin record 0x004227C0 plus index times 0x180 for indices below 0x21; otherwise null.
+0x00A19210, dataPlChaGet - Returns player-character record 0x00425A18 plus index times 0xA8 for indices below 0x21; otherwise null.
+0x00A19270, dataUnitInitGet - Returns unit-init base pointer plus index times 0x34 plus fixed address 0x00426F0C.
+0x00A192A8, dataNormInitGet - Returns normal-init base pointer plus index times 0x0C plus fixed address 0x00426F34.
+0x00A192D8, dataSpecInitGet - Returns special-init base pointer plus index times 0x0C plus fixed address 0x00426F34.
+0x00A19308, dataEtherInitGet - Returns ether-init base pointer plus index times 0x18 plus fixed address 0x00426F28.
+0x00A19338, dataExpTblGet - Returns experience-table base pointer iRam00426F78 plus fixed address 0x00426F40.
+0x00A19350, dataParaTblGet - Returns parameter-table base pointer plus index times 0x20 plus fixed address 0x00426F20.
+0x00A19378, dataDefEquipGet - Returns default-equipment base pointer plus index times 0x20 plus fixed address 0x00426F20.
+0x00A193A0, dataSpecTblGet - Returns special-table base pointer plus index times 0x20 plus fixed address 0x00426F20.
+0x00A193C8, dataEtherTecSet - Maps selector one through eight to predefined character ether and special techniques, then marks those techniques learned.
+0x00A194E0, dataEtherLearnSet - Sets the learned-ether bitmap bit beginning at player offset 0x28 for characters below 0x11.
+0x00A19578, dataEtherLearnGet - Returns the requested learned-ether bit from player record bitmap beginning at offset 0x28.
+0x00A19600, dataSkillLearnSet - Sets the learned-skill bitmap bit beginning at player offset 0x38 for characters below 0x11.
+0x00A19698, dataSkillLearnGet - Returns the requested learned-skill bit from player record bitmap beginning at offset 0x38.
+0x00A19720, dataSpecBaseGet - Returns the 32-bit special-table base entry at DAT_00A3EA74 plus four times the character index.
+0x00A19738, dataBakpBaseGet - Returns the halfword at specTbl plus character index times four plus offset 0x3C.
+0x00A19750, dataSpecLearnSet - Stores a learned special identifier in its 0x0C-byte player slot relative to that character's special-table base.
+0x00A197E8, dataSpecLearnGet - Returns the learned-special halfword at player offset 0x48 indexed relative to that character special base.
+0x00A19870, dataSpecDataGet - Searches eight 0x0C-byte learned-special records from player offset 0x48 and returns the matching record pointer.
+0x00A19900, dataNormIdxGet - Searches six normal-technique identifiers at calculation offset 0x76 and returns the matching slot or minus one.
+0x00A19988, dataPlUnitInit - Initializes 32 player unit records, default equipment and techniques, plus character experience, parameters, learned abilities, and slot costs.
+0x00A19D80, dataDummySet - Empty stub returns immediately; no arguments, globals, or external routines are referenced.
+0x00A19D88, dataBattleInit - Resets unit file metadata and clears calculation-record assignment markers for seven player and five enemy slots.
+0x00A19E00, dataUnitInitSet - Assigns reusable player or enemy calculation storage and initializes it from character, enemy, or AGWS source records.
+0x00A1A298, dataPosTblGet - Returns posTbl plus the absolute value of position index times 0x20.
+0x00A1A2C0, dataPosLineGet - Returns the halfword at posTbl plus absolute position index times 0x20 plus 0x10.
+0x00A1A2E8, dataCidGet - Returns cidChgTbl halfword for indices below 0xC4; logs invalid indices and returns zero.
+0x00A1A330, dataWidGet - Returns widChgTbl halfword for indices below 0x75; logs invalid indices and returns zero.
+0x00A1A378, dataTecGet - Returns technique base pointer plus identifier times 0x18 and fixed offset 0x00426F28; rejects identifiers below one.
+0x00A1A3D8, dataWpnGet - Returns weapon base pointer plus identifier times 0x20 and fixed offset 0x00426F20; rejects identifiers below one.
+0x00A1A428, dataAttGet - Returns attack base pointer plus identifier times 0x0E and fixed offset 0x00426F32; rejects identifiers below one.
+0x00A1A488, dataEthGet - Returns ether base pointer plus identifier times 0x0C and fixed offset 0x00426F34; rejects identifiers below one.
+0x00A1A4E8, dataItmGet - Returns item base pointer plus identifier times 0x14 and fixed offset 0x00426F2C; rejects identifiers below one.
+0x00A1A548, dataAccGet - Returns accessory base pointer plus identifier times 0x10 and fixed offset 0x00426F30; rejects identifiers below one.
+0x00A1A598, dataFrmGet - Returns frame base pointer plus identifier times 0x10 and fixed offset 0x00426F30; rejects identifiers below one.
+0x00A1A5E8, dataEngGet - Returns engine base pointer plus identifier times 0x0C and fixed offset 0x00426F34; rejects identifiers below one.
+0x00A1A648, dataSklGet - Returns skill base pointer plus identifier times eight and fixed offset 0x00426F38; rejects identifiers below one.
+0x00A1A698, dataGainGet - Returns gain base pointer plus identifier times 0x14 and fixed offset 0x00426CAC; rejects identifiers below one.
+0x00A1A6F8, dataFileLoad - Submits a synchronous file read with zero mode and callback, logs its request identifier, and returns success.
+0x00A1A760, dataCdSync - Returns global cdReqNum, the outstanding asynchronous file-request count.
+0x00A1A770, dataCdSyncClear - Resets the outstanding asynchronous file-request count cdReqNum to zero.
+0x00A1A780, dataNBreadCB - Handles asynchronous read completion, decrementing cdReqNum for status four and reporting errors or an exhausted request count.
+0x00A1A7E8, dataFileLoadNB - Submits an asynchronous file read with callback dataNBreadCB; increments cdReqNum on success and returns whether submission succeeded.
+0x00A1A878, dataFileInfoInit - Clears six unitFileInfo records, initializes model and animation bases, and zeroes three weapon and five animation subrecords each.
+0x00A1A9B0, dataFileInfoInitChg - Clears the active unit-file record's model pointer and three groups of animation and weapon subrecords.
+0x00A1AA70, dataEnemyMdlChk - Examines up to three enemy definitions, resolves CID model ranges, records relocated range boundaries, and performs required memory moves.
+0x00A1AC58, dataLeaderChk - Finds the current field leader among three party entries unless accessory 0x2D blocks it, then promotes that party record.
+0x00A1AD60, dataLeaderCidGet - Returns global leaderCid, the character identifier selected as party leader.
+0x00A1AD70, dataLeaderCidReset - Resets global leaderCid to zero before leader selection or reload.
+0x00A1AD80, dataLeaderReload - Validates that the field character ID at offset 0x2C still matches global leaderCid.
+0x00A1ADC8, dataMotNameGetMenu - Builds a weapon technique's motion filename from the unit-origin record, clearing output when no valid motion exists.
+0x00A1AE90, dataMotNameGet - Builds a unit motion filename from its calculation record and requested motion and weapon selectors.
+0x00A1AF20, dataMotNameGetSub - Appends a motion-name fragment from cidChgTbl, including AGWS model and side suffixes when required.
+0x00A1B018, dataUnitFileLoad - Claims unit file storage, queues body, three weapon, base motion, and special weapon-motion resources, and handles leader changes.
+0x00A1B1E8, dataUnitFileGet - Finds an existing unitFileInfo record by ID or claims a free player or enemy slot and stores character ID.
+0x00A1B310, dataPackPcMdlNameGet - Resolves a character model package name with AGWS exclusions and accessory, KOS-MOS progression, and M.O.M.O. status overrides.
+0x00A1B530, dataPackWpnMdlNameGet - Searches the pcPack weapon-model mapping pairs and returns the matching model filename pointer, or null.
+0x00A1B588, dataUnitFileLoadMdl - Selects character or enemy model files, queues aligned model components, assigns actor resource pointers, and optionally creates a face model.
+0x00A1B910, dataUnitFileLoadFaceMdl - Reuses leader face resources or records character identity, creates a child face actor, and assigns its model pointers.
+0x00A1B9B8, dataUnitFileLoadMot - Builds and queues an aligned motion file into a selected animation slot, reusing already loaded identifiers.
+0x00A1BBF0, dataUnitFileLoadWep - Resolves packed or standalone weapon model components, reuses matching hand resources, queues loads, and creates the weapon child actor.
+0x00A1C1B0, dataWpnLRChk - Returns one only when type equals one and the supplied weapon matches record offset 0xA0.
+0x00A1C1D0, dataChildActorCreate - Creates a child actor, initializes words 0x00-0x08 to 0x208, zero, zero, and returns its pointer.
+0x00A1C238, dataUnitFileLoadMotSp - Resolves the unit's resource bundle and queues loading of the requested special motion into its selected slot.
+0x00A1C298, dataUnitFileLoadMotSp2 - Rebases a loaded motion and assigns its pointer to face, AGWS, or indexed weapon model animation storage.
+0x00A1C348, dataUnitFileLoad2 - Finalizes loaded unit models, then queues standing command 0x25 with random enemy variant or player variant zero.
+0x00A1C3C0, dataUnitFileLoad2Sub - Rebases body, weapon, face, motion, and sound resources, initializes model attachments, and creates eligible character effect actors.
+0x00A1C8A8, dataPackWpnMdl2 - Rebases packed weapon model pointers at unit offsets 0x8D0, 0x8D4, and 0x8D8 using header offsets 0x08-0x10.
+0x00A1C8D8, dataMotAdrSet - Rebases animation pointer at unit offset 0x8DC plus slot times four and stores payload address at 0x100 plus slot times four.
+0x00A1C910, dataFpkAdrGet - Returns the supplied packed-file base plus its relative data offset stored at 0x08.
+0x00A1C920, dataTid2WepSp - Searches three-word wepSpTbl entries by technique identifier and returns the matching entry pointer, or null.
+0x00A1C970, dataFileLoadWepSp - Resolves special weapon metadata or AGWS backup weapon, updates unit equipment fields, and loads the corresponding weapon model.
+0x00A1CA60, dataFileLoadWepSp2 - Finalizes a special or AGWS backup weapon model, rebases packed data, attaches it when needed, and initializes rendering.
+0x00A1CB88, dataFileLoadWepSpEnd - Releases a special or AGWS backup weapon model and clears associated temporary weapon fields.
+0x00A1CC38, dataDefWpnGet - Returns constant 0; no weapon data or external routine is accessed.
+0x00A1CC40, dataMtdRead - Searches the actor MTD table for an event and current animation frame, returning one on frame match, two otherwise.
+0x00A1CDE0, dataXtxFileGet - Returns address of the two-word xtxFile entry selected by index.
+0x00A1CDF8, dataXtxAdrGet - Returns xtxAdr[index] for indices zero through 0x12; logs out-of-range indices and returns zero.
+0x00A1CE50, dataXtxLoad - Queues every filename and destination pair in the null-terminated xtxFile table for nonblocking loading.
+0x00A1CEA0, dataBatDatLoad - Loads the battle data file named at 0x00A46008 into fixed destination 0x00426F40.
+0x00A1CEC8, dataThinkAdrGet - Returns constant 0x436f40; no battle data state or external routine is accessed.
+0x00A1CED8, thinkMapGet - Searches the 100-entry thinkMapTbl for a map number and returns its index or minus one.
+0x00A1CF18, dataThinkNameGet - Builds a think-script filename from base, mapped map index, and extension; clears output and returns false when unmapped.
+0x00A1CFB8, dataThinkDataSet - Copies 0x4000 bytes of supplied AI data to 0x00436F40 for mapped maps and selects that script index.
+0x00A1D0A8, dataThinkFileLoad - Resolves the current map's AI index, queues its script file, updates thinkNo, and reports whether mapped.
+0x00A1D0F8, dataThinkLoad - Builds an AI script filename from base, numeric identifier, and extension, then loads it at 0x00436F40.
+0x00A1D188, dataMapLoadAdrGet - Returns constant 0x1b9e000; no map state or external routine is accessed.
+0x00A1D198, dataMapCameraAdrGet - Returns the loaded map base plus its camera-data offset stored in map header field 0x10.
+0x00A1D1C0, dataMapLoad - Builds and queues a numbered map filename for map indices below 100; logs invalid indices.
+0x00A1D270, dataVPadModeSet - Stores virtual-pad mode, then clears accumulated virtual-pad data.
+0x00A1D288, dataVPadSet - Translates the low fourteen input bits through padConvTbl and ORs mapped masks into padData.
+0x00A1D2D0, dataPadRead - Returns virtual padData when enabled; otherwise selects physical pad words at 0x00490DC0, 0x00490DC2, or 0x00490DC4.
+0x00A1D348, thinkSysInit - Zeroes the 0x240-byte AI process table and the adjacent 0x1D0-byte AI work area.
+0x00A1D380, thinkTopSet - Stores the supplied AI data-segment base directly into global pDataTop.
+0x00A1D390, thinkContextSet - Stores the supplied AI execution-context pointer directly into global pContext.
+0x00A1D3A0, thinkAdrGet - Returns pDataTop plus the supplied script address with its low bit cleared.
+0x00A1D3C0, thinkProcessAdd - Copies a context into the first free of sixteen AI process slots and returns its one-based identifier.
+0x00A1D460, thinkProcessDel - Clears a nonempty AI process slot and returns one; returns zero when already empty.
+0x00A1D480, thinkProcessChk - Returns whether process slot 1-16 has a nonzero pointer at DAT_00A597AC plus index times 0x24.
+0x00A1D4B8, thinkProcessKindChk - Counts active processBuf entries among sixteen slots whose kind field at offset 0x10 matches the requested kind.
+0x00A1D4F8, thinkProcessExec - Clears virtual-pad input, executes every active AI process among sixteen slots, and returns one.
+0x00A1D558, thinkProcessExecSub - Executes AI commands until yield or completion, deletes completed processes, reports unexpected statuses, and returns one.
+0x00A1D5D0, thinkInit - Initializes AI memory, script tables, camera and message defaults, validates enemy-set index, and selects its map override.
+0x00A1D6E8, camInit - Selects loaded map camera data as script memory, resolves its camera-set table, and resets camTblIdx.
+0x00A1D750, thinkMonsTblNumGet - Counts five-halfword monster table records from pMonsSetTop until a zero identifier.
+0x00A1D790, thinkMonsTblGet - Selects AI script memory and returns the enemy-table address indexed by the requested monster-set number.
+0x00A1D7E0, thinkCamTblNumGet - Counts camera table halfwords from pCamSetTop until a zero terminator.
+0x00A1D820, camInitExec - Selects camera execution context, seeds camera flag register 0x801B, and runs the map's optional initialization script.
+0x00A1D898, camEventExec - Finds the requested camera event script, populates unit and battle registers, then executes its camera command sequence.
+0x00A1DA30, thinkInitExec - Selects battle AI context and runs the current enemy set's optional initialization script.
+0x00A1DAB0, thinkTurnStartExec - Seeds acting-unit and living-side count registers, then runs the enemy set's optional turn-start script.
+0x00A1DB78, thinkTurnEndExec - Seeds acting-unit and living-side count registers, then runs the enemy set's optional turn-end script.
+0x00A1DC40, thinkUnitAtkExec - Seeds attack-command and unit-count registers, records pThinkUnit, and runs that enemy type's optional attack AI script.
+0x00A1DD28, thinkUnitDmgExec - Seeds damaged unit, attacker, command, damage, result, and living-count registers, then runs that enemy type's damage AI script.
+0x00A1DE30, thinkExec - Creates an AI process at the supplied script offset using current thinkTop and context, then returns one.
+0x00A1DE70, camExec - Creates a kind-one camera-script process at the supplied offset when scripted camera control is enabled.
+0x00A1DED0, thinkExecChk - Returns whether no kind-zero AI process is currently registered in the process table.
+0x00A1DEF0, thinkExecSub - Decodes and dispatches one of 99 AI opcodes, preserves PC on waits, and optionally traces completed commands.
+0x00A1DFC8, regChk - Returns whether script operand bit 0x8000 is set and logs operands lacking that register flag.
+0x00A1E008, thinkRegNo - Reads a script halfword through thinkAdrGet, validates its register bit with regChk, and returns it.
+0x00A1E050, thinkValSet - Sign-extends a 15-bit script operand when bit 0x4000 is set and returns the resulting value.
+0x00A1E070, thinkRegGet - Reads a context register or its indirect script-memory target, then sign-extends encoded 15-bit values.
+0x00A1E0C8, thinkRegSet - Stores a masked 15-bit value into a context register or its indirect script-memory target.
+0x00A1E130, cmdReg - Reads a register operand from script memory, validates its register marker, and returns the referenced register value.
+0x00A1E180, cmdNum - Decodes a script operand as a sign-encoded immediate or register reference and returns its value.
+0x00A1E1D8, cmdExit - Terminates the current AI script command by returning status one.
+0x00A1E1E0, cmdGo - Decodes a script address operand and replaces the current script program counter with that destination.
+0x00A1E210, cmdGosub - Pushes script PC plus two onto return stack 0x80, increments depth 0xA0, then jumps to decoded operand.
+0x00A1E298, cmdReturn - Pops a return address from pContext stack 0x80 using depth 0xA0, writes script PC offset 0x04, and reports underflow.
+0x00A1E2F8, cmdBra - Compares two decoded operands using equality or ordered relation selector zero through five, then conditionally branches.
+0x00A1E430, cmdOngo - Reads start and limit operands, advances script PC, and jumps through the indexed table when start does not exceed limit.
+0x00A1E4C8, cmdOngosub - Pushes the jump-table continuation onto the return stack and calls the indexed destination when index is within limit.
+0x00A1E5B0, cmdRset - Decodes a destination register and source operand, stores the value, advances script PC four bytes, and returns zero.
+0x00A1E618, cmdRmath1 - Applies increment, decrement, bitwise complement, or negation to one script register based on the preceding opcode.
+0x00A1E718, cmdRmath2 - Applies selected arithmetic, bitwise, or random operation between an AI register and immediate operand, then stores the 16-bit result.
+0x00A1E878, cmdRpush - Decodes an operand, advances script PC, and pushes its value onto stack 0xA4 using depth 0xE4.
+0x00A1E900, cmdRpop - Pops the AI value stack into a decoded register, decrements stack depth, and reports underflow.
+0x00A1E988, cmdTblget - Reads a halfword from script memory at base plus twice index and stores it in a decoded register.
+0x00A1EA28, cmdTblset - Writes a decoded register value to script memory at base plus twice index.
+0x00A1EAD8, cmdRput - Prints a direct script register's index and value for debugging, warning when indirect addressing was requested.
+0x00A1EB50, cmdPrint - Prints a null-terminated string embedded at script PC and advances PC to the next aligned halfword.
+0x00A1EBE0, cmdMemdump - Prints a decoded count of script-memory halfwords from a decoded start address, formatting eight values per row.
+0x00A1ED10, cmdCmdputon - Enables script command tracing by setting cmdPutFlag to one, then returns zero.
+0x00A1ED28, cmdCmdputoff - Disables script command tracing by clearing cmdPutFlag, then returns zero.
+0x00A1ED38, cmdMsgPos - Decodes message X and Y operands into msgPosX and msgPosY, advances script PC four bytes, and returns zero.
+0x00A1EDB0, cmdMsg - Reads an aligned embedded string and duration mode, then creates completion-driven or timed battle text at msgPos.
+0x00A1EE80, battleMsgEndChk - Returns whether global pMsgObj is null, indicating no battle message object remains active.
+0x00A1EE90, battleMsgPut - Creates a timed battle-message task, opens text at fixed screen coordinates, and stores it in pMsgObj.
+0x00A1EF28, msgObj - Counts down the message object's timer, then closes the message, removes the task, and clears pMsgObj.
+0x00A1EF80, battleMsgPut2 - Creates a completion-driven battle-message task, opens its text, and stores the task in pMsgObj.
+0x00A1F000, msgObj2 - Waits for message completion, closes the message, removes its object task, and clears pMsgObj.
+0x00A1F058, cmdThinkset - Converts reserved AI registers into a unit action command, then appends command eight to the current AI unit.
+0x00A1F0A0, cmdThinkset2 - Forwards the current AI script context directly to the shared cmdThinksetSub implementation.
+0x00A1F0B8, cmdThinksetSub - Converts AI registers 0x8011-0x8013 into attack, ether, item, movement, or control commands for pThinkUnit.
+0x00A1F348, thinkUnitPtrGetReg - Resolves a unit number from a script register, substituting pThinkUnit when its value is 0x7FFF, then returns the unit pointer.
+0x00A1F388, cmdCounterBoost - Attempts a non-manual boost for the unit in register 0x8010 and logs its character identifier when successful.
+0x00A1F3F0, cmdStatChk - Tests a decoded unit's object flags against a mask and writes the Boolean result into a script register.
+0x00A1F490, cmdLineChk - Tests whether a decoded unit occupies a valid formation line and writes the Boolean result to a register.
+0x00A1F508, cmdUnitparaGet - Reads a selected byte or halfword parameter from a decoded unit and writes it into a script register.
+0x00A1F5B0, cmdUnitparaSet - Writes a script register's value into a selected byte or halfword parameter of a decoded unit.
+0x00A1F658, cmdUnitpara - Returns the selected byte or halfword unit parameter and optionally overwrites it with the supplied value.
+0x00A1F6C8, cmdUnitparaSub - Maps unit-parameter selector zero through 0x1A to its calculation-record address and one- or two-byte width.
+0x00A1F8F0, cmdUnittbl - Writes active unit numbers from a selected unit group into script memory and returns their count in a register.
+0x00A1FA30, cmdUnitCreate - Chooses an unoccupied position from a decoded range, creates an enemy there, queues initialization commands, and returns its unit number.
+0x00A1FC88, cmdUnitChange - Queues species and position changes for the current scripted unit and writes success into the requested register.
+0x00A1FD78, cmdAtktbl - Builds script-memory pairs of usable attack-slot and target-unit numbers for the current unit, then writes the pair count.
+0x00A1FF98, cmdAtkset - Selects one attack-table pair from script memory and writes its attack and target values into reserved registers.
+0x00A20070, cmdAtktblSort - Selects ascending attack-table ordering in field 0x14, then invokes the shared sorter.
+0x00A20088, cmdAtktblSortRev - Selects descending attack-table ordering in field 0x14, then invokes the shared sorter.
+0x00A200A8, cmdAtktblSortSub - Sorts script-memory attack-target pairs by a selected unit parameter in ascending or descending order.
+0x00A20310, cmdAtktblSearch - Runs a script predicate over attack-target pairs, writes accepted pairs to a destination table, and returns their count.
+0x00A20518, cmdTecparaGet - Reads a selected byte or halfword from a technique record and writes it into the requested script register.
+0x00A205B8, cmdTecpara - Returns the selected technique parameter as a byte or halfword according to cmdTecparaSub type output.
+0x00A205F8, cmdTecparaSub - Maps technique-parameter selector zero through nine to its record address and one- or two-byte field width.
+0x00A206F0, cmdMonsSetNoGet - Writes the current enemy-set number into the decoded script register and advances script PC two bytes.
+0x00A20748, cmdPartySizeGet - Finds the greatest party-size field among active units in the selected group and writes it to a register.
+0x00A20840, cmdLightAmb - Decodes three hundredth-scaled ambient light components, advances script PC six bytes, and applies them to the current graphics context.
+0x00A20918, cmdLightCol - Decodes a light index and three hundredth-scaled color components, advances script PC eight bytes, and applies the color.
+0x00A20A18, cmdLightDir - Decodes a light index and three hundredth-scaled direction components, advances script PC eight bytes, and applies the direction.
+0x00A20B18, mcamPtrGet - Maps camMode zero, one, minus one, and minus two to static or moving camera parameter blocks; otherwise null.
+0x00A20B78, mpersPtrGet - Returns mcamPers for perspective mode three, mcamPersMove for minus three, or null otherwise.
+0x00A20BB0, mbankPtrGet - Returns mcamBank for bank mode two, mcamBankMove for minus four, or null otherwise.
+0x00A20BE8, myMCamSet - Applies camera parameters through MCamSet only for nonnegative static camera modes; moving modes remain staged.
+0x00A20C10, unitNoChk - Returns unit number zero through seven unchanged; logs larger values and returns zero.
+0x00A20C48, cmdCamRefMode - Selects static look-at camera mode by setting camMode to one, then returns zero.
+0x00A20C60, cmdCamCamMode - Selects static view camera mode by setting camMode to zero, then returns zero.
+0x00A20C70, cmdCamRefMoveMode - Selects moving look-at camera mode by setting camMode to minus two, then returns zero.
+0x00A20C88, cmdCamCamMoveMode - Selects moving view camera mode by setting camMode to minus one, then returns zero.
+0x00A20CA0, cmdCamPersMode - Selects static perspective mode by setting persMode to three, then returns zero.
+0x00A20CB8, cmdCamBankMode - Selects static bank mode by setting bankMode to two, then returns zero.
+0x00A20CD0, cmdCamPersMoveMode - Selects moving perspective mode by setting persMode to minus three, then returns zero.
+0x00A20CE8, cmdCamBankMoveMode - Selects moving bank mode by setting bankMode to minus four, then returns zero.
+0x00A20D00, cmdCamLock - Captures the current selected camera coordinate as a static position parameter and applies it for nonmoving modes.
+0x00A20D98, cmdCamCopy - Copies the opposite current camera coordinate into the selected static parameter block and applies it.
+0x00A20E38, cmdCamSetPos - Decodes three hundredth-scaled coordinates into the selected camera block, marks static positioning, and applies it when appropriate.
+0x00A20F28, cmdCamSetAct - Targets a validated unit joint with decoded offsets, stores actor identity, and applies the camera block when static.
+0x00A21090, cmdCamSetAct2 - Defines an interpolated camera point between two validated unit joints, including local offsets and interpolation ratio.
+0x00A21288, cmdCamSetAct3 - Defines a range-adjusted camera point between two validated unit joints with local offsets.
+0x00A21458, cmdCamOffsPos - Enables positional camera offset and decodes three hundredth-scaled components into the selected parameter block.
+0x00A21548, cmdCamOffsAng - Enables angular camera offset and decodes scale plus degree-based Y and Z rotations into the selected block.
+0x00A21660, cmdCamMove - Decodes duration, interpolation, and motion operands, selects view, look-at, perspective, or bank parameters, and starts camera movement.
+0x00A217D8, cmdCamShake - Decodes five camera-shake operands, advances script PC ten bytes, calls MCamShake, and returns zero.
+0x00A218B8, cmdCamCenterLength - Writes the selected static camera's actor-center distance times 100 into a script register; rejects moving mode.
+0x00A21948, cmdCamUnitHeight - Reads a validated unit's model height, scales it by 100, and writes it into a script register.
+0x00A219F0, cmdCamCoordGet - Writes current static or staged moving camera X, Y, and Z coordinates times 100 into three script registers.
+0x00A21B30, cmdCamBank - Decodes a tenths-of-degrees bank angle into the selected bank block and applies it when static.
+0x00A21BD0, cmdCamPers - Decodes a tenths-scaled perspective value into the selected perspective block and applies it when static.
+0x00A21C48, cmdCamTblSet - Sets camTblIdx to the decoded index only when it is below the available camera-table count.
+0x00A21CA0, cmdCamMoveStop - Stops source- or target-coordinate camera movement according to camMode and returns script status zero.
+0x00A21CD0, cmdEvent - Starts an AI event process at the decoded data offset and writes its process identifier to a script register.
+0x00A21D60, cmdWaitEvent - Captures a process identifier on activation, then waits until that process ends before advancing the script PC.
+0x00A21DC8, cmdWaitCnt - Initializes wait count at command offset 0x14, decrements it on later calls, then advances script PC offset 0x04.
+0x00A21E30, cmdWaitCamMove - Captures current camera selector at command offset 0x14, then waits until MCamIsMoving reports false.
+0x00A21E90, cmdWaitMsg - Returns wait status two until pMsgObj becomes null after command activation, then returns zero.
+0x00A21EB8, cmdVPadEneble - Enables virtual-pad input mode through dataVPadModeSet and returns script status zero.
+0x00A21ED8, cmdVPadDisable - Disables virtual-pad input mode through dataVPadModeSet and returns script status zero.
+0x00A21EF8, cmdVPadSet - Decodes one virtual-pad mask, advances script PC two bytes, applies the mask, and returns zero.
+0x00A21F38, cmdMapMulSet - Decodes four hundredth-scaled map multiplier components, advances script PC eight bytes, calls mapMulSet, and returns zero.
+0x00A22028, cmdHpPerGet - Computes the selected unit's current HP percentage and writes the integer result into a script register.
+0x00A220E8, cmdEventSlotGet - Writes the current battle event-timer slot into the decoded script register and advances script PC two bytes.
+0x00A22140, cmdThinkCamEvent - Runs camera event 0x19 with a decoded selector and current AI unit, then restores script and AI contexts.
+0x00A22250, cmdCfEncountGet - Writes current encounter configuration flags into the decoded script register and advances script PC two bytes.
+0x00A222A8, cmdCfEventGet - Writes current event configuration flags into the decoded script register and advances script PC two bytes.
+0x00A22300, cmdThinkNoGet - Writes the current AI script number into the decoded script register and advances script PC two bytes.
+0x00A22358, cmdStatGet - Reads a selected unit status group and mask, then writes the resulting status value into a script register.
+0x00A22420, cmdStatSet - Applies a selected status group and mask to a unit, then writes the operation result into a script register.
+0x00A224F0, cmdStatReset - Clears a selected status group and mask from the decoded unit and advances script PC six bytes.
+0x00A22590, cmdDeadTime - Sets a decoded unit model's death-animation time scale to the reciprocal of the supplied duration.
+0x00A22628, entryFirstInit - Initializes engine battle state, loads shared battle data, initializes player records, and selects default AI zero and map one.
+0x00A22668, battleProc - Runs the battle frame loop, executing phase, AI, objects, display, pause, and timing until completion or system abort.
+0x00A22850, battleProcEnd - Tears down battle subsystems, resets pause and AI state, releases camera control, and stops sound channels one through fourteen.
+0x00A228F8, frameCntGet - Returns global frameCnt, incremented by battleProc and consumed by timed effects and HUD animation.
+0x00A22908, battleTimeGet - Returns the current battle elapsed-frame count directly from frameCntGet.
+0x00A22920, cameraFlagSet - Stores the supplied camera configuration directly into global cameraFlag.
+0x00A22930, cameraFlagGet - Returns global cameraFlag, which controls scripted battle camera activation.
+0x00A22940, pauseProc - Returns one as the battle pause-processing stub result.
+0x00A22948, selectPL - Keeps a valid normal player target; otherwise randomly selects among living battle-enabled character units.
+0x00A22A60, lastBossBtlChk - Returns whether mapNoGet identifies map 0x34 as the final boss battle.
+0x00A22A88, bossBtlChk - Returns one only when cfEventGet has bit 3 set and bit 4 clear.
+0x00A22AC8, entryPhase00 - Initializes battle subsystems, objects, AI, framebuffer snapshot, optional camera control, fade, and startup sound, then enters phase ten.
+0x00A22C50, entryPhase10 - Validates party and enemy models, queues selected battle music, starts fade and encounter effect, then enters phase fifteen.
+0x00A22CF0, entryPhase15 - Holds fade delay while resource loads finish, then starts music transfer, queues textures, and enters phase sixteen.
+0x00A22D68, entryPhase16 - Holds fade delay until texture loading finishes, then queues the selected map resource and enters phase twenty.
+0x00A22DE0, entryPhase20 - Waits for map loading, initializes map and camera, starts encounter camera and effect, then begins party creation.
+0x00A22EA0, entryPhase25 - Skips empty party slots, creates the next player unit, initializes HUD after the last occupied slot, and enters phase twenty-six.
+0x00A22FD8, entryPhase26 - Waits for resource and engine readiness, finalizes the created unit, runs its entrance camera, then resumes party creation.
+0x00A23060, entryPhase30 - Selects a living player, begins loading that unit's battle-start voice bank, and enters phase thirty-one.
+0x00A230C0, entryPhase31 - Waits for voice loading, prepares and plays the selected player's battle-start voice, then begins enemy creation.
+0x00A23158, entryPhase35 - Creates the next of up to five configured enemy units, or advances to phase forty when finished.
+0x00A23220, entryPhase36 - Waits for resource and engine readiness, finalizes the created enemy's files, then resumes enemy creation.
+0x00A23280, entryPhase40 - Applies encounter calculation flags, initializes enemy AI, starts final entry systems, and advances battle startup to phase 45.
+0x00A232D0, entryPhase45 - Waits for engine setup and flagged units, then displays the encounter effect, resets frameCnt, and advances to phase 50.
+0x00A23368, entryPhase50 - Runs battle logic until completion, then queues victory voice and music when won, clears effects, and enters phase fifty-one.
+0x00A23430, entryPhase51 - Waits for pending loads, prepares and plays the selected player's victory voice, then enters phase sixty.
+0x00A234A8, entryPhase60 - Runs post-battle processing until complete, then starts a four-step fade-out and enters phase seventy.
+0x00A234F0, entryPhase70 - Waits for fade completion, selects result display or direct cleanup from outcome and flags, then shuts down battle subsystems.
+0x00A23598, entryPhase80 - Logs accumulated monster rewards and each drop entry, then advances battle startup to phase 90.
+0x00A23658, entryPhase90 - Runs resultProc; when it finishes, advances battleSeq to entryPhase100, always returning one.
+0x00A23690, entryPhase100 - Restores dead party members, reloads party leader data, stops music, and returns zero to end battle processing.
+0x00A236C0, encountEffDisp - Displays encounter effect identifiers 0xA42, 0xA43, and 0xA44 for corresponding encounter flag bits.
+0x00A23748, cfSnap - Identifies draw and unused framebuffer indices, then creates a one-shot object to copy the current battle frame.
+0x00A23780, battleDisp - Executes and renders battle, map, model, and effect layers in mode one, or result display in mode two.
+0x00A23808, vramCopyObjCreate - Creates and initializes a one-shot framebuffer-copy object carrying the supplied source and destination buffer indices.
+0x00A23868, vramCopyDummy - Empty VRAM-copy callback returns immediately; no object fields or graphics routines are referenced.
+0x00A23870, vramCopyObj - Copies the selected framebuffer region through grVramCopyFBtoFB, then removes the one-shot object task.
+0x00A238A0, fadeIn - Creates a fade-in task, stores duration and color, initializes alpha to zero, and clears fadeFlag.
+0x00A238F8, fadeOut - Creates a fade-out task, stores duration and color, initializes alpha to 0x80, and clears fadeFlag.
+0x00A23958, fadeEndChk - Returns global fadeFlag, cleared when the fade object reaches its terminal opacity.
+0x00A23968, fadeInObj - Counts down any delay, increases overlay alpha by its step, then signals completion and removes itself above 0x80.
+0x00A239C0, fadeOutObj - Counts down any delay, decreases overlay alpha by its step, draws the final transparent frame, then removes itself.
+0x00A23A28, fadeObjDraw - Builds and submits a GS fullscreen F2 packet whose RGBA alpha comes from object offset 0x1C.
+0x00A23C28, encEnvMake - Appends encounter-effect GS texture, alpha, test, clamp, and framebuffer registers using the unused framebuffer address.
+0x00A23CE0, encEffObjInit - Builds a 64-by-64 warped encounter grid with FT4 cells, then creates its animation and draw task.
+0x00A240C0, encEffObj - Advances encounter-grid rotation and fade, computes 65 transform matrices, projects warped cells, and removes the object after shutdown delay.
+0x00A24408, effCalcMatrix - Builds an encounter-effect matrix with Y rotation theta times index divided by eight, then applies translation and scale.
+0x00A244C8, encEffObjDraw - Copies the encounter framebuffer, batches active FT4 quads into GS command lists, submits every 50 objects, then appends overlay.
+0x00A24620, encEffAppend - Builds and submits two gray GS sprite quads sampling the draw framebuffer with opposite one-pixel offsets.
+0x00A24950, encEffVramCopy - Copies a centered framebuffer rectangle capped at 0x200 by 0x1C0, then submits GS FINISH.
+0x00A24A98, grGpInit - Initializes a graphics packet cursor to base 0x70000000 with zero queued quadwords.
+0x00A24AA8, grFBAdrGet - Returns framebuffer address entry fb[index] without applying bounds checks.
+0x00A24AC0, grBBIdxGet - Returns the first framebuffer index differing from both current display and draw addresses, or minus one.
+0x00A24B28, grDBIdxGet - Writes draw and display framebuffer indices to caller outputs by scanning fb until sentinel 0xFFFFF, then returns one.
+0x00A24B90, grVramCopyFBtoFB - Clamps source and destination framebuffer rectangles to 0x200 by 0x1C0 and forwards them to grVramCopy.
+0x00A24C68, grVramCopy - Builds a five-register GS local-to-local transfer packet for source, destination, dimensions, and direction, then submits it.
+0x00A24E10, grOpenF2 - Begins an F2 GS primitive packet, saving its tag cursor and writing GIF tag 0x20A0C00000008000.
+0x00A24E80, grCloseF2 - ORs the accumulated F2 vertex count into the saved GIF tag.
+0x00A24EB0, grOpenF4 - Begins an F4 GS primitive packet, saving its tag cursor and writing GIF tag 0x20A2400000008000.
+0x00A24F20, grCloseF4 - ORs the accumulated F4 vertex count into the saved GIF tag.
+0x00A24F50, grOpenFT4 - Begins an FT4 GS primitive packet, saving its tag cursor and writing GIF tag 0x30AA400000008000.
+0x00A24FC0, grCloseFT4 - ORs the accumulated FT4 vertex count into the saved GIF tag.
+0x00A24FF0, grOpenFT4STQ - Begins an STQ-textured FT4 GS packet and writes GIF tag 0x302A400000008000 with register list 0x512.
+0x00A25060, grCloseFT4STQ - ORs the accumulated STQ-textured FT4 vertex count into the saved GIF tag.
+0x00A25090, grOpenSpr - Begins a sprite GS packet, saving its tag cursor and writing GIF tag 0x30AB400000008000.
+0x00A25100, grCloseSpr - ORs the accumulated sprite vertex count into the saved GIF tag.
+0x00A25130, grPutF2 - Writes two F2 color and XYZ vertices into the GS packet, optionally transforming them, then adds two vertices.
+0x00A252F0, grPutF4 - Writes four F4 color and XYZ vertices into the GS packet, optionally transforming them, then adds four vertices.
+0x00A254B0, grPutFT4 - Writes four FT4 UV, color, and XYZ vertices into the GS packet, optionally transforming them, then adds four vertices.
+0x00A25748, grPutFT4STQ - Transforms and writes four STQ, color, and XYZ vertex records into the GS packet, then adds four vertices.
+0x00A258C0, grPutSpr - Writes two sprite UV, color, and XYZ vertices into the GS packet, applying screen offsets for untransformed coordinates.
+0x00A25A80, grPacketSend - Submits the packet base and quadword count through the GS command interface, then starts the command list.
+0x00A25AF0, grWorldMatGet - Queries the current graphics context and returns its world-matrix pointer at context offset 0x470.
+0x00A25B18, grCalcMatrix - Builds an object matrix from command translation offsets 0x90-0xA8, rotation 0xB0, and scale 0xC0, then multiplies world matrix.
+0x00A25BE8, grRotMatrix - Loads the destination matrix, then applies X, Y, and Z rotations from the supplied three-word angle vector.
+0x00A25C38, grRotTransPers - Projects one point, writes packet XYZ fields, marks clip bit 0x8000 outside normalized bounds, and returns reciprocal W.
+0x00A25DE0, grBBCalc - Projects an object origin and returns screen coordinates after removing GS offsets 0x7000 and 0x7200, unless clipped.
+0x00A25EA0, grGsRegSet - Appends an AD GIF tag and one GS register-value pair to the packet, advancing its quadword count by two.
+0x00A25F18, grGsRegListSet - Appends an AD GIF tag followed by register-value pairs until register sentinel minus one, then patches the pair count.
+0x00A25FE0, GS_REG_SET - Appends one GS register-value pair to the current packet and increments its quadword count.
+0x00A26018, menuInitBat - Clears global pMenuBat so no battle menu object is considered open.
+0x00A26028, menuOpenBat - Creates the battle command menu, initializes character- or AGWS-specific spline positions, stores the acting unit, and plays opening sound.
+0x00A26138, menuCloseBat - Clears the battle-menu result, removes the menu object, clears its global pointer, and plays closing sound eight.
+0x00A26178, menuResultBat - Returns global menuResBat, the battle menu result consumed by command processing.
+0x00A26188, menuOpenChkBat - Returns whether global pMenuBat currently references an open battle menu object.
+0x00A26198, menuBatObj - Retrieves the current object command, then processes free-control input for the battle menu.
+0x00A261C8, menuBatObjFree - Cycles five battle commands, validates confirmation against unit abilities, records accepted commands, and handles cancellation sounds.
+0x00A26350, menuBatObjDraw - Draws five animated character- or AGWS-specific command entries, highlights selection, dims unavailable commands, and advances their spline.
+0x00A26600, menuCmdExecChk - Reports availability of ether, items, defense, AGWS, movement, or double-action commands from inventory and unit state.
+0x00A267B8, menuEtherNumChk - Counts nonzero learned ether technique identifiers across the unit's twelve ether slots.
+0x00A26828, menuOpenEth - Builds up to twelve learned-ether menu entries with names, EP costs, and availability, then opens the window and plays sound seven.
+0x00A26978, menuCloseEth - Closes the ether menu object at 0x00A5A370 and plays system sound eight.
+0x00A269A0, menuResultEth - Merges navigation input, updates the ether window, returns its selected technique, and plays confirm, reject, or cancel sounds.
+0x00A26A90, menuOpenItm - Builds item-menu entries from owned items with quantities and usability flags, opens the list window, and plays sound seven.
+0x00A26BD0, menuCloseItm - Closes the item menu object at 0x00A5A438 and plays system sound eight.
+0x00A26BF8, menuResultItm - Merges navigation input, updates the item window, returns its selected item, and plays confirm, reject, or cancel sounds.
+0x00A26CE8, menuStatDispCreate - Creates and initializes texture, ATB, key-guide, boost, critical, action-stock, and per-unit status display objects.
+0x00A27130, menuStatDispRemove - Removes every battle HUD object, clears their global pointers, and closes any battle, ether, and item menus.
+0x00A27278, menuStatPreObj - Empty status pre-object callback returns immediately; its paired draw callback performs the texture upload.
+0x00A27280, menuStatPreObjDraw - Uploads the status-panel texture before drawing the battle status object.
+0x00A27298, menuATBObj - Executes ATB object wait and movement commands, eases map height toward its target, and rotates event-timer orientation.
+0x00A27438, menuKeyGuideObj - Empty key-guide object callback returns immediately; menuKeyGuideObjDraw handles its rendering.
+0x00A27440, menuKeyGuideObjDraw - Reads manual-control work through manWorkGet and appends the corresponding key-guide display to the current packet.
+0x00A27480, menuStatObj - Executes panel commands, smoothly tracks unit HP, EP, AP, and boost values, and cycles displayed status icons every thirty frames.
+0x00A27A38, menuBoostObj - Retrieves its current command and rotates the boost-ring angle backward by two degrees each frame.
+0x00A27A98, menuBoostObjDraw - Draws the selection boost indicator when action slots are empty; otherwise draws character action-stock indicators.
+0x00A27AF0, menuBoostObjDrawCha - Draws rotating action-stock rings with the queued actor's portrait, palette, and frame at the boost display position.
+0x00A27E78, menuBoostObjDrawSel - Draws the boost-selection frame and portraits of party units currently eligible to boost.
+0x00A280B0, menuBoostDisp - Sets hidden bit 2 in the boost object flags when disabled, or clears it when enabled.
+0x00A280F0, menuCritDispOn - Queues the critical indicator's entrance, records its variant, resets motion endpoints, and unhides it when changed.
+0x00A281B0, menuCritDispOff - Sets hidden bit 2 in the critical-indicator object flags reached through pCritObj offset 0x10.
+0x00A281D0, menuCritObj - Moves the critical indicator toward its queued endpoint using speed four for default or two for numbered variants.
+0x00A28238, menuCritObjDraw - Draws the visible critical indicator at compact map height, selecting default or numbered variant sprites.
+0x00A28378, menuATBObjDraw - Draws event timer and battle map, then adds map items and target lines at full map height.
+0x00A28420, menuMapHSet - Sets mapHDist to 0x14 for nonzero input or 0x40 for zero input.
+0x00A28448, menuMapDisp - Appends battle-map environment, palette, border, and cursor sprite quads to the caller GS packet.
+0x00A286F8, menuMapItemDisp - Appends two map-item groups to the GS packet using palette one and object position offsets 0x90 and 0x98.
+0x00A287C0, menuTgtLineDisp - Draws the selected target line, AGWS position icon, and HP value when map selection coordinates are valid.
+0x00A28978, menuStockStart - Resets five action-stock objects to predefined positions, queues movement, shows the first four, and hides the fifth.
+0x00A28A70, menuStockNext - Moves each of four queued-action objects down one stock position, or hides objects whose queue count is empty.
+0x00A28B60, menuStockBoost - Queues boost movement for the designated stock object, resets its interpolation endpoints, and makes it visible.
+0x00A28BF8, menuStockDead - When a stock entry becomes empty, shifts all later queued-action objects down one displayed position.
+0x00A28D28, menuStockObj - Executes queued stock movement commands, accelerates toward endpoints, caps display width at 0x14, and increments animation age.
+0x00A28DF8, menuStockObjDraw - Draws an eligible queued actor's expanding portrait and animated border, emphasizing current targets and queue endpoints.
+0x00A290B8, faceUVGet - Returns portrait UV coordinates from character index, or AGWS-specific UV columns from unit formation flags.
+0x00A29188, menuMapItemDispSub - Draws active units on the battle map with status-dependent colors and records the selected target's screen position.
+0x00A29548, menuSelLine - Draws a two-segment target line from the HUD anchor to selection coordinates, colored green or red by line validity.
+0x00A29690, menuEventTimerDisp - Draws rotating event-timer contents and overlays its fixed frame sprite at the ATB panel position.
+0x00A29730, menuEventTimerDispSub - Builds and draws twelve textured timer segments around a rotated circular ring, skipping back-facing quads.
+0x00A29AC0, menuTimeSet - Stores the event slot, randomly selects value two, four, or ten, and computes its quarter-turn ring orientation.
+0x00A29B70, menuTimeNext - Increments eventTimer modulo four, calls menuTimeSet with the new value, and returns it.
+0x00A29BB8, menuTimeGet - Returns global eventTimer, the current rotating battle event slot.
+0x00A29BC8, menuTimeXGet - Returns global eventTimerX, the horizontal position associated with the event timer.
+0x00A29BD8, menuStatObjDraw - Draws the selected unit's status panel, submits its packet, and displays status names when that unit is acting.
+0x00A29C40, menuStatChrIdGet - Returns unit character ID minus one, substituting linked pilot ID through calculation offset 0x50 for AGWS actors.
+0x00A29CD0, menuPlStatPut - Draws one unit's portrait, active highlight, HP, EP, AP, boost, level, experience, and optional status icon.
+0x00A2A118, menuNumPut - Draws a fixed-width decimal value with palette-selected digit sprites, or four placeholder glyphs for display mode three.
+0x00A2A308, menuApBarPut - Appends six AP-bar sprite cells, selecting filled UV coordinates while remaining AP is positive.
+0x00A2A390, menuBpBarPut - Draws a horizontal boost-point bar as a colored flat quad whose width equals the supplied boost value.
+0x00A2A490, menuStatIconChk - Searches the selected status icon table for the first entry whose mask intersects the requested status, returning its index.
+0x00A2A500, menuStatIconPut - Finds the matching status icon and draws its 0x16-by-0x18 sprite beside the unit panel.
+0x00A2A5B0, menuStatNamePut - Displays the acting unit's matching status name in a message window while the battle menu is open.
+0x00A2A660, menuKeyGuideDisp - Draws available character or AGWS key prompts with contextual help and values while battle menus are closed.
+0x00A2A8C8, keyGideDisp - Draws one key-guide icon using the UV rectangle indexed by the one-based command selector.
+0x00A2A950, menuGuideFrameDisp - Draws a four-piece colored guide frame with mirrored UV halves at the supplied position and width.
+0x00A2AAE0, monsNameDisp - Draws a centered player or enemy name inside an 0x50-wide guide frame.
+0x00A2ABC0, menuKeyGuideHelp - Draws a centered command-help frame containing the selected technique or weapon name, or detailed technique attribute labels.
+0x00A2AEC0, menuKeyGuideVal - Draws selected AGWS weapon or technique ammunition, EP cost, and action cost inside a guide frame.
+0x00A2B0D0, objDmgNumCreate - Creates a thirty-frame damage-number object and stores its target, value, and result flags when allocation succeeds.
+0x00A2B158, objDmgNum - Updates the damage number's projected target coordinate and vertical animation curve, then removes it when its thirty-frame lifetime expires.
+0x00A2B2B8, objDmgNumDraw - Projects a damage object, draws its numeric or miss message plus flagged result message, then submits the sprite packet.
+0x00A2B418, dmgMsgPut - Selects one damage-message UV rectangle by message index and appends its sprite at position minus 0x12, 0x0E.
+0x00A2B538, dmgNumPut - Centers and draws up to four decimal damage digits using a result-type-selected sprite color.
+0x00A2B6D0, menuFontIdxGet - Searches 0xE6 single-byte font_0 entries and returns the matching index, or minus one.
+0x00A2B718, menuDFontIdxGet - Searches 0xE6 two-byte font_1 glyphs and returns matching index, 0xAF, or minus one.
+0x00A2B768, menuFontPutSub - Draws one font glyph by forwarding its prepared sprite parameters to menuStatSprite.
+0x00A2B7B8, menuFontPut - Decodes single-byte, multibyte, and hash-prefixed glyphs from a string and draws recognized characters at ten-pixel intervals.
+0x00A2B8E0, menuActCurPut - Temporarily positions a billboard on an eligible unit, projects it, draws the selected action cursor frame, and restores object state.
+0x00A2BA60, menuStatSprite - Builds a two-corner sprite from position, size, and contiguous UV bounds, then appends it through grPutSpr.
+0x00A2BB30, menuStatSprite2 - Builds a two-corner sprite from position, size, and independently supplied UV bounds, then appends it through grPutSpr.
+0x00A2BBE8, menuStatSpriteRGB - Builds a colored sprite from position, size, contiguous UV bounds, and RGBA word, then appends it through grPutSpr.
+0x00A2BCA0, menuStatSprite2RGB - Builds a colored sprite from position, size, independent UV bounds, and RGBA word, then appends it through grPutSpr.
+0x00A2BD50, menuTexTrans - Uploads battle-menu texture file slot one, emits GS FINISH register 0x3F value one, and submits the packet.
+0x00A2BD98, menuStatTexTrans - Uploads status texture file slot zero, emits GS FINISH register 0x3F value one, and submits the packet.
+0x00A2BDE0, menuEnvMake - Appends menu GS environment registers using texture address 0x0D and palette address 0x0E.
+0x00A2BEB8, menuStatEnvMake - Appends status-panel GS environment registers using texture address zero and palette address three.
+0x00A2BF90, menuFaceEnvMake - Appends portrait GS environment registers using texture address eight and palette address nine.
+0x00A2C068, menuATBEnvMake - Appends ATB GS environment registers using texture address four and palette address seven.
+0x00A2C140, menuFontEnvMake - Appends font GS environment registers using texture address 0x0B, palette 0x0C, and alpha mode 0x44.
+0x00A2C218, menuStatIconEnvMake - Appends status-icon GS environment registers using texture address zero and palette address one.
+0x00A2C2F0, menuATBEnvPalSet - Appends GS TEX0 register using texture address four and palette address five, seven, or ten by selector.
+0x00A2C3A0, mapInit - Clears map display flags and initializes both map multiplier vectors to 1.0.
+0x00A2C3D8, mapMulSet - Copies two 64-bit map multiplier vectors from the caller into mapMul and DAT_00A5A938.
+0x00A2C3F8, mapMulGet - Returns the address of the global two-vector map multiplier block mapMul.
+0x00A2C408, mapDispOn - Enables map layer zero or one by clearing its mapDispWork suppression byte.
+0x00A2C430, mapDispOff - Disables map layer zero or one by setting its mapDispWork suppression byte.
+0x00A2C458, mapDispOnAll - Clears both global map-display suppression flags; enabling every map layer.
+0x00A2C470, mapDispOffAll - Sets both global map-display suppression flags; disabling every map layer.
+0x00A2C488, mapDisp - Loads map model and matrix data, draws two map parts according to mapDispWork flags, then finalizes model rendering.
+0x00A2C5A0, mapDispTest - Empty map display test hook returns immediately; no map globals or renderer calls are referenced.
+0x00A2C5A8, dataEthNameGet - Returns font_1 plus three pointer entries per positive ether identifier; rejects identifiers below one.
+0x00A2C5F8, dataItmNameGet - Returns item-name table 0x00A3FB94 plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C648, dataSklNameGet - Returns skill-name table 0x00A3FEF4 plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C698, dataAccNameGet - Returns accessory-name table 0x00A4021C plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C6E8, dataWepNameGet - Returns weapon-name table 0x00A40A8C plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C738, dataBltNameGet - Returns bullet-name table 0x00A40FE4 plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C788, dataNrmNameGet - Returns normal-technique name table 0x00A4183C plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C7D8, dataSpcNameGet - Returns special-technique name table 0x00A4183C plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C828, dataEnemyNameGet - Returns enemy-name pointer table 0x00A41C54 plus identifier times four for identifiers at least 0x21.
+0x00A2C870, dataStatNameGet - Returns the selected status group's name table plus language index times four; returns null for groups above eight.
+0x00A2C8A0, dataPlayerNameGet - Bounds-checks the character identifier and returns its name-table pointer; with a conditional Ziggy-name override.
+0x00A2C918, dataEngNameGet - Returns engine-name table 0x00A420EC plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C968, dataFrmNameGet - Returns frame-name table 0x00A422CC plus identifier times 0x0C; rejects identifiers below one.
+0x00A2C9B8, resultProcInit - Tail-calls engine routine 0x002A19E0 to initialize the post-battle result process.
+0x00A2C9D0, resultProc - Tail-calls engine routine 0x002A18C0 to execute the post-battle result process.
+0x00A2C9E8, resultDisp - Empty result display hook returns immediately; no result fields or graphics calls are referenced.
+0x00A2C9F0, resultBackDisp - Empty result background hook returns immediately; no result fields or graphics calls are referenced.
+0x00A2C9F8, sndInit - Clears six 0x68-byte sound registration slots, assigns player and enemy bank buffers, and initializes global music metadata.
+0x00A2CAF8, sndInit2 - Clears all three damage-bank offsets and status words, then resets the global sound controller identifier.
+0x00A2CB40, dataSndStEdNum - Collects eligible sound start/end variants from eight condition entries and returns one randomly selected variant index.
+0x00A2CBF8, dataSndStEdNumSub - Evaluates one sound-set condition against party composition, statuses, learned ether, encounter duration, dead players, or enemy IDs.
+0x00A2CEC0, dataSndStEdNameGet - Finds matching battle-start or ending sound definitions, selects an eligible variant, and appends its base name and digit.
+0x00A2CFA0, dataSndSeNameGet - Builds a sound-effect filename from unit type, character, bank selector, weapon technique, or system sound mapping.
+0x00A2D1F8, sndSeAdrGet - Returns global sndSeDat, the base of loaded sound-effect bank metadata.
+0x00A2D208, sndSeRegAdrChk - Searches six 0x68-byte sndSeRegDat records for the requested character ID and returns its record pointer.
+0x00A2D248, sndSeRegAdrGet - Reuses an existing sound registration or claims a free player or enemy slot for character IDs below 0xBB.
+0x00A2D308, sndSeRegRemove - Clears the matching sound registration ID and five associated 20-byte bank subrecords; returns whether found.
+0x00A2D388, sndSeRegChk - Checks whether the unit sound registration contains the requested bank bit in its per-type mask.
+0x00A2D4A0, dataSndSeLoadSub - Builds a unit sound-bank filename, queues its file load, records aligned size and type, and reports success.
+0x00A2D598, dataSndSeLoad - Reuses an identical unit sound bank or resets its metadata and loads the requested bank type.
+0x00A2D648, dataSndSeLoad2 - Derives sound sample and program addresses from the loaded bank header when neither address is initialized.
+0x00A2D6A0, dataSndSeRegLoad - Claims a unit sound registration, loads its base bank, then loads three AGWS-specific banks when applicable.
+0x00A2D7B0, dataSndSeRegLoad2 - Parses a loaded unit sound bank into numbered sample and program subrecords, including three additional AGWS bank records.
+0x00A2D8B8, sndSeTrans - Selects a unit or default sound bank, validates sample and program headers and size, then transfers both to audio memory.
+0x00A2DA80, sndSysSePlay - Plays system sound identifiers below 0x26 on controller zero and reports whether the identifier was valid.
+0x00A2DAB0, sndSePlay - Starts a banked sound, guards duplicate damage-bank playback, increments ctrlId for non-damage sounds, and reports success.
+0x00A2DB78, sndSeStop - Stops the selected sound bank when its selector is nonzero and returns whether a stop was issued.
+0x00A2DBC8, sndConvRegNo - Searches a sentinel-terminated sound conversion pair table and returns its mapped register number, or minus one.
+0x00A2DCA0, sndBankGet - Selects sound bank 1-6 from sound type, actor side, character ID, and reusable damage-bank assignments.
+0x00A2DE30, sndConvSpid - Maps command type, technique category, item effect, and character-relative technique index to a sound program identifier.
+0x00A2DF80, sndConvSe - Returns alternate sound one for ordinary actions, or 0x21 for eligible character normal attacks indexed three or five.
+0x00A2E050, sndConvHitSe - Returns hit sound 0x22 for normal indices three or five under mode one; otherwise returns two.
+0x00A2E0A8, sndSeTransPlay - Transfers a sound bank and, on success, creates a playback object carrying bank, sound, and control arguments.
+0x00A2E108, sndSeTransPlayObj - Waits for audio transfer completion, plays the object's saved sound arguments, then removes the playback object.
+0x00A2E160, dataSndMuLoad - Loads primary, optional alternate, and companion music files into aligned consecutive buffers for selectors zero through two.
+0x00A2E350, sndMuTrans - Transfers either the normal or alternate loaded music bank through engine audio calls, then returns one.
+0x00A2E3A8, sndMuPlay - Starts music playback at volume 0x7F through engine audio routine 0x00226200, then returns one.
+0x00A2E3C8, sndMuStop - Requests a 2000-unit music fade-stop through engine audio routine 0x00226278, then returns one.
+0x00A2E3E8, sndMuFadeIn - Tail-calls the music-volume routine for controller zero, target volume 0x7F, over 2000 time units.
+0x00A2E408, sndMuTransPlay - Transfers loaded music data and creates a deferred playback object when transfer succeeds.
+0x00A2E460, sndMuTransPlayObj - Waits for audio transfer completion, starts music playback, then removes the deferred playback object.
+0x00A2E4B0, debugEntry - Enters the battle debug interface by directly invoking debugBattle.
+0x00A2E4C8, debugNameGet - Returns nameTbl entry for identifiers below 0xC3; otherwise returns the shared error string.
+0x00A2E4F8, debugWpnGet - Returns wpnTbl entry for identifiers below 0x74; otherwise returns the shared error string.
+0x00A2E528, debugCmdPrint - Formats debug details for a unit command, including frame, actor identity, command operands, and target when applicable.
+0x00A2EA78, debugThinkRegName - Writes supplied name-table data into record field 0xa0 after validating the input.
+0x00A2EB50, debugThinkPrint - Formats one of 24 AI opcodes with its decoded register, address, immediate, and name operands for debug output.
+0x00A2EF60, debugBattle - Dispatches debug page zero to status output, page one to parameters, and page two to learned specials.
+0x00A2EFA8, debugStatDisp - Prints each unit's identity, core attributes, equipment values, status masks, durations, and protection bytes for debugging.
+0x00A2F1B8, debugParaDisp - Prints each active unit's identifiers, character name, primary attributes, levels, experience, gauges, and battle-state fields.
+0x00A2F348, debugSpecDisp - Prints identity and all eight six-halfword learned-special records for each non-AGWS battle unit.
+0x00A2F4A0, plMutekiGet - Returns global plMuteki, the current debug player-invincibility toggle value.
+0x00A2F4B0, enMutekiGet - Returns global enMuteki, the current debug enemy-invincibility toggle value.
+0x00A2F4C0, plIchigekiGet - Returns global plIchigeki, the current debug player-instant-kill toggle value.
+0x00A2F4D0, debugItemSet - Stores supplied item data in the referenced structure fields.
+0x00A2F528, debugEtherSet - Populates predefined ether technique ranges for six characters using character-specific source identifiers and destination slots.
+0x00A2F638, debugSkillSet - Returns immediately without changing state; debugBattleConfig invokes it as a placeholder hook.
+0x00A2F640, debugEquSet - Equips AGWS 0x1A with unit 6, weapon 0x4E in both hands, and attack item one twice.
+0x00A2F6A8, debugBattleConfig - Runs the interactive battle configuration interface for party, encounters, maps, AI, equipment, stats, rewards, and debug cheats.
+0x00A305D0, configStart - Returns constant 1; no debug configuration state or external routine is accessed.
+0x00A305D8, configPlayer1 - Runs the debug character selector for party slot zero through configPlayer.
+0x00A305F0, configPlayer2 - Runs the debug character selector for party slot one through configPlayer.
+0x00A30608, configPlayer3 - Runs the debug character selector for party slot two through configPlayer.
+0x00A30620, configPlayer - Adjusts the selected party slot's character identifier from zero through 0x1F and preserves its secondary table value.
+0x00A30688, configPlPos1 - Runs the debug formation-position selector for party slot zero through configPlPos.
+0x00A306A0, configPlPos2 - Runs the debug formation-position selector for party slot one through configPlPos.
+0x00A306B8, configPlPos3 - Runs the debug formation-position selector for party slot two through configPlPos.
+0x00A306D0, configPlPos - Adjusts the selected party slot's formation position from one through nine while preserving its character identifier.
+0x00A30738, configMonsSet - Adjusts the debug enemy-group number from zero through 99 and applies it through monsSetNoSet.
+0x00A30780, configMap - Adjusts debug mapNo from zero through 99, applies it through mapNoSet, and returns zero.
+0x00A307C8, configCamera - Toggles the debug camera flag between zero and one using directional input and applies the result.
+0x00A30808, configStat - Adjusts debug status selection from 1-0xC2 and sets configSeq to one when pad bit 0x20 is pressed.
+0x00A30858, configEqu - Adjusts debug equipment selection from 1-0x20 and enters equipment page two with cursor zero on confirmation.
+0x00A308B0, configGain - Adjusts debug gain selection from 1-0xC2 and enters gain page three with cursor zero on confirmation.
+0x00A30908, configPlMuteki - Toggles the debug player-invincibility flag between zero and one using directional input.
+0x00A30950, configEnMuteki - Toggles the debug enemy-invincibility flag between zero and one using directional input.
+0x00A30998, configPlIchigeki - Toggles the debug player-instant-kill flag between zero and one using directional input.
+0x00A309E0, configCFEncount - Adjusts the debug encounter configuration from zero through 0x0F and applies it through cfEncountSet.
+0x00A30A28, configCFEvent - Adjusts the debug event configuration from zero through 0x0F and applies it through cfEventSet.
+0x00A30A70, configThink - Adjusts the debug AI script number from zero through 0x63 and applies it through thinkNoSet.
+0x00A30AB8, configYadoya - On confirmation, restores current HP and EP for character records one through 0x20 to their calculated maxima.
+0x00A30B30, valUD - Changes a bounded value on controller up or down bits 0x4000 and 0x1000, wrapping at supplied limits.
+0x00A30BA0, valLR - Adjusts a debug value by one or ten from directional input, wraps within inclusive bounds, and reports changes.
+0x00A30C90, equipChar - Adjusts the debug equipment character selector from one through 0x20 using valLR.
+0x00A30CC0, equipAgws - Adjusts the selected character's AGWS identifier from 0x11 through 0x20 and reapplies AGWS equipment.
+0x00A30D20, equipEngine - Adjusts the selected character's AGWS engine identifier from zero through 0x28 and reapplies engine equipment.
+0x00A30D80, equipFrame - Adjusts the selected character's AGWS frame identifier from zero through 0x29 and reapplies frame equipment.
+0x00A30DE0, equipWpn0 - Runs the debug weapon selector for party slot zero through equipWpn.
+0x00A30DF8, equipWpn1 - Runs the debug weapon selector for party slot one through equipWpn.
+0x00A30E10, equipWpn2 - Runs the debug weapon selector for party slot two through equipWpn.
+0x00A30E28, equipWpn - Edits a hand's weapon type or identifier, reapplies it to the selected character, and switches configuration columns on confirmation.
+0x00A30F00, equipAtt0 - Runs the debug attack-equipment selector for party slot zero through equipAtt.
+0x00A30F18, equipAtt1 - Runs the debug attack-equipment selector for party slot one through equipAtt.
+0x00A30F30, equipAtt2 - Runs the debug attack-equipment selector for party slot two through equipAtt.
+0x00A30F48, equipAtt - Adjusts one of three attack-equipment slots from zero through 0xB2 and reapplies it to the selected character.
+0x00A30FC0, equipAcc0 - Runs the debug accessory selector for party slot zero through equipAcc.
+0x00A30FD8, equipAcc1 - Runs the debug accessory selector for party slot one through equipAcc.
+0x00A30FF0, equipAcc2 - Runs the debug accessory selector for party slot two through equipAcc.
+0x00A31008, equipAcc - Adjusts one of three accessory slots from zero through 0xB4 and reapplies it to the selected character.
+0x00A31080, equipSpec - Edits the current special-technique slot, reapplies it, and advances cyclically through six slots on confirmation.
+0x00A31140, equipEther0 - Runs the debug ether selector for learned slots zero through three.
+0x00A31160, equipEther1 - Runs the debug ether selector for learned slots four through seven.
+0x00A31180, equipEther2 - Runs the debug ether selector for learned slots eight through eleven.
+0x00A311A0, equipEther - Edits and reapplies the current ether slot, advancing cyclically through the caller-selected slot range on confirmation.
+0x00A31280, equipSkill - Edits and reapplies the current skill slot, advancing cyclically through three slots on confirmation.
+0x00A31340, MatuzawaTest - Empty Matuzawa test entry returns immediately; no globals, arguments, or routines are referenced.
+0x00A31348, MBattleInit - Initializes engine, camera, and both movie systems once, sets battle-manager bit one, and reports duplicate initialization attempts.
+0x00A313C0, MBattleCreate - Initializes battle state when needed, creates the engine battle object, then activates it with argument one.
+0x00A313F8, MBattleDestroy - Shuts down the engine battle object, stops active primary and secondary movies, and clears battle pause state.
+0x00A31438, MBattleExec - Executes the battle manager's camera, primary model-motion, and secondary model-motion subsystems for one frame.
+0x00A31460, MBattlePause - Sets battle pause bit 1 for nonzero input; otherwise clears pause and related bit 2.
+0x00A314A0, MBattleIsInPause - Returns battle pause flag bit 1 from global batFlags.
+0x00A314B8, MCamGetSysCam - Returns global sysCam, the system camera parameter block pointer.
+0x00A314C8, MCamGetCurrentBaseCoord - Copies current base-coordinate vector zero or one from DAT_00A5B200 or DAT_00A5B210 into the caller buffer.
+0x00A31500, MCamGetCurrentCoord - Copies current camera coordinate vector zero or one from DAT_00A5B230 or DAT_00A5B240 and forces W to one.
+0x00A31540, MCamGetCurrentAngle - Copies current angle vector zero or one from DAT_00A5B1E0 or DAT_00A5B1F0 into the caller buffer.
+0x00A31578, MCamGetCurrentEye - Copies the four-word current eye vector at DAT_00A5B250 through DAT_00A5B25C into the caller buffer.
+0x00A31598, MCamGetLengthActor - Returns actor-length globals DAT_00A5B220 or DAT_00A5B224 for selector zero or one; otherwise zero.
+0x00A315D0, MCamInit - Clears camFlags and zeroes the 0x5B0-byte global camera work structure.
+0x00A31600, MCamExec - While camera control is active, advances movement, applies calculated parameters, and invokes the display-parameter hook.
+0x00A31648, MCamDumpDisabled - Sets or clears camera dump-disable bit 0x10 in global camFlags.
+0x00A31688, MCamTakeControl - Acquires camera control when free, snapshots 0x5F0 system-camera bytes, initializes camera parameters, and sets camFlags bit zero.
+0x00A31840, MCamReleaseControl - When camera control bit 0 is set, restores 0x5F0 bytes from sysCam and clears that bit; returns prior ownership.
+0x00A318B8, MCamStoreParams - Copies current camera coordinates; angles; eye data; and scalar parameters into the saved camera snapshot.
+0x00A31910, MCamIsActive - Returns camera active-control bit 0 from global camFlags.
+0x00A31920, MCamSet - Copies static or moving camera coordinates, sets bank or perspective values by selector, then recalculates derived parameters.
+0x00A31AE0, MCamMove - Starts timed source coordinates, target coordinates, bank, or perspective movement according to selector zero through three.
+0x00A31BB8, MCamStopMove - Clears camera movement flag 0x100, 0x200, 0x400, or 0x800 selected by movement type.
+0x00A31C30, MCamIsMoving - Returns whether any camera coordinate, bank, or perspective movement bits 0x100, 0x400, or 0x800 are set.
+0x00A31CA0, MCamShake - Configures camera shake amplitude, frequency, delay, duration, and decay, then sets camFlags bit 0x1000; zero duration disables it.
+0x00A31E08, MCamIsShaking - Returns camera shake-active bit 0x1000 from global camFlags.
+0x00A31E20, MCamGetActorCoord - Returns an actor root or joint coordinate and stores facing plus pi in the output vector's fourth component.
+0x00A31EC0, MCamCalcBaseCoord - Resolves static, actor, interpolated pair, or range-adjusted pair base coordinates and returns the actor-pair distance.
+0x00A32070, MCamCalcCoord - Computes base camera coordinates, then optionally transforms them by matrix offset 0x80 or Euler angles 0x94-0x98.
+0x00A32120, MCamGetAtkRange - Returns unit-init attack range halfword at offset 0x10 divided by 100, or zero when unavailable.
+0x00A32190, MCamGetDefRange - Returns unit-init defense range halfword at offset 0x12 divided by 100, or zero when unavailable.
+0x00A32200, MCamExec_Control - Advances source, target, bank, perspective, and shake motions, commits completed coordinates, and clears each finished control flag.
+0x00A323E0, MCamExec_SetParams - Recalculates camera coordinates and eye, applies active shake displacement, then writes eye, target, and perspective into sysCam.
+0x00A324D8, MCamExec_SetParams_Base - Recalculates both camera base coordinates and their transformed coordinates from the current parameter blocks.
+0x00A325A0, MCamExec_DispParams - Returns immediately without changing state; MCamExec invokes it as a placeholder hook.
+0x00A325A8, MCamMove_Coord - Captures source or target camera parameters, calculates start and destination coordinates, initializes timing, and sets movement and optional reset flags.
+0x00A32758, MCamMove_Bank - Captures bank start and target fields, resets elapsed time, and sets camera bank-motion bit 0x400.
+0x00A327A0, MCamMove_Pers - Captures perspective start, target, duration, and radians FOV, then sets camera perspective-motion bit 0x800.
+0x00A32820, MCamMoveProc_CalcRatio - Returns linear, cosine-smoothed, ease-out, or ease-in elapsed-to-duration ratio for interpolation modes zero through three.
+0x00A329E8, MCamMoveProc_Coord - Advances timed camera-coordinate interpolation linearly or spherically, adds tracked endpoint displacement, and reports whether motion remains active.
+0x00A32BB8, MCamMoveProc_Bank - Advances bank interpolation, stores the eased value, and reports whether its elapsed frame remains below duration.
+0x00A32C18, MCamMoveProc_Pers - Advances perspective interpolation, stores the eased value, and reports whether its elapsed frame remains below duration.
+0x00A32C78, MCamShakeProc - Advances shake delay and phase, alternates or sinusoidally computes displacement, decays amplitude, and clears bit 0x1000 when finished.
+0x00A32DB8, MGsGPInit - Initializes an effect GS packet workspace with supplied buffer and size or defaults 0x70000000 and 0x400.
+0x00A32DE0, MGsGPTerm - Submits pending effect GS packet quadwords, resets packet count, and restores the workspace cursor to its base.
+0x00A32E78, MMvInit - Sets movie playback flags to five to request initialization, then returns one.
+0x00A32E90, MMvExec - Handles allowed skip input, updates primary movie display state, and closes playback when the decoder reports completion.
+0x00A32FA8, MMvPlay - Starts the supplied movie through MMvPlay2 using playback mode two.
+0x00A32FD0, MMvPlay2 - Initializes movie buffers and decoder state, validates frame dimensions, configures display bounds, and marks playback active.
+0x00A331F8, MMvStop - Stops primary movie playback through engine handle 0x00A5B6D0 and clears mvFlags bit 1.
+0x00A33248, MMvIsPlaying - Returns primary movie-playing bit 1 from global mvFlags.
+0x00A33260, MMvGetTime - Writes movie end and current times to optional outputs and returns their difference while playback bit 1 is set.
+0x00A332A0, MMvSkipEnabled - Sets or clears movie-skip permission bit 2 in global mvFlags.
+0x00A332E0, MMv2Init - Sets movie playback flags to five for the secondary player, then returns one.
+0x00A332F8, MMv2Exec - Handles secondary movie skipping, retries failed streams once, advances completed streams, and clears playback state on completion or failure.
+0x00A334A0, MMv2Play - Initializes secondary movie state and stream buffer, starts playback, then sets mvFlags bit 1 on success.
+0x00A33590, MMv2Stop - Stops secondary movie decoding and stream buffer 0x00A5B838, then clears mvFlags bit 1.
+0x00A335F0, MMv2IsPlaying - Returns secondary movie-playing bit 1 from global mvFlags.
+0x00A33608, MMv2SkipEnabled - Sets or clears secondary movie-skip permission bit 2 in global mvFlags.
+0x00A33648, MEfCreate - Allocates the configured number of effect instances, copies 0x60 bytes of parameters, invokes type constructor, and frees failed instances.
+0x00A337A0, MEfCheckWorkSize - Returns whether requested effect work size is at most 0x400 bytes; logs larger requests.
+0x00A337E8, MEfCalcAngle - Computes yaw and pitch from the vector between two coordinates and writes both angles to the output.
+0x00A33860, MEfCalcAngleMatrix - Transforms the forward vector by a matrix, then computes and writes its yaw and pitch angles.
+0x00A338C8, MEfGetActorMatrix - Returns an actor root transform for selectors minus one or two, or a joint matrix for selectors below 0x28.
+0x00A33A18, MEfGetActorCoord - Extracts the translation vector from the current actor matrix into the caller's output coordinate.
+0x00A33A50, MEfDrawModel - Optionally applies a model matrix, selects the model resource, then tail-calls its engine draw routine.
+0x00A33A98, MEfMake4Vertex - Builds four square corner vectors, transforms and projects each, and returns the number rejected by clipping.
+0x00A33BA0, MEfMake4Vertex2 - Builds four rotated square corners using VU trigonometry, transforms and projects each, and returns the clipped count.
+0x00A33D20, MEfCalcCircumXZ - Computes an XZ-plane circumference offset from an angle and radius, adds the center vector, and returns the destination.
+0x00A33DC0, MEfScatterXY - Computes source-to-target angles, applies a random radial XY offset through that rotation, and returns the destination vector.
+0x00A33EA8, MEfCalcWeaponCoord - Transforms a weapon-local coordinate by its selected actor matrix, sets homogeneous W to one, and returns the output.
+0x00A33F08, MEfCreate_MSP00 - Initializes MSP00 source and target geometry, trajectory, angles, packet state, particle buffers, and processing callbacks.
+0x00A34058, fnMSP00_PR000 - Shifts nine three-point particle trails, advances their emitter, and spawns three randomized trail points during the first eighteen frames.
+0x00A34298, fnMSP00_DM000 - Before effect frame 0x12, builds the model matrix from offset 0xD0 and draws model pointers 0x40 and 0x44.
+0x00A34308, fnMSP00_DP000 - Builds a GS packet containing up to three rotated textured quads for each of ten active MSP00 particles.
+0x00A34660, fnMSP00_PO000 - Increments the effect lifetime, triggers its event at frame 0x12, and expires after frame 0x1B.
+0x00A346C8, MEfCreate_BP00 - Initializes BP00 source and target positions, scaled actor orientation, packet state, particle storage, counters, and processing callbacks.
+0x00A347F8, fnBP00_PR000 - Advances one particle until frame eighteen, then seeds five randomized trajectories and switches to the five-particle update callback after frame twenty-three.
+0x00A34A38, fnBP00_PR010 - Shifts five particle histories, disables expired entries, and advances active particle positions while the effect age remains below sixteen.
+0x00A34B40, fnBP00_DP000 - Builds translucent geometry packets for five particle trails, fading trail colors by segment age and terminating the graphics packet chain.
+0x00A34E18, fnBP00_PO000 - Increments the effect lifetime, triggers its event at frame 0x21, and expires after frame 0x2C.
+0x00A34E90, MEfCreate_SMP01 - Initializes SMP01 source and target geometry, facing angle, random state, color ranges, particle buffers, packets, and callbacks.
+0x00A35010, updateSmoke - Shifts nine three-point smoke trails, clears the current emitter slot, and spawns three randomized points during the first fifteen frames.
+0x00A35200, fnSMP01_PR000 - Moves the smoke emitter along a rising arc, starts trail updates after four frames, then switches to orbit interpolation after five.
+0x00A35380, fnSMP01_PR010 - Interpolates the smoke emitter around its initial and target coordinates, rotates it, updates trails, and increments orbit phase.
+0x00A35460, fnSMP01_DM000 - Before effect frame 0x0F, builds the smoke model matrix from offset 0xD0 and draws model pointers 0x40 and 0x44.
+0x00A354D0, fnSMP01_DP000 - Builds a GS packet containing up to three rotated textured quads for each of ten active SMP01 smoke particles.
+0x00A35838, fnSMP01_PO000 - Increments the effect lifetime, triggers its event at frame 0x0F, and expires after frame 0x18.
+0x00A358A0, MEfCreate_EAC00 - Returns constant 0; no battle effect state or external routine is accessed.
+0x00A358A8, MEfCreate_AMP02 - Initializes AMP02 source and target geometry, arc motion, randomized color ranges, packet state, particle buffers, and callbacks.
+0x00A35A78, fnAMP02_PR000 - Advances a particle emitter for thirty frames, shifts its nine-point trail, and generates one randomized transformed position per frame.
+0x00A35C70, fnAMP02_DM000 - During the first thirty frames, aims and scales the AMP02 model matrix between its endpoints and draws both model resources.
+0x00A35D08, fnAMP02_DP000 - Builds a GS packet of rotated colored quads for each active AMP02 particle, omitting fully clipped quads.
+0x00A36078, fnAMP02_PO000 - Increments the effect lifetime, triggers its event at frame 0x1E, and expires after frame 0x27.
+0x00A360E0, MEfCreate_MSP02 - Initializes MSP02 source and target geometry, dual trajectories, random state, color ranges, particles, packets, and callbacks.
+0x00A362A8, fnMSP02_PR000 - Steers a randomized secondary emitter toward its target, shifts nine two-point trails, and spawns two transformed points for twenty frames.
+0x00A36718, fnMSP02_DM000 - Before effect frame 0x14, builds a rotated model matrix from angles 0x100-0x10C and draws model pointers 0x40 and 0x44.
+0x00A367B8, fnMSP02_DP000 - Builds a GS packet containing two rotated colored quads for each of ten active MSP02 particles.
+0x00A36B28, fnMSP02_PO000 - Increments the effect lifetime, triggers its event at frame 0x14, and expires after frame 0x1D.
+0x00A36B90, adjAngle - Adds a random angular delta clamped between plus or minus the supplied limit to the base angle.
+0x00A36BE8, MEfCreate_SOLB - Initializes SOLB counters and particle storage, captures source coordinates, builds its Hermite path, and installs processing callbacks.
+0x00A36CB8, makePath - Derives four rotated path points around an actor joint using its transform, model yaw, angular spread, and predefined offsets.
+0x00A36ED0, makeHermiteParam - Builds one SOLB Hermite segment descriptor from indexed control points at effect offsets 0x2E0-0x340.
+0x00A36F28, makeHermiteCoord - Evaluates the selected SOLB Hermite segment using frame progress divided by its duration table entry.
+0x00A36F90, fnSOLB_PR000 - Shifts a thirty-point trail and advances its head along piecewise Hermite segments for the effect's first twenty-three frames.
+0x00A37088, fnSOLB_DP000 - Builds multiple fading ribbon and halo packet passes from the thirty-point Hermite trail, then terminates the graphics packet chain.
+0x00A37A48, fnSOLB_PO000 - Advances the SOLB effect frame, triggers its event at frame 0x17, and finishes after frame 0x34.
+0x00A37AB8, MEfCreate_ECM01 - Initializes ECM01 source-to-target geometry, randomized spin and dimensions, particle buffers, packet state, and processing callbacks.
+0x00A37C78, fnECM01_PR000 - Shifts thirty visibility and age entries, activating the current entry with endpoint marker two throughout the first sixty frames.
+0x00A37CE8, fnECM01_DP000 - Builds two fading GS line strips from up to 31 active ECM01 segments after transforming and clipping their endpoints.
+0x00A38128, fnECM01_PO000 - Increments the effect lifetime, triggers its event at frame 0x3C, and expires after frame 0x59.
+0x00A38190, MEfCreate_ECM02 - Initializes ECM02 colors, trail arrays, rotation seed, graphics packets, and process, postprocess, and draw callbacks.
+0x00A382B8, makeCoord - Builds a local coordinate from radius and normalized radius, then transforms it into destination offset 0x80.
+0x00A38310, fnECM02_PR000 - Shifts twenty trail visibility, angle, and rotation entries, then activates and rotates the head during the first thirty-five frames.
+0x00A383A8, fnECM02_DP000 - Builds two-sided fading ribbon packets from twenty active trail samples and their calculated paired coordinates, then terminates packet generation.
+0x00A38738, fnECM02_PO000 - Advances the ECM02 effect frame, triggers its event at frame 0x23, and finishes after frame 0x36.
+0x00A387A8, MEfCreate_GAMERA - Initializes GAMERA source and target coordinates, particle buffers, Hermite path, packet state, counters, and processing callbacks.
+0x00A388A0, makePath - Generates four randomized expanding path points in actor space using angle, signed angular drift, radius, and height tables.
+0x00A38A68, makeHermiteParams - Builds one GAMERA Hermite segment descriptor from indexed control points at effect offsets 0x2D0-0x340.
+0x00A38AC0, makeHermiteCoord - Evaluates the selected GAMERA Hermite segment using its frame count multiplied by one eighth.
+0x00A38B10, fnGAMERA_PR000 - Shifts a twenty-seven-point trail and advances its head through eight-frame Hermite segments during the first twenty-four effect frames.
+0x00A38BF0, fnGAMERA_DP000 - Builds four paired ribbon passes around the twenty-seven-point GAMERA trail, applying segment angles, endpoint transparency, projection, and clipping.
+0x00A39018, fnGAMERA_PO000 - Advances the GAMERA effect frame, triggers its event at frame 0x18, and finishes after frame 0x32.
+0x00A39088, MEfCreate_EAD00 - Initializes EAD00 packet state, installs process, lifetime, and draw callbacks, and returns creation success one.
+0x00A390E8, fnEAD00_PR000 - Computes three actor-relative segment pairs, scaling their local endpoints during the opening and closing eight effect frames.
+0x00A392C8, fnEAD00_DP000 - Builds twelve rotating fifty-one-segment EAD00 ribbons, fading their colors along each strip and during the final eight frames.
+0x00A39758, fnEAD00_PO000 - Increments the EAD00 effect lifetime, triggers its completion event at frame 0x46, and then terminates the effect.
+0x00A397C0, MEfCreate_SO14 - Returns constant 0; no battle effect state or external routine is accessed.
+0x00A397C8, MEfCreate_DORA - Initializes DORA weapon-source and target coordinates, particle buffers, Hermite path, packet state, counters, and processing callbacks.
+0x00A398B8, makePath - Generates four randomized expanding DORA path points after applying local translation and X rotation to the actor transform.
+0x00A39A68, makeHermiteParams - Builds one DORA Hermite segment descriptor from indexed control points at effect offsets 0x350-0x3C0.
+0x00A39AC0, makeHermiteCoord - Evaluates the selected DORA Hermite segment using its frame count multiplied by one fifth.
+0x00A39B18, fnDORA_PR000 - Shifts a thirty-three-point trail and advances its head through five-frame Hermite segments during the first fifteen effect frames.
+0x00A39BF8, fnDORA_DP000 - Builds four paired ribbon passes around the thirty-three-point DORA trail, applying segment angles, endpoint transparency, projection, and clipping.
+0x00A3A020, fnDORA_PO000 - Advances the DORA effect frame, triggers its event at frame 0x0F, and finishes after frame 0x2F.
+0x00A3A090, MEfCreate_KOSBW02 - Initializes KOSBW02 midpoint geometry, source-relative orientation, beam lengths, colors, particles, packet state, random seed, and callbacks.
+0x00A3A2A8, fnKOSBW02_PR000 - Advances a circular emitter, shifts nine three-point trails, and spawns three randomized transformed points during the first twenty-five frames.
+0x00A3A538, fnKOSBW02_DM000 - During the first twenty-five frames, builds the model matrix from the current emitter angle and draws both model resources.
+0x00A3A598, fnKOSBW02_DP000 - Builds the KOSBW02 GS packet from rotated or axis-aligned textured quads, omitting vertices rejected by clipping.
+0x00A3AA60, fnKOSBW02_PO000 - Increments the effect lifetime, triggers its event at frame 0x19, and expires after frame 0x22.

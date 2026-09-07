@@ -1,0 +1,110 @@
+0x00A00000, device_check_sync - polls device status, advances one frame, and draws the shared device-check message.
+0x00A00040, hdd_check - probes hard-drive availability, prompts through recoverable errors, and retries or initializes storage from user input.
+0x00A00300, mc_check - polls both memory-card slots, validates capacity and state, and displays retryable warnings for unusable cards.
+0x00A00668, LogoFirst - initializes boot display services, performs storage checks, prints a status message, and starts logo playback.
+0x00A006C8, ipuplay - configures an IPU movie stream, renders frames until completion or skip input, then releases playback state.
+0x00A007F8, Logo - resets the display and plays two logo movies in sequence unless the first is skipped.
+0x00A00850, BootDisplay - performs no work and returns immediately as an empty boot display hook.
+0x00A00858, copyframe - builds and submits a GS command packet that copies between the current frame buffers.
+0x00A00980, build_mipmap - constructs a large GS command packet for mipmap generation and submits it to the supplied buffer.
+0x00A00D18, particle_reset - randomizes one title particle's starting edge, position, velocity, and lifetime according to its index parity.
+0x00A00E18, Title - loads title resources, animates particles and menu choices, then dispatches game startup or hard-drive installation.
+0x00A017A0, TitleGameInit - clears persistent game state, initializes core runtime systems, and disables the title display mode.
+0x00A017F0, HddInstallSync - renders the hard-drive installation backdrop from shared parameters and synchronizes the completed frame.
+0x00A01928, HddInstallCB - renders installation status and percentage updates, swaps progress artwork, and handles user cancellation requests.
+0x00A01D78, TitleHddInstallSubInstall - confirms installation, starts the asynchronous installer with HddInstallCB, and presents success or retry prompts.
+0x00A01F80, TitleHddInstallSubUninstall - confirms removal, invokes the uninstall operation, and presents completion or retry prompts while synchronizing frames.
+0x00A02148, TitleHddInstall - allocates installation resources, dispatches install, uninstall, or error dialogs, then restores the previous memory pointer.
+0x00A023A8, tskUmnObjectTaskMain - invokes a stored object callback during initialization and updates, or destroys the task when UMN exits.
+0x00A02458, UmnObjectTaskCreate - allocates a child UMN task, stores its callback and argument, and clears its private work area.
+0x00A024D8, UmnChangeTopLevel - clears top-level UI state, selects a new UMN section, and installs its procurator model.
+0x00A02530, UmnFirstLoad - loads the shared UMN text resource at the work arena and advances the arena pointer.
+0x00A025B8, UmnInit - initializes UMN graphics, memory arenas, task lists, interface objects, mail headers, and event-history resources.
+0x00A02778, UmnMain - runs the full UMN loop, dispatching top, mail, database, simulation, and plugin sections before cleanup.
+0x00A029A8, UmnMain2 - creates a temporary UMN runtime focused on mail, preserves graphics context, then tears everything down.
+0x00A02D68, tskUmnBgCubeMain - initializes and incrementally rotates the background cube transform, then submits its textured model each frame.
+0x00A03060, UmnBgCubeInit - allocates the background-cube task and initializes its render environment, texture, model, and transform storage.
+0x00A03148, DrawUmnInterface2 - emits six colored interface quads into a GS packet using two packed color sets.
+0x00A03368, UmnInterface2Main - decreases two interface intensity counters each frame until both reach zero.
+0x00A033E0, UmnInterface2Init - aligns and initializes the interface color block, returning the first address after its storage.
+0x00A03450, taskUmnTopWin - animates and renders the top-level carousel, selection highlight, labels, arrows, and unavailable entries.
+0x00A03EB0, UmnTopMenu - builds available top-level choices, processes navigation and confirmation, and changes sections or exits UMN.
+0x00A04170, UmnManzaiControl - advances dialogue when both actor windows are ready, updates shared flags, and detects conversation completion.
+0x00A042A8, UmnManzaiInit - parses event dialogue, loads missing actor resources, attaches actor callbacks, and creates two speech windows.
+0x00A04388, tskUmnManzaiWin - animates the two speaker windows, updates displayed dialogue text, and synchronizes readiness through shared flags.
+0x00A047C8, LocalLightSet - initializes a model's local lighting transform from fixed camera parameters and enables its lighting flag.
+0x00A048C0, UmnProcuratorManzai2 - positions and fades the secondary dialogue actor, moves its portrait window, and updates synchronization flags.
+0x00A04DE0, Rotation - transforms an offset through supplied rotations and adds the result to a base position vector.
+0x00A04E80, UmnProcuratorManzai - animates the primary dialogue actor and portrait window, coordinating movement phases through conversation flags.
+0x00A052F8, UmnProcuratorMail - initializes local lighting and smoothly moves, rotates, and fades the mail-section character into place.
+0x00A054F0, UmnProcuratorTop - applies a fixed top-menu pose and lighting, then starts the character's standard animation.
+0x00A055A0, UmnProcuratorGoodBy - starts the farewell animation, advances model translation and rotation, and destroys the task when motion completes.
+0x00A05670, UmnProcuratorSet - requests the primary UMN character model when entering either the top menu or mail section.
+0x00A05738, tskUmnMailPas - initializes the mail prompt panel and slides context-sensitive command labels according to the mail state.
+0x00A05A80, tskUmnMailInfo - composes contextual mail help text from header, attachment, reply, and investment state, then updates its panel.
+0x00A05F40, tskUmnMailFolder - animates and renders the folder carousel, mail summaries, selection cursor, scroll arrows, and folder-status icons.
+0x00A06EB0, tskUmnMailDisp - animates the selected mail reader, handles scrolling and page jumps, and renders text plus scroll indicators.
+0x00A07B38, tskUmnMailHensin - animates the reply-recipient panel and draws selectable recipient names from referenced mail headers.
+0x00A07EB0, tskUmnMailMenu - opens and closes contextual mail option or confirmation menus while reflecting disabled choices.
+0x00A082E0, tskUmnMailExWin - animates auxiliary mail action hints and enables their icons according to attachment and reply eligibility.
+0x00A08700, SisoSiso.6 - recursively searches a history-tree branch for the currently selected mail identifier and reports whether found.
+0x00A087A0, UmnMailFolderSet - builds or restores the visible mail-folder ancestry, preserving cursor and scroll positions between hierarchy levels.
+0x00A08A50, UmnMail - drives mail browsing, reading, replies, attachments, dialogue events, state flags, and return to the top menu.
+0x00A097D8, UmnGunoDataBaseGet - returns the fixed-size database record for supported IDs, otherwise returning the database base record.
+0x00A09818, tskUmnDataBasePas - initializes the database prompt panel and slides its message based on the current database state.
+0x00A09A70, tskUmnDataBaseInfo - initializes the database information panel and displays the description for the selected command.
+0x00A09BC0, tskUmnDataBaseName - animates a two-column record grid, populates unlocked names and models, and tracks the selection cursor.
+0x00A0A3F8, tskUmnDataBaseAnalisis - launches and renders the selected database model analysis, then closes it on input or state changes.
+0x00A0A600, tskUmnDataBaseMenu - animates the database command menu, populates three choices, and disables browsing when no records exist.
+0x00A0A8F8, tskUmnDataBaseExWin - renders database action hints, toggles their layout, and dims analysis when unavailable for the selection.
+0x00A0ACE0, tskUmnDataBaseKeyWord - embeds the reusable database browser, records its selected keyword, and renders selection and arrow indicators.
+0x00A0B028, UmnDataBaseModel - initializes, displays, and dismisses the selected database model while honoring analysis state changes.
+0x00A0B1D8, UmnDataBase - builds unlocked database entries, drives menus and grid navigation, loads models, and returns to UMN top level.
+0x00A0BAF8, tskUmnSimulationPas - initializes and animates the simulation prompt panel according to the simulation menu state.
+0x00A0BD08, tskUmnSimulationInfo - composes the selected simulation description from its label and displays it in an animated information panel.
+0x00A0BEE8, tskUmnSimulationList - builds the unlocked simulation list, updates selection from input, and renders the animated list window.
+0x00A0C1C8, UmnSimulation - unlocks simulations from progress, creates their UI tasks, and launches the selected script after confirmation.
+0x00A0C488, mark - records a computed text line boundary in the display state and increments the boundary count.
+0x00A0C4C8, tail - computes and stores the final text boundary from the current parser and display coordinates.
+0x00A0C4F0, tyaUmlDispLoad - loads a numbered display resource, expands control codes, and constructs text plus embedded-image descriptors in working memory.
+0x00A0CA38, texture_trans - uploads one texture descriptor through a GS transfer packet and synchronizes the supplied command buffer.
+0x00A0CAD8, tyaUmlDispType3Sub0 - clips and renders display text, tiled backgrounds, and intersecting embedded images while uploading required textures.
+0x00A0CEF0, tyaUmlDispType3Sub1 - writes a GS packet terminator using the current screen dimensions and fixed register commands.
+0x00A0CF60, tyaUmlDispType3 - clears the display object's pending-render flag before the renderer-specific drawing path continues.
+0x00A0D038, tyaUmlDispMain - clears stale buffers, reloads changed display resources, and invokes the type-three renderer for valid state.
+0x00A0D0C8, find_text - walks variable-length text records for a matching identifier and returns available payload text or null.
+0x00A0D128, get_fileno - scans the database file table for an entry matching the requested ID and returns its file index.
+0x00A0D1A0, get_indexno - scans the base database table for the requested ID and returns its selectable-entry index.
+0x00A0D218, get_selectno - maps a selectable-entry ordinal back to its base table index while skipping sentinel entries.
+0x00A0D290, dbfileno_load - loads and parses the database file-number list into a signed table terminated by a sentinel.
+0x00A0D3C0, dbheader_load - loads database headers, filters unavailable records, expands their text, and stores visible and available counts.
+0x00A0D5E0, disp_index - prints the 26 database index labels, highlighting the current index and optionally appending a marker.
+0x00A0D708, tyaUmlDatabaseMain - initializes the database browser, handles list and index navigation, loads selected text, and renders scrolling indicators.
+0x00A0DD80, tyaUmlDispParamReset - resets a display parameter block to default bounds, offsets, colors, and invalid resource identifiers.
+0x00A0DDC8, tyaUmlDispInit2 - assigns the display work buffer and clears all eight cached embedded-image descriptors.
+0x00A0DE08, tyaUmlDispInit - initializes display parsing with the fixed default work buffer by forwarding to tyaUmlDispInit2.
+0x00A0DE20, tskUmnPluginPas - initializes and slides the plugin prompt panel according to the plugin section state.
+0x00A0E038, tskUmnPluginInfo - displays the selected plugin description from loaded text or a fallback for invalid selections.
+0x00A0E1A0, tskUmnPluginList - builds the unlocked plugin list, handles selection input, and updates selected plugin state while animating.
+0x00A0E4D8, tskUmnPluginExWin - animates the plugin action-hint window and renders its selection and total-count indicators.
+0x00A0E6F8, UmnPlugin - enumerates unlocked plugin bits, creates plugin UI tasks, drives entry and exit timing, and returns upward.
+0x00A0E938, UmnEventTextSymbolCheck - recognizes seven bracketed event-script tags, advances the source pointer, and returns the matched tag code.
+0x00A0EA68, UmnEventTextCharCheck - recognizes either supported speaker-name token, advances the source pointer, and returns its character code.
+0x00A0EB28, UmnEventTextNumberGet - parses a decimal or octal number from the source and advances its caller-owned pointer.
+0x00A0EBB0, UmnEventTextGyouJump - advances the source pointer past all consecutive newline characters.
+0x00A0EBF0, UmnEventTextMessageMake - copies message bytes until the next tag, decoding numeric escapes and appending a terminator.
+0x00A0ECE0, UmnEventTextMake - loads an event script, indexes speech blocks, parses speaker and message tags, and builds dialogue records.
+0x00A0EFC0, UmnEventTextNextGet - advances the global dialogue record cursor and returns the requested record or null at the end.
+0x00A0F000, UmnMailEventCheck - finds a mail in the event table and returns its pending event index when not completed.
+0x00A0F068, UmnEventEndMailCheck - unlocks and registers the configured follow-up mail when the specified event-ending mail is read.
+0x00A0F0D8, UmnHistoryTreeLoad - aligns an 0x800-byte history-tree buffer, loads its resource, and returns the next free address.
+0x00A0F128, UmnHistoryTreeGet - returns a four-byte history-tree entry for identifiers below 128, otherwise returning null.
+0x00A0F150, UmnKosmosSpecialGetCheck - matches four special-mail entries and copies up to three associated reward identifiers into global state.
+0x00A0F1D8, UmnMailAttachGet - returns the three-byte attachment descriptor at the requested table index.
+0x00A0F1F8, UmnMailAttachSet - applies an attachment descriptor by unlocking plugins, granting repeated items, or adding a scaled amount.
+0x00A0F338, UmnMailHeaderGet - returns the fixed-size mail header record at the requested identifier index.
+0x00A0F358, UmnMailHeaderCreate - loads packed mail records, expands sender and subject text, and builds indexed headers with attachment metadata.
+0x00A0F550, UmnPluginTextGet - returns one of six fixed-size plugin text records, falling back to the text base.
+0x00A0F578, UmnTextLoad - aligns the UMN text buffer, loads it synchronously or asynchronously, and returns the next arena address.
+0x00A0F5E8, UmnMailCompulsionDownLoadCheck - recognizes forced-download attachments and reports whether the associated mail attachment remains undownloaded.
+0x00A0F650, UmnEventTextInit - aligns and reserves the event-text workspace, clears its loaded flag, and returns the following address.

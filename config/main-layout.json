@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "scope": "full-main",
+  "revision": "slus-20469-412d448de315",
+  "manifest_sha256": "f38aeb224e2d96ababcdce03c4aa4461ce6da22de8feffb86425ee332501a7e3",
+  "original_sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2",
+  "original_file_size": 3441932,
+  "resident_functions": 4526,
+  "resident_func_bytes": 1270388,
+  "resident_text_bytes": 1279344,
+  "partition_sha256": "634de23dd06206db297101a15e455a68c5ee923be9875a085d11a57173349707",
+  "section_layout_sha256": "223ac181f9ef94082262082f612c3a623f5384e08e7ed1e9dbec8c13dd36ce98",
+  "header": {
+    "entry": "0x00200008", "flags": 546455553, "gp": "0x004dfb70",
+    "gp_sources": [
+      {"source": "program_header:0", "value": "0x004dfb70"},
+      {"source": "section:4", "value": "0x004dfb70"},
+      {"source": "main:55:6227", "value": "0x004dfb70"}
+    ],
+    "machine": 8, "program_header_count": 4, "section_count": 57, "type": 2
+  },
+  "program_headers": [
+    {"index": 0, "type": 1879048192, "file_offset": 1283440, "va": "0x00338570", "physical_address": "0x00338570", "file_size": 24, "memory_size": 24, "flags": 4, "alignment": 4},
+    {"index": 1, "type": 1, "file_offset": 4096, "va": "0x00200000", "physical_address": "0x00200000", "file_size": 1279368, "memory_size": 1279368, "flags": 5, "alignment": 4096},
+    {"index": 2, "type": 1, "file_offset": 1283584, "va": "0x00338600", "physical_address": "0x00338600", "file_size": 1720024, "memory_size": 6705936, "flags": 6, "alignment": 4096},
+    {"index": 3, "type": 1, "file_offset": 3006464, "va": "0x00a00000", "physical_address": "0x00a5b8f8", "file_size": 80108, "memory_size": 80108, "flags": 7, "alignment": 4096}
+  ],
+  "literal_data": [{"va": "0x002124e0", "size": 16, "symbol": "_maxval", "bytes_hex": "ff00ff00ff00ff00ff00ff00ff00ff00"}],
+  "policy": {
+    "embedded_ov02": "canonical copy, not resident ASM",
+    "matched_c_functions": 0,
+    "nobits": "memory layout, never file bytes",
+    "nonalloc_metadata": "preserved sidecars, not original ELF identity"
+  }
+}

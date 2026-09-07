@@ -1,0 +1,59 @@
+{
+  "discarded_generated_metadata": [
+    ".reginfo",
+    ".MIPS.abiflags",
+    ".pdr",
+    ".gnu.attributes"
+  ],
+  "header": {
+    "entry": "0x00200008",
+    "flags": 546455553,
+    "gp": null,
+    "gp_sources": [],
+    "machine": 8,
+    "program_header_count": 1,
+    "section_count": 5,
+    "type": 2
+  },
+  "manifest_sha256": "f38aeb224e2d96ababcdce03c4aa4461ce6da22de8feffb86425ee332501a7e3",
+  "original_file_size": 425114,
+  "original_sha256": "dd333f728314c4e553690056d5ed21efc0d65d58ce2afb74d7a45a782849690a",
+  "partition_sha256": "863244d5ef53a80767ca0d380563af679226c09c09a8d2096e03c1120b211364",
+  "program_headers": [
+    {
+      "alignment": 4096,
+      "file_offset": 4096,
+      "file_size": 375032,
+      "flags": 7,
+      "index": 0,
+      "memory_size": 375032,
+      "physical_address": "0x00a00000",
+      "type": 1,
+      "va": "0x00a00000"
+    }
+  ],
+  "provenance": {
+    "asm_bytes": 238124,
+    "asm_functions": 1081,
+    "matched_c_functions": 0,
+    "preserved_non_func_bytes": 136908,
+    "preserved_ranges": 552
+  },
+  "revision": "slus-20469-412d448de315",
+  "schema_version": 1,
+  "section": {
+    "alignment": 16,
+    "entry_size": 0,
+    "file_offset": 4096,
+    "flags": 7,
+    "index": 1,
+    "info": 0,
+    "link": 0,
+    "name": "ov01",
+    "sha256": "fe7c41746c8834e145b907982af83685726e0eb48d5fcbb77374fadd457dc2e5",
+    "size": 375032,
+    "type": 1,
+    "va": "0x00a00000"
+  },
+  "unit": "ov01"
+}

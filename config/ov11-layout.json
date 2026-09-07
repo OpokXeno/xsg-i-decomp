@@ -1,0 +1,59 @@
+{
+  "discarded_generated_metadata": [
+    ".reginfo",
+    ".MIPS.abiflags",
+    ".pdr",
+    ".gnu.attributes"
+  ],
+  "header": {
+    "entry": "0x00200008",
+    "flags": 546455553,
+    "gp": null,
+    "gp_sources": [],
+    "machine": 8,
+    "program_header_count": 1,
+    "section_count": 5,
+    "type": 2
+  },
+  "manifest_sha256": "f38aeb224e2d96ababcdce03c4aa4461ce6da22de8feffb86425ee332501a7e3",
+  "original_file_size": 71289,
+  "original_sha256": "2072d6586766ebea5d39217cae67f2169685a95526d08ff7b1f652c093879eaf",
+  "partition_sha256": "b45c8fff4abaeb2566ea8818ed4363d9bb6cb3c490f6d44f00f02064baae14aa",
+  "program_headers": [
+    {
+      "alignment": 4096,
+      "file_offset": 4096,
+      "file_size": 57464,
+      "flags": 7,
+      "index": 0,
+      "memory_size": 57464,
+      "physical_address": "0x00ac701a",
+      "type": 1,
+      "va": "0x00a00000"
+    }
+  ],
+  "provenance": {
+    "asm_bytes": 37180,
+    "asm_functions": 139,
+    "matched_c_functions": 0,
+    "preserved_non_func_bytes": 20284,
+    "preserved_ranges": 59
+  },
+  "revision": "slus-20469-412d448de315",
+  "schema_version": 1,
+  "section": {
+    "alignment": 16,
+    "entry_size": 0,
+    "file_offset": 4096,
+    "flags": 7,
+    "index": 1,
+    "info": 0,
+    "link": 0,
+    "name": "ov11",
+    "sha256": "bedef8de64ceea15acb14a27ac8b2538e3ae1d017b15d175594667c398a1c31f",
+    "size": 57464,
+    "type": 1,
+    "va": "0x00a00000"
+  },
+  "unit": "ov11"
+}
