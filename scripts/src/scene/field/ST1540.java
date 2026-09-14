@@ -1,0 +1,179 @@
+import xeno.Camera;
+import xeno.Chr;
+import xeno.Effect;
+import xeno.Enepc;
+import xeno.Light;
+import xeno.Stage;
+import xeno.Unit;
+import xeno.Uwamono;
+import xeno.XenoConstants;
+import xeno.map.MC_GNU14_PRJ;
+import xeno.plan.CfConstants;
+import xeno.util.Menu;
+import xeno.util.Runtime;
+import xeno.util.Window;
+import xeno.vm.System;
+
+class ST1540
+        extends Stage
+        implements XenoConstants,
+        CfConstants,
+        MC_GNU14_PRJ {
+    static final int MTN_TEST1 = 257;
+    static final int MTN_TEST2 = 258;
+    static final int MTN_TEST3 = 259;
+    static final int MTN_TEST4 = 260;
+    static final int MTN_TEST5 = 261;
+    static final int MTN_TEST6 = 262;
+    static final int MTN_TEST7 = 263;
+    static final int MTN_TEST8 = 264;
+    static final int MTN_TEST9 = 265;
+    static final int MTN_TEST10 = 266;
+    Player player;
+    Camera cam1;
+    Enepc npc1;
+    Enepc npc2;
+    Enepc npc3;
+    Enepc npc4;
+    Enepc npc5;
+    Enepc npc6;
+    Enepc npc7;
+    Enepc npc8;
+    Unit unit1;
+    Menu menu;
+    Window win;
+    int count = 0;
+    int selected = 0;
+    int npc1talked = 0;
+    int npc2talked = 0;
+    int npc3talked = 0;
+    int npc4talked = 0;
+    int npc5talked = 0;
+    int npc6talked = 0;
+    int npc7talked = 0;
+    int npc8talked = 0;
+    boolean npc1flg = false;
+    boolean npc2flg = false;
+    Uwamono doorA;
+    Uwamono itembox;
+    int test1;
+    int test2;
+    int test3;
+    int test4;
+    int test5;
+    Light light = new Light(0);
+    Effect fade;
+    int page;
+
+    ST1540() {
+    }
+
+    void Final_init(int n) {
+    }
+
+    public void KickEvent(int n, int n2) {
+    }
+
+    public void entered(int n) {
+        Runtime.setRegister(0, n);
+        System.println("enterd : /[$0]");
+        this.fade.call(0);
+        System.sleep(30);
+        switch (n) {
+            case 0: {
+                Runtime.jumpCF(1500, 1);
+                break;
+            }
+        }
+    }
+
+    void init() {
+        this.fade = new Effect(0);
+        this.fade.args[0] = -268435456;
+        this.fade.args[1] = 30;
+        this.fade.args[2] = 0;
+        Stage.setColor(1.0f, 1.0f, 1.0f);
+        this.light.setColor(0, 0.3f, 0.3f, 0.3f);
+        this.light.setColor(1, 0.3f, 0.3f, 0.3f);
+        this.light.setDirection2(1, 0.0f, 1.0f, 0.0f);
+        this.light.setColor(2, 0.5f, 0.5f, 0.5f);
+        this.light.setDirection2(2, 0.0f, 1.0f, 2.0f);
+        this.light.setColor(3, 0.5f, 0.5f, 0.5f);
+        this.light.setDirection2(3, 0.0f, -1.0f, -2.0f);
+        Stage.setVisible(-1, true);
+        int n = Runtime.getEntrance();
+        if (n >= 0) {
+            Runtime.setRegister(0, n);
+            System.println("entrance: /[$0]");
+            this.player.setLocation(1, n);
+        }
+        Runtime.setPlayerMoveParam(32.0f, 96.0f, 9.895E-4f);
+        this.cam0.setCFAngle(1, -28.0f, 0.0f, 0.0f, 8.0f, 40.0f);
+        this.cam0.setCFHokan(1, 0.01f, 0.01f);
+        this.itembox = new Uwamono(28680, 2.2f, 0.0f, 0.0f, 90.0f, 452);
+        this.itembox.SetCallNo(1);
+        this.itembox.SetSymbol(28726);
+        this.doorA = new Uwamono(2, 40, '\u0004');
+        this.doorA.SetDoorType('\u0004');
+        this.doorA.SetDiffSize(0.0f, -0.05f, 0.0f);
+    }
+
+    void itemget(int n) {
+        switch (n) {
+            case 1: {
+                Runtime.setFlags(3249, 1, 1);
+                break;
+            }
+        }
+    }
+
+    static int waitPage(Window window, int n) {
+        int n2;
+        while ((n2 = window.getSignal()) < n) {
+            System.sleep(1);
+        }
+        return n2;
+    }
+
+    class Player
+            extends Chr {
+        Player() {
+        }
+
+        void init() {
+            this.setPlayer();
+            this.setShadow(4, 16);
+        }
+    }
+
+    class Obj
+            extends Unit {
+        Obj() {
+        }
+    }
+
+    class NPC_NORMAL
+            extends Enepc {
+        NPC_NORMAL() {
+        }
+
+        void init() {
+        }
+
+        public void talk(Window window) {
+        }
+    }
+
+    class NPC_EVENT
+            extends Enepc {
+        NPC_EVENT() {
+        }
+
+        void init() {
+        }
+
+        public void talk() {
+        }
+    }
+}
+
