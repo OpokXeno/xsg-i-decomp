@@ -1,0 +1,17 @@
+# The disassembler that regenerates the scaffold (asm/, skeletons, blobs).
+# Install into a virtualenv and point XENO_SPLAT_PYTHON at its interpreter:
+#
+#     python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#     export XENO_SPLAT_PYTHON=$PWD/.venv/bin/python
+#
+# Versions are pinned: a different splat or rabbitizer disassembles differently
+# and the scaffold stops assembling back to the original bytes.
+splat64==0.50.0
+spimdisasm==1.42.4
+rabbitizer==1.16.2
+pyyaml==6.0.3
+pylibyaml==0.1.0
+intervaltree==3.1.0
+sortedcontainers==2.4.0
+colorama==0.4.6
+tqdm==4.67.1

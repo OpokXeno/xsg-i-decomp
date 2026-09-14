@@ -1,0 +1,310 @@
+.text
+.set noreorder
+.set nomacro
+
+# Scoped effect-only reconstruction.  The source begins with the original
+# four-byte zero alignment gap, then defines nmlModelEntryEffect at 0x00233980.
+# The contract below names the packet, model-state, group, and VU roles; it is
+# not a binary include or an emitted opcode/data substitute.
+
+.align 3
+.align 2
+.globl nmlModelEntryEffect
+.type nmlModelEntryEffect,@function
+.ent nmlModelEntryEffect
+nmlModelEntryEffect:
+    .frame $29,112,$31
+    .mask 0xc0ff0000,-16
+    .fmask 0x00000000,0
+    addiu	$29,$29,-112
+    sd	$17,40($29)
+    sd	$16,32($29)
+    sd	$18,48($29)
+    sd	$19,56($29)
+    sd	$20,64($29)
+    sd	$21,72($29)
+    sd	$22,80($29)
+    sd	$23,88($29)
+    sd	$30,96($29)
+    sd	$31,104($29)
+    jal nmlPacketSetCurrent
+    daddu	$17,$4,$0
+    lw	$5,-14160($28)
+    slti	$2,$5,512
+    beq	$2,$0,L_00233d9c
+    lw	$2,-14156($28)
+    lw	$3,-14148($28)
+    lw	$4,68($17)
+    addu	$2,$2,$3
+    addu	$2,$2,$4
+    slti	$2,$2,4095
+    beq	$2,$0,L_00233d9c
+    lwc1	$f0,-14200($28)
+    lui	$19,0x4b
+    addiu	$18,$19,-28192
+    sw	$0,16($29)
+    addiu	$20,$17,176
+    addiu	$16,$18,496
+    sw	$5,604($18)
+    addiu	$2,$17,144
+    swc1	$f0,-14196($28)
+    sw	$17,596($18)
+    lqc2	vf3,0($2)
+    lqc2	vf2,0($16)
+    vadd.xyz	vf2xyz,vf2xyz,vf3xyz
+    sqc2	vf2,0($16)
+    jal _CurSetMatrix
+    addiu	$4,$18,128
+    daddu	$4,$16,$0
+    jal _CurApplyMatrix
+    daddu	$5,$4,$0
+    lwc1	$f0,156($17)
+    lw	$2,636($18)
+    lui	$1,0x3f80
+    mtc1	$1,$f1
+    sll	$2,$2,0x2
+    swc1	$f0,508($18)
+    addu	$2,$2,$18
+    swc1	$f1,620($18)
+    sw	$0,552($18)
+    sw	$0,768($2)
+    lw	$5,64($17)
+    lw	$2,72($17)
+    lw	$4,80($17)
+    addu	$5,$5,$2
+    addu	$4,$17,$4
+    jal nmlPacketSetAttributeData64N
+    sll	$5,$5,0x1
+    sw	$0,612($18)
+    sw	$2,600($18)
+    lw	$16,68($17)
+    andi	$2,$16,0xf
+    beq	$2,$0,L_00233a88
+    subu	$2,$16,$2
+    addiu	$16,$2,16
+L_00233a88:
+    addiu	$3,$16,15
+    slti	$2,$16,0
+    movn	$16,$3,$2
+    sra	$16,$16,0x4
+    jal nmlPacketSetAttributeAlloc16N
+    daddu	$4,$16,$0
+    daddu	$5,$0,$0
+    sw	$2,696($18)
+    lw	$3,16($29)
+    slt	$2,$3,$16
+    beq	$2,$0,L_00233adc
+    daddu	$4,$18,$0
+    lw	$2,696($4)
+    sll	$0,$0,0x0
+L_00233ac0:
+    sll	$3,$5,0x4
+    addu	$3,$3,$2
+    sq	$0,0($3)
+    addiu	$5,$5,1
+    slt	$2,$5,$16
+    bnel	$2,$0,L_00233ac0
+    lw	$2,696($4)
+L_00233adc:
+    addiu	$5,$0,50
+    jal nmlPacketSetAttributeData16N
+    addiu	$4,$19,-28192
+    lw	$5,-13416($28)
+    daddu	$18,$2,$0
+    lw	$2,-14160($28)
+    slti	$3,$5,511
+    sw	$0,20($29)
+    sll	$2,$2,0x2
+    sw	$0,24($29)
+    lui	$1,0x95
+    addu	$1,$1,$2
+    sw	$18,20656($1)
+    beq	$3,$0,L_00233b60
+    lw	$3,-13412($28)
+    lui	$2,0x95
+    lhu	$4,-14148($28)
+    addiu	$2,$2,31040
+    sll	$3,$5,0x4
+    addu	$8,$2,$3
+    addiu	$6,$0,4095
+    addu	$7,$3,$2
+    addiu	$5,$2,8
+    subu	$6,$6,$4
+    daddu	$4,$18,$0
+    daddu	$2,$8,$0
+    sh	$6,0($7)
+    sh	$0,2($7)
+    addu	$5,$3,$5
+    sw	$0,4($8)
+    jal set_group_status
+    sw	$18,12($2)
+    lw	$3,-13412($28)
+L_00233b60:
+    slti	$2,$3,511
+    beql	$2,$0,L_00233ba4
+    lw	$6,68($17)
+    lui	$2,0x96
+    sll	$3,$3,0x4
+    addiu	$2,$2,-26304
+    lhu	$7,-14156($28)
+    addu	$6,$3,$2
+    addiu	$5,$2,8
+    addu	$2,$2,$3
+    sh	$7,0($6)
+    sh	$0,2($6)
+    addu	$5,$3,$5
+    sw	$18,12($2)
+    jal set_group_status
+    daddu	$4,$18,$0
+    lw	$6,68($17)
+L_00233ba4:
+    blez	$6,L_00233d44
+    sw	$0,16($29)
+    lui	$4,0x95
+    daddu	$19,$20,$0
+    addiu	$30,$4,9232
+    addiu	$23,$0,4095
+    addiu	$22,$28,-14148
+    addiu	$21,$28,-14156
+    lui	$20,0x4
+    ori	$20,$20,0x4
+    sll	$0,$0,0x0
+L_00233bd0:
+    lw	$5,-14148($28)
+    lw	$2,-14156($28)
+    lw	$3,0($19)
+    addu	$2,$5,$2
+    slti	$2,$2,4095
+    beq	$2,$0,L_00233d2c
+    addu	$16,$17,$3
+    lw	$2,192($16)
+    andi	$2,$2,0x6
+    bne	$2,$0,L_00233c20
+    lw	$4,-13416($28)
+    lw	$2,592($18)
+    andi	$2,$2,0x20
+    bne	$2,$0,L_00233c24
+    lui	$8,0x95
+    jal is_parts_transparency
+    daddu	$4,$16,$0
+    beq	$2,$0,L_00233c7c
+    lw	$5,-14148($28)
+    lw	$4,-13416($28)
+L_00233c20:
+    lui	$8,0x95
+L_00233c24:
+    addiu	$8,$8,31040
+    lw	$6,0($22)
+    sll	$4,$4,0x4
+    subu	$5,$23,$5
+    addu	$4,$4,$8
+    lui	$8,0x95
+    lhu	$3,2($4)
+    subu	$2,$23,$6
+    lhu	$7,-14160($28)
+    sll	$5,$5,0x2
+    addiu	$3,$3,1
+    sll	$2,$2,0x1
+    addiu	$8,$8,-7152
+    sh	$3,2($4)
+    addu	$5,$5,$8
+    addu	$2,$2,$30
+    addiu	$6,$6,1
+    addiu	$3,$0,1
+    sw	$3,20($29)
+    sh	$7,0($2)
+    sw	$16,0($5)
+    sw	$6,0($22)
+L_00233c7c:
+    lw	$2,192($16)
+    andi	$2,$2,0x2
+    bnel	$2,$0,L_00233d2c
+    lw	$6,68($17)
+    lw	$2,592($18)
+    andi	$2,$2,0x20
+    bnel	$2,$0,L_00233d2c
+    lw	$6,68($17)
+    ld	$2,192($16)
+    and	$2,$2,$20
+    beql	$2,$20,L_00233d2c
+    lw	$6,68($17)
+    jal is_parts_transparency
+    daddu	$4,$16,$0
+    bnel	$2,$0,L_00233d2c
+    lw	$6,68($17)
+    lw	$4,-14192($28)
+    addiu	$2,$0,-1
+    lw	$3,-13412($28)
+    addiu	$5,$0,1
+    movz	$2,$0,$4
+    lw	$4,-14156($28)
+    addu	$3,$3,$2
+    lui	$7,0x96
+    sw	$5,24($29)
+    addiu	$7,$7,-26304
+    sll	$3,$3,0x4
+    lw	$6,0($21)
+    addu	$3,$3,$7
+    lhu	$7,-14160($28)
+    lhu	$2,2($3)
+    lui	$8,0x95
+    sll	$5,$6,0x1
+    addiu	$6,$6,1
+    sll	$4,$4,0x2
+    addiu	$8,$8,-7152
+    addu	$4,$4,$8
+    addu	$5,$5,$30
+    addiu	$2,$2,1
+    sh	$2,2($3)
+    sw	$16,0($4)
+    sh	$7,0($5)
+    sw	$6,0($21)
+    lw	$6,68($17)
+L_00233d2c:
+    lw	$2,16($29)
+    addiu	$2,$2,1
+    sw	$2,16($29)
+    slt	$2,$2,$6
+    bne	$2,$0,L_00233bd0
+    addiu	$19,$19,4
+L_00233d44:
+    lw	$2,-14160($28)
+    lw	$3,20($29)
+    addiu	$2,$2,1
+    beq	$3,$0,L_00233d88
+    sw	$2,-14160($28)
+    lw	$2,-13416($28)
+    slti	$2,$2,511
+    beq	$2,$0,L_00233d8c
+    lw	$5,24($29)
+    addiu	$3,$18,496
+    lq	$2,0($3)
+    sq	$2,0($29)
+    jal AlphaGroupSortEntry
+    daddu	$4,$29,$0
+    lw	$2,-13416($28)
+    addiu	$2,$2,1
+    sw	$2,-13416($28)
+L_00233d88:
+    lw	$5,24($29)
+L_00233d8c:
+    beq	$5,$0,L_00233d9c
+    lw	$2,-13412($28)
+    addiu	$2,$2,1
+    sw	$2,-13412($28)
+L_00233d9c:
+    jal nmlModelClear
+    sll	$0,$0,0x0
+    ld	$16,32($29)
+    ld	$17,40($29)
+    ld	$18,48($29)
+    ld	$19,56($29)
+    ld	$20,64($29)
+    ld	$21,72($29)
+    ld	$22,80($29)
+    ld	$23,88($29)
+    ld	$30,96($29)
+    ld	$31,104($29)
+    jr	$31
+    addiu	$29,$29,112
+.end nmlModelEntryEffect

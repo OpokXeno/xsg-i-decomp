@@ -1,0 +1,204 @@
+{
+ "text": {
+  "ov10/calc_vert_out_vec_edge": [
+   "0x00a00000",
+   "0x00a00410"
+  ],
+  "ov10/card_play_sound1": [
+   "0x00a00410",
+   "0x00a08670"
+  ],
+  "ov10/card_fread": [
+   "0x00a08670",
+   "0x00a12a90"
+  ],
+  "ov10/ccu_038_exec_sub": [
+   "0x00a12a90",
+   "0x00a19a20"
+  ],
+  "ov10/card_deck_chk": [
+   "0x00a19a20",
+   "0x00a1c1b8"
+  ],
+  "ov10/card_view_proc": [
+   "0x00a1c1b8",
+   "0x00a1e5d8"
+  ],
+  "ov10/card_disp": [
+   "0x00a1e5d8",
+   "0x00a21348"
+  ],
+  "ov10/card_tutorial": [
+   "0x00a21348",
+   "0x00a21768"
+  ],
+  "ov10/cgp": [
+   "0x00a21768",
+   "0x00a324b8"
+  ],
+  "ov10/card_enemy": [
+   "0x00a324b8",
+   "0x00a34190"
+  ],
+  "ov10/battle_area_check_enemy": [
+   "0x00a34190",
+   "0x00a42034"
+  ]
+ },
+ "families": {
+  ".data": [
+   [
+    "ov10/calc_vert_out_vec_edge",
+    "0x00a42034",
+    "0x00a42040"
+   ],
+   [
+    "ov10/card_play_sound1",
+    "0x00a42040",
+    "0x00a43420"
+   ],
+   [
+    "ov10/card_fread",
+    "0x00a43420",
+    "0x00a437a0"
+   ],
+   [
+    "ov10/card_deck_chk",
+    "0x00a437a0",
+    "0x00a43a94"
+   ],
+   [
+    "ov10/card_view_proc",
+    "0x00a43a94",
+    "0x00a43bcc"
+   ],
+   [
+    "ov10/card_disp",
+    "0x00a43bcc",
+    "0x00a487c8"
+   ],
+   [
+    "ov10/card_tutorial",
+    "0x00a487c8",
+    "0x00a488f0"
+   ],
+   [
+    "ov10/cgp",
+    "0x00a488f0",
+    "0x00a4bb88"
+   ],
+   [
+    "ov10/battle_area_check_enemy",
+    "0x00a4bb88",
+    "0x00a4bba0"
+   ]
+  ],
+  ".rodata": [
+   [
+    "ov10/calc_vert_out_vec_edge",
+    "0x00a4bba0",
+    "0x00a4bbd0"
+   ],
+   [
+    "ov10/card_play_sound1",
+    "0x00a4bbd0",
+    "0x00a4d130"
+   ],
+   [
+    "ov10/card_fread",
+    "0x00a4d130",
+    "0x00a4d730"
+   ],
+   [
+    "ov10/ccu_038_exec_sub",
+    "0x00a4d730",
+    "0x00a4da50"
+   ],
+   [
+    "ov10/card_deck_chk",
+    "0x00a4da50",
+    "0x00a4db30"
+   ],
+   [
+    "ov10/card_view_proc",
+    "0x00a4db30",
+    "0x00a4ddb0"
+   ],
+   [
+    "ov10/card_disp",
+    "0x00a4ddb0",
+    "0x00a4e320"
+   ],
+   [
+    "ov10/card_tutorial",
+    "0x00a4e320",
+    "0x00a4e4f0"
+   ],
+   [
+    "ov10/cgp",
+    "0x00a4e4f0",
+    "0x00a4f710"
+   ],
+   [
+    "ov10/card_enemy",
+    "0x00a4f710",
+    "0x00a4f850"
+   ],
+   [
+    "ov10/battle_area_check_enemy",
+    "0x00a4f850",
+    "0x00a4fa10"
+   ]
+  ],
+  ".bss": [
+   [
+    "ov10/calc_vert_out_vec_edge",
+    "0x00a4fa10",
+    "0x00a56f10"
+   ],
+   [
+    "ov10/card_play_sound1",
+    "0x00a56f10",
+    "0x00a57750"
+   ],
+   [
+    "ov10/ccu_038_exec_sub",
+    "0x00a57750",
+    "0x00a57838"
+   ],
+   [
+    "ov10/card_deck_chk",
+    "0x00a57838",
+    "0x00a57848"
+   ],
+   [
+    "ov10/card_view_proc",
+    "0x00a57848",
+    "0x00a578c8"
+   ],
+   [
+    "ov10/card_disp",
+    "0x00a578c8",
+    "0x00a57da8"
+   ],
+   [
+    "ov10/card_tutorial",
+    "0x00a57da8",
+    "0x00a57dc0"
+   ],
+   [
+    "ov10/cgp",
+    "0x00a57dc0",
+    "0x00a57e34"
+   ],
+   [
+    "ov10/card_enemy",
+    "0x00a57e34",
+    "0x00a57e36"
+   ]
+  ]
+ },
+ "reference_witness_symbols": {},
+ "main_shadowed": {},
+ "reference_aliases": {}
+}

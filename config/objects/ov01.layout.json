@@ -1,0 +1,486 @@
+{
+ "text": {
+  "ov01/yamamoto_test": [
+   "0x00a00000",
+   "0x00a00218"
+  ],
+  "ov01/obj": [
+   "0x00a00218",
+   "0x00a00d60"
+  ],
+  "ov01/unit_cmd": [
+   "0x00a00d60",
+   "0x00a07770"
+  ],
+  "ov01/battle_init": [
+   "0x00a07770",
+   "0x00a10bb8"
+  ],
+  "ov01/calc": [
+   "0x00a10bb8",
+   "0x00a191c0"
+  ],
+  "ov01/data_unit_org_get": [
+   "0x00a191c0",
+   "0x00a1d348"
+  ],
+  "ov01/cmd": [
+   "0x00a1d348",
+   "0x00a22628"
+  ],
+  "ov01/entry_first_init": [
+   "0x00a22628",
+   "0x00a24a98"
+  ],
+  "ov01/gr_gp_init": [
+   "0x00a24a98",
+   "0x00a26018"
+  ],
+  "ov01/menu": [
+   "0x00a26018",
+   "0x00a2c3a0"
+  ],
+  "ov01/map_disp": [
+   "0x00a2c3a0",
+   "0x00a2c5a8"
+  ],
+  "ov01/data_eth_name_get": [
+   "0x00a2c5a8",
+   "0x00a2c9b8"
+  ],
+  "ov01/result": [
+   "0x00a2c9b8",
+   "0x00a2c9f8"
+  ],
+  "ov01/snd": [
+   "0x00a2c9f8",
+   "0x00a2e4b0"
+  ],
+  "ov01/debug_entry": [
+   "0x00a2e4b0",
+   "0x00a31340"
+  ],
+  "ov01/matuzawa_test": [
+   "0x00a31340",
+   "0x00a31348"
+  ],
+  "ov01/m_battle": [
+   "0x00a31348",
+   "0x00a314b8"
+  ],
+  "ov01/m_cam": [
+   "0x00a314b8",
+   "0x00a32db8"
+  ],
+  "ov01/m_gs": [
+   "0x00a32db8",
+   "0x00a32e78"
+  ],
+  "ov01/m_mv": [
+   "0x00a32e78",
+   "0x00a332e0"
+  ],
+  "ov01/m_mv2": [
+   "0x00a332e0",
+   "0x00a33648"
+  ],
+  "ov01/m_ef_create": [
+   "0x00a33648",
+   "0x00a337a0"
+  ],
+  "ov01/m_ef": [
+   "0x00a337a0",
+   "0x00a33f08"
+  ],
+  "ov01/m_ef_create_msp_00": [
+   "0x00a33f08",
+   "0x00a346c8"
+  ],
+  "ov01/m_ef_create_bp_00": [
+   "0x00a346c8",
+   "0x00a34e90"
+  ],
+  "ov01/m_ef_create_smp_01": [
+   "0x00a34e90",
+   "0x00a358a0"
+  ],
+  "ov01/m_ef_create_eac_00": [
+   "0x00a358a0",
+   "0x00a358a8"
+  ],
+  "ov01/m_ef_create_amp_02": [
+   "0x00a358a8",
+   "0x00a360e0"
+  ],
+  "ov01/m_ef_create_msp_02": [
+   "0x00a360e0",
+   "0x00a36be8"
+  ],
+  "ov01/m_ef_create_solb": [
+   "0x00a36be8",
+   "0x00a37ab8"
+  ],
+  "ov01/m_ef_create_ecm_01": [
+   "0x00a37ab8",
+   "0x00a38190"
+  ],
+  "ov01/m_ef_create_ecm_02": [
+   "0x00a38190",
+   "0x00a387a8"
+  ],
+  "ov01/m_ef_create_gamera": [
+   "0x00a387a8",
+   "0x00a39088"
+  ],
+  "ov01/m_ef_create_ead_00": [
+   "0x00a39088",
+   "0x00a397c0"
+  ],
+  "ov01/m_ef_create_so_14": [
+   "0x00a397c0",
+   "0x00a397c8"
+  ],
+  "ov01/m_ef_create_dora": [
+   "0x00a397c8",
+   "0x00a3a090"
+  ],
+  "ov01/m_ef_create_kosbw_02": [
+   "0x00a3a090",
+   "0x00a3aac8"
+  ]
+ },
+ "families": {
+  ".data": [
+   [
+    "ov01/unit_cmd",
+    "0x00a3aac8",
+    "0x00a3d440"
+   ],
+   [
+    "ov01/battle_init",
+    "0x00a3d440",
+    "0x00a3d8f8"
+   ],
+   [
+    "ov01/calc",
+    "0x00a3d8f8",
+    "0x00a3d980"
+   ],
+   [
+    "ov01/data_unit_org_get",
+    "0x00a3d980",
+    "0x00a3edc8"
+   ],
+   [
+    "ov01/cmd",
+    "0x00a3edc8",
+    "0x00a3ef60"
+   ],
+   [
+    "ov01/entry_first_init",
+    "0x00a3ef60",
+    "0x00a3f000"
+   ],
+   [
+    "ov01/gr_gp_init",
+    "0x00a3f000",
+    "0x00a3f038"
+   ],
+   [
+    "ov01/menu",
+    "0x00a3f038",
+    "0x00a3f7e0"
+   ],
+   [
+    "ov01/map_disp",
+    "0x00a3f7e0",
+    "0x00a3f7e8"
+   ],
+   [
+    "ov01/data_eth_name_get",
+    "0x00a3f7e8",
+    "0x00a424b8"
+   ],
+   [
+    "ov01/snd",
+    "0x00a424b8",
+    "0x00a42dc0"
+   ],
+   [
+    "ov01/debug_entry",
+    "0x00a42dc0",
+    "0x00a4368c"
+   ],
+   [
+    "ov01/m_battle",
+    "0x00a4368c",
+    "0x00a43690"
+   ],
+   [
+    "ov01/m_mv",
+    "0x00a43690",
+    "0x00a43724"
+   ],
+   [
+    "ov01/m_mv2",
+    "0x00a43724",
+    "0x00a43728"
+   ],
+   [
+    "ov01/m_ef_create",
+    "0x00a43728",
+    "0x00a43780"
+   ],
+   [
+    "ov01/m_ef_create_solb",
+    "0x00a43780",
+    "0x00a437b0"
+   ],
+   [
+    "ov01/m_ef_create_ead_00",
+    "0x00a437b0",
+    "0x00a437e0"
+   ]
+  ],
+  ".rodata": [
+   [
+    "ov01/obj",
+    "0x00a437e0",
+    "0x00a438f0"
+   ],
+   [
+    "ov01/unit_cmd",
+    "0x00a438f0",
+    "0x00a43c20"
+   ],
+   [
+    "ov01/battle_init",
+    "0x00a43c20",
+    "0x00a44310"
+   ],
+   [
+    "ov01/calc",
+    "0x00a44310",
+    "0x00a44880"
+   ],
+   [
+    "ov01/data_unit_org_get",
+    "0x00a44880",
+    "0x00a46050"
+   ],
+   [
+    "ov01/cmd",
+    "0x00a46050",
+    "0x00a465e0"
+   ],
+   [
+    "ov01/entry_first_init",
+    "0x00a465e0",
+    "0x00a466e8"
+   ],
+   [
+    "ov01/gr_gp_init",
+    "0x00a466e8",
+    "0x00a46730"
+   ],
+   [
+    "ov01/menu",
+    "0x00a46730",
+    "0x00a46c18"
+   ],
+   [
+    "ov01/map_disp",
+    "0x00a46c18",
+    "0x00a46c28"
+   ],
+   [
+    "ov01/data_eth_name_get",
+    "0x00a46c28",
+    "0x00a4e130"
+   ],
+   [
+    "ov01/snd",
+    "0x00a4e130",
+    "0x00a4e880"
+   ],
+   [
+    "ov01/debug_entry",
+    "0x00a4e880",
+    "0x00a50ea8"
+   ],
+   [
+    "ov01/m_battle",
+    "0x00a50ea8",
+    "0x00a50ec8"
+   ],
+   [
+    "ov01/m_cam",
+    "0x00a50ec8",
+    "0x00a510a0"
+   ],
+   [
+    "ov01/m_mv",
+    "0x00a510a0",
+    "0x00a51160"
+   ],
+   [
+    "ov01/m_mv2",
+    "0x00a51160",
+    "0x00a51220"
+   ],
+   [
+    "ov01/m_ef_create",
+    "0x00a51220",
+    "0x00a512b0"
+   ],
+   [
+    "ov01/m_ef",
+    "0x00a512b0",
+    "0x00a51380"
+   ],
+   [
+    "ov01/m_ef_create_msp_00",
+    "0x00a51380",
+    "0x00a51460"
+   ],
+   [
+    "ov01/m_ef_create_bp_00",
+    "0x00a51460",
+    "0x00a51480"
+   ],
+   [
+    "ov01/m_ef_create_smp_01",
+    "0x00a51480",
+    "0x00a51580"
+   ],
+   [
+    "ov01/m_ef_create_amp_02",
+    "0x00a51580",
+    "0x00a51680"
+   ],
+   [
+    "ov01/m_ef_create_msp_02",
+    "0x00a51680",
+    "0x00a51780"
+   ],
+   [
+    "ov01/m_ef_create_solb",
+    "0x00a51780",
+    "0x00a517d0"
+   ],
+   [
+    "ov01/m_ef_create_gamera",
+    "0x00a517d0",
+    "0x00a51820"
+   ],
+   [
+    "ov01/m_ef_create_dora",
+    "0x00a51820",
+    "0x00a51880"
+   ],
+   [
+    "ov01/m_ef_create_kosbw_02",
+    "0x00a51880",
+    "0x00a51970"
+   ]
+  ],
+  ".bss": [
+   [
+    "ov01/obj",
+    "0x00a51970",
+    "0x00a57240"
+   ],
+   [
+    "ov01/unit_cmd",
+    "0x00a57240",
+    "0x00a57300"
+   ],
+   [
+    "ov01/battle_init",
+    "0x00a57300",
+    "0x00a57ce8"
+   ],
+   [
+    "ov01/calc",
+    "0x00a57ce8",
+    "0x00a57e90"
+   ],
+   [
+    "ov01/data_unit_org_get",
+    "0x00a57e90",
+    "0x00a597d0"
+   ],
+   [
+    "ov01/cmd",
+    "0x00a597d0",
+    "0x00a5a1e8"
+   ],
+   [
+    "ov01/entry_first_init",
+    "0x00a5a1e8",
+    "0x00a5a250"
+   ],
+   [
+    "ov01/gr_gp_init",
+    "0x00a5a250",
+    "0x00a5a2a0"
+   ],
+   [
+    "ov01/menu",
+    "0x00a5a2a0",
+    "0x00a5a920"
+   ],
+   [
+    "ov01/map_disp",
+    "0x00a5a920",
+    "0x00a5a940"
+   ],
+   [
+    "ov01/snd",
+    "0x00a5a940",
+    "0x00a5aa40"
+   ],
+   [
+    "ov01/debug_entry",
+    "0x00a5aa40",
+    "0x00a5aa70"
+   ],
+   [
+    "ov01/m_cam",
+    "0x00a5aa70",
+    "0x00a5b630"
+   ],
+   [
+    "ov01/m_mv",
+    "0x00a5b630",
+    "0x00a5b7b0"
+   ],
+   [
+    "ov01/m_mv2",
+    "0x00a5b7b0",
+    "0x00a5b8f8"
+   ]
+  ]
+ },
+ "reference_witness_symbols": {
+  "taskBuf": "0x00a55940",
+  "taskMan": "0x00a55930",
+  "objRemoveError": "0x00a437f8",
+  "objRemovePureError": "0x00a43828",
+  "cdReqNum": "0x00a597b0",
+  "fadeFlag": "0x00a5a210",
+  "mefVertex2CornerTable": "0x00a51370",
+  "mapDispWork": "0x00a5a920",
+  "mapMul": "0x00a5a930",
+  "invalid_interpolation_message": "0x00a51078",
+  "zero_duration_message": "0x00a51050"
+ },
+ "main_shadowed": {},
+ "reference_aliases": {
+  "makePath": {
+   "va": "0x00a36cb8",
+   "splat_name": "makePath_00A36CB8",
+   "record": "config/units/math-correction13-10.json"
+  }
+ }
+}

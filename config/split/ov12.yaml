@@ -1,0 +1,294 @@
+name: xenosaga1 ov12 TU-migration phase 2 (per original TU)
+sha1: 17acad201d694f9abefaf097a06fae5e1f38480d
+options:
+  platform: ps2
+  compiler: EEGCC
+  endianness: little
+  base_path: .
+  target_path: orig/OV12.OVL
+  basename: ov12
+  asm_path: asm
+  src_path: scaffold/src
+  auto_decompile_empty_functions: False
+  disassemble_all: True
+  build_path: build
+  asset_path: assets
+  ld_script_path: ov12.ld
+  symbol_addrs_path:
+    - symbol_addrs.txt
+  undefined_funcs_auto_path: undefined_funcs_auto.txt
+  undefined_syms_auto_path: undefined_syms_auto.txt
+  o_as_suffix: True
+  create_asm_dependencies: False
+  ld_dependencies: False
+  find_file_boundaries: False
+  disasm_unknown: True
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+  named_regs_for_c_funcs: False
+  mips_abi_gpr: numeric
+  mips_abi_float_regs: numeric
+  generate_asm_macros_files: True
+  asm_function_macro: glabel
+  asm_data_macro: dlabel
+  asm_end_label: endlabel
+  asm_emit_size_directive: True
+  use_legacy_include_asm: False
+  ld_fill_value: 0
+  section_order:
+    - .text
+    - .data
+    - .rodata
+    - .lit4
+    - .sdata
+    - .sbss
+    - .bss
+  migrate_rodata_to_functions: False
+segments:
+  - [0x0, bin, elf_header]
+  - name: ov12
+    type: code
+    start: 0x1000
+    vram: 0x00A00000
+    bss_size: 0x1C64
+    align: 4
+    subalign: null
+    subsegments:
+      - [0x1000, asm, ov12/nisimori_test]
+      - [0x1088, asm, ov12/rg_main]
+      - [0x2FF8, c, ov12/rg_char]
+      - [0x34F8, asm, ov12/rg_get_frame_time]
+      - [0x3510, c, ov12/rg_robot]
+      - [0xA480, asm, ov12/rg_robot_control]
+      - [0xABA0, asm, ov12/rg_enemy]
+      - [0xDBC8, asm, ov12/rg_robot_subcon]
+      - [0xE178, asm, ov12/rg_robot_spec]
+      - [0xEB58, c, ov12/rg_robot_db]
+      - [0xEF70, asm, ov12/rg_robot_effect]
+      - [0xFCE8, asm, ov12/rg_shot_thread]
+      - [0x10340, asm, ov12/rg_debug_flags]
+      - [0x10490, asm, ov12/rg_motion_info_db]
+      - [0x11318, asm, ov12/rg_hissatu]
+      - [0x11618, asm, ov12/rg_player]
+      - [0x11F20, asm, ov12/rg_camera]
+      - [0x139C8, asm, ov12/rg_bgobj]
+      - [0x14200, asm, ov12/assert_prog]
+      - [0x14260, asm, ov12/rg_heap]
+      - [0x150A0, c, ov12/rg_singleton_id]
+      - [0x153E0, c, ov12/rg_charmgr]
+      - [0x15D38, asm, ov12/rg_simple_db]
+      - [0x16600, c, ov12/rg_shot]
+      - [0x18C90, asm, ov12/rg_shot_effect]
+      - [0x19668, c, ov12/rg_shot_db]
+      - [0x1A388, asm, ov12/rg_weapon]
+      - [0x1D7D8, c, ov12/rg_weapon_db]
+      - [0x1F618, asm, ov12/rg_drop_weapon]
+      - [0x1F880, asm, ov12/rg_shotmot_control]
+      - [0x1FEA0, asm, ov12/rg_equip_type]
+      - [0x207E0, asm, ov12/rg_dull_flag]
+      - [0x20A30, asm, ov12/create_rg]
+      - [0x20BD8, asm, ov12/rg_effect_env]
+      - [0x21040, asm, ov12/rg_battle_common_data]
+      - [0x21718, asm, ov12/rg_particle_effect]
+      - [0x22C58, asm, ov12/rg_read_text]
+      - [0x23668, asm, ov12/rg_text_info]
+      - [0x23A78, asm, ov12/rg_disp_gameinfo]
+      - [0x249D0, asm, ov12/rg_gauge]
+      - [0x24E48, asm, ov12/rg_gauge_disp]
+      - [0x255D8, asm, ov12/rg_disp_wpn1p]
+      - [0x261A8, asm, ov12/rg_disp_wpn2p]
+      - [0x26D30, asm, ov12/rg_disp_life]
+      - [0x27A00, asm, ov12/rg_disp]
+      - [0x27C78, asm, ov12/rg_draw]
+      - [0x295E0, asm, ov12/rg_light]
+      - [0x29858, asm, ov12/rg_battlemgr]
+      - [0x2BB70, asm, ov12/rg_handler]
+      - [0x2BF20, asm, ov12/rg_battle_init]
+      - [0x2C5E8, c, ov12/rg_vector]
+      - [0x2CE48, asm, ov12/rg_geom]
+      - [0x2D288, c, ov12/rg_geom_point]
+      - [0x2DA28, asm, ov12/rg_geom_ball]
+      - [0x2E290, asm, ov12/rg_geom_robot]
+      - [0x2E900, c, ov12/rg_geom_poly]
+      - [0x2ED58, c, ov12/rg_geom_tray]
+      - [0x2F698, c, ov12/rg_geom_pillar]
+      - [0x30650, asm, ov12/rg_geom_collision]
+      - [0x313A8, asm, ov12/rg_geom_group]
+      - [0x32150, asm, ov12/rg_game_collision]
+      - [0x32768, asm, ov12/rg_error]
+      - [0x32970, asm, ov12/rg_colidata]
+      - [0x33688, asm, ov12/rg_linkdata]
+      - [0x33C48, asm, ov12/rg_bg_builder]
+      - [0x34BF8, c, ov12/rg_filesys]
+      - [0x35C68, asm, ov12/rg_actor_motid]
+      - [0x378E8, asm, ov12/rg_actor_charid]
+      - [0x37DE8, c, ov12/rg_matrices_effector]
+      - [0x390D8, c, ov12/rg_select_agws]
+      - [0x3D6A0, asm, ov12/rg_select_subcon]
+      - [0x3DD10, c, ov12/rg_select_robot]
+      - [0x3F518, asm, ov12/rg_font]
+      - [0x3FA10, asm, ov12/rg_bxx]
+      - [0x40230, asm, ov12/rg_title]
+      - [0x41008, asm, ov12/rg_piclist]
+      - [0x430E0, asm, ov12/rg_help]
+      - [0x444B8, asm, ov12/rg_announce]
+      - [0x45F08, c, ov12/rg_dispmodel]
+      - [0x46120, asm, ov12/xrg_dispmodel_impl]
+      - [0x464F8, asm, ov12/xrg_actor]
+      - [0x49548, asm, ov12/xrg_bxx_ps2]
+      - [0x497C0, c, ov12/xrg_cdread]
+      - [0x49918, c, ov12/xrg_filesys_mode]
+      - [0x49C08, asm, ov12/xrg_particle]
+      - [0x4AF70, asm, ov12/init_xrg_input]
+      - [0x4B620, c, ov12/xrg_paint2d]
+      - [0x4D840, c, ov12/xrg_sysinit]
+      - [0x4DAF8, asm, ov12/xrg_rand_int]
+      - [0x4F1E8, asm, ov12/xrg_exit]
+      - [0x4F1F0, asm, ov12/xrg_v_log]
+      - [0x4F340, c, ov12/xrg_hostfile]
+      - [0x4F488, asm, ov12/xrg_pad]
+      - [0x4F780, asm, ov12/xrg_main_font]
+      - [0x4F8F0, asm, ov12/xrg_sound]
+      - [0x50280, asm, ov12/xrg_event]
+      - [0x504C4, data, ov12/rg_main]
+      - [0x50520, data, ov12/rg_robot]
+      - [0x5059C, data, ov12/rg_enemy]
+      - [0x505A0, data, ov12/rg_robot_subcon]
+      - [0x505E0, data, ov12/rg_robot_spec]
+      - [0x505E8, data, ov12/rg_camera]
+      - [0x50638, data, ov12/rg_bgobj]
+      - [0x5063C, data, ov12/rg_heap]
+      - [0x50648, data, ov12/rg_weapon_db]
+      - [0x50668, data, ov12/rg_equip_type]
+      - [0x506A8, data, ov12/rg_battle_common_data]
+      - [0x50AF0, data, ov12/rg_disp_wpn1p]
+      - [0x50B18, data, ov12/rg_disp_wpn2p]
+      - [0x50B30, data, ov12/rg_disp_life]
+      - [0x50C00, data, ov12/rg_disp]
+      - [0x51080, data, ov12/rg_draw]
+      - [0x51090, data, ov12/rg_geom_collision]
+      - [0x51120, data, ov12/rg_select_agws]
+      - [0x51470, data, ov12/rg_select_subcon]
+      - [0x51480, data, ov12/rg_select_robot]
+      - [0x514F0, data, ov12/rg_title]
+      - [0x51508, data, ov12/rg_piclist]
+      - [0x51510, data, ov12/rg_help]
+      - [0x51860, data, ov12/rg_announce]
+      - [0x518A0, data, ov12/xrg_dispmodel_impl]
+      - [0x51920, data, ov12/xrg_actor]
+      - [0x521D0, data, ov12/xrg_filesys_mode]
+      - [0x521F4, data, ov12/xrg_particle]
+      - [0x52200, data, ov12/xrg_paint2d]
+      - [0x52230, data, ov12/xrg_sysinit]
+      - [0x52290, data, ov12/xrg_rand_int]
+      - [0x522D0, data, ov12/xrg_pad]
+      - [0x522D4, data, ov12/xrg_sound]
+      - [0x522E0, data, ov12/xrg_event]
+      - [0x52430, rodata, ov12/nisimori_test]
+      - [0x52440, rodata, ov12/rg_main]
+      - [0x52808, rodata, ov12/rg_char]
+      - [0x52830, rodata, ov12/rg_robot]
+      - [0x52C20, rodata, ov12/rg_robot_control]
+      - [0x52C60, rodata, ov12/rg_enemy]
+      - [0x52E08, rodata, ov12/rg_robot_subcon]
+      - [0x52E68, rodata, ov12/rg_robot_spec]
+      - [0x53280, rodata, ov12/rg_robot_db]
+      - [0x53358, rodata, ov12/rg_robot_effect]
+      - [0x533F0, rodata, ov12/rg_shot_thread]
+      - [0x53438, rodata, ov12/rg_debug_flags]
+      - [0x53460, rodata, ov12/rg_motion_info_db]
+      - [0x53660, rodata, ov12/rg_hissatu]
+      - [0x536F8, rodata, ov12/rg_player]
+      - [0x53750, rodata, ov12/rg_camera]
+      - [0x539B0, rodata, ov12/rg_bgobj]
+      - [0x539E8, rodata, ov12/assert_prog]
+      - [0x53A40, rodata, ov12/rg_heap]
+      - [0x54008, rodata, ov12/rg_singleton_id]
+      - [0x54088, rodata, ov12/rg_charmgr]
+      - [0x541F0, rodata, ov12/rg_simple_db]
+      - [0x542E8, rodata, ov12/rg_shot]
+      - [0x54418, rodata, ov12/rg_shot_effect]
+      - [0x54450, rodata, ov12/rg_shot_db]
+      - [0x54648, rodata, ov12/rg_weapon]
+      - [0x54818, rodata, ov12/rg_weapon_db]
+      - [0x54CF0, rodata, ov12/rg_drop_weapon]
+      - [0x54D18, rodata, ov12/rg_shotmot_control]
+      - [0x54E10, rodata, ov12/rg_equip_type]
+      - [0x55070, rodata, ov12/rg_dull_flag]
+      - [0x550C8, rodata, ov12/rg_effect_env]
+      - [0x55158, rodata, ov12/rg_battle_common_data]
+      - [0x552C8, rodata, ov12/rg_particle_effect]
+      - [0x553A8, rodata, ov12/rg_read_text]
+      - [0x55480, rodata, ov12/rg_text_info]
+      - [0x55560, rodata, ov12/rg_disp_gameinfo]
+      - [0x55608, rodata, ov12/rg_gauge]
+      - [0x55640, rodata, ov12/rg_gauge_disp]
+      - [0x55678, rodata, ov12/rg_disp_wpn1p]
+      - [0x55770, rodata, ov12/rg_disp_wpn2p]
+      - [0x55810, rodata, ov12/rg_disp_life]
+      - [0x55970, rodata, ov12/rg_disp]
+      - [0x55AC0, rodata, ov12/rg_draw]
+      - [0x55C68, rodata, ov12/rg_light]
+      - [0x55CA0, rodata, ov12/rg_battlemgr]
+      - [0x55E18, rodata, ov12/rg_battle_init]
+      - [0x55F40, rodata, ov12/rg_vector]
+      - [0x560C8, rodata, ov12/rg_geom]
+      - [0x560F0, rodata, ov12/rg_geom_point]
+      - [0x56148, rodata, ov12/rg_geom_ball]
+      - [0x56170, rodata, ov12/rg_geom_robot]
+      - [0x561A8, rodata, ov12/rg_geom_poly]
+      - [0x56218, rodata, ov12/rg_geom_tray]
+      - [0x56260, rodata, ov12/rg_geom_pillar]
+      - [0x562E8, rodata, ov12/rg_geom_collision]
+      - [0x56338, rodata, ov12/rg_geom_group]
+      - [0x563C8, rodata, ov12/rg_game_collision]
+      - [0x56448, rodata, ov12/rg_error]
+      - [0x564F0, rodata, ov12/rg_colidata]
+      - [0x566C0, rodata, ov12/rg_linkdata]
+      - [0x56738, rodata, ov12/rg_bg_builder]
+      - [0x56988, rodata, ov12/rg_filesys]
+      - [0x56C48, rodata, ov12/rg_actor_motid]
+      - [0x574E0, rodata, ov12/rg_actor_charid]
+      - [0x575D8, rodata, ov12/rg_matrices_effector]
+      - [0x57650, rodata, ov12/rg_select_agws]
+      - [0x57D38, rodata, ov12/rg_select_subcon]
+      - [0x57D90, rodata, ov12/rg_select_robot]
+      - [0x57F20, rodata, ov12/rg_font]
+      - [0x57F90, rodata, ov12/rg_bxx]
+      - [0x58118, rodata, ov12/rg_title]
+      - [0x58310, rodata, ov12/rg_piclist]
+      - [0x58550, rodata, ov12/rg_help]
+      - [0x58BB0, rodata, ov12/rg_announce]
+      - [0x59720, rodata, ov12/rg_dispmodel]
+      - [0x59750, rodata, ov12/xrg_dispmodel_impl]
+      - [0x597B0, rodata, ov12/xrg_actor]
+      - [0x59D10, rodata, ov12/xrg_bxx_ps2]
+      - [0x59E28, rodata, ov12/xrg_cdread]
+      - [0x59E70, rodata, ov12/xrg_filesys_mode]
+      - [0x59F10, rodata, ov12/xrg_particle]
+      - [0x5A030, rodata, ov12/xrg_paint2d]
+      - [0x5A108, rodata, ov12/xrg_sysinit]
+      - [0x5A1E8, rodata, ov12/xrg_hostfile]
+      - [0x5A218, rodata, ov12/xrg_main_font]
+      - [0x5A250, rodata, ov12/xrg_sound]
+      - [0x5A2F0, rodata, ov12/xrg_event]
+      - [0x5A490]
+      - { type: bss, vram: 0x00A59490, name: ov12/rg_main }
+      - { type: bss, vram: 0x00A59920, name: ov12/rg_robot }
+      - { type: bss, vram: 0x00A599D8, name: ov12/rg_enemy }
+      - { type: bss, vram: 0x00A599E0, name: ov12/rg_robot_db }
+      - { type: bss, vram: 0x00A59AA0, name: ov12/rg_heap }
+      - { type: bss, vram: 0x00A5AAC0, name: ov12/rg_singleton_id }
+      - { type: bss, vram: 0x00A5AB80, name: ov12/rg_geom_pillar }
+      - { type: bss, vram: 0x00A5ABC0, name: ov12/rg_matrices_effector }
+      - { type: bss, vram: 0x00A5ABC8, name: ov12/rg_select_robot }
+      - { type: bss, vram: 0x00A5ACE4, name: ov12/xrg_actor }
+      - { type: bss, vram: 0x00A5ACF0, name: ov12/xrg_rand_int }
+  - [0x5A490, pad, ov12_bss_file_image]
+  - [0x5C0F4, bin, elf_shstrtab]
+  - [0x5C114, bin, elf_section_headers]
+  - [0x5C1DC, bin, elf_symtab]
+  - [0x6440C, bin, elf_strtab]
+  - [0x6BFC2]

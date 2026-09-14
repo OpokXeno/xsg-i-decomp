@@ -1,0 +1,77 @@
+{
+ "ov01": {
+  "obj": {
+   "reason": "Merging the accepted units of OV01 TU1 into one file: core-ov01-00a00218 (objInit) declared taskMan locally as `unsigned char taskMan[]`, while the other six units of the same original TU use the shared declaration `extern TaskManager taskMan;` (include/xeno/core/functions.h). One TU admits one declaration: keep the shared one and take its address where objInit passed the array name (same relocation, same code).",
+   "drop_preamble": [
+    "extern unsigned char taskMan[];"
+   ],
+   "replace": [
+    {
+     "function": "objInit",
+     "old": "xglTaskInitial(taskMan, 50, 0);",
+     "new": "xglTaskInitial(&taskMan, 50, 0);",
+     "reason": "taskMan is the shared TaskManager object (include/xeno/core/functions.h); &taskMan is the address the array name decayed to"
+    }
+   ]
+  },
+  "m_ef_create_solb": {
+   "reason": "math-correction13-10 (MEfCreate_SOLB) carries local copies of the SOLB callback slot types and u32 that were since promoted verbatim into include/xeno/math/types.h, which correction84-review16-5 in the same original TU includes; the local copies are redefinitions in one TU.",
+   "drop_preamble": [
+    "typedef unsigned int u32;",
+    "typedef void (*SOLBCallback)(void);",
+    "typedef struct SOLBProcessSlot { SOLBCallback process_callback; } SOLBProcessSlot;",
+    "typedef struct SOLBDrawPacketSlot { SOLBCallback draw_packet_callback; } SOLBDrawPacketSlot;",
+    "typedef struct SOLBPostProcessSlot { SOLBCallback post_process_callback; } SOLBPostProcessSlot;"
+   ]
+  },
+  "gr_gp_init": {
+   "header_divergence": [
+    {
+     "name": "xglMatrixTrans",
+     "summary": "reviewed byte_required spelling of config/header-canon.json decisions.xglMatrixTrans (unit math-correction13-8), keyed there to the accepted unit's private.h path",
+     "canon_entry": "config/header-canon.json decisions.xglMatrixTrans.byte_required[0]",
+     "canon_file_old_path": "src/math/ov01/correction13-ov01-00a25af0-allocation-18edb66718f9/form-8/private.h",
+     "tu_path_new": "src/ov01/gr_gp_init.c",
+     "unit": "math-correction13-8",
+     "reason": "the canonical text names `Matrix4`, which this translation unit does not declare and cannot obtain: `header_harvest.py promote` refuses this unit's include of the shared header, and with the canonical spelling written in place the unit no longer compiles, so it reproduces none of its original bytes (round 3, `.work/attempts/integration-round3/divergences2.json`). Its own spelling is what the exact unit depends on. [verbatim canon reason]",
+     "mapping_note": "the declaration text is unchanged; only its file moved from the unit's private.h (inlined) to the TU file. config/header-canon.json is not edited here (shared; the canon path rewrite is a later work package): this entry maps the reviewed exception to the new path for that rewrite."
+    },
+    {
+     "name": "xglMatrixScale",
+     "summary": "reviewed byte_required spelling of config/header-canon.json decisions.xglMatrixScale (unit math-correction13-8), keyed there to the accepted unit's private.h path",
+     "canon_entry": "config/header-canon.json decisions.xglMatrixScale.byte_required[0]",
+     "canon_file_old_path": "src/math/ov01/correction13-ov01-00a25af0-allocation-18edb66718f9/form-8/private.h",
+     "tu_path_new": "src/ov01/gr_gp_init.c",
+     "unit": "math-correction13-8",
+     "reason": "the canonical text names `Matrix4`, which this translation unit does not declare and cannot obtain: `header_harvest.py promote` refuses this unit's include of the shared header, and with the canonical spelling written in place the unit no longer compiles, so it reproduces none of its original bytes (round 3, `.work/attempts/integration-round3/divergences2.json`). Its own spelling is what the exact unit depends on. [verbatim canon reason]",
+     "mapping_note": "the declaration text is unchanged; only its file moved from the unit's private.h (inlined) to the TU file. config/header-canon.json is not edited here (shared; the canon path rewrite is a later work package): this entry maps the reviewed exception to the new path for that rewrite."
+    }
+   ]
+  }
+ },
+ "ov12": {
+  "xrg_filesys_mode": {
+   "reason": "Original TU 83 (xrg_filesys_mode) merges io-ov12-00a487d0 (_PushMode/_PopMode, split from TU 82), io-ov12-00a489e0 (static _CurMode) and io-ov12-00a48a30 (XrgFileSysModeGet/XrgFileSysAlloc). (1) Review R1: _CurMode is the TU-local static defined here (0x00a489e0) before its only C users; both io-ov12-00a48a30's private.h and the shared include/xeno/io/functions.h (promoted from that private.h) declare `extern int _CurMode(void);`, which gives the identifier two linkages in one TU (cc1: `static declaration for _CurMode follows non-static`). The private.h line is dropped and the TU no longer includes xeno/io/functions.h (pulled in only by io-ov12-00a487d0's source); it includes xeno/io/types.h for RgHeap instead. (2) io-ov12-00a48a30's private.h declares InstanceOfRgHeapData/InstanceOfRgHeap as returning void *; the canonical shared declarations return RgHeap * (include/xeno/io/functions.h:23,27, core owns the name). They are written verbatim from the shared header and the private void * spellings are dropped (the value is only passed on to RgHeapAlloc(void *heap, ...)). Queued header fix (separate header-canon/header_harvest assignment): stop promoting the TU-local static _CurMode of OV12 xrg_filesys_mode into include/xeno/io/functions.h.",
+   "drop_preamble": [
+    "#include \"xeno/io/functions.h\"",
+    "extern int _CurMode(void);",
+    "extern void *InstanceOfRgHeapData(void);",
+    "extern void *InstanceOfRgHeap(void);"
+   ],
+   "add_preamble": [
+    "#include \"xeno/io/types.h\"",
+    "extern RgHeap *InstanceOfRgHeapData(void);",
+    "extern RgHeap *InstanceOfRgHeap(void);"
+   ]
+  },
+  "rg_singleton_id": {
+   "reason": "Review R1: include/xeno/core/functions.h exports `extern void _Destruct(RgSingletonManager *)` and `extern void *_Get(RgSingletonManager *, unsigned int)` (promoted from the private.h files of core-ov12-00a14370/core-ov12-00a143c0, whose standalone compiles saw them as externals), but in the original TU 20 both are TU-local statics defined here by core-ov12-00a140a0/core-ov12-00a142d8. Including the shared header before the static definitions gives each two linkages (cc1: `static declaration ... follows non-static`). The TU does not include core/functions.h; the one shared declaration its C needs, `extern RgSingletonManager s_inIDmgr;`, is written verbatim from include/xeno/core/functions.h. Queued header fix (separate header-canon/header_harvest assignment): stop promoting the TU-local statics _Destruct/_Get (and the `static void _Clear` prototype) of OV12 rg_singleton_id into include/xeno/core/functions.h.",
+   "drop_preamble": [
+    "#include \"xeno/core/functions.h\""
+   ],
+   "add_preamble": [
+    "extern RgSingletonManager s_inIDmgr;"
+   ]
+  }
+ }
+}

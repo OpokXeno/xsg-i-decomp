@@ -1,0 +1,74 @@
+name: xenosaga1 ov11 TU-migration phase 2 (per original TU)
+sha1: 7ee3f3025e6d10f165b1532c57135d0a4b0a4ad2
+options:
+  platform: ps2
+  compiler: EEGCC
+  endianness: little
+  base_path: .
+  target_path: orig/OV11.OVL
+  basename: ov11
+  asm_path: asm
+  src_path: scaffold/src
+  auto_decompile_empty_functions: False
+  disassemble_all: True
+  build_path: build
+  asset_path: assets
+  ld_script_path: ov11.ld
+  symbol_addrs_path:
+    - symbol_addrs.txt
+  undefined_funcs_auto_path: undefined_funcs_auto.txt
+  undefined_syms_auto_path: undefined_syms_auto.txt
+  o_as_suffix: True
+  create_asm_dependencies: False
+  ld_dependencies: False
+  find_file_boundaries: False
+  disasm_unknown: True
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+  named_regs_for_c_funcs: False
+  mips_abi_gpr: numeric
+  mips_abi_float_regs: numeric
+  generate_asm_macros_files: True
+  asm_function_macro: glabel
+  asm_data_macro: dlabel
+  asm_end_label: endlabel
+  asm_emit_size_directive: True
+  use_legacy_include_asm: False
+  ld_fill_value: 0
+  section_order:
+    - .text
+    - .data
+    - .rodata
+    - .lit4
+    - .sdata
+    - .sbss
+    - .bss
+  migrate_rodata_to_functions: False
+segments:
+  - [0x0, bin, elf_header]
+  - name: ov11
+    type: code
+    start: 0x1000
+    vram: 0x00A00000
+    bss_size: 0x450
+    align: 4
+    subalign: null
+    subsegments:
+      - [0x1000, asm, ov11/tanaka_test]
+      - [0x1100, c, ov11/mini_g]
+      - [0xA1F8, asm, ov11/cajino_get]
+      - [0xA224, data, ov11/mini_g]
+      - [0xCA20, data, ov11/cajino_get]
+      - [0xCB10, rodata, ov11/tanaka_test]
+      - [0xCB30, rodata, ov11/mini_g]
+      - [0xD720, rodata, ov11/cajino_get]
+      - [0xEC28]
+      - { type: bss, vram: 0x00A0DC28, name: ov11/mini_g }
+  - [0xEC28, pad, ov11_bss_file_image]
+  - [0xF078, bin, elf_shstrtab]
+  - [0xF098, bin, elf_section_headers]
+  - [0xF160, bin, elf_symtab]
+  - [0x10770, bin, elf_strtab]
+  - [0x11679]

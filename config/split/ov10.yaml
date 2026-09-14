@@ -1,0 +1,105 @@
+name: xenosaga1 ov10 TU-migration phase 2 (per original TU)
+sha1: 41403da70bf7df1b62d4b090f52da5d38b9074a1
+options:
+  platform: ps2
+  compiler: EEGCC
+  endianness: little
+  base_path: .
+  target_path: orig/OV10.OVL
+  basename: ov10
+  asm_path: asm
+  src_path: scaffold/src
+  auto_decompile_empty_functions: False
+  disassemble_all: True
+  build_path: build
+  asset_path: assets
+  ld_script_path: ov10.ld
+  symbol_addrs_path:
+    - symbol_addrs.txt
+  undefined_funcs_auto_path: undefined_funcs_auto.txt
+  undefined_syms_auto_path: undefined_syms_auto.txt
+  o_as_suffix: True
+  create_asm_dependencies: False
+  ld_dependencies: False
+  find_file_boundaries: False
+  disasm_unknown: True
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+  named_regs_for_c_funcs: False
+  mips_abi_gpr: numeric
+  mips_abi_float_regs: numeric
+  generate_asm_macros_files: True
+  asm_function_macro: glabel
+  asm_data_macro: dlabel
+  asm_end_label: endlabel
+  asm_emit_size_directive: True
+  use_legacy_include_asm: False
+  ld_fill_value: 0
+  section_order:
+    - .text
+    - .data
+    - .rodata
+    - .lit4
+    - .sdata
+    - .sbss
+    - .bss
+  migrate_rodata_to_functions: False
+segments:
+  - [0x0, bin, elf_header]
+  - name: ov10
+    type: code
+    start: 0x1000
+    vram: 0x00A00000
+    bss_size: 0x8426
+    align: 2
+    subalign: null
+    subsegments:
+      - [0x1000, asm, ov10/calc_vert_out_vec_edge]
+      - [0x1410, asm, ov10/card_play_sound1]
+      - [0x9670, asm, ov10/card_fread]
+      - [0x13A90, asm, ov10/ccu_038_exec_sub]
+      - [0x1AA20, asm, ov10/card_deck_chk]
+      - [0x1D1B8, asm, ov10/card_view_proc]
+      - [0x1F5D8, asm, ov10/card_disp]
+      - [0x22348, asm, ov10/card_tutorial]
+      - [0x22768, asm, ov10/cgp]
+      - [0x334B8, asm, ov10/card_enemy]
+      - [0x35190, asm, ov10/battle_area_check_enemy]
+      - [0x43034, data, ov10/calc_vert_out_vec_edge]
+      - [0x43040, data, ov10/card_play_sound1]
+      - [0x44420, data, ov10/card_fread]
+      - [0x447A0, data, ov10/card_deck_chk]
+      - [0x44A94, data, ov10/card_view_proc]
+      - [0x44BCC, data, ov10/card_disp]
+      - [0x497C8, data, ov10/card_tutorial]
+      - [0x498F0, data, ov10/cgp]
+      - [0x4CB88, data, ov10/battle_area_check_enemy]
+      - [0x4CBA0, rodata, ov10/calc_vert_out_vec_edge]
+      - [0x4CBD0, rodata, ov10/card_play_sound1]
+      - [0x4E130, rodata, ov10/card_fread]
+      - [0x4E730, rodata, ov10/ccu_038_exec_sub]
+      - [0x4EA50, rodata, ov10/card_deck_chk]
+      - [0x4EB30, rodata, ov10/card_view_proc]
+      - [0x4EDB0, rodata, ov10/card_disp]
+      - [0x4F320, rodata, ov10/card_tutorial]
+      - [0x4F4F0, rodata, ov10/cgp]
+      - [0x50710, rodata, ov10/card_enemy]
+      - [0x50850, rodata, ov10/battle_area_check_enemy]
+      - [0x50A10]
+      - { type: bss, vram: 0x00A4FA10, name: ov10/calc_vert_out_vec_edge }
+      - { type: bss, vram: 0x00A56F10, name: ov10/card_play_sound1 }
+      - { type: bss, vram: 0x00A57750, name: ov10/ccu_038_exec_sub }
+      - { type: bss, vram: 0x00A57838, name: ov10/card_deck_chk }
+      - { type: bss, vram: 0x00A57848, name: ov10/card_view_proc }
+      - { type: bss, vram: 0x00A578C8, name: ov10/card_disp }
+      - { type: bss, vram: 0x00A57DA8, name: ov10/card_tutorial }
+      - { type: bss, vram: 0x00A57DC0, name: ov10/cgp }
+      - { type: bss, vram: 0x00A57E34, name: ov10/card_enemy }
+  - [0x50A10, pad, ov10_bss_file_image]
+  - [0x58E36, bin, elf_shstrtab]
+  - [0x58E58, bin, elf_section_headers]
+  - [0x58F20, bin, elf_symtab]
+  - [0x5C9E0, bin, elf_strtab]
+  - [0x5FC32]

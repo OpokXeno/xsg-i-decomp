@@ -1,0 +1,403 @@
+{
+ "schema": "toolchain-identity/1",
+ "doc": "README.md, section \"Obtaining the toolchain\"",
+ "note": [
+  "Identity only: every tool is named by version string and SHA-256, with the",
+  "provenance needed to obtain or rebuild it.  No local path appears here.",
+  "Where the tools live on this machine is a local setting: the environment",
+  "variable XENO_TOOLCHAIN_DIR, or config/toolchain-local.json (untracked).",
+  "tools/tu/toolchain.py resolves the two, verifies every SHA-256 and refuses",
+  "the build with a named tool and a named difference when one does not match."
+ ],
+ "layout": {
+  "note": "Where each tool is expected under the toolchain root, so a clone can lay one out by hand.",
+  "root_env": "XENO_TOOLCHAIN_DIR",
+  "local_config": "config/toolchain-local.json",
+  "default_root": ".work/toolchains"
+ },
+ "tools": {
+  "ee-gcc2.96-realconv-lp7": {
+   "role": "cc1 of every GCC 2.96-family compile contract (game and runtime C)",
+   "dir": "ee-gcc2.96-realconv-lp7-v1/bin",
+   "version": "gcc 2.96-ee-001003-1 (cc1), locally patched: realconv + lp7",
+   "files": {
+    "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+    "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
+    "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
+   },
+   "provenance": {
+    "kind": "binary_variant_of_a_published_binary",
+    "base_archive": {
+     "url": "https://github.com/decompme/compilers/releases/download/compilers/ee-gcc2.96.tar.xz",
+     "catalog": "https://github.com/decompme/compilers",
+     "catalog_revision": "0884197d3e4a27ee0e274f17ca5b03d8bee94d0a",
+     "sha256": "0590d2ca9da8f5903889d66761220d14b47a8d14ba987ca53db84a1650a1fd0a",
+     "members": {
+      "lib/gcc-lib/ee/2.96-ee-001003-1/cc1": "59ec92b3f9f3513e0633331af304733e3094de30884e662a8cb584a51c1c42b5",
+      "lib/gcc-lib/ee/2.96-ee-001003-1/cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
+      "bin/ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
+     }
+    },
+    "rebuild": [
+     "Download the base archive and check its SHA-256.",
+     "Extract lib/gcc-lib/ee/2.96-ee-001003-1/{cc1,cpp0} and bin/ee-gcc into <root>/ee-gcc2.96-realconv-lp7-v1/bin/.",
+     "cpp0 and ee-gcc are used unmodified.",
+     "Apply the eight single-byte patches below to cc1, in file-offset order; the result must hash to the cc1 SHA-256 above."
+    ],
+    "cc1_byte_patches": {
+     "note": [
+      "Each entry patches one byte of the extracted cc1 at `file_offset`.",
+      "`old` must be the byte already there; `new` replaces it.",
+      "The six `realconv` patches turn the six MASK_MIPS5900 conversion gates",
+      "of the bundled e-type float code into unconditional jumps, so decimal",
+      "literals round the way the original compiler rounded them.",
+      "The two `lp7` patches raise the R5900 short-loop padding gate and loop",
+      "bound in mips_r5900_lengthen_loops from 4 to 6, which reproduces the",
+      "7-d padding ten original game objects carry.",
+      "Why this is a patched binary and not a published one (public-compiler hunt,",
+      "2026-09-12, .work/attempts/tu-public-compiler-hunt/attempt-1/artifact.json):",
+      "all 15 public ee-gcc* entries of the pinned decompme catalog revision were",
+      "tested, and none produces both the rounded decimal literals and the 7-d",
+      "short-loop padding the original bytes carry. The flag hypothesis is dead",
+      "mechanically: the complete TARGET_SWITCHES/TARGET_OPTIONS tables were read",
+      "out of every candidate ELF and no entry names rounding, truncation, loops or",
+      "the R5900 short-loop erratum, and the padding pass is gated on the same",
+      "MASK_MIPS5900 bit with its thresholds as immediate bytes in code.",
+      "lp7's value is SCE's own: ps2-ee-toolchain ee/gcc/config/mips/mips.c:8717",
+      "(SCE 2.9-ee-991111, GPL-2.0-or-later) reads `for (; distance <= 6;",
+      "distance++) emit_insn_before (gen_nop (), insn);`, and the public",
+      "ee-gcc2.9-991111 cc1 carries `cmp $0x6` at 0x081ad7cc and 0x081ad7e4 - the",
+      "same two instruction slots these patches set to 6 in the 2.96 binary, whose",
+      "catalog build moved the pass after delay-slot filling, split it into a",
+      "JUMP_INSN and a SEQUENCE arm and lowered both to 4. So the patch restores a",
+      "constant SCE shipped rather than inventing one; the build that carries it on",
+      "the JUMP arm only is not public.",
+      "The asymmetry is evidenced from both sides: the ten 7-d objects require 6 on",
+      "the JUMP arm, and raising the SEQUENCE arm to 6 as well breaks 17 of the 101",
+      "accepted C TUs, so 4 there is required by the accepted corpus.",
+      "Caveat that keeps original_distribution_proven false: the unpatched public",
+      "cc1 currently compiles all 101 accepted TUs to identical assembly and passes",
+      "the whole-file gate, because the recovered corpus is still blind to both",
+      "patches (0 of its 71 decimal literals discriminate rounding, 0 TUs reach the",
+      "JUMP arm). The original bytes are not blind: 343 rounded-evidence constants",
+      "and the ten padded objects. A clean witness is xglRenderSyncMove (main",
+      "0x0022CC40, five nops, body 7, unfilled delay slot)."
+     ],
+     "load_virtual_address": "0x08048000",
+     "patches": [
+      {
+       "group": "realconv",
+       "file_offset": 543167,
+       "old": "0x74",
+       "new": "0xeb",
+       "function": "etoe113",
+       "governs": "e-type -> TFmode"
+      },
+      {
+       "group": "realconv",
+       "file_offset": 543459,
+       "old": "0x74",
+       "new": "0xeb",
+       "function": "etoe64",
+       "governs": "e-type -> XFmode"
+      },
+      {
+       "group": "realconv",
+       "file_offset": 543772,
+       "old": "0x74",
+       "new": "0xeb",
+       "function": "etoe53",
+       "governs": "e-type -> DFmode (double literal)"
+      },
+      {
+       "group": "realconv",
+       "file_offset": 544132,
+       "old": "0x74",
+       "new": "0xeb",
+       "function": "etoe24",
+       "governs": "e-type -> SFmode (double literal narrowed to float)"
+      },
+      {
+       "group": "realconv",
+       "file_offset": 549006,
+       "old": "0x74",
+       "new": "0xeb",
+       "function": "asctoeg",
+       "governs": "decimal -> e-type, intermediate normalise"
+      },
+      {
+       "group": "realconv",
+       "file_offset": 549339,
+       "old": "0x74",
+       "new": "0xeb",
+       "function": "asctoeg",
+       "governs": "decimal -> e-type, final round to target precision"
+      },
+      {
+       "group": "lp7",
+       "file_offset": 1593246,
+       "old": "0x04",
+       "new": "0x06",
+       "function": "mips_r5900_lengthen_loops",
+       "governs": "cmp $imm8,%esi: JUMP_INSN arm gate, pad only when the loop distance d <= imm"
+      },
+      {
+       "group": "lp7",
+       "file_offset": 1593271,
+       "old": "0x04",
+       "new": "0x06",
+       "function": "mips_r5900_lengthen_loops",
+       "governs": "cmp $imm8,%ebx: JUMP_INSN arm nop-emission loop bound, i = d .. imm"
+      }
+     ],
+     "intermediate_hashes": {
+      "realconv_only_cc1": "403fe76c8b2adc1a24c5d0491ac245a8100d57a8341c4d66956a38bd1ab4c754"
+     }
+    },
+    "license": "GPL-2.0-or-later (GCC).  The published binary ships without corresponding source; no 2.96-ee-001003 source tree is available, so this is a license reference, not corresponding-source proof.",
+    "caveats": [
+     "exact_corresponding_source_verified: false",
+     "original_distribution_proven: false"
+    ]
+   }
+  },
+  "ee-gcc2.9-991111": {
+   "role": "cc1 of the SCE SDK compile contract (ee-tu-c991111-G0)",
+   "dir": "compiler-variants/ee-gcc2.9-991111",
+   "version": "gcc 2.9-ee-991111",
+   "files": {
+    "cc1": "548c962776e6d01ea0e83a08dc8ea99b87eb7b77bcfd2350d5bce7dc9395398d",
+    "cpp": "260a2ae5d55d223539be9f4a09a9890a1bc12bcdccf50e015d95e581089df499",
+    "ee-gcc": "89f4b3d0c81271d627cc6ec402c9ffe265e853c1fec5857c744f0f204cd16995"
+   },
+   "provenance": {
+    "kind": "published_binary_unmodified",
+    "base_archive": {
+     "url": "https://github.com/decompme/compilers/releases/download/compilers/ee-gcc2.9-991111.tar.xz",
+     "sha256": "99cb5db603cd985b50fc6851157020ad69489f2227309ccf825bd43ac7bc19dd",
+     "members": {
+      "lib/gcc-lib/ee/2.9-ee-991111/cc1": "548c962776e6d01ea0e83a08dc8ea99b87eb7b77bcfd2350d5bce7dc9395398d",
+      "lib/gcc-lib/ee/2.9-ee-991111/cpp": "260a2ae5d55d223539be9f4a09a9890a1bc12bcdccf50e015d95e581089df499",
+      "bin/ee-gcc": "89f4b3d0c81271d627cc6ec402c9ffe265e853c1fec5857c744f0f204cd16995"
+     }
+    },
+    "rebuild": [
+     "Download the archive, check its SHA-256 and extract the three members into <root>/compiler-variants/ee-gcc2.9-991111/ as cc1, cpp and ee-gcc.",
+     "No modification."
+    ],
+    "license": "GPL-2.0-or-later (GCC)."
+   }
+  },
+  "ee-as-la29-vsqrt": {
+   "role": "assembler of every game and runtime object (the -G of the object is passed per object)",
+   "path": "ee-legacy-binutils-la29-vsqrt-v1/bin/ee-as",
+   "version": "GNU assembler 2.9-ee-991111, locally patched: memmove + vsqrt",
+   "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+   "provenance": {
+    "kind": "built_from_source_with_a_recorded_patch",
+    "upstream": {
+     "repository": "https://github.com/SSXModding/ps2-ee-toolchain.git",
+     "commit": "b595ded606227e93b8c4a447446c1d2ac093827d",
+     "source_archive_sha256": "3121385fd0b048d93edb5f77890a3c26f3926d0d934ba064ebc7f6d8c322038c",
+     "pristine_files": {
+      "gas/config/tc-mips.c": "a0b3fa03a084d4382e6e9c4ca6b9184e3d21f726fb1406aa4d59eb50b8fbb5f1",
+      "opcodes/mips-opc.c": "dfa1cfd4cdd8e4abd1a0e4e844d5780ba1b32daf11c11496a4a540c5697927c5"
+     }
+    },
+    "rebuild": [
+     "Check out the commit above (the `ee` binutils 2.9 tree it carries).",
+     "Apply `source_diff` below.",
+     "configure --target=ee --disable-nls --disable-shared, then build gas; install build/gas/as-new as ee-as (no strip).",
+     "The build is not bit-reproducible across host compilers; the SHA-256 above is this project's build (host gcc 16.1.1).  A differently built ee-as that assembles the same bytes also reproduces the images, so the hash check can be relaxed with XENO_TOOLCHAIN_ALLOW=ee-as-la29-vsqrt (the build then says so)."
+    ],
+    "source_diff": "--- a/gas/config/tc-mips.c\n+++ b/gas/config/tc-mips.c\n@@ -11707,7 +11707,8 @@\n       fixptr = fragp->fr_literal + fragp->fr_fix;\n \n       if (new > 0)\n-\tmemcpy (fixptr - old, fixptr, new);\n+\t/* Expanded alternatives can overlap their final destination.  */\n+\tmemmove (fixptr - old, fixptr, new);\n \n       fragp->fr_fix += new - old;\n     }\n--- a/opcodes/mips-opc.c\n+++ b/opcodes/mips-opc.c\n@@ -242,7 +242,7 @@\n {\"vrxor\", \"X,8\",\t0x4a00043f, 0xff9f07ff,\t0, \t\tT5},\n {\"vsqd\",  \"&2K,(--4)K\",\t0x4a00037f, 0xfe0007ff,\t0, \t\tT5},\n {\"vsqi\",  \"&2K,(4++)K\",\t0x4a00037d, 0xfe0007ff,\t0, \t\tT5},\n-{\"vsqrt\", \"Q,7\",\t0x4a0003bd, 0xfe60ffff,\t0, \t\tT5},\n+{\"vsqrt\", \"Q,7\",\t0x4a2003bd, 0xfe60ffff,\t0, \t\tT5}, /* masked bits 21-22 are 01 */\n {\"vsub\",  \"&3K,2K,1K\",\t0x4a00002c, 0xfe00003f,\t0, \t\tT5},\n {\"vsubi\", \"&3K,2K,J\",\t0x4a000026, 0xfe1f003f,\t0, \t\tT5},\n {\"vsubq\", \"&3K,2K,Q\",\t0x4a000024, 0xfe1f003f,\t0, \t\tT5},\n",
+    "patch_reasons": [
+     "md_convert_frag copies an expanded alternative over its own destination; memcpy corrupts the overlap on a modern libc, memmove does not.  Behaviour only, not an encoding change.",
+     "The vsqrt base opcode carries bits 21-22 = 01 in every original word, as GNU as 2.10-ee-001003-1 and ps2dev binutils encode it; the 2.9 table has 00 and assembles the wrong word silently."
+    ],
+    "license": "GPL-2.0-or-later (binutils)."
+   }
+  },
+  "ee-as-2.9-plain": {
+   "role": "assembler of the SCE SDK contract's scaffold objects (ee-tu-c991111-G0)",
+   "path": "ee-legacy-binutils/bin/ee-as",
+   "version": "GNU assembler 2.9-ee-991111",
+   "sha256": "8cf3508116e85cacf62e1958c9a1592df4e7761363c3ea5efe47ca5f7fab1f20",
+   "provenance": {
+    "kind": "built_from_source_unmodified",
+    "upstream": {
+     "repository": "https://github.com/SSXModding/ps2-ee-toolchain.git",
+     "commit": "b595ded606227e93b8c4a447446c1d2ac093827d",
+     "source_archive_sha256": "3121385fd0b048d93edb5f77890a3c26f3926d0d934ba064ebc7f6d8c322038c"
+    },
+    "rebuild": [
+     "The same checkout as ee-as-la29-vsqrt with no patch applied; configure --target=ee --disable-nls --disable-shared, build gas, install build/gas/as-new as ee-as.",
+     "Not bit-reproducible across host compilers; see XENO_TOOLCHAIN_ALLOW above."
+    ],
+    "license": "GPL-2.0-or-later (binutils)."
+   }
+  },
+  "ps2dev-binutils": {
+   "role": "modern GAS for scaffold data objects and retail blobs, and the linker and objcopy of every unit link",
+   "dir": "ee-binutils/bin",
+   "prefix": "mips64r5900el-ps2-elf-",
+   "version": "GNU Binutils 2.45.1 (ps2dev branch ee-v2.45.1)",
+   "files": {
+    "mips64r5900el-ps2-elf-as": "6c4ee9ee347c647b2e034ba77009901bd04b6ba20c26cfd0d833a1c86e08d037",
+    "mips64r5900el-ps2-elf-ld": "3976bb46002eb27075c5bed00d6f7364db80dce650fc2be3f1c472fe799ddbf9",
+    "mips64r5900el-ps2-elf-objcopy": "89b15547b76feac27ea599f5ac213873611185528802908f69081e8cc7f32ac0"
+   },
+   "provenance": {
+    "kind": "built_from_source_unmodified",
+    "upstream": {
+     "repository": "https://github.com/ps2dev/binutils-gdb.git",
+     "branch": "ee-v2.45.1",
+     "commit": "616e51fa6ed9d1e8f4bda7d0087fac30c5398aa9"
+    },
+    "rebuild": [
+     "configure --target=mips64r5900el-ps2-elf --disable-separate-code --disable-sim --disable-gdb --disable-gdbserver --disable-nls --disable-werror --without-debuginfod --with-python=no",
+     "make all-gas all-ld all-binutils && make install-gas install-ld install-binutils",
+     "Not bit-reproducible across host compilers; a stock 2.45.1 ps2dev build works.  Relax the hash check with XENO_TOOLCHAIN_ALLOW=ps2dev-binutils."
+    ],
+    "license": "GPL-3.0-or-later (binutils)."
+   }
+  },
+  "dvp-as-3eb45ea": {
+   "role": "assembler of every VU microprogram (the DVP assembler; config/vu-build.json contract vu-dvp-as-v1)",
+   "path": "dvp-binutils-3eb45ea/bin/dvp-as",
+   "version": "GNU Binutils 2.45.1, target dvp",
+   "sha256": "234f5fbc37fe303e55ae5deac86a515d2cca252bf5fe9940a9fbd0518ba437ea",
+   "provenance": {
+    "kind": "built_from_source_unmodified",
+    "upstream": {
+     "repository": "https://github.com/ps2dev/binutils-gdb.git",
+     "branch_lead": "dvp-v2.45.1",
+     "commit": "3eb45ea37f0efd498d1de3cf9562de07197aefa8"
+    },
+    "rebuild": [
+     "Check out the commit above; no modification.",
+     "Out of tree: configure --target=dvp --disable-nls --disable-werror --disable-gdb --disable-gdbserver --disable-gprofng --disable-sim --disable-gprof --disable-gold --without-debuginfod --without-zstd --without-zlib --disable-shared",
+     "make MAKEINFO=true all-gas, then install build/gas/as-new as dvp-as (no strip).",
+     "configure excludes ld for this target: there is no dvp linker, and none is needed - the DVP object is linked by the EE linker (config/toolchain-identity.json ps2dev-binutils).",
+     "Not bit-reproducible across host compilers; this is this project's build (.work/attempts/ps2-vu-microcode-backend-23). A differently built dvp-as that assembles the same bytes also reproduces the packet, so the hash check can be relaxed with XENO_TOOLCHAIN_ALLOW=dvp-as-3eb45ea (the build then says so)."
+    ],
+    "license": "GPL-3.0-or-later (binutils); the DVP opcode file is GPL-2.0-or-later. The COPYING files are hashed in .work/attempts/ps2-vu-microcode-backend-23/sandbox/provenance.json."
+   }
+  }
+ },
+ "contracts": {
+  "note": [
+   "One entry per compile contract of config/objects/<unit>.json.  `compiler`",
+   "and `assembler` name a tool above; `flags` is the object's own -O/-G, which",
+   "the per-object contract repeats per object."
+  ],
+  "ee-tu-c296-G0": {
+   "description": "GCC 2.96-family object, -O2 -G0",
+   "compiler": "ee-gcc2.96-realconv-lp7",
+   "driver": "ee-gcc",
+   "driver_flags": [
+    "-nostdinc",
+    "-fno-builtin"
+   ],
+   "flags": [
+    "-O2",
+    "-G0"
+   ],
+   "assembler": "ee-as-la29-vsqrt",
+   "assembler_argv": [
+    "-EL",
+    "-m5900",
+    "-mabi=eabi",
+    "-G0",
+    "-I",
+    "."
+   ],
+   "scaffold_assembler": "ee-as-la29-vsqrt"
+  },
+  "ee-tu-c296-G8": {
+   "description": "GCC 2.96-family object, -O2 -G8",
+   "compiler": "ee-gcc2.96-realconv-lp7",
+   "driver": "ee-gcc",
+   "driver_flags": [
+    "-nostdinc",
+    "-fno-builtin"
+   ],
+   "flags": [
+    "-O2",
+    "-G8"
+   ],
+   "assembler": "ee-as-la29-vsqrt",
+   "assembler_argv": [
+    "-EL",
+    "-m5900",
+    "-mabi=eabi",
+    "-G8",
+    "-I",
+    "."
+   ],
+   "scaffold_assembler": "ee-as-la29-vsqrt"
+  },
+  "ee-tu-c991111-G0": {
+   "description": "SCE SDK object, gcc 2.9-ee-991111, -O2 -G0",
+   "compiler": "ee-gcc2.9-991111",
+   "driver": "ee-gcc",
+   "driver_flags": [
+    "-nostdinc",
+    "-fno-builtin"
+   ],
+   "flags": [
+    "-O2",
+    "-G0"
+   ],
+   "assembler": "ee-as-2.9-plain",
+   "assembler_argv": [
+    "-EL",
+    "-m5900",
+    "-mabi=eabi",
+    "-G0",
+    "-I",
+    "."
+   ],
+   "scaffold_assembler": "ee-as-la29-vsqrt",
+   "gap": "No swap-capable 2.9-ee-991111 GAS is pinned; the plain build reproduces every SDK object of this contract."
+  },
+  "ee-tu-asm-G0": {
+   "description": "hand-written assembler object",
+   "compiler": null,
+   "flags": [
+    "-G0"
+   ],
+   "assembler": "ee-as-la29-vsqrt",
+   "assembler_argv": [
+    "-EL",
+    "-m5900",
+    "-mabi=eabi",
+    "-G0",
+    "-I",
+    "."
+   ],
+   "scaffold_assembler": "ee-as-la29-vsqrt"
+  },
+  "vu-dvp-as-v1": {
+   "description": "VU microprogram object assembled by the DVP assembler (docs/vu-microcode-unit.md)",
+   "compiler": null,
+   "flags": [],
+   "assembler": "dvp-as-3eb45ea",
+   "assembler_argv": [
+    "--fatal-warnings",
+    "-no-abicalls",
+    "-64"
+   ],
+   "scaffold_assembler": "ps2dev-binutils",
+   "note": "config/vu-build.json is the contract's authority; this entry names its tools by identity. --fatal-warnings makes the DVP assembler's count warnings errors; -no-abicalls -64 clear the PIC/n32 marks that would make ld speak when the object meets this project's EABI64 objects."
+  }
+ },
+ "splat": {
+  "note": "The disassembler that regenerates the scaffold.  Pinned in requirements.txt; install it into a virtualenv and point XENO_SPLAT_PYTHON at that interpreter, or let configure.py use the interpreter that runs it.",
+  "packages": {
+   "splat64": "0.50.0",
+   "spimdisasm": "1.42.4",
+   "rabbitizer": "1.16.2"
+  }
+ }
+}

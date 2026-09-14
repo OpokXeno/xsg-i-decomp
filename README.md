@@ -6,35 +6,120 @@ A matching decompilation of **Xenosaga Episode I: Der Wille zur Macht**
 for the PlayStation 2.
 
 The goal is readable C source that reproduces the original machine code.
+The Sony SDK and public libraries do not need to be recovered.
 
 ## Progress
 
-| Version | Target | Bytes | Progress |
+<!-- coverage-report:begin -->
+Recovered 434 of 7,645 in-scope game function(s) (5.677%).
+
+- `exact_c` (pure C): 349 function(s)
+- `exact_c_with_asm`: 80 function(s)
+- `exact_asm`: 5 function(s)
+- `exact_vu_microcode`: 1 VU microprogram(s) (main/vu0-microcode): 224 instruction pair(s), 1,792 bytes, 19 entry point(s)
+  A VU microprogram is not an EE function: it is counted in its own
+  units and enters no EE function denominator.
+- empty-body functions: 6 of the counted function(s) are 8-byte `jr ra; nop` bodies
+<!-- coverage-report:end -->
+
+| Version | Target | Functions | Progress |
 | --- | --- | ---: | ---: |
-| NTSC-U | `SLUS_204.69` | 1,052 / 1,279,344 | 0.082% |
-| NTSC-U | `OV01.OVL` | 0 / 238,124 | 0.000% |
-| NTSC-U | `OV02.OVL` | 0 / 62,868 | 0.000% |
-| NTSC-U | `OV10.OVL` | 0 / 269,564 | 0.000% |
-| NTSC-U | `OV11.OVL` | 192 / 37,180 | 0.516% |
-| NTSC-U | `OV12.OVL` | 0 / 321,380 | 0.000% |
-| NTSC-U | `SSD.IRX` | 0 / 57,188 | 0.000% |
-| NTSC-U | `RSSD.IRX` | 0 / 10,860 | 0.000% |
+| NTSC-U | `SLUS_204.69` | 332 / 3,671 | 9.044% |
+| NTSC-U | `OV01.OVL` | 32 / 1,081 | 2.960% |
+| NTSC-U | `OV02.OVL` | 5 / 110 | 4.545% |
+| NTSC-U | `OV10.OVL` | 0 / 361 | 0.000% |
+| NTSC-U | `OV11.OVL` | 9 / 139 | 6.475% |
+| NTSC-U | `OV12.OVL` | 56 / 1,788 | 3.132% |
+| NTSC-U | `SSD.IRX` | 0 / 442 | 0.000% |
+| NTSC-U | `RSSD.IRX` | 0 / 53 | 0.000% |
 
-## Project Structure
+## Building
 
-```text
-src/          Recovered C source
-include/      Shared headers and types
-config/       Targets, toolchains and matching packets
-tools/        Analysis, build and matching utilities
-tests/        Verification tests
-annotations/  Prior reverse-engineering notes
-docs/         Workflow and contribution guidelines
-reports/      Analysis and matching evidence
-game/         Local game files (not distributed)
-build/        Generated artifacts (not distributed)
-.work/        Local toolchains and agent workspaces (not distributed)
+You need three things the repository does not contain: your own copy of the
+game, the original toolchain, and a Python environment for the disassembler.
+
+### 1. The originals
+
+Extract `SLUS_204.69`, `OV01.OVL`, `OV02.OVL`, `OV10.OVL`, `OV11.OVL`,
+`OV12.OVL` and the `IOP/` directory from your own disc image and put them in one
+folder. `config/originals.json` names the six files with their sizes and
+SHA-256; the build refuses anything else, so it tells you immediately if you
+have a different release. This project reproduces the NTSC-U release.
+
+### 2. The toolchain
+
+`config/toolchain-identity.json`: for every compiler and
+assembler it gives the version, the SHA-256 of each payload, and the provenance
+needed to obtain or rebuild it. Two of the tools are patched, and both patches
+are recorded there in full:
+
+| Tool | Where it comes from |
+| --- | --- |
+| `ee-gcc2.96-realconv-lp7` | the published `ee-gcc2.96` archive, with eight documented single-byte patches to `cc1` (six that restore the original decimal-literal rounding, two that restore the R5900 short-loop padding) |
+| `ee-gcc2.9-991111` | the published `ee-gcc2.9-991111` archive, unmodified |
+| `ee-as-la29-vsqrt` | GNU as 2.9-ee-991111 built from the pinned `ps2-ee-toolchain` commit with the recorded two-hunk diff (an overlap-safe `memmove`, and the `vsqrt` opcode's bits 21-22) |
+| `ee-as-2.9-plain` | the same commit, unpatched |
+| `ps2dev-binutils` | ps2dev binutils 2.45.1, the linker, objcopy and modern GAS |
+
+Lay them out under one directory as `config/toolchain-identity.json`'s
+`tools.<id>.dir` / `.path` say. Then:
+
+```bash
+python3 -B tools/tu/toolchain.py --check
 ```
+
+It prints where it looked and what it found, and refuses with the tool's name,
+both hashes and the recipe when something is missing or different.
+
+### 3. The disassembler
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+### 4. Tell the build where those three are
+
+By environment variable:
+
+```bash
+export XENO_GAME_DIR=/path/to/extracted-iso
+export XENO_TOOLCHAIN_DIR=/path/to/toolchains
+export XENO_SPLAT_PYTHON=$PWD/.venv/bin/python
+```
+
+or once, in `config/toolchain-local.json` (untracked):
+
+```json
+{
+  "game_dir": "/path/to/extracted-iso",
+  "toolchain_root": "/path/to/toolchains",
+  "splat_python": "/path/to/.venv/bin/python"
+}
+```
+
+Three of the tools are built from source rather than downloaded, so their bytes
+depend on the host compiler. A build of the same source that assembles the same
+bytes still reproduces the images: accept it one tool at a time with
+`XENO_TOOLCHAIN_ALLOW=ee-as-la29-vsqrt,ee-as-2.9-plain,ps2dev-binutils`. The
+build then says which check it relaxed.
+
+### 5. Build
+
+```bash
+./configure.py      # generate every unit build directory and build.ninja
+ninja               # build and compare all six originals
+ninja gate          # + per-unit status and the whole-file SHA-256 gate
+```
+
+`ninja gate` writes `build/gate.json`. `"result": "pass"` means every one of the
+six files came out byte for byte identical to your original.
+
+## Contributing
+
+Pick an object from `config/objects/<unit>.objects.json` that has no source yet,
+write the C, and build: `ninja` tells you whether the file still comes out
+identical. A function counts when its translation unit's source defines it in C
+and the whole-file gate passes.
 
 ## Acknowledgments
 
@@ -43,6 +128,10 @@ Thanks to the developers and contributors of the projects on which this work rel
 - [splat](https://github.com/ethteck/splat),
   [spimdisasm](https://github.com/Decompollaborate/spimdisasm), and
   [Rabbitizer](https://github.com/Decompollaborate/rabbitizer) for splitting and disassembly.
+- [m2c](https://github.com/matt-kempster/m2c) for first-pass decompilation of MIPS
+  assembly into C.
+- [decomp-permuter](https://github.com/simonlindholm/decomp-permuter) for the bounded
+  mutation search over a compiled non-exact base.
 - [ps2dev/binutils-gdb](https://github.com/ps2dev/binutils-gdb) and
   [SSXModding/ps2-ee-toolchain](https://github.com/SSXModding/ps2-ee-toolchain) for EE toolchains.
 - [decomp.me's compiler collection](https://github.com/decompme/compilers) for historical compiler distributions.

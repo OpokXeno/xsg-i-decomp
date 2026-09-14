@@ -1,0 +1,105 @@
+name: xenosaga1 ov02 TU-migration phase 2 (per original TU)
+sha1: 783a26157b30964a93431b930ecb5a0a93aec7d4
+options:
+  platform: ps2
+  compiler: EEGCC
+  endianness: little
+  base_path: .
+  target_path: orig/OV02.OVL
+  basename: ov02
+  asm_path: asm
+  src_path: scaffold/src
+  auto_decompile_empty_functions: False
+  disassemble_all: True
+  build_path: build
+  asset_path: assets
+  ld_script_path: ov02.ld
+  symbol_addrs_path:
+    - symbol_addrs.txt
+  undefined_funcs_auto_path: undefined_funcs_auto.txt
+  undefined_syms_auto_path: undefined_syms_auto.txt
+  o_as_suffix: True
+  create_asm_dependencies: False
+  ld_dependencies: False
+  find_file_boundaries: False
+  disasm_unknown: True
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+  named_regs_for_c_funcs: False
+  mips_abi_gpr: numeric
+  mips_abi_float_regs: numeric
+  generate_asm_macros_files: True
+  asm_function_macro: glabel
+  asm_data_macro: dlabel
+  asm_end_label: endlabel
+  asm_emit_size_directive: True
+  use_legacy_include_asm: False
+  ld_fill_value: 0
+  section_order:
+    - .text
+    - .data
+    - .rodata
+    - .lit4
+    - .sdata
+    - .sbss
+    - .bss
+  migrate_rodata_to_functions: False
+segments:
+  - [0x0, bin, elf_header]
+  - name: ov02
+    type: code
+    start: 0x1000
+    vram: 0x00A00000
+    bss_size: 0x298
+    align: 4
+    subalign: null
+    subsegments:
+      - [0x1000, asm, ov02/logo]
+      - [0x1850, asm, ov02/boot_display]
+      - [0x1858, c, ov02/title]
+      - [0x27A0, c, ov02/title_game_init]
+      - [0x27F0, asm, ov02/title_hdd_install]
+      - [0x33A8, asm, ov02/tsk_umn_object_task_main]
+      - [0x3D68, asm, ov02/umn_interface2]
+      - [0x4450, asm, ov02/task_umn_top_win]
+      - [0x5170, c, ov02/umn_procurator]
+      - [0x6738, asm, ov02/tsk_umn_mail_pas]
+      - [0xA7D8, asm, ov02/umn_guno_data_base_get]
+      - [0xCAF8, asm, ov02/tsk_umn_simulation_pas]
+      - [0xD488, c, ov02/tya_uml]
+      - [0xEE20, asm, ov02/tsk_umn_plugin_pas]
+      - [0xF938, asm, ov02/umn_event_text_symbol_check]
+      - [0x10674, data, ov02/logo]
+      - [0x10720, data, ov02/title]
+      - [0x10E10, data, ov02/title_hdd_install]
+      - [0x114A8, data, ov02/task_umn_top_win]
+      - [0x11618, data, ov02/tsk_umn_mail_pas]
+      - [0x116F8, data, ov02/umn_guno_data_base_get]
+      - [0x11848, data, ov02/tsk_umn_simulation_pas]
+      - [0x11890, data, ov02/tya_uml]
+      - [0x11C40, data, ov02/tsk_umn_plugin_pas]
+      - [0x11C60, data, ov02/umn_event_text_symbol_check]
+      - [0x11D28, rodata, ov02/logo]
+      - [0x125D0, rodata, ov02/title]
+      - [0x12620, rodata, ov02/title_hdd_install]
+      - [0x12D40, rodata, ov02/tsk_umn_object_task_main]
+      - [0x12E60, rodata, ov02/umn_interface2]
+      - [0x12F10, rodata, ov02/task_umn_top_win]
+      - [0x13060, rodata, ov02/umn_procurator]
+      - [0x13240, rodata, ov02/tsk_umn_mail_pas]
+      - [0x13D90, rodata, ov02/umn_guno_data_base_get]
+      - [0x14180, rodata, ov02/tsk_umn_simulation_pas]
+      - [0x14310, rodata, ov02/tya_uml]
+      - [0x14440, rodata, ov02/tsk_umn_plugin_pas]
+      - [0x14550, rodata, ov02/umn_event_text_symbol_check]
+      - [0x14654]
+      - { type: bss, vram: 0x00A13654, name: ov02/title_hdd_install }
+      - { type: bss, vram: 0x00A13660, name: ov02/tya_uml }
+  - [0x14654, pad, ov02_bss_file_image]
+  - [0x148EC, bin, elf_shstrtab]
+  - [0x1490C, bin, elf_section_headers]
+  - [0x149D4, bin, elf_symtab]
+  - [0x15874, bin, elf_strtab]
+  - [0x16307]

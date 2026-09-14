@@ -1,0 +1,44 @@
+{
+ "schema": "originals/1",
+ "note": [
+  "The six EE files this repository rebuilds byte for byte.  They come from",
+  "your own copy of the game and are never distributed here: point XENO_GAME_DIR",
+  "at the folder holding them (default: game/extracted-iso).",
+  "This is the NTSC-U release; a different release has different hashes and this",
+  "source does not reproduce it."
+ ],
+ "revision": "slus-20469-412d448de315",
+ "region": "NTSC-U",
+ "units": {
+  "main": {
+   "file": "SLUS_204.69",
+   "size": 3441932,
+   "sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2"
+  },
+  "ov01": {
+   "file": "OV01.OVL",
+   "size": 425114,
+   "sha256": "dd333f728314c4e553690056d5ed21efc0d65d58ce2afb74d7a45a782849690a"
+  },
+  "ov02": {
+   "file": "OV02.OVL",
+   "size": 90887,
+   "sha256": "7d55893ed02212ca5b4c4a92a2bdbeecbba3c1abfeadb2d6f004f54349ee6f4e"
+  },
+  "ov10": {
+   "file": "OV10.OVL",
+   "size": 392242,
+   "sha256": "a4e27bc538e7d13de80b9e694b5c93e8d55950af28ac8a7269fe8b0d15630c11"
+  },
+  "ov11": {
+   "file": "OV11.OVL",
+   "size": 71289,
+   "sha256": "2072d6586766ebea5d39217cae67f2169685a95526d08ff7b1f652c093879eaf"
+  },
+  "ov12": {
+   "file": "OV12.OVL",
+   "size": 442306,
+   "sha256": "0e13f0a1dbe399c11b13865761360990a2a0859348dd8a52f896347e7ba00b53"
+  }
+ }
+}

@@ -1,0 +1,64 @@
+/*
+ * TU-local declarations of main/tu213 (src/main/sc_get.c).
+ */
+
+#ifndef SRC_MAIN_SC_GET_H
+#define SRC_MAIN_SC_GET_H
+
+typedef struct ScriptTask ScriptTask;
+
+/*
+ * One slot of the script VM's task table.  The table is `_scriptWork`, indexed
+ * as `script * 1104 + task * 128`, with at most 8 task slots per script
+ * (scCreateTask 0x002ea028: slot stride sll 7 at 0x002ea110, script stride
+ * 1104 at 0x002ea10c..0x002ea11c, bound slti 0x8 at 0x002ea0ac) and a 16-byte
+ * script header at +0x440 after them.
+ *
+ * `flags` is the halfword at +0: scCreateTask sets bit 0 when it takes a slot
+ * (sh 1 at 0x002ea13c) and tests it when it looks for a free one (lhu/andi 1 at
+ * 0x002ea08c); scDeleteTask clears the whole halfword (sh $0 at 0x002ea264) and
+ * treats a nonzero value as "this slot was in use"; scDispatchScript tests bits
+ * 4, 0x10 and 0x20 of it.  scDeleteTask's own accepted record called this
+ * halfword `active` and modelled it as its own type ScTaskSlot; the bit tests
+ * above show the two are one record and one flags word, so they are spelled
+ * once here.
+ *
+ * `script_pc` is the branch stack: scCreateTask seeds entry 0 with the script
+ * address it was given (lh 0x54 / sll 2 / sw 0x8 at 0x002ea134..0x002ea14c),
+ * scONGOScript writes the branch target to the entry `branch_depth` selects
+ * (the same three instructions at 0x002eaabc..0x002eaacc), and scDeleteTask
+ * invalidates entry 0 with -1 (sw at 0x002ea26c).  Its six entries are bounded
+ * by the 16 bytes scCreateTask zeroes from _zeroPos at +0x20 (sd at
+ * 0x002ea1a4/0x002ea1c0), which is where the stack stops.
+ *
+ * `branch_depth` is the signed halfword at +0x54 that indexes it, cleared by
+ * scDeleteTask (sh $0 at 0x002ea268).  Between +0x02 and +0x08, and from +0x20
+ * to +0x54, this unit's C reads nothing: scCreateTask copies 32 bytes from its
+ * caller into +0x30 and writes halfwords at +0x56 and +0x58, but what they mean
+ * is not established here, so those spans stay byte ranges.
+ */
+struct ScriptTask {
+    unsigned short flags;             /* +0x00 */
+    unsigned char unmodeled_02[6];    /* +0x02 */
+    int script_pc[6];                 /* +0x08 */
+    unsigned char unmodeled_20[52];   /* +0x20 */
+    short branch_depth;               /* +0x54 */
+};
+
+extern int scWaitParseScript(ScriptTask *task);
+
+extern int scMoveParseScript(ScriptTask *task);
+
+#include "shared.h"
+
+typedef unsigned short ScSchedulerWord;
+
+typedef unsigned int ScSchedulerWord32;
+
+extern unsigned char _scriptWork[];
+
+extern int scONGOSUB(ScriptTask *task);
+
+extern int scParseScript(ScriptTask *task);
+
+#endif /* SRC_MAIN_SC_GET_H */

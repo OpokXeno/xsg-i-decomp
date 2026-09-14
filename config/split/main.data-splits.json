@@ -1,0 +1,119 @@
+{
+ "schema": "tu-auto-splits-main/1",
+ "tus": {
+  "106": {
+   ".lit4": [
+    [
+     "0x004D891C",
+     "0x004D8920"
+    ]
+   ]
+  },
+  "107": {
+   ".rodata": [
+    [
+     "0x004D30B0",
+     "0x004D30D0"
+    ]
+   ]
+  },
+  "158": {
+   ".rodata": [
+    [
+     "0x004C2D60",
+     "0x004C2D80"
+    ]
+   ]
+  },
+  "215": {
+   ".lit4": [
+    [
+     "0x004D8360",
+     "0x004D8364"
+    ]
+   ]
+  }
+ },
+ "detail": {
+  "nml_model_set:.lit4": {
+   "items": 30,
+   "generated": [
+    [
+     "0x004D891C",
+     "0x004D8920",
+     "math-spark-cont01-00231d50"
+    ]
+   ],
+   "c_owned": [
+    "D_004D891C"
+   ],
+   "also_referenced_by_c": [],
+   "run": [
+    "0x004D891C",
+    "0x004D8920"
+   ],
+   "scaffold_items_inside_run": []
+  },
+  "nml_packet_add:.rodata": {
+   "items": 7,
+   "generated": [
+    [
+     "0x004D30B0",
+     "0x004D30CC",
+     "math-correction13-0"
+    ]
+   ],
+   "c_owned": [
+    "jtbl_004D30B0"
+   ],
+   "also_referenced_by_c": [],
+   "run": [
+    "0x004D30B0",
+    "0x004D30D0"
+   ],
+   "scaffold_items_inside_run": []
+  },
+  "endou_test:.rodata": {
+   "items": 105,
+   "generated": [
+    [
+     "0x004C2D60",
+     "0x004C2D7C",
+     "io-main-00272ac0"
+    ]
+   ],
+   "c_owned": [
+    "jtbl_004C2D60"
+   ],
+   "also_referenced_by_c": [
+    "not_found_format",
+    "read_error_format"
+   ],
+   "run": [
+    "0x004C2D60",
+    "0x004C2D80"
+   ],
+   "scaffold_items_inside_run": []
+  },
+  "sdv:.lit4": {
+   "items": 6,
+   "generated": [
+    [
+     "0x004D8360",
+     "0x004D8364",
+     "math-spark-cont01-002ecbf0"
+    ]
+   ],
+   "c_owned": [
+    "D_004D8360"
+   ],
+   "also_referenced_by_c": [],
+   "run": [
+    "0x004D8360",
+    "0x004D8364"
+   ],
+   "scaffold_items_inside_run": []
+  }
+ },
+ "problems": []
+}

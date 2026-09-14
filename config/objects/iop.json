@@ -1,0 +1,317 @@
+{
+ "schema": "iop-objects/1",
+ "note": [
+  "The two IOP modules are in the recovery scope but have no build here yet:",
+  "the EE build reproduces the six EE files, and SSD.IRX / RSSD.IRX need their",
+  "own MIPS-I ABI and IRX relocation support (AGENTS.md).  This file carries",
+  "only what the progress report needs to keep them in the denominator: the",
+  "module identity and the function groups of its debug records.",
+  "No source is published for them, so they contribute 0 to the numerator."
+ ],
+ "units": {
+  "iop_ssd": {
+   "file": "IOP/SSD.IRX",
+   "sha256": "53393010609ac23b107d3ab93d67f0c07a7db5170e10081e76425daf17940363",
+   "groups": 20,
+   "functions": 442,
+   "build": "not implemented yet"
+  },
+  "iop_rssd": {
+   "file": "IOP/RSSD.IRX",
+   "sha256": "368167530995f362ba75e9c9c21608e24833670525061a2a75b6884d1500e1b6",
+   "groups": 4,
+   "functions": 53,
+   "build": "not implemented yet"
+  }
+ },
+ "groups": [
+  {
+   "id": "iop_ssd/debug-file-000",
+   "unit": "iop_ssd",
+   "function_count": 16,
+   "code": {
+    "start": "0x00000000",
+    "end": "0x0000072c"
+   },
+   "attested_source_files": [
+    "ssd_init.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-001",
+   "unit": "iop_ssd",
+   "function_count": 22,
+   "code": {
+    "start": "0x00000730",
+    "end": "0x000013d4"
+   },
+   "attested_source_files": [
+    "ssd_mem.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-002",
+   "unit": "iop_ssd",
+   "function_count": 14,
+   "code": {
+    "start": "0x000013e0",
+    "end": "0x000018cc"
+   },
+   "attested_source_files": [
+    "ssd_dma.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-003",
+   "unit": "iop_ssd",
+   "function_count": 16,
+   "code": {
+    "start": "0x000018d0",
+    "end": "0x00001f40"
+   },
+   "attested_source_files": [
+    "ssd_out.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-004",
+   "unit": "iop_ssd",
+   "function_count": 10,
+   "code": {
+    "start": "0x00001f40",
+    "end": "0x00002614"
+   },
+   "attested_source_files": [
+    "ssd_wave.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-005",
+   "unit": "iop_ssd",
+   "function_count": 27,
+   "code": {
+    "start": "0x00002620",
+    "end": "0x00003498"
+   },
+   "attested_source_files": [
+    "ssd_seq.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-006",
+   "unit": "iop_ssd",
+   "function_count": 13,
+   "code": {
+    "start": "0x000034a0",
+    "end": "0x00003cb0"
+   },
+   "attested_source_files": [
+    "ssd_musc.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-007",
+   "unit": "iop_ssd",
+   "function_count": 27,
+   "code": {
+    "start": "0x00003cb0",
+    "end": "0x000050ac"
+   },
+   "attested_source_files": [
+    "ssd_sec.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-008",
+   "unit": "iop_ssd",
+   "function_count": 13,
+   "code": {
+    "start": "0x000050b0",
+    "end": "0x000057b8"
+   },
+   "attested_source_files": [
+    "ssd_smpl.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-009",
+   "unit": "iop_ssd",
+   "function_count": 12,
+   "code": {
+    "start": "0x000057c0",
+    "end": "0x00006954"
+   },
+   "attested_source_files": [
+    "ssd_main.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-010",
+   "unit": "iop_ssd",
+   "function_count": 101,
+   "code": {
+    "start": "0x00006960",
+    "end": "0x00008a04"
+   },
+   "attested_source_files": [
+    "ssd_trap.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-011",
+   "unit": "iop_ssd",
+   "function_count": 44,
+   "code": {
+    "start": "0x00008a10",
+    "end": "0x00009e60"
+   },
+   "attested_source_files": [
+    "ssd_chan.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-012",
+   "unit": "iop_ssd",
+   "function_count": 14,
+   "code": {
+    "start": "0x00009e60",
+    "end": "0x0000a4d0"
+   },
+   "attested_source_files": [
+    "ssd_lfo.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-013",
+   "unit": "iop_ssd",
+   "function_count": 12,
+   "code": {
+    "start": "0x0000a4d0",
+    "end": "0x0000b108"
+   },
+   "attested_source_files": [
+    "ssd_voic.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-014",
+   "unit": "iop_ssd",
+   "function_count": 19,
+   "code": {
+    "start": "0x0000b110",
+    "end": "0x0000b688"
+   },
+   "attested_source_files": [
+    "ssd_dev.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-015",
+   "unit": "iop_ssd",
+   "function_count": 8,
+   "code": {
+    "start": "0x0000b690",
+    "end": "0x0000b7e4"
+   },
+   "attested_source_files": [
+    "ssd_err.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-016",
+   "unit": "iop_ssd",
+   "function_count": 18,
+   "code": {
+    "start": "0x0000b7f0",
+    "end": "0x0000bd18"
+   },
+   "attested_source_files": [
+    "ssd_midi.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-017",
+   "unit": "iop_ssd",
+   "function_count": 11,
+   "code": {
+    "start": "0x0000bd20",
+    "end": "0x0000c358"
+   },
+   "attested_source_files": [
+    "ssd_dbg.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-018",
+   "unit": "iop_ssd",
+   "function_count": 14,
+   "code": {
+    "start": "0x0000c360",
+    "end": "0x0000cad4"
+   },
+   "attested_source_files": [
+    "ssd_pcm.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-019",
+   "unit": "iop_ssd",
+   "function_count": 31,
+   "code": {
+    "start": "0x0000cae0",
+    "end": "0x0000dfe8"
+   },
+   "attested_source_files": [
+    "ssd_vag.c"
+   ]
+  },
+  {
+   "id": "iop_rssd/debug-file-000",
+   "unit": "iop_rssd",
+   "function_count": 11,
+   "code": {
+    "start": "0x00000000",
+    "end": "0x00001604"
+   },
+   "attested_source_files": [
+    "rssdinit.c"
+   ]
+  },
+  {
+   "id": "iop_rssd/debug-file-001",
+   "unit": "iop_rssd",
+   "function_count": 16,
+   "code": {
+    "start": "0x00001610",
+    "end": "0x00001c58"
+   },
+   "attested_source_files": [
+    "rssdfunc.c"
+   ]
+  },
+  {
+   "id": "iop_rssd/debug-file-002",
+   "unit": "iop_rssd",
+   "function_count": 18,
+   "code": {
+    "start": "0x00001c60",
+    "end": "0x000027e4"
+   },
+   "attested_source_files": [
+    "rssdstrm.c"
+   ]
+  },
+  {
+   "id": "iop_rssd/debug-file-003",
+   "unit": "iop_rssd",
+   "function_count": 8,
+   "code": {
+    "start": "0x000027f0",
+    "end": "0x00002a8c"
+   },
+   "attested_source_files": [
+    "rssdring.c"
+   ]
+  }
+ ]
+}

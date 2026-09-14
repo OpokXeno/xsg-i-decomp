@@ -1,0 +1,74 @@
+{
+ "schema": "overlay-plan/1",
+ "note": [
+  "Which original overlay objects are built from a C translation unit.",
+  "`c_tus` lists the object ordinals of the unit whose source lives at",
+  "src/<unit>/<name>.c; every other object builds from its generated",
+  "INCLUDE_ASM skeleton.  Read by tools/tu/gen_ovl_src.py."
+ ],
+ "units": {
+  "ov01": {
+   "c_tus": [
+    1,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    10,
+    17,
+    22,
+    28,
+    29,
+    30,
+    31,
+    32,
+    35
+   ]
+  },
+  "ov02": {
+   "c_tus": [
+    2,
+    3,
+    8,
+    12
+   ]
+  },
+  "ov10": {
+   "c_tus": []
+  },
+  "ov11": {
+   "c_tus": [
+    1
+   ]
+  },
+  "ov12": {
+   "c_tus": [
+    2,
+    4,
+    9,
+    20,
+    21,
+    23,
+    25,
+    27,
+    50,
+    52,
+    55,
+    56,
+    57,
+    65,
+    68,
+    69,
+    71,
+    78,
+    82,
+    83,
+    86,
+    87,
+    91
+   ]
+  }
+ }
+}

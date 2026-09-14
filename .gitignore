@@ -1,33 +1,68 @@
-/.idea/
-/game/
-/build/
-/.work/
-/worktrees/
-/tools/vendor/
-/.venv/
+# What this repository tracks: the source, and the inputs a stranger needs to
+# rebuild the six original EE files from it.  Nothing else.  The rule is an
+# allowlist, so a new private file is out by default and has to be let in on
+# purpose.
+#
+#   src/ include/            the recovered source and its headers
+#   scripts/src/              the recovered java sources files used for scripting
+#   config/                  the split configuration, the symbol files, the
+#                            per-object compile contract and the identity of
+#                            the compilers and assemblers
+#   configure.py tools/      the build system
+#   README.md                how to build it
+#
+
+/*
+!/.gitignore
+!/README.md
+!/configure.py
+!/requirements.txt
+!/src/
+!/include/
+!/config/
+!/tools/
+!/scripts/
+
+# ---------------------------------------------------------------- config/
+# The build inputs
+/config/*
+!/config/originals.json
+!/config/toolchain-identity.json
+!/config/overlay-plan.json
+!/config/overlay-adaptations.json
+!/config/split/
+!/config/symbols/
+!/config/objects/
+
+
+/config/toolchain-local.json
+
+# ----------------------------------------------------------------- tools/
+# The build system is tracked; the workflow tools are not.
+/tools/*
+!/tools/configure.py
+!/tools/elf_gate.py
+!/tools/coverage_report.py
+!/tools/tu_edit.py
+!/tools/tu/
+
+# Inside tools/tu/, these regenerate the tracked inputs from the project's
+# private migration evidence, or audit against the acceptance records.
+/tools/tu/gen_main.py
+/tools/tu/gen_ovl.py
+/tools/tu/gen_manifest_ovl.py
+/tools/tu/proto_gen_config.py
+/tools/tu/split_plan.py
+/tools/tu/run_audit.py
+/tools/tu/run_audit_ovl.py
+
+# A workflow tool that happens to live here: it is imported only by
+# tools/preflight.py and tools/worker.py, both of which are themselves untracked
+# workflow tools. Nothing in configure.py or the build graph reaches it, so it is
+# not part of the build system this directory otherwise holds.
+/tools/tu/function_object.py
+
+# -------------------------------------------------------------- generated
 __pycache__/
 *.pyc
-/tests/
-/tools/
-info
-/reports/
-opencode.json
-AGENTS.md
-/docs/
-
-# Local analysis, experiments and toolchain build records.
-/config/analysis-backend.lock.json
-/config/calibration.json
-/config/compiler-experiments.json
-/config/compiler-variants.lock.json
-/config/ee-binutils.lock.json
-/config/ee-gcc-candidate.lock.json
-/config/ee-legacy-binutils.lock.json
-/config/iop-tools.lock.json
-/config/library-families.json
-/config/main-tools.lock.json
-/config/pilots/
-/config/res-context.json
-/config/scaling-policy.json
-/config/split-tools.lock.json
-/config/toolchain.lock.json
+.venv/

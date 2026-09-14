@@ -1,0 +1,641 @@
+; Vu0MicroCode -- the resident VU0 microprogram of the xgl geometry layer.
+;
+; Assembled by the ps2dev DVP assembler (config/vu-build.json, contract
+; vu-dvp-as-v1).  One source file produces two things at once: the DMA
+; source-chain packet that lives in .vudata of SLUS_204.69, and the VU0
+; instruction-memory image that packet uploads.  224 instruction pairs,
+; 1792 bytes, VU0 instruction memory 0x000..0x6FF.
+;
+; xglGeometryInit calls xglDmaDirectSrcChain(0, PacketDataVu0MicroCode) once at
+; start-up.  Channel 0 is VIF0, so this program is resident in VU0 for the whole
+; game; nothing ever overwrites it.  Every entry point below is reached from the
+; EE by loading its address, shifting it from bytes to instruction pairs, writing
+; that to CMSAR0 and issuing vcallmsr:
+;
+;       lui   $v0, %hi(Vu0CallMatrixStackUnit)
+;       addiu $v0, $v0, %lo(Vu0CallMatrixStackUnit)   ; 0x108, a VU byte address
+;       srl   $v0, $v0, 3                             ; -> instruction pair index
+;       ctc2.i $v0, $vi27                             ; CMSAR0
+;       vcallmsr $vi27
+;
+;
+; Register conventions
+; --------------------
+; vf00            the hardware constant (0, 0, 0, 1).  Used throughout as a
+;                 source of 0 (any of xyz) and 1 (w), and as the identity for
+;                 the copy idioms "mulw.xyzw d, s, vf00w" and "add.xyz d,s,vf00".
+;
+; vf28..vf31      THE RESIDENT MATRIX.  This is the state the whole program
+;                 exists to maintain; it survives between vcallmsr calls.  The
+;                 four registers are the four COLUMNS of a 4x4 matrix, lane =
+;                 row, so vf31 is the translation column.  Every entry that
+;                 changes the current matrix leaves its result here.
+;
+;                 The EE says so outright: xglMatrixStackSave (0x22A590) is
+;                 nothing but "sqc2 vf28..vf31, 0/16/32/48($a0)" and
+;                 xglMatrixStackLoad (0x22A5B0) the matching lqc2 quartet.  A
+;                 4x4 matrix in memory is saved and restored by moving exactly
+;                 these four registers, with vf31 at +48 -- which is both what
+;                 makes them "the" matrix and what fixes the column-major
+;                 layout.
+;
+; vf24..vf27      the scratch copy of the matrix under construction.  The shared
+;                 tail Vu0MatrixStackCopyExit copies vf24..vf27 into vf28..vf31
+;                 and returns, so an entry that can build its result in the
+;                 scratch set ends with "b Vu0MatrixStackCopyExit" instead of
+;                 writing the resident set itself.
+;
+; vf04..vf07      the argument registers.  What they mean depends on the entry
+;                 and is stated at each one; the EE loads them with lqc2/qmtc2
+;                 before vcallmsr.  vf04..vf07 are also the four columns of the
+;                 argument matrix for Vu0MatrixStackMul.
+;
+; vf01..vf03      scratch.  vf01.x in particular is the sine/cosine result.
+; vf08..vf13      scratch, used only by Vu0MatrixStackFrustum.
+; vf20..vf23      the second output matrix of Vu0CallLightCalcMatrix.
+;
+; vi13            THE MATRIX STACK POINTER, in VU data-memory quadwords.  A
+;                 matrix is four quadwords, so vi13 moves in steps of 4 and is
+;                 masked with 0x7C after every push and pop: the stack is a
+;                 CIRCULAR buffer of 32 matrices (128 quadwords, 2 KB) at the
+;                 bottom of VU0 data memory.  Overflow wraps; it never faults.
+;                 vi13 also survives between calls.
+;
+; vi14            the return link of an EE-level entry.  Each Vu0Call* entry is
+;                 a one-pair prologue that sets vi14 to 0 and falls through into
+;                 its body; the body ends with "jr vi14", which lands on pair 0.
+;                 Pair 0 carries the E bit, so returning to 0 ends the
+;                 microprogram -- one terminator shared by every entry.
+;
+; vi15            the link register of the two INTERNAL routines, Vu0Sin and
+;                 Vu0Cos.  The four rotation entries call them with
+;                 "bal vi15, ..." and get control back at the following pair;
+;                 Vu0CallSin and Vu0CallCos instead set vi15 to 0 so that the
+;                 same "jr vi15" ends the program when the EE called sine or
+;                 cosine directly.
+;
+; vi01, vi02      scratch.  vi01 is also an INPUT: Vu0MatrixStackPop reads the
+;                 number of matrices to pop from it (the EE writes it with
+;                 ctc2.ni before vcallmsr), and Vu0MatrixStackFrustum uses it to
+;                 address the six frustum planes the EE left in VU data memory.
+;
+; Q               the divider result.  Every producer here is a reciprocal
+;                 ("div q, vf00w, <x>" is 1.0/x) and every consumer is preceded
+;                 by the waitq that synchronises it.
+;
+; I               the immediate scalar, loaded by "loi" in the lower slot of the
+;                 pair BEFORE the one that uses it.  All ten immediates in this
+;                 program are sine/cosine constants.
+
+	.data
+	.globl	PacketSizeVu0MicroCode
+	.globl	PacketDataVu0MicroCode
+
+; The packet header the EE DMA helper reads: the length of the chain that
+; follows, in quadwords.  xglDmaDirectSrcChain takes the data pointer; the size
+; word sits in the quadword before it.
+PacketSizeVu0MicroCode:
+	.word	(PacketBottomVu0MicroCode - PacketDataVu0MicroCode) >> 4
+	.word	0
+	.word	0
+	.word	0
+
+; One DMAcnt tag carrying the whole microprogram inline, with the two VIF codes
+; packed into the tag's second half: a NOP to align, then MPG to load VU0
+; instruction memory from address 0.  Both counts are autocounted from the data
+; the assembler actually emits, so the packet can never disagree with the
+; program: QWC = 224 pairs / 2 = 112 quadwords, MPG NUM = 224 pairs.
+PacketDataVu0MicroCode:
+	dmacnt	*
+	mpg	0, *
+
+Vu0MicroCodeStart:
+
+; ---------------------------------------------------------------------------
+; Vu0Ready -- the shared terminator, and the idle program.
+;
+; Pair 0 carries the E bit -- the only one in the program -- so control reaching
+; here stops the microprogram after the following (delay) pair.  Every entry
+; returns here, by "jr vi14", by "jr vi15" or, in Vu0CallLightCalcMatrix, by an
+; explicit branch.
+;
+; The last two pairs of this block are not reached by any path in the program:
+; execution entering at pair 0 has already stopped.  Their effect, if reached,
+; would be to branch back to Vu0Ready rather than fall through into Vu0CallSin,
+; which is the plausible reason for writing them; that reading is not something
+; the bytes establish.
+; ---------------------------------------------------------------------------
+Vu0Ready:
+	nop[e]					nop
+	nop					nop
+	nop					b Vu0Ready
+	nop					nop
+
+; ---------------------------------------------------------------------------
+; Vu0CallSin(vf04.x = angle in radians) -> vf01.x = sin(angle)
+;
+; EE entry.  Clears the link register so that Vu0Sin's "jr vi15" ends the
+; program, then falls through into the routine.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallSin
+Vu0CallSin:
+	nop					iaddiu vi15,vi00,0
+
+; Vu0Sin -- the internal routine.  Called from here by fall-through, from
+; Vu0Cos by branch, and from the four rotation entries by "bal vi15, Vu0Sin".
+;
+; Range reduction: n = round(angle / pi), r = angle - n*pi, so r lies in
+; [-pi/2, pi/2]; sin(angle) = sin(r) if n is even, -sin(r) if n is odd.  The
+; rounding is done as a truncation of angle/pi + 0.5 for non-negative arguments
+; and of angle/pi - 0.5 for negative ones; the branch picks between the two
+; from the sign flag of the reduction FMAC.
+;
+; sin(r) is then a degree-9 odd polynomial
+;       r + c1*r^3 + c2*r^5 + c3*r^7 + c4*r^9
+; evaluated by accumulating into ACC.x.  The four coefficients are close to the
+; Taylor coefficients but are NOT them, and the difference is deliberate: they
+; are a fitted set, drifting further from Taylor the higher the term (c1 by
+; 6e-7 relative, c4 by 5.6e-2).  Over [-pi/2, pi/2] the fitted polynomial is
+; worth 235x: peak error 1.5e-8 against Taylor's 3.5e-6, which puts it at about
+; one ulp of a single-precision result -- the polynomial is as good as the
+; format, which is the point of the fit.  Each coefficient is annotated with the
+; Taylor value it replaces.  The two leading constants, 1/pi and pi, are the
+; mathematical values, exact to single precision.
+Vu0Sin:
+	add[i].x vf03x,vf04x,vf00x		loi 0.5			; vf03.x = angle ; I = 0.5
+	addai[i].x accx,vf00x,i			loi 0.3183098862	; ACC.x = 0.5 ; I = 1/pi
+	maddi[i].x vf01x,vf04x,i		loi -0.5		; vf01.x = angle/pi + 0.5 ; I = -0.5
+	addai[i].x accx,vf00x,i			loi 0.3183098862	; ACC.x = -0.5 ; I = 1/pi
+	maddi.x vf02x,vf04x,i			fsand vi01,2		; vf02.x = angle/pi - 0.5 ; vi01 = sign flag
+	adda.x accx,vf04x,vf00x			ibeq vi01,vi00,Vu0SinSkip00 ; ACC.x = angle ; non-negative?
+	ftoi0.x vf03x,vf01x			nop			; delay pair: n = trunc(angle/pi + 0.5)
+	ftoi0.x vf03x,vf02x			nop			; negative:   n = trunc(angle/pi - 0.5)
+Vu0SinSkip00:
+	itof0[i].x vf01x,vf03x			loi 3.1415926536	; vf01.x = (float)n ; I = pi
+	msubi.x vf01x,vf01x,i			mtir vi01,vf03x		; r = angle - n*pi ; vi01 = n
+	mul.x vf03x,vf01x,vf01x			iaddiu vi02,vi00,1	; vf03.x = r^2
+	mul.x vf02x,vf01x,vf03x			iand vi01,vi01,vi02	; vf02.x = r^3 ; vi01 = n & 1
+	mulaw.x accx,vf01x,vf00w		nop			; ACC.x = r
+	mul[i].x vf01x,vf02x,vf03x		loi -0.16666657		; r^5 ; I = c1  (Taylor -1/6)
+	maddai.x accx,vf02x,i			nop			; ACC.x += c1*r^3
+	mul[i].x vf02x,vf01x,vf03x		loi 0.0083330255	; r^7 ; I = c2  (Taylor  1/120)
+	maddai.x accx,vf01x,i			nop			; ACC.x += c2*r^5
+	mul[i].x vf01x,vf02x,vf03x		loi -0.00019807414	; r^9 ; I = c3  (Taylor -1/5040)
+	maddai[i].x accx,vf02x,i		loi 0.00000260188	; ACC.x += c3*r^7 ; I = c4 (Taylor 1/362880)
+	maddi.x vf01x,vf01x,i			ibeq vi01,vi00,Vu0SinSkip01 ; vf01.x = ACC.x + c4*r^9 ; n even?
+	nop					nop			; delay pair
+	sub.x vf01x,vf00x,vf01x			nop			; n odd: negate
+Vu0SinSkip01:
+	nop					jr vi15			; back to the caller, or to Vu0Ready
+	nop					nop
+
+; ---------------------------------------------------------------------------
+; Vu0CallCos(vf04.x = angle in radians) -> vf01.x = cos(angle)
+;
+; cos(a) = sin(a + pi/2).  Adds the quarter turn and branches into Vu0Sin, so
+; the whole of the cosine is three pairs.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallCos
+Vu0CallCos:
+	nop					iaddiu vi15,vi00,0
+
+Vu0Cos:
+	nop[i]					loi 1.5707963268	; I = pi/2
+	addi.x vf04x,vf04x,i			b Vu0Sin		; angle += pi/2
+	nop					nop			; delay pair
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackUnit() -- current matrix := identity.
+;
+; Built out of vf00 = (0,0,0,1) alone: vf31 is a straight copy, vf30 is vf00
+; rotated one lane (mr32 maps old Y/Z/W/X onto new X/Y/Z/W, giving (0,0,1,0)),
+; and vf28/vf29 are zeroed and then given their 1 from vf00.w.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackUnit
+Vu0CallMatrixStackUnit:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackUnit:
+	mulx.yzw vf28yzw,vf00yzw,vf00x		move.xyzw vf31xyzw,vf00xyzw	; vf28.yzw = 0 ; vf31 = (0,0,0,1)
+	mulx.xzw vf29xzw,vf00xzw,vf00x		mr32.xyzw vf30xyzw,vf00xyzw	; vf29.xzw = 0 ; vf30 = (0,0,1,0)
+	addw.x vf28x,vf00x,vf00w		jr vi14				; vf28.x = 1
+	addw.y vf29y,vf00y,vf00w		nop				; vf29.y = 1 (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackMul(vf04..vf07 = columns of A) -- current matrix := M * A.
+;
+; Four column products, each one a mulax/madday/maddaz/maddw chain over the
+; resident columns.  The result is built in vf24..vf27 and handed to the shared
+; tail.  Vu0MatrixStackRotV and Vu0MatrixStackFrustum both branch here after
+; building A in vf04..vf07.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackMul
+Vu0CallMatrixStackMul:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackMul:
+	mulax.xyzw accxyzw,vf28xyzw,vf04x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf04y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf04z	nop
+	maddw.xyzw vf24xyzw,vf31xyzw,vf04w	nop			; vf24 = M * A column 0
+	mulax.xyzw accxyzw,vf28xyzw,vf05x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf05y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf05z	nop
+	maddw.xyzw vf25xyzw,vf31xyzw,vf05w	nop			; vf25 = M * A column 1
+	mulax.xyzw accxyzw,vf28xyzw,vf06x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf06y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf06z	nop
+	maddw.xyzw vf26xyzw,vf31xyzw,vf06w	nop			; vf26 = M * A column 2
+	mulax.xyzw accxyzw,vf28xyzw,vf07x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf07y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf07z	b Vu0MatrixStackCopyExit
+	maddw.xyzw vf27xyzw,vf31xyzw,vf07w	nop			; vf27 = M * A column 3 (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackReverse() -- current matrix := transpose(M).
+;
+; A full 4x4 transpose, written as sixteen single-lane moves scheduled two per
+; pair so that the upper and lower slots are both busy.  Note that this is a
+; plain transpose, not an affine inverse: the translation column becomes the
+; bottom row.  Vu0CallMatrixStackInverse is the one that inverts.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackReverse
+Vu0CallMatrixStackReverse:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackReverse:
+	addx.y vf24y,vf00y,vf29x		move.w vf27w,vf31w	; vf24.y = vf29.x ; vf27.w = vf31.w
+	addx.z vf24z,vf00z,vf30x		mr32.z vf27z,vf30z	; vf24.z = vf30.x ; vf27.z = vf30.w
+	addy.z vf25z,vf00z,vf30y		move.x vf24x,vf28x	; vf25.z = vf30.y ; vf24.x = vf28.x
+	muly.w vf25w,vf00w,vf31y		mr32.w vf24w,vf31w	; vf25.w = vf31.y ; vf24.w = vf31.x
+	addz.x vf26x,vf00x,vf28z		move.y vf25y,vf29y	; vf26.x = vf28.z ; vf25.y = vf29.y
+	mulz.w vf26w,vf00w,vf31z		mr32.x vf25x,vf28x	; vf26.w = vf31.z ; vf25.x = vf28.y
+	addw.x vf27x,vf00x,vf28w		move.z vf26z,vf30z	; vf27.x = vf28.w ; vf26.z = vf30.z
+	addw.y vf27y,vf00y,vf29w		mr32.y vf26y,vf29y	; vf27.y = vf29.w ; vf26.y = vf29.z
+
+; Vu0MatrixStackCopyExit -- the shared tail.  Copies the scratch matrix into the
+; resident one and returns.  Reached by fall-through from the transpose and by
+; branch from Mul, Scale, RotX, RotY and RotZ.  The multiply by vf00.w is the
+; VU idiom for a full-width copy in the upper slot, which leaves the lower slot
+; free for the move that copies the next column in the same pair.
+Vu0MatrixStackCopyExit:
+	mulw.xyzw vf28xyzw,vf24xyzw,vf00w	move.xyzw vf29xyzw,vf25xyzw
+	mulw.xyzw vf30xyzw,vf26xyzw,vf00w	jr vi14
+	nop					move.xyzw vf31xyzw,vf27xyzw	; delay pair
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackInverse() -- current matrix := inverse(M).
+;
+; A true inverse of the affine matrix, not a transpose.  vf04..vf06 and
+; vf24..vf26 are two cyclically permuted copies of the 3x3 part, chosen so that
+; the three cofactor rows fall out as three cross products (mula.xyz followed by
+; msub.xyz).  vf03, vf07 and vf27 are those cofactor rows; the determinant is
+; their dot product with the first column, and the reciprocal comes back in Q.
+; The translation column is transformed by the adjugate and negated, and the w
+; lanes are restored to (0,0,0,1) in the lower slots while the divide runs.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackInverse
+Vu0CallMatrixStackInverse:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackInverse:
+	addy.z vf04z,vf00z,vf28y		move.y vf26y,vf28y
+	addz.x vf24x,vf00x,vf30z		mr32.x vf04x,vf29x
+	addz.x vf05x,vf00x,vf29z		move.y vf04y,vf30y
+	addy.z vf26z,vf00z,vf29y		mr32.y vf24y,vf28y
+	addx.y vf06y,vf00y,vf30x		move.z vf24z,vf29z
+	addx.z vf06z,vf00z,vf28x		mr32.y vf05y,vf30y
+	addx.y vf25y,vf00y,vf28x		move.z vf05z,vf28z
+	addx.z vf25z,vf00z,vf29x		mr32.x vf26x,vf30x
+	mula.xyz accxyz,vf04xyz,vf24xyz		move.x vf06x,vf29x
+	msub.xyz vf03xyz,vf05xyz,vf26xyz	move.x vf25x,vf30x	; vf03 = cofactor row 0
+	mula.xyz accxyz,vf05xyz,vf25xyz		nop
+	msub.xyz vf07xyz,vf06xyz,vf24xyz	nop			; vf07 = cofactor row 1
+	mula.xyz accxyz,vf06xyz,vf26xyz		nop
+	msub.xyz vf27xyz,vf04xyz,vf25xyz	nop			; vf27 = cofactor row 2
+	mulax.x accx,vf03x,vf28x		nop
+	madday.x accx,vf07x,vf28y		nop
+	maddz.x vf01x,vf27x,vf28z		nop			; vf01.x = determinant
+	mulax.xyz accxyz,vf03xyz,vf31x		div q,vf00w,vf01x	; Q = 1 / determinant
+	madday.xyz accxyz,vf07xyz,vf31y		mr32.w vf28w,vf00w	; vf28.w = 0
+	maddz.xyz vf02xyz,vf27xyz,vf31z		mr32.w vf29w,vf00w	; vf02 = adjugate * translation ; vf29.w = 0
+	mulq.xyz vf28xyz,vf03xyz,q		waitq
+	mulq.xyz vf29xyz,vf07xyz,q		mr32.w vf30w,vf00w	; vf30.w = 0
+	mulq.xyz vf30xyz,vf27xyz,q		move.w vf31w,vf00w	; vf31.w = 1
+	mulq.xyz vf01xyz,vf02xyz,q		jr vi14
+	sub.xyz vf31xyz,vf00xyz,vf01xyz		nop			; vf31.xyz = -(inverse * translation)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackScale(vf04 = (sx, sy, sz, sw)) -- current matrix := M * S.
+;
+; Post-multiplying by a diagonal matrix is one broadcast multiply per column.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackScale
+Vu0CallMatrixStackScale:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackScale:
+	mulx.xyzw vf24xyzw,vf28xyzw,vf04x	nop
+	muly.xyzw vf25xyzw,vf29xyzw,vf04y	nop
+	mulz.xyzw vf26xyzw,vf30xyzw,vf04z	b Vu0MatrixStackCopyExit
+	mulw.xyzw vf27xyzw,vf31xyzw,vf04w	nop			; delay pair
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackTrans(vf04 = (tx, ty, tz, 1)) -- current matrix := M * T.
+;
+; Post-multiplying by a translation only changes the translation column, so this
+; is the column-0..3 product of Mul with the result written straight into vf31.
+; It does not go through the copy tail.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackTrans
+Vu0CallMatrixStackTrans:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackTrans:
+	mulax.xyzw accxyzw,vf28xyzw,vf04x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf04y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf04z	jr vi14
+	maddw.xyzw vf31xyzw,vf31xyzw,vf04w	nop			; delay pair
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackRotV(vf05 = axis, vf04.x = angle) -- rotate about an axis.
+;
+; Rodrigues' rotation, built as a full matrix in vf04..vf07 and then multiplied
+; into the current matrix by branching into Vu0MatrixStackMul.  s = sin(angle)
+; and c = cos(angle) come from the two internal routines; vf24 = axis*s holds
+; the three off-diagonal sine terms and vf07 = axis*(1-c) times the axis gives
+; the (1-c)*a*a products.  The "mr32.w vfNNw,vf00w" lower slots clear the w
+; lanes of the columns as they are produced, and the last pair sets the fourth
+; column to vf00 = (0,0,0,1).
+;
+; The two "bal vi15" calls target the routine bodies, not the Vu0Call* entries:
+; bal writes vi15 itself, so the entry prologue that clears vi15 must be skipped.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackRotV
+Vu0CallMatrixStackRotV:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackRotV:
+	nop					bal vi15,Vu0Sin		; vf01.x = s
+	nop					nop			; delay pair
+	mulx.xyzw vf24xyzw,vf05xyzw,vf01x	bal vi15,Vu0Cos		; vf24 = axis * s, captured before the call
+	nop					nop			; delay pair; on return vf01.x = c
+	subx.w vf25w,vf00w,vf01x		mr32.w vf07w,vf00w	; vf25.w = 1 - c
+	mulw.xyz vf07xyz,vf05xyz,vf25w		nop			; vf07 = axis * (1 - c)
+	mulx.xyzw vf02xyzw,vf07xyzw,vf05x	nop			; vf02 = (1-c) * a.x * axis
+	muly.xyzw vf03xyzw,vf07xyzw,vf05y	nop			; vf03 = (1-c) * a.y * axis
+	mulz.xyzw vf26xyzw,vf07xyzw,vf05z	mr32.w vf04w,vf00w	; vf26 = (1-c) * a.z * axis
+	addx.x vf04x,vf02x,vf01x		nop			; column 0
+	addz.y vf04y,vf02y,vf24z		nop
+	suby.z vf04z,vf02z,vf24y		mr32.w vf05w,vf00w
+	subz.x vf05x,vf03x,vf24z		nop			; column 1
+	addx.y vf05y,vf03y,vf01x		nop
+	addx.z vf05z,vf03z,vf24x		mr32.w vf06w,vf00w
+	addy.x vf06x,vf26x,vf24y		nop			; column 2
+	subx.y vf06y,vf26y,vf24x		b Vu0MatrixStackMul
+	addx.z vf06z,vf26z,vf01x		move.xyzw vf07xyzw,vf00xyzw ; column 3 = (0,0,0,1) (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackRotX(vf04.x = angle) -- current matrix := M * Rx.
+;
+; The three axis-aligned rotations share one shape: take s and c, copy the two
+; columns the rotation does not touch straight across, and build the other two
+; as c*column +/- s*column.  Only the sign pattern and the column pair differ.
+; Rx mixes columns 1 and 2 and leaves columns 0 and 3.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackRotX
+Vu0CallMatrixStackRotX:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackRotX:
+	nop					bal vi15,Vu0Sin		; vf01.x = s
+	nop					nop			; delay pair
+	addx.x vf05x,vf00x,vf01x		bal vi15,Vu0Cos		; vf05.x = s, captured before the call
+	nop					nop			; delay pair; on return vf01.x = c
+	mulax.xyzw accxyzw,vf29xyzw,vf01x	move.xyzw vf24xyzw,vf28xyzw	; vf24 = column 0 unchanged
+	maddx.xyzw vf25xyzw,vf30xyzw,vf05x	move.xyzw vf27xyzw,vf31xyzw	; vf25 = c*col1 + s*col2 ; vf27 = col3
+	mulax.xyzw accxyzw,vf30xyzw,vf01x	b Vu0MatrixStackCopyExit
+	msubx.xyzw vf26xyzw,vf29xyzw,vf05x	nop				; vf26 = c*col2 - s*col1 (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackRotY(vf04.x = angle) -- current matrix := M * Ry.
+; Mixes columns 0 and 2, with the sign pattern mirrored against Rx.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackRotY
+Vu0CallMatrixStackRotY:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackRotY:
+	nop					bal vi15,Vu0Sin		; vf01.x = s
+	nop					nop			; delay pair
+	addx.x vf05x,vf00x,vf01x		bal vi15,Vu0Cos		; vf05.x = s, captured before the call
+	nop					nop			; delay pair; on return vf01.x = c
+	mulax.xyzw accxyzw,vf28xyzw,vf01x	move.xyzw vf25xyzw,vf29xyzw	; vf25 = column 1 unchanged
+	msubx.xyzw vf24xyzw,vf30xyzw,vf05x	move.xyzw vf27xyzw,vf31xyzw	; vf24 = c*col0 - s*col2 ; vf27 = col3
+	mulax.xyzw accxyzw,vf30xyzw,vf01x	b Vu0MatrixStackCopyExit
+	maddx.xyzw vf26xyzw,vf28xyzw,vf05x	nop				; vf26 = c*col2 + s*col0 (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackRotZ(vf04.x = angle) -- current matrix := M * Rz.
+; Mixes columns 0 and 1.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackRotZ
+Vu0CallMatrixStackRotZ:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackRotZ:
+	nop					bal vi15,Vu0Sin		; vf01.x = s
+	nop					nop			; delay pair
+	addx.x vf05x,vf00x,vf01x		bal vi15,Vu0Cos		; vf05.x = s, captured before the call
+	nop					nop			; delay pair; on return vf01.x = c
+	mulax.xyzw accxyzw,vf28xyzw,vf01x	move.xyzw vf26xyzw,vf30xyzw	; vf26 = column 2 unchanged
+	maddx.xyzw vf24xyzw,vf29xyzw,vf05x	move.xyzw vf27xyzw,vf31xyzw	; vf24 = c*col0 + s*col1 ; vf27 = col3
+	mulax.xyzw accxyzw,vf29xyzw,vf01x	b Vu0MatrixStackCopyExit
+	msubx.xyzw vf25xyzw,vf28xyzw,vf05x	nop				; vf25 = c*col1 - s*col0 (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackFrustum() -- current matrix := M * frustum.
+;
+; The six planes do not come in registers: the EE writes them into VU0 data
+; memory before the call, at quadwords 0x80 and 0x81, which is EE address
+; 0x11004800/0x11004810.  vf08 = (left, bottom, near, 0) and
+; vf09 = (right, top, far, 0).
+;
+; The matrix built in vf04..vf07 is the OpenGL glFrustum matrix:
+;   vf04.x = 2n/(r-l)   vf06.x = (r+l)/(r-l)
+;   vf05.y = 2n/(t-b)   vf06.y = (t+b)/(t-b)
+;                       vf06.z = -(f+n)/(f-n)   vf07.z = -2fn/(f-n)
+;                       vf06.w = -1
+; vf04, vf05 and vf07 start zeroed by "mulx.xyzw vfNN, vf00, vf00x"; vf06 starts
+; with only its w lane set to 1, which the later "sub.zw" turns into the -1.
+; The three reciprocals are issued as three separate divides so each one can
+; overlap the multiply that consumes the previous result.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackFrustum
+Vu0CallMatrixStackFrustum:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackFrustum:
+	mulx.xyzw vf04xyzw,vf00xyzw,vf00x	iaddiu vi01,vi00,0x80	; vf04 = 0 ; vi01 = quadword 0x80
+	mulx.xyzw vf05xyzw,vf00xyzw,vf00x	lq.xyzw vf08xyzw,0(vi01); vf05 = 0 ; vf08 = (l, b, n, 0)
+	mulx.xyzw vf07xyzw,vf00xyzw,vf00x	lq.xyzw vf09xyzw,1(vi01); vf07 = 0 ; vf09 = (r, t, f, 0)
+	sub.xyz vf11xyz,vf09xyz,vf08xyz		move.w vf06w,vf00w	; vf11 = (r-l, t-b, f-n) ; vf06.w = 1
+	add.xyz vf10xyz,vf08xyz,vf09xyz		div q,vf00w,vf11x	; vf10 = (r+l, t+b, f+n) ; Q = 1/(r-l)
+	addz.xyz vf01xyz,vf00xyz,vf08z		nop			; vf01 = (n, n, n)
+	add.xyz vf12xyz,vf01xyz,vf01xyz		nop			; vf12 = (2n, 2n, 2n)
+	addq.x vf13x,vf00x,q			waitq			; vf13.x = 1/(r-l)
+	mul.x vf04x,vf12x,vf13x			div q,vf00w,vf11y	; vf04.x = 2n/(r-l) ; Q = 1/(t-b)
+	addq.y vf13y,vf00y,q			waitq			; vf13.y = 1/(t-b)
+	mul.y vf05y,vf12y,vf13y			div q,vf00w,vf11z	; vf05.y = 2n/(t-b) ; Q = 1/(f-n)
+	addq.z vf13z,vf00z,q			waitq			; vf13.z = 1/(f-n)
+	mul.xyz vf06xyz,vf10xyz,vf13xyz		nop			; vf06 = ((r+l)/(r-l), (t+b)/(t-b), (f+n)/(f-n))
+	sub.zw vf06zw,vf04zw,vf06zw		nop			; vf06.z = -(f+n)/(f-n) ; vf06.w = -1
+	mul.z vf02z,vf12z,vf09z			nop			; vf02.z = 2n*f
+	mul.z vf03z,vf02z,vf13z			b Vu0MatrixStackMul	; vf03.z = 2fn/(f-n)
+	sub.z vf07z,vf04z,vf03z			nop			; vf07.z = -2fn/(f-n) (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackPushUnit() -- push the current matrix, then load identity.
+;
+; The push and the mask are the same four stores, the same increment and the
+; same "iand vi13,vi13,vi01" as Vu0MatrixStackPush; only the exit differs.  The
+; mask sits in the branch's delay pair, so it costs nothing.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackPushUnit
+Vu0CallMatrixStackPushUnit:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackPushUnit:
+	nop					sq.xyzw vf28xyzw,0(vi13)
+	nop					sq.xyzw vf29xyzw,1(vi13)
+	nop					sq.xyzw vf30xyzw,2(vi13)
+	nop					sq.xyzw vf31xyzw,3(vi13)
+	nop					iaddiu vi13,vi13,4	; one matrix = four quadwords
+	nop					iaddiu vi01,vi00,0x7c
+	nop					b Vu0MatrixStackUnit
+	nop					iand vi13,vi13,vi01	; wrap to 32 entries (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackPush() -- push the current matrix and return.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackPush
+Vu0CallMatrixStackPush:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackPush:
+	nop					sq.xyzw vf28xyzw,0(vi13)
+	nop					sq.xyzw vf29xyzw,1(vi13)
+	nop					sq.xyzw vf30xyzw,2(vi13)
+	nop					sq.xyzw vf31xyzw,3(vi13)
+	nop					iaddiu vi13,vi13,4
+	nop					iaddiu vi01,vi00,0x7c
+	nop					jr vi14
+	nop					iand vi13,vi13,vi01	; wrap to 32 entries (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackPop(vi01 = count) -- pop COUNT matrices and load the top.
+;
+; vi01 is an input written by the EE with ctc2 before the call: the number of
+; matrices to drop.  Two integer adds turn it into a quadword count (count*4)
+; because the VU has no integer multiply; the same 0x7C mask wraps the result.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackPop
+Vu0CallMatrixStackPop:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackPop:
+	nop					iadd vi02,vi01,vi01	; vi02 = count * 2
+	nop					iadd vi01,vi02,vi02	; vi01 = count * 4 quadwords
+	nop					isub vi13,vi13,vi01
+	nop					iaddiu vi01,vi00,0x7c
+	nop					iand vi13,vi13,vi01	; wrap to 32 entries
+	nop					lq.xyzw vf28xyzw,0(vi13)
+	nop					lq.xyzw vf29xyzw,1(vi13)
+	nop					lq.xyzw vf30xyzw,2(vi13)
+	nop					jr vi14
+	nop					lq.xyzw vf31xyzw,3(vi13); delay pair
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackMulVector(vf04 = v) -> vf05 = M * v.
+; The single column product of Vu0MatrixStackMul, written into vf05.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackMulVector
+Vu0CallMatrixStackMulVector:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackMulVector:
+	mulax.xyzw accxyzw,vf28xyzw,vf04x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf04y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf04z	jr vi14
+	maddw.xyzw vf05xyzw,vf31xyzw,vf04w	nop			; delay pair
+
+; ---------------------------------------------------------------------------
+; Vu0CallMatrixStackRTPS(vf04 = point, vf05 = scale, vf06 = offset)
+;       -> vf07 = screen position.
+;
+; Transform, perspective divide, viewport scale and offset, and convert: x and y
+; leave as 12.4 fixed point (ftoi4), which is the GS screen-coordinate format,
+; z leaves as a plain integer (ftoi0), and w keeps 1/w in floating point for
+; perspective-correct interpolation.  The EE reads vf07 back with sqc2 after a
+; cfc2 sync.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallMatrixStackRTPS
+Vu0CallMatrixStackRTPS:
+	nop					iaddiu vi14,vi00,0
+
+Vu0MatrixStackRTPS:
+	mulax.xyzw accxyzw,vf28xyzw,vf04x	nop
+	madday.xyzw accxyzw,vf29xyzw,vf04y	nop
+	maddaz.xyzw accxyzw,vf30xyzw,vf04z	nop
+	maddw.xyzw vf01xyzw,vf31xyzw,vf04w	nop			; vf01 = M * point
+	nop					div q,vf00w,vf01w	; Q = 1/w
+	mulq.xyzw vf02xyzw,vf01xyzw,q		waitq			; perspective divide
+	mul.xyz vf03xyz,vf02xyz,vf05xyz		nop			; * scale
+	add.xyz vf01xyz,vf03xyz,vf06xyz		nop			; + offset
+	ftoi4.xy vf07xy,vf01xy			nop			; x, y as 12.4 fixed point
+	ftoi0.z vf07z,vf01z			jr vi14			; z as an integer
+	mulq.w vf07w,vf00w,q			nop			; w = 1/w (delay pair)
+
+; ---------------------------------------------------------------------------
+; Vu0CallLightCalcMatrix(vf04..vf10 = seven vectors)
+;       -> vf20..vf23 and vf24..vf27 = two matrices.
+;
+; The EE passes a block of seven quadwords in vf04..vf10 and reads eight back
+; from vf20..vf27; the current matrix is not touched.  vf24..vf27 are the four
+; columns vf05, vf07, vf09, vf04 with w = (0,0,0,1); vf20..vf23 are the
+; TRANSPOSE of the three columns vf06, vf08, vf10, also with w = (0,0,0,1) --
+; every lane of vf20/vf21/vf22 is gathered from the matching lane of the three
+; source vectors, which is why this block is written as single-lane moves rather
+; than column copies.
+;
+; This is the last entry and has no Vu0Call/body split and no "jr vi14": it is
+; entered directly at Vu0CallLightCalcMatrix and ends with "b Vu0Ready", which
+; is the same terminator every other entry reaches through vi14.
+;
+; What the seven inputs and the two outputs MEAN to the lighting code is not
+; established here.  The EE caller only moves the block in and out, so the
+; naming of the individual vectors would have to come from its callers; it is
+; left as analysis rather than guessed at.
+; ---------------------------------------------------------------------------
+	.globl	Vu0CallLightCalcMatrix
+Vu0CallLightCalcMatrix:
+	add.xyz vf24xyz,vf05xyz,vf00xyz		mr32.w vf25w,vf00w	; vf24.xyz = vf05 ; vf25.w = 0
+	add.xyz vf25xyz,vf07xyz,vf00xyz		mr32.w vf26w,vf00w	; vf25.xyz = vf07 ; vf26.w = 0
+	add.xyz vf26xyz,vf09xyz,vf00xyz		move.w vf27w,vf00w	; vf26.xyz = vf09 ; vf27.w = 1
+	add.xyz vf27xyz,vf04xyz,vf00xyz		mr32.w vf24w,vf00w	; vf27.xyz = vf04 ; vf24.w = 0
+	addx.y vf20y,vf00y,vf08x		move.z vf22z,vf10z	; vf20.y = vf08.x ; vf22.z = vf10.z
+	addx.z vf20z,vf00z,vf10x		mr32.y vf22y,vf08y	; vf20.z = vf10.x ; vf22.y = vf08.z
+	addy.z vf21z,vf00z,vf10y		move.x vf20x,vf06x	; vf21.z = vf10.y ; vf20.x = vf06.x
+	sub.w vf21w,vf00w,vf00w			mr32.w vf20w,vf00w	; vf21.w = 0 ; vf20.w = 0
+	addz.x vf22x,vf00x,vf06z		move.y vf21y,vf08y	; vf22.x = vf06.z ; vf21.y = vf08.y
+	mulw.xyzw vf23xyzw,vf00xyzw,vf00w	b Vu0Ready		; vf23 = (0,0,0,1)
+	sub.w vf22w,vf00w,vf00w			mr32.x vf21x,vf06x	; vf22.w = 0 ; vf21.x = vf06.y (delay pair)
+
+	.endmpg
+	.enddmadata
+
+; The chain ends here: a DMAend tag with no data, and the two VIF slots left as
+; NOPs.  PacketBottomVu0MicroCode is what PacketSizeVu0MicroCode measures to.
+	dmaend
+	.align	4
+PacketBottomVu0MicroCode:

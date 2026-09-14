@@ -1,0 +1,1109 @@
+{
+ "text": {
+  "ov12/nisimori_test": [
+   "0x00a00000",
+   "0x00a00088"
+  ],
+  "ov12/rg_main": [
+   "0x00a00088",
+   "0x00a01ff8"
+  ],
+  "ov12/rg_char": [
+   "0x00a01ff8",
+   "0x00a024f8"
+  ],
+  "ov12/rg_get_frame_time": [
+   "0x00a024f8",
+   "0x00a02510"
+  ],
+  "ov12/rg_robot": [
+   "0x00a02510",
+   "0x00a09480"
+  ],
+  "ov12/rg_robot_control": [
+   "0x00a09480",
+   "0x00a09ba0"
+  ],
+  "ov12/rg_enemy": [
+   "0x00a09ba0",
+   "0x00a0cbc8"
+  ],
+  "ov12/rg_robot_subcon": [
+   "0x00a0cbc8",
+   "0x00a0d178"
+  ],
+  "ov12/rg_robot_spec": [
+   "0x00a0d178",
+   "0x00a0db58"
+  ],
+  "ov12/rg_robot_db": [
+   "0x00a0db58",
+   "0x00a0df70"
+  ],
+  "ov12/rg_robot_effect": [
+   "0x00a0df70",
+   "0x00a0ece8"
+  ],
+  "ov12/rg_shot_thread": [
+   "0x00a0ece8",
+   "0x00a0f340"
+  ],
+  "ov12/rg_debug_flags": [
+   "0x00a0f340",
+   "0x00a0f490"
+  ],
+  "ov12/rg_motion_info_db": [
+   "0x00a0f490",
+   "0x00a10318"
+  ],
+  "ov12/rg_hissatu": [
+   "0x00a10318",
+   "0x00a10618"
+  ],
+  "ov12/rg_player": [
+   "0x00a10618",
+   "0x00a10f20"
+  ],
+  "ov12/rg_camera": [
+   "0x00a10f20",
+   "0x00a129c8"
+  ],
+  "ov12/rg_bgobj": [
+   "0x00a129c8",
+   "0x00a13200"
+  ],
+  "ov12/assert_prog": [
+   "0x00a13200",
+   "0x00a13260"
+  ],
+  "ov12/rg_heap": [
+   "0x00a13260",
+   "0x00a140a0"
+  ],
+  "ov12/rg_singleton_id": [
+   "0x00a140a0",
+   "0x00a143e0"
+  ],
+  "ov12/rg_charmgr": [
+   "0x00a143e0",
+   "0x00a14d38"
+  ],
+  "ov12/rg_simple_db": [
+   "0x00a14d38",
+   "0x00a15600"
+  ],
+  "ov12/rg_shot": [
+   "0x00a15600",
+   "0x00a17c90"
+  ],
+  "ov12/rg_shot_effect": [
+   "0x00a17c90",
+   "0x00a18668"
+  ],
+  "ov12/rg_shot_db": [
+   "0x00a18668",
+   "0x00a19388"
+  ],
+  "ov12/rg_weapon": [
+   "0x00a19388",
+   "0x00a1c7d8"
+  ],
+  "ov12/rg_weapon_db": [
+   "0x00a1c7d8",
+   "0x00a1e618"
+  ],
+  "ov12/rg_drop_weapon": [
+   "0x00a1e618",
+   "0x00a1e880"
+  ],
+  "ov12/rg_shotmot_control": [
+   "0x00a1e880",
+   "0x00a1eea0"
+  ],
+  "ov12/rg_equip_type": [
+   "0x00a1eea0",
+   "0x00a1f7e0"
+  ],
+  "ov12/rg_dull_flag": [
+   "0x00a1f7e0",
+   "0x00a1fa30"
+  ],
+  "ov12/create_rg": [
+   "0x00a1fa30",
+   "0x00a1fbd8"
+  ],
+  "ov12/rg_effect_env": [
+   "0x00a1fbd8",
+   "0x00a20040"
+  ],
+  "ov12/rg_battle_common_data": [
+   "0x00a20040",
+   "0x00a20718"
+  ],
+  "ov12/rg_particle_effect": [
+   "0x00a20718",
+   "0x00a21c58"
+  ],
+  "ov12/rg_read_text": [
+   "0x00a21c58",
+   "0x00a22668"
+  ],
+  "ov12/rg_text_info": [
+   "0x00a22668",
+   "0x00a22a78"
+  ],
+  "ov12/rg_disp_gameinfo": [
+   "0x00a22a78",
+   "0x00a239d0"
+  ],
+  "ov12/rg_gauge": [
+   "0x00a239d0",
+   "0x00a23e48"
+  ],
+  "ov12/rg_gauge_disp": [
+   "0x00a23e48",
+   "0x00a245d8"
+  ],
+  "ov12/rg_disp_wpn1p": [
+   "0x00a245d8",
+   "0x00a251a8"
+  ],
+  "ov12/rg_disp_wpn2p": [
+   "0x00a251a8",
+   "0x00a25d30"
+  ],
+  "ov12/rg_disp_life": [
+   "0x00a25d30",
+   "0x00a26a00"
+  ],
+  "ov12/rg_disp": [
+   "0x00a26a00",
+   "0x00a26c78"
+  ],
+  "ov12/rg_draw": [
+   "0x00a26c78",
+   "0x00a285e0"
+  ],
+  "ov12/rg_light": [
+   "0x00a285e0",
+   "0x00a28858"
+  ],
+  "ov12/rg_battlemgr": [
+   "0x00a28858",
+   "0x00a2ab70"
+  ],
+  "ov12/rg_handler": [
+   "0x00a2ab70",
+   "0x00a2af20"
+  ],
+  "ov12/rg_battle_init": [
+   "0x00a2af20",
+   "0x00a2b5e8"
+  ],
+  "ov12/rg_vector": [
+   "0x00a2b5e8",
+   "0x00a2be48"
+  ],
+  "ov12/rg_geom": [
+   "0x00a2be48",
+   "0x00a2c288"
+  ],
+  "ov12/rg_geom_point": [
+   "0x00a2c288",
+   "0x00a2ca28"
+  ],
+  "ov12/rg_geom_ball": [
+   "0x00a2ca28",
+   "0x00a2d290"
+  ],
+  "ov12/rg_geom_robot": [
+   "0x00a2d290",
+   "0x00a2d900"
+  ],
+  "ov12/rg_geom_poly": [
+   "0x00a2d900",
+   "0x00a2dd58"
+  ],
+  "ov12/rg_geom_tray": [
+   "0x00a2dd58",
+   "0x00a2e698"
+  ],
+  "ov12/rg_geom_pillar": [
+   "0x00a2e698",
+   "0x00a2f650"
+  ],
+  "ov12/rg_geom_collision": [
+   "0x00a2f650",
+   "0x00a303a8"
+  ],
+  "ov12/rg_geom_group": [
+   "0x00a303a8",
+   "0x00a31150"
+  ],
+  "ov12/rg_game_collision": [
+   "0x00a31150",
+   "0x00a31768"
+  ],
+  "ov12/rg_error": [
+   "0x00a31768",
+   "0x00a31970"
+  ],
+  "ov12/rg_colidata": [
+   "0x00a31970",
+   "0x00a32688"
+  ],
+  "ov12/rg_linkdata": [
+   "0x00a32688",
+   "0x00a32c48"
+  ],
+  "ov12/rg_bg_builder": [
+   "0x00a32c48",
+   "0x00a33bf8"
+  ],
+  "ov12/rg_filesys": [
+   "0x00a33bf8",
+   "0x00a34c68"
+  ],
+  "ov12/rg_actor_motid": [
+   "0x00a34c68",
+   "0x00a368e8"
+  ],
+  "ov12/rg_actor_charid": [
+   "0x00a368e8",
+   "0x00a36de8"
+  ],
+  "ov12/rg_matrices_effector": [
+   "0x00a36de8",
+   "0x00a380d8"
+  ],
+  "ov12/rg_select_agws": [
+   "0x00a380d8",
+   "0x00a3c6a0"
+  ],
+  "ov12/rg_select_subcon": [
+   "0x00a3c6a0",
+   "0x00a3cd10"
+  ],
+  "ov12/rg_select_robot": [
+   "0x00a3cd10",
+   "0x00a3e518"
+  ],
+  "ov12/rg_font": [
+   "0x00a3e518",
+   "0x00a3ea10"
+  ],
+  "ov12/rg_bxx": [
+   "0x00a3ea10",
+   "0x00a3f230"
+  ],
+  "ov12/rg_title": [
+   "0x00a3f230",
+   "0x00a40008"
+  ],
+  "ov12/rg_piclist": [
+   "0x00a40008",
+   "0x00a420e0"
+  ],
+  "ov12/rg_help": [
+   "0x00a420e0",
+   "0x00a434b8"
+  ],
+  "ov12/rg_announce": [
+   "0x00a434b8",
+   "0x00a44f08"
+  ],
+  "ov12/rg_dispmodel": [
+   "0x00a44f08",
+   "0x00a45120"
+  ],
+  "ov12/xrg_dispmodel_impl": [
+   "0x00a45120",
+   "0x00a454f8"
+  ],
+  "ov12/xrg_actor": [
+   "0x00a454f8",
+   "0x00a48548"
+  ],
+  "ov12/xrg_bxx_ps2": [
+   "0x00a48548",
+   "0x00a487c0"
+  ],
+  "ov12/xrg_cdread": [
+   "0x00a487c0",
+   "0x00a48918"
+  ],
+  "ov12/xrg_filesys_mode": [
+   "0x00a48918",
+   "0x00a48c08"
+  ],
+  "ov12/xrg_particle": [
+   "0x00a48c08",
+   "0x00a49f70"
+  ],
+  "ov12/init_xrg_input": [
+   "0x00a49f70",
+   "0x00a4a620"
+  ],
+  "ov12/xrg_paint2d": [
+   "0x00a4a620",
+   "0x00a4c840"
+  ],
+  "ov12/xrg_sysinit": [
+   "0x00a4c840",
+   "0x00a4caf8"
+  ],
+  "ov12/xrg_rand_int": [
+   "0x00a4caf8",
+   "0x00a4e1e8"
+  ],
+  "ov12/xrg_exit": [
+   "0x00a4e1e8",
+   "0x00a4e1f0"
+  ],
+  "ov12/xrg_v_log": [
+   "0x00a4e1f0",
+   "0x00a4e340"
+  ],
+  "ov12/xrg_hostfile": [
+   "0x00a4e340",
+   "0x00a4e488"
+  ],
+  "ov12/xrg_pad": [
+   "0x00a4e488",
+   "0x00a4e780"
+  ],
+  "ov12/xrg_main_font": [
+   "0x00a4e780",
+   "0x00a4e8f0"
+  ],
+  "ov12/xrg_sound": [
+   "0x00a4e8f0",
+   "0x00a4f280"
+  ],
+  "ov12/xrg_event": [
+   "0x00a4f280",
+   "0x00a4f4c4"
+  ]
+ },
+ "families": {
+  ".data": [
+   [
+    "ov12/rg_main",
+    "0x00a4f4c4",
+    "0x00a4f520"
+   ],
+   [
+    "ov12/rg_robot",
+    "0x00a4f520",
+    "0x00a4f59c"
+   ],
+   [
+    "ov12/rg_enemy",
+    "0x00a4f59c",
+    "0x00a4f5a0"
+   ],
+   [
+    "ov12/rg_robot_subcon",
+    "0x00a4f5a0",
+    "0x00a4f5e0"
+   ],
+   [
+    "ov12/rg_robot_spec",
+    "0x00a4f5e0",
+    "0x00a4f5e8"
+   ],
+   [
+    "ov12/rg_camera",
+    "0x00a4f5e8",
+    "0x00a4f638"
+   ],
+   [
+    "ov12/rg_bgobj",
+    "0x00a4f638",
+    "0x00a4f63c"
+   ],
+   [
+    "ov12/rg_heap",
+    "0x00a4f63c",
+    "0x00a4f648"
+   ],
+   [
+    "ov12/rg_weapon_db",
+    "0x00a4f648",
+    "0x00a4f668"
+   ],
+   [
+    "ov12/rg_equip_type",
+    "0x00a4f668",
+    "0x00a4f6a8"
+   ],
+   [
+    "ov12/rg_battle_common_data",
+    "0x00a4f6a8",
+    "0x00a4faf0"
+   ],
+   [
+    "ov12/rg_disp_wpn1p",
+    "0x00a4faf0",
+    "0x00a4fb18"
+   ],
+   [
+    "ov12/rg_disp_wpn2p",
+    "0x00a4fb18",
+    "0x00a4fb30"
+   ],
+   [
+    "ov12/rg_disp_life",
+    "0x00a4fb30",
+    "0x00a4fc00"
+   ],
+   [
+    "ov12/rg_disp",
+    "0x00a4fc00",
+    "0x00a50080"
+   ],
+   [
+    "ov12/rg_draw",
+    "0x00a50080",
+    "0x00a50090"
+   ],
+   [
+    "ov12/rg_geom_collision",
+    "0x00a50090",
+    "0x00a50120"
+   ],
+   [
+    "ov12/rg_select_agws",
+    "0x00a50120",
+    "0x00a50470"
+   ],
+   [
+    "ov12/rg_select_subcon",
+    "0x00a50470",
+    "0x00a50480"
+   ],
+   [
+    "ov12/rg_select_robot",
+    "0x00a50480",
+    "0x00a504f0"
+   ],
+   [
+    "ov12/rg_title",
+    "0x00a504f0",
+    "0x00a50508"
+   ],
+   [
+    "ov12/rg_piclist",
+    "0x00a50508",
+    "0x00a50510"
+   ],
+   [
+    "ov12/rg_help",
+    "0x00a50510",
+    "0x00a50860"
+   ],
+   [
+    "ov12/rg_announce",
+    "0x00a50860",
+    "0x00a508a0"
+   ],
+   [
+    "ov12/xrg_dispmodel_impl",
+    "0x00a508a0",
+    "0x00a50920"
+   ],
+   [
+    "ov12/xrg_actor",
+    "0x00a50920",
+    "0x00a511d0"
+   ],
+   [
+    "ov12/xrg_filesys_mode",
+    "0x00a511d0",
+    "0x00a511f4"
+   ],
+   [
+    "ov12/xrg_particle",
+    "0x00a511f4",
+    "0x00a51200"
+   ],
+   [
+    "ov12/xrg_paint2d",
+    "0x00a51200",
+    "0x00a51230"
+   ],
+   [
+    "ov12/xrg_sysinit",
+    "0x00a51230",
+    "0x00a51290"
+   ],
+   [
+    "ov12/xrg_rand_int",
+    "0x00a51290",
+    "0x00a512d0"
+   ],
+   [
+    "ov12/xrg_pad",
+    "0x00a512d0",
+    "0x00a512d4"
+   ],
+   [
+    "ov12/xrg_sound",
+    "0x00a512d4",
+    "0x00a512e0"
+   ],
+   [
+    "ov12/xrg_event",
+    "0x00a512e0",
+    "0x00a51430"
+   ]
+  ],
+  ".rodata": [
+   [
+    "ov12/nisimori_test",
+    "0x00a51430",
+    "0x00a51440"
+   ],
+   [
+    "ov12/rg_main",
+    "0x00a51440",
+    "0x00a51808"
+   ],
+   [
+    "ov12/rg_char",
+    "0x00a51808",
+    "0x00a51830"
+   ],
+   [
+    "ov12/rg_robot",
+    "0x00a51830",
+    "0x00a51c20"
+   ],
+   [
+    "ov12/rg_robot_control",
+    "0x00a51c20",
+    "0x00a51c60"
+   ],
+   [
+    "ov12/rg_enemy",
+    "0x00a51c60",
+    "0x00a51e08"
+   ],
+   [
+    "ov12/rg_robot_subcon",
+    "0x00a51e08",
+    "0x00a51e68"
+   ],
+   [
+    "ov12/rg_robot_spec",
+    "0x00a51e68",
+    "0x00a52280"
+   ],
+   [
+    "ov12/rg_robot_db",
+    "0x00a52280",
+    "0x00a52358"
+   ],
+   [
+    "ov12/rg_robot_effect",
+    "0x00a52358",
+    "0x00a523f0"
+   ],
+   [
+    "ov12/rg_shot_thread",
+    "0x00a523f0",
+    "0x00a52438"
+   ],
+   [
+    "ov12/rg_debug_flags",
+    "0x00a52438",
+    "0x00a52460"
+   ],
+   [
+    "ov12/rg_motion_info_db",
+    "0x00a52460",
+    "0x00a52660"
+   ],
+   [
+    "ov12/rg_hissatu",
+    "0x00a52660",
+    "0x00a526f8"
+   ],
+   [
+    "ov12/rg_player",
+    "0x00a526f8",
+    "0x00a52750"
+   ],
+   [
+    "ov12/rg_camera",
+    "0x00a52750",
+    "0x00a529b0"
+   ],
+   [
+    "ov12/rg_bgobj",
+    "0x00a529b0",
+    "0x00a529e8"
+   ],
+   [
+    "ov12/assert_prog",
+    "0x00a529e8",
+    "0x00a52a40"
+   ],
+   [
+    "ov12/rg_heap",
+    "0x00a52a40",
+    "0x00a53008"
+   ],
+   [
+    "ov12/rg_singleton_id",
+    "0x00a53008",
+    "0x00a53088"
+   ],
+   [
+    "ov12/rg_charmgr",
+    "0x00a53088",
+    "0x00a531f0"
+   ],
+   [
+    "ov12/rg_simple_db",
+    "0x00a531f0",
+    "0x00a532e8"
+   ],
+   [
+    "ov12/rg_shot",
+    "0x00a532e8",
+    "0x00a53418"
+   ],
+   [
+    "ov12/rg_shot_effect",
+    "0x00a53418",
+    "0x00a53450"
+   ],
+   [
+    "ov12/rg_shot_db",
+    "0x00a53450",
+    "0x00a53648"
+   ],
+   [
+    "ov12/rg_weapon",
+    "0x00a53648",
+    "0x00a53818"
+   ],
+   [
+    "ov12/rg_weapon_db",
+    "0x00a53818",
+    "0x00a53cf0"
+   ],
+   [
+    "ov12/rg_drop_weapon",
+    "0x00a53cf0",
+    "0x00a53d18"
+   ],
+   [
+    "ov12/rg_shotmot_control",
+    "0x00a53d18",
+    "0x00a53e10"
+   ],
+   [
+    "ov12/rg_equip_type",
+    "0x00a53e10",
+    "0x00a54070"
+   ],
+   [
+    "ov12/rg_dull_flag",
+    "0x00a54070",
+    "0x00a540c8"
+   ],
+   [
+    "ov12/rg_effect_env",
+    "0x00a540c8",
+    "0x00a54158"
+   ],
+   [
+    "ov12/rg_battle_common_data",
+    "0x00a54158",
+    "0x00a542c8"
+   ],
+   [
+    "ov12/rg_particle_effect",
+    "0x00a542c8",
+    "0x00a543a8"
+   ],
+   [
+    "ov12/rg_read_text",
+    "0x00a543a8",
+    "0x00a54480"
+   ],
+   [
+    "ov12/rg_text_info",
+    "0x00a54480",
+    "0x00a54560"
+   ],
+   [
+    "ov12/rg_disp_gameinfo",
+    "0x00a54560",
+    "0x00a54608"
+   ],
+   [
+    "ov12/rg_gauge",
+    "0x00a54608",
+    "0x00a54640"
+   ],
+   [
+    "ov12/rg_gauge_disp",
+    "0x00a54640",
+    "0x00a54678"
+   ],
+   [
+    "ov12/rg_disp_wpn1p",
+    "0x00a54678",
+    "0x00a54770"
+   ],
+   [
+    "ov12/rg_disp_wpn2p",
+    "0x00a54770",
+    "0x00a54810"
+   ],
+   [
+    "ov12/rg_disp_life",
+    "0x00a54810",
+    "0x00a54970"
+   ],
+   [
+    "ov12/rg_disp",
+    "0x00a54970",
+    "0x00a54ac0"
+   ],
+   [
+    "ov12/rg_draw",
+    "0x00a54ac0",
+    "0x00a54c68"
+   ],
+   [
+    "ov12/rg_light",
+    "0x00a54c68",
+    "0x00a54ca0"
+   ],
+   [
+    "ov12/rg_battlemgr",
+    "0x00a54ca0",
+    "0x00a54e18"
+   ],
+   [
+    "ov12/rg_battle_init",
+    "0x00a54e18",
+    "0x00a54f40"
+   ],
+   [
+    "ov12/rg_vector",
+    "0x00a54f40",
+    "0x00a550c8"
+   ],
+   [
+    "ov12/rg_geom",
+    "0x00a550c8",
+    "0x00a550f0"
+   ],
+   [
+    "ov12/rg_geom_point",
+    "0x00a550f0",
+    "0x00a55148"
+   ],
+   [
+    "ov12/rg_geom_ball",
+    "0x00a55148",
+    "0x00a55170"
+   ],
+   [
+    "ov12/rg_geom_robot",
+    "0x00a55170",
+    "0x00a551a8"
+   ],
+   [
+    "ov12/rg_geom_poly",
+    "0x00a551a8",
+    "0x00a55218"
+   ],
+   [
+    "ov12/rg_geom_tray",
+    "0x00a55218",
+    "0x00a55260"
+   ],
+   [
+    "ov12/rg_geom_pillar",
+    "0x00a55260",
+    "0x00a552e8"
+   ],
+   [
+    "ov12/rg_geom_collision",
+    "0x00a552e8",
+    "0x00a55338"
+   ],
+   [
+    "ov12/rg_geom_group",
+    "0x00a55338",
+    "0x00a553c8"
+   ],
+   [
+    "ov12/rg_game_collision",
+    "0x00a553c8",
+    "0x00a55448"
+   ],
+   [
+    "ov12/rg_error",
+    "0x00a55448",
+    "0x00a554f0"
+   ],
+   [
+    "ov12/rg_colidata",
+    "0x00a554f0",
+    "0x00a556c0"
+   ],
+   [
+    "ov12/rg_linkdata",
+    "0x00a556c0",
+    "0x00a55738"
+   ],
+   [
+    "ov12/rg_bg_builder",
+    "0x00a55738",
+    "0x00a55988"
+   ],
+   [
+    "ov12/rg_filesys",
+    "0x00a55988",
+    "0x00a55c48"
+   ],
+   [
+    "ov12/rg_actor_motid",
+    "0x00a55c48",
+    "0x00a564e0"
+   ],
+   [
+    "ov12/rg_actor_charid",
+    "0x00a564e0",
+    "0x00a565d8"
+   ],
+   [
+    "ov12/rg_matrices_effector",
+    "0x00a565d8",
+    "0x00a56650"
+   ],
+   [
+    "ov12/rg_select_agws",
+    "0x00a56650",
+    "0x00a56d38"
+   ],
+   [
+    "ov12/rg_select_subcon",
+    "0x00a56d38",
+    "0x00a56d90"
+   ],
+   [
+    "ov12/rg_select_robot",
+    "0x00a56d90",
+    "0x00a56f20"
+   ],
+   [
+    "ov12/rg_font",
+    "0x00a56f20",
+    "0x00a56f90"
+   ],
+   [
+    "ov12/rg_bxx",
+    "0x00a56f90",
+    "0x00a57118"
+   ],
+   [
+    "ov12/rg_title",
+    "0x00a57118",
+    "0x00a57310"
+   ],
+   [
+    "ov12/rg_piclist",
+    "0x00a57310",
+    "0x00a57550"
+   ],
+   [
+    "ov12/rg_help",
+    "0x00a57550",
+    "0x00a57bb0"
+   ],
+   [
+    "ov12/rg_announce",
+    "0x00a57bb0",
+    "0x00a58720"
+   ],
+   [
+    "ov12/rg_dispmodel",
+    "0x00a58720",
+    "0x00a58750"
+   ],
+   [
+    "ov12/xrg_dispmodel_impl",
+    "0x00a58750",
+    "0x00a587b0"
+   ],
+   [
+    "ov12/xrg_actor",
+    "0x00a587b0",
+    "0x00a58d10"
+   ],
+   [
+    "ov12/xrg_bxx_ps2",
+    "0x00a58d10",
+    "0x00a58e28"
+   ],
+   [
+    "ov12/xrg_cdread",
+    "0x00a58e28",
+    "0x00a58e70"
+   ],
+   [
+    "ov12/xrg_filesys_mode",
+    "0x00a58e70",
+    "0x00a58f10"
+   ],
+   [
+    "ov12/xrg_particle",
+    "0x00a58f10",
+    "0x00a59030"
+   ],
+   [
+    "ov12/xrg_paint2d",
+    "0x00a59030",
+    "0x00a59108"
+   ],
+   [
+    "ov12/xrg_sysinit",
+    "0x00a59108",
+    "0x00a591e8"
+   ],
+   [
+    "ov12/xrg_hostfile",
+    "0x00a591e8",
+    "0x00a59218"
+   ],
+   [
+    "ov12/xrg_main_font",
+    "0x00a59218",
+    "0x00a59250"
+   ],
+   [
+    "ov12/xrg_sound",
+    "0x00a59250",
+    "0x00a592f0"
+   ],
+   [
+    "ov12/xrg_event",
+    "0x00a592f0",
+    "0x00a59490"
+   ]
+  ],
+  ".bss": [
+   [
+    "ov12/rg_main",
+    "0x00a59490",
+    "0x00a59920"
+   ],
+   [
+    "ov12/rg_robot",
+    "0x00a59920",
+    "0x00a599d8"
+   ],
+   [
+    "ov12/rg_enemy",
+    "0x00a599d8",
+    "0x00a599e0"
+   ],
+   [
+    "ov12/rg_robot_db",
+    "0x00a599e0",
+    "0x00a59aa0"
+   ],
+   [
+    "ov12/rg_heap",
+    "0x00a59aa0",
+    "0x00a5aac0"
+   ],
+   [
+    "ov12/rg_singleton_id",
+    "0x00a5aac0",
+    "0x00a5ab80"
+   ],
+   [
+    "ov12/rg_geom_pillar",
+    "0x00a5ab80",
+    "0x00a5abc0"
+   ],
+   [
+    "ov12/rg_matrices_effector",
+    "0x00a5abc0",
+    "0x00a5abc8"
+   ],
+   [
+    "ov12/rg_select_robot",
+    "0x00a5abc8",
+    "0x00a5ace4"
+   ],
+   [
+    "ov12/xrg_actor",
+    "0x00a5ace4",
+    "0x00a5acf0"
+   ],
+   [
+    "ov12/xrg_rand_int",
+    "0x00a5acf0",
+    "0x00a5b0f4"
+   ]
+  ]
+ },
+ "reference_witness_symbols": {
+  "rg_singleton_manager_nonnull_expression": "0x00a53008",
+  "rg_singleton_id_source_file": "0x00a53018",
+  "rg_singleton_id_range_expression": "0x00a53068",
+  "s_inIDmgr": "0x00a5aac0",
+  "s_pWhoAreYou": "0x00a5ace0",
+  "s_uOkNum": "0x00a5abcc",
+  "s_uReqNum": "0x00a5abc8",
+  "xrg_system_init_log_1": "0x00a59108",
+  "xrg_system_init_log_2": "0x00a59130",
+  "xrg_system_init_log_3": "0x00a59140",
+  "xrg_system_init_log_4": "0x00a59170",
+  "xrg_system_init_log_5": "0x00a59180",
+  "xrg_system_init_log_6": "0x00a59190",
+  "xrg_system_init_log_7": "0x00a591a0",
+  "xrg_system_init_log_8": "0x00a591b0",
+  "xrg_system_init_source_file": "0x00a59118",
+  "pSys_not_nil": "0x00a559a0",
+  "rg_filesys_source_file": "0x00a55988",
+  "prepare_count_check": "0x00a55a98",
+  "root_name_name_check": "0x00a58e30",
+  "root_name_source_file": "0x00a58e40",
+  "root_name_result_check": "0x00a58e58",
+  "mode_stack_depth_check": "0x00a58e70",
+  "mode_source_file": "0x00a58e90",
+  "mode_stack_top_check": "0x00a58eb0",
+  "allocate_error": "0x00a58ef0",
+  "file_sys_size_check": "0x00a58ec0",
+  "unknown_filesys_mode": "0x00a58ed0",
+  "xrg_host_unsupported_message": "0x00a591e8",
+  "xrg_host_source_file": "0x00a59200",
+  "rg_point_assert_expression": "0x00a550f0",
+  "rg_vector_index_message": "0x00a55010",
+  "rg_vector_not_null_message": "0x00a54f80"
+ },
+ "main_shadowed": {},
+ "reference_aliases": {
+  "_Destruct": {
+   "va": "0x00a14110",
+   "splat_name": "_Destruct_00A14110",
+   "record": "config/units/core-ov12-00a14370.json"
+  },
+  "CheckBallBoxCollision": {
+   "va": "0x00a2eb18",
+   "splat_name": "CheckBallBoxCollision_00A2EB18",
+   "record": "config/units/math-correction13-14.json"
+  }
+ }
+}

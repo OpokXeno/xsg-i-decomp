@@ -1,0 +1,60 @@
+{
+ "text": {
+  "ov11/tanaka_test": [
+   "0x00a00000",
+   "0x00a00100"
+  ],
+  "ov11/mini_g": [
+   "0x00a00100",
+   "0x00a091f8"
+  ],
+  "ov11/cajino_get": [
+   "0x00a091f8",
+   "0x00a09224"
+  ]
+ },
+ "families": {
+  ".data": [
+   [
+    "ov11/mini_g",
+    "0x00a09224",
+    "0x00a0ba20"
+   ],
+   [
+    "ov11/cajino_get",
+    "0x00a0ba20",
+    "0x00a0bb10"
+   ]
+  ],
+  ".rodata": [
+   [
+    "ov11/tanaka_test",
+    "0x00a0bb10",
+    "0x00a0bb30"
+   ],
+   [
+    "ov11/mini_g",
+    "0x00a0bb30",
+    "0x00a0c720"
+   ],
+   [
+    "ov11/cajino_get",
+    "0x00a0c720",
+    "0x00a0dc28"
+   ]
+  ],
+  ".bss": [
+   [
+    "ov11/mini_g",
+    "0x00a0dc28",
+    "0x00a0e078"
+   ]
+  ]
+ },
+ "reference_witness_symbols": {
+  "Gwork": "0x00a0dd20",
+  "ResData": "0x00a0dfa0"
+ },
+ "main_shadowed": {},
+ "reference_aliases": {}
+}
