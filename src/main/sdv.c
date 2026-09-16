@@ -3,19 +3,36 @@
 
 extern void *memset(void *, int, unsigned int);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvInitAmbient);
+void sdvInitAmbient(void)
+{
+    _sdvAmbFrame = 0;
+    _sdvAmbState = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSaveAmbient);
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetAmbStateSub);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetAmbState);
+void sdvSetAmbState(int state, int effect_no)
+{
+    sdvSetAmbStateSub(state, effect_no, 0);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetAmbState2);
+void sdvSetAmbState2(int state, int effect_no)
+{
+    sdvSetAmbStateSub(state, effect_no, 1);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetAmbient);
+void sdvSetAmbient(void *map_rgb, void *ambient)
+{
+    xglLightIntensityAmbient(xglStudioGetLight2(), ambient);
+    func_A2C3D8(map_rgb);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvRestoreAmbient);
+void sdvRestoreAmbient(void)
+{
+    sdvSetAmbient(_sdvMapRgb, _sdvAmbient);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecAmbient);
 
@@ -23,7 +40,10 @@ INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecSeqTbl);
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvProgressKey);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvPlaySound);
+void sdvPlaySound(int sound_id, int unused, int flags)
+{
+    xglSoundEffectNormalID(sound_id, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvScheduleSound);
 

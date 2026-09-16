@@ -21105,10 +21105,21 @@
         }
       ],
       "id": "main/tu088",
+      "import": {
+        "mode": "c",
+        "note": "xgl_dma (game): 9 of 11 functions accepted C (xglDmaDirectNormal, xglDmaDirectSrcChain, xglDmaBufferReset, xglDmaBufferCnt, xglDmaBufferRef, xglDmaBufferCall, xglDmaBufferRequest, xglDmaMFIFOLeave, xglDmaInitial; task tu-slus-20469-412d448de315-main-tu088-xgl-dma-0021b6b0-54815ae1d58b, submission 680917753cb937899d0715c37391acce907aa1226786f046f1a41cb82afc9710, reviewed ready_to_integrate by claude-review-r01-20260916). xglDmaInitial is an empty body (jr ra; nop), declared in tools/tu/run_audit.py EMPTY_BODY_CLAIMS. xglDmaMFIFOSetup and xglDmaMFIFOKick stay INCLUDE_ASM; no data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_dma.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_dma",
       "name_basis": "common function-name prefix 'xglDma' (100% of global functions)",
       "name_confidence": "low",
@@ -21116,7 +21127,7 @@
       "owners": {
         ".data": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_dma.c",
       "scaffold_path": "scaffold/src/main/xgl_dma.c",
@@ -23250,10 +23261,21 @@
         }
       ],
       "id": "main/tu094",
+      "import": {
+        "mode": "c",
+        "note": "xgl_1 (game): 1 of 22 functions accepted C (xglMpeg2InfoInit; task tu-slus-20469-412d448de315-main-tu094-xgl-1-00220c58-08cc2f676763, submission 44d122fd1dd504930b42d114f48657e6ae0eaa9d2acc880879b2f5eca8f17a75, reviewed ready_to_integrate by claude-review-r13-20260916). This TU's first published C source. The rest stay INCLUDE_ASM; no data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_1.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_1",
       "name_basis": "common function-name prefix 'xgl' (100% of global functions); disambiguated (2 objects share 'xgl.c')",
       "name_confidence": "low",
@@ -23262,7 +23284,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_1.c",
       "scaffold_path": "scaffold/src/main/xgl_1.c",
@@ -27134,10 +27156,21 @@
         }
       ],
       "id": "main/tu104",
+      "import": {
+        "mode": "c",
+        "note": "xgl_studio (game): 13 of 13 functions accepted C (xglStudioChange, xglStudioGetLight, xglStudioGetCamera, xglStudioGetActiveCamera, xglStudioSelectGetActiveCamera, xglStudioFlushActiveCamera, xglStudioGetLight2, xglStudioGetCamera2, xglStudioMainCameraInit, xglStudioMainCameraMove, xglStudioInit, xglStudioMove, xglStudioEntry; task tu-slus-20469-412d448de315-main-tu104-xgl-studio-0022c558-2f1f82307896, submission 6860871aaa38042508a1e938799c60c91decdbde8bd50e9028d584d95a3163aa, reviewed ready_to_integrate by claude-review-r30-20260916). This TU's first published C source; the StudioCamera type is shared through include/shared.h via the decisions.StudioCamera header-canon decision. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_studio.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_studio",
       "name_basis": "common function-name prefix 'xglStudio' (100% of global functions)",
       "name_confidence": "low",
@@ -27145,7 +27178,7 @@
       "owners": {
         ".bss": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_studio.c",
       "scaffold_path": "scaffold/src/main/xgl_studio.c",
@@ -31034,16 +31067,27 @@
         }
       ],
       "id": "main/tu111",
+      "import": {
+        "mode": "c",
+        "note": "ssd_set (game, audio): 5 of 5 functions accepted C (SsdSetOutputMode, SsdSetSPDIFMode, SsdSetSpuVolume, SsdSetCDVolume, SsdSetReverbParameter; task tu-slus-20469-412d448de315-main-tu111-ssd-set-00240478-c842b58e2ba9, submission c853d7b9edb452e861bd3e710108e14455440183b9a9fda89098643867d19a14, reviewed ready_to_integrate by claude-review-r17-20260916). This TU's first published C source. No data section is C-owned: the TU has no data piece.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/ssd_set.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "ssd_set",
       "name_basis": "common function-name prefix 'SsdSet' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 111,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/ssd_set.c",
       "scaffold_path": "scaffold/src/main/ssd_set.c",
@@ -31396,17 +31440,28 @@
         }
       ],
       "id": "main/tu112",
+      "import": {
+        "mode": "c",
+        "note": "ssd_1 (game, audio): 16 of 40 functions accepted C (SsdStopWave, SsdStopEffectFileID, SsdCheckPlayEffectAll, SsdCheckPlayEffect, SsdCheckPlayEffectFileID, SsdInitSampling, SsdDisposeSampling, SsdSetSampleDmaCallback, SsdSetSampleKeyoffCallback, SsdTransferSampling, SsdTransferSamplingNext, SsdPlaySampling, SsdStopSampling, SsdSetSamplingParam, SsdSetSamplingEffect, RssdRequestCall; task tu-slus-20469-412d448de315-main-tu112-ssd-1-00240eb0-4699b5189ff7-rev01, submission 7b0a9f568016b6ff7910ca82f43d3e4b66299751243b0e1aa4c154e823b636a0, reviewed ready_to_integrate by claude-review-r26-20260916). This TU's first published C source; the remaining 24 functions stay INCLUDE_ASM. No data section is C-owned; .rodata stays scaffold-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/ssd_1.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "ssd_1",
       "name_basis": "common function-name prefix 'Ssd' (98% of global functions); disambiguated (4 objects share 'ssd.c')",
       "name_confidence": "low",
       "ordinal": 112,
       "owners": {
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/ssd_1.c",
       "scaffold_path": "scaffold/src/main/ssd_1.c",
@@ -31665,16 +31720,27 @@
         }
       ],
       "id": "main/tu113",
+      "import": {
+        "mode": "c",
+        "note": "ssd_2 (game, audio): 23 of 23 functions accepted C (the whole Ssd sequence-control family: SsdPlaySequence, SsdAddSequenceData, SsdAddSeqEffectData, SsdDisposeSequence, SsdStartSequence, SsdResumeSequence, SsdStopSequence, SsdPauseSequence, SsdGetSeqPlayStatus, SsdSetSeqMaster{Tempo,Volume,Note,Panpot}, SsdSetSeq{Note,Volume,Panpot}Fader, SsdSetSequenceOutputVolume, SsdSetEffectOutVolume, SsdSetSeqPatchNumber, SsdSetTrackPatchSet, SsdSetSeqMute, SsdGetTimeCode, SsdSetSeqSignal; task tu-slus-20469-412d448de315-main-tu113-ssd-2-002412d0-ab5759c8049c, submission 669b2b7c6e57099a6328ac028f6438650f53ff068aa3731fd6a284fcbdc22fb5, reviewed ready_to_integrate by claude-review-r05-20260916). No data section is C-owned: the new src/main/ssd_init.h only splits two unnamed scaffold spans for readability (RssdWorkFlags value/_unmodeled_04 tail and SsdVoiceInfo sample_rate/_unmodeled_012 tail); every data owner in config/tu-build.json main/tu113 stays asm.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/ssd_2.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "ssd_2",
       "name_basis": "common function-name prefix 'Ssd' (100% of global functions); disambiguated (4 objects share 'ssd.c')",
       "name_confidence": "low",
       "ordinal": 113,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/ssd_2.c",
       "scaffold_path": "scaffold/src/main/ssd_2.c",
@@ -33041,10 +33107,21 @@
         }
       ],
       "id": "main/tu118",
+      "import": {
+        "mode": "c",
+        "note": "map_1 (game): 5 of 11 functions accepted C (MapChangeFadeSet, MapChange, MapChange2, MapGetNo, MapInit; task tu-slus-20469-412d448de315-main-tu118-map-1-00246428-102fdba6209b, submission ae2626732a5346206927e970cf144a000429ae20394e5756a1e070d48b504d84, reviewed ready_to_integrate by claude-review-r14-20260916). This TU's first published C source. The rest stay INCLUDE_ASM; no data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/map_1.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "map_1",
       "name_basis": "common function-name prefix 'Map' (90% of global functions); disambiguated (2 objects share 'map.c')",
       "name_confidence": "low",
@@ -33052,7 +33129,7 @@
       "owners": {
         ".data": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/map_1.c",
       "scaffold_path": "scaffold/src/main/map_1.c",
@@ -39814,10 +39891,21 @@
         }
       ],
       "id": "main/tu145",
+      "import": {
+        "mode": "c",
+        "note": "game_init_camera (game): 5 of 13 functions accepted C (GAME_initLight, DB_cmode, DB_reset, DB_reset2, DB_incPos; task tu-slus-20469-412d448de315-main-tu145-game-init-camera-002606e0-87c6ed5e29ff, submission 476f34bc655904ee951b257a4ce8366cdfbd496b7ce270a9ba5e01d0b2c425ca, reviewed ready_to_integrate by claude-review-r07-20260916). The rest stay INCLUDE_ASM; no data section is C-owned, so .lit4/.rodata/.sdata stay scaffold-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/game_init_camera.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "game_init_camera",
       "name_basis": "first global function GAME_initCamera",
       "name_confidence": "low",
@@ -39826,7 +39914,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/game_init_camera.c",
       "scaffold_path": "scaffold/src/main/game_init_camera.c",
@@ -42399,17 +42487,28 @@
         }
       ],
       "id": "main/tu154",
+      "import": {
+        "mode": "c",
+        "note": "js_class_light_get_peer (game): 3 of 3 functions accepted C (JS_classLight_getPeer, JS_classLight_setColor, JS_classLight_setDirection2; task tu-slus-20469-412d448de315-main-tu154-js-class-light-get-peer-0026be18-32f64ddd4060, submission 7c2417b95b1ee888c1c4fe41340926feb46d843b0eb2dad80352205d306fd0b6, reviewed ready_to_integrate by claude-review-r30-20260916). This TU's first published C source. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/js_class_light_get_peer.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "js_class_light_get_peer",
       "name_basis": "first global function JS_classLight_getPeer",
       "name_confidence": "low",
       "ordinal": 154,
       "owners": {
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/js_class_light_get_peer.c",
       "scaffold_path": "scaffold/src/main/js_class_light_get_peer.c",
@@ -42939,10 +43038,21 @@
         }
       ],
       "id": "main/tu156",
+      "import": {
+        "mode": "c",
+        "note": "rsrc (game): 11 of 19 functions accepted C (RSRC_inactiveSource, RSRC_create, RSRC_setPrintParam, RSRC_getDefaultPath, RSRC_setDefaultPath, RSRC_init, isLeave, RSRC_getItemID, RSRC_getItem2, RSRC_loadFile2, RSRC_loadFile; task tu-slus-20469-412d448de315-main-tu156-rsrc-0026d430-ec0b544c6485-rev01, submission 60864ad6dfb5c0380e82e8a3f24bb6d92b20e67fd1f358998de086868cf4cf5b, reviewed ready_to_integrate by claude-review-r20-20260916). This TU's first published C source; the remaining 8 functions stay INCLUDE_ASM. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/rsrc.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "rsrc",
       "name_basis": "common function-name prefix 'RSRC' (100% of global functions)",
       "name_confidence": "low",
@@ -42950,7 +43060,7 @@
       "owners": {
         ".data": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/rsrc.c",
       "scaffold_path": "scaffold/src/main/rsrc.c",
@@ -55714,16 +55824,27 @@
         }
       ],
       "id": "main/tu188",
+      "import": {
+        "mode": "c",
+        "note": "outer_product (game, math): 4 of 9 functions accepted C (OuterProduct, CheckPointLine, CheckCrossLine, CheckDist3D; task tu-slus-20469-412d448de315-main-tu188-outer-product-002c8970-5e4217f21c1c, submission 43bc7ab1d9d44bc2f2bf27334dedf1858dc956673cbb7d5f250fcb35e8a07dc4, reviewed publishable by claude-review-r09-20260916). The rest stay INCLUDE_ASM; no data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/outer_product.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "outer_product",
       "name_basis": "first global function OuterProduct",
       "name_confidence": "low",
       "ordinal": 188,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/outer_product.c",
       "scaffold_path": "scaffold/src/main/outer_product.c",
@@ -55952,17 +56073,25 @@
       ],
       "id": "main/tu189",
       "import": {
-        "note": "boundary only (tu-main-v2 review): the .data run 0x00378B30..0x00379100 is `container` (1488 B, referenced only by game/189_init_drill). Without this start the cut rule leaves it in main#186's piece, because the map's .data object order jumps 186 -> 193 (objects 187-192 have no LOCAL static in .data).",
+        "mode": "c",
+        "note": "init_drill (game): 1 of 22 functions accepted C (DrillClearContainer; task tu-slus-20469-412d448de315-main-tu189-init-drill-002c8f10-09a478ea8a16, submission 34ee23efeec4b09e3f707b1f0cbefc880cdc6ed23674875ea61e35685e795346, reviewed ready_to_integrate by claude-review-r15-20260916). This TU's first published C source. The rest stay INCLUDE_ASM; no data section is C-owned. Boundary only (tu-main-v2 review, unrelated to this batch): the .data run 0x00378B30..0x00379100 is `container` (1488 B, referenced only by game/189_init_drill). Without this start the cut rule leaves it in main#186's piece, because the map's .data object order jumps 186 -> 193 (objects 187-192 have no LOCAL static in .data).",
         "sections": {
           ".data": {
             "start": "0x00378B30"
           }
+        },
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/init_drill.c"
         }
       },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "init_drill",
       "name_basis": "first global function InitDrill",
       "name_confidence": "low",
@@ -55973,7 +56102,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/init_drill.c",
       "scaffold_path": "scaffold/src/main/init_drill.c",
@@ -56166,16 +56295,27 @@
         }
       ],
       "id": "main/tu190",
+      "import": {
+        "mode": "c",
+        "note": "matumoto_test (game): 1 of 1 function accepted C (MatumotoTest, an empty-body function; task tu-slus-20469-412d448de315-main-tu190-matumoto-test-002cb1a8-f7e332d8b45e, submission 987dac439f9338f768c75cf613002fd3248d483762b462e0501163501576aa75, reviewed ready_to_integrate by claude-review-r09-20260916). Declared in tools/tu/run_audit.py EMPTY_BODY_CLAIMS['190']. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/matumoto_test.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "matumoto_test",
       "name_basis": "common function-name prefix 'MatumotoTest' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 190,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/matumoto_test.c",
       "scaffold_path": "scaffold/src/main/matumoto_test.c",
@@ -58393,16 +58533,27 @@
         }
       ],
       "id": "main/tu200",
+      "import": {
+        "mode": "c",
+        "note": "vibration (game, input): 4 of 4 functions accepted C (Vibration_Stop, Vibration_Set_Weak, Vibration_Set_Strong, VibrationEngine; task tu-slus-20469-412d448de315-main-tu200-vibration-002d6c60-74b4f232d25d, submission 9469b84d4879ae94df273f9327b028a5ac02c0e7745a79a4b9d79f50646bc122, reviewed ready_to_integrate by claude-review-r09-20260916). header_divergence (recorded, allowed): the TU-local `extern PadDataDebugLayout PadData;`-style wider declaration (evidenced to +0x51) differs from the shared `extern PadPrefix PadData;`, the same accepted precedent already recorded for src/main/game.c/config/header-canon.json. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/vibration.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "vibration",
       "name_basis": "common function-name prefix 'Vibration' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 200,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/vibration.c",
       "scaffold_path": "scaffold/src/main/vibration.c",
@@ -59349,17 +59500,28 @@
         }
       ],
       "id": "main/tu203",
+      "import": {
+        "mode": "c",
+        "note": "pp_init (game): 6 of 6 functions accepted C (ppInit, ppNextStart, ppNextEnd, ppCheckWall, ppMove, ppSetPos; task tu-slus-20469-412d448de315-main-tu203-pp-init-002d92e0-b73a156ad4fa, submission 58f2e9fe6986c35487c6f96ca2cf023f36254f10dbf36d8d8e800935d78cc88f, reviewed ready_to_integrate by claude-review-r10-20260916). No data section is C-owned; .lit4 stays scaffold-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/pp_init.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "pp_init",
       "name_basis": "first global function ppInit",
       "name_confidence": "low",
       "ordinal": 203,
       "owners": {
         ".lit4": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/pp_init.c",
       "scaffold_path": "scaffold/src/main/pp_init.c",
@@ -60021,10 +60183,21 @@
         }
       ],
       "id": "main/tu206",
+      "import": {
+        "mode": "c",
+        "note": "colli_test (game): 5 of 9 functions are C (swapf, GetIntersectionPointLineX, GetIntersectionPointLineZ, CheckSlope, CheckInBox; task tu-slus-20469-412d448de315-main-tu206-colli-test-002db6b8-f99f4cf1421b, submission 5590586fde4cc000b82b46918f7e4b3b647e4b7d8d01bdae04b5a38e9e857e24, reviewed ready_to_integrate by review-tu160-tu206-tu113-20260916-sol). CheckIntersect, CheckBallBoxCollision, InitTest and ColliTest stay INCLUDE_ASM. No data section is C-owned: every data owner in config/tu-build.json main/tu206 stays asm.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/colli_test.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "colli_test",
       "name_basis": "common function-name prefix 'ColliTest' (100% of global functions)",
       "name_confidence": "low",
@@ -60036,7 +60209,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/colli_test.c",
       "scaffold_path": "scaffold/src/main/colli_test.c",
@@ -60268,16 +60441,27 @@
         }
       ],
       "id": "main/tu207",
+      "import": {
+        "mode": "c",
+        "note": "log (game): 2 of 2 functions accepted C (LOG, ItaiTest; task tu-slus-20469-412d448de315-main-tu207-log-002dc3a8-ace38e40df7f, submission 739fc8c3547013a41153078aab07a0e6a1eb00124d0a785e05d7edb389cd3aa9, reviewed ready_to_integrate by claude-review-r14-20260916). This TU's first published C source. LOG is an empty body (jr ra; nop), declared in tools/tu/run_audit.py EMPTY_BODY_CLAIMS. No data section is C-owned: the TU has no data piece.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/log.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "log",
       "name_basis": "first global function LOG",
       "name_confidence": "low",
       "ordinal": 207,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/log.c",
       "scaffold_path": "scaffold/src/main/log.c",
@@ -65527,10 +65711,21 @@
         }
       ],
       "id": "main/tu218",
+      "import": {
+        "mode": "c",
+        "note": "m_output_debug_string (game): 1 of 2 functions accepted C (MOutputDebugString; task tu-slus-20469-412d448de315-main-tu218-m-output-debug-string-002eeec0-8eed8551aacd, submission 5c4edb66fe5bac93132352dab818ac6167d9b35c802dc38357cf8d7dc243b2eb, reviewed ready_to_integrate by claude-review-r11-20260916). This TU's first published C source; MOutputDebugStringWarn stays INCLUDE_ASM. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/m_output_debug_string.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "m_output_debug_string",
       "name_basis": "common function-name prefix 'MOutputDebugString' (100% of global functions)",
       "name_confidence": "low",
@@ -65538,7 +65733,7 @@
       "owners": {
         ".bss": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/m_output_debug_string.c",
       "scaffold_path": "scaffold/src/main/m_output_debug_string.c",
@@ -66316,10 +66511,21 @@
         }
       ],
       "id": "main/tu220",
+      "import": {
+        "mode": "c",
+        "note": "m_ef_obj (game): 1 of 6 functions accepted C (MEfObjInit; task tu-slus-20469-412d448de315-main-tu220-m-ef-obj-002f0018-2eca04a954e3, submission 56940d9fdbbfa1deff173ac07380013dfa496fbde40e39da2f7c7a06dbb8dc8b, reviewed publishable by claude-review-r11-20260916). This TU's first published C source; the remaining 5 functions stay INCLUDE_ASM. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/m_ef_obj.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "m_ef_obj",
       "name_basis": "common function-name prefix 'MEfObj' (100% of global functions)",
       "name_confidence": "low",
@@ -66328,7 +66534,7 @@
         ".bss": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/m_ef_obj.c",
       "scaffold_path": "scaffold/src/main/m_ef_obj.c",
@@ -74154,16 +74360,27 @@
         }
       ],
       "id": "main/tu250",
+      "import": {
+        "mode": "c",
+        "note": "scene_2 (game): both functions accepted C (Java_xeno_Scene_start__ILjava_lang_Object_, Java_xeno_Scene_stop__; task tu-slus-20469-412d448de315-main-tu250-scene-2-00304d40-921c0bd60be0, submission 02d349a958b5b08d7be5180382c52316e88584d6512835612394f2b8ae33124d, reviewed ready_to_integrate by claude-review-r12-20260916). This TU's first published C source. Java_xeno_Scene_stop__ is an empty body (jr ra; nop), declared in tools/tu/run_audit.py EMPTY_BODY_CLAIMS. No data section is C-owned: the TU has no data piece.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/scene_2.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "scene_2",
       "name_basis": "JNI natives of Java class xeno.Scene (2/2 functions); disambiguated (2 objects share 'scene.c')",
       "name_confidence": "low",
       "ordinal": 250,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/scene_2.c",
       "scaffold_path": "scaffold/src/main/scene_2.c",
@@ -78824,10 +79041,21 @@
         }
       ],
       "id": "main/tu268",
+      "import": {
+        "mode": "c",
+        "note": "exm_2 (game): 5 of 17 functions accepted C (EXM_InitWind, EXM_SetWindStruct, EXM_ClearWindStruct, EXM_ResetWave, EXM_GetWaveRad; task tu-slus-20469-412d448de315-main-tu268-exm-2-0031e8c8-cd7c31d00663, submission 0e3e6ee2472f985e6443edc266900b157d35de203d6ad63a82292c3c34997de7, reviewed publishable by claude-review-r12-20260916). This TU's first published C source; the remaining 12 functions stay INCLUDE_ASM. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/exm_2.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "exm_2",
       "name_basis": "common function-name prefix 'EXM' (100% of global functions); disambiguated (2 objects share 'exm.c')",
       "name_confidence": "low",
@@ -78836,7 +79064,7 @@
         ".data": "asm",
         ".lit4": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/exm_2.c",
       "scaffold_path": "scaffold/src/main/exm_2.c",
@@ -79578,16 +79806,27 @@
         }
       ],
       "id": "main/tu272",
+      "import": {
+        "mode": "c",
+        "note": "mot (game): 4 of 5 functions accepted C (GetMdlFileName, MotInit, MotCalc, MotSetEx, all empty bodies (jr ra; nop), declared in tools/tu/run_audit.py EMPTY_BODY_CLAIMS; task tu-slus-20469-412d448de315-main-tu272-mot-00321be0-1306206565d0, submission 5e76d8ed1f3b168b899b86058e45e272b97a93a39bdfd56b4813045766f62d7b, reviewed ready_to_integrate by claude-review-r12-20260916). This TU's first published C source; MotTransXYZ is NOT delivered and stays INCLUDE_ASM. No data section is C-owned.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/mot.c"
+        }
+      },
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "mot",
       "name_basis": "common function-name prefix 'Mot' (80% of global functions)",
       "name_confidence": "low",
       "ordinal": 272,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/mot.c",
       "scaffold_path": "scaffold/src/main/mot.c",

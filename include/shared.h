@@ -1,3 +1,4 @@
+
 #ifndef INCLUDE_SHARED_H
 #define INCLUDE_SHARED_H
 
@@ -14,14 +15,10 @@ typedef unsigned short u16;
 
 typedef unsigned long long u64;
 
-/*
- * Only StudioCamera+4 state is evidenced (lw 4(v0); compared to 4).
- * Offset +0 is never touched by these bodies, so it is kept as opaque
- * reserved bytes, not a named semantic field.
- */
 typedef struct StudioCamera {
-    u8 reserved0[4];
+    u32 active;
     u32 state;
+    u8 unmodeled[0x5e8];
 } StudioCamera;
 
 typedef struct {

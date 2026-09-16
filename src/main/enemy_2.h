@@ -178,6 +178,35 @@ typedef struct Actor {
 #define ACTOR_TARGET_ANGLE(actor) \
     (*(float *)((unsigned char *)(actor) + ACTOR_TARGET_ANGLE_OFFSET))
 
+/* The actor's speed, ACT_info's "SPEED %8.3f" column (lwc1/swc1 at
+ * 0x00306378, cited above at +0x6f8). src/main/near_dir.h names the same
+ * offset `speed` in its own field-evidence comment; this macro reuses that
+ * name rather than inventing another one for the object both files describe.
+ * Enemy_Command_Freeze below is the only function of this TU that reads or
+ * writes it, saving and restoring it across a freeze/thaw and slowing it to
+ * D_004D8140 for a scripted deceleration. It is 0x28 bytes past the recovered
+ * type, with nothing in between recovered, so it stays a named offset
+ * (docs/style.md rule 2) rather than a member of Actor. */
+#define ACTOR_SPEED_OFFSET 0x6f8
+
+#define ACTOR_SPEED(actor) \
+    (*(float *)((unsigned char *)(actor) + ACTOR_SPEED_OFFSET))
+
+/* The second flags word ACT_info prints with the same "FLAGS %08x" as +0x00
+ * (0x00306374, cited above at +0x6f0). Enemy_Command_Stop_FreeFall below is
+ * the only function of this TU that touches it, setting or clearing its top
+ * two bits to claim or release free-fall ownership. */
+#define ACTOR_RUNTIME_FLAGS_OFFSET 0x6f0
+
+#define ACTOR_RUNTIME_FLAGS(actor) \
+    (*(u32 *)((unsigned char *)(actor) + ACTOR_RUNTIME_FLAGS_OFFSET))
+
+/* The engine's own entry point for an actor's enemy behaviour; not called by
+ * this TU, only cited above (0x002cb278) as the witness that ties `enepc` and
+ * Actor.number together. Declared here so the citation is a checked
+ * prototype rather than a bare comment. */
+extern void Enemy_Init(Actor *actor);
+
 /* The executable exports this 64-entry enemy-work allocation. */
 typedef struct EnemyWork {
     unsigned char bytes[0x38b0];
@@ -248,6 +277,44 @@ typedef struct EnemyTurn {
 /* The bit this function sets in ENEMY_TURN_FLAGS to ask for a timed turn. */
 #define ENEMY_TURN_REQUEST 0x10000
 
+/* Enemy_Command_Freeze's own state inside the entry: a one-byte freeze
+ * command (lb/sb at 0x002d2eac/0x002d2ef4/0x002d2f00) and, 14 bytes later,
+ * the actor's speed saved across the freeze (lwc1/swc1 at
+ * 0x002d2f0c/0x002d2f30/0x002d2f54, ACTOR_SPEED above). Both are read and
+ * written by Enemy_Command_Freeze alone, so they are named offsets rather
+ * than members: nothing between the entry's base and +0x37a2, or between
+ * +0x37a2 and +0x37b0, is recovered.
+ *
+ * ENEMY_FREEZE_NO_SAVED_SPEED is the sentinel Enemy_Command_Freeze stores at
+ * +0x37b0 for "not currently frozen" (lui $1,0xc47a / mtc1 at 0x002d2f1c and
+ * 0x002d2f40) and compares against before thawing (c.eq.s at 0x002d2f28). */
+#define ENEMY_FREEZE_STATE_OFFSET       0x37a2
+#define ENEMY_FREEZE_SAVED_SPEED_OFFSET 0x37b0
+
+#define ENEMY_FREEZE_STATE(work) \
+    (*(signed char *)((unsigned char *)(work) + ENEMY_FREEZE_STATE_OFFSET))
+
+#define ENEMY_FREEZE_SAVED_SPEED(work) \
+    (*(float *)((unsigned char *)(work) + ENEMY_FREEZE_SAVED_SPEED_OFFSET))
+
+#define ENEMY_FREEZE_NO_SAVED_SPEED -1000.0f
+
+/* Enemy_Command_Turn's own one-byte state, one byte after
+ * ENEMY_FREEZE_STATE (lb/sb at 0x002d2fc4/0x002d2fd0/0x002d2fd8): set,
+ * cleared or toggled by commands 0-2 and read by nothing else in this TU. */
+#define ENEMY_TURN_LOCK_OFFSET 0x37a3
+
+#define ENEMY_TURN_LOCK(work) \
+    (*(signed char *)((unsigned char *)(work) + ENEMY_TURN_LOCK_OFFSET))
+
+/* Enemy_Command_Light's own state: a halfword, not a byte (lh/sh at
+ * 0x002d3038/0x002d3048/0x002d3050/0x002d3060), set, cleared or toggled by
+ * commands 0-2 the same way ENEMY_TURN_LOCK is. */
+#define ENEMY_LIGHT_OFFSET 0x38aa
+
+#define ENEMY_LIGHT(work) \
+    (*(short *)((unsigned char *)(work) + ENEMY_LIGHT_OFFSET))
+
 void Enemy_Command_Sac_Turn(Actor *actor, int duration,
                             float angle_degrees, float angle_mode,
                             short axis);
@@ -256,5 +323,10 @@ void Enemy_Command_Sac_Turn(Actor *actor, int duration,
 extern const float sac_turn_pi;
 extern volatile const float sac_turn_two_pi_subtract;
 extern volatile const float sac_turn_two_pi_add;
+
+/* The scripted deceleration speed Enemy_Command_Freeze applies for its
+ * "slow" command (lwc1 $gp,-31280 at 0x002d2f60, value 0.03333...). Not in
+ * config/symbols/main.txt, so it keeps the splat default name. */
+extern float D_004D8140;
 
 #endif /* SRC_MAIN_ENEMY_2_H */

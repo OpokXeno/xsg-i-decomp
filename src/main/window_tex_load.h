@@ -19,7 +19,7 @@
  * - +0x98, whether it has been scanned: the same pair of functions one
  *   displacement further on, UmnDataBaseAnalisisSet (main:0x00276298,
  *   `addiu $5,$3,0x98`) and UmnDataBaseAnalisisCheck (main:0x002762f0,
- *   `lbu $2,0x98($3)`), both still assembly in this TU.  It is what the
+ *   `lbu $2,0x98($3)`), which this candidate recovers as C.  It is what the
  *   0x9c extent of the published UmnDataBaseStateData declaration ends on.
  * The spans around them stay unmodeled byte ranges with no meaning claimed
  * (docs/naming.md), and this is what was searched to leave them so. Every
@@ -64,5 +64,7 @@ int MenuLoadSync(void);
 extern int MenuLoadCount;
 
 void MenuLoadInit(void);
+
+int MenuModelInit(int work_start);
 
 #endif /* SRC_MAIN_WINDOW_TEX_LOAD_H */

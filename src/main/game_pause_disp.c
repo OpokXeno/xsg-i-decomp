@@ -2,7 +2,10 @@
 #include "shared.h"
 #include "game_pause_disp.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/game_pause_disp", DrawShadow);
+static void DrawShadow(PauseDrawContext *context)
+{
+    sceVif1PkAddDirectDataN(context->packet, ShadowEnv, 7);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_pause_disp", DrawCredit);
 

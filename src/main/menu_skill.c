@@ -7,7 +7,17 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_skill", SkillSetLvGet);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_skill", SkillGetPtGet);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_skill", SkillNextLvGet);
+/*
+ * Offset of the per-level "points required for next skill level" table inside
+ * the loaded skill data block (SkillDataBuf). Evidenced by the original
+ * SkillNextLvGet (`lhu $2, 382($4)`, 382 = 0x17e);
+ */
+#define SKILL_NEXT_LV_TABLE_OFFSET 0x17e
+
+unsigned short SkillNextLvGet(int level)
+{
+    return ((unsigned short *)(SkillDataBuf + SKILL_NEXT_LV_TABLE_OFFSET))[level];
+}
 
 int SkillCharSkillLvGet(int character_id)
 {

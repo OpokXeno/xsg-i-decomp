@@ -9,21 +9,55 @@
 #include "main/xgl_flags.h"
 #include "xgl_flags.h"
 
+int xglFlagsSet(int bit_offset, int bit_count, int value);
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet1);
+int xglFlagsSet1(int bit_offset, int value)
+{
+    return xglFlagsSet(bit_offset, 1, value);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet2);
+int xglFlagsSet2(int bit_offset, int value)
+{
+    return xglFlagsSet(bit_offset, 2, value);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet4);
+int xglFlagsSet4(int bit_offset, int value)
+{
+    return xglFlagsSet(bit_offset, 4, value);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet8);
+int xglFlagsSet8(int bit_offset, int value)
+{
+    return xglFlagsSet(bit_offset, 8, value);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet16);
+int xglFlagsSet16(int bit_offset, int value)
+{
+    return xglFlagsSet(bit_offset, 16, value);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet32);
+int xglFlagsSet32(int bit_offset, int value)
+{
+    return xglFlagsSet(bit_offset, 32, value);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_flags", xglFlagsSet64);
+long long xglFlagsSet64(int bit_offset, long long value)
+{
+    unsigned long long low;
+    unsigned long long high;
+
+    /*
+     * Unsigned composition mirrors xglFlagsGet64: keeps the high << 32 shift
+     * defined (high may be negative as a plain 32-bit call result) while
+     * reproducing the same bit pattern the target's sign-extending register
+     * convention produces.
+     */
+    low = xglFlagsSet(bit_offset, 32, (int)value);
+    high = xglFlagsSet(bit_offset + 32, 32, value >> 32);
+    return (long long)((high << 32) + low);
+}
 
 int xglFlagsGet(int bit_offset, int bit_count)
 {

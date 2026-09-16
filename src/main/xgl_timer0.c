@@ -10,15 +10,35 @@
 #define T0_MODE  ((volatile u32 *)0x10000010)
 #define T0_MODE_CUE 128
 
+typedef struct ArxBitReader {
+    u32 value;
+    u32 bit_count;
+    u32 *data;
+} ArxBitReader;
+
 void xglTimer0Reset(int mode)
 {
     *T0_COUNT = 0;
     *T0_MODE = mode + T0_MODE_CUE;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_timer0", xglTimer0Get);
+int xglTimer0Get(void)
+{
+    return *T0_COUNT & 0xffff;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_timer0", getbit1);
+static u32 getbit1(ArxBitReader *reader)
+{
+    u32 bit;
+
+    if (reader->bit_count == 0) {
+        reader->value = *reader->data++;
+    }
+    reader->bit_count = (reader->bit_count - 1) & 0x1f;
+    bit = reader->value >> 31;
+    reader->value <<= 1;
+    return bit;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_timer0", getbits);
 

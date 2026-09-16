@@ -11,6 +11,17 @@ extern void GamePauseDispBG(void);
 
 extern unsigned char ShadowEnv[];
 
+/*
+ * Only the packet handle at +0x00 is evidenced (DrawShadow). The rest of the
+ * structure is populated by DrawCredit, which is still unresolved; this is
+ * an explicit partial type and does not claim the layout beyond +0x00.
+ */
+typedef struct PauseDrawContext {
+    void *packet;
+} PauseDrawContext;
+
+extern void sceVif1PkAddDirectDataN(void *packet, const void *data, int count);
+
 extern void GamePauseDispCf(void);
 
 extern int xglFontGetStringWidth(const char *text);

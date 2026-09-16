@@ -61,4 +61,26 @@ extern const float lit4_004d8354;
  */
 extern const float D_004D8318;
 
+/* sefGetLineAdr (main:0x002e7ea0): the line-effect table, scaffold-owned like
+ * _scheduler/_ptAlloc/_battleData above; only its pointer accessor is C. */
+extern unsigned char _lineData[];
+
+/*
+ * sefGetDmgNull (main:0x002e7e40): 0x0079411C is _battleData + SEF_BATTLE_PHASE
+ * (0x00794110 + 0x00c), the same battle-phase field sefCalcLocalMatrix reads
+ * as *(short *)(battle + SEF_BATTLE_PHASE) (this file, main:0x002e2d48).
+ * Compiled in isolation (no other _battleData field is touched in
+ * sefGetDmgNull), the original computes this address directly against its
+ * own scaffold-owned .bss symbol instead of folding +0x00c onto
+ * _battleData's own relocation, so this declaration keeps the scaffold's own
+ * splat name rather than reusing _battleData (docs/naming.md,
+ * "Scaffold-owned data keeps its splat name"); measured with
+ * tools/asm_diff.py, `_battleData + SEF_BATTLE_PHASE` here relocates against
+ * _battleData with the offset folded into the load's own immediate
+ * (`lh v1,12(v0)`), while the original relocates against this narrower
+ * symbol with a zero immediate (`lh v1,0(v0)`) -- byte-identical once linked,
+ * but relocations_equal only holds for the latter.
+ */
+extern short D_0079411C[];
+
 #endif /* SRC_MAIN_SEF_H */

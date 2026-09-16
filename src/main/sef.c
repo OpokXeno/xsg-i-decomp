@@ -735,17 +735,56 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefPushEffect);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefPopEffect);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetBattleData);
+/* The effect tables are scaffold-owned, so these helpers expose their original
+ * addresses without defining or renaming the backing data. */
+unsigned char *sefGetBattleData(void)
+{
+    return _battleData;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetDmgNull);
+/*
+ * sefGetDmgNull returns the same two target ids sefCalcLocalMatrix selects
+ * for its target == 529 case (this file, main:0x002e2d48, sef.c:351-352).
+ * D_0079411C is _battleData + SEF_BATTLE_PHASE (declared in sef.h with the
+ * measured relocation evidence for why it keeps the scaffold's own name).
+ */
+#define SEF_TARGET_DAMAGE_NULL_A 527
+#define SEF_TARGET_DAMAGE_NULL_B 528
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sevGetPtAllocator);
+int sefGetDmgNull(void)
+{
+    return (D_0079411C[0] >= 2) ? SEF_TARGET_DAMAGE_NULL_A : SEF_TARGET_DAMAGE_NULL_B;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sevGetPtAllocator2);
+/* _ptAlloc's per-record byte size, the same 640 sefCalcLocalMatrix already
+ * multiplies by at sef.c:359. */
+#define SEF_PT_ALLOC_RECORD_SIZE 640
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetLineAdr);
+unsigned char *sevGetPtAllocator(int allocator_index)
+{
+    return &_ptAlloc[allocator_index * SEF_PT_ALLOC_RECORD_SIZE];
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetScheduler);
+unsigned char *sevGetPtAllocator2(int allocator_index)
+{
+    return &_ptAlloc[allocator_index * SEF_PT_ALLOC_RECORD_SIZE];
+}
+
+/* _lineData's per-record byte size; evidenced only here. */
+#define SEF_LINE_DATA_RECORD_SIZE 0x820
+
+unsigned char *sefGetLineAdr(int line_index)
+{
+    if (line_index < 0) {
+        return 0;
+    }
+    return &_lineData[line_index * SEF_LINE_DATA_RECORD_SIZE];
+}
+
+unsigned char *sefGetScheduler(void)
+{
+    return _scheduler;
+}
 
 /* Spark S1: static sbss scheduler-pointer getter.
  * Changed hypothesis: the original TU holds the current scheduler as a

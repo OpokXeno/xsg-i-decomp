@@ -226,13 +226,49 @@ def main():
                 "rebuilt from are not part of the repository (config/units)")
         if not records_available:
             unchecked_records.update(recs)
+        tu_rel = f"src/{a.unit}/{tu}.c"
+        published_defs, record_pins = None, []
         for rp in (sorted(recs) if records_available else []):
             rec = json.loads((ROOT / rp).read_text())
             rec_json[rp] = rec
             src = ROOT / rec["source"]["path"]
-            assert sha(src.read_bytes()) == rec["source"]["sha256"], rp
             lang = "ee-asm" if src.suffix == ".s" else "c"
             rec_lang[rp] = lang
+            on_tu = [s for s in (rec["source"].get("tu_sources") or ()) if s.get("path") == tu_rel]
+            if lang == "c" and not reconstruct and on_tu:
+                # The record was repointed at the published TU file (task
+                # tu-retire-legacy-src), and that file, not the record, is what the
+                # build compiles here. Its whole-file `sha256` is then a property of
+                # the published baseline: it moves whenever anything else in the
+                # file is edited (another function, a header move, a comment), so
+                # it neither proves nor disproves anything about this record's
+                # functions and must not stop the build. It is reported
+                # (`record_pins`), exactly as tools/tu_audit.py reports it
+                # (`accepted_records.stale_pins`); the body is judged by the audit
+                # against the archived pre-migration source. What this pass still
+                # requires is that every function of the record is a C definition
+                # of the published TU file.
+                if published_defs is None:
+                    published_defs = {n for k, _, n in csplit.split((ROOT / tu_rel).read_text())
+                                      if k == "func"}
+                on_disk = sha((ROOT / tu_rel).read_bytes())
+                for s in on_tu:
+                    missing = [n for n in s.get("functions", ()) if n not in published_defs]
+                    if missing:
+                        raise SystemExit(f"gen_ovl_src: {rp}: {', '.join(missing)} is not a C "
+                                         f"definition of the published {tu_rel}")
+                    pinned = sorted({s["sha256"]} | ({rec["source"]["sha256"]}
+                                                     if rec["source"]["path"] == tu_rel else set()))
+                    record_pins.append(dict(record=rp, source=tu_rel,
+                                            pin="matches" if pinned == [on_disk] else "stale",
+                                            on_disk=on_disk, pinned=pinned))
+                continue
+            # The record's own source is read (a TU rebuilt from it) or it is not the
+            # published TU file (an accepted .s, a legacy per-function source): its
+            # pin is the integrity of exactly what is consumed, and it is enforced.
+            if sha(src.read_bytes()) != rec["source"]["sha256"]:
+                raise SystemExit(f"gen_ovl_src: {rp}: {rec['source']['path']} does not hash to "
+                                 f"the record's source.sha256")
             if lang == "ee-asm" or not reconstruct:
                 continue
             items = csplit.split(src.read_text())
@@ -388,6 +424,7 @@ def main():
                           adaptations=adaptations_used, split_unused_declarations=split_dropped,
                           accepted_asm_files=accepted_asm_files,
                           header_divergence=adapt.get(tu, {}).get("header_divergence", []),
+                          record_pins=record_pins,
                           sha256=sha(text.encode()))
     if report:
         add_accepted_asm_macro(a.unit_dir / "include/include_asm.h")
@@ -396,6 +433,12 @@ def main():
     asm_units = sum(len(r["accepted_asm_files"]) for r in report.values())
     print(f"{a.unit}: {len(report)} C TUs, {renamed} INCLUDE_ASM local renames, "
           f"{asm_units} accepted-assembly unit(s) checked against the compile contract")
+    stale = sum(1 for r in report.values() for p in r["record_pins"] if p["pin"] == "stale")
+    if stale:
+        print(f"{a.unit}: {stale} accepted record(s) carry a whole-file source.sha256 that no "
+              f"longer matches the published TU file they point at; their functions are still "
+              f"C definitions of it (bookkeeping, not a build input: see record_pins in "
+              f"tu-src-report.json and tools/tu_audit.py accepted_records.stale_pins)")
     if unchecked_records:
         print(f"{a.unit}: the acceptance records are not part of this repository, so the "
               f"source-integrity check of {len(unchecked_records)} record(s) was not "

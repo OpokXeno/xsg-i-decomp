@@ -10,6 +10,9 @@ extern char *strcat(char *destination, const char *source);
 extern int SCRIPT_load(const char *path);
 extern int SCRIPT_exec(void);
 extern const char event_suffix[];
+extern void GameResourceReset(int reset_mode);
+extern void ACT_init(void);
+extern void CallMethod(const char *method_name);
 
 INCLUDE_ASM("asm/main/nonmatchings/disp_on", disptest);
 
@@ -87,9 +90,44 @@ static void loader(MapLoadTask *task)
 
 INCLUDE_ASM("asm/main/nonmatchings/disp_on", LoadMap);
 
-INCLUDE_ASM("asm/main/nonmatchings/disp_on", LoadMap2);
+void LoadMap2(int map_id, int event_index)
+{
+    XglTaskScheduler *scheduler;
+    MapLoadTask *task;
 
-INCLUDE_ASM("asm/main/nonmatchings/disp_on", LoadMapOnly);
+    GameResourceReset(0);
+    ACT_init();
+    scheduler = GameLoopState.task_scheduler;
+    task = (MapLoadTask *)xglTaskEntryNext(
+        scheduler, (int (*)(XglTaskPrefix *))loader,
+        scheduler != 0 ? scheduler->active_tail : 0);
+    if (task != 0) {
+        task->header.state = &GameLoopState;
+        task->header.flags = 0;
+        task->header.next_callback = 0;
+    }
+    task->event_index = event_index;
+    task->map_id = map_id;
+    task->request = MAP_LOAD_MAP_AND_EVENT;
+}
+
+void LoadMapOnly(int map_id)
+{
+    XglTaskScheduler *scheduler;
+    MapLoadTask *task;
+
+    scheduler = GameLoopState.task_scheduler;
+    task = (MapLoadTask *)xglTaskEntryNext(
+        scheduler, (int (*)(XglTaskPrefix *))loader,
+        scheduler != 0 ? scheduler->active_tail : 0);
+    if (task != 0) {
+        task->header.state = &GameLoopState;
+        task->header.flags = 0;
+        task->header.next_callback = 0;
+    }
+    task->map_id = map_id;
+    task->request = MAP_LOAD_MAP_ONLY;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/disp_on", EventTimerTask);
 

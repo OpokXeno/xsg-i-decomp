@@ -2,13 +2,32 @@
 #include "shared.h"
 #include "data_buffer.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/data_buffer", DataBuffer_init);
+void DataBuffer_init(DataBuffer *buffer, DataBufferByte *base, int length, int big_endian)
+{
+    if (big_endian == 0)
+        buffer->reader = DataBuffer_LittleEndian_getUIntegerAt;
+    else
+        buffer->reader = DataBuffer_BigEndian_getUIntegerAt;
+    buffer->base = base;
+    buffer->limit = base + length;
+    buffer->position = base;
+    buffer->length = length;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/data_buffer", DataBuffer_getPos);
+int DataBuffer_getPos(DataBuffer *buffer)
+{
+    return buffer->position - buffer->base;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/data_buffer", DataBuffer_setPos);
+void DataBuffer_setPos(DataBuffer *buffer, int offset)
+{
+    buffer->position = buffer->base + offset;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/data_buffer", DataBuffer_seek);
+void DataBuffer_seek(DataBuffer *buffer, int offset)
+{
+    buffer->position += offset;
+}
 
 int DataBuffer_getBytes(DataBuffer *buffer, DataBufferByte *destination, int length)
 {

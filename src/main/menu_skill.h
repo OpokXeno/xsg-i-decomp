@@ -63,7 +63,10 @@ typedef struct PlayerCharacter {
 
 extern void *dataPlChaGet(unsigned int character_id);
 
-extern unsigned short SkillNextLvGet(unsigned char level);
+/* Populated with the loaded skill table by MenuSkill (INCLUDE_ASM below). */
+extern unsigned char *SkillDataBuf;
+
+extern unsigned short SkillNextLvGet(int level);
 
 extern void xglSoundEffectNormalID(int sound_id, int variant);
 

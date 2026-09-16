@@ -16,13 +16,16 @@
  * - After the copy the compiler reloads RssdWork.flags (lw v0,0(a2) before
  *   the sra/andi), i.e. the copied record may alias an `int` object under
  *   GCC's type-based aliasing. The words after the two halfwords are
- *   therefore `int`-typed; their meaning is not evidenced by this function,
- *   so they stay an explicit unmodeled word span rather than named fields.
+ *   therefore `int`-typed.
+ * - The sequence command wrappers in main/tu113 return the word at +0x08.
+ *   Its protocol meaning is not yet known, so the neutral name is `value`.
  */
 typedef struct RssdRpcResponse {
     unsigned short _unmodeled_00; /* +0x00 */
     short result;                 /* +0x02: nonzero -> error status (-1) */
-    int _unmodeled_04[7];         /* +0x04..0x1f: 32-bit words, not read here */
+    int _unmodeled_04;            /* +0x04: 32-bit word, meaning not recovered */
+    int value;                    /* +0x08: command result value */
+    int _unmodeled_0c[5];         /* +0x0c..0x1f: 32-bit words, not read here */
 } RssdRpcResponse;
 
 /* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
@@ -37,7 +40,9 @@ typedef struct RssdRpcResponse {
  */
 typedef struct RssdWorkFlags {
     int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
-    unsigned char _unmodeled_004[0x24];   /* +0x004..0x027 */
+    unsigned char _unmodeled_004[0x0c];   /* +0x004..0x00f */
+    unsigned short sample_rate;           /* +0x010: samples per second used by SsdGetTimeCode */
+    unsigned char _unmodeled_012[0x16];   /* +0x012..0x027 */
     void (*complete_callback)(int status, RssdRpcResponse *response,
                               void *arg); /* +0x028: one-shot, cleared after use */
     void *callback_arg;                   /* +0x02c: third complete_callback argument */
@@ -68,12 +73,66 @@ typedef struct RssdWorkFlags {
     int next_wave_thread_id;              /* +0x1ac: RssdBackNextWaveThread */
     void *next_wave_thread_stack;         /* +0x1b0: MYwaveTransThStack */
     int sema_id;                          /* +0x1b4: signalled when the RPC completes */
-    unsigned char _unmodeled_1b8[0x48];   /* +0x1b8..0x1ff */
+    unsigned char _unmodeled_1b8[0x30];   /* +0x1b8..0x1e7 */
+    /*
+     * Two (callback, argument) pairs stored verbatim by main/tu112:
+     * SsdSetSampleDmaCallback (main:0x002410a0) `sw $4,488($2)` /
+     * `sw $5,492($2)` and SsdSetSampleKeyoffCallback (main:0x002410b8)
+     * `sw $4,496($2)` / `sw $5,500($2)`, $2 = &RssdWork. No recovered
+     * function reads them back, so their call signature is not evidenced
+     * and they stay untyped pointers named after the store site.
+     */
+    void *sample_dma_callback;            /* +0x1e8: SsdSetSampleDmaCallback arg0 */
+    void *sample_dma_callback_arg;        /* +0x1ec: SsdSetSampleDmaCallback arg1 */
+    void *sample_keyoff_callback;         /* +0x1f0: SsdSetSampleKeyoffCallback arg0 */
+    void *sample_keyoff_callback_arg;     /* +0x1f4: SsdSetSampleKeyoffCallback arg1 */
+    unsigned char _unmodeled_1f8[0x08];   /* +0x1f8..0x1ff */
 } RssdWorkFlags;
+
+/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
+#define RSSD_FLAG_SUCCESS 0x20
 
 void RssdBackgroundNextWave(const int *request);
 
 extern RssdWorkFlags RssdWork;
+
+/*
+ * One argument word of an RSSD request. Most commands pass plain integers;
+ * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence
+ * data wrappers of main/tu113 pass a buffer address in the same slot, so the
+ * word is a union of the two views (both are 32-bit on the EE).
+ */
+typedef union RssdRequestWord {
+    int value;
+    void *pointer;
+} RssdRequestWord;
+
+/*
+ * The 32-byte RSSD RPC request record.
+ *
+ * RssdCallFunc (main:0x0023fff0, still INCLUDE_ASM) copies all 32 bytes of a
+ * non-null request into the SIF RPC buffer RssdWork.response_source with
+ * four unaligned ldl/ldr -> sdl/sdr pairs (0x00240050..0x0024008c), then
+ * writes two fields of that copy from its own arguments: the +0x00 halfword
+ * (`sh $21,0($17)`, command) and the +0x0c word (`sw $16,12($17)`, size).
+ * No caller writes header[0..3] (+0x00..+0x0f), but every wrapper reserves
+ * the whole record on its stack (all of them have a 0x30-byte frame, however
+ * many argument words the command uses).
+ * arg[0..3] (+0x10..+0x1f) are the command's own argument words.
+ */
+typedef struct RssdRequest {
+    int header[4];
+    RssdRequestWord arg[4];
+} RssdRequest;
+
+/*
+ * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
+ * `request` may be null, otherwise it is copied as above, and `size` bytes
+ * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
+ * Returns -1 when the rounded payload exceeds the buffer, otherwise the
+ * sceSifCallRpc result.
+ */
+int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
 
 /*
  * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the

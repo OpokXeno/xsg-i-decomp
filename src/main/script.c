@@ -34,6 +34,34 @@ int getEmptyVM(ScriptObserverTask *observer);
 extern PadPrefix PadData;
 
 extern unsigned int s_nScriptCfTime;
+extern unsigned int s_nScriptFadeOutTime;
+extern unsigned int s_nScriptFadeRequest;
+extern unsigned char s_nScriptChangeTime;
+extern unsigned int s_nScriptSequenceReset;
+extern unsigned int s_nScriptEventFin;
+extern unsigned int s_nScriptEventActive;
+extern unsigned int s_nScriptTalkLock;
+
+typedef void (*JSNativeMethod)(void);
+extern void JS_init(int state, int class_capacity, int method_capacity);
+extern int JS_loadClass(const char *class_name);
+extern void JS_classSetup(int class_id, JSNativeMethod get_peer);
+extern void JS_classAddMethod(int class_id, const char *name,
+                              JSNativeMethod method);
+extern const char D_004DA460[];
+extern const char D_004C1D50[];
+extern const char D_004C1D60[];
+extern void JS_classLight_getPeer(void);
+extern void JS_classLight_setColor(void);
+extern void JS_classLight_setDirection2(void);
+
+/* Only the halfword at GameLoopState+0xC is evidenced by
+ * SCRIPT_sendMovieSkipSignal; the rest of the game-state record remains
+ * scaffold-owned. */
+typedef struct GameLoopMovieStatePrefix {
+    u8 unmodeled_00[0xC];
+    unsigned short movie_state;
+} GameLoopMovieStatePrefix;
 
 /* TU-local declarations for the main-00261860 observer/CallMethod allocation
  * (talktoObserver, CallMethod, CallMethod_I, CallMethod_II, funcObserver).
@@ -81,43 +109,123 @@ extern GameLoopStateAddressView GameLoopState;
         return;                      \
     } while (0)
 
-INCLUDE_ASM("asm/main/nonmatchings/script", initJS);
+static void initJS(int state)
+{
+    int class_id;
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_test);
+    JS_init(state, 0x40, 8);
+    class_id = JS_loadClass(D_004DA460);
+    JS_classSetup(class_id, JS_classLight_getPeer);
+    JS_classAddMethod(class_id, D_004C1D50, JS_classLight_setColor);
+    JS_classAddMethod(class_id, D_004C1D60, JS_classLight_setDirection2);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_talkIgnoreSet);
+void SCRIPT_test(SceneObject argument, SceneMethod *method)
+{
+    JNI_initThread(stageVM);
+    if (method != 0) {
+        SceneObject arguments[1];
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_talkIgnoreClr);
+        arguments[0] = argument;
+        JNI_callMethod(stageVM, method, arguments, 0);
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_talkIgnoreGet);
+void SCRIPT_talkIgnoreSet(void)
+{
+    s_nScriptTalkLock = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_sceneChangeTimeInit);
+void SCRIPT_talkIgnoreClr(void)
+{
+    s_nScriptTalkLock = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_sceneChangeTimeGet);
+int SCRIPT_talkIgnoreGet(void)
+{
+    return s_nScriptTalkLock;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_sceneChangeTimeSet);
+void SCRIPT_sceneChangeTimeInit(void)
+{
+    s_nScriptChangeTime = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_sceneChangeTimeDec);
+int SCRIPT_sceneChangeTimeGet(void)
+{
+    return s_nScriptChangeTime;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_sendMovieSkipSignal);
+void SCRIPT_sceneChangeTimeSet(int value)
+{
+    s_nScriptChangeTime = value;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_clrEventActiveFlag);
+void SCRIPT_sceneChangeTimeDec(void)
+{
+    if (s_nScriptChangeTime != 0)
+        s_nScriptChangeTime -= 1;
+    else
+        s_nScriptChangeTime = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_setEventActiveFlag);
+void SCRIPT_sendMovieSkipSignal(void)
+{
+    GameLoopMovieStatePrefix *game_state = (GameLoopMovieStatePrefix *)GameLoopState;
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_getEventActiveFlag);
+    if (game_state->movie_state == 3)
+        s_nScriptEventFin = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_eventFinish);
+void SCRIPT_clrEventActiveFlag(void)
+{
+    s_nScriptEventActive = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_methodClearSet);
+void SCRIPT_setEventActiveFlag(void)
+{
+    s_nScriptEventActive = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_methodClearGet);
+int SCRIPT_getEventActiveFlag(void)
+{
+    return s_nScriptEventActive;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_fade);
+void SCRIPT_eventFinish(void)
+{
+    s_nScriptEventFin = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_getFadeTime);
+void SCRIPT_methodClearSet(void)
+{
+    s_nScriptSequenceReset = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_fadeGet);
+int SCRIPT_methodClearGet(void)
+{
+    return s_nScriptSequenceReset;
+}
+
+void SCRIPT_fade(int time)
+{
+    s_nScriptFadeRequest = 1;
+    if (time < 0)
+        time = 0;
+    s_nScriptFadeOutTime = time;
+}
+
+int SCRIPT_getFadeTime(void)
+{
+    return s_nScriptFadeOutTime;
+}
+
+int SCRIPT_fadeGet(void)
+{
+    if (s_nScriptFadeRequest == 0)
+        return 0;
+    return s_nScriptFadeOutTime;
+}
 
 int SCRIPT_getCfTime(void)
 {

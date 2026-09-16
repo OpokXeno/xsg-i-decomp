@@ -6,13 +6,98 @@ INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Get_ActorNumber);
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Motion);
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Freeze);
+void Enemy_Command_Freeze(Actor *actor, int command)
+{
+    unsigned char *work;
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Turn);
+    work = (unsigned char *)(enepc + actor->number);
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Light);
+    if (ENEMY_FREEZE_STATE(work) == command)
+        return;
+    if ((unsigned char)(ENEMY_FREEZE_STATE(work) - 1) < 3 &&
+        (unsigned int)(command - 1) < 3)
+        return;
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Stop_FreeFall);
+    ENEMY_FREEZE_STATE(work) = command;
+    switch (command) {
+    case 0:
+        if (ENEMY_FREEZE_SAVED_SPEED(work) == ENEMY_FREEZE_NO_SAVED_SPEED)
+            return;
+        ACTOR_SPEED(actor) = ENEMY_FREEZE_SAVED_SPEED(work);
+        return;
+    case 1:
+        ENEMY_FREEZE_SAVED_SPEED(work) = ENEMY_FREEZE_NO_SAVED_SPEED;
+        return;
+    case 2:
+        ENEMY_FREEZE_SAVED_SPEED(work) = ACTOR_SPEED(actor);
+        ACTOR_SPEED(actor) = 0.0f;
+        return;
+    case 3:
+        ENEMY_FREEZE_SAVED_SPEED(work) = ACTOR_SPEED(actor);
+        ACTOR_SPEED(actor) = D_004D8140;
+        return;
+    }
+}
+
+void Enemy_Command_Turn(Actor *actor, signed char command)
+{
+    unsigned char *work;
+
+    work = (unsigned char *)(enepc + actor->number);
+
+    switch (command) {
+    case 0:
+        ENEMY_TURN_LOCK(work) = 1;
+        break;
+    case 1:
+        ENEMY_TURN_LOCK(work) = 0;
+        break;
+    case 2:
+    {
+        int current_mode;
+
+        current_mode = ENEMY_TURN_LOCK(work);
+        ENEMY_TURN_LOCK(work) = (current_mode ^ 1) != 0;
+        break;
+    }
+    }
+}
+
+void Enemy_Command_Light(Actor *actor, signed char light)
+{
+    unsigned char *work;
+
+    work = (unsigned char *)(enepc + actor->number);
+
+    switch (light) {
+    case 0:
+        ENEMY_LIGHT(work) = 1;
+        break;
+    case 1:
+        ENEMY_LIGHT(work) = 0;
+        break;
+    case 2:
+    {
+        short current_light;
+
+        current_light = ENEMY_LIGHT(work);
+        ENEMY_LIGHT(work) = (current_light ^ 1) != 0;
+        break;
+    }
+    }
+}
+
+void Enemy_Command_Stop_FreeFall(Actor *actor, signed char command)
+{
+    switch (command) {
+    case 0:
+        ACTOR_RUNTIME_FLAGS(actor) |= 0xc0000000u;
+        break;
+    case 1:
+        ACTOR_RUNTIME_FLAGS(actor) &= 0x3fffffffu;
+        break;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Type);
 

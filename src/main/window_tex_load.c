@@ -182,8 +182,32 @@ int UmnDataBaseMonsterCheck(int monster_id)
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnDataBaseAnalisisSet);
+void UmnDataBaseAnalisisSet(int monster_id)
+{
+    UmnDataBase *state = (UmnDataBase *)UmnDataBaseStateData;
+    int bit_number = monster_id - 0x22;
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnDataBaseAnalisisCheck);
+    if ((unsigned int)bit_number < 0x1d) {
+        state->monster_analysed[bit_number / 8] |=
+            (unsigned char)(1 << (bit_number % 8));
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", hen);
+int UmnDataBaseAnalisisCheck(int monster_id)
+{
+    UmnDataBase *state = (UmnDataBase *)UmnDataBaseStateData;
+    int bit_number = monster_id - 0x22;
+    int result = 0;
+
+    if ((unsigned int)bit_number < 0x1d) {
+        result = ((unsigned int)state->monster_analysed[bit_number / 8] >>
+                  (bit_number % 8)) & 1;
+    }
+
+    return result;
+}
+
+int hen(void)
+{
+    return MenuModelInit(0);
+}

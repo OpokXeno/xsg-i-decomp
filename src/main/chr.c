@@ -175,9 +175,17 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_sclX__FFZ);
+void Java_xeno_Chr_sclX__FFZ(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_sclX(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_sclX__IFZ);
+void Java_xeno_Chr_sclX__IFZ(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_sclX(0, thread, arguments, failure_result);
+}
 
 static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
                      u32 *failure_result)
@@ -255,9 +263,17 @@ static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_sclY__FFZ);
+void Java_xeno_Chr_sclY__FFZ(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_sclY(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_sclY__IFZ);
+void Java_xeno_Chr_sclY__IFZ(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_sclY(0, thread, arguments, failure_result);
+}
 
 static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
                      u32 *failure_result)

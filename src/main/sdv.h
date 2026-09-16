@@ -5,6 +5,8 @@
 #ifndef SRC_MAIN_SDV_H
 #define SRC_MAIN_SDV_H
 
+#include "menu_skill.h"
+
 typedef short int16_t;
 
 /*
@@ -26,5 +28,15 @@ typedef struct {
     float ang[3];
     unsigned int : 32;
 } SdvCamOffset;
+
+extern int _sdvAmbFrame;
+extern int _sdvAmbState;
+
+extern void sdvSetAmbStateSub(int state, int effect_no, int force);
+extern void *xglStudioGetLight2(void);
+extern void xglLightIntensityAmbient(void *light, void *ambient);
+extern void func_A2C3D8(void *map_rgb);
+extern unsigned char _sdvAmbient[16];
+extern unsigned char _sdvMapRgb[16];
 
 #endif /* SRC_MAIN_SDV_H */

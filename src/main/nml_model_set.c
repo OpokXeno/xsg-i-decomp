@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "nml_model_set.h"
 
+extern int s_nClip;
+
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", _VectorLengthSQ_0022DE28);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", _CurSetMatrix);
@@ -50,9 +52,21 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_MAP_HANDLE);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_MAP_HANDLE);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_FADE_CONTROL);
+static void CONSTRUCT_FADE_CONTROL(FadeControl *control)
+{
+    control->frame = -1;
+    control->duration = 1;
+    control->skipRender = 0;
+    control->dispose = 0;
+    control->cancelFrames = 0;
+    control->startDelay = 0;
+    control->locked = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", INIT_FADE_CONTROL);
+static void INIT_FADE_CONTROL(FadeControl *control)
+{
+    CONSTRUCT_FADE_CONTROL(control);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_MODEL_ENTRY);
 
@@ -64,37 +78,88 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_MODELSYSTEM);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetBackBufferClear);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFaceModel);
+void nmlModelSetFaceModel(int enabled)
+{
+    if (enabled != 0) {
+        s_inLayout.slots[0x250 / 4].i |= 0x100000;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetHumanModel);
+void nmlModelSetHumanModel(int enabled)
+{
+    if (enabled != 0) {
+        s_inLayout.slots[0x250 / 4].i |= 0x40;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetMapClip);
+void nmlModelSetMapClip(int enabled)
+{
+    if (enabled != 0) {
+        s_nMapClip = 1;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendRenderCancel);
+void nmlModelSendRenderCancel(void)
+{
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelGetRenderCancel);
+int nmlModelGetRenderCancel(void)
+{
+    return s_nRenderCancelOld;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendBackBufferSignal);
+void nmlModelSendBackBufferSignal(void)
+{
+    s_nUseBackBuffer = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelIsBackBufferRequest);
+int nmlModelIsBackBufferRequest(void)
+{
+    return D_0095BB3C[0];
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendPauseSignal);
+void nmlModelSendPauseSignal(int pause)
+{
+    s_nPause = pause;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendMenuStart);
+void nmlModelSendMenuStart(void)
+{
+    s_nMenu = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendMenuEnd);
+void nmlModelSendMenuEnd(void)
+{
+    s_nMenu = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelGetMenuStatus);
+int nmlModelGetMenuStatus(void)
+{
+    return s_nMenu;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendSignalStartBattle);
+void nmlModelSendSignalStartBattle(void)
+{
+    s_nFrameLockOff = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendSignalEventFinish);
+void nmlModelSendSignalEventFinish(void)
+{
+    s_nFrameLockOff = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendPacketChangeSignal);
+void nmlModelSendPacketChangeSignal(void)
+{
+    s_nPacketSignal = 0;
+    D_0095BB3C[0] = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendSignalMovieStart);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetMpeg2CrossFadeTime);
+void nmlModelSetMpeg2CrossFadeTime(int time)
+{
+    D_0095BB44[0] = time;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendSignalMovieFinish);
 
@@ -198,25 +263,96 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetPartsPixelAlpha);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetScale);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetClip);
+void nmlModelSetClip(int clip)
+{
+    s_nClip = clip;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetAlpha);
+void nmlModelSetAlpha(u64 alpha)
+{
+    s_inLayout.fields.alpha = alpha;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetStencil);
+#define NML_RENDER_STENCIL 0x4u
+#define NML_RENDER_ZWRITE 0x8u
+#define NML_RENDER_TOUMEI 0x20u
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetZwrite);
+void nmlModelSetStencil(int enabled)
+{
+    if (enabled) {
+        s_inLayout.fields.render_status |= NML_RENDER_STENCIL;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetTransparency);
+void nmlModelSetZwrite(int enabled)
+{
+    if (enabled) {
+        s_inLayout.fields.render_status |= NML_RENDER_ZWRITE;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetReflTransparency);
+void nmlModelSetTransparency(float transparency)
+{
+    if (transparency < 0.0f) {
+        transparency = 0.0f;
+    }
+    if (1.0f < transparency) {
+        transparency = 1.0f;
+    }
+    s_inLayout.slots[0x220 / 4].f = transparency;
+    s_inLayout.slots[0x2c0 / 4].f = transparency;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetToumei);
+void nmlModelSetReflTransparency(float transparency)
+{
+    if (transparency < 0.0f) {
+        transparency = 0.0f;
+    }
+    if (1.0f < transparency) {
+        transparency = 1.0f;
+    }
+    s_inLayout.slots[0x224 / 4].f = transparency;
+}
+
+void nmlModelSetToumei(int enabled)
+{
+    if (enabled) {
+        s_inLayout.fields.render_status |= NML_RENDER_TOUMEI;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetLight);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetTexture);
+/*
+ * Bounds and alignment a model texture pointer must satisfy: the pointer
+ * lands inside main RAM at or above the executable's own load base
+ * (config/tu/main/tu000.json "start": "0x00200000") and at or below the top
+ * of the 32 MiB EE RAM, and it is qword (16-byte) aligned as GIF/DMA
+ * texture transfers require.
+ */
+#define NML_TEXTURE_RAM_BASE 0x00200000u
+#define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
+#define NML_TEXTURE_ALIGN_MASK 0xfu
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetTexfunc);
+void nmlModelSetTexture(const char *texture)
+{
+    /* Accept only a non-null, in-range, qword-aligned pointer whose header
+     * carries the "XTX" texture-resource signature: texture[0..2] ==
+     * 'X','T','X' (texture[2] is compared against texture[0], not a literal,
+     * per the original disassembly). */
+    if (texture == 0 ||
+        (u32)texture - NML_TEXTURE_RAM_BASE > NML_TEXTURE_RAM_MAX_OFFSET ||
+        ((u32)texture & NML_TEXTURE_ALIGN_MASK) != 0 ||
+        texture[0] != 'X' || texture[1] != 'T' || texture[2] != texture[0]) {
+        return;
+    }
+    s_inLayout.fields.texture = texture;
+}
+
+void nmlModelSetTexfunc(int texfunc)
+{
+    s_inLayout.fields.texfunc = texfunc;
+}
 
 /*
  * Stores the current model matrix pointer in the pointer-width s_inLayout

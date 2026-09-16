@@ -21,6 +21,51 @@
 #define JNT_MATRIX_SELECT(scratch) \
     (*(JntMatrixSelect *)((scratch) + JNT_MATRIX_SELECT_OFFSET))
 
+/*
+ * Three more scratchpad slots share a fixed layout with the pair above, so
+ * they are named with a partial struct instead of one offset macro per
+ * field: JNT_setInterpMatrix stores its matrix-buffer argument at 0x7A4 and
+ * its float argument at 0x800 (interp_matrix / interpolation below).
+ *
+ * JNT_setCurve stores its two pointer arguments at 0x7A8/0x7AC. Neither is
+ * an end pointer: this same TU's JNT_getStaticVal (VA 0x0030EDC8) and
+ * JNT_getVal (VA 0x0030F038) read them back as two independent per-element
+ * 32-byte record tables, each gated on both slots being non-null and then
+ * indexed by element_index*32 (the element's own 0x2C field):
+ *   - JNT_getStaticVal: `sll $3,$11,5 / addu $3,$3,$5` with
+ *     $5 = lw 0x7A8($10) -- 0x7A8 is the table it reads, static_value_records.
+ *   - JNT_getVal: `sll $2,$6,5 / addu $3,$2,$3` with
+ *     $3 = lw 0x7AC($17) -- 0x7AC is the table it reads, value_records.
+ */
+typedef struct JntWork {
+    unsigned char unmodeled_000[0x7A4];
+    JntMatrixBuffer interp_matrix; /* 0x7A4, JNT_setInterpMatrix */
+    void *static_value_records;    /* 0x7A8, JNT_setCurve arg0; read by JNT_getStaticVal */
+    void *value_records;           /* 0x7AC, JNT_setCurve arg1; read by JNT_getVal */
+    unsigned char unmodeled_7b0[0x50];
+    float interpolation; /* 0x800, JNT_setInterpMatrix */
+} JntWork;
+
+/*
+ * A joint element is a fixed-size record: JNT_getElement indexes an array of
+ * them and JNT_nextElement advances by exactly one. The layout beyond that
+ * 0x40-byte stride is not recovered, so it stays a single unmodeled span
+ * (docs/naming.md) rather than invented members.
+ */
+typedef struct JntElement {
+    unsigned char unmodeled_00[0x40];
+} JntElement;
+
+/*
+ * The joint resource header JNT_getRootElement reads: 0x10 bytes not
+ * recovered here, then a self-relative offset field whose own address plus
+ * its value is the joint's root element.
+ */
+typedef struct JntElementHeader {
+    unsigned char unmodeled_00[0x10];
+    int root_element_offset;
+} JntElementHeader;
+
 INCLUDE_ASM("asm/main/nonmatchings/jnt", get_fcvpack);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", get_fcvpack_fix);
@@ -91,9 +136,19 @@ void JNT_setMatrix2(JntMatrixBuffer matrix_buffer, JntMatrixSelect matrix_select
     JNT_MATRIX_SELECT(scratch) = matrix_select;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setInterpMatrix);
+void JNT_setInterpMatrix(JntMatrixBuffer matrix_buffer, float interpolation)
+{
+    JntWork *work = (JntWork *)JNT_SCRATCH_BASE;
+    work->interp_matrix = matrix_buffer;
+    work->interpolation = interpolation;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setCurve);
+void JNT_setCurve(void *static_value_records, void *value_records)
+{
+    JntWork *work = (JntWork *)JNT_SCRATCH_BASE;
+    work->static_value_records = static_value_records;
+    work->value_records = value_records;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setMDLMatrix);
 
@@ -101,7 +156,11 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setModelMatrix);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getMoveElement);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getRootElement);
+void *JNT_getRootElement(void *joint)
+{
+    int *root_element_offset = &((JntElementHeader *)joint)->root_element_offset;
+    return (unsigned char *)root_element_offset + *root_element_offset;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setModel);
 
@@ -121,9 +180,15 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_initProducer);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_startProduction);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getElement);
+void *JNT_getElement(void *elements, int index)
+{
+    return &((JntElement *)elements)[index];
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_nextElement);
+void *JNT_nextElement(void *element)
+{
+    return (JntElement *)element + 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_defaultConsumer);
 

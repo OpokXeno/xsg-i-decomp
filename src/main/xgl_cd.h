@@ -52,6 +52,26 @@ typedef struct CdReadMode {
     unsigned char data_pattern;
 } CdReadMode;
 
+/* Only the fields xglCdArcInitSub1 writes are evidenced here. */
+typedef struct CdArchiveEntry {
+    unsigned char state;
+    unsigned char unmodeled_01[3];
+    unsigned char *destination;
+    int lbn;
+} CdArchiveEntry;
+
+/* xglCdGetFilePos fills a 0x30-byte file-position record; only its leading
+ * lbn word is evidenced by its callers in this TU. */
+typedef struct CdFilePosition {
+    int lbn;
+    unsigned char unmodeled_04[0x2c];
+} CdFilePosition;
+
+/* Defined later in this file (INCLUDE_ASM); declared here, like BCD2INT
+ * above, so its LOCAL definition does not follow a non-static declaration. */
+static int xglCdGetFilePos(CdFilePosition *file_position, const char *path,
+                           void (*callback)(int event, int value));
+
 void xglCdPowerOffCB(void);
 
 extern unsigned char LW[];
