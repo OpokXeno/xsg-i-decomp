@@ -191,6 +191,15 @@ def main():
              for sec, v in m["sections"].items() if v.get("common_tail")}
     tail_syms = {s.name: s for s in osyms for sec, (lo, hi) in tails.items()
                  if sec_by_index[s.shndx] == sec and lo <= s.value < hi}
+    # Object starts inside another TU's .text piece.  A TU without functions whose
+    # zero text bytes are carried as trailing padding of the previous TU
+    # (empty_002f0c64 after jni: `splat_range` of jni runs to 0x002F0C68) has no
+    # piece of its own, yet its compiler stamps (`gcc2_compiled.`,
+    # `__gnu_compiled_c`) sit at its own start inside that padding.  Those
+    # symbols belong to the next object, not to the C TU whose piece carries
+    # the padding, so the symbol audit of a C piece stops at the first other
+    # object start it contains.
+    text_starts = sorted((int(t["text"]["start"], 16), t["name"]) for t in tus if t["text"].get("start"))
     for t in tus:
         if mode(t) != "c":
             continue
@@ -224,9 +233,19 @@ def main():
             pl = placed.get((c_obj, sec))
             c_end = pl[0] + pl[1] if pl else lo
             gap = hi - c_end
-            inside = [s for s in osyms if sec_by_index[s.shndx] == sec and lo <= s.value < hi]
+            own_hi, carried = hi, None
+            if sec == ".text":
+                carried = next(((va, name) for va, name in text_starts if lo < va < hi and name != n), None)
+                if carried:
+                    own_hi = carried[0]
+            inside = [s for s in osyms if sec_by_index[s.shndx] == sec and lo <= s.value < own_hi]
             piece = dict(start=f"0x{lo:08X}", end=f"0x{hi:08X}", c_end=f"0x{c_end:08X}", gap=gap,
                          original_symbols=len(inside))
+            if carried:
+                piece["carried_object"] = dict(
+                    tu=carried[1], start=f"0x{carried[0]:08X}",
+                    symbols=[dict(symbol=s.name, va=f"0x{s.value:08X}") for s in osyms
+                             if sec_by_index[s.shndx] == sec and carried[0] <= s.value < hi])
             if gap < 0 or (gap > 0 and gap >= align_of(hi, 16 if sec != ".text" else 8)):
                 problems.append(dict(kind="C piece gap is not alignment padding", tu=n, section=sec, **piece))
             for s in inside:

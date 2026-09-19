@@ -6,6 +6,9 @@
 #include "ov12/rg_singleton_id.h"
 #include "rg_shot_db.h"
 
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _EntryTemporariesShotDB);
 
 /*
@@ -33,7 +36,20 @@ RgSimpleDB *InstanceOfRgShotDB(void)
     return shot_database;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBGetEssence);
+extern int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
+extern void *RgSimpleDBGet(RgSimpleDB *pDB, int nDataID);
+extern void RgSimpleDBClear(RgSimpleDB *pDB);
+
+void *RgShotDBGetEssence(RgSimpleDB *database, const char *name)
+{
+    int dataID;
+
+    dataID = RgSimpleDBFind(database, name);
+    if (dataID >= 0) {
+        return RgSimpleDBGet(database, dataID);
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _ReadCommon_00A18730);
 
@@ -51,4 +67,21 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _ReadFire);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBRead);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBClear);
+/*
+ * External file-backed witnesses, not candidate-emitted data: this window is
+ * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
+ *
+ * ov12:0x00a535d8 contains the assertion expression "pDB != NIL".
+ * ov12:0x00a53470 contains the source filename "../rg_shot_db.euc.c".
+ */
+extern const char D_00A535D8[];
+extern const char D_00A53470[];
+
+void RgShotDBClear(RgSimpleDB *database)
+{
+    if (database == 0) {
+        assert_prog(D_00A535D8, D_00A53470, 346);
+    }
+    RgSimpleDBClear(database);
+    _EntryTemporariesShotDB(database);
+}

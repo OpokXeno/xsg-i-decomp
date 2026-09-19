@@ -25,6 +25,8 @@ extern SceneThread *evtVM[2];
 extern int UseVMFlag;
 extern int currentScriptDB;
 extern SceneClass *classJava_xeno_Stage;
+extern SceneClass *classJava_xeno_Chr;
+extern void createTalkTask(void *actor, const char *method_name);
 extern const char call_method_signature_void[4];
 extern const char call_method_signature_int[5];
 extern const char call_method_signature_int_int[6];
@@ -41,6 +43,9 @@ extern unsigned int s_nScriptSequenceReset;
 extern unsigned int s_nScriptEventFin;
 extern unsigned int s_nScriptEventActive;
 extern unsigned int s_nScriptTalkLock;
+extern unsigned int s_nScriptFrameLockEntry;
+extern int resourceID;
+extern int windowOwner;
 
 typedef void (*JSNativeMethod)(void);
 extern void JS_init(int state, int class_capacity, int method_capacity);
@@ -80,6 +85,40 @@ typedef struct ScriptDbEntry {
     u8 unmodeled_14[0x1C - 0x14];
 } ScriptDbEntry;
 extern ScriptDbEntry scriptDB[];
+
+/*
+ * TU-local partial view of the engine's actor record (the 0xa70-strided
+ * `actor` array at main 0x0043c1e0; other units keep their own scoped views
+ * of the same record, e.g. src/main/near_dir.h). SCRIPT_execTalkto and
+ * SCRIPT_execTouchto are handed one entry and read only the three members
+ * below; every other byte of the record is untouched by this allocation and
+ * stays an unmodeled span.
+ *
+ *   +0x4c0 script_object      the same byte talktoObserver already reaches
+ *                             through ACTOR_SCRIPT_OBJECT_OFFSET (this
+ *                             allocation's own two call sites name it as a
+ *                             member instead, so as not to add more
+ *                             offset-cast findings than that one already
+ *                             accepted use).
+ *   +0x9f4 talk_method_name   the JNI method name of the actor's talk
+ *                             script method, null when it has none. Both
+ *                             entry points gate on it before queuing a talk
+ *                             task, and SCRIPT_execTalkto passes it straight
+ *                             through as the method to call. createTalkTask
+ *                             (0x00261620, still assembler) passes its own
+ *                             second argument to loadConstString(bytes,
+ *                             length) (0x00261698), so the field is a name
+ *                             string, not an integer flag.
+ *   +0x9f8 touch_method_name  the method SCRIPT_execTouchto passes instead,
+ *                             once the same +0x9f4 gate lets it through.
+ */
+typedef struct ScriptActorMethods {
+    u8 unmodeled_00[0x4c0];
+    SceneObject script_object;      /* +0x4c0 */
+    u8 unmodeled_4c4[0x9f4 - 0x4c4];
+    const char *talk_method_name;   /* +0x9f4 */
+    const char *touch_method_name;  /* +0x9f8 */
+} ScriptActorMethods;
 
 /* Reused TU-local declaration (src/core/main-0025a9c0/private.h and every
  * other GameLoopState-family accepted source in this unit). */
@@ -237,15 +276,64 @@ void SCRIPT_incCfTime(void)
     s_nScriptCfTime += 1u;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_frameLock2Battle);
+void SCRIPT_frameLock2Battle(void)
+{
+    s_nScriptFrameLockEntry = 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_reset);
 
 INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_init);
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_execTalkto);
+/*
+ * Queue the actor's talk task when it has a talk method, its owning script
+ * is active, no other talk is in progress, the actor is a xeno/Chr instance
+ * and the current script's VM thread is running on a Stage object.
+ */
+void SCRIPT_execTalkto(void *actor)
+{
+    ScriptActorMethods *methods = (ScriptActorMethods *)actor;
+    ScriptDbEntry *entry = &scriptDB[currentScriptDB];
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_execTouchto);
+    if (methods->talk_method_name != 0 && entry->active != 0 &&
+        s_nScriptTalkLock == 0 &&
+        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0 &&
+        JNI_isInstanceOf(entry->thread->object, classJava_xeno_Stage) != 0) {
+        /*
+         * The original calls createTalkTask with jal and returns through
+         * the shared epilogue instead of a sibling jump. Under this TU's
+         * compiler the call stays out of tail position only inside a loop
+         * construct, which is the shape a do/while (0) statement macro
+         * gives it.
+         */
+        do {
+            createTalkTask(actor, methods->talk_method_name);
+        } while (0);
+    }
+}
+
+/*
+ * Queue the actor's touch task under the same gate as SCRIPT_execTalkto,
+ * but call the actor's touch method instead of its talk method.
+ */
+void SCRIPT_execTouchto(void *actor)
+{
+    ScriptActorMethods *methods = (ScriptActorMethods *)actor;
+    ScriptDbEntry *entry = &scriptDB[currentScriptDB];
+
+    if (methods->talk_method_name != 0 && entry->active != 0 &&
+        s_nScriptTalkLock == 0 &&
+        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0 &&
+        JNI_isInstanceOf(entry->thread->object, classJava_xeno_Stage) != 0) {
+        /*
+         * Same shape as SCRIPT_execTalkto: the original keeps a real jal
+         * to createTalkTask, which only a loop construct reproduces here.
+         */
+        do {
+            createTalkTask(actor, methods->touch_method_name);
+        } while (0);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/script", createTalkTask);
 
@@ -518,15 +606,39 @@ int getEmptyVM(ScriptObserverTask *observer)
     return observer->vm_slot != -1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_load);
+extern int loadScriptCD(ScriptDbEntry *entry, const char *path);
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_load2);
+int SCRIPT_load(const char *path)
+{
+    return loadScriptCD(&scriptDB[(currentScriptDB + 1) & 1], path);
+}
+
+extern int loadScriptCD2(ScriptDbEntry *entry, const char *path);
+
+int SCRIPT_load2(const char *path)
+{
+    return loadScriptCD2(&scriptDB[(currentScriptDB + 1) & 1], path);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_load_DBG);
 
 INCLUDE_ASM("asm/main/nonmatchings/script", getStrIndex_00262160);
 
-INCLUDE_ASM("asm/main/nonmatchings/script", replacePathExt);
+extern char *strcpy(char *destination, const char *source);
+extern unsigned int strlen(const char *string);
+static char *getStrIndex(char *string, unsigned int length, int ch);
+
+/*
+ * loadScriptCD/loadScriptCD2/loadScript all capture this call's return
+ * value ($v0 into $s0, e.g. build/main/asm/main/nonmatchings/script/
+ * loadScriptCD.s "jal replacePathExt" / "daddu $16, $2, $0"): the tail
+ * call to strcpy leaves its return (the extension write position) in v0,
+ * and the caller reads it, so this returns that pointer instead of void.
+ */
+static char *replacePathExt(char *path, const char *ext)
+{
+    return strcpy(getStrIndex(path, strlen(path), '.'), ext);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/script", attrObserver);
 
@@ -564,12 +676,24 @@ INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_exec);
 
 INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_exec2);
 
-INCLUDE_ASM("asm/main/nonmatchings/script", XTK_setResourceID);
+void XTK_setResourceID(int id)
+{
+    resourceID = id;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", XTK_getResourceID);
+int XTK_getResourceID(void)
+{
+    return resourceID;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", XTK_setWindowOwner);
+void XTK_setWindowOwner(int owner)
+{
+    windowOwner = owner;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/script", XTK_getWindowOwner);
+int XTK_getWindowOwner(void)
+{
+    return windowOwner;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/script", XTK_findFile);

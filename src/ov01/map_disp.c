@@ -5,9 +5,9 @@
 #include "map_disp.h"
 
 void mapInit(void) {
-    mapDispWork[0] = 0;
-    mapMul.components[0] = 1.0f;
     mapDispWork[1] = 0;
+    mapMul.components[0] = 1.0f;
+    mapDispWork[0] = 0;
     mapMul.components[1] = 1.0f;
     mapMul.components[2] = 1.0f;
     mapMul.components[3] = 1.0f;
@@ -25,10 +25,19 @@ INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispOn);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispOff);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispOnAll);
+void mapDispOnAll(void)
+{
+    mapDispWork[1] = 0;
+    mapDispWork[0] = 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispOffAll);
+void mapDispOffAll(void)
+{
+    mapDispWork[1] = 1;
+    mapDispWork[0] = 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDisp);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispTest);
+void mapDispTest(void) {
+}

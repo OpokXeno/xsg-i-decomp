@@ -99,9 +99,27 @@ void Enemy_Command_Stop_FreeFall(Actor *actor, signed char command)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Type);
+void Enemy_Command_Type(Actor *actor, signed char type)
+{
+    unsigned char *work;
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Code);
+    work = (unsigned char *)(enepc + actor->number);
+    ENEMY_TYPE(work) = type;
+    /* Statement-macro shape: written as a bare final call, ee-gcc 2.96 turns
+     * it into a sibling jump; the original keeps jal plus the epilogue. */
+    do {
+        Enemy_Pause(actor);
+    } while (0);
+}
+
+void Enemy_Command_Code(Actor *actor, int code)
+{
+    actor->command_code = code;
+    /* Same statement-macro shape as Enemy_Command_Type above. */
+    do {
+        Enemy_Init(actor);
+    } while (0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Target);
 

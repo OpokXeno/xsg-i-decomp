@@ -196,6 +196,7 @@ UmnHistoryTreeBuf = 0x00A10D18; // size:0x4
 UmnMailHeaderBuf = 0x00A10D1C; // size:0x4
 umn_text = 0x00A10D20; // size:0x4
 db_fileno_path = 0x00A13398; // accepted-reference witness (no ELF symbol)
+HddInstallParam = 0x00A13658; // original ELF symbol (NOTYPE LOCAL)
 buffer = 0x00A13660; // accepted-reference witness (no ELF symbol)
 base_tbl = 0x00A13668; // accepted-reference witness (no ELF symbol)
 tbl = 0x00A138E8; // accepted-reference witness (no ELF symbol)

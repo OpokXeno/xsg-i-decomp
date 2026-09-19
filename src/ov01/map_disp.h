@@ -14,10 +14,12 @@ void mapInit(void);
 
 void mapMulSet(const MapMultiplier *value);
 
-extern volatile unsigned int mapDispWork[];
+extern unsigned int mapDispWork[];
 
 MapMultiplier *mapMulGet(void);
 
 extern MapMultiplier mapMul;
+
+void mapDispTest(void);
 
 #endif /* SRC_OV01_MAP_DISP_H */

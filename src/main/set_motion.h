@@ -153,4 +153,47 @@ typedef struct Actor {
 #define ENEMY_ROUTE_POINT_COUNT(entry) \
     (*(short *)((unsigned char *)(entry) + ENEMY_ROUTE_POINT_COUNT_OFFSET))
 
+/* The per-actor table Get_DefaultMotion below indexes by a motion number.
+ * Its callers pass the actor pointer itself as the first argument: main/
+ * tu194's Enemy_ActionReady calls it with the actor in a0 and a small
+ * literal motion number in a1 (`move a0,s2` / `li a1,2` / `jal
+ * Get_DefaultMotion` at 0x002d3b3c..0x002d3b4c), and Before_Talk in this
+ * unit calls it the same way with the actor it was given and the literal 3
+ * (`li a1,3` at 0x002d0a54, `jal Get_DefaultMotion` at 0x002d0a5c), then
+ * hands the returned motion id to Set_Motion (0x002d0a64..0x002d0a6c).
+ * Get_DefaultMotion's own body adds twice the
+ * motion number to the actor pointer and reads a halfword there (lh
+ * v0,0x130(a0) at 0x002d0a10), so the table is an array of short motion ids
+ * starting at +0x130. It is 0xc0 bytes past the end of the recovered Actor
+ * type, with nothing in between recovered, so it stays a named offset
+ * (docs/style.md rule 2) instead of a member of Actor. */
+#define ACTOR_DEFAULT_MOTION_TABLE_OFFSET 0x130
+
+#define ACTOR_DEFAULT_MOTION_TABLE(actor) \
+    ((short *)((unsigned char *)(actor) + ACTOR_DEFAULT_MOTION_TABLE_OFFSET))
+
+/* The actor's enepc slot number, set by ACT_create when it hands the record
+ * out (see the Actor struct comment above). EnemySoundEnd reads it right
+ * before tearing the sound down and adds one for the stop-call flags
+ * (`lbu v1,0x80(s0)` / `addiu a1,v1,1` at 0x002d0860/0x002d086c). It cannot
+ * be a member of Actor without inventing the unrecovered span between +0x70
+ * and +0x80 (docs/naming.md); naming the offset is docs/style.md rule 2's
+ * documented fallback. */
+#define ACTOR_NUMBER_OFFSET 0x80
+
+#define ACTOR_NUMBER(actor) \
+    (((unsigned char *)(actor))[ACTOR_NUMBER_OFFSET])
+
+/* The actor's active sound-effect id, matched against RES_GetEnemySeBank's and
+ * RES_GetEnemySeType's own EnemySeBank[].id table entries. EnemySoundEnd reads
+ * it right before tearing the sound down (`lh a0,0x86(s0)` at 0x002d085c,
+ * `jal RES_GetEnemySeBank`). It begins 5 bytes after `number` (+0x80) ends,
+ * with nothing between them recovered, so it cannot be a member of Actor
+ * without inventing that span (docs/naming.md); naming the offset is
+ * docs/style.md rule 2's documented fallback. */
+#define ACTOR_SOUND_EFFECT_ID_OFFSET 0x86
+
+#define ACTOR_SOUND_EFFECT_ID(actor) \
+    ((short *)((unsigned char *)(actor) + ACTOR_SOUND_EFFECT_ID_OFFSET))
+
 #endif /* SRC_MAIN_SET_MOTION_H */

@@ -7,13 +7,39 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setPlayer__);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", CHR_moveXZ);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_move__IFFZ);
+/*
+ * CHR_moveXZ is local to this file in the original (glabel ..., local); it
+ * stays asm here but needs a prototype for the trampolines below to call.
+ * Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
+ */
+static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
+                       u32 *failure_result);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_move__FFFZ);
+void Java_xeno_Chr_move__IFFZ(JThread *thread, ChrMoveCall *arguments,
+                              u32 *failure_result)
+{
+    CHR_moveXZ(0, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_move__ILjava_lang_Object_Z);
+void Java_xeno_Chr_move__FFFZ(JThread *thread, ChrMoveCall *arguments,
+                              u32 *failure_result)
+{
+    CHR_moveXZ(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_move__Ljava_lang_Object_FZ);
+void Java_xeno_Chr_move__ILjava_lang_Object_Z(JThread *thread,
+                                              ChrMoveCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_moveXZ(2, thread, arguments, failure_result);
+}
+
+void Java_xeno_Chr_move__Ljava_lang_Object_FZ(JThread *thread,
+                                              ChrMoveCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_moveXZ(3, thread, arguments, failure_result);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_move__Lxeno_util_Spline_IZ);
 
@@ -25,29 +51,96 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", CHR_rotY);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", CHR_rotZ);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotX__FFZ);
+/*
+ * CHR_rotX/CHR_rotY/CHR_rotZ are local to this file in the original (glabel
+ * ..., local); they stay asm here but need a prototype for the trampolines
+ * below to call. Overload -> mode: FFZ 1, IFZ 0, I,Object,Z 2, Object,F,Z 3
+ * (same as CHR_sclX).
+ */
+static void CHR_rotX(int mode, JThread *thread, ChrRotCall *arguments,
+                     u32 *failure_result);
+static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
+                     u32 *failure_result);
+static void CHR_rotZ(int mode, JThread *thread, ChrRotCall *arguments,
+                     u32 *failure_result);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotX__IFZ);
+void Java_xeno_Chr_rotX__FFZ(JThread *thread, ChrRotCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_rotX(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotX__ILjava_lang_Object_Z);
+void Java_xeno_Chr_rotX__IFZ(JThread *thread, ChrRotCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_rotX(0, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotX__Ljava_lang_Object_FZ);
+void Java_xeno_Chr_rotX__ILjava_lang_Object_Z(JThread *thread,
+                                              ChrRotCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_rotX(2, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotY__FFZ);
+void Java_xeno_Chr_rotX__Ljava_lang_Object_FZ(JThread *thread,
+                                              ChrRotCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_rotX(3, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotY__IFZ);
+void Java_xeno_Chr_rotY__FFZ(JThread *thread, ChrRotCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_rotY(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotY__ILjava_lang_Object_Z);
+void Java_xeno_Chr_rotY__IFZ(JThread *thread, ChrRotCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_rotY(0, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotY__Ljava_lang_Object_FZ);
+void Java_xeno_Chr_rotY__ILjava_lang_Object_Z(JThread *thread,
+                                              ChrRotCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_rotY(2, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotZ__FFZ);
+void Java_xeno_Chr_rotY__Ljava_lang_Object_FZ(JThread *thread,
+                                              ChrRotCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_rotY(3, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotZ__IFZ);
+void Java_xeno_Chr_rotZ__FFZ(JThread *thread, ChrRotCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_rotZ(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotZ__ILjava_lang_Object_Z);
+void Java_xeno_Chr_rotZ__IFZ(JThread *thread, ChrRotCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_rotZ(0, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotZ__Ljava_lang_Object_FZ);
+void Java_xeno_Chr_rotZ__ILjava_lang_Object_Z(JThread *thread,
+                                              ChrRotCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_rotZ(2, thread, arguments, failure_result);
+}
+
+void Java_xeno_Chr_rotZ__Ljava_lang_Object_FZ(JThread *thread,
+                                              ChrRotCall *arguments,
+                                              u32 *failure_result)
+{
+    CHR_rotZ(3, thread, arguments, failure_result);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_start__ILjava_lang_Object_);
 
@@ -55,9 +148,25 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_stop__);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", CHR_motion);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_mtn__IIIIIFZ);
+/*
+ * CHR_motion is local to this file in the original (glabel ..., local); it
+ * stays asm here but needs a prototype for the trampolines below to call.
+ * Overload -> mode: IIIIIFZ 1, IIFZ 0.
+ */
+static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
+                       u32 *failure_result);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_mtn__IIFZ);
+void Java_xeno_Chr_mtn__IIIIIFZ(JThread *thread, ChrMotionCall *arguments,
+                                u32 *failure_result)
+{
+    CHR_motion(1, thread, arguments, failure_result);
+}
+
+void Java_xeno_Chr_mtn__IIFZ(JThread *thread, ChrMotionCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_motion(0, thread, arguments, failure_result);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_signal__I);
 
@@ -79,7 +188,23 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setCollision__Z);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setHand__I);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", copyArgs_002FEFB0);
+static void copyArgs(u8 *dst, u8 *src, int count)
+{
+    u8 byte;
+
+    if (count > 0) {
+        count--;
+        if (count >= 0) {
+            do {
+                byte = *src;
+                src++;
+                count--;
+                *dst = byte;
+                dst++;
+            } while (count >= 0);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setArgs__III);
 
@@ -91,7 +216,27 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getSerial__);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getState__);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_);
+/*
+ * Unimplemented native: it looks up the peer field descriptor the same way
+ * every other Chr native does, but never uses arguments or the descriptor
+ * to read the motion root, and never writes to failure_result.
+ */
+void Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_(JThread *thread,
+                                                     ChrScaleCall *arguments,
+                                                     u32 *failure_result)
+{
+    /*
+     * The original calls lookupClassField with jal and returns through the
+     * shared epilogue instead of a sibling jump. Under this TU's compiler
+     * the call, whose result is discarded, stays out of tail position only
+     * inside a loop construct, which is the shape a do/while (0) statement
+     * gives it.
+     */
+    do {
+        lookupClassField(classJava_xeno_Chr,
+                         loadConstString(chr_peer_string, -1), 0);
+    } while (0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setScale__FFF);
 
@@ -351,17 +496,74 @@ static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_sclZ__FFZ);
+void Java_xeno_Chr_sclZ__FFZ(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_sclZ(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_sclZ__IFZ);
+/*
+ * The IFZ overload forwards the same interpolation mode 1 as FFZ (addiu
+ * a0,zero,1 at 0x002ffc74): the original does not give this overload its own
+ * mode 0 dispatch the way CHR_sclX/CHR_sclY do.
+ */
+void Java_xeno_Chr_sclZ__IFZ(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    CHR_sclZ(1, thread, arguments, failure_result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotCNS__ILjava_lang_Object_);
+void Java_xeno_Chr_rotCNS__ILjava_lang_Object_(JThread *thread,
+                                               ChrScaleCall *arguments,
+                                               u32 *failure_result)
+{
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_rotCNS__IFFF);
+/*
+ * Unimplemented native: it fetches its peer the same way every other Chr
+ * native does (peer_field then peer) and does nothing else with it.
+ */
+void Java_xeno_Chr_rotCNS__IFFF(JThread *thread, ChrScaleCall *arguments,
+                                u32 *failure_result)
+{
+    JavaField *peer_field;
+    Actor *peer;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setRotCNSParam__IFFFFF);
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_relax__II);
+/*
+ * Unimplemented native: it fetches its peer the same way every other Chr
+ * native does (peer_field then peer) and does nothing else with it.
+ */
+void Java_xeno_Chr_setRotCNSParam__IFFFFF(JThread *thread,
+                                          ChrScaleCall *arguments,
+                                          u32 *failure_result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+}
+
+/*
+ * Unimplemented native: it fetches its peer the same way every other Chr
+ * native does (peer_field then peer) and does nothing else with it.
+ */
+void Java_xeno_Chr_relax__II(JThread *thread, ChrScaleCall *arguments,
+                             u32 *failure_result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getFlags__);
 
@@ -447,8 +649,12 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setWeaponR__Lxeno_Chr_);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_resetWeaponR__Lxeno_Chr_);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_resetHand__);
+void Java_xeno_Chr_resetHand__(void)
+{
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_resetEnv__);
+void Java_xeno_Chr_resetEnv__(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_ignoreShape__I);

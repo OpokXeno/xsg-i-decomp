@@ -12,10 +12,50 @@ extern s16 base_tbl[];
 extern char db_fileno_path[];
 
 extern s16 *tbl;
+extern void tyaUmlDispInit2(u8 *work_buffer);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", mark);
+/*
+ * The parser cursor mark() and tail() read from: only the two columns they
+ * use are evidenced, so the rest of the struct stays unmodeled.
+ */
+typedef struct TyaUmlParser {
+    u8 unmodeled_00[0x0A];
+    s16 column;                /* 0x0A */
+    u8 unmodeled_0c[0x06];
+    s16 lineStartColumn;       /* 0x12 */
+} TyaUmlParser;
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tail);
+/*
+ * The display line mark() and tail() write into: only the fields those two
+ * functions touch are evidenced, so the rest of the struct stays unmodeled.
+ */
+typedef struct TyaUmlDispLine {
+    u8 unmodeled_00[0x0A];
+    s16 column;                /* 0x0A */
+    u8 unmodeled_0c[0x0E];
+    s16 baseColumn;            /* 0x1A */
+    u8 unmodeled_1c[0x02];
+    s16 tailColumn;            /* 0x1E: written by tail() */
+    u8 unmodeled_20[0x08];
+    u8 markCount;              /* 0x28: number of entries stored in marks[] */
+    u8 unmodeled_29[0x03];
+    /*
+     * 0x2C: boundary columns stored by mark(); bounded by the separate
+     * halfword tyaUmlDatabaseMain writes at 0x50 of the same line.
+     */
+    s16 marks[18];
+} TyaUmlDispLine;
+
+static void mark(TyaUmlParser *parser, TyaUmlDispLine *line)
+{
+    line->marks[line->markCount] = line->baseColumn + (parser->column - (line->column - parser->lineStartColumn));
+    line->markCount++;
+}
+
+static void tail(TyaUmlParser *parser, TyaUmlDispLine *line)
+{
+    line->tailColumn = line->baseColumn + (parser->column - (line->column - parser->lineStartColumn));
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispLoad);
 
@@ -104,4 +144,7 @@ INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispParamReset);
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispInit2);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispInit);
+void tyaUmlDispInit(void)
+{
+    tyaUmlDispInit2((u8 *)0x01000000);
+}

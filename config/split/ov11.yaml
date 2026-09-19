@@ -56,9 +56,9 @@ segments:
     align: 4
     subalign: null
     subsegments:
-      - [0x1000, asm, ov11/tanaka_test]
+      - [0x1000, c, ov11/tanaka_test]
       - [0x1100, c, ov11/mini_g]
-      - [0xA1F8, asm, ov11/cajino_get]
+      - [0xA1F8, c, ov11/cajino_get]
       - [0xA224, data, ov11/mini_g]
       - [0xCA20, data, ov11/cajino_get]
       - [0xCB10, rodata, ov11/tanaka_test]

@@ -3,6 +3,8 @@
 
 #include "shared.h"
 
+extern StudioCamera *xglStudioGetCamera2(int camera_id);
+
 /*
  * The light block of a studio record (0xf0 bytes). This TU owns the
  * definition: every accessor here only ever hands out or receives the

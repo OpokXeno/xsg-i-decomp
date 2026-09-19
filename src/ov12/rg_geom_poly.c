@@ -12,11 +12,39 @@
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", _InitRgGeomPoly);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", CreateRgGeomPoly);
+/*
+ * The failed-allocation assert reuses "pData != NIL" (D_00A551A8), not the
+ * "pPoly != NIL" text the rest of this TU validates a geometry pointer with;
+ * the object is still the same RgGeom every RgGeomPoly accessor here calls
+ * geom.
+ */
+RgGeom *CreateRgGeomPoly(void)
+{
+    RgGeom *geom;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", InitRgGeomPoly);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomPoly), D_00A551B8, 36);
+    if (geom == 0) {
+        assert_prog(D_00A551A8, D_00A551B8, 37);
+    }
+    _InitRgGeomPoly(geom);
+    return geom;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", RgGeomPolySetColiData);
+void InitRgGeomPoly(RgGeom *geom)
+{
+    if (geom == 0) {
+        assert_prog(D_00A551D0, D_00A551B8, 44);
+    }
+    _InitRgGeomPoly(geom);
+}
+
+void RgGeomPolySetColiData(RgGeom *geom, RgColiData *coliData)
+{
+    if (geom == 0) {
+        assert_prog(D_00A551D0, D_00A551B8, 55);
+    }
+    ((RgGeomPoly *)geom)->coliData = coliData;
+}
 
 void RgGeomPolySetLocal(RgGeom *geom, const RgMatrix local)
 {
@@ -28,7 +56,13 @@ void RgGeomPolySetLocal(RgGeom *geom, const RgMatrix local)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", RgGeomPolyGetData);
+RgColiData *RgGeomPolyGetData(const RgGeom *geom)
+{
+    if (geom == 0) {
+        assert_prog(D_00A551D0, D_00A551B8, 77);
+    }
+    return ((const RgGeomPoly *)geom)->coliData;
+}
 
 void RgGeomPolyGetLocal(const RgGeom *geom, RgMatrix destination)
 {

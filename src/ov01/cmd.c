@@ -6,17 +6,38 @@
 #include "ov01/obj.h"
 #include "cmd.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkSysInit);
+void thinkSysInit(void)
+{
+    memset(processBuf, 0, sizeof(processBuf));
+    memset(context, 0, sizeof(context));
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkTopSet);
+void thinkTopSet(int dataTop)
+{
+    pDataTop = dataTop;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkContextSet);
+void thinkContextSet(int context)
+{
+    pContext = context;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkAdrGet);
+int thinkAdrGet(short offset)
+{
+    /* The offset is rounded down to an even byte count before it is added. */
+    return pDataTop + (unsigned int)offset / 2 * 2;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkProcessAdd);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkProcessDel);
+int thinkProcessDel(int *slot)
+{
+    if (*slot != 0) {
+        *slot = 0;
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkProcessChk);
 
@@ -32,7 +53,11 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", camInit);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkMonsTblNumGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkMonsTblGet);
+int thinkMonsTblGet(int monsSetNo)
+{
+    thinkTopSet(pThinkTop);
+    return thinkAdrGet(pMonsSetTop[monsSetNo].script_offset);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkCamTblNumGet);
 
@@ -54,15 +79,35 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkExec);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", camExec);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkExecChk);
+int thinkExecChk(void)
+{
+    return thinkProcessKindChk(0) == 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkExecSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", regChk);
+int regChk(int operand)
+{
+    unsigned short reg = operand;
+
+    if (!(reg & 0x8000)) {
+        printf(D_00A461E8, reg);
+        return 0;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkRegNo);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkValSet);
+int thinkValSet(int value)
+{
+    value &= 0x7FFF;
+
+    if (value & 0x4000) {
+        value |= ~0x7FFF;
+    }
+    return value;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkRegGet);
 
@@ -72,9 +117,16 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdReg);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdNum);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdExit);
+int cmdExit(void)
+{
+    return 1;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdGo);
+int cmdGo(ThinkProcess *proc)
+{
+    proc->pc = cmdNum(proc->pc);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdGosub);
 
@@ -100,21 +152,47 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdTblget);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdTblset);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdRput);
+int cmdRput(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+    int reg;
+
+    proc->pc += 2;
+    if (regNo & 0x4000) {
+        printf(D_00A46300);
+    }
+    /* regNo's low 16 bits, kept in its own register separately from the raw
+     * value the indirect-addressing test above reads. */
+    reg = 0xFFFF;
+    reg = regNo & reg;
+    printf(D_00A46308, reg & 0x3FFF, thinkRegGet(reg));
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdPrint);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdMemdump);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCmdputon);
+int cmdCmdputon(void)
+{
+    cmdPutFlag = 1;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCmdputoff);
+int cmdCmdputoff(void)
+{
+    cmdPutFlag = 0;
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdMsgPos);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdMsg);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", battleMsgEndChk);
+int battleMsgEndChk(void)
+{
+    return pMsgObj == 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", battleMsgPut);
 
@@ -145,17 +223,39 @@ void msgObj2(MessageTask *task)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkset);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkset2);
+void cmdThinkset2(ThinkProcess *proc)
+{
+    cmdThinksetSub(proc);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinksetSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkUnitPtrGetReg);
+void thinkUnitPtrGetReg(int reg)
+{
+    int unitNo = thinkRegGet(reg & 0xFFFF);
+
+    if (unitNo == 0x7FFF) {
+        unitNo = unitNoGet(pThinkUnit);
+    }
+    unitPtrGet(unitNo);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCounterBoost);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdStatChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdLineChk);
+int cmdLineChk(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+    int unitNo;
+
+    proc->pc += 2;
+    unitNo = cmdNum(proc->pc);
+
+    proc->pc += 2;
+    thinkRegSet(regNo & 0xFFFF, calcLineChk(unitPtrGet(unitNo)) != 0);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdUnitparaGet);
 
@@ -175,9 +275,17 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktbl);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtkset);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktblSort);
+void cmdAtktblSort(ThinkProcess *proc)
+{
+    proc->sortMode = 0;
+    cmdAtktblSortSub(proc);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktblSortRev);
+void cmdAtktblSortRev(ThinkProcess *proc)
+{
+    proc->sortMode = 1;
+    cmdAtktblSortSub(proc);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktblSortSub);
 
@@ -189,7 +297,14 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdTecpara);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdTecparaSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdMonsSetNoGet);
+int cmdMonsSetNoGet(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+
+    proc->pc += 2;
+    thinkRegSet(regNo & 0xFFFF, monsSetNoGet() & 0xFFFF);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdPartySizeGet);
 
@@ -205,25 +320,69 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", mpersPtrGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", mbankPtrGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", myMCamSet);
+void myMCamSet(int mode, void *params)
+{
+    if (mode >= 0) {
+        MCamSet(mode, params);
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", unitNoChk);
+int unitNoChk(int unitNo)
+{
+    if (unitNo >= 8) {
+        printf(D_00A46578, unitNo);
+        unitNo = 0;
+    }
+    return unitNo;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamRefMode);
+int cmdCamRefMode(void)
+{
+    camMode = 1;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamCamMode);
+int cmdCamCamMode(void)
+{
+    camMode = 0;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamRefMoveMode);
+int cmdCamRefMoveMode(void)
+{
+    camMode = -2;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamCamMoveMode);
+int cmdCamCamMoveMode(void)
+{
+    camMode = -1;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamPersMode);
+int cmdCamPersMode(void)
+{
+    persMode = 3;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamBankMode);
+int cmdCamBankMode(void)
+{
+    bankMode = 2;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamPersMoveMode);
+int cmdCamPersMoveMode(void)
+{
+    persMode = -3;
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamBankMoveMode);
+int cmdCamBankMoveMode(void)
+{
+    bankMode = -4;
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamLock);
 
@@ -255,9 +414,22 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamBank);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamPers);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamTblSet);
+int cmdCamTblSet(ThinkProcess *proc)
+{
+    int tblNo = cmdNum(proc->pc);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamMoveStop);
+    proc->pc += 2;
+    if (tblNo < thinkCamTblNumGet()) {
+        camTblIdx = tblNo;
+    }
+    return 0;
+}
+
+int cmdCamMoveStop(void)
+{
+    MCamStopMove((unsigned int)(camMode + 1) >= 2);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdEvent);
 
@@ -267,27 +439,79 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdWaitCnt);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdWaitCamMove);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdWaitMsg);
+int cmdWaitMsg(ThinkProcess *proc)
+{
+    int result = 2;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdVPadEneble);
+    if (proc->waitActive) {
+        result = pMsgObj == 0;
+        result = result ? 0 : 2;
+    }
+    return result;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdVPadDisable);
+int cmdVPadEneble(void)
+{
+    dataVPadModeSet(1);
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdVPadSet);
+int cmdVPadDisable(void)
+{
+    dataVPadModeSet(0);
+    return 0;
+}
+
+int cmdVPadSet(ThinkProcess *proc)
+{
+    int padMask = cmdNum(proc->pc) & 0xFFFF;
+
+    proc->pc += 2;
+    dataVPadSet(padMask);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdMapMulSet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdHpPerGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdEventSlotGet);
+int cmdEventSlotGet(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+
+    proc->pc += 2;
+    thinkRegSet(regNo & 0xFFFF, menuTimeGet() & 0xFFFF);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkCamEvent);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCfEncountGet);
+int cmdCfEncountGet(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCfEventGet);
+    proc->pc += 2;
+    thinkRegSet(regNo & 0xFFFF, cfEncountGet() & 0xFFFF);
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkNoGet);
+int cmdCfEventGet(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+
+    proc->pc += 2;
+    thinkRegSet(regNo & 0xFFFF, cfEventGet() & 0xFFFF);
+    return 0;
+}
+
+int cmdThinkNoGet(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+
+    proc->pc += 2;
+    thinkRegSet(regNo & 0xFFFF, thinkNoGet() & 0xFFFF);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdStatGet);
 

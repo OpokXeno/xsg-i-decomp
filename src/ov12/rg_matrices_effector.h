@@ -115,6 +115,13 @@ struct MatrixCombine {
 
 extern void _ManiGet(void *manipulator, RgMatrix matrix);
 
+/*
+ * _CreateConstraint (0x00a37848) has local binding in the original symbol
+ * table: unlike this TU's other single-underscore helpers, its ELF symbol
+ * type is STT_FUNC with local binding, not global.
+ */
+static MatrixConstraint *_CreateConstraint(void);
+
 extern void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
 
 extern void XrgLinearIntpVector(RgVector destination, RgVector first,

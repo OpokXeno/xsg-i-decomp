@@ -5,7 +5,19 @@ extern void *memset(void *destination, int value, unsigned int count);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_allocMatrix);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_allocBlock);
+/*
+ * RSRC_alloc is defined by another TU (src/main/rsrc.c, still unrecovered)
+ * and is not yet declared in a shared header, so its parameters are
+ * declared here from this call site: main:0x00305a84 shifts the block count
+ * left by 6 (multiplying by 64) into the size argument, and main:0x00305a7c
+ * moves this function's own tag argument into the third argument unchanged.
+ */
+extern void RSRC_alloc(MatrixHeap *heap, int size, int tag);
+
+void ACT_allocBlock(int tag, int blockCount)
+{
+    RSRC_alloc(actMatrixHeap, blockCount << 6, tag);
+}
 
 /*
  * ACT_matrixInit establishes the shared actor matrix-heap state consumed by

@@ -36,4 +36,6 @@ typedef struct PadDataDebugLayout {
     u16 debug_buttons;
 } PadDataDebugLayout;
 
+int getScriptFlag(SceneObject object);
+
 #endif /* SRC_MAIN_GAME_H */

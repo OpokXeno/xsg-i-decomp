@@ -6,6 +6,36 @@
 #ifndef SRC_OV12_XRG_PAINT2D_H
 #define SRC_OV12_XRG_PAINT2D_H
 
+#include "shared.h"
+
+/*
+ * The 3D line descriptor InitXrgPaint2DLine3D (0x00a4c1f8) builds and
+ * XrgPaint2DDrawLine (0x00a4c240, outside this allocation) copies into the
+ * paint's request ring for the geometry callback _Line3D (0x00a4b120):
+ *
+ *   mode   the same flags-word shape XrgPaint2DRect's mode has; InitXrgPaint2DLine3D
+ *          zeroes it and _Line3D tests bit 0x1 of the copy (0x00a4b228).
+ *   start, the line's two endpoints. InitXrgPaint2DLine3D clears both with
+ *   end    XrgClearVector; the caller (e.g. RgShotEffectDisp, 0x00a184d8)
+ *          fills them in afterwards, and XrgPaint2DDrawLine copies each as one
+ *          quadword (lqc2/sqc2, 0x00a4c2c8/0x00a4c2d8).
+ *   width  the line's thickness. XrgPaint2DDrawLine halves it (mul.s by 0.5,
+ *          0x00a4c2ec) before storing it into the request, and _Line3D uses
+ *          that half to offset each projected point's screen-space extent
+ *          (0x00a4b190..0x00a4b1a8).
+ *
+ * The 12-byte gap after mode exists only to bring start to the 16-byte
+ * alignment its quadword copy requires, the same reason XrgPaint2DRect below
+ * has one.
+ */
+typedef struct XrgPaint2DLine3D {
+    int mode;
+    unsigned char quadword_alignment_gap[12];
+    RgVector start;
+    RgVector end;
+    float width;
+} XrgPaint2DLine3D;
+
 /*
  * The rectangle request the caller fills in and hands to XrgPaint2DDrawRect,
  * which copies it into the paint object's request ring: `mode` reaches the
@@ -60,5 +90,171 @@ typedef struct XrgPaint2DRect {
     float scale;
     float angle;
 } XrgPaint2DRect;
+
+/*
+ * The heap-allocated 2D paint renderer CreateXrgPaint2D_sub allocates
+ * (XRG_PAINT2D_SIZE bytes, below) and DisposeXrgPaint2D_sub releases.  Only
+ * the two fields this allocation's own setters touch are named:
+ *
+ *   prio    XrgPaint2DSetDrawPrio (0x00a4b9e8) stores its argument here
+ *           unconditionally after asserting the object is non-nil.
+ *   drawID  XrgPaint2DSetDrawID (0x00a4b998) stores its argument here the
+ *           same way.
+ *
+ * The rest of the object (its draw-request ring at +0xD014, the debug
+ * allocation-site name _InitPaint copies to +0xD018, and everything else
+ * _Geom2D, _CalcOffset, _InitPaint, XrgPaint2DUseTexture and the sibling
+ * XrgPaint2DOffset and XrgPaint2DSetUV setters read) is outside this
+ * allocation's evidence and is not modeled here.
+ */
+#define XRG_PAINT2D_SIZE 0xD060
+
+typedef struct XrgPaint2DDrawReq XrgPaint2DDrawReq;
+
+typedef struct XrgPaint2D {
+    int prio;
+    int drawID;
+    /*
+     * XrgPaint2DOffsetResult and XrgPaint2DUseTexture (0x00a4bca0/0x00a4be70)
+     * are the first functions of this allocation to reach through the
+     * pointer at +0xD014 the earlier comment names: both read it as the
+     * draw-request object XrgPaint2DDrawReq (below) describes, so it is
+     * named `request` here. The 0xD00C bytes before it stay unmodeled for
+     * the same reason as above: nothing in this allocation reads or writes
+     * them.
+     */
+    unsigned char unmodeled_08[0xD014 - 8];
+    XrgPaint2DDrawReq *request;
+} XrgPaint2D;
+
+/*
+ * The draw-request object CreateXrgPaint2D_sub's paint keeps a pointer to at
+ * +0xD014 (read by XrgPaint2DUseTexture/XrgPaint2DOffsetResult, outside this
+ * allocation) and _InitReq (0x00a4a728, outside this allocation) fills in.
+ * _DeriveInfoReq (0x00a4a788) copies two spans of it, both left exactly as
+ * wide as the copy itself because nothing in this allocation's evidence
+ * resolves their interior further:
+ *
+ *   offsetMode    a flags/selector word _CalcOffset (0x00a4aa58) reads as its
+ *                 own mode argument: the low two bits pick one of four
+ *                 anchor branches (a table lookup when clear, home-position
+ *                 arithmetic otherwise) and bit 0x10 is the one
+ *                 XrgPaint2DOffsetResult (outside this allocation) ORs in
+ *                 when it stores an explicit override.  _InitReq zeroes it.
+ *   offsetAnchor  the 16-byte block at +0x50 _CalcOffset reads as its own
+ *                 anchor argument (address-only, never itself interpreted by
+ *                 _DeriveInfoReq); _InitReq zeroes it as one quadword, which
+ *                 is why it is four ints rather than an opaque byte span.
+ *   offsetResult  the 16-byte block at +0x60 _CalcOffset reads as its own
+ *                 current/result argument the same way; its second int
+ *                 (+0x64) is the explicit value XrgPaint2DOffsetResult
+ *                 stores there.  _InitReq zeroes it as one quadword.
+ *
+ * Everything before +0x40 (the geometry callback pointers _InitReq installs,
+ * the mode/position/scale/angle XrgPaint2DDrawRect and XrgPaint2DDrawLine
+ * copy in from the caller's XrgPaint2DRect, and the picture-size flags
+ * _Geom2D reads) and the 12 bytes between offsetMode and offsetAnchor stay
+ * unmodeled: this allocation only copies them, it never interprets them.
+ * offsetAnchor's and offsetResult's own four ints are named only by position
+ * (x, y, z, w): nothing in this allocation's evidence gives any of them an
+ * individual role beyond offsetResult's second int.
+ *
+ * `quadword` is never read: it exists only so the type's own alignment (8,
+ * from `long long`) matches the 8-byte loads/stores _DeriveInfoReq's whole-
+ * union copy compiles to, the same width _CalcOffset reads this block with.
+ * A plain four-int struct has 4-byte alignment, which cc1 cannot use for an
+ * aligned load or store and reproduces with unaligned ldl/ldr instead.
+ */
+typedef union XrgPaint2DOffset {
+    struct {
+        int x;
+        int y;
+        int z;
+        int w;
+    } i;
+    long long quadword[2];
+} XrgPaint2DOffset;
+
+/*
+ * XrgPaint2DUseTexture (0x00a4be70) fills in the rest of the request once a
+ * texture is bound, still inside this allocation's own evidence:
+ *
+ *   draw    the callback the request's execution invokes once a texture is
+ *           bound: XrgPaint2DUseTexture stores &_DrawWithTex (0x00a4b560,
+ *           outside this allocation) here, in the same (paint, pStudio)
+ *           calling shape _Paint2DFlush/_Paint2DClearReq already use for the
+ *           adjacent RgDrawReq callbacks.
+ *   texture the bound texture object; XrgPaint2DUseTexture stores its own
+ *           argument here unchanged.
+ *   tex0    the GS TEX0 register value XrgBxxPs2Tex0 computes for `texture`.
+ *   uLow,   the GS TEXCLAMP bounds XrgPaint2DUseTexture derives from the
+ *   vLow,   bound texture's own left/top/right/bottom (XrgPaint2DTexture,
+ *   uHigh,  where XrgPaint2DUseTexture is defined), converted to 12.4
+ *   vHigh   subpixel units and inset by half a texel (8 = 0.5 * 16) on each
+ *           side so the clamp never samples past the bound sub-image.
+ *   uvMode  a flags word the explicit XrgPaint2DSetUVOffset/-SetUVSize
+ *           setters (0x00a4bf48/0x00a4bfc8) OR a bit into: bit 0x1 for an
+ *           explicit uOffset/vOffset, bit 0x2 for an explicit uSize/vSize,
+ *           the same "explicit override" idiom offsetMode's bit 0x10 above
+ *           already uses.
+ *   uOffset, the explicit UV origin XrgPaint2DSetUVOffset stores, already
+ *   vOffset  converted to 12.4 subpixel units.
+ *   uSize,   the explicit UV extent XrgPaint2DSetUVSize stores, the same
+ *   vSize    way.
+ */
+typedef struct XrgPaint2DDrawReq {
+    unsigned char unmodeled_00[4];
+    void (*draw)(XrgPaint2D *paint, void *pStudio);
+    unsigned char unmodeled_08[0x38];
+    int offsetMode;
+    unsigned char unmodeled_44[0xC];
+    XrgPaint2DOffset offsetAnchor;
+    XrgPaint2DOffset offsetResult;
+    void *texture;
+    unsigned char unmodeled_74[0x24];
+    long long tex0;
+    int uLow;
+    int vLow;
+    int uHigh;
+    int vHigh;
+    int uvMode;
+    unsigned char unmodeled_B4[0xC];
+    int uOffset;
+    int vOffset;
+    int uSize;
+    int vSize;
+} XrgPaint2DDrawReq;
+
+/*
+ * The four corners _CalcRectangle (0x00a4a7b8) expands one XYWH rectangle
+ * into, in the GS packet order its own caller _CalcUV (0x00a4a8a0) and
+ * _Geom2D (0x00a4ad80) build on: top-left, top-right, bottom-left,
+ * bottom-right.  `color` and `prio` are the same uniform values on all four
+ * corners; `prio` is named for the draw-priority vocabulary this TU already
+ * uses (XrgPaint2DSetDrawPrio).
+ */
+typedef struct XrgPaint2DVertex {
+    int x;
+    int y;
+    int color;
+    int prio;
+} XrgPaint2DVertex;
+
+/* The plain integer rectangle _CalcUV (0x00a4a8a0) builds and hands to
+ * _CalcRectangle: nothing else in this allocation's evidence reads or
+ * writes it, so no other field is claimed.
+ */
+typedef struct XrgIntRect {
+    int x;
+    int y;
+    int width;
+    int height;
+} XrgIntRect;
+
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+
+extern const char D_00A59098[];
+extern const char D_00A59058[];
 
 #endif /* SRC_OV12_XRG_PAINT2D_H */

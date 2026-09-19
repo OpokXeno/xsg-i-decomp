@@ -65,6 +65,45 @@ extern int MenuLoadCount;
 
 void MenuLoadInit(void);
 
+void MenuLoadEnd(void);
+
+/* Defined in main/xgl_cd.c (main:0x0021e330). */
+extern void xglCdReadCancel(void);
+
+void MenuLoadCancel(void);
+
+extern unsigned char MenuBibrationAct;
+
+extern unsigned char MenuBibrationCount;
+
+extern unsigned char MenuBibrationPad;
+
+extern unsigned char MenuBibrationSpeed;
+
+/*
+ * The vibration request MenuBibrationMain replays: while count is non-zero it
+ * decrements it and writes speed to actuator act of pad slot pad in PadData.
+ * All four are unsigned bytes (MenuBibrationMain reads them with lbu, and
+ * subMenuSystemMain passes speed 0x80).
+ */
+void MenuBibrationSet(unsigned char pad, unsigned char act, unsigned char speed,
+                      unsigned char count);
+
+void MenuBibrationInit(void);
+
+extern unsigned char UmnKosmosSpecialBox[8];
+
+void UmnkosmosSpecialInit(void);
+
+/*
+ * Save-record offset of the UMN mail table: one 2-byte entry per mail box,
+ * addressed directly as SaveData + 0x10304 (the same region src/main/party.h
+ * documents as SAVE_UMN_MAIL_DATA).
+ */
+#define SAVE_UMN_MAIL_DATA 0x10304
+
+unsigned char *UmnMailDataGet(int box_id);
+
 int MenuModelInit(int work_start);
 
 #endif /* SRC_MAIN_WINDOW_TEX_LOAD_H */

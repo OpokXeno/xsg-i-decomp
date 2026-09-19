@@ -342,13 +342,19 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFilePosSub);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFilePos);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFileData);
+int xglCdGetFileData(const char *path, CdFilePosition *file_position)
+{
+    return (xglCdGetFilePos(file_position, path, xglCdDummyCallback) != 0) ? 0 : -1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFileSize);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdReadFilePart);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdReadFile);
+int xglCdReadFile(const char *name, void *buffer, int mode, int flags)
+{
+    return xglCdReadFilePart(name, buffer, mode, (CdCompletionCallback *)flags, 0, -1);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdReadCancel);
 

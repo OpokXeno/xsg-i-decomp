@@ -84,9 +84,19 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateWind);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", VW_setCursorMode);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", VW_setCursorFunc);
+void VW_setCursorFunc(CursorCallback callback, void *argument)
+{
+    unsigned char *cursorBytes = (unsigned char *)cursor;
+    *(CursorCallback *)(cursorBytes + CURSOR_CALLBACK_OFFSET) = callback;
+    *(void **)(cursorBytes + CURSOR_CALLBACK_ARGUMENT_OFFSET) = argument;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", VW_setCursor);
+void VW_setCursor(const Vector4 *position)
+{
+    cursor[1].x = position->x;
+    cursor[1].y = position->y;
+    cursor[1].z = position->z;
+}
 
 void VW_getCursor(HomogeneousVector *destination)
 {

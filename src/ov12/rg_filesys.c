@@ -62,6 +62,28 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysOnMemory);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", DisposeRgFileSysData_sub);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysDataGetName);
+/*
+ * This accessor's own additive view of RgFileSysData (completed in
+ * include/shared.h up to +0x14): only the inline name storage its address
+ * computation evidences is named. Shared-header need: extend the owned
+ * RgFileSysData with this field once header_harvest can regenerate its
+ * published layout; a name field cannot be restated here since
+ * include/shared.h already completes the tag.
+ */
+typedef struct RgFileSysDataName {
+    unsigned char unmodeled_00[0x1c];
+    char name; /* +0x1C */
+} RgFileSysDataName;
+
+extern const char D_00A55A30[]; /* "pFile != NIL" */
+
+char *RgFileSysDataGetName(RgFileSysData *pFile)
+{
+    if (pFile == 0) {
+        assert_prog(D_00A55A30, rg_filesys_source_file, 584);
+    }
+
+    return &((RgFileSysDataName *)pFile)->name;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysDump);

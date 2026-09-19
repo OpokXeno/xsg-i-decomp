@@ -3,7 +3,10 @@
 #include "main/xgl_2.h"
 #include "m_math.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathMakeRandom);
+float MMathMakeRandom(void)
+{
+    return (float)xglSRand() * D_004D8374;
+}
 
 float MMathMakeRandom2PI(void)
 {
@@ -373,7 +376,23 @@ float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second)
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcDirVector);
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcDir);
+/* sef.c (main); no header is published for it yet. */
+extern float srsAtan2(float deltaX, float deltaZ);
+
+/*
+ * The call to srsAtan2 is the last statement of this function, but the
+ * original keeps a real jal for it followed by its own epilogue rather than
+ * tail-jumping into srsAtan2; a value read after the call reproduces that
+ * (this compiler otherwise folds a trailing call with nothing after it into
+ * a sibling jump).
+ */
+void MMathCalcDir(const Vector4 *from, const Vector4 *to)
+{
+    float toX;
+
+    srsAtan2(to->x - from->x, to->z - from->z);
+    toX = to->x;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcAngle);
 

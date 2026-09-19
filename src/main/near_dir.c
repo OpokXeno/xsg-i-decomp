@@ -125,13 +125,43 @@ INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updateSequence);
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updateNPC);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updateDefault);
+/* Defined below in this file; forward-declared for the two callers here. */
+extern void ACT_updateMotion(Actor *actor);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updateRECTRand);
+/* Undulate.c (main); no header is published for it yet. */
+extern float UnduGet(float x, float z);
+
+void ACT_updateDefault(Actor *actor)
+{
+    if (actor->flags & 0x40)
+        actor->position.y = UnduGet(actor->position.x, actor->position.z);
+    ACT_updateMotion(actor);
+}
+
+void ACT_updateRECTRand(Actor *actor)
+{
+    ACT_updateMotion(actor);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updatePlayer);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_initSequenceAt);
+void ACT_initSequenceAt(Actor *actor)
+{
+    SequenceState *sequence =
+        (SequenceState *)(actSequence + actor->number * 0x260u);
+
+    sequence->flags = 0;
+    sequence->state_flags = 0;
+    sequence->cleared_on_init = 0;
+    sequence->cleared_on_init_run[0] = 0;
+    sequence->cleared_on_init_run[1] = 0;
+    sequence->cleared_on_init_run[2] = 0;
+    sequence->cleared_on_init_run[3] = 0;
+    sequence->handler[0] = 0;
+    sequence->handler[1] = 0;
+    sequence->handler[2] = 0;
+    sequence->handler[3] = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_initSequence);
 
@@ -141,16 +171,74 @@ INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_createChr);
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_createNPC);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_info_0030B6B0);
+void ACT_info(void)
+{
+    int i;
+
+    for (i = 0; i < 64; i++) {
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", getCurrentCamera_0030B6E0);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updateMPack);
+/* play.c (main); no header is published for it yet. */
+extern void *PLAY_getCurrent(void);
+/* Defined below in this file. */
+extern void SEQ_motion(Actor *actor);
+/* Undulate.c (main); no header is published for it yet. */
+extern void UnduGet2(void *destination, float x, float z);
+/* include/main/xgl_2.h's own declaration: not included directly because it
+ * (through include/shared.h) redefines struct Vector4, which this TU's own
+ * near_dir.h already defines locally. */
+extern void xglMatrixStackUnit(void);
+
+void ACT_updateMPack(Actor *actor)
+{
+    void *play = PLAY_getCurrent();
+    Actor *linked_actor;
+
+    xglMatrixStackUnit();
+    SEQ_motion(actor);
+    ACT_updateMotion(actor);
+
+    /* PLAY_getCurrent's object (play.c) is not recovered; +0x44 is the one
+     * float this TU reads from it, mirrored into motion_time. */
+    actor->motion_time = *(float *)((u8 *)play + 0x44);
+    actor->undulation = 0;
+
+    linked_actor = actor->linked_actor;
+    UnduGet2(&actor->undulation, linked_actor->velocity.x,
+             linked_actor->velocity.z);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_initScene);
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_setHand);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_filterGuno);
+/* nml_model_set.c (main); no header is published for it yet. */
+extern void nmlModelSetToumei(int enabled);
+extern void nmlModelSetZwrite(int enabled);
+extern void nmlModelSetStencil(int enabled);
+extern void nmlModelSetFilter(int mode, float filter_param_1, float filter_param_2);
+extern void nmlModelSetTransparency(float transparency);
+extern void nmlModelSetReflTransparency(float transparency);
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_filterStealth);
+void ACT_filterGuno(Actor *actor)
+{
+    nmlModelSetToumei(1);
+    nmlModelSetZwrite(1);
+    nmlModelSetStencil(1);
+    nmlModelSetFilter(1, actor->filter_param_1, actor->filter_param_2);
+    nmlModelSetTransparency(actor->transparency);
+    nmlModelSetReflTransparency(actor->refl_transparency);
+}
+
+void ACT_filterStealth(Actor *actor)
+{
+    nmlModelSetToumei(1);
+    nmlModelSetZwrite(1);
+    nmlModelSetStencil(1);
+    nmlModelSetFilter(2, actor->filter_param_1, actor->filter_param_2);
+    nmlModelSetTransparency(actor->transparency);
+    nmlModelSetReflTransparency(actor->refl_transparency);
+}

@@ -38,7 +38,19 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecBaseGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataBakpBaseGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecLearnSet);
+void dataSpecLearnSet(int cid, int specialId)
+{
+    PlCharacter *pl;
+
+    if (cid >= 0x11) {
+        printf(D_00A457B0, cid);
+        return;
+    }
+    if (specialId != 0) {
+        pl = dataPlChaGet(cid);
+        pl->special[specialId - dataSpecBaseGet(cid)].id = specialId;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecLearnGet);
 
@@ -48,7 +60,9 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataNormIdxGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlUnitInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataDummySet);
+void dataDummySet(void)
+{
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataBattleInit);
 
@@ -84,14 +98,31 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataGainGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataCdSync);
+int dataCdSync(void)
+{
+    return cdReqNum;
+}
 
 void dataCdSyncClear(void)
 {
     cdReqNum = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataNBreadCB);
+extern int printf(const char *format, ...);
+extern const char D_00A459E0[];
+extern const char D_00A459F8[];
+
+void dataNBreadCB(int result) {
+    if (result < 0) {
+        printf(D_00A459E0, result);
+        return;
+    }
+    if (result == 4) {
+        if (--cdReqNum == 0) {
+            printf(D_00A459F8, 0);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoadNB);
 
@@ -103,9 +134,13 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEnemyMdlChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataLeaderChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataLeaderCidGet);
+int dataLeaderCidGet(void) {
+    return leaderCid;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataLeaderCidReset);
+void dataLeaderCidReset(void) {
+    leaderCid = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataLeaderReload);
 
@@ -135,7 +170,17 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataWpnLRChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataChildActorCreate);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMotSp);
+/* calcUPGet's return type comes from its definer, ov01/tu004 calc.c. */
+#include "ov01/calc.h"
+
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
+extern void *dataUnitFileGet(ObjectTask *unit, short charaId);
+extern int dataUnitFileLoadMot(ObjectTask *unit, int, int, void *);
+
+int dataUnitFileLoadMotSp(ObjectTask *unit, int motionId, int slot) {
+    dataUnitFileLoadMot(unit, motionId, slot, dataUnitFileGet(unit, calcUPGet(unit)->charaId));
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMotSp2);
 
@@ -147,7 +192,20 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackWpnMdl2);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotAdrSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFpkAdrGet);
+/*
+ * dataFpkAdrGet resolves a packed file's data pointer: 8 bytes not
+ * recovered, then the offset of the packed data from the start of the
+ * header.
+ */
+typedef struct FpkHeader {
+    unsigned char unmodeled_00[8];
+    int data_offset;
+} FpkHeader;
+
+void *dataFpkAdrGet(FpkHeader *fpk)
+{
+    return (unsigned char *)fpk + fpk->data_offset;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataTid2WepSp);
 
@@ -157,7 +215,12 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoadWepSp2);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoadWepSpEnd);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataDefWpnGet);
+/* Callers pass the unit whose default weapon they want; the function
+ * always returns 0 and ignores it. */
+int dataDefWpnGet(void *unit)
+{
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMtdRead);
 
@@ -167,9 +230,22 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataXtxAdrGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataXtxLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataBatDatLoad);
+extern int dataFileLoad(const char *name, void *dst);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkAdrGet);
+extern const char D_00A46008[];
+extern unsigned char batDatBuf[0x10000];
+
+void dataBatDatLoad(void)
+{
+    dataFileLoad(D_00A46008, batDatBuf);
+}
+
+extern unsigned char thinkBuf[0x4000];
+
+void *dataThinkAdrGet(void)
+{
+    return thinkBuf;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", thinkMapGet);
 
@@ -181,13 +257,22 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkFileLoad);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMapLoadAdrGet);
+/* dataMapLoad passes the map number it is loading; every map loads into
+ * the same fixed EE RAM region, so the number is ignored. */
+void *dataMapLoadAdrGet(int mapNo)
+{
+    return (void *)0x01b9e000;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMapCameraAdrGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMapLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataVPadModeSet);
+void dataVPadModeSet(int mode)
+{
+    padMode = mode;
+    padData = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataVPadSet);
 

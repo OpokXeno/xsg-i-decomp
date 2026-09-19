@@ -142,6 +142,13 @@
  *   +0x9e4            the target facing angle, declared below.
  *
  * None of those five is used by this TU, so none of them is declared here.
+ *
+ * One member past `number` is declared all the same, because this TU writes
+ * it: +0xec command_code, the int Enemy_Command_Code below stores its command
+ * code into (sw a1,0xec(a0) at 0x002d30fc) just before it calls Enemy_Init.
+ * The bytes between `number` and it stay the unmodeled_81 gap, the convention
+ * src/main/near_dir.h and src/ov01/unit_cmd.h use for their own members past
+ * +0x80.
  */
 typedef struct Actor {
     u32 flags;
@@ -156,6 +163,8 @@ typedef struct Actor {
     Vector4 scale;
     Vector4 global_position;
     u8 number;
+    u8 unmodeled_81[0xec - 0x81];
+    int command_code;
 } Actor;
 
 /* The actor's target facing angle, in radians like Actor.rotation.
@@ -201,10 +210,9 @@ typedef struct Actor {
 #define ACTOR_RUNTIME_FLAGS(actor) \
     (*(u32 *)((unsigned char *)(actor) + ACTOR_RUNTIME_FLAGS_OFFSET))
 
-/* The engine's own entry point for an actor's enemy behaviour; not called by
- * this TU, only cited above (0x002cb278) as the witness that ties `enepc` and
- * Actor.number together. Declared here so the citation is a checked
- * prototype rather than a bare comment. */
+/* The engine's own entry point for an actor's enemy behaviour, cited above
+ * (0x002cb278) as the witness that ties `enepc` and Actor.number together,
+ * and called by Enemy_Command_Code below (jal Enemy_Init at 0x002d30f8). */
 extern void Enemy_Init(Actor *actor);
 
 /* The executable exports this 64-entry enemy-work allocation. */
@@ -328,5 +336,22 @@ extern volatile const float sac_turn_two_pi_add;
  * "slow" command (lwc1 $gp,-31280 at 0x002d2f60, value 0.03333...). Not in
  * config/symbols/main.txt, so it keeps the splat default name. */
 extern float D_004D8140;
+
+/* Runs an enemy's pause behaviour, chosen by ENEMY_TYPE of its `enepc` entry
+ * (lbu v0,0x4a(s1) at 0x002ccfc4). No caller uses a value from it or from
+ * Enemy_Init: Start_Enemy_Command discards what Enemy_Command_Type and
+ * Enemy_Command_Code leave in v0 (0x002d366c, 0x002d3684). */
+extern void Enemy_Pause(Actor *actor);
+
+/* Enemy_Command_Type's own one-byte state inside the entry (sb a1 to
+ * enepc + 0x4a at 0x002d30d4, read back by Enemy_Pause with lbu v0,0x4a(s1)
+ * at 0x002ccfc4): the enemy behaviour type Enemy_Pause switches on to select
+ * one of its pause behaviours. It stays a named offset like the other `enepc`
+ * offsets above: EnemyWork is the opaque block src/main/set_motion.h defines
+ * identically, so it gets no members here. */
+#define ENEMY_TYPE_OFFSET 0x4a
+
+#define ENEMY_TYPE(work) \
+    (*(unsigned char *)((unsigned char *)(work) + ENEMY_TYPE_OFFSET))
 
 #endif /* SRC_MAIN_ENEMY_2_H */

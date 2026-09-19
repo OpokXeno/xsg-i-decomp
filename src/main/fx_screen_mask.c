@@ -20,6 +20,22 @@ static void screenMask(ScreenMaskTask *task)
 
 INCLUDE_ASM("asm/main/nonmatchings/fx_screen_mask", fxAdapter);
 
-INCLUDE_ASM("asm/main/nonmatchings/fx_screen_mask", FX_ScreenMask);
+void FX_ScreenMask(int unused, int color, int duration, int mode)
+{
+    XglTaskScheduler *scheduler = GameLoopState[2];
+    ScreenMaskTask *task = (ScreenMaskTask *)xglTaskEntryNext(
+        scheduler, (int (*)(XglTaskPrefix *))screenMask,
+        scheduler != 0 ? scheduler->active_tail : 0);
+
+    (void)unused;
+    if (task != 0) {
+        task->state = GameLoopState;
+        task->flags = 0;
+        task->next_callback = 0;
+    }
+    task->color = color;
+    task->duration = duration;
+    task->mode = mode;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/fx_screen_mask", FX_call);

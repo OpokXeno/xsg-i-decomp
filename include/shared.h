@@ -1,4 +1,3 @@
-
 #ifndef INCLUDE_SHARED_H
 #define INCLUDE_SHARED_H
 
@@ -14,12 +13,6 @@ struct request {
 typedef unsigned short u16;
 
 typedef unsigned long long u64;
-
-typedef struct StudioCamera {
-    u32 active;
-    u32 state;
-    u8 unmodeled[0x5e8];
-} StudioCamera;
 
 typedef struct {
     u8 pad_00[0x28];
@@ -67,7 +60,25 @@ typedef struct {
     unsigned short year;
 } XglClock;
 
+typedef struct ObjectTask ObjectTask;
+
+typedef signed short s16;
+
 typedef struct RgHeap RgHeap;
+
+/*
+ * The helper ABI uses a four-float vector record.  Its pinned implementation
+ * loads all four storage slots but computes the length from xyz only, so w is
+ * storage for this call rather than an input to the distance test.
+ */
+typedef struct Vector4 {
+    float x;
+    float y;
+    float z;
+    float w;
+} Vector4;
+
+typedef float Matrix4[4][4];
 
 typedef struct XglTaskPrefix XglTaskPrefix;
 
@@ -86,13 +97,28 @@ struct XglTaskPrefix {
     int (*callback)(XglTaskPrefix *task);
 };
 
-/* canon: config/header-canon.json chose src/core/main-0021c5c0/private.h over 0 other accepted spellings */
 struct XglTaskScheduler {
     XglTaskPrefix *free_tasks;
     XglTaskPrefix *active_head;
     XglTaskPrefix *active_tail;
     XglTaskPrefix *next_to_visit;
 };
+
+typedef struct StudioCamera {
+    u32 active;
+    u32 state;
+    u8 unmodeled_08[0x18];
+    float nearClip;
+    float farClip;
+    u8 unmodeled_28[0x48];
+    Vector4 screenOffset;
+    Vector4 screenScale;
+    u8 unmodeled_90[0x10];
+    Vector4 rotation;
+    u8 unmodeled_b0[0x3c0];
+    Matrix4 viewMatrix;
+    u8 unmodeled_4b0[0x140];
+} StudioCamera;
 
 typedef struct SceneClassName SceneClassName;
 
@@ -106,7 +132,9 @@ typedef struct SceneTypeDescriptor SceneTypeDescriptor;
  * this TU: class name at +4, loader at +12, instance class-ref at +24,
  * fields at +28, counts at +48/+50, field entries of 20 bytes (flags +4,
  * descriptor +8, offset +16). Every other span is an explicit unmodeled
- * byte range, not a named/invented field
+ * byte range, not a named/invented field (review core-cc-20260911-b8 item
+ * 4.1; docs/naming.md: renaming an unresolved span to "reserved" does not
+ * resolve it).
  */
 struct SceneClassName {
     unsigned char unmodeled_00[8];
@@ -139,7 +167,8 @@ typedef void SceneVm;
  * Only those two words are evidenced (talktoObserver/funcObserver class
  * lookups; SCENE_cleanup/SCENE_start in src/core/main-0025a6d8 spell the
  * same double dereference as `*(SceneClass **)*(void **)object`). The
- * typed view compiles to the same bytes */
+ * typed view compiles to the same bytes (attempt-5684d45333e0 forms 09/10
+ * vs 05/06). */
 typedef struct SceneObjectClassRef {
     SceneClass *scene_class; /* +0x0 */
 } SceneObjectClassRef;
@@ -190,8 +219,6 @@ typedef struct PartySkillLevelArray {
     unsigned char level_by_character[8];
 } PartySkillLevelArray;
 
-typedef struct ObjectTask ObjectTask;
-
 struct ObjectTask {
     XglTaskPrefix task; /* the scheduler header xglTaskEntryNext maintains. */
     void *work; /* objRemove passes this slot to objWorkFree. */
@@ -200,6 +227,24 @@ struct ObjectTask {
 /* Only an opaque handle crosses this bounded source slice. */
 typedef struct RgSimpleDB RgSimpleDB;
 
+typedef struct RgCharMgr RgCharMgr;
+
+typedef unsigned char byte;
+
+typedef struct RgFileSys RgFileSys;
+
+typedef struct RgFileSysData RgFileSysData;
+
+struct RgFileSysData {
+    void *data;
+    unsigned int size;
+    unsigned int mode;
+    RgFileSys *owner;
+    unsigned int ref_count;
+    unsigned char unmodeled_14[0x1C - 0x14];
+    char name[0x60 - 0x1C];
+};
+
 typedef struct {
     float x;
     float y;
@@ -207,19 +252,7 @@ typedef struct {
     float w;
 } HomogeneousVector;
 
-/*
- * The helper ABI uses a four-float vector record.  Its pinned implementation
- * loads all four storage slots but computes the length from xyz only, so w is
- * storage for this call rather than an input to the distance test.
- */
-typedef struct Vector4 {
-    float x;
-    float y;
-    float z;
-    float w;
-} Vector4;
-
-typedef float Matrix4[4][4];
+typedef void *NmlPacket;
 
 typedef struct {
     float x;
@@ -240,34 +273,20 @@ typedef struct RgGeomPoint RgGeomPoint;
 
 typedef float RgVector[4];
 
+typedef struct RgStatus RgStatus;
+
 extern int WakeupThread(int thread_id);
 
 extern unsigned char SaveData[];
-
-extern XglPacket *xglPacketGetCurrent(void);
 
 extern void sceVif1PkRef(XglPacket *packet, const void *environment,
                          int count, int mode, int offset, int flags);
 
 extern void xglFontPrint(int x, int y, int color, const char *text);
 
-extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-
 extern void *classJava_xeno_Unit;
 
-extern int xglHddActivate(int state);
-
 extern int sprintf(char *destination, const char *format, ...);
-
-extern void DisposeRgSimpleDB(RgSimpleDB *database);
-
-/* _InitDB stores capacity at +4 and entry_size at +8 of the descriptor. */
-extern RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size);
-
-extern void RgSingletonIDEntry(
-    int singleton_id,
-    RgSimpleDB *database,
-    void (*destructor)(RgSimpleDB *database));
 
 extern int sceClose(int descriptor);
 
@@ -304,6 +323,6 @@ extern void XrgCopyMatrix(RgMatrix destination, const RgMatrix source);
 
 extern void XrgInvMatrix(RgMatrix destination, const RgMatrix source);
 
-extern void XrgCopyVector(RgVector destination, RgVector source);
+#include "umbrella/public.h"
 
 #endif /* INCLUDE_SHARED_H */

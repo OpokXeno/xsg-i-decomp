@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "game_pause_disp.h"
+#include "main/xgl_packet.h"
 
 static void DrawShadow(PauseDrawContext *context)
 {

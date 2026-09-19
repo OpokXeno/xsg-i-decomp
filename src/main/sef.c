@@ -20,7 +20,14 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", srsAtan2);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefRandf);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsBossID);
+/*
+ * sefIsBossID (main:0x002e11e8): true when character_id falls in the boss ID
+ * range [0x97, 0xba] (sefCnvDeathEffectNo, sefSetupEnemy, this TU).
+ */
+static int sefIsBossID(int character_id)
+{
+    return (unsigned int)(character_id - 0x97) < 0x24;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefMemZero);
 
@@ -247,7 +254,22 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetSpherePos);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetCubePosBtm);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetCubePosTop);
+/*
+ * sefGetCubePosBtm (main:0x002e23c8) is still INCLUDE_ASM in this TU;
+ * declared here so sefGetCubePosTop (main:0x002e24c0) can call it. Both are
+ * LOCAL in the original, so both stay static.
+ */
+static void sefGetCubePosBtm(Vector4 *pos);
+
+/*
+ * sefGetCubePosTop (main:0x002e24c0): fills `pos` with the bottom corner via
+ * sefGetCubePosBtm, then negates its Y component to mirror it to the top.
+ */
+static void sefGetCubePosTop(Vector4 *pos)
+{
+    sefGetCubePosBtm(pos);
+    pos->y = -pos->y;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetCubePos);
 
@@ -597,7 +619,34 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeScheduler);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyScriptScheduler);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyScriptScheduler2);
+extern void sefFreeScheduler(unsigned int scheduler_index);
+
+/*
+ * sefDestroyScriptScheduler2 (main:0x002e5320): scDestroyScript2 (main:
+ * 0x002e9e48, still assembly in a different TU) forwards its own two
+ * parameters here unchanged and also to scDeleteTask, whose own accepted
+ * parameters are named script_index and task_index (src/main/sc_get.c).
+ * This loop walks the scheduler table's own SchedulerState records (sef.h)
+ * at their established 0xab0 stride and frees the first slot whose
+ * scriptBinding matches.
+ */
+void sefDestroyScriptScheduler2(int script_index, int task_index)
+{
+    SchedulerState *scheduler;
+    ScriptBinding *record;
+    int index;
+
+    index = 0;
+    scheduler = (SchedulerState *)_scheduler;
+    record = &scheduler->scriptBinding;
+    do {
+        if (record->script_id == script_index && record->task_id == task_index) {
+            sefFreeScheduler(index);
+        }
+        index++;
+        record = (ScriptBinding *)((unsigned char *)record + 0xab0);
+    } while (index < 0x80);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffectTbl);
 
@@ -671,13 +720,83 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyEffect);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyEffectCf);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefLoadEffect);
+/*
+ * sefCnvEtEffectNo (main:0x002e74e0) is still assembly in this TU and LOCAL
+ * in the original, so it is declared static. It takes two parameters:
+ * besides the effect number in a0 it tests a1 against 2 (effects 2024..2029
+ * shift by 3) and against 1 (effects 2038..2041 shift by 2), so the same
+ * encounter effect resolves to a per-character variant. Every call site
+ * loads a1 first: sefIsFinishEffect2 (below) passes the scheduler record's
+ * character_id; seffectDebugDb (main:0x002dd038) passes 1,
+ * seffectDebugBattle (main:0x002dd568) its debug character and ov01
+ * scenarioBatExecPhase10 (0x00a0bf34) calcUPGet(...)->charaId, those three
+ * through sefLoadEffect.
+ */
+static int sefCnvEtEffectNo(int effect_no, int character_id);
+extern void svFileLoadScript(int mode, int effect_no);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefCheckLoad);
+/*
+ * sefLoadEffect (main:0x002e7100): both parameters stay live in a0/a1 across
+ * the call (neither register is rewritten before the jal), so they are
+ * forwarded unchanged to sefCnvEtEffectNo; all three callers load a1 before
+ * calling sefLoadEffect. The tail call (j, not jal+jr) makes
+ * svFileLoadScript's own return value sefLoadEffect's return value on that
+ * path; the effect_no<=0 path falls straight through to the epilogue without
+ * setting v0, so the original never uses this function's result and the
+ * return type is void.
+ */
+void sefLoadEffect(int effect_no, int character_id)
+{
+    if (effect_no > 0) {
+        svFileLoadScript(0, sefCnvEtEffectNo(effect_no, character_id));
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefExecEffect);
+extern int srsLeaveCdRead(void);
+extern int _sefLoadEftQue;
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefProgressEffect);
+int sefCheckLoad(void)
+{
+    if (_sefLoadEftQue != 0) {
+        return 1;
+    }
+    return srsLeaveCdRead() > 0;
+}
+
+extern void scExecEffect(void);
+extern void sdvExecAlters(void);
+extern short _hitFlag;
+extern short _hitSignal;
+extern short _seSignal;
+
+void sefExecEffect(void)
+{
+    scExecEffect();
+    sdvExecAlters();
+    _hitFlag = 0;
+    _hitSignal = 0;
+    _seSignal = 0;
+}
+
+/*
+ * sefProgressEffect (main:0x002e7198): the entry test reads the parameter
+ * register directly (blez a0) before it is copied into the loop counter, and
+ * the counter is decremented after each call (the decrement is scheduled
+ * into the call's own delay slot), matching the original's own instruction
+ * order.
+ */
+void sefProgressEffect(int frame_count)
+{
+    int remaining;
+
+    if (frame_count > 0) {
+        remaining = frame_count;
+        do {
+            sefExecEffect();
+            remaining--;
+        } while (remaining != 0);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefDrawEffect);
 
@@ -697,39 +816,218 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateEffect);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateEffect2);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDeleteEffect2);
+/*
+ * sefDeleteEffect2 (main:0x002e7748) tail-calls sefFreeSchedulerCf (main:
+ * 0x002e5118, still assembly in this file) with its own argument unchanged:
+ * no register is written before the j. sefDeleteEffectWait (main:0x002e7430)
+ * passes the address of a _scheduler record in a0 and never reads a result
+ * back from the call.
+ */
+extern void sefFreeSchedulerCf(SchedulerState *scheduler);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefLoadEffectCf);
+void sefDeleteEffect2(SchedulerState *scheduler)
+{
+    sefFreeSchedulerCf(scheduler);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefLoadEffectCfName);
+/*
+ * sefLoadEffectCf (main:0x002e7760) also sets up no registers before its
+ * call: seffectDebugCf and getPeer_Effect (its only callers) load a cf id
+ * into a0 and an effect number into a1 first, so both are real parameters
+ * forwarded unchanged to srsFileLoadCf. The result is discarded; v0 is
+ * cleared to 0 after the call rather than read from it.
+ */
+extern void srsFileLoadCf(int cf_id, int effect_no);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefLoadMemoryEffectCf);
+int sefLoadEffectCf(int cf_id, int effect_no)
+{
+    srsFileLoadCf(cf_id, effect_no);
+    return 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefLoadMemoryEffectCfName);
+/*
+ * sefLoadEffectCfName (main:0x002e7780) converts effect_name with
+ * srsEffectNameToID before forwarding to the same two-parameter
+ * srsFileLoadCf established above, keeping the cf id live in a saved
+ * register across the conversion call.
+ */
+extern int srsEffectNameToID(int effect_name);
+
+int sefLoadEffectCfName(int cf_id, int effect_name)
+{
+    int effect_no = srsEffectNameToID(effect_name);
+
+    if (effect_no > 0) {
+        srsFileLoadCf(cf_id, effect_no);
+    }
+    return 0;
+}
+
+/*
+ * sefLoadMemoryEffectCf (main:0x002e77c0) sets up no registers before
+ * calling srsMemoryLoadCf, so it forwards whatever its own caller passed;
+ * modeled here with the same three parameters srsMemoryLoadCf takes in
+ * sefLoadMemoryEffectCfName below, the only call in this file with evidenced
+ * arguments.
+ */
+extern void srsMemoryLoadCf(int cf_id, int effect_no, int buffer);
+
+int sefLoadMemoryEffectCf(int cf_id, int effect_no, int buffer)
+{
+    srsMemoryLoadCf(cf_id, effect_no, buffer);
+    return 0;
+}
+
+/*
+ * sefLoadMemoryEffectCfName (main:0x002e77e0) converts effect_name with
+ * srsEffectNameToID before forwarding to srsMemoryLoadCf, keeping the cf id
+ * and the buffer argument live in saved registers across the conversion
+ * call.
+ */
+int sefLoadMemoryEffectCfName(int cf_id, int effect_name, int buffer)
+{
+    int effect_no = srsEffectNameToID(effect_name);
+
+    if (effect_no > 0) {
+        srsMemoryLoadCf(cf_id, effect_no, buffer);
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateEffectCf2);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateEffectCf);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDeleteEffectCf);
+/*
+ * sefDeleteEffectCf (main:0x002e7930) is another tail call to
+ * sefFreeSchedulerCf, identical in shape to sefDeleteEffect2 above;
+ * CheckGameSymbol (one of its callers) loads a saved scheduler handle into
+ * a0 and never reads a result back.
+ */
+void sefDeleteEffectCf(SchedulerState *scheduler)
+{
+    sefFreeSchedulerCf(scheduler);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefRewindEffectCf);
+/* The flag sefRewindEffectCf sets in SchedulerState's flags word (sef.h);
+ * sefFreeScheduler (main:0x002e51a8) tests the same word with a wider mask
+ * (0x202). */
+#define SEF_SCHEDULER_REWIND_FLAG 1
+
+void sefRewindEffectCf(SchedulerState *scheduler)
+{
+    if (scheduler != 0) {
+        scheduler->flags |= SEF_SCHEDULER_REWIND_FLAG;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefClearEffectCf);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsFinishEffect);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsFinishEffect2);
+/*
+ * The fields of a 0xab0-byte _scheduler record sefIsFinishEffect2 reads,
+ * as displacements from the record + 0xa70 anchor its loop keeps in a
+ * register (the same anchor sefKillEffect below and sefIsFinishEffect, still
+ * assembly, use): the liveness word sefIsDeadSchduler tests at +0x6b0, the
+ * owning character at +0xa74 (sefCnvEtEffectNo's character_id) and the
+ * effect number at +0xa78 (the field sefKillEffect matches).
+ */
+#define SEF_RECORD_ANCHOR 0xa70
+#define SEF_RECORD_LIVE (0x6b0 - SEF_RECORD_ANCHOR)
+#define SEF_RECORD_CHARACTER_ID (0xa74 - SEF_RECORD_ANCHOR)
+#define SEF_RECORD_EFFECT_NO (0xa78 - SEF_RECORD_ANCHOR)
+#define SEF_SCHEDULER_RECORD_SIZE 0xab0
+#define SEF_SCHEDULER_COUNT 0x80
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetLoadQue);
+/*
+ * sefIsFinishEffect2 (main:0x002e7aa8): returns 1 when no live scheduler
+ * record is still playing effect_no, comparing against each record's effect
+ * number converted for its own character, so a per-character variant counts
+ * as the effect it was started from. A non-positive effect_no is always
+ * finished. As in sefKillEffect, record_offset stays a separate assignment:
+ * folded into record's initializer, cc1 2.96 folds the 0xa70 into
+ * _scheduler's own %lo relocation (one addiu instead of the original's two)
+ * and no longer reproduces the original bytes. The unused index is counted
+ * down (0x7f..0, bgez) by the compiler's own loop reversal.
+ */
+int sefIsFinishEffect2(int effect_no)
+{
+    int record_offset;
+    unsigned char *record;
+    int index;
+    int running;
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetLoadQue);
+    running = 0;
+    if (effect_no <= 0) {
+        return 1;
+    }
+    record_offset = SEF_RECORD_ANCHOR;
+    record = _scheduler + record_offset;
+    for (index = 0; index < SEF_SCHEDULER_COUNT; index++) {
+        if (*(int *)(record + SEF_RECORD_LIVE) != 0
+            && sefCnvEtEffectNo(*(short *)(record + SEF_RECORD_EFFECT_NO),
+                                *(short *)(record + SEF_RECORD_CHARACTER_ID))
+                   == effect_no) {
+            running++;
+        }
+        record += SEF_SCHEDULER_RECORD_SIZE;
+    }
+    return running == 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefExecLoadQue);
+void sefSetLoadQue(int effect_no)
+{
+    _sefLoadEftQue = effect_no;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefKillEffect);
+int *sefGetLoadQue(void)
+{
+    return &_sefLoadEftQue;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefHitEffect);
+void sefExecLoadQue(void)
+{
+    if (_sefLoadEftQue > 0) {
+        svFileLoadScript(0, _sefLoadEftQue);
+    }
+}
+
+extern void sefFreeScheduler(unsigned int scheduler_index);
+
+/*
+ * sefKillEffect (main:0x002e7b80): the loop's running pointer is preset to
+ * _scheduler + record_offset, the same anchor sefIsDeadSchduler's own 0x6b0
+ * offset (this TU) and sefIsFinishEffect2's own +8 offset (still assembly in
+ * this TU) resolve against, so both fields this loop dereferences -- the
+ * 0x6b0 liveness word, reached at record-0x3c0 from here, and the 0xa78
+ * effect number, at record+8 -- use small displacements from it.
+ * record_offset stays a separate assignment (not folded into record's own
+ * initializer): with it inlined, cc1 2.96 swaps which of record/index lands
+ * in s0 versus s1 and no longer reproduces the original bytes.
+ */
+void sefKillEffect(int effect_no)
+{
+    int record_offset;
+    unsigned char *record;
+    int index;
+
+    record_offset = 0xa70;
+    record = _scheduler + record_offset;
+    index = 0;
+    do {
+        if (*(int *)(record - 0x3c0) != 0
+            && (effect_no < 0 || *(short *)(record + 8) == effect_no)) {
+            sefFreeScheduler(index);
+        }
+        index++;
+        record += 0xab0;
+    } while (index < 0x80);
+}
+
+void sefHitEffect(void) {
+    _hitFlag = 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefPushEffect);
 
@@ -803,7 +1101,16 @@ SchedulerState *sefGetNowScheduler(void)
     return _nowScheduler;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetParentLine);
+/* Same gate and record address as the target == 4 case in sefCalcLocalMatrix
+ * (this file, sef.c:358-359), but on parameters rather than on _parentLine
+ * and _nowParentLocal directly. */
+unsigned char *sefGetParentLine(int line, int parent_local)
+{
+    if (line >= 0 && parent_local >= 0) {
+        return &_ptAlloc[parent_local * SEF_PT_ALLOC_RECORD_SIZE];
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefScaleIVectorAdd);
 

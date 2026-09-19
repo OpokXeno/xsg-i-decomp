@@ -2,6 +2,7 @@
  * OV12 original TU 20: 0x00a140a0..0x00a143e0 (8 functions)
  */
 #include "common.h"
+#include "shared.h"
 #include "ov12/rg_singleton_id.h"
 #include "rg_singleton_id.h"
 
@@ -24,6 +25,9 @@ extern const char rg_singleton_manager_nonnull_expression[];
 extern const char rg_singleton_id_source_file[];
 extern const char rg_singleton_id_range_expression[];
 extern RgSingletonManager s_inIDmgr;
+
+static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
+                    void *instance, void (*destructor)(void *instance));
 
 /*
  * Reviewer-directed correction for the OV12 singleton-manager functions.
@@ -90,7 +94,10 @@ static void *_Get(RgSingletonManager *manager, unsigned int singleton_id)
     return manager->instances[singleton_id];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_singleton_id", RgSingletonIDClear);
+void RgSingletonIDClear(void)
+{
+    _Clear(&s_inIDmgr);
+}
 
 /* Reviewer-directed correction for the OV12 singleton disposal wrapper. */
 
@@ -99,7 +106,18 @@ void RgSingletonDispose(void)
     _Destruct(&s_inIDmgr);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_singleton_id", RgSingletonIDEntry);
+/*
+ * The registry keeps any singleton with its destructor; its shared
+ * prototype (include/shared.h, config/header-canon.json) is spelled for
+ * the RgSimpleDB singletons, so a non-RgSimpleDB destructor converts at
+ * the call (see src/ov12/rg_motion_info_db.c).  _Entry itself stores the
+ * pointer and destructor untyped, so the conversion happens here.
+ */
+void RgSingletonIDEntry(int singleton_id, RgSimpleDB *database,
+                        void (*destructor)(RgSimpleDB *database))
+{
+    _Entry(&s_inIDmgr, singleton_id, database, (void (*)(void *))destructor);
+}
 
 /* Reviewer-directed correction for the OV12 singleton ID wrapper. */
 

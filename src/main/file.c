@@ -75,7 +75,12 @@ INCLUDE_ASM("asm/main/nonmatchings/file", FileSaveDataPush);
 
 INCLUDE_ASM("asm/main/nonmatchings/file", FileSlotNameGet);
 
-INCLUDE_ASM("asm/main/nonmatchings/file", TskObjectSet);
+void TskObjectSet(TskObject *task, TskObjectWorker worker, void *data)
+{
+    task->data = data;
+    task->worker = worker;
+    task->state = 0;
+}
 
 void tskTskMain(TskObject *task)
 {

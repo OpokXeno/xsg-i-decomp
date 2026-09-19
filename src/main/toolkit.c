@@ -90,7 +90,9 @@ INCLUDE_ASM("asm/main/nonmatchings/toolkit", getPeer_Effect);
 
 INCLUDE_ASM("asm/main/nonmatchings/toolkit", getPeer_Stage);
 
-INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_call__Ljava_lang_Object_Ljava_lang_String_);
+void Java_xeno_util_Toolkit_call__Ljava_lang_Object_Ljava_lang_String_(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I);
 

@@ -10,7 +10,12 @@ extern void assert_prog(const char *expression, const char *source_file,
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_cdread", _GetLocalPath);
+extern char D_00A58E28[];
+
+char *_GetLocalPath(void)
+{
+    return D_00A58E28;
+}
 
 static char *_RootName(const char *pszName, char *pszResult, const char *pszRoot)
 {

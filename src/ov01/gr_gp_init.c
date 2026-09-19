@@ -2,6 +2,8 @@
  * OV01 original TU 8: 0x00a24a98..0x00a26018 (30 functions)
  */
 #include "common.h"
+#include "shared.h"
+#include "main/xgl_packet.h"
 
 typedef unsigned char u8;
 typedef struct Matrix {
@@ -18,6 +20,30 @@ typedef struct FloatVector3 {
     float y;
     float z;
 } FloatVector3;
+
+/* grGpInit's argument: the VIF1 DIRECT packet grPacketSend transmits, a
+ * data buffer and its length. grGpInit points data at the scratchpad
+ * (0x70000000). */
+typedef struct GrPacket {
+    void *data;  /* +0x0 */
+    int count;   /* +0x4 */
+} GrPacket;
+
+/* Framebuffer base addresses; grFBAdrGet indexes this table. */
+extern int fb[4];
+
+/* EE scratchpad RAM base. */
+#define SCRATCHPAD_BASE ((void *)0x70000000)
+/* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */
+#define VIF_CODE_FLUSH 0x11000000
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
+                                    int count);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void sceVif1PkTerminate(XglPacket *packet);
 
 /* The record grCalcMatrix transforms. Only the four vectors of its transform
  * block are recovered; everything before +0x90 stays unnamed.
@@ -107,9 +133,16 @@ extern void xglMatrixStackSave(float matrix[4][4]);
 extern void grRotMatrix(Matrix *destination, Matrix *source,
                         FloatVector3 *angles);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grGpInit);
+void grGpInit(GrPacket *packet)
+{
+    packet->count = 0;
+    packet->data = SCRATCHPAD_BASE;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grFBAdrGet);
+int grFBAdrGet(int index)
+{
+    return fb[index];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grBBIdxGet);
 
@@ -149,7 +182,18 @@ INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grPutFT4STQ);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grPutSpr);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grPacketSend);
+void grPacketSend(GrPacket *packet)
+{
+    XglPacket *vif1Packet;
+
+    vif1Packet = xglPacketGetCurrent();
+    sceVif1PkCnt(vif1Packet, 0);
+    sceVif1PkAddCode(vif1Packet, VIF_CODE_FLUSH);
+    sceVif1PkOpenDirectHLCode(vif1Packet, 0);
+    sceVif1PkAddDirectDataN(vif1Packet, packet->data, packet->count);
+    sceVif1PkCloseDirectHLCode(vif1Packet);
+    sceVif1PkTerminate(vif1Packet);
+}
 
 Matrix *grWorldMatGet(void)
 {

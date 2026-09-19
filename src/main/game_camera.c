@@ -8,8 +8,7 @@
  * standalone one-byte extern: at -G8 an object at or under the G threshold is
  * addressed through $gp, and the original's own two-instruction
  * lui/lbu absolute address for this byte proves this access is NOT
- * gp-relative (config/units/math-spark-cont01-00246c60.json asm_contract
- * memory: "reads the flag byte at main VA 0x00338741"). This TU-local view is
+ * gp-relative. This TU-local view is
  * independent of the other partial views other TUs give the same symbol
  * (GameLoopFlagsPrefix, GameLoopStateAddressView, ...; */
 extern unsigned char GameLoopState[0x2a030];
@@ -60,9 +59,7 @@ void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
  * TU's original functions) is audited at the TU's plain "ordinary" class
  * instead and is the only construct that keeps this idiom reachable at all
  * while MoveHokan itself stays hardware-classified; it leaves no trace in
- * the compiled object (confirmed: attempt-b103f57e2557
- * build/form-04/audit.json "no_emitted_helpers" ok=true, emitted=[] for
- * that attempt's own byte-identical build).
+ * the compiled object
  * This is disclosed as exactly that tool-boundary limitation, to be
  * revisited if the calibrated grammar is ever widened to admit a scalar
  * builtin alongside hardware statements in one function -- not as a claim
@@ -138,7 +135,7 @@ static void MoveHokan(void *unused, float step, const Vector4 *target,
     if (*remaining == zero || (MoveHokanStateFlag & 0x80) != 0) {
         *remaining = zero;
         /* current = *target, the SDK sceVu0CopyVector 16-byte quadword-copy
-           idiom (docs/tu-worker.md "The R5900 GPR quadword load/store"): the
+           idiom: the
            original hand-wrote this snap as inline lq/sq using $2 (v0) as the
            scratch register, rather than leaving the 16-byte aggregate copy
            to the compiler's own block-copy codegen. Confirmed necessary, not
@@ -147,15 +144,7 @@ static void MoveHokan(void *unused, float step, const Vector4 *target,
            uses, but the compiler's own aggregate-copy path recognizes both
            this site and the matching one below as identical and folds them
            into one shared unaligned ldl/ldr/sdl/sdr block reached by two
-           jumps -- which the original does not do: measured at
-           attempt-b103f57e2557 build/form-01 (79.023%, +8 bytes/+2
-           instructions, first difference at relative offset 0x34c; diff
-           classes 5 deletions/7 insertions show the merged block replacing
-           the original's two independent copies), matching
-           attempt-763904f524a9 build/form-01 and recorded as CP-0153.
-           Writing both sites as this SDK-shaped inline asm keeps them as two
-           independent, opaque asm statements the compiler's tail-merge pass
-           does not fold. */
+           jumps -- which the original does not do. */
         __asm__ __volatile__(
             "lq $2, 0(%1)\n"
             "sq $2, 0(%0)\n"

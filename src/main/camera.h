@@ -160,4 +160,24 @@ typedef struct CameraSplineRequest {
 
 extern StudioCamera *xglStudioGetCamera2(int camera_id);
 
+/*
+ * CAMERA_transSPL (main:0x002fb900) and CAMERA_viewSPL (main:0x002fbb30) are
+ * local to this file in the original, still asm here, and share
+ * CAMERA_rotateSPL's shape: `selection` picks the case, `request` is the
+ * argument block and `environment` is loaded into no register the body
+ * reads. Both also take a fourth argument neither body reads (their `lw`/`sw`
+ * sequences never name $a1 or $a3): `result`, the native method's
+ * return-value slot, which the VM passes to every native as its third
+ * argument (Java_xeno_Camera_getRotateX__ stores its float through it) and
+ * which these void natives leave untouched.
+ * Java_xeno_Camera_transSPL__aFI/aFIII (0x002fb9d0/0x002fba00) and
+ * Java_xeno_Camera_viewSPL__aFI/aFIII (0x002fbc00/0x002fbc30) forward it
+ * unread, exactly as Java_xeno_Camera_rotateSPL__aFI/aFIII
+ * (0x002fb6f8/0x002fb728) forward the same slot into CAMERA_rotateSPL.
+ */
+static void CAMERA_transSPL(int selection, JavaEnvironment *environment,
+                            CameraSplineRequest *request, void *result);
+static void CAMERA_viewSPL(int selection, JavaEnvironment *environment,
+                           CameraSplineRequest *request, void *result);
+
 #endif /* SRC_MAIN_CAMERA_H */

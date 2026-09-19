@@ -1,9 +1,14 @@
 #include "common.h"
 #include "shared.h"
 
+extern int s_nIgnoreCulling;
+
 INCLUDE_ASM("asm/main/nonmatchings/face_point", culling_matrix);
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", culling_cell_disp);
+/* Empty in this build: the original body is a bare return. */
+static void culling_cell_disp(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", _FacePoint);
 
@@ -35,11 +40,20 @@ INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapCreate);
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapDisp);
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingIgnore);
+void xglCullingIgnore(void)
+{
+    s_nIgnoreCulling = 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingIgnoreOff);
+void xglCullingIgnoreOff(void)
+{
+    s_nIgnoreCulling = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapDebug);
+/* Empty in this build: the original body is a bare return. */
+void xglCullingMapDebug(void)
+{
+}
 
 /*
  * _ModelCalcClipInit: load the pair of 4x4 clip matrices into VU0 macro-mode

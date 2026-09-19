@@ -66,6 +66,34 @@ typedef struct JntElementHeader {
     int root_element_offset;
 } JntElementHeader;
 
+/*
+ * Another partial view of the same scratchpad work area as JntWork (it is
+ * one layout; JntWork does not model these slots): the general flags word
+ * at 0x38, which JNT_setFlags writes and JNT_getFlags reads (`sw $4,56($1)`
+ * / `lw $2,56($2)` off the 0x70000000 base). Callers ACT_resetMatrix,
+ * ACT_updateMotionSub, ACT_modelDrawSub, ACT_setMotion and ACT_setMotion2
+ * read/write it around the same joint update the matrix/curve slots above
+ * serve.
+ */
+typedef struct JntFlagsWork {
+    unsigned char unmodeled_000[0x38];
+    int flags;
+} JntFlagsWork;
+
+/*
+ * A view of the same work area for two adjacent slots past the end of
+ * JntWork:
+ * JNT_animSetFlags writes the animation flags word at 0x810
+ * (`sw $4,2064($1)`) and JNT_setClipR writes the clipping radius right
+ * after it at 0x814 (`swc1 $f12,2068($1)`); both are supplied by
+ * ACT_updateMotionSub (JNT_animSetFlags also by ACT_modelDrawSub).
+ */
+typedef struct JntAnimWork {
+    unsigned char unmodeled_000[0x810];
+    int anim_flags;
+    float clip_radius;
+} JntAnimWork;
+
 INCLUDE_ASM("asm/main/nonmatchings/jnt", get_fcvpack);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", get_fcvpack_fix);
@@ -92,13 +120,29 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", liner_interpolate);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_interpolate);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setFlags);
+void JNT_setFlags(int flags)
+{
+    JntFlagsWork *work = (JntFlagsWork *)JNT_SCRATCH_BASE;
+    work->flags = flags;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setClipR);
+void JNT_setClipR(float clip_radius)
+{
+    JntAnimWork *work = (JntAnimWork *)JNT_SCRATCH_BASE;
+    work->clip_radius = clip_radius;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_animSetFlags);
+void JNT_animSetFlags(int anim_flags)
+{
+    JntAnimWork *work = (JntAnimWork *)JNT_SCRATCH_BASE;
+    work->anim_flags = anim_flags;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getFlags);
+int JNT_getFlags(void)
+{
+    JntFlagsWork *work = (JntFlagsWork *)JNT_SCRATCH_BASE;
+    return work->flags;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getAccessories);
 
@@ -176,7 +220,33 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getRootScale);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_addConsumer);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_initProducer);
+/*
+ * A joint producer: JNT_initProducer's own evidence is a consumer count, an
+ * 8-entry array at 0x24 it clears, and three trailing words it resets to an
+ * idle state (0x64/0x68 to zero, 0x6C to -1).
+ */
+struct JntProducer {
+    int count;              /* 0x00 */
+    unsigned char unmodeled_04[0x20];
+    int consumers[8];       /* 0x24, only evidenced as cleared by JNT_initProducer */
+    unsigned char unmodeled_44[0x20];
+    int pending_output;     /* 0x64 */
+    int output_count;       /* 0x68, only evidenced as cleared by JNT_initProducer */
+    int current_index;      /* 0x6C, -1 when none */
+};
+
+void JNT_initProducer(JntProducer *producer)
+{
+    int i;
+
+    producer->pending_output = 0;
+    producer->count = 0;
+    producer->output_count = 0;
+    producer->current_index = -1;
+    for (i = 7; i >= 0; i--) {
+        producer->consumers[i] = 0;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_startProduction);
 
@@ -206,6 +276,19 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_resetMatrix);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_computeMatrix);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_onSmoothHair);
+/*
+ * Hair-smoothing toggle at VA 0x004DC248: JNT_computeMatrix reads it with
+ * `lb $2,flagSmoothHair` (VA 0x00314B14) to decide whether to apply the
+ * interpolated hair matrix; this pair only sets/clears it.
+ */
+extern signed char flagSmoothHair;
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_offSmoothHair);
+void JNT_onSmoothHair(void)
+{
+    flagSmoothHair = 1;
+}
+
+void JNT_offSmoothHair(void)
+{
+    flagSmoothHair = 0;
+}

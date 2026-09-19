@@ -3,7 +3,7 @@
 /*
  * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
  * own header, src/main/ssd_init.h. The generated include/main/ssd_init.h cannot
- * carry RssdWork's type yet (config/header-canon.json, RssdWorkFlags), so that
+ * carry RssdWork's type yet, so that
  * header is included directly.
  */
 #include "ssd_init.h"
@@ -58,7 +58,13 @@ INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdSetPlayEffectParam);
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdSetEffectParam);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdStopAllEffect);
+enum { RSSD_CMD_STOP_ALL_EFFECT = 0x78 };
+
+void SsdStopAllEffect(void)
+{
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_STOP_ALL_EFFECT, 0, 0, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdStopEffect);
 

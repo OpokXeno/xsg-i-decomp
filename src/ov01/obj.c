@@ -53,7 +53,9 @@ void objExec2(void) {
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntry);
+void objEntry(void *argument) {
+    objEntrySub(&taskMan, argument, 0);
+}
 
 ObjectTask *objEntry2(void *argument, ObjectTaskCallback callback) {
     ObjectTask *task;
@@ -67,7 +69,9 @@ ObjectTask *objEntry2(void *argument, ObjectTaskCallback callback) {
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntrySub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntryRev);
+void objEntryRev(void *argument) {
+    objEntrySub(&taskMan, argument, 1);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntry2Rev);
 
@@ -106,26 +110,91 @@ INCLUDE_ASM("asm/nonmatchings/ov01/obj", objStdMove);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objHatoVec);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdClear);
+void objCmdClear(ObjectTask *task) {
+    ObjectCommandQueue *queue;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdPtrGet);
+    queue = task->work;
+    queue->entries[0].selector = 0;
+    queue->writeIndex = 0;
+    queue->readIndex = 0;
+    queue->word70 = 0;
+    queue->word74 = 0;
+    queue->flags &= ~OBJCMD_QUEUE_PENDING;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdTailGet);
+void *objCmdPtrGet(ObjectTask *task) {
+    ObjectCommandQueue *queue;
+
+    queue = task->work;
+    return &queue->entries[queue->writeIndex];
+}
+
+void *objCmdTailGet(ObjectTask *task) {
+    ObjectCommandQueue *queue;
+
+    queue = task->work;
+    return &queue->entries[queue->readIndex];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdPush);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdPop);
+#define OBJ_DEBUG_PRINT(args) do { printf args; } while (0)
+
+void *objCmdPop(ObjectTask *task) {
+    ObjectCommandQueue *queue;
+    int index;
+
+    queue = task->work;
+    index = queue->readIndex;
+    queue->readIndex = index - 1;
+    if (queue->readIndex < 0) {
+        queue->readIndex = 0;
+        OBJ_DEBUG_PRINT((D_00A438A0, queue));
+        return 0;
+    }
+    return &queue->entries[index];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdNext);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoInit);
+void fifoInit(Fifo *fifo, int capacity) {
+    fifo->base = 0;
+    fifo->maxIndex = capacity - 1;
+    fifo->readIndex = 0;
+    fifo->writeIndex = 0;
+    fifo->count = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoPush);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoPop);
+int fifoPop(Fifo *fifo) {
+    int count;
+    int newCount;
+    int readIndex;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoEdGet);
+    count = fifo->count;
+    newCount = count - 1;
+    if (count <= 0) {
+        printf(D_00A438D8, newCount);
+        return -1;
+    }
+    readIndex = fifo->readIndex + 1;
+    fifo->count = newCount;
+    fifo->readIndex = readIndex;
+    if (fifo->maxIndex < readIndex) {
+        fifo->readIndex = fifo->base;
+    }
+    return fifo->readIndex;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoStGet);
+int fifoEdGet(Fifo *fifo) {
+    return fifo->writeIndex;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoNumGet);
+int fifoStGet(Fifo *fifo) {
+    return fifo->readIndex;
+}
+
+int fifoNumGet(Fifo *fifo) {
+    return fifo->count;
+}

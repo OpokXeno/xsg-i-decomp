@@ -1,19 +1,19 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_studio.h"
 
 extern int dbCX;
 extern int dbCY;
 extern int dbCH;
 extern int dbMODE;
 
-extern void xglStudioGetLight(void *light_out);
-extern void xglLightSetDefault(void *light);
+extern void xglLightSetDefault(StudioLight *light);
 
 INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", GAME_initCamera);
 
 void GAME_initLight(void)
 {
-    void *light;
+    StudioLight *light;
 
     xglStudioGetLight(&light);
     xglLightSetDefault(light);
@@ -48,7 +48,16 @@ void DB_incPos(int x, int y)
     dbCY += y;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", DB_params);
+extern int dbCZ;
+
+extern int xglFontGetFlags(void);
+
+void DB_params(const char *text)
+{
+    if ((xglFontGetFlags() & 3) == 3) {
+        xglFontPrint(dbCX, dbCY, dbCZ, text);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", DB_println);
 

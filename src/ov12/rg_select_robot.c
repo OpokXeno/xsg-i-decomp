@@ -2,11 +2,66 @@
  * OV12 original TU 71: 0x00a3cd10..0x00a3e518 (26 functions)
  */
 #include "common.h"
+#include "shared.h"
 #include "rg_select_robot.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ReadCallback);
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(void *heap, unsigned int size,
+                         const char *source_file, int line);
+extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
+                       int line);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _KillLoad);
+static void _InitSelRob(RgSelectRobot *pCont);
+static void _DestructSelRob(RgSelectRobot *pCont);
+static void _JobAct(RgSelectRobot *pCont, float deltaTime);
+
+/* Linker witness: this TU's own source-file name, used by every assert here. */
+extern const char D_00A56DA0[];
+/* Linker witness for the original literal at ov12:0x00a56ef8 ("pCont != NIL"). */
+extern const char D_00A56EF8[];
+/* Linker witness for the original literal at ov12:0x00a56d90 ("who are you ?"). */
+extern const char D_00A56D90[];
+
+/* jal RgWarn(format, file, line, ...), the XrgLogSys-shaped debug warning
+   (also declared this way by src/ov12/rg_main.c, its accepted caller). */
+extern void RgWarn(const char *format, const char *file, int line, ...);
+
+/*
+ * xglCdReadFile's completion callback: only completion code 4 does
+ * anything, and only when a requester (s_pWhoAreYou) is on file to receive
+ * the count; any other requester-less code-4 completion is logged instead
+ * of counted.  Codes below -2 and codes 1..3 are guarded out and ignored.
+ */
+static void _ReadCallback(int completionCode)
+{
+    if (completionCode < -2) {
+        return;
+    }
+    if (completionCode < 4) {
+        return;
+    }
+    if (completionCode != 4) {
+        return;
+    }
+    if (s_pWhoAreYou != 0) {
+        s_uOkNum++;
+    } else {
+        RgWarn(D_00A56D90, D_00A56DA0, 55);
+    }
+    s_bLoading = 0;
+}
+
+static void _KillLoad(void)
+{
+    if (s_bLoading != 0) {
+        xglCdReadCancel();
+        s_bLoading = 0;
+    }
+    s_uReqNum = (s_uOkNum = 0);
+    s_pWhoAreYou = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _KillLoadIfMe);
 
@@ -59,18 +114,48 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _InitSelRob);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _DestructSelRob);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", CreateRgSelectRobot);
+RgSelectRobot *CreateRgSelectRobot(void)
+{
+    RgSelectRobot *pCont;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", DisposeRgSelectRobot);
+    pCont = RgHeapAlloc(InstanceOfRgHeap(), RG_SELECT_ROBOT_SIZE, D_00A56DA0,
+                        745);
+    _InitSelRob(pCont);
+    return pCont;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotScreenPos);
+void DisposeRgSelectRobot(RgSelectRobot *pCont)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 753);
+    }
+    _DestructSelRob(pCont);
+    RgHeapFree(InstanceOfRgHeap(), pCont, D_00A56DA0, 755);
+    xglCdReadCancel();
+}
+
+void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 766);
+    }
+    pCont->screenPos = screenPos;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotSetMode);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotPassTime);
+void RgSelectRobotPassTime(RgSelectRobot *pCont, float deltaTime)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 820);
+    }
+    _JobAct(pCont, deltaTime);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotDisp);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _DumpHead_00A3E510);
+static void _DumpHead(void)
+{
+}

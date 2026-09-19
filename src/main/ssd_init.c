@@ -7,11 +7,26 @@
  */
 extern int iSignalSema(int sema_id);
 
+/*
+ * RssdInitIop is this TU's own IOP sound RPC client setup (its body is still
+ * scaffold below); sceSifRpcLoop is the SCE SDK SIF RPC server loop.
+ */
+extern void RssdInitIop(void);
+extern void sceSifRpcLoop(void *queue);
+
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdInit);
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdQuit);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RSsdSifRpcThread);
+/*
+ * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
+ * on the queue reserved at RssdWork.rpc_queue. It never returns.
+ */
+void RSsdSifRpcThread(void)
+{
+    RssdInitIop();
+    sceSifRpcLoop(RssdWork.rpc_queue);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdInitIop);
 
@@ -67,17 +82,53 @@ void RssdSifRpcCallback(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdFuncCallCompleted);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdGetCallCompletedCode);
+/* Returns the bit RssdSifRpcCallback clears on RPC completion. */
+int RssdGetCallCompletedCode(void)
+{
+    return (RssdWork.flags >> 3) & 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdGetResultValue);
+extern int printf(const char *format, ...);
+extern const char D_004D4AA0[]; /* "Rssd get result error !" */
+
+int SsdGetResultValue(int *value)
+{
+    int result;
+
+    if (RssdWork.flags & 0x8) {
+        result = (RssdWork.flags & RSSD_FLAG_SUCCESS) ? -1 : -2;
+    } else if (RssdWork.response.error_code >= 0) {
+        result = (RssdWork.flags & RSSD_FLAG_SUCCESS) == 0;
+        if (value != 0)
+            *value = RssdWork.response.value;
+    } else {
+        result = -3;
+        printf(D_004D4AA0);
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdGetResultParam);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdSetServerCallback);
+void SsdSetServerCallback(void *callback, void *arg)
+{
+    RssdWork.server_callback = callback;
+    RssdWork.server_callback_arg = arg;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdSetFuncCallback);
+void SsdSetFuncCallback(void (*callback)(int status, RssdRpcResponse *response,
+                                         void *arg),
+                        void *arg)
+{
+    RssdWork.complete_callback = callback;
+    RssdWork.callback_arg = arg;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdSetStreamEndCallback);
+void SsdSetStreamEndCallback(void *callback, void *arg)
+{
+    RssdWork.stream_end_callback = callback;
+    RssdWork.stream_end_callback_arg = arg;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdResume);
 

@@ -55,4 +55,9 @@ void xglMpeg2InfoInit(void *info, void *arena)
     xglMpeg2InfoInit2(info, arena, 0x100000);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1", xglMovieInit);
+extern int sceIpuInit(void);
+
+int xglMovieInit(void)
+{
+    return sceIpuInit();
+}

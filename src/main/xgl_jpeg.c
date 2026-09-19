@@ -38,7 +38,30 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", ExtractHuffmanTableSub);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", xglJpegEncode);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", DefineRestartInterval);
+/*
+ * Parses a DRI (Define Restart Interval) marker segment: marker[0..1] is the
+ * segment length, marker[2..3] the big-endian restart interval. Stores it and
+ * that value plus one into the codec work area past the JpegWork extent
+ * modeled above (lw/sw at main 0x002248ac/0x002248b4, +0x2ba0/+0x2ba4 of
+ * `sw`); nothing in this allocation reads either field back, so their
+ * consuming role is not evidenced here. Modeling them as named JpegWork
+ * members needs a published extension of that struct (an
+ * unmodeled_1590[0x1610] gap then two u32 members), which is a shared-header
+ * change outside a single function's additive edit and is reported rather
+ * than made here. Returns the byte after the segment, as the marker dispatch
+ * table's other parsers do.
+ */
+static void *DefineRestartInterval(void *marker)
+{
+    u8 *segment = marker;
+    u8 *work = (u8 *)sw;
+    u32 interval;
+
+    interval = (segment[2] << 8) + segment[3];
+    *(u32 *)(work + 0x2ba0) = interval;
+    *(u32 *)(work + 0x2ba4) = interval + 1;
+    return segment + 4;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", DefineQuantizeTable);
 

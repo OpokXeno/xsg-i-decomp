@@ -4,7 +4,17 @@
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scInitScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scFindScriptData);
+/*
+ * scFindScriptData is a genuine tail call (`j sefSearchMapperIndex`, not
+ * `jal`) into the mapper-index search main/tu211 (src/main/sef.c) defines;
+ * that function is still INCLUDE_ASM there.
+ */
+extern void sefSearchMapperIndex(void);
+
+static void scFindScriptData(void)
+{
+    sefSearchMapperIndex();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scCreateScript);
 
@@ -16,7 +26,22 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scDestroyScriptAll);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scExecScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scExecEffect);
+/* scExecScript (above) is still INCLUDE_ASM; declare it so its caller does
+ * not see an implicit declaration. */
+static void scExecScript(void);
+
+/*
+ * sefExecScheduler runs the effect scheduler's tick; it is defined in
+ * main/tu211 (src/main/sef.c), still INCLUDE_ASM there. scExecEffect calls
+ * scExecScript, then genuinely tail-calls (`j`, not `jal`) into it.
+ */
+extern void sefExecScheduler(void);
+
+void scExecEffect(void)
+{
+    scExecScript();
+    sefExecScheduler();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scCreateTask);
 
@@ -74,7 +99,24 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetNumScript);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetRegScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetAdrScript);
+/*
+ * scGetAdrScript forwards the running task it was given straight through to
+ * scGetCmdScript (register evidence: it sets up no argument of its own before
+ * the `jal scGetCmdScript`), and collapses the same 0xFFFF/-1 "no address"
+ * sentinels scGetImmAdrImmIdx2 above documents.
+ */
+extern int scGetCmdScript(ScriptTask *task);
+
+int scGetAdrScript(ScriptTask *task)
+{
+    int address;
+
+    address = scGetCmdScript(task) & 0xFFFF;
+    if (address == 0xFFFF || address == -1) {
+        address = 0;
+    }
+    return address;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetAdrIdx);
 
@@ -84,23 +126,64 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetTableAdrImmIdx);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetImmAdrImmIdx);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetImmAdrImmIdx2);
+/*
+ * Resolves a table-indexed operand to an address relative to `base`: the
+ * halfword at `table[index]` is a count of halfword units (multiplied by 2
+ * below), with the same 0xFFFF/-1 "no address" sentinels as scGetAdrScript
+ * collapsing to 0.
+ */
+int scGetImmAdrImmIdx2(int base, unsigned short *table, int index)
+{
+    int offset;
+    int address;
+
+    offset = table[index];
+    if (offset == 0xFFFF || offset == -1) {
+        offset = 0;
+    }
+    address = 0;
+    if (offset != 0) {
+        address = base + offset * 2;
+    }
+    return address;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetTableNumIdx);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetImmNumIdx);
+/* Reads a signed 16-bit table entry: `table[index]`. */
+short scGetImmNumIdx(short *table, int index)
+{
+    return table[index];
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetAdrImmScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scERRORScript);
+static int scERRORScript(void)
+{
+    return 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGOScript);
+extern int scGetAdrScript(ScriptTask *task);
+
+/*
+ * scGOScript is the script VM's GO opcode wrapper: it stores the resolved
+ * address at the branch-stack entry `branch_depth` selects, the same slot
+ * scONGOScript above writes.
+ */
+static int scGOScript(ScriptTask *task)
+{
+    task->script_pc[task->branch_depth] = scGetAdrScript(task);
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGOSUBScript);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRETURNScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scEXITScript);
+static int scEXITScript(void)
+{
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scBRAScript);
 
@@ -124,45 +207,214 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scONGOSUBScript);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scOBJEVEScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scABORTScript);
+extern int _nowEvent;
+extern int _nowScript;
+extern void scDeleteTaskAll(int event, int task_index);
+/*
+ * scGetNumScript decodes the current script command's next numeric operand.
+ * Every opcode handler is called with the running ScriptTask in $a0 (as
+ * scONGOScript and scPAUSEScript use it), and the handlers below hand that
+ * task on to scGetNumScript: the R*Script handlers save $a0 across
+ * scGetCmdScript and reload it before the call (daddu a0,s0 at 0x002eae90),
+ * and scABORTScript, whose first call it is, leaves $a0 untouched
+ * (0x002eabc4..0x002eabc8). scGetNumScript's own body does not read it.
+ */
+extern int scGetNumScript(ScriptTask *task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scPAUSEScript);
+/*
+ * Deletes the task the decoded index selects.  A negative index deletes every
+ * task of the given event instead (gp-relative _nowEvent/_nowScript at
+ * 0x002eabdc/0x002eabf0).
+ *
+ * `event` first receives the scGetNumScript(task) result (discarded once
+ * `taskIndex` is initialised from the same expression) and only later the
+ * _nowEvent load: forms 01-03 (build/form-0{1,2,3}/functions/scABORTScript.json)
+ * show that giving `taskIndex` and `event` independent initialisations, in
+ * either declaration order, costs the compiler the shared epilogue between
+ * the two branches (+8 bytes over the original); the chained assignment
+ * below (form04) is what keeps it.
+ */
+static int scABORTScript(ScriptTask *task)
+{
+    int taskIndex;
+    int event;
+
+    taskIndex = (event = scGetNumScript(task));
+    if (taskIndex < 0) {
+        event = _nowEvent;
+        scDeleteTaskAll(event, taskIndex);
+    } else {
+        scDeleteTask(_nowScript, taskIndex);
+    }
+    return 1;
+}
+
+static int scPAUSEScript(ScriptTask *task)
+{
+    task->flags |= 4; /* pause bit; scDispatchScript's `flags & 4` reads it */
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scPRINTScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRPUTScript);
+/*
+ * scGetCmdScript (still asm) decodes the running task's next command
+ * operand: it reads the task the handler was given in $a0
+ * (`lh $3,0x54($4)` = task->branch_depth at 0x002ea418,
+ * `addiu $5,$4,0x8` = task->script_pc at 0x002ea41c).
+ */
+extern int scGetCmdScript(ScriptTask *task);
+extern int scGetReg(int reg);
+
+static int scRPUTScript(ScriptTask *task)
+{
+    scGetReg(scGetCmdScript(task));
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRDUMPScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scCMDPUTONScript);
+extern short _cmdPut;
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scCMDPUTOFFScript);
+static int scCMDPUTONScript(void)
+{
+    _cmdPut = 1;
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRSETScript);
+static int scCMDPUTOFFScript(void)
+{
+    _cmdPut = 0;
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRINCScript);
+extern void scSetReg(int reg, int value);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRDECScript);
+static int scRSETScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRADDScript);
+    scSetReg(reg, scGetNumScript(task));
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRSUBScript);
+static int scRINCScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRMULScript);
+    scSetReg(reg, scGetReg(reg) + 1);
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRDIVScript);
+static int scRDECScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRMODScript);
+    scSetReg(reg, scGetReg(reg) - 1);
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scR_ANDScript);
+static int scRADDScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scR_ORScript);
+    scSetReg(reg, scGetReg(reg) + operand);
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scR_XORScript);
+static int scRSUBScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scR_NOTScript);
+    scSetReg(reg, scGetReg(reg) - operand);
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scR_NEGScript);
+static int scRMULScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
+
+    scSetReg(reg, scGetReg(reg) * operand);
+    return 1;
+}
+
+/*
+ * `divisor` duplicates `operand` into its own local: form01
+ * (build/form-01/functions/scRDIVScript.json) shows the original keeps a
+ * third callee-saved register (s2) holding this value only for the `beql
+ * s2,zero` zero-divide guard, separate from the register the `div`
+ * instruction itself reads, and drops to two saved registers without it.
+ */
+static int scRDIVScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
+    int divisor = operand;
+
+    if (divisor != 0) {
+        scSetReg(reg, scGetReg(reg) / divisor);
+    }
+    return 1;
+}
+
+/* Same compiler-forced extra register as scRDIVScript; see its comment. */
+static int scRMODScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
+    int divisor = operand;
+
+    if (divisor != 0) {
+        scSetReg(reg, scGetReg(reg) % divisor);
+    }
+    return 1;
+}
+
+static int scR_ANDScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
+
+    scSetReg(reg, scGetReg(reg) & operand);
+    return 1;
+}
+
+static int scR_ORScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
+
+    scSetReg(reg, scGetReg(reg) | operand);
+    return 1;
+}
+
+static int scR_XORScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+    int operand = scGetNumScript(task);
+
+    scSetReg(reg, scGetReg(reg) ^ operand);
+    return 1;
+}
+
+static int scR_NOTScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+
+    scSetReg(reg, ~scGetReg(reg));
+    return 1;
+}
+
+static int scR_NEGScript(ScriptTask *task)
+{
+    int reg = scGetCmdScript(task);
+
+    scSetReg(reg, -scGetReg(reg));
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRRNDScript);
 
@@ -170,15 +422,56 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scREVEScript);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scWAITCNTScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scWAITEVEScript);
+/*
+ * scWAITEVEScript is the WAIT-for-event opcode handler: it reads the event
+ * number operand, records it as the task's wait_value and sets wait_mode to
+ * 2, then returns the parser-yield status 2.
+ */
+static int scWAITEVEScript(ScriptTask *task)
+{
+    task->wait_value = scGetNumScript(task);
+    task->wait_mode = 2;
+    return 2;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scWAITEFTScript);
+/*
+ * scWAITEFTScript is the WAIT-for-effect opcode handler. It consumes an
+ * operand from the script stream (the scGetNumScript(task) call), but the
+ * value it waits on is the effect_scheduler handle scEFFECTScript (still
+ * asm) already stored in the task: it copies that into wait_value and sets
+ * wait_mode to 3.
+ */
+static int scWAITEFTScript(ScriptTask *task)
+{
+    scGetNumScript(task);
+    task->wait_mode = 3;
+    task->wait_value = task->effect_scheduler;
+    return 2;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scWAITMOVIEScript);
+/* scWAITMOVIEScript is the WAIT-for-movie opcode handler: no operand of its
+ * own, it just sets wait_mode to 4 and yields. */
+static int scWAITMOVIEScript(ScriptTask *task)
+{
+    task->wait_mode = 4;
+    return 2;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scWAITMISSILEScript);
+/* scWAITMISSILEScript is the WAIT-for-missile opcode handler: no operand of
+ * its own, it just sets wait_mode to 5 and yields. */
+static int scWAITMISSILEScript(ScriptTask *task)
+{
+    task->wait_mode = 5;
+    return 2;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scFADEONScript);
+/* scFADEONScript sets the fade-on bit of the task's flags word and returns
+ * the running status 1. */
+static int scFADEONScript(ScriptTask *task)
+{
+    task->flags |= 0x100;
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scFreezeCamera);
 
@@ -229,7 +522,17 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetTaskAdr);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetRegAdr);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scOfsToAdr);
+/*
+ * Collapses the same 0xFFFF/-1 "no address" sentinels scGetAdrScript and
+ * scGetImmAdrImmIdx2 above document to 0; any other offset is returned as-is.
+ */
+int scOfsToAdr(int offset)
+{
+    if (offset == 0xFFFF || offset == -1) {
+        offset = 0;
+    }
+    return offset;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scAdrToImm);
 

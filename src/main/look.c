@@ -60,9 +60,13 @@ void look_limit_add(float *angle, float target, float step)
 
 INCLUDE_ASM("asm/main/nonmatchings/look", look_get_place);
 
-INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_target_init);
+void LOOK_target_init(void)
+{
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_target_doit);
+void LOOK_target_doit(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_sebo_cont);
 

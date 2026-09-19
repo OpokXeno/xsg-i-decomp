@@ -1,4 +1,3 @@
-
 #ifndef INCLUDE_MAIN_XGL_TASK_H
 #define INCLUDE_MAIN_XGL_TASK_H
 

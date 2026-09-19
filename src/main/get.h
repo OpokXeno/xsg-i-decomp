@@ -116,4 +116,9 @@ float Get_Multi_Max_Under(float value, float step, float maximum);
 
 int Get_Rnd(int min, int max);
 
+extern const float D_004D81C8;
+
+int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
+                         float facing, float radius, float fanWidthDegrees);
+
 #endif /* SRC_MAIN_GET_H */

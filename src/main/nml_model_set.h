@@ -91,12 +91,22 @@ typedef struct {
  */
 void nmlModelSetMatrix(void *matrix);
 
+/* Marks model fades for processing during the next render pass. */
+void nmlModelSetFadeDoit(void);
+
 /* canon: config/header-canon.json chose src/math/main/spark-cont01-00231d50/nmlModelCalcDropShadow.c over 0 other accepted spellings */
 extern LayoutStore s_inLayout;
 
 extern unsigned int s_nShadowVec;
 
 extern Vector4 s_inShadowVec;
+
+/* The four fade-control instances nmlModelSendSignalMovieStart initializes
+ * through INIT_FADE_CONTROL; see the FadeControl comment above. */
+extern FadeControl s_inFadeIn;
+extern FadeControl s_inFadeOut;
+extern FadeControl s_inActiveFadeIn;
+extern FadeControl s_inActiveFadeOut;
 
 /* TU-local scalar state referenced by the recovered model-system setters. */
 extern int s_nMapClip;
@@ -106,6 +116,26 @@ extern int s_nPause;
 extern int s_nMenu;
 extern int s_nFrameLockOff;
 extern int s_nPacketSignal;
+extern int s_nFadeDoit;
+extern int s_nEffectWrite;
+extern float s_fSortOffsetEntry;
+extern int s_nParent;
+extern int s_nMapLast;
+
+/*
+ * Render-group counters CONSTRUCT_ALPHA_GROUP/FLUSH_ALPHA_GROUP reset to
+ * zero; s_aAlphaGroup/s_aNonAlphaGroup (main 0x00957940/0x00959940) are the
+ * arrays they index into elsewhere in this TU.
+ */
+extern int s_nAlphaGroup;
+extern int s_nNonAlphaGroup;
+
+/*
+ * Allocation counter CONSTRUCT_PARENT_BUF/FLUSH_PARENT_BUF reset to zero:
+ * an index into the s_aParentBuf entries (main 0x0095bb50), also still
+ * INCLUDE_ASM in this TU.
+ */
+extern int s_nParentBuf;
 
 /*
  * These two status words have no published C owner in this TU. They are
@@ -124,5 +154,20 @@ extern int s_nPacketSignal;
  */
 extern int D_0095BB3C[];
 extern int D_0095BB44[];
+
+/*
+ * The 40-byte back-buffer request record (main 0x0095bb20). CONSTRUCT_BACK_
+ * BUFFER/INIT_BACK_BUFFER/FLUSH_BACK_BUFFER address every word of it through
+ * one base register (lui %hi(s_inBackBuffer)/addiu %lo), including the two
+ * words D_0095BB3C (+0x1c) and D_0095BB44 (+0x24) already declared above
+ * under those names for nmlModelIsBackBufferRequest/
+ * nmlModelSendPacketChangeSignal/nmlModelSetMpeg2CrossFadeTime; this array
+ * is a second declaration of the same asm-owned bytes for the three
+ * functions that reach them from the s_inBackBuffer symbol instead, for the
+ * same reason D_0095BB3C/D_0095BB44 stay unsized arrays: an incomplete type
+ * keeps GCC from routing it through gp-relative small-data addressing,
+ * which the original object never uses for these words.
+ */
+extern int s_inBackBuffer[];
 
 #endif /* SRC_MAIN_NML_MODEL_SET_H */

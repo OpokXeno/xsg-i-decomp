@@ -23,4 +23,6 @@ extern const char root_name_source_file[];
 
 extern const char root_name_result_check[];
 
+char *_GetLocalPath(void);
+
 #endif /* SRC_OV12_XRG_CDREAD_H */

@@ -35,6 +35,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from elfinfo import Elf  # noqa: E402
 from toolchain import Toolchain  # noqa: E402
+import tail_align  # noqa: E402
 
 
 def resolve_tools(root):
@@ -387,7 +388,13 @@ def main(argv=None):
             return obj[(t["name"], "c")], True
         return obj[(t["name"], "hasm" if t["text"]["splat"] == "hasm" else "exp")], False
 
-    def text_contents(tlist, base, carve):
+    # TUs whose original object pads its .text to an 8-byte boundary after the
+    # last function (tools/tu/tail_align.py). A C TU's object loses that padding
+    # once its last function is C, so the script restores the declared property;
+    # while the object still ends at text.end the statement is a no-op.
+    tail_aligned = {(t["unit"], t["name"]) for t in tail_align.declaring_tus(ROOT)}
+
+    def text_contents(tlist, base, carve, unit="main"):
         out, prev_c = [], False
         for t in tlist:
             if not t["text"]["splat"]:
@@ -399,6 +406,8 @@ def main(argv=None):
             if is_c:
                 out.append(f"{piece_sym(t['name'], '.text')} = .;")
             out.append(f"{o}(.text);")
+            if is_c and (unit, t["name"]) in tail_aligned:
+                out.append(f"{tail_align.ld_statement()}; {tail_align.ld_comment(unit + '/' + t['name'])}")
             prev_c = is_c
         return out
 
@@ -433,7 +442,7 @@ def main(argv=None):
         return out
 
     def ov02_contents(carve):
-        return text_contents(ov_tus, S["ov02"].addr, carve) + ["build/ov02/data.o(.data);"]
+        return text_contents(ov_tus, S["ov02"].addr, carve, unit="ov02") + ["build/ov02/data.o(.data);"]
 
     # The VU0 microprogram's EE entry points.  Generated from the assembled object
     # by tools/vu_audit.py --emit-ld and tracked as config/symbols/main.vu0-symbols.ld.
@@ -569,6 +578,16 @@ def main(argv=None):
                 if ref.get("unit") != "main" and nm not in seen_ext:
                     seen_ext.add(nm)
                     ext.append(f"PROVIDE({nm} = {ref['va']}); /* {ref['unit']} */")
+        # A published TU-mode source has no acceptance record, so the overlay
+        # addresses it calls are added to the tracked file by hand: keep every
+        # tracked PROVIDE the records do not already give, in tracked order.
+        tracked = ROOT / "config/symbols/main.externals.ld"
+        if tracked.is_file():
+            for line in tracked.read_text().splitlines():
+                provided = re.match(r"PROVIDE\((\w+)\s*=", line)
+                if provided and provided.group(1) not in seen_ext:
+                    seen_ext.add(provided.group(1))
+                    ext.append(line)
         write_if_changed(unit_dir / "externals.ld", "\n".join(ext) + "\n")
     elif not (unit_dir / "externals.ld").is_file():
         raise SystemExit("ninja_main: externals.ld is missing; it is a tracked build "
@@ -599,18 +618,26 @@ def main(argv=None):
          "# (config/vu-build.json contracts[vu-dvp-as-v1].assembler.argv).",
          "rule dvpas", f"  command = {T} $dvpas {DVPASFLAGS} -o $out $in", "  description = DVPAS $in",
          "# C TU: cpp -> cc1 -> legacy assembler; ANY assembler message is an error (tu-asmcompat rule)",
+         "# Header dependencies: cpp writes them (-Wp,-MD) naming the object by its basename;",
+         "# the target is rewritten to $out and ninja records them (deps = gcc), so an edit to",
+         "# any header a TU includes -- one created after configure too -- recompiles it. The",
+         "# preprocessed text, and so every output, is unchanged by the option.",
          "rule ccas", f"  command = {T} $ccdir/ee-gcc -B$ccdir/ -nostdinc -fno-builtin -E $flags $incs $in -o $out.i "
+         f"-Wp,-MD,$out.d.raw && sed -e '1s|^[^:]*:|$out:|' $out.d.raw > $out.d && rm -f $out.d.raw "
          f"&& {T} $ccdir/ee-gcc -B$ccdir/ -nostdinc -fno-builtin -S $flags $out.i -o $out.s && "
          + strict.format(T=T, src="$out.s"),
+         "  depfile = $out.d", "  deps = gcc",
          "  description = CC $in",
          "# C-mode TU: the scaffold asm it includes comes from a per-TU overlay without `.extern` lines for",
          "# symbols the TU declares/defines in C (tools/cinc.py, review finding F3)",
          "rule ccas_c", f"  command = {T} $ccdir/ee-gcc -B$ccdir/ -nostdinc -fno-builtin -E $flags $incs $in -o $out.i "
+         f"-Wp,-MD,$out.d.raw && sed -e '1s|^[^:]*:|$out:|' $out.d.raw > $out.d && rm -f $out.d.raw "
          f"&& {T} $ccdir/ee-gcc -B$ccdir/ -nostdinc -fno-builtin -S $flags $out.i -o $out.s && "
          f"{T} $py {HERE}/cinc.py --i $out.i --s $out.s --root . --dst $overlay --report $out.cinc.json && "
          f"( cd $overlay && {T} $eeas -EL -m5900 -mabi=eabi $gflag -I . -I {unit_dir} -I {unit_dir}/include "
          f"-o {unit_dir}/$out {unit_dir}/$out.s > {unit_dir}/$out.asmsg 2>&1 ) "
          "&& ! test -s $out.asmsg || { cat $out.asmsg 2>/dev/null; rm -f $out; false; }",
+         "  depfile = $out.d", "  deps = gcc",
          "  description = CC(c) $in",
          "rule eeas_s", "  command = " + strict.format(T=T, src="$in"), "  description = EE-AS $in",
          "# splat's undefined_*_auto.txt minus every name a linked object defines (review finding F8)",

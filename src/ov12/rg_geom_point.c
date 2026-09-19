@@ -7,12 +7,46 @@
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(void *heap, unsigned int size,
+                         const char *source_file, int line);
+extern void InitRgGeomPoint(RgGeomPoint *point, float weight);
+extern void XrgAddVectorXYZ(RgVector destination, RgVector source1,
+                            RgVector source2);
+extern float XrgLengthVector(RgVector vector);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGetGeomGravity);
+/*
+ * External file-backed witnesses, not candidate-emitted data: this window is
+ * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
+ *
+ * ov12:0x00a55100 contains the source filename "../rg_geom_point.euc.c".
+ * ov12:0x00a55118 contains the assertion expression
+ * "fWeight > RG_FCONST(0.0)".
+ * ov12:0x00a55138 contains the assertion expression "pGeom != NIL".
+ */
+extern const char D_00A55100[];
+extern const char D_00A55118[];
+extern const char D_00A55138[];
+
+float RgGetGeomGravity(void)
+{
+    return 60.0f;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", InitRgGeomPoint);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", CreateRgGeomPoint);
+RgGeomPoint *CreateRgGeomPoint(float weight)
+{
+    RgGeomPoint *point;
+
+    point = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomPoint), D_00A55100,
+                        50);
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 51);
+    }
+    InitRgGeomPoint(point, weight);
+    return point;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetPos);
 
@@ -22,13 +56,48 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointResetPos);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetVel);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointAddForce);
+void RgGeomPointAddForce(RgGeomPoint *point, RgVector force)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 92);
+    }
+    XrgAddVectorXYZ(point->force, point->force, force);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetWeight);
+void RgGeomPointSetWeight(RgGeomPoint *point, float weight)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 99);
+    }
+    if (!(weight > 0.0f)) {
+        assert_prog(D_00A55118, D_00A55100, 100);
+    }
+    point->weight = weight;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetMoveResist);
+void RgGeomPointSetMoveResist(RgGeomPoint *point, float moveResist)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 107);
+    }
+    point->moveResist = moveResist;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetMaxXYSpd);
+/*
+ * The pointer-validation assert reuses the "pGeom != NIL" text
+ * (ov12:0x00a55138), not "pPoint != NIL"; the parameter stays an
+ * RgGeomPoint, the same object every other setter here validates.
+ */
+void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxXYSpd)
+{
+    if (point == 0) {
+        assert_prog(D_00A55138, D_00A55100, 114);
+    }
+    if (maxXYSpd <= 0.0f) {
+        maxXYSpd = 1.0f;
+    }
+    point->maxXYSpd = maxXYSpd;
+}
 
 void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
                          const char *source_file, int source_line)
@@ -52,10 +121,28 @@ void __RgGeomPointGetOldPos(RgGeomPoint *point, RgPointVector *destination,
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointGetVel);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointGetSpeed);
+float RgGeomPointGetSpeed(RgGeomPoint *point)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 145);
+    }
+    return XrgLengthVector(point->velocity);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointGetWeight);
+float RgGeomPointGetWeight(RgGeomPoint *point)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 152);
+    }
+    return point->weight;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointGetMoveResist);
+float RgGeomPointGetMoveResist(RgGeomPoint *point)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 159);
+    }
+    return point->moveResist;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointPassTime);

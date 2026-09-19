@@ -20022,7 +20022,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "control_entry",
       "name_basis": "first global function ControlEntry",
       "name_confidence": "low",
@@ -20030,7 +20030,7 @@
       "owners": {
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/control_entry.c",
       "scaffold_path": "scaffold/src/main/control_entry.c",
@@ -20104,7 +20104,18 @@
         "start": "0x00218240"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "control_entry (game, audio): 1 of 3 functions accepted C (main; task tu-slus-20469-412d448de315-main-tu084-control-entry-00218240-c27b73e563de, submission 7e84e34b07cbc66b8e72b960e6946c9a2710a902fbac7cf1f4201c2f3962b8c2, reviewed ready_to_integrate by review-bulk-r61-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/control_entry.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -20848,7 +20859,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_font",
       "name_basis": "common function-name prefix 'xglFont' (100% of global functions)",
       "name_confidence": "low",
@@ -20858,7 +20869,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_font.c",
       "scaffold_path": "scaffold/src/main/xgl_font.c",
@@ -20980,7 +20991,18 @@
         "start": "0x00218a68"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_font (game, graphics): 2 of 32 functions accepted C (xglFontPrintDirect, xglFontFlushSubHex; task tu-slus-20469-412d448de315-main-tu087-xgl-font-00218a68-99e56167b659, submission f31746c9fde90c9c4c5ffc296ad27610f2f552a5e0c47fae434c807ee72ef4b5, reviewed accepted_with_adjustment by review-bulk-r55-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_font.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -21640,14 +21662,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_menu",
       "name_basis": "common function-name prefix 'xglMenu' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 91,
       "owners": {
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_menu.c",
       "scaffold_path": "scaffold/src/main/xgl_menu.c",
@@ -21697,7 +21719,18 @@
         "start": "0x0021c788"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_menu (game, graphics): 1 of 6 functions accepted C (xglMenuDrawType0; task tu-slus-20469-412d448de315-main-tu091-xgl-menu-0021c788-70c3aff8d7c8, submission 71a4a6b2aea5043db35908b91d1b7cea13b1b6ab770cf50ddd55815d20bd3a24, reviewed ready_to_integrate by review-bulk-r68-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_menu.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -23704,13 +23737,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_prim_add",
       "name_basis": "common function-name prefix 'xglPrimAdd' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 96,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_prim_add.c",
       "scaffold_path": "scaffold/src/main/xgl_prim_add.c",
@@ -23735,7 +23768,18 @@
         "start": "0x00222bd0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_prim_add (game, graphics): 1 of 4 functions accepted C (xglPrimAddGifTag; task tu-slus-20469-412d448de315-main-tu096-xgl-prim-add-00222bd0-96a9cf3100bd, submission b0cdbf8885cf518737b22501b12529bb66574d739ef3d2ab1c8b1e854c7e844c, reviewed ready_to_integrate by review-bulk-r66-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_prim_add.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -24434,7 +24478,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_sound",
       "name_basis": "common function-name prefix 'xglSound' (95% of global functions)",
       "name_confidence": "low",
@@ -24445,7 +24489,7 @@
         ".lit4": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_sound.c",
       "scaffold_path": "scaffold/src/main/xgl_sound.c",
@@ -24591,7 +24635,18 @@
         "start": "0x00225a58"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_sound (game, audio): 4 of 38 functions accepted C (xglSoundWaitDma, xglSoundSequenceNormal, xglSoundSequenceFadeOut, xglSoundSequenceStop; task tu-slus-20469-412d448de315-main-tu098-xgl-sound-00225a58-e53075d0c1ea, submission 2f93f3b1d6fa5a96bcc93b6b851e0be3612334397df0d28cb0a2caa95fc17c0b, reviewed accepted_with_adjustment by review-bulk-r37-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_sound.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -26481,14 +26536,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_light",
       "name_basis": "common function-name prefix 'xglLight' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 101,
       "owners": {
         ".data": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_light.c",
       "scaffold_path": "scaffold/src/main/xgl_light.c",
@@ -26538,7 +26593,18 @@
         "start": "0x0022ac30"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_light (game, graphics): 1 of 7 functions accepted C (xglLightDirection; task tu-slus-20469-412d448de315-main-tu101-xgl-light-0022ac30-15842a8e1970, submission 9d86ecceca7b033e071cd7c6a8e714a0096df3d52f16d66d17cb75f21130b217, reviewed ready_to_integrate by review-bulk-r61-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_light.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -26709,7 +26775,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_camera",
       "name_basis": "common function-name prefix 'xglCamera' (100% of global functions)",
       "name_confidence": "low",
@@ -26718,7 +26784,7 @@
         ".data": "asm",
         ".lit4": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_camera.c",
       "scaffold_path": "scaffold/src/main/xgl_camera.c",
@@ -26816,7 +26882,18 @@
         "start": "0x0022aec0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_camera (game, camera): 3 of 17 functions accepted C (xglCameraControlInit, xglCameraMoveOffset, xglCameraClipRangeDefault; task tu-slus-20469-412d448de315-main-tu102-xgl-camera-0022aec0-02eb770c784f, submission baf9afdd2e280f32851ef331108134ff687f56a6529c362fe85e91da69dda71b, reviewed ready_to_integrate by review-bulk-r80-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_camera.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -26910,7 +26987,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_packet",
       "name_basis": "common function-name prefix 'xglPacket' (100% of global functions)",
       "name_confidence": "low",
@@ -26919,7 +26996,7 @@
         ".bss": "asm",
         ".data": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_packet.c",
       "scaffold_path": "scaffold/src/main/xgl_packet.c",
@@ -27017,7 +27094,18 @@
         "start": "0x0022c268"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_packet (game, graphics): 2 of 6 functions accepted C (xglPacketGetCurrent, xglPacketSend; task tu-slus-20469-412d448de315-main-tu103-xgl-packet-0022c268-cb271d4c4bf9, submission 790ff0da0245597f32b69b8a034b766e53ce942ffcf8bed9f65d33fbb89308b7, reviewed accepted_with_adjustment by review-bulk-r54-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_packet.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -27506,7 +27594,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "xgl_render",
       "name_basis": "common function-name prefix 'xglRender' (100% of global functions)",
       "name_confidence": "low",
@@ -27514,7 +27602,7 @@
       "owners": {
         ".data": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/xgl_render.c",
       "scaffold_path": "scaffold/src/main/xgl_render.c",
@@ -27588,7 +27676,18 @@
         "start": "0x0022c8b8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "xgl_render (game, graphics): 3 of 29 functions accepted C (xglRenderClearOn, xglRenderClearOff, xglRenderEntry; task tu-slus-20469-412d448de315-main-tu105-xgl-render-0022dbf8-a14a56f23149, submission 7dd60cd37776ed56d122b24a52ff60b6ea539de0a2e5f9e4b9c8da4e90ec5c36, reviewed accepted_with_adjustment by review-bulk-r43-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/xgl_render.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -32145,13 +32244,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "ssd_4",
       "name_basis": "common function-name prefix 'Ssd' (75% of global functions); disambiguated (4 objects share 'ssd.c')",
       "name_confidence": "low",
       "ordinal": 115,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/ssd_4.c",
       "scaffold_path": "scaffold/src/main/ssd_4.c",
@@ -32176,7 +32275,18 @@
         "start": "0x002420a8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "ssd_4 (game, audio): 3 of 12 functions accepted C (SsdNewMemoryPtr, SsdNewMemoryPtr2, SsdDisposeMemoryPtr; task tu-slus-20469-412d448de315-main-tu115-ssd-4-002420a8-147cc439d89c, submission eb1c367b320e65f3278205a1b9115880502bb4212058be90375ce52e79b29ec3, reviewed ready_to_integrate by review-bulk-r42-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/ssd_4.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -33759,7 +33869,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "look_at_player",
       "name_basis": "first global function LookAt_Player",
       "name_confidence": "low",
@@ -33770,7 +33880,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/look_at_player.c",
       "scaffold_path": "scaffold/src/main/look_at_player.c",
@@ -33916,7 +34026,18 @@
         "start": "0x00248ff8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "look_at_player (game, field): 1 of 9 functions accepted C (GameCfPlayerMoveInit; task tu-slus-20469-412d448de315-main-tu121-look-at-player-00248ff8-9d352c4e7d4c, submission c5d216223863d4d5f12f981e5729ef3a948fca4e3f84b1c574e7cad7bc1c5711, reviewed ready_to_integrate by review-bulk-r64-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/look_at_player.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -34720,7 +34841,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "game_snap_shot",
       "name_basis": "common function-name prefix 'GameSnapShot' (100% of global functions)",
       "name_confidence": "low",
@@ -34729,7 +34850,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/game_snap_shot.c",
       "scaffold_path": "scaffold/src/main/game_snap_shot.c",
@@ -34827,7 +34948,18 @@
         "start": "0x0024daa0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "game_snap_shot (game, graphics): 2 of 6 functions accepted C (GameSnapShotNumber, GameSnapShotCheck; task tu-slus-20469-412d448de315-main-tu123-game-snap-shot-0024daa0-9345dcadb8e0, submission 80cfb80b7da9fd20046f72d3e0720a28d4d0b62d9a616f68a21e62ca3140c503, reviewed accepted_with_adjustment by review-bulk-r55-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/game_snap_shot.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -35218,7 +35350,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "game_movie",
       "name_basis": "common function-name prefix 'GameMovie' (80% of global functions)",
       "name_confidence": "low",
@@ -35227,7 +35359,7 @@
         ".bss": "asm",
         ".data": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/game_movie.c",
       "scaffold_path": "scaffold/src/main/game_movie.c",
@@ -35325,7 +35457,18 @@
         "start": "0x002502d0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "game_movie (game, movie): 1 of 9 functions accepted C (movie_skip; task tu-slus-20469-412d448de315-main-tu125-game-movie-002502d0-6b5b15de60fd, submission d089f49e8609c98b2ca995640614f6dba65c442a8308475243df3a4abc0d8594, reviewed ready_to_integrate by review-bulk-r94-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/game_movie.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -35613,7 +35756,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "game_bg_draw_type",
       "name_basis": "common function-name prefix 'GameBgDrawType' (100% of global functions)",
       "name_confidence": "low",
@@ -35621,7 +35764,7 @@
       "owners": {
         ".data": "asm",
         ".lit4": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/game_bg_draw_type.c",
       "scaffold_path": "scaffold/src/main/game_bg_draw_type.c",
@@ -35695,7 +35838,18 @@
         "start": "0x00251f40"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "game_bg_draw_type (game, graphics): 2 of 7 functions accepted C (GameBgDrawType0, nullfunc; task tu-slus-20469-412d448de315-main-tu127-game-bg-draw-type-00251f40-e58eefe79dd0, submission 5cc1a352562db385a1765ef1eba9dd839f6713440ab5ffb42c459586f5be3ccb, reviewed accepted_with_adjustment by review-bulk-r56-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/game_bg_draw_type.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -36308,7 +36462,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "game_disk_change",
       "name_basis": "common function-name prefix 'GameDiskChange' (100% of global functions)",
       "name_confidence": "low",
@@ -36317,7 +36471,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/game_disk_change.c",
       "scaffold_path": "scaffold/src/main/game_disk_change.c",
@@ -36415,7 +36569,18 @@
         "start": "0x002544b8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "game_disk_change (game, graphics): 1 of 3 functions accepted C (replace; task tu-slus-20469-412d448de315-main-tu131-game-disk-change-002544b8-a77b4a1f3034, submission 0343cecd7bdbe1795d132ffb10274d0001fe35139ab34c5074c89c77d6d31902, reviewed ready_to_integrate by review-bulk-r61-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/game_disk_change.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -37306,7 +37471,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "tya",
       "name_basis": "common function-name prefix 'tya' (100% of global functions)",
       "name_confidence": "low",
@@ -37316,7 +37481,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/tya.c",
       "scaffold_path": "scaffold/src/main/tya.c",
@@ -37438,7 +37603,18 @@
         "start": "0x00258010"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "tya (game, graphics): 1 of 11 functions accepted C (tyaCaptureNull; task tu-slus-20469-412d448de315-main-tu133-tya-00258010-76a07c44263b, submission 31f4bf2117e218df7e4558a69f7ecbf6199f01c6a3f5989185de820ff5f4195e, reviewed ready_to_integrate by review-bulk-r81-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/tya.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -38009,13 +38185,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "ytachi_test",
       "name_basis": "first global function YtachiTest",
       "name_confidence": "low",
       "ordinal": 138,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/ytachi_test.c",
       "scaffold_path": "scaffold/src/main/ytachi_test.c",
@@ -38040,7 +38216,18 @@
         "start": "0x0025a1c0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "ytachi_test (game, math): 2 of 2 functions accepted C (YtachiTest, dummy_func; task tu-slus-20469-412d448de315-main-tu138-ytachi-test-0025a1c0-23fa0cd3fd53, submission 25cb4cb6b7dc44e4f0fb729d6affde09f042bfdfdbcd873e027ded268b789b00, reviewed ready_to_integrate by review-bulk-r57-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/ytachi_test.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -39011,7 +39198,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "msg_init",
       "name_basis": "first global function MSG_init",
       "name_confidence": "low",
@@ -39021,7 +39208,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/msg_init.c",
       "scaffold_path": "scaffold/src/main/msg_init.c",
@@ -39143,7 +39330,18 @@
         "start": "0x0025b118"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "msg_init (game, menu): 3 of 32 functions accepted C (MSG_init, MSG_send, MIF2_dummy; task tu-slus-20469-412d448de315-main-tu142-msg-init-0025b118-59de142553d1, submission 16ac62fee6ea462f7498a71f4f3a2a77aa63d34a62199c3ba8bc884b9002fcf2, reviewed accepted_with_adjustment by review-bulk-r45-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/msg_init.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -39405,7 +39603,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "twsys_init",
       "name_basis": "first global function TWSYS_init",
       "name_confidence": "low",
@@ -39417,7 +39615,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/twsys_init.c",
       "scaffold_path": "scaffold/src/main/twsys_init.c",
@@ -39587,7 +39785,18 @@
         "start": "0x0025cfc8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "twsys_init (game, menu): 2 of 30 functions accepted C (WIN_initCF, WIN_initScene; task tu-slus-20469-412d448de315-main-tu143-twsys-init-0025cfc8-b9eac223c65e, submission 0754394ea47800705c38bfa64b94fbc1d0f5b023a8c60217ac85ecf2458a74fd, reviewed ready_to_integrate by review-bulk-r78-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/twsys_init.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -39694,14 +39903,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "tslider_create",
       "name_basis": "first global function TSLIDER_create",
       "name_confidence": "low",
       "ordinal": 144,
       "owners": {
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/tslider_create.c",
       "scaffold_path": "scaffold/src/main/tslider_create.c",
@@ -39751,7 +39960,18 @@
         "start": "0x0025fec8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "tslider_create (game, menu): 1 of 8 functions accepted C (createItemGetWin; task tu-slus-20469-412d448de315-main-tu144-tslider-create-0025fec8-40850c08fcd0, submission 1e21a4a096ab3aea61a5d0887d757096b8b669b59d685dfdaf0cbb8a32dea14d, reviewed ready_to_integrate by review-bulk-r83-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/tslider_create.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -40195,13 +40415,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "align",
       "name_basis": "common function-name prefix 'align' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 147,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/align.c",
       "scaffold_path": "scaffold/src/main/align.c",
@@ -40226,7 +40446,18 @@
         "start": "0x00260d78"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "align (game, math): 1 of 5 functions accepted C (alignXYAxis; task tu-slus-20469-412d448de315-main-tu147-align-00260d78-e1fd411c67c5, submission 92b8c4a62c809e6742f34a67bd332493ff7ef8392422d2c473a84d2e73983f47, reviewed ready_to_integrate by review-bulk-r89-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/align.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -41772,7 +42003,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "play",
       "name_basis": "common function-name prefix 'PLAY' (100% of global functions)",
       "name_confidence": "low",
@@ -41780,7 +42011,7 @@
       "owners": {
         ".lit4": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/play.c",
       "scaffold_path": "scaffold/src/main/play.c",
@@ -41854,7 +42085,18 @@
         "start": "0x0026a630"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "play (game, animation): 2 of 9 functions accepted C (PLAY_setTimeChart, PLAY_loadCamera; task tu-slus-20469-412d448de315-main-tu150-play-0026a630-5637b636c90f, submission 50cb585dca226718a25841cf59422d6ce85051d9c6196e25fbe7bf4a42b90ab6, reviewed accepted_with_adjustment by review-bulk-r45-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/play.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -42286,7 +42528,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "js_init",
       "name_basis": "first global function JS_init",
       "name_confidence": "low",
@@ -42296,7 +42538,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/js_init.c",
       "scaffold_path": "scaffold/src/main/js_init.c",
@@ -42418,7 +42660,18 @@
         "start": "0x0026b130"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "js_init (game, script): 2 of 14 functions accepted C (JS_classSetup, STR_tokenGetType; task tu-slus-20469-412d448de315-main-tu153-js-init-0026b130-e7d23463d366, submission 39861f26884d01a2572dab4b7ba2b23d04d42d6ec197b5012cd8b91acc7776cc, reviewed ready_to_integrate by review-bulk-r78-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/js_init.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -42750,7 +43003,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "ew_sprt_set_cursor_uv",
       "name_basis": "first global function EW_sprtSetCursorUV",
       "name_confidence": "low",
@@ -42759,7 +43012,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/ew_sprt_set_cursor_uv.c",
       "scaffold_path": "scaffold/src/main/ew_sprt_set_cursor_uv.c",
@@ -42857,7 +43110,18 @@
         "start": "0x0026bf80"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "ew_sprt_set_cursor_uv (game, graphics): 4 of 20 functions accepted C (frame_init, sprt_init, mask_init, container_init; task tu-slus-20469-412d448de315-main-tu155-ew-sprt-set-cursor-uv-0026bf80-e176af59640f, submission f3728e1dbad6a7cb627f70c5d4fc6746915edb5983dcbc5649308d5af9f7b19c, reviewed accepted_with_adjustment by review-bulk-r41-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/ew_sprt_set_cursor_uv.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -44241,7 +44505,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "open_close_main",
       "name_basis": "first global function OpenCloseMain",
       "name_confidence": "low",
@@ -44249,7 +44513,7 @@
       "owners": {
         ".lit4": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/open_close_main.c",
       "scaffold_path": "scaffold/src/main/open_close_main.c",
@@ -44323,7 +44587,18 @@
         "start": "0x00273d20"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "open_close_main (game, menu): 1 of 9 functions accepted C (eWindowSet; task tu-slus-20469-412d448de315-main-tu159-open-close-main-00273d20-3cfa55608cf7, submission dd9c526d069c9c43178de5f88f1c35aeb1451b9c2f248b0a06bf693427cc037f, reviewed ready_to_integrate by review-bulk-r86-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/open_close_main.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -45094,14 +45369,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "e_number_main",
       "name_basis": "first global function eNumberMain",
       "name_confidence": "low",
       "ordinal": 161,
       "owners": {
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/e_number_main.c",
       "scaffold_path": "scaffold/src/main/e_number_main.c",
@@ -45151,7 +45426,18 @@
         "start": "0x00276358"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "e_number_main (game, graphics): 5 of 12 functions accepted C (eNumberNumberChange, eNumberSet, eSpriteSet, eRibbonModeChange, eTagFontSet; task tu-slus-20469-412d448de315-main-tu161-e-number-main-00276358-929275e6f00c, submission a740ea1f48dbefac340e75de9cbcaafdc0020fedc0530130cebe5262fc900fb4, reviewed accepted_with_adjustment by review-bulk-r40-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/e_number_main.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -45293,7 +45579,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_top_command_check",
       "name_basis": "first global function MenuTopCommandCheck",
       "name_confidence": "low",
@@ -45304,7 +45590,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_top_command_check.c",
       "scaffold_path": "scaffold/src/main/menu_top_command_check.c",
@@ -45450,7 +45736,18 @@
         "start": "0x00277608"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_top_command_check (game, menu): 1 of 13 functions accepted C (MenuTopCommandCheck; task tu-slus-20469-412d448de315-main-tu162-menu-top-command-check-00277608-afd627cebbd7, submission b358af96828efef53ab896ab9a9497e87aaff55f798a46c1c21d001664fbfdc7, reviewed ready_to_integrate by review-bulk-r88-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_top_command_check.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -45607,7 +45904,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "e_message",
       "name_basis": "common function-name prefix 'eMessage' (100% of global functions)",
       "name_confidence": "low",
@@ -45617,7 +45914,7 @@
         ".data": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/e_message.c",
       "scaffold_path": "scaffold/src/main/e_message.c",
@@ -45739,7 +46036,18 @@
         "start": "0x0027ac78"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "e_message (game, menu): 5 of 15 functions accepted C (eMessageSpriteReset, eMessageDrawType00, eMessageModeChange, eMessageDraw, eMessageCpy; task tu-slus-20469-412d448de315-main-tu163-e-message-0027ac78-ce0449ba6451, submission ec86561c291099cc1af8853bc6f62a2e82cf77ceee2275cdf5226cb100765b96, reviewed accepted_with_adjustment by review-bulk-r35-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/e_message.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -46077,7 +46385,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "end_print",
       "name_basis": "common function-name prefix 'endPrint' (75% of global functions)",
       "name_confidence": "low",
@@ -46088,7 +46396,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/end_print.c",
       "scaffold_path": "scaffold/src/main/end_print.c",
@@ -46234,7 +46542,18 @@
         "start": "0x0027bf40"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "end_print (game, graphics): 1 of 41 functions accepted C (ePrintWHGet; task tu-slus-20469-412d448de315-main-tu164-end-print-0027bf40-f61fab02b1d4, submission 01953a221bda8014c991808767b9e3dd6f1cca220aeffc5576afd2d8d14836fd, reviewed ready_to_integrate by review-bulk-r81-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/end_print.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -46615,7 +46934,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_model",
       "name_basis": "common function-name prefix 'MenuModel' (93% of global functions)",
       "name_confidence": "low",
@@ -46625,7 +46944,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_model.c",
       "scaffold_path": "scaffold/src/main/menu_model.c",
@@ -46747,7 +47066,18 @@
         "start": "0x0027f108"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_model (game, menu): 6 of 47 functions accepted C (MenuModelUnitOpen, MenuModelDrawTypeMain, MenuModelExtFuncSet, MenuModelWeaponActorGet, MenuModelMain, MenuModelInit; task tu-slus-20469-412d448de315-main-tu165-menu-model-002807b8-a7d6ece6acbd, submission c00ccf3917f526c096b07a2d9d3fdee070f9af581db396e92b931ef6c76972ce, reviewed accepted_with_adjustment by review-bulk-r34-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_model.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -47015,7 +47345,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "e_battle_win_open",
       "name_basis": "first global function eBattleWinOpen",
       "name_confidence": "low",
@@ -47025,7 +47355,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/e_battle_win_open.c",
       "scaffold_path": "scaffold/src/main/e_battle_win_open.c",
@@ -47147,7 +47477,18 @@
         "start": "0x002819a8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "e_battle_win_open (game, menu): 7 of 31 functions accepted C (eBattleWinClose, eBattleWinClose2, eBattleWinClose3, eBattleWinClose4, eBattleWinPageCheck4, eBattleWinInit, WindowDXSet; task tu-slus-20469-412d448de315-main-tu166-e-battle-win-open-002819a8-5b9a9f381c91, submission 052944d27660cbdb63c1fcb48853885d68ef38b603ab3ae37d889b3397883c9f, reviewed ready_to_integrate by review-bulk-r31-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/e_battle_win_open.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -48578,7 +48919,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_1",
       "name_basis": "common function-name prefix 'Menu' (86% of global functions); disambiguated (2 objects share 'menu.c')",
       "name_confidence": "low",
@@ -48589,7 +48930,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_1.c",
       "scaffold_path": "scaffold/src/main/menu_1.c",
@@ -48735,7 +49076,18 @@
         "start": "0x0028e658"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_1 (game, menu): 8 of 66 functions accepted C (MenuSortSubType04, MenuSortSubType03, MenuSortSubType02, MenuSortSubType01, MenuSortSubType00, MenuIdChange, subListMake00, subListMake01; task tu-slus-20469-412d448de315-main-tu169-menu-1-00290458-486c1fcf6f98, submission 0b097c6966062ad07b10657852f2f42d95008490a48886fcf2b93c18875a1b60, reviewed accepted_with_adjustment by review-bulk-r24-20260917). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_1.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -49032,7 +49384,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_para_pt_rate_get",
       "name_basis": "first global function MenuParaPtRateGet",
       "name_confidence": "low",
@@ -49044,7 +49396,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_para_pt_rate_get.c",
       "scaffold_path": "scaffold/src/main/menu_para_pt_rate_get.c",
@@ -49214,7 +49566,18 @@
         "start": "0x002913c0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_para_pt_rate_get (game, menu): 1 of 35 functions accepted C (MenuCharWeaponAttCheck; task tu-slus-20469-412d448de315-main-tu170-menu-para-pt-rate-get-002913c0-5e64aaf9008e, submission 35717fdb0746e3f542b09a9a540b25230748bb9edf51a81f54407b6764173d4c, reviewed ready_to_integrate by review-bulk-r88-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_para_pt_rate_get.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -50627,7 +50990,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_ether",
       "name_basis": "common function-name prefix 'MenuEther' (100% of global functions)",
       "name_confidence": "low",
@@ -50636,7 +50999,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_ether.c",
       "scaffold_path": "scaffold/src/main/menu_ether.c",
@@ -50734,7 +51097,18 @@
         "start": "0x002a9f10"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_ether (game, menu): 1 of 23 functions accepted C (MenuEtherTypeGet; task tu-slus-20469-412d448de315-main-tu174-menu-ether-002a9f10-345c39a2f9b2, submission de1dc0185af46cc8911c19f510540634a7cceb541dc5a8313c36591a2487e197, reviewed ready_to_integrate by review-bulk-r88-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_ether.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -51023,7 +51397,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_tec",
       "name_basis": "common function-name prefix 'MenuTec' (97% of global functions)",
       "name_confidence": "low",
@@ -51033,7 +51407,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_tec.c",
       "scaffold_path": "scaffold/src/main/menu_tec.c",
@@ -51155,7 +51529,18 @@
         "start": "0x002af498"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_tec (game, menu): 2 of 34 functions accepted C (MenuTecTrgCheck, MenuTecTypeCheck; task tu-slus-20469-412d448de315-main-tu175-menu-tec-002b1338-eaa69a2e0ac5, submission 975a6a0f2eddb7745c5917ca8958c48876488ece152b00eec3b789bc3c6a5b3f, reviewed ready_to_integrate by review-bulk-r86-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_tec.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -51270,7 +51655,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_system",
       "name_basis": "common function-name prefix 'MenuSystem' (78% of global functions)",
       "name_confidence": "low",
@@ -51279,7 +51664,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_system.c",
       "scaffold_path": "scaffold/src/main/menu_system.c",
@@ -51377,7 +51762,18 @@
         "start": "0x002b4128"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_system (game, menu): 1 of 9 functions accepted C (MenuSystem2Init; task tu-slus-20469-412d448de315-main-tu176-menu-system-002b4128-6ea6f0e84c32, submission 7b81eac625f72d0ea93ac51671f99f75591656e727762dd381d7c72161f2cbf8, reviewed ready_to_integrate by review-bulk-r88-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_system.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -54761,7 +55157,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "init_map_door",
       "name_basis": "first global function InitMapDoor",
       "name_confidence": "low",
@@ -54769,7 +55165,7 @@
       "owners": {
         ".lit4": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/init_map_door.c",
       "scaffold_path": "scaffold/src/main/init_map_door.c",
@@ -54843,7 +55239,18 @@
         "start": "0x002c4760"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "init_map_door (game, field): 1 of 23 functions accepted C (DoubleDoorFunc; task tu-slus-20469-412d448de315-main-tu183-init-map-door-002c4760-7f462534eacf, submission 85201a2cc60d9330533d8fe3db2d7b40c01fa31e4c20b2964243f7b29f43d23c, reviewed ready_to_integrate by review-bulk-r64-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/init_map_door.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -59915,7 +60322,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "hair_test",
       "name_basis": "first global function HairTest",
       "name_confidence": "low",
@@ -59926,7 +60333,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/hair_test.c",
       "scaffold_path": "scaffold/src/main/hair_test.c",
@@ -60072,7 +60479,18 @@
         "start": "0x002da1d8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "hair_test (game, animation): 2 of 6 functions accepted C (JNT_hairID, getNumFCV; task tu-slus-20469-412d448de315-main-tu205-hair-test-002da1d8-556ef008e0d5, submission f36c3e08290d4c93df4d76a11a773336c6d22a3e56b2f8c0e0c35406159c0af5, reviewed accepted_with_adjustment by review-bulk-r52-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/hair_test.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -60677,7 +61095,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "set_path",
       "name_basis": "first global function setPath",
       "name_confidence": "low",
@@ -60688,7 +61106,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/set_path.c",
       "scaffold_path": "scaffold/src/main/set_path.c",
@@ -60834,7 +61252,18 @@
         "start": "0x002dc410"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "set_path (game, camera): 1 of 20 functions accepted C (sdbDebugCamera; task tu-slus-20469-412d448de315-main-tu208-set-path-002dc410-0a466b703c83, submission 042959f9db245ba7f611efced4da92d35fd11b46a9387ae4f35c8c25c774c6ea, reviewed ready_to_integrate by review-bulk-r61-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/set_path.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -65489,7 +65918,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "sm_initilize",
       "name_basis": "first global function smInitilize",
       "name_confidence": "low",
@@ -65497,7 +65926,7 @@
       "owners": {
         ".bss": "asm",
         ".sbss": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/sm_initilize.c",
       "scaffold_path": "scaffold/src/main/sm_initilize.c",
@@ -65571,7 +66000,18 @@
         "start": "0x002eec50"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "sm_initilize (game, runtime): 1 of 5 functions accepted C (smPrintInfo; task tu-slus-20469-412d448de315-main-tu216-sm-initilize-002eec50-3ae7cbb28d93, submission d6b47d4ec277ff7d847a2052adc17e587efbd96a94feba414d5bf23e6b5846a7, reviewed ready_to_integrate by review-bulk-r90-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/sm_initilize.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -66802,14 +67242,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "jni",
       "name_basis": "common function-name prefix 'JNI' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 221,
       "owners": {
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/jni.c",
       "scaffold_path": "scaffold/src/main/jni.c",
@@ -66859,7 +67299,18 @@
         "start": "0x002f02c0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "jni (game, script): 8 of 17 functions accepted C (JNI_initSystem, JNI_pushFrame, JNI_popFrame, JNI_isInstanceOf, JNI_callMethod, JNI_catchException, JNI_threadException, JNI_initThread; task tu-slus-20469-412d448de315-main-tu221-jni-002f02c0-b21160cb91ac, submission ecef966f9511335c2a3bff4a712f5c696029c6812cca470a117699cce4af9412, reviewed ready_to_integrate by review-bulk-r30-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/jni.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -67688,7 +68139,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "init_vm",
       "name_basis": "first global function initVM",
       "name_confidence": "low",
@@ -67696,7 +68147,7 @@
       "owners": {
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/init_vm.c",
       "scaffold_path": "scaffold/src/main/init_vm.c",
@@ -67770,7 +68221,18 @@
         "start": "0x002f1d98"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "init_vm (game, script): 1 of 5 functions accepted C (initWrapperClass; task tu-slus-20469-412d448de315-main-tu226-init-vm-002f4348-1b0c1b9abf44, submission e05bce5dc5f5f79799c3f8837fa7dc5e5d1470d282f555b09e800c092725f02c, reviewed ready_to_integrate by review-bulk-r86-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/init_vm.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -67997,7 +68459,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "find_native_method",
       "name_basis": "first global function findNativeMethod",
       "name_confidence": "low",
@@ -68006,7 +68468,7 @@
         ".bss": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/find_native_method.c",
       "scaffold_path": "scaffold/src/main/find_native_method.c",
@@ -68104,7 +68566,18 @@
         "start": "0x002f4528"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "find_native_method (game, script): 2 of 25 functions accepted C (newObject, newArray; task tu-slus-20469-412d448de315-main-tu227-find-native-method-002f4528-62d4cfb50c4a, submission f431a08f20580cb219871808e08b03a0f3e277fbfd599ed2f613fd3b1395664e, reviewed ready_to_integrate by review-bulk-r79-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/find_native_method.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -68198,13 +68671,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "get_method_signature_class",
       "name_basis": "first global function getMethodSignatureClass",
       "name_confidence": "low",
       "ordinal": 228,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/get_method_signature_class.c",
       "scaffold_path": "scaffold/src/main/get_method_signature_class.c",
@@ -68229,7 +68702,18 @@
         "start": "0x002f5998"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "get_method_signature_class (game, script): 1 of 6 functions accepted C (findMethod; task tu-slus-20469-412d448de315-main-tu228-get-method-signature-class-002f5998-4b037c72afb9, submission 449007c83d1c8bda8bbb1ca0ebda6bdb543e13c6d86f7591faf66860e9293ec9, reviewed ready_to_integrate by review-bulk-r86-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/get_method_signature_class.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -69186,14 +69670,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "format",
       "name_basis": "JNI natives of Java class xeno.util.Format (7/7 functions)",
       "name_confidence": "low",
       "ordinal": 235,
       "owners": {
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/format.c",
       "scaffold_path": "scaffold/src/main/format.c",
@@ -69243,7 +69727,18 @@
         "start": "0x002f6810"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "format (game, script): 1 of 7 functions accepted C (Java_xeno_util_Format_toInt__Ljava_lang_String_; task tu-slus-20469-412d448de315-main-tu235-format-002f6810-d93a08894e21, submission 90d54ed30d8b8f33786695ccb935bd9d72b444e8d84d2d0059448f56f8196249, reviewed accepted_with_adjustment by review-bulk-r85-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/format.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -70490,14 +70985,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "window",
       "name_basis": "JNI natives of Java class xeno.util.Window (13/13 functions)",
       "name_confidence": "low",
       "ordinal": 239,
       "owners": {
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/window.c",
       "scaffold_path": "scaffold/src/main/window.c",
@@ -70547,7 +71042,18 @@
         "start": "0x002f87b0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "window (game, script): 1 of 13 functions accepted C (Java_xeno_util_Window_setName__Ljava_lang_String_; task tu-slus-20469-412d448de315-main-tu239-window-002f87b0-35ebae73da31, submission 7fc7929ac4d6f41fcf931ba3e0b4b938a4d3cddb39e4b96ae7c4da05b025181f, reviewed accepted_with_adjustment by review-bulk-r85-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/window.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -70655,13 +71161,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "menu_2",
       "name_basis": "JNI natives of Java class xeno.util.Menu (8/8 functions); disambiguated (2 objects share 'menu.c')",
       "name_confidence": "low",
       "ordinal": 240,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/menu_2.c",
       "scaffold_path": "scaffold/src/main/menu_2.c",
@@ -70686,7 +71192,18 @@
         "start": "0x002f8aa0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "menu_2 (game, script): 1 of 8 functions accepted C (Java_xeno_util_Menu_setVisible__Z; task tu-slus-20469-412d448de315-main-tu240-menu-2-002f8aa0-09eda1d986b4, submission 8505da381334e1dee281a8bc42a87121237fd5cd7e9b3578c95fcbc70d9ac93e, reviewed ready_to_integrate by review-bulk-r84-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/menu_2.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -71210,7 +71727,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "movie",
       "name_basis": "JNI natives of Java class xeno.Movie (4/4 functions)",
       "name_confidence": "low",
@@ -71219,7 +71736,7 @@
         ".data": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/movie.c",
       "scaffold_path": "scaffold/src/main/movie.c",
@@ -71317,7 +71834,18 @@
         "start": "0x002fa228"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "movie (game, script): 1 of 4 functions accepted C (Java_xeno_Movie_stop__; task tu-slus-20469-412d448de315-main-tu243-movie-002fa228-c41ca355958d, submission 5e388d7de705e0bc25aa80bbd73183fc2eedcaee124695729b3e8d268affb154, reviewed accepted_with_adjustment by review-bulk-r85-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/movie.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -72377,7 +72905,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "light",
       "name_basis": "JNI natives of Java class xeno.Light (6/6 functions)",
       "name_confidence": "low",
@@ -72385,7 +72913,7 @@
       "owners": {
         ".lit4": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/light.c",
       "scaffold_path": "scaffold/src/main/light.c",
@@ -72459,7 +72987,18 @@
         "start": "0x002fc980"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "light (game, script): 1 of 6 functions accepted C (Java_xeno_Light_setGlobalPointLightReset__; task tu-slus-20469-412d448de315-main-tu247-light-002fc980-e2a508fc91a4, submission 71b8a5b7832b2970a75c105b2585257a79133556dfc5063ab729da9f71911128, reviewed ready_to_integrate by review-bulk-r86-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/light.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -74141,7 +74680,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "unit",
       "name_basis": "JNI natives of Java class xeno.Unit (71/83 functions)",
       "name_confidence": "low",
@@ -74152,7 +74691,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/unit.c",
       "scaffold_path": "scaffold/src/main/unit.c",
@@ -74298,7 +74837,18 @@
         "start": "0x00301400"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "unit (game, script): 14 of 83 functions accepted C (Java_xeno_Unit_rotY__FFZ, Java_xeno_Unit_rotY__IFZ, Java_xeno_Unit_rotY__ILjava_lang_Object_Z, Java_xeno_Unit_rotY__Ljava_lang_Object_FZ, Java_xeno_Unit_rotZ__FFZ, Java_xeno_Unit_rotZ__IFZ, Java_xeno_Unit_rotZ__ILjava_lang_Object_Z, Java_xeno_Unit_rotZ__Ljava_lang_Object_FZ, Java_xeno_Unit_sclX__FFZ, Java_xeno_Unit_sclX__IFZ, Java_xeno_Unit_sclY__FFZ, Java_xeno_Unit_sclY__IFZ, Java_xeno_Unit_sclZ__FFZ, Java_xeno_Unit_sclZ__IFZ; task tu-slus-20469-412d448de315-main-tu249-unit-00302c98-f4b7ca001254, submission 726b825431c118a93ce793905f278a1ae134f064a30fd27f02dd197cb2bb7fdc, reviewed ready_to_integrate by review-bulk-r04-20260916). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/unit.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -74575,14 +75125,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "stage_2",
       "name_basis": "JNI natives of Java class xeno.Stage (17/17 functions); disambiguated (2 objects share 'stage.c')",
       "name_confidence": "low",
       "ordinal": 251,
       "owners": {
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/stage_2.c",
       "scaffold_path": "scaffold/src/main/stage_2.c",
@@ -74632,7 +75182,18 @@
         "start": "0x00304d70"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "stage_2 (game, script): 2 of 17 functions accepted C (Java_xeno_Stage_setPartsLastReset__, Java_xeno_Stage_clrBackBuffer__; task tu-slus-20469-412d448de315-main-tu251-stage-2-00304d70-96dfa752184f, submission f7b4ca1cf9a3ea53aae1a783c37ec3d0d5d28503d60809298ea6cbf42bfc61ed, reviewed accepted_with_adjustment by review-bulk-r74-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/stage_2.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -74837,7 +75398,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "jthread",
       "name_basis": "common function-name prefix 'JTHREAD' (100% of global functions)",
       "name_confidence": "low",
@@ -74845,7 +75406,7 @@
       "owners": {
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/jthread.c",
       "scaffold_path": "scaffold/src/main/jthread.c",
@@ -74919,7 +75480,18 @@
         "start": "0x00305448"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "jthread (game, script): 2 of 11 functions accepted C (JTHREAD_init, JTHREAD_info; task tu-slus-20469-412d448de315-main-tu253-jthread-00305448-55053cb39a46, submission 76b50d11d9007ff93102f7da63e07f25ea305d472312d6b92c45af70fbd237e5, reviewed ready_to_integrate by review-bulk-r74-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/jthread.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -75495,7 +76067,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "act_2",
       "name_basis": "common function-name prefix 'ACT' (100% of global functions); disambiguated (3 objects share 'act.c')",
       "name_confidence": "low",
@@ -75506,7 +76078,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/act_2.c",
       "scaffold_path": "scaffold/src/main/act_2.c",
@@ -75652,7 +76224,18 @@
         "start": "0x00306578"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "act_2 (game, animation): 5 of 32 functions accepted C (ACT_jointGetMoveElementID, ACT_animGetUserData, ACT_animCheckData, ACT_initMTNResource, ACT_resourceInit; task tu-slus-20469-412d448de315-main-tu255-act-2-00306578-a041622fc815, submission 6641a027cc4e26cc49e978ce021bdabe95a72492af3e5ad6a02bd908e2d04427, reviewed ready_to_integrate by review-bulk-r36-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/act_2.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -76827,7 +77410,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "fcv2",
       "name_basis": "common function-name prefix 'FCV2' (71% of global functions)",
       "name_confidence": "low",
@@ -76837,7 +77420,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/fcv2.c",
       "scaffold_path": "scaffold/src/main/fcv2.c",
@@ -76959,7 +77542,18 @@
         "start": "0x0030c6e0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "fcv2 (game, animation): 3 of 19 functions accepted C (FCV_resetPack, FCV_getFKeyType, FCV2_getValue; task tu-slus-20469-412d448de315-main-tu259-fcv2-0030c6e0-b3e2e3d3c794, submission 38fab449132a6fe81de2ba56d8fd80d79c4fd5eebf5fa11ed59dcde974cd45b8, reviewed accepted_with_adjustment by review-bulk-r42-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/fcv2.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -78191,13 +78785,13 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "mdl",
       "name_basis": "common function-name prefix 'MDL' (100% of global functions)",
       "name_confidence": "low",
       "ordinal": 264,
       "owners": {
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/mdl.c",
       "scaffold_path": "scaffold/src/main/mdl.c",
@@ -78222,7 +78816,18 @@
         "start": "0x00317ce0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "mdl (game, graphics): 1 of 6 functions accepted C (MDL_draw; task tu-slus-20469-412d448de315-main-tu264-mdl-00317ce0-b5f34ec1a733, submission 306dd3bf9df328c3d12edd33cbbd5db511a88f36a94c1211325522022f25466d, reviewed ready_to_integrate by review-bulk-r81-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/mdl.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -78371,7 +78976,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "act_3",
       "name_basis": "common function-name prefix 'ACT' (100% of global functions); disambiguated (3 objects share 'act.c')",
       "name_confidence": "low",
@@ -78380,7 +78985,7 @@
         ".data": "asm",
         ".lit4": "asm",
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/act_3.c",
       "scaffold_path": "scaffold/src/main/act_3.c",
@@ -78478,7 +79083,18 @@
         "start": "0x00318150"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "act_3 (game, graphics): 1 of 14 functions accepted C (ACT_DrawShadowInit; task tu-slus-20469-412d448de315-main-tu265-act-3-0031a098-291786d6ac7c, submission ff4b3766129c487ac1d5f31fd6760be68e8b2da568b87cf901b4025b26081d83, reviewed ready_to_integrate by review-bulk-r60-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/act_3.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -78716,7 +79332,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "exm_1",
       "name_basis": "common function-name prefix 'EXM' (100% of global functions); disambiguated (2 objects share 'exm.c')",
       "name_confidence": "low",
@@ -78727,7 +79343,7 @@
         ".lit4": "asm",
         ".rodata": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/exm_1.c",
       "scaffold_path": "scaffold/src/main/exm_1.c",
@@ -78873,7 +79489,18 @@
         "start": "0x0031a190"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "exm_1 (game, animation): 4 of 12 functions accepted C (EXM_InitMovedHair, EXM_OnMovedHair, EXM_OffMovedHair, EXM_SetDelayMovedHair; task tu-slus-20469-412d448de315-main-tu267-exm-1-0031d760-5b105ea2216e, submission 011fa21d7d20a030d9dd1605c6a733da7673437bd8896b842f664d6057f8d733, reviewed ready_to_integrate by review-bulk-r39-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/exm_1.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -79262,14 +79889,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "map_2",
       "name_basis": "common function-name prefix 'MAP' (100% of global functions); disambiguated (2 objects share 'map.c')",
       "name_confidence": "low",
       "ordinal": 269,
       "owners": {
         ".rodata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/map_2.c",
       "scaffold_path": "scaffold/src/main/map_2.c",
@@ -79319,7 +79946,18 @@
         "start": "0x0031ede0"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "map_2 (game, field): 1 of 7 functions accepted C (MAP_getHeight; task tu-slus-20469-412d448de315-main-tu269-map-2-0031ede0-ef0dfcb48e67, submission 6dedd97f1834cf4f73a661e153f8446adfa92a8800b16226926a4c0fd6c8d6ba, reviewed ready_to_integrate by review-bulk-r60-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/map_2.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -79511,14 +80149,14 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "map_create_unit_peer",
       "name_basis": "first global function MAP_createUnitPeer",
       "name_confidence": "low",
       "ordinal": 270,
       "owners": {
         ".lit4": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/map_create_unit_peer.c",
       "scaffold_path": "scaffold/src/main/map_create_unit_peer.c",
@@ -79568,7 +80206,18 @@
         "start": "0x0031f548"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "map_create_unit_peer (game, field): 2 of 20 functions accepted C (MAP_updateUnitMotion, MAP_updateUnitDefault; task tu-slus-20469-412d448de315-main-tu270-map-create-unit-peer-0031f548-cd6b6077ee18, submission f6101542e3d44f893f58c72027be6281cb8df9fc48ea3a604765ba8c02b70dee, reviewed accepted_with_adjustment by review-bulk-r54-20260918). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/map_create_unit_peer.c"
+        }
+      }
     },
     {
       "accepted": {
@@ -79994,7 +80643,7 @@
       "in_scope": true,
       "kind": "gcc",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "Undulate",
       "name_basis": "attested __FILE__-style string '../Undulate.euc.c' in this object's .rodata (0x004d27b0)",
       "name_confidence": "high",
@@ -80004,7 +80653,7 @@
         ".rodata": "asm",
         ".sbss": "asm",
         ".sdata": "asm",
-        ".text": "asm"
+        ".text": "c"
       },
       "path": "src/main/Undulate.c",
       "scaffold_path": "scaffold/src/main/Undulate.c",
@@ -80126,7 +80775,18 @@
         "start": "0x00321ce8"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "note": "Undulate (game, physics): 1 of 13 functions accepted C (UnduCheckSubCheckAll; task tu-slus-20469-412d448de315-main-tu273-undulate-00321ce8-d63ec65e2308, submission 0aaa42b8cd59f56cc1e7c3b423c4c9bc40f3379b8b445c85838d9ab05a6903d3, reviewed ready_to_integrate by review-bulk-r91-20260919). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "source": {
+          "include_dirs": [
+            "include"
+          ],
+          "kind": "file",
+          "path": "src/main/Undulate.c"
+        }
+      }
     },
     {
       "accepted": {

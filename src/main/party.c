@@ -728,7 +728,19 @@ XglClock *PartyTimeUpDate(void)
     return play_time;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/party", PartyTimeDispChange);
+/*
+ * Folds a multi-day XglClock record (the same day/hour/minute/second
+ * breakdown PartyTimeLimitCheck clamps and PartyTimeUpDate/SeisanTimeEx
+ * build) into an hour count for a display that only shows hours, minutes
+ * and seconds: each day past the first adds 24 hours to the hour field.
+ * Only the hour and day fields are read or written.
+ */
+void PartyTimeDispChange(XglClock *elapsed)
+{
+    if (elapsed->day != 0) {
+        elapsed->hour = elapsed->hour + elapsed->day * 24 - 24;
+    }
+}
 
 XglClock *PartyTimePauseStart(void)
 {

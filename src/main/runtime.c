@@ -1,6 +1,20 @@
 #include "common.h"
 #include "main/party.h"
 
+/*
+ * The script VM's per-thread context, recovered as `JThread` in
+ * src/main/chr.h (main's chr TU). Every Java native receives
+ * (thread, arguments, result) as the sibling natives of this TU show
+ * (a1 read as the argument block, a2 written as the result); these
+ * wrappers only need the tag.
+ */
+typedef struct JThread JThread;
+
+extern void SCRIPT_sceneChangeTimeSet(int value);
+extern void CharactorAllRecovery(void);
+extern void AgwsAllRecovery(void);
+extern void tyaCaptureEnd(void);
+
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_execBattle__II);
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_getFlags__II);
@@ -27,7 +41,11 @@ INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_enable__I);
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_getGameState__);
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_CaptureEnd__);
+void Java_xeno_util_Runtime_CaptureEnd__(JThread *thread, void *arguments,
+                                         unsigned int *result)
+{
+    tyaCaptureEnd();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_CaptureStart__Ljava_lang_String_I);
 
@@ -156,7 +174,15 @@ INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_mailExec__I)
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_minigameExec__I);
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_setMenuLock__);
+void Java_xeno_util_Runtime_setMenuLock__(JThread *thread, void *arguments,
+                                          unsigned int *result)
+{
+    /*
+     * Arms the script scene-change timer, which SCRIPT_sceneChangeTimeDec
+     * counts down once per game frame, with 62 frames.
+     */
+    SCRIPT_sceneChangeTimeSet(62);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_evsSetRetPoint__);
 
@@ -164,6 +190,14 @@ INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_evsExit__);
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_etherTecSet__I);
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_charAllRecovery__);
+void Java_xeno_util_Runtime_charAllRecovery__(JThread *thread, void *arguments,
+                                              unsigned int *result)
+{
+    CharactorAllRecovery();
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_AGWSAllRecovery__);
+void Java_xeno_util_Runtime_AGWSAllRecovery__(JThread *thread, void *arguments,
+                                              unsigned int *result)
+{
+    AgwsAllRecovery();
+}

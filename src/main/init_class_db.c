@@ -6,7 +6,36 @@ INCLUDE_ASM("asm/main/nonmatchings/init_class_db", initClassDB);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", findClass);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readClass);
+/*
+ * Reads a Java class file header from `buffer` into `class_info`: the
+ * magic 0xCAFEBABE, the unused minor/major version words, the constant
+ * pool, access_flags/this_class/super_class, then the interfaces, fields,
+ * methods and attributes that follow (JVM class file format).
+ */
+ClassDescriptor *readClass(DataBuffer *buffer, ClassDescriptor *class_info,
+                           u32 class_loader)
+{
+    u32 access_flags;
+    u32 this_class_index;
+    u32 super_class_index;
+
+    if (DataBuffer_getUIntAt(buffer) != 0xCAFEBABE) {
+        return 0;
+    }
+    DataBuffer_getUShortAt(buffer); /* minor_version, unused */
+    DataBuffer_getUShortAt(buffer); /* major_version, unused */
+    readConstantPool(buffer, class_info);
+    access_flags = DataBuffer_getUShortAt(buffer);
+    this_class_index = DataBuffer_getUShortAt(buffer);
+    super_class_index = DataBuffer_getUShortAt(buffer);
+    setupClass(class_info, this_class_index, super_class_index, access_flags,
+               class_loader);
+    readInterfaces(buffer, class_info);
+    readFields(buffer, class_info);
+    readMethods(buffer, class_info);
+    readAttributes(buffer, class_info, 0);
+    return class_info;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", addCode);
 
@@ -24,7 +53,16 @@ INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readAttributes);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readConstantPool);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", setFieldValue);
+/*
+ * Stores a field's resolved constant/instance value and marks it resolved
+ * (SceneField.flags bit 0x4000), the way readAttributes does after loading a
+ * field's ConstantValue attribute.
+ */
+void setFieldValue(SceneField *field, unsigned int value)
+{
+    field->instance_offset = value;
+    field->flags |= 0x4000;
+}
 
 void setupClass(ClassDescriptor *class_info, u32 this_class_index,
                 u32 super_class_index, u32 access_flags,

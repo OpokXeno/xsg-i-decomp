@@ -11,6 +11,30 @@ extern int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int fla
 extern void XrgApplyVector(RgVector destination, const RgMatrix matrix, const RgVector source);
 extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 
+/* InitRgGeomTray is an original function of a neighbouring tray TU
+ * (rg_geom_tray.c, ov12/tu056), already recovered as C; CreateRgGeomTray in
+ * that same TU is still assembly.  This TU declares both, as it does for the
+ * other still-assembly siblings above. */
+extern void InitRgGeomTray(RgGeom *geom);
+extern RgGeom *CreateRgGeomTray(void);
+
+/* RgGeomSetType is an original function of the base geometry TU
+ * (rg_geom.c, ov12/tu051), already recovered as C. */
+extern void RgGeomSetType(RgGeom *pGeom, int type);
+
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+
+/* Referenced by InitRgGeomPillar: the assertion text "pPillar != NIL" and
+ * this TU's own original file name "../rg_geom_pillar.euc.c", both
+ * scaffold-owned .rodata (config/tu-build.json, data_ownership.rodata). */
+extern const char D_00A55260[];
+extern const char D_00A55270[];
+
+/* The type tag InitRgGeomPillar and CreateRgGeomPillar pass to
+ * RgGeomSetType; no other OV12 translation unit names this value yet. */
+#define RG_GEOM_TYPE_PILLAR 5
+
 /* Scaffold-owned (.bss still owner: asm, config/tu-build.json): the function's
  * own four file-local scratch vectors, kept under their splat names
  * (docs/naming.md, "Scaffold-owned data keeps its splat name").  The original
@@ -46,9 +70,28 @@ struct RgGeomPoint {
  * only their X and Z carry the pillar's own half-extents. */
 #define RG_GEOM_PILLAR_CORNER_Y 3.0f
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", InitRgGeomPillar);
+/*
+ * Initialises the pillar: asserts the geometry handle is non-null, then
+ * reuses the tray's own initialiser and marks the type as a pillar.
+ */
+void InitRgGeomPillar(RgGeom *pPillar)
+{
+    if (pPillar == 0) {
+        assert_prog(D_00A55260, D_00A55270, 0x15);
+    }
+    InitRgGeomTray(pPillar);
+    RgGeomSetType(pPillar, RG_GEOM_TYPE_PILLAR);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CreateRgGeomPillar);
+/* Allocates and initialises a tray, then re-tags it as a pillar. */
+RgGeom *CreateRgGeomPillar(void)
+{
+    RgGeom *pillar;
+
+    pillar = CreateRgGeomTray();
+    RgGeomSetType(pillar, RG_GEOM_TYPE_PILLAR);
+    return pillar;
+}
 
 /*
  * Tests the point's path this frame -- the segment from its old position to
@@ -134,11 +177,42 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CheckIntersect_00A2E8A8);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", GetIntersectionPointLineX_00A2E9B0);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", GetIntersectionPointLineZ_00A2E9F8);
+static int GetIntersectionPointLineZ(float *intersection, const RgVector lineStart,
+                                     const RgVector lineEnd, float z)
+{
+    if (lineStart[2] == lineEnd[2]) {
+        *intersection = 0.0f;
+        return 0;
+    }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CheckSlope_00A2EA40);
+    *intersection = (z - lineStart[2]) / (lineEnd[2] - lineStart[2]);
+    return 1;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CheckInBox_00A2EAB0);
+static int CheckSlope(const RgVector p0, const RgVector p1, const RgVector p2,
+                      const RgVector p3)
+{
+    float cross = (p1[0] - p0[0]) * (p3[2] - p2[2])
+                - (p1[2] - p0[2]) * (p3[0] - p2[0]);
+
+    if (cross == 0.0f) {
+        return 0;
+    }
+    if (cross > 0.0f) {
+        return 1;
+    }
+    return -1;
+}
+
+static int CheckInBox(const RgVector point, const RgVector lower,
+                      const RgVector upper)
+{
+    if (point[0] < upper[0] && lower[0] < point[0]
+            && point[2] < upper[2] && lower[2] < point[2]) {
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CheckBallBoxCollision_00A2EB18);
 

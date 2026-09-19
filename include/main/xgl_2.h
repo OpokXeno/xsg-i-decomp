@@ -14,7 +14,7 @@
  *
  * xglPointLength/xglPointLengthXZ return that value as an ordinary float:
  * cc1 emits the mtc1 that copies the "=r" GPR result into $f0 itself
- * , never a hand-written mfc1/mtc1.
+ * (CP-0161), never a hand-written mfc1/mtc1.
  *
  * xglVectorLength instead writes the value through its destination pointer
  * and returns void, which the original does with a plain GPR store (sw), not
@@ -67,12 +67,18 @@ extern void xglVectorLength(float *destination, const Vector4 *vector);
  */
 extern void xglMatrixStackUnit(void);
 
+void xglMatrixStackScale(const float scale[4]);
+
 extern void xglMatrixStackRotX(float angle);
 
 extern void xglMatrixStackRotY(float angle);
 
+extern void xglMatrixStackRotZ(float angle);
+
 extern void xglMatrixStackSave(float matrix[4][4]);
 
 unsigned short xglSRand(void);
+
+void xglMatrixStackTrans(const float translation[4]);
 
 #endif /* INCLUDE_MAIN_XGL_2_H */

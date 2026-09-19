@@ -21,7 +21,25 @@ int xglHddCheck2(void)
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddCheck);
+int xglHddCheck(void)
+{
+    int result;
+
+    if (HddActive == 3) {
+        xglHddErrorScreen();
+        xglHddActivate(0);
+        xglHddActivate(0x102);
+    }
+
+    result = xglHddCheckCore();
+    if (result != -6)
+        return result;
+
+    xglHddErrorScreen();
+    xglHddActivate(0);
+    xglHddActivate(0x102);
+    return -5;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddErrorScreen);
 
@@ -86,7 +104,19 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddInstallReadCB);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddInstall);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddActivate);
+int xglHddActivate(int state)
+{
+    int previous = HddActive;
+
+    if (state != -1) {
+        if (previous != 2 && (state & 0xff) < 4 && (state & 0xff) >= 0) {
+            HddActive = (u8)state;
+            if (state < 0x100)
+                xglCdArcCheck();
+        }
+    }
+    return previous < 2 ? previous : 0;
+}
 
 static void decrypt(void)
 {

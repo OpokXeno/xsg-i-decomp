@@ -12,9 +12,37 @@ typedef struct {
     u16 flags;
 } SplineTrack;
 
+/*
+ * The actSequence entry head. `flags` and `state_flags` are the two words
+ * every function below reads; ACT_initSequenceAt additionally clears six
+ * more words of the same entry when it (re)starts a slot:
+ *
+ *   +0x0c cleared_on_init
+ *                    one word ACT_initSequenceAt clears; no function in this
+ *                    TU reads it, so nothing beyond that is evidenced.
+ *   +0x14 cleared_on_init_run[4]
+ *                    four consecutive words (+0x14/+0x18/+0x1c/+0x20)
+ *                    ACT_initSequenceAt clears the same way, otherwise
+ *                    unread here.
+ *   +0x24 handler[4] the sequence's four handler slots: ACT_updateSequence
+ *                    walks +0x24..+0x30 and calls whichever of the four is
+ *                    non-null with the actor (0x0030abe8..0x0030ac18,
+ *                    src/main/chr.h's SEQ_HANDLER family names the same
+ *                    layout), and SEQ_scale installs SEQ_scale itself into
+ *                    the scale channel's own handler slot the same way
+ *                    (main/tu248). ACT_initSequenceAt clears all four.
+ *
+ * +0x08 and +0x10 are between evidenced words and untouched by every
+ * function in this TU, so they stay unmodeled gaps.
+ */
 typedef struct {
     u32 flags;
     u32 state_flags;
+    u32 unmodeled_08;
+    u32 cleared_on_init;
+    u32 unmodeled_10;
+    u32 cleared_on_init_run[4];
+    void *handler[4];
 } SequenceState;
 
 typedef struct Vector4 {
@@ -44,13 +72,12 @@ typedef struct Vector4 {
  * src/main/enemy_2.c's EnemyActor are one object; the earlier `SequenceActor`
  * name was specific to this file and is retired here.
  *
- * The type stops at +0x70 because that is where the evidence stops, not at a
- * recovered end: 0xa70 bytes follow and only scattered offsets of them are
- * known (+0x80 the actor's own slot number, +0x86 its id, +0x6f0 a second flags
- * word, +0x6f8 its speed, +0x704 its motion number, +0x8fc/+0x900/+0x904 the
- * parent and child links, +0x9e4 the turn target). Nothing between +0x70 and
- * +0x80 is recovered, so `number` is not a member and the two functions below
- * keep reading it through the byte view, as does main/tu193.
+ * The shared head below (+0x00..+0x70) is the part src/main/chr.h,
+ * src/main/set_motion.h and src/main/enemy_2.h also model: 0xa70 bytes
+ * follow and only scattered offsets of them are known. This TU's own
+ * functions evidence several more of them, declared as members after the
+ * head (docs/naming.md). `actor_bytes[0x80]` in the two functions above is
+ * the same byte as `number` below.
  *
  * Field evidence, mostly from the game's own debug printer ACT_info
  * (0x00306090), which prints this record with its own column headings:
@@ -107,6 +134,48 @@ typedef struct Vector4 {
  * so the original's vector type carried that alignment. This tree cannot spell
  * that alignment - AGENTS.md admits no GNU attribute in game code - so the gap
  * is written out as a word instead. It claims no semantics and no name.
+ *
+ * Past the shared head, ACT_initSequenceAt and ACT_updateMPack below evidence
+ * these members (docs/naming.md):
+ *
+ *   +0x80 number      the actor's own slot in the 64-entry array: ACT_create
+ *                     stores the index it hands out there (sb a2,0x80(s0) at
+ *                     0x00305de0) and ACT_initSequenceAt reads it to index
+ *                     actSequence (lbu v1,128(a0)). The same byte
+ *                     src/main/enemy_2.h already names `number`.
+ *   +0x4c8 undulation the address ACT_updateMPack passes to UnduGet2 as its
+ *                     destination (addiu a0,s0,0x4c8); ACT_updateMPack itself
+ *                     only zeroes this one word (sw zero,0x4c8(s0)), so only
+ *                     one word is declared here and whatever UnduGet2 (still
+ *                     unrecovered) does beyond it stays in the following gap.
+ *   +0x6f4 motion_time
+ *                     the current motion's playback time in seconds:
+ *                     Sound_FootStep divides it by 1/30 (D_004D8100) and
+ *                     compares the F2I frame with the FootStep frame table
+ *                     for the motion at +0x704 (0x002d05c0..0x002d05f0), and
+ *                     ov12's XrgActor names the same offset motionFrame.
+ *                     ACT_updateMPack copies PLAY_getCurrent()'s own +0x44
+ *                     float here (lwc1 f0,0x44(s1); swc1 f0,0x6f4(s0)).
+ *   +0x824 linked_actor
+ *                     a pointer to another Actor: ACT_updateMPack reads it
+ *                     (lw v0,0x824(s0)) and then loads two floats from it at
+ *                     +0x30/+0x38, exactly this type's own velocity.x/z
+ *                     offsets.
+ *   +0x9c0 transparency, +0x9c4 refl_transparency
+ *                     ACT_filterGuno/ACT_filterStealth pass these straight to
+ *                     nmlModelSetTransparency(float transparency) and
+ *                     nmlModelSetReflTransparency(float transparency)
+ *                     (src/main/nml_model_set.c), whose own parameter names
+ *                     this reuses.
+ *   +0x9c8 filter_param_2, +0x9cc filter_param_1
+ *                     the two float arguments ACT_filterGuno/ACT_filterStealth
+ *                     pass to nmlModelSetFilter after transparency; that
+ *                     function is still unrecovered asm, so its parameters
+ *                     have no name beyond their call order (filter_param_1 is
+ *                     its first float argument, at the higher address).
+ *
+ * +0x81..+0x4c7, +0x4cc..+0x6f3, +0x6f8..+0x823 and +0x828..+0x9bf are
+ * unmodeled: nothing in this TU reads or writes them.
  */
 typedef struct Actor {
     u32 flags;
@@ -119,6 +188,19 @@ typedef struct Actor {
     Vector4 acceleration;
     Vector4 rotation;
     Vector4 scale;
+    u8 unmodeled_70[0x80 - 0x70];
+    u8 number;
+    u8 unmodeled_81[0x4c8 - 0x81];
+    u32 undulation;
+    u8 unmodeled_4cc[0x6f4 - 0x4cc];
+    float motion_time;
+    u8 unmodeled_6f8[0x824 - 0x6f8];
+    struct Actor *linked_actor;
+    u8 unmodeled_828[0x9c0 - 0x828];
+    float transparency;
+    float refl_transparency;
+    float filter_param_2;
+    float filter_param_1;
 } Actor;
 
 /* actSequence is an external original witness at 0x0046f460 with witnessed

@@ -49,7 +49,10 @@ INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetFileLen);
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", fileLoad);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetEffectData);
+char *srsGetEffectData(int index)
+{
+    return srsGetEsdData(index);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetComboData);
 
@@ -69,13 +72,28 @@ INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetComboName);
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetEffectType);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsInitCdRead);
+void srsInitCdRead(void)
+{
+    _nRead = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsLeaveCdRead);
+int srsLeaveCdRead(void)
+{
+    return _nRead;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsCdReadCallback);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsLoadEffectData);
+int srsLoadEffectData(void *buffer, int effectNo)
+{
+    char *name;
+
+    name = srsGetEffectName(effectNo);
+    if (name == 0) {
+        return -1;
+    }
+    return fileLoad(buffer, name, 1);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", sresInitMemoryRes);
 
@@ -93,7 +111,10 @@ INCLUDE_ASM("asm/main/nonmatchings/srs", sresDataMapping);
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", sresLoadBattleData);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsFileLoad);
+int srsFileLoad(void *buffer, const char *name, int mode)
+{
+    return fileLoad(buffer, name, mode);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsFileLoadCf);
 

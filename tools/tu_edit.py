@@ -27,18 +27,22 @@ CLI (see docs/tu-tools.md):
   subset TU --keep F[,F...] [--skeleton S | --asm-dir DIR]
   split-asm ASM.s --keep F[,F...] -o OUT.s [--manifest M.json]   re-cut an accepted group
   split-asm ASM.s --check M.json [--result OUT.s]                re-derive and compare
-  merge --base B --ours O --theirs T [--skeleton S] [--allowed F,...] [--comments strict|ours]
+  merge --base B --ours O --theirs T [--skeleton S] [--allowed F,...] [--interstitial-allowed F,...]
+        [--comments strict|ours]
   make-patch --base B --theirs T [--skeleton S]
   apply-patch --base B --target O --patch P.json [--skeleton S] [--allowed F,...]
 Edits write to stdout, to -o OUT or back with --in-place (never on conflict).
 Exit status: 0 ok, 1 conflicts/refusal, 2 usage or parse error.
 """
 import argparse
+import difflib
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -224,6 +228,125 @@ def lexical(text):
                 out[k] = ' '
         i = e
     return ''.join(out)
+
+
+# ---------------------------------------------------------------------------
+# Comment-neutral comparison
+# ---------------------------------------------------------------------------
+# User direction 2026-09-19: a change that only removes, rewords or adds C
+# comments never blocks anything and never counts as an error. The published
+# source is edited by hand (workflow citations were removed from comments of
+# src/main/game_camera.c and src/main/ssd_1.c on 2026-09-16), so every check
+# that compares source text has to be able to tell a comment edit from a code
+# edit. Two texts are the same code when their C preprocessing-token streams,
+# with every comment treated as whitespace (translation phase 3), are equal.
+# Whitespace is not compared either, except that a newline ends a directive.
+
+class LexError(ValueError):
+    """The text cannot be tokenized (an unterminated comment or literal)."""
+
+
+_PUNCTUATORS = tuple(sorted(('%:%:', '...', '<<=', '>>=', '->', '++', '--', '<<', '>>', '<=', '>=', '==',
+                             '!=', '&&', '||', '*=', '/=', '%=', '+=', '-=', '&=', '^=', '|=', '##',
+                             '<:', ':>', '<%', '%>', '%:'), key=len, reverse=True))
+_TOKEN_IDENT = re.compile(r'[A-Za-z_$][A-Za-z_0-9$]*')
+_TOKEN_NUMBER = re.compile(r'\.?[0-9](?:[eEpP][+-]|[0-9A-Za-z_.])*')
+_LINE_SPLICE = re.compile(r'\\\r?\n')
+DIRECTIVE_END = '\n'
+
+
+def c_tokens(text):
+    """The C preprocessing tokens of `text`, comments dropped.
+
+    Backslash-newline splices are removed first (phase 2); a `/* */` or `//`
+    comment is whitespace; string and character literals (with an `L` prefix)
+    are single tokens, so comment markers inside them are text; identifiers,
+    pp-numbers and punctuators follow maximal munch, so `a+ +b` and `a++b` stay
+    different. Outside directives whitespace only separates tokens; a directive
+    (a line whose first token is `#`) ends at the next newline outside a
+    comment, which is emitted as DIRECTIVE_END. An unterminated comment, or an
+    unterminated literal outside a directive, raises LexError; inside a
+    directive (`#error don't`) a lone quote is one token, as cpp treats it.
+    """
+    text = _LINE_SPLICE.sub('', text)
+    tokens, i, n = [], 0, len(text)
+    directive, line_start = False, True
+    while i < n:
+        c = text[i]
+        if c == '\n':
+            if directive:
+                tokens.append(DIRECTIVE_END)
+                directive = False
+            line_start = True
+            i += 1
+            continue
+        if c in ' \t\r\f\v':
+            i += 1
+            continue
+        if text.startswith('/*', i):
+            e = text.find('*/', i + 2)
+            if e < 0:
+                raise LexError(f'unterminated comment at {_where(text, i)}')
+            i = e + 2
+            continue
+        if text.startswith('//', i):
+            e = text.find('\n', i)
+            i = n if e < 0 else e
+            continue
+        if c in '"\'' or (c == 'L' and text[i + 1:i + 2] in ('"', "'")):
+            q = i + 1 if c == 'L' else i
+            quote, j = text[q], q + 1
+            while j < n and text[j] != '\n':
+                if text[j] == '\\':
+                    j += 2
+                    continue
+                if text[j] == quote:
+                    break
+                j += 1
+            if j < n and text[j] == quote:
+                j += 1
+            elif directive:
+                j = q + 1
+            else:
+                raise LexError(f'unterminated literal at {_where(text, i)}')
+            tok = text[i:j]
+        else:
+            m = _TOKEN_IDENT.match(text, i) or _TOKEN_NUMBER.match(text, i)
+            tok = m.group() if m else next((p for p in _PUNCTUATORS if text.startswith(p, i)), c)
+            j = i + len(tok)
+        if line_start and tok in ('#', '%:'):
+            directive = True
+        line_start = False
+        tokens.append(tok)
+        i = j
+    if directive:
+        tokens.append(DIRECTIVE_END)
+    return tokens
+
+
+def code_key(text):
+    """tuple(c_tokens(text)), or None when the text cannot be tokenized."""
+    try:
+        return tuple(c_tokens(text))
+    except LexError:
+        return None
+
+
+def same_code(a, b):
+    """True when a and b differ at most in comments and whitespace.
+
+    Untokenizable text (an unterminated comment or literal) is the same code
+    only as identical text, so such a difference keeps its strict treatment.
+    """
+    if a == b:
+        return True
+    key = code_key(a)
+    return key is not None and key == code_key(b)
+
+
+def is_comment_only(text):
+    """True for non-blank text that holds nothing but comments and whitespace."""
+    return bool(text.strip()) and code_key(text) == ()
 
 
 def _strip_attributes(head):
@@ -991,13 +1114,22 @@ def _clean_block_text(text):
     return text.strip('\n').rstrip()
 
 
-def extract_function(source_text, name):
-    """Text of the C definition `name` in another C file, attached comments included."""
+def extract_function(source_text, name, declarations=False):
+    """Text of the C definition `name` in another C file, attached comments included.
+
+    With `declarations`, the file's top-level declarations before the definition
+    (typedefs, macros, externs, prototypes) are returned in front of it, for
+    `to_c` to place the missing ones beside the function.
+    """
     tu = TU(source_text)
     b = tu.by_name.get(name)
     if b is None or b.state != 'c':
         raise EditError(f'no C definition of {name!r} in the source')
-    return tu.block_text(b)
+    if not declarations:
+        return tu.block_text(b)
+    lead = [item.text(source_text) for item in scan(source_text)
+            if item.kind in ('pp', 'decl') and item.end <= b.start]
+    return '\n'.join(lead + [tu.block_text(b)])
 
 
 def check_c_body(text, name, alt=None):
@@ -1013,18 +1145,80 @@ def check_c_body(text, name, alt=None):
     return funcs[0]
 
 
-def to_c(tu, name, c_text, as_name=None, replace_accepted_asm=False):
-    """Replace block `name` with the C definition c_text (defining as_name or name)."""
+def split_leading_declarations(c_text):
+    """(leading declaration items, definition text) of a body that bundles its prototypes.
+
+    A bulk/m2c function file carries the typedefs, macros, externs and forward
+    prototypes its definition needs, then the one definition. Anything after the
+    definition, or a second definition, is still refused by check_c_body.
+    """
+    text = _clean_block_text(c_text)
+    try:
+        items = scan(text)
+    except ParseError:
+        return [], text
+    funcs = [k for k, item in enumerate(items) if item.kind == 'func']
+    if len(funcs) != 1 or any(item.kind not in ('comment',) for item in items[funcs[0] + 1:]):
+        return [], text
+    k = funcs[0]
+    start = items[k].start
+    # comments directly attached above the definition stay with it
+    j = k - 1
+    while j >= 0 and items[j].kind == 'comment' and _starts_line(text, items[j].start) \
+            and text[items[j].end:start].count('\n') <= 1 and not text[items[j].end:start].strip():
+        start = items[j].start
+        j -= 1
+    lead = [item.text(text) for item in items[:j + 1] if item.kind in ('pp', 'decl', 'comment')]
+    return lead, text[start:]
+
+
+def _declared_in(tu, item_text):
+    """True when `item_text` (or a declaration of the same names) is already in the TU."""
+    norm = _norm(item_text)
+    keys = decl_keys(item_text)
+    for item in scan(tu.text):
+        if item.kind not in ('pp', 'decl'):
+            continue
+        other = item.text(tu.text)
+        if _norm(other) == norm:
+            return True
+        if keys and keys & decl_keys(other):
+            return True
+    return False
+
+
+def to_c(tu, name, c_text, as_name=None, replace_accepted_asm=False, report=None):
+    """Replace block `name` with the C definition c_text (defining as_name or name).
+
+    `c_text` may start with the declarations the definition needs (a bulk/m2c
+    function file): those the TU does not declare yet are placed immediately
+    before the function (interstitial text of an allocated function, which a
+    function-level patch carries); those it already declares are skipped and
+    listed in `report['skipped_declarations']`.
+    """
     b = tu.block(name)
     if b.conditional:
         raise EditError(f'{name} sits inside a preprocessor conditional: edit the source by hand')
     if b.state == 'accepted_asm' and not replace_accepted_asm:
         raise EditError(f'{name} is accepted exact_asm; pass replace_accepted_asm for a re-treatment')
-    body = _clean_block_text(c_text)
+    lead, body = split_leading_declarations(c_text)
     defined = check_c_body(body, as_name or b.key, alt=None if as_name else name_stem(b.name)).name
     if not same_function(defined, b.key) and not same_function(defined, b.name) and defined != as_name:
         raise EditError(f'C body defines {defined!r}, not the function of block {name!r}')
-    out = tu.splice(b.start, b.end, body)
+    kept, skipped = [], []
+    for item in lead:
+        if item.lstrip().startswith(('/*', '//')):
+            continue                            # the file's own banner/notes, not declarations
+        if decl_keys(item) == {('ordinary', defined)}:
+            skipped.append(item)                # the definition's own prototype
+            continue
+        (skipped if _declared_in(tu, item) or any(_norm(item) == _norm(k) for k in kept)
+         else kept).append(item)
+    if report is not None:
+        report['added_declarations'] = kept
+        report['skipped_declarations'] = skipped
+    text = ('\n'.join(kept) + '\n\n' + body) if kept else body
+    out = tu.splice(b.start, b.end, text)
     _check_same_layout(tu, out, {b.name: defined})
     return out
 
@@ -1211,6 +1405,12 @@ def decl_keys(text):
             ident = _IDENT.match(part.strip())
             if ident:
                 keys.add(('ordinary', ident.group()))
+    # A tag name after struct/union/enum names a tag, never an ordinary
+    # identifier. Keep only the keyword, which still counts as a type specifier:
+    # `struct S { ... };` then declares no ordinary name (only the tag above),
+    # while `struct S *p;` or `struct S { ... } s;` still yield their declarator.
+    # Done before brace removal so `struct { ... } obj;` keeps `obj`.
+    lex = re.sub(r'\b(struct|union|enum)\s+[A-Za-z_]\w*', r'\1', lex)
     # Remove brace bodies, then read declarators separated by top-level commas.
     flat, depth = [], 0
     for c in lex:
@@ -1312,42 +1512,416 @@ def _is_comment(text):
     return text.lstrip().startswith(('/*', '//'))
 
 
+def _same_line_comment_gap(text, gap):
+    """True when an added prelude comment sits on the line of the item before it.
+
+    scan() makes a trailing comment such as `extern const char D_x[]; /* "s" */`
+    its own item with a newline-free whitespace gap. Callers keep that gap
+    (instead of forcing a newline) only when they insert the comment directly
+    after the item that precedes it in theirs, so the comment stays attached to
+    the declaration it annotates.
+    """
+    return _is_comment(text) and gap.strip() == '' and '\n' not in gap
+
+
+# The banner tools/tu/gen_ovl_src.py writes at the top of an overlay skeleton
+# (build/<unit>/scaffold/src/<unit>/<tu>.c) for a TU with no published source.
+# It is generated text, not authored source, and its presence is not
+# deterministic: gen_ovl_src.py `--scaffold-out` writes it only when
+# src/<unit>/<tu>.c does not exist, and otherwise leaves splat's banner-less
+# skeleton in place. So a private configure run after a candidate was staged at
+# src/<unit>/<tu>.c regenerates the skeleton without it, and a worker may drop
+# or rewrite it. Only this exact generated shape is matched: the one-line form
+# gen_ovl_src.py writes since 2026-09-19 (user direction), which published TU
+# files also carry, and the older long form with name/accepted/provenance lines.
+_GENERATED_BANNER = re.compile(
+    r'/\*\n \* (?:MAIN|OV\d\d) original TU \d+: 0x[0-9a-f]+\.\.0x[0-9a-f]+ \(\d+ functions\)\n'
+    r'(?: \* Name: [^\n]*\n \* Accepted C: [^\n]*\n \* Accepted standalone EE assembly: [^\n]*\n'
+    r' \* Generated by tools/tu/gen_ovl_src\.py from the accepted\n'
+    r' \* unit sources \(function text verbatim\) and splat INCLUDE_ASM bodies\.\n'
+    r'(?: \* Header divergence [^\n]*\n)*)? \*/')
+
+
+def is_generated_banner(text):
+    """True for exactly the gen_ovl_src.py skeleton banner comment."""
+    return _GENERATED_BANNER.fullmatch(text.strip()) is not None
+
+
+def strip_generated_banner(text):
+    """`text` without a leading gen_ovl_src.py banner (and the newline after it).
+
+    Any other text, including any other leading comment, is returned unchanged,
+    so comparing two stripped files still fails on every other difference.
+    """
+    m = _GENERATED_BANNER.match(text)
+    if not m:
+        return text
+    end = m.end()
+    return text[end + 1:] if text[end:end + 1] == '\n' else text[end:]
+
+
+def _comment_variants(b_items, t_items):
+    """Positional pairing of the prelude items theirs changed only in comments.
+
+    Returns (base indices, theirs indices, reworded theirs indices). A base item
+    and a theirs item pair when they sit in the same replaced run of the item
+    sequences and are the same code (comments and whitespace aside), so a
+    duplicated line elsewhere (a second `#endif`) is never mistaken for one. A
+    comment-only theirs item in a replaced run that also drops a base comment
+    is that comment reworded (one theirs comment per dropped base comment, in
+    order, so a comment written for a new declaration in the same run stays an
+    addition).
+    """
+    b_norm, t_norm = [_norm(t) for _, t in b_items], [_norm(t) for _, t in t_items]
+    # A generated banner is not authored text: its replacement is merged as an
+    # ordinary addition (merge_prelude), never read as a reworded comment.
+    b_code = [None if is_generated_banner(t) else code_key(t) for _, t in b_items]
+    t_code = [code_key(t) for _, t in t_items]
+    base_ix, theirs_ix, reworded = set(), set(), set()
+    matcher = difflib.SequenceMatcher(None, b_norm, t_norm, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != 'replace':
+            continue
+        free = [i for i in range(i1, i2) if b_code[i]]
+        for j in range(j1, j2):
+            if not t_code[j]:
+                continue
+            hit = next((i for i in free if b_code[i] == t_code[j]), None)
+            if hit is not None:
+                free.remove(hit)
+                base_ix.add(hit)
+                theirs_ix.add(j)
+        # each dropped base comment accounts for at most one theirs comment of the run
+        dropped = sum(1 for i in range(i1, i2) if b_code[i] == ())
+        reworded.update([j for j in range(j1, j2) if t_code[j] == ()][:dropped])
+    return base_ix, theirs_ix, reworded
+
+
+# ---------------------------------------------------------------------------
+# Struct member sizes (shared with tools/review_stage.py and header_types.py)
+# ---------------------------------------------------------------------------
+# AGENTS.md lets a worker replace an `unmodeled_XX[N]` span by named members of
+# the same total size. These helpers compute that size from the text alone:
+# plain scalar/pointer/array members only. A member whose type is not listed
+# (a typedef'd struct, a bitfield) has no provable size; callers treat that as
+# "unknown", never as a pass.
+
+MEMBER_SIZES = {'char': 1, 'signed char': 1, 'unsigned char': 1, 'u8': 1, 's8': 1,
+                'short': 2, 'signed short': 2, 'unsigned short': 2, 'u16': 2, 's16': 2,
+                'short int': 2, 'unsigned short int': 2,
+                'int': 4, 'signed int': 4, 'unsigned int': 4, 'unsigned': 4, 'signed': 4,
+                'long': 4, 'unsigned long': 4, 'u32': 4, 's32': 4, 'float': 4,
+                'long long': 8, 'unsigned long long': 8, 'u64': 8, 's64': 8, 'double': 8}
+UNMODELED_MEMBER = re.compile(r'\bunmodell?ed_\w*')
+
+
+def member_dim(expr):
+    """Value of an array bound written as integer arithmetic (`0x9A0 - 0x6F8`), or None."""
+    expr = expr.strip()
+    if not expr or not re.fullmatch(r'[\s0-9a-fA-FxX+\-*()]+', expr):
+        return None
+    try:
+        value = eval(re.sub(r'\b0[xX][0-9a-fA-F]+\b|\b\d+\b', lambda m: str(int(m.group(0), 0)), expr),
+                     {'__builtins__': {}}, {})
+    except Exception:
+        return None
+    return value if isinstance(value, int) and value >= 0 else None
+
+
+def member_layout(decl):
+    """(size, alignment) of one simple member declaration `TYPE name[N][M]` (no `;`), or None.
+
+    Alignment is the natural one of the element type (the EE ABI aligns every
+    listed scalar to its size and a pointer to 4).
+    """
+    decl = ' '.join(decl.split())
+    dims = []
+    m = re.fullmatch(r'[A-Za-z_][\w\s]*\(\s*\*\s*[A-Za-z_]\w*\s*((?:\[[^\]]+\]\s*)*)\)\s*\(.*\)', decl)
+    if m:                                  # function pointer member
+        size, dims = 4, re.findall(r'\[([^\]]+)\]', m.group(1))
+    else:
+        m = re.fullmatch(r'((?:(?:const|volatile)\s+)*[A-Za-z_][\w\s]*?)\s*(\*+)?\s*'
+                         r'([A-Za-z_]\w*)\s*((?:\[[^\]]+\]\s*)*)', decl)
+        if not m:
+            return None
+        base, stars, _, dim_text = m.groups()
+        base = ' '.join(w for w in base.split() if w not in ('const', 'volatile', 'struct'))
+        size = 4 if stars else MEMBER_SIZES.get(base)
+        dims = re.findall(r'\[([^\]]+)\]', dim_text or '')
+    if size is None:
+        return None
+    align = size
+    for dim in dims:
+        value = member_dim(dim)
+        if value is None:
+            return None
+        size *= value
+    return size, align
+
+
+def member_size(decl):
+    """Byte size of one simple member declaration, or None (see member_layout)."""
+    layout = member_layout(decl)
+    return None if layout is None else layout[0]
+
+
+def members_size(members):
+    """Total byte size of member declarations (no padding), or None when one is unknown."""
+    total = 0
+    for member in members:
+        size = member_size(member)
+        if size is None:
+            return None
+        total += size
+    return total
+
+
+def strip_member_comments(text):
+    """`text` with its comments replaced by spaces, tolerating a cut comment.
+
+    The text may be a run of lines cut out of a larger body (a diff hunk): a
+    block comment may then open on its last line and close on a line outside
+    the run, or close on its first line after opening outside it. Both halves
+    are comment text: an unterminated trailing `/* ...` and a leading
+    `... */` with no opening before it are removed as well.
+    """
+    first_close, first_open = text.find('*/'), text.find('/*')
+    if first_close >= 0 and (first_open < 0 or first_close < first_open):
+        text = ' ' * (first_close + 2) + text[first_close + 2:]
+    text = re.sub(r'/\*.*?\*/|//[^\n]*', ' ', text, flags=re.S)
+    cut = text.find('/*')
+    return text if cut < 0 else text[:cut]
+
+
+def body_members(text):
+    """Member declarations of a run of struct-body lines, or None when it holds anything else."""
+    code = strip_member_comments(text)
+    if re.search(r'[{}#]', code):
+        return None
+    pieces = [p.strip() for p in code.split(';')]
+    if pieces and pieces[-1]:
+        return None                        # text after the last `;`
+    return [p for p in pieces if p]
+
+
+def _struct_parts(text):
+    """(head, [members], tail) of a single-body struct/union item, comments ignored, or None."""
+    code = lexical(text)
+    if '#' in code or code.count('{') != 1 or code.count('}') != 1:
+        return None
+    start, stop = code.index('{'), code.index('}')
+    if stop < start or not re.search(r'\bstruct\b', code[:start]):
+        return None
+    members = body_members(code[start + 1:stop])
+    if not members:
+        return None
+    return _norm(code[:start]), [_norm(m) for m in members], _norm(code[stop + 1:])
+
+
+def _unmodeled_name(member):
+    words = _IDENT.findall(re.sub(r'\[[^\]]*\]', ' ', member))
+    return bool(words) and UNMODELED_MEMBER.fullmatch(words[-1]) is not None
+
+
+def unmodeled_split(base_text, theirs_text):
+    """Why `theirs_text` is not a same-size `unmodeled_` split of `base_text` (a string), or its spans.
+
+    The two prelude items must be one struct definition (a single brace body,
+    no nested struct/union body, no directive) with the same text before and
+    after the body and the same members, except runs of base members that are
+    all `unmodeled_*` and are replaced by members of exactly the same total
+    byte size (member_size). Comments are ignored. When the offset of a run is
+    computable from the members before it, both the run and its replacement are
+    laid out from there with natural alignment and must end at the same offset,
+    so no later member moves; the struct's alignment must not grow. Where an
+    offset or the struct alignment is not computable (a member of unlisted
+    type), `alignment_checked` is False and the whole-file gate is the proof.
+    Returns a list of span dicts on success.
+    """
+    b, t = _struct_parts(base_text), _struct_parts(theirs_text)
+    if b is None or t is None:
+        return 'not a single-body struct definition with plain member declarations'
+    if b[0] != t[0] or b[2] != t[2]:
+        return 'the text around the struct body changed'
+    b_members, t_members = b[1], t[1]
+    b_layout = [member_layout(m) for m in b_members]
+    t_layout = [member_layout(m) for m in t_members]
+    spans = []
+    matcher = difflib.SequenceMatcher(None, b_members, t_members, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            continue
+        if tag != 'replace':
+            return f'members are {"added" if tag == "insert" else "removed"} outside an unmodeled_ span'
+        named = [m for m in b_members[i1:i2] if not _unmodeled_name(m)]
+        if named:
+            return f'a member that is not an unmodeled_ span changes ({named[0]})'
+        want, got = members_size(b_members[i1:i2]), members_size(t_members[j1:j2])
+        if want is None or got is None:
+            return 'the size of the unmodeled_ span or of its replacement is not provable from the text'
+        if want != got:
+            return f'the unmodeled_ span is {want:#x} bytes, its replacement {got:#x}'
+        offset = 0
+        for layout in b_layout[:i1]:
+            if layout is None:
+                offset = None
+                break
+            offset = -(-offset // layout[1]) * layout[1] + layout[0]
+        if offset is not None:
+            ends = []
+            for layouts in (b_layout[i1:i2], t_layout[j1:j2]):
+                end = offset
+                for size, align in layouts:
+                    end = -(-end // align) * align + size
+                ends.append(end)
+            if ends[0] != ends[1]:
+                return (f'with natural alignment the replacement of the unmodeled_ span after {offset:#x} '
+                        f'ends at {ends[1]:#x}, the span at {ends[0]:#x}')
+        spans.append(dict(offset=offset, bytes=want, removed=b_members[i1:i2], added=t_members[j1:j2]))
+    if not spans:
+        return 'no member changed'
+    # the struct's own alignment (and so its size and tail padding) must not grow
+    known = [layout[1] for layout in b_layout if layout is not None]
+    added_align = max(layout[1] for s in spans for layout in map(member_layout, s['added']))
+    alignment_checked = all(s['offset'] is not None for s in spans)
+    if not known or added_align > max(known):
+        if None not in b_layout:
+            return f'the replacement raises the struct alignment from {max(known)} to {added_align}'
+        alignment_checked = False
+    for s in spans:
+        s['alignment_checked'] = alignment_checked
+    return spans
+
+
+def _prelude_unmodeled_split(item, keys, added_ix, t_items, o_items, taken):
+    """The unmodeled_ split that replaces base prelude `item`, or why it is none.
+
+    Returns a dict (theirs_index, ours_index, replacement, spans) when exactly
+    one added theirs item declares the same names as `item`, the target (ours)
+    still holds `item` itself exactly once (a change by the patch only), and
+    unmodeled_split() accepts the pair. Otherwise a reason string, or None when
+    the patch adds no item of the same name (a plain removal).
+    """
+    candidates = sorted({k for key in keys for k in added_ix.get(key, [])} - taken)
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        return 'more than one added item declares its names'
+    k = candidates[0]
+    if decl_keys(t_items[k][1]) != keys:
+        return 'the replacement declares different names'
+    at = [j for j, (_, t) in enumerate(o_items) if _norm(t) == _norm(item)]
+    if len(at) != 1:
+        return 'the target no longer holds the base item unchanged (changed on both sides)'
+    spans = unmodeled_split(item, t_items[k][1])
+    if isinstance(spans, str):
+        return spans
+    return dict(theirs_index=k, ours_index=at[0], replacement=t_items[k][1], spans=spans)
+
+
 def merge_prelude(base, ours, theirs, comments='strict'):
-    """Three-way additive prelude merge. Returns (text, conflicts, notes)."""
+    """Three-way additive prelude merge. Returns (text, conflicts, notes).
+
+    Comment-only differences never conflict (user direction 2026-09-19): a
+    comment theirs removes or rewords, or a prelude item theirs changes only in
+    its comments, keeps the target's text and is reported as a note
+    (`prelude_comment_removed_ignored`, `prelude_comment_changed_ignored`). A
+    new comment is added as before, and code changes are treated as before.
+
+    One non-additive change is merged (2026-09-19): a base struct item that the
+    patch replaces by the same struct with `unmodeled_` span member(s) split
+    into named members of the same total size (unmodeled_split), while the
+    target still holds the base item unchanged. The patch's item takes its
+    place and a `prelude_unmodeled_split` note records it for the reviewer. A
+    split that changes a size, touches another member, adds or removes members
+    outside a span, or meets a target that changed the item stays
+    `prelude_modified`, whose detail then says why.
+    """
     b_items, _ = prelude_items(base)
     o_items, o_tail = prelude_items(ours)
     t_items, _ = prelude_items(theirs)
     conflicts, notes = [], []
     b_set = {_norm(t) for _, t in b_items}
-    o_norm = [_norm(t) for _, t in o_items]
     t_set = {_norm(t) for _, t in t_items}
-    removed = [t for _, t in b_items if _norm(t) not in t_set]
+    variant_base, variant_theirs, reworded = _comment_variants(b_items, t_items)
+    removed = [(i, t) for i, (_, t) in enumerate(b_items) if _norm(t) not in t_set]
     added = [(k, g, t) for k, (g, t) in enumerate(t_items) if _norm(t) not in b_set]
-    added_keys = {}
-    for _, _, t in added:
+    added_keys, added_ix = {}, {}
+    for k, _, t in added:
+        if k in variant_theirs:
+            continue
         for key in decl_keys(t):
             added_keys.setdefault(key, []).append(t)
-    for t in removed:
+            added_ix.setdefault(key, []).append(k)
+    split_theirs, split_ours = set(), {}
+    dropped_banner = []
+    for i, t in removed:
+        if is_generated_banner(t):
+            # Generated scaffold text (see _GENERATED_BANNER): removing or
+            # replacing it is not a prelude change of authored source. It is
+            # removed from the result too, so the replacement (if any) is
+            # merged as an ordinary addition.
+            dropped_banner.append(_norm(t))
+            notes.append(dict(kind='generated_banner_removed', item=t))
+            continue
         if _is_comment(t) and comments == 'ours':
             notes.append(dict(kind='prelude_comment_removed_ignored', item=t))
             continue
+        if is_comment_only(t):
+            notes.append(dict(kind='prelude_comment_removed_ignored', item=t,
+                              detail='the patch removes or rewords a prelude comment; comment-only changes '
+                                     'never conflict, and the target keeps its text'))
+            continue
+        if i in variant_base:
+            notes.append(dict(kind='prelude_comment_changed_ignored', item=t,
+                              detail='the patch changes only the comments of this prelude item; the target '
+                                     'keeps its text'))
+            continue
         shared = [a for key in decl_keys(t) for a in added_keys.get(key, [])]
+        split = _prelude_unmodeled_split(t, decl_keys(t), added_ix, t_items, o_items, split_theirs)
+        if isinstance(split, dict):
+            split_theirs.add(split['theirs_index'])
+            split_ours[split['ours_index']] = t_items[split['theirs_index']][1]
+            notes.append(dict(kind='prelude_unmodeled_split', item=t, replacement=split['replacement'],
+                              spans=split['spans'],
+                              detail='the patch replaces unmodeled_ span member(s) of this prelude struct by '
+                                     'named members of the same total size (the target still has the base '
+                                     'item); merged in place for the reviewer to confirm against the member '
+                                     'offsets in the evidence'))
+            continue
         conflicts.append(dict(kind='prelude_modified' if shared else 'prelude_removed', item=t,
                               replacement=shared[0] if shared else None,
                               detail='the patch changes or removes an existing prelude item; '
-                                     'prelude changes must be additive'))
-    merged = list(o_items)
-    merged_norm = list(o_norm)
+                                     'prelude changes must be additive' +
+                                     (f' (not a same-size unmodeled_ split: {split})' if split else '')))
+    merged = [(g, split_ours.get(k, t)) for k, (g, t) in enumerate(o_items) if _norm(t) not in dropped_banner]
+    merged_norm = [_norm(t) for _, t in merged]
+    merged_code = [code_key(t) for _, t in merged]
+    if merged and len(merged) < len(o_items) and not o_items[0][0].strip() and merged[0] != o_items[0]:
+        merged[0] = (o_items[0][0], merged[0][1])   # the file keeps its leading gap, not the banner's
     for k, gap, t in added:
         nt = _norm(t)
+        if k in split_theirs:
+            continue                  # merged in place of the base item (prelude_unmodeled_split)
         if _is_comment(t) and comments == 'ours':
             notes.append(dict(kind='prelude_comment_added_ignored', item=t))
+            continue
+        if k in variant_theirs:
+            continue                  # reported with the base item it changes (prelude_comment_changed_ignored)
+        if k in reworded:
+            notes.append(dict(kind='prelude_comment_changed_ignored', item=t,
+                              detail='the patch rewords a prelude comment; the target keeps its text'))
             continue
         if nt in merged_norm:
             notes.append(dict(kind='prelude_already_present', item=t))
             continue
+        t_decl, t_code = decl_keys(t), code_key(t)
+        if t_decl and t_code and t_code in merged_code:
+            notes.append(dict(kind='prelude_already_present', item=t,
+                              detail='the target already has this item, differing only in comments'))
+            continue
         clash = []
-        for key in decl_keys(t):
+        for key in t_decl:
             for (_, ot), on in zip(merged, merged_norm):
                 if key in decl_keys(ot) and on != nt:
                     clash.append(ot)
@@ -1360,7 +1934,7 @@ def merge_prelude(base, ours, theirs, comments='strict'):
         # Anchor by item identity: the nearest neighbour in theirs that occurs
         # exactly once in the merged prelude. A duplicated anchor text (two
         # `#else` lines, say) is ambiguous and must not be guessed.
-        pos, ambiguous = None, None
+        pos, ambiguous, right_after = None, None, False
         for direction in (-1, 1):
             j = k + direction
             while 0 <= j < len(t_items):
@@ -1368,6 +1942,8 @@ def merge_prelude(base, ours, theirs, comments='strict'):
                 count = merged_norm.count(n)
                 if count == 1:
                     pos = merged_norm.index(n) + (1 if direction < 0 else 0)
+                    # anchored on the item immediately before it in theirs
+                    right_after = direction < 0 and j == k - 1
                     break
                 if count > 1:
                     ambiguous = t_items[j][1]
@@ -1382,11 +1958,24 @@ def merge_prelude(base, ours, theirs, comments='strict'):
             continue
         if pos is None:
             pos = len(merged)
-        gap = gap if '\n' in gap else '\n'
+        # A trailing same-line comment keeps its gap when it follows the very
+        # item it annotated in theirs. A `//` comment also needs a line break
+        # after it in the target, or it would swallow the next item.
+        follows = merged[pos][0] if pos < len(merged) else o_tail
+        keep_inline = (right_after and _same_line_comment_gap(t, gap)
+                       and (not t.lstrip().startswith('//') or '\n' in follows))
+        if '\n' not in gap and not keep_inline:
+            gap = '\n'
         if pos == 0 and not merged:
             gap = ''
+        elif pos == 0 and not merged[0][0].strip():
+            # A new first item takes the file's leading gap; the old first item
+            # is then separated from it the way theirs separates them.
+            follow = t_items[k + 1][0] if k + 1 < len(t_items) else '\n'
+            gap, merged[0] = merged[0][0], (follow if '\n' in follow else '\n', merged[0][1])
         merged.insert(pos, (gap, t))
         merged_norm.insert(pos, nt)
+        merged_code.insert(pos, t_code)
         notes.append(dict(kind='prelude_added', item=t, position=pos))
     common_b = [_norm(t) for _, t in b_items if _norm(t) in t_set]
     common_t = [_norm(t) for _, t in t_items if _norm(t) in b_set]
@@ -1408,13 +1997,96 @@ def _three(base, ours, theirs, norm=_norm_block):
     return None, 'conflict'
 
 
-def merge3(base, ours, theirs, names=None, allowed=None, comments='strict'):
+_MERGE_FILE_TIMEOUT = 30
+
+
+def _merge_comment_edits(base, ours, theirs):
+    """theirs' code change with the target's comment-only edits kept, or None.
+
+    `git merge-file` merges the region line by line (bounded, in a private
+    temporary directory). The result is used only when the merge is clean and
+    is exactly theirs as code, so the target's edits it carries are comments.
+    """
+    git = shutil.which('git')
+    if git is None:
+        return None
+    try:
+        with tempfile.TemporaryDirectory(prefix='tu-edit-merge-') as tmp:
+            paths = []
+            for name, text in (('ours', ours), ('base', base), ('theirs', theirs)):
+                path = Path(tmp) / name
+                path.write_bytes(text.encode('utf-8', 'surrogateescape'))
+                paths.append(str(path))
+            proc = subprocess.run([git, 'merge-file', '-p', '-q', *paths], stdout=subprocess.PIPE,
+                                  stderr=subprocess.DEVNULL, timeout=_MERGE_FILE_TIMEOUT,
+                                  start_new_session=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    merged = proc.stdout.decode('utf-8', 'surrogateescape')
+    return merged if same_code(merged, theirs) else None
+
+
+def _three_code(base, ours, theirs, in_scope=True, merge_comments=True):
+    """_three with comment-only differences made neutral (user direction 2026-09-19).
+
+    Returns (text, status, note). A region theirs changes only in comments
+    never conflicts: outside the allocation (`in_scope` False) or where the
+    target changed the region too, the target's text is kept and `note` says
+    so. Where the target changed only comments and theirs changes code, theirs
+    is taken, with the target's comment edits merged in when that merges
+    cleanly. Every code change keeps exactly the status `_three` gives it.
+    """
+    text, status = _three(base, ours, theirs)
+    if not (status == 'conflict' or (status == 'theirs' and not in_scope)):
+        return text, status, None
+    if same_code(base, theirs):
+        kept = 'ours' if _norm_block(ours) != _norm_block(base) else 'same'
+        if status == 'theirs':
+            return ours, kept, dict(kind='comment_only_change_ignored',
+                                    detail='the patch changes only comments here, outside its allocation; '
+                                           'comment-only changes never conflict, and the target keeps its text')
+        return ours, kept, dict(kind='comment_only_change_superseded',
+                                detail='the patch changes only comments here and the target changed this '
+                                       'region as well; the target keeps its text')
+    if status == 'conflict' and same_code(base, ours):
+        merged = _merge_comment_edits(base, ours, theirs) if merge_comments else None
+        if merged is not None:
+            return merged, 'theirs', dict(kind='target_comment_edits_merged',
+                                          detail='the target changed only comments here and the patch changes '
+                                                 'the code; the patch is applied and the target\'s comment '
+                                                 'edits are kept (git merge-file, clean)')
+        return theirs, 'theirs', dict(kind='target_comment_edits_superseded',
+                                      detail='the target changed only comments here and the patch changes the '
+                                             'code; the patch text is taken, so the target\'s comment edits in '
+                                             'this region are not kept')
+    return text, status, None
+
+
+def merge3(base, ours, theirs, names=None, allowed=None, comments='strict', interstitial_allowed=None):
     """Function-level three-way merge of TU objects. Returns a result dict.
 
     result['text'] is None when there are conflicts. Conflicts: structural
     (function missing/reordered), prelude (non-additive change, name clash),
     function changed on both sides, removal of accepted C or accepted asm,
     interstitial/epilogue text changed on both sides, change outside `allowed`.
+
+    `interstitial_allowed` names functions outside `allowed` whose interstitial
+    text (the file-scope text just before the function) the patch may change
+    anyway: the worker's explicit, reasoned waiver
+    `merge:interstitial_outside_allocation:<function>` (tools/worker.py result
+    --allow-preflight). It is applied only when the function's own block is
+    unchanged by the patch and the edit removes no function definition and no
+    INCLUDE_ASM/ACCEPTED_ASM item of the base's interstitial text; otherwise it
+    stays the `interstitial_outside_allocation` conflict. Each applied edit is
+    reported in result['notes'] as `interstitial_outside_allocation_waived`, for
+    the reviewer to judge; the whole-file gate and the TU audit stay the proof.
+
+    A difference that is only in comments is never one of them (user direction
+    2026-09-19): see merge_prelude and _three_code. It is reported in
+    result['notes'] (`prelude_comment_*`, `comment_only_change_*`,
+    `target_comment_edits_*`), and every code change is treated as before.
     """
     names = [b.key for b in base.functions()] if names is None else [n for n in names if n not in base.covered]
     result = dict(schema=SCHEMA_MERGE, conflicts=[], notes=[], applied=[], text=None,
@@ -1426,15 +2098,52 @@ def merge3(base, ours, theirs, names=None, allowed=None, comments='strict'):
         result['conflicts'].append(dict(kind='structure', side=e.label, missing=e.missing,
                                         detail='the original function sequence differs', found=e.got))
         return result
+    head = dict(result)
+    result = _merge_regions(head, base, rb, ro, rt, names, allowed, comments, True, interstitial_allowed)
+    if result.pop('_merged_comment_edits', False) and result['text'] is None and any(
+            c['kind'] == 'structure' for c in result['conflicts']):
+        # A region merged with the target's comment edits broke the layout:
+        # take the patch text for those regions instead (never a new conflict).
+        result = _merge_regions(head, base, rb, ro, rt, names, allowed, comments, False, interstitial_allowed)
+        result.pop('_merged_comment_edits', None)
+    return result
+
+
+_DEFINITION_HEAD = re.compile(r'^[^;{}]*\)\s*\{')
+_COMMENTS = re.compile(r'/\*.*?\*/|//[^\n]*', re.S)
+
+
+def _interstitial_code_removed(base_text, theirs_text):
+    """Function definitions and INCLUDE_ASM/ACCEPTED_ASM items of `base_text`
+    (an interstitial region) that `theirs_text` no longer contains."""
+    base_items, _ = prelude_items(base_text)
+    theirs_items = {_norm(t) for _, t in prelude_items(theirs_text)[0]}
+    removed = []
+    for _, item in base_items:
+        code = _COMMENTS.sub(' ', item).strip()
+        if not code:
+            continue
+        if (_MACRO_ITEM.search(code) or _DEFINITION_HEAD.match(code)) and _norm(item) not in theirs_items:
+            removed.append(code.splitlines()[0][:80])
+    return removed
+
+
+def _merge_regions(head, base, rb, ro, rt, names, allowed, comments, merge_comments, interstitial_allowed=None):
+    result = dict(head, conflicts=list(head['conflicts']), notes=list(head['notes']), applied=list(head['applied']))
     prelude, conflicts, notes = merge_prelude(rb.prelude, ro.prelude, rt.prelude, comments)
     result['conflicts'] += conflicts
     result['notes'] += notes
     pre, block = {}, {}
     for n in names:
         bs, os_, ts = rb.state[n], ro.state[n], rt.state[n]
-        text, status = _three(rb.block[n], ro.block[n], rt.block[n])
+        in_scope = allowed is None or any(same_function(a, n) for a in allowed)
+        text, status, note = _three_code(rb.block[n], ro.block[n], rt.block[n], in_scope, merge_comments)
+        if note:
+            result['notes'].append(dict(note, function=n))
+            if note['kind'] == 'target_comment_edits_merged':
+                result['_merged_comment_edits'] = True
         theirs_changed = status in ('theirs', 'both_same') or status == 'conflict'
-        if theirs_changed and allowed is not None and not any(same_function(a, n) for a in allowed):
+        if theirs_changed and not in_scope:
             result['conflicts'].append(dict(kind='outside_allocation', function=n,
                                             detail='the patch changes a function it was not allocated'))
         if theirs_changed and bs == 'c' and ts != 'c':
@@ -1454,20 +2163,43 @@ def merge3(base, ours, theirs, names=None, allowed=None, comments='strict'):
                 if bs == 'accepted_asm' and ts == 'c':
                     result['notes'].append(dict(kind='replaces_accepted_asm', function=n))
         block[n] = text if text is not None else ro.block[n]
-        ptext, pstatus = _three(rb.pre[n], ro.pre[n], rt.pre[n])
+        ptext, pstatus, note = _three_code(rb.pre[n], ro.pre[n], rt.pre[n], in_scope, merge_comments)
+        if note:
+            result['notes'].append(dict(note, interstitial_before=n))
+            if note['kind'] == 'target_comment_edits_merged':
+                result['_merged_comment_edits'] = True
         if pstatus == 'conflict':
             result['conflicts'].append(dict(kind='interstitial_both_changed', before_function=n))
             ptext = ro.pre[n]
         elif pstatus in ('theirs', 'both_same'):
-            if allowed is not None and not any(same_function(a, n) for a in allowed):
-                result['conflicts'].append(dict(
-                    kind='interstitial_outside_allocation', before_function=n,
-                    detail='the patch changes file-scope text before a function it was not allocated (it can '
-                           'redefine macros or data other functions use)'))
+            waived = not in_scope and bool(interstitial_allowed) and any(
+                same_function(a, n) for a in interstitial_allowed)
+            removed = _interstitial_code_removed(rb.pre[n], rt.pre[n]) if waived else []
+            block_changed = status in ('theirs', 'both_same', 'conflict')
+            if not in_scope and not (waived and not removed and not block_changed):
+                detail = ('the patch changes file-scope text before a function it was not allocated (it can '
+                          'redefine macros or data other functions use)')
+                if waived and block_changed:
+                    detail += '; the waiver does not apply: the function\'s own block changed too'
+                if waived and removed:
+                    detail += f'; the waiver does not apply: the edit removes {removed}'
+                result['conflicts'].append(dict(kind='interstitial_outside_allocation', before_function=n,
+                                                detail=detail))
+            elif not in_scope:
+                result['applied'].append(dict(interstitial_before=n, waived=True))
+                result['notes'].append(dict(
+                    kind='interstitial_outside_allocation_waived', before_function=n,
+                    detail='the patch changes file-scope text before a function it was not allocated; applied '
+                           'under the worker\'s recorded waiver (the function\'s own block is unchanged and no '
+                           'definition or asm include is removed): the reviewer must judge the edit'))
             else:
                 result['applied'].append(dict(interstitial_before=n))
         pre[n] = ptext
-    etext, estatus = _three(rb.epilogue, ro.epilogue, rt.epilogue)
+    etext, estatus, note = _three_code(rb.epilogue, ro.epilogue, rt.epilogue, True, merge_comments)
+    if note:
+        result['notes'].append(dict(note, epilogue=True))
+        if note['kind'] == 'target_comment_edits_merged':
+            result['_merged_comment_edits'] = True
     if estatus == 'conflict':
         result['conflicts'].append(dict(kind='epilogue_both_changed'))
         etext = ro.epilogue
@@ -1544,7 +2276,11 @@ def patch_to_theirs(base, patch, names=None):
         else:
             raise EditError(f'prelude anchor not found in base: {after[:60]!r}')
         gap = entry.get('gap', '\n')
-        items.insert(pos, (gap if gap.strip() == '' and ('\n' in gap or pos == 0) else '\n', text))
+        # `after` is always the item immediately before this one in theirs
+        # (make_patch), so a trailing same-line comment keeps its gap there.
+        keep = gap.strip() == '' and ('\n' in gap or pos == 0 or
+                                      (after is not None and _same_line_comment_gap(text, gap)))
+        items.insert(pos, (gap if keep else '\n', text))
     prelude = _emit_prelude(items, tail)
     pre, block = dict(rb.pre), dict(rb.block)
     for n, spec in patch.get('functions', {}).items():
@@ -1572,9 +2308,9 @@ def patch_to_theirs(base, patch, names=None):
     return out
 
 
-def apply_patch(base, target, patch, names=None, allowed=None, comments='strict'):
+def apply_patch(base, target, patch, names=None, allowed=None, comments='strict', interstitial_allowed=None):
     theirs = patch_to_theirs(base, patch, names)
-    return merge3(base, target, theirs, names, allowed, comments)
+    return merge3(base, target, theirs, names, allowed, comments, interstitial_allowed)
 
 
 # ---------------------------------------------------------------------------
@@ -1656,6 +2392,10 @@ def main(argv=None):
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument('--body', help='file holding exactly the C definition')
     g.add_argument('--from-source', help='C file to take the definition of NAME (or --as) from')
+    p.add_argument('--with-declarations', action='store_true',
+                   help='with --from-source: also take the declarations the file has before the '
+                        'definition (a bulk/m2c function file); the ones the TU lacks are placed '
+                        'just before the function. --body accepts such leading declarations always')
     p.add_argument('--as', dest='as_name', help='C function name when it differs from the block name')
     p.add_argument('--replace-accepted-asm', action='store_true')
     common(p, skeleton=False, out=True)
@@ -1697,6 +2437,9 @@ def main(argv=None):
     p.add_argument('--ours', required=True)
     p.add_argument('--theirs', required=True)
     p.add_argument('--allowed', action='append', help='functions the patch may change')
+    p.add_argument('--interstitial-allowed', action='append',
+                   help='functions outside --allowed whose preceding file-scope text the patch may change '
+                        '(a recorded merge:interstitial_outside_allocation waiver)')
     p.add_argument('--comments', choices=('strict', 'ours'), default='strict')
     common(p, out=True)
     p = sub.add_parser('make-patch', help='function-level patch base -> theirs')
@@ -1711,6 +2454,7 @@ def main(argv=None):
     p.add_argument('--target', required=True)
     p.add_argument('--patch', required=True)
     p.add_argument('--allowed', action='append')
+    p.add_argument('--interstitial-allowed', action='append')
     p.add_argument('--comments', choices=('strict', 'ours'), default='strict')
     common(p, out=True)
     args = ap.parse_args(argv)
@@ -1772,11 +2516,19 @@ def main(argv=None):
             if args.body:
                 body = _read(args.body)
             else:
-                body = extract_function(_read(args.from_source), args.as_name or args.name)
-            out = to_c(tu, args.name, body, args.as_name, args.replace_accepted_asm)
+                body = extract_function(_read(args.from_source), args.as_name or args.name,
+                                        declarations=args.with_declarations)
+            report = {}
+            out = to_c(tu, args.name, body, args.as_name, args.replace_accepted_asm, report=report)
             _write(_out_target(args), out.text)
+            if report.get('added_declarations') or report.get('skipped_declarations'):
+                print(f'to-c {args.name}: {len(report["added_declarations"])} declaration(s) placed '
+                      f'before the function, {len(report["skipped_declarations"])} already declared '
+                      f'in the TU (skipped)', file=sys.stderr)
             if args.json:
-                print(json.dumps(dict(function=args.name, state='c', sha256=sha256_text(out.text))),
+                print(json.dumps(dict(function=args.name, state='c', sha256=sha256_text(out.text),
+                                      added_declarations=report.get('added_declarations') or [],
+                                      skipped_declarations=report.get('skipped_declarations') or [])),
                       file=sys.stderr)
             return 0
         if args.cmd == 'to-asm':
@@ -1849,11 +2601,13 @@ def main(argv=None):
             base = load_tu(args.base)
             if args.cmd == 'merge':
                 ours, theirs = load_tu(args.ours), load_tu(args.theirs)
-                result = merge3(base, ours, theirs, names, _names(args.allowed), args.comments)
+                result = merge3(base, ours, theirs, names, _names(args.allowed), args.comments,
+                                _names(args.interstitial_allowed))
             else:
                 target = load_tu(args.target)
                 patch = json.loads(_read(args.patch))
-                result = apply_patch(base, target, patch, names, _names(args.allowed), args.comments)
+                result = apply_patch(base, target, patch, names, _names(args.allowed), args.comments,
+                                     _names(args.interstitial_allowed))
             text = result.pop('text')
             if text is not None:
                 dest = args.ours if (args.cmd == 'merge' and args.in_place) else (

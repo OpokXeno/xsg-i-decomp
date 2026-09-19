@@ -319,7 +319,26 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DM000);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DP000);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_PO000);
+/* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
+ * still asm in their defining TU; declared locally until published there. */
+extern void MEfObjDestroy(void *self);
+extern void sefHitEffect(void);
+
+/* Same frame gating as MSP00's fnMSP00_PO000 (see m_ef_create_msp_00.c),
+ * against this TU's own thresholds (MspEffect.frame above). */
+#define MSP02_HIT_FRAME 0x14
+#define MSP02_LIFETIME  0x1E
+
+static void fnMSP02_PO000(void *self, MspEffect *effect)
+{
+    effect->frame++;
+    if (effect->frame == MSP02_HIT_FRAME) {
+        sefHitEffect();
+    }
+    if (effect->frame >= MSP02_LIFETIME) {
+        MEfObjDestroy(self);
+    }
+}
 
 static float adjAngle(float first, float second, float bound)
 {

@@ -5,17 +5,80 @@
 #include "shared.h"
 #include "rg_dispmodel.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", InitRgDispModel);
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
+                       int line);
+extern void XrgUnitMatrix(RgMatrix destination);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", DisposeRgDispModel);
+/*
+ * External file-backed witnesses, not candidate-emitted data: this window is
+ * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
+ *
+ * ov12:0x00a58720 contains the assertion expression "pDispModel != NIL".
+ * ov12:0x00a58738 contains the source filename "../rg_dispmodel.euc.c".
+ */
+extern const char D_00A58720[];
+extern const char D_00A58738[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelDisplay);
+void InitRgDispModel(RgDispModel *pDispModel)
+{
+    if (pDispModel == 0) {
+        assert_prog(D_00A58720, D_00A58738, 18);
+    }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelSetMode);
+    pDispModel->dispMethod = 0;
+    pDispModel->destructMethod = 0;
+    pDispModel->mode = 0;
+    pDispModel->transparent = 1.0f;
+    pDispModel->blight = 1.0f;
+    XrgUnitMatrix(pDispModel->local);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelResetMode);
+void DisposeRgDispModel(RgDispModel *pDispModel)
+{
+    if (pDispModel == 0) {
+        assert_prog(D_00A58720, D_00A58738, 30);
+    }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelSetLocal);
+    if (pDispModel->destructMethod != 0) {
+        pDispModel->destructMethod(pDispModel);
+    }
+    RgHeapFree(InstanceOfRgHeap(), pDispModel, D_00A58738, 33);
+}
+
+void RgDispModelDisplay(RgDispModel *pDispModel)
+{
+    if (pDispModel == 0) {
+        assert_prog(D_00A58720, D_00A58738, 41);
+    }
+
+    if (pDispModel->dispMethod != 0 && !(pDispModel->mode & 2)) {
+        pDispModel->dispMethod(pDispModel);
+    }
+}
+
+void RgDispModelSetMode(RgDispModel *pDispModel, int mode)
+{
+    if (pDispModel != 0) {
+        pDispModel->mode |= mode;
+    }
+}
+
+void RgDispModelResetMode(RgDispModel *pDispModel, int mode)
+{
+    if (pDispModel != 0) {
+        pDispModel->mode &= ~mode;
+    }
+}
+
+void RgDispModelSetLocal(RgDispModel *pDispModel, const RgMatrix source)
+{
+    if (pDispModel != 0) {
+        XrgCopyMatrix(pDispModel->local, source);
+    }
+}
 
 /*
  * RgDispModel keeps its local four-by-four matrix at byte offset zero.  The
@@ -29,8 +92,27 @@ void RgDispModelGetLocal(void *model, RgMatrix destination)
         XrgCopyMatrix(destination, (float *)model);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelSetTransparent);
+void RgDispModelSetTransparent(RgDispModel *pDispModel, float transparent)
+{
+    if (pDispModel != 0) {
+        pDispModel->transparent = transparent;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelSetBlight);
+void RgDispModelSetBlight(RgDispModel *pDispModel, float blight)
+{
+    if (pDispModel != 0) {
+        pDispModel->blight = blight;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_dispmodel", RgDispModelGetTransparent);
+float RgDispModelGetTransparent(RgDispModel *pDispModel)
+{
+    float transparent;
+
+    transparent = 0.0f;
+    if (pDispModel != 0) {
+        transparent = pDispModel->transparent;
+    }
+    return transparent;
+}

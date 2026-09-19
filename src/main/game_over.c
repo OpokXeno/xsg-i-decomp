@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "main/xgl_thread.h"
 #include "game_over.h"
+#include "main/xgl_packet.h"
 
 extern GameLoopStatePrefix GameLoopState;
 

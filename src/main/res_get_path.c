@@ -7,6 +7,12 @@ extern void Intermission(int save_number);
 extern int xglCdGetFileSize(const char *name);
 extern int arcfilepreload;
 extern char scene_txt_buffer[];
+extern void SCRIPT_fade(int time);
+extern char *command_mpeg2_core(int command, char *cursor, int mode);
+extern int next_arc_size(void *address);
+extern void Enemy_LoadPreset(void *address, const char *name);
+extern u32 *arcfileaddr;
+extern void *AdrsEnemyPreset;
 #include "main/xgl_thread.h"
 
 typedef struct {
@@ -148,7 +154,43 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadface);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadmot);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", RES_GetFootStepNo);
+/*
+ * The engine's actor record: main/tu194 (src/main/enemy_2.h) defines and
+ * owns it. This TU only reads the resource pointer past that definition's
+ * extent, so it names the same tag without completing it (no local header
+ * can include another TU's TU-local one) rather than modelling a
+ * competing layout.
+ */
+struct Actor;
+
+/*
+ * The resource record an actor's `resource` pointer refers to.
+ * RES_GetFootStepNo is the only reader in this TU, and it reads only the
+ * footstep number byte at +6; the bytes before it are an unread span here.
+ */
+typedef struct ActorResource {
+    unsigned char unmodeled_000[6];
+    u8 foot_step_no; /* +6 */
+} ActorResource;
+
+/*
+ * +0x8dc: the actor's resource pointer, past the extent src/main/enemy_2.h
+ * completes; RES_GetFootStepNo is the only reader of it in this TU.
+ */
+#define ACTOR_RESOURCE_OFFSET 0x8dc
+#define ACTOR_RESOURCE(actor) \
+    (*(ActorResource **)((unsigned char *)(actor) + ACTOR_RESOURCE_OFFSET))
+
+u8 RES_GetFootStepNo(struct Actor *actor)
+{
+    ActorResource *resource = ACTOR_RESOURCE(actor);
+    u8 foot_step_no = 0;
+
+    if (resource != 0) {
+        foot_step_no = resource->foot_step_no;
+    }
+    return foot_step_no;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadtex);
 
@@ -158,7 +200,16 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadeffect_sub);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadeffect);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadene_sub);
+/* RES_loadFile callback: (resource type, file name, resource address). */
+static int command_loadene_sub(int type, const char *name, void *address)
+{
+    if (arcfileaddr != 0)
+        next_arc_size(AdrsEnemyPreset);
+    else
+        Enemy_LoadPreset(AdrsEnemyPreset, name);
+
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadene);
 
@@ -180,7 +231,11 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2_core);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2battle);
+static char *command_mpeg2battle(int command, char *cursor, int mode)
+{
+    SCRIPT_fade(2);
+    return command_mpeg2_core(command, cursor, 1);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2nofade);
 
@@ -190,7 +245,10 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_player_lock);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_enenpcse);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_enese);
+static char *command_enese(int command, char *cursor, int mode)
+{
+    return command_enenpcse(command, cursor, 0);
+}
 
 static char *command_npcse(int command, char *cursor, int mode)
 {

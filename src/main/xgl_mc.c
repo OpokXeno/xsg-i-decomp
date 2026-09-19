@@ -28,7 +28,49 @@ void xglMcReset(void)
     mw[0] = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_mc", xglMcEUC2SJIS);
+/*
+ * Converts one EUC-JIS double-byte character to Shift-JIS in place: hi and
+ * lo hold the character's lead and trail byte, EUC-encoded on entry and
+ * Shift-JIS on return. Called from xglMcSetMapName while building a memory
+ * card map name.
+ */
+static void xglMcEUC2SJIS(u8 *hi, u8 *lo)
+{
+    u32 hi_byte;
+    int lo_byte;
+    u8 sjis_hi;
+    u8 sjis_lo;
+
+    hi_byte = ((*hi) + 0x80) & 0xFF;
+    lo_byte = ((*lo) + 0x80) & 0xFF;
+    sjis_hi = hi_byte;
+    if (sjis_hi & 1)
+    {
+        lo_byte = lo_byte + 0x1F;
+        sjis_hi = (sjis_hi >> 1) + 0x71;
+    }
+    else
+    {
+        lo_byte = lo_byte + 0x7D;
+        sjis_hi = (sjis_hi >> 1) + 0x70;
+    }
+    sjis_lo = lo_byte & 0xFF;
+    if (sjis_hi >= 0xA0U)
+    {
+        sjis_hi = (sjis_hi + 0x40) & 0xFF;
+    }
+    if (sjis_lo >= 0x7FU)
+    {
+        sjis_lo = (sjis_lo + 1) & 0xFF;
+    }
+    if ((sjis_hi == 0x87) && (sjis_lo == 0x54))
+    {
+        sjis_hi = 0x82;
+        sjis_lo = 0x50;
+    }
+    *hi = sjis_hi;
+    *lo = sjis_lo;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_mc", xglMcSetMapName);
 

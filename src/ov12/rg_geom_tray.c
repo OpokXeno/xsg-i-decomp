@@ -17,9 +17,38 @@ void InitRgGeomTray(RgGeom *geom)
     _InitRgGeomTray(geom);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_tray", CreateRgGeomTray);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(void *heap, unsigned int size,
+                         const char *source_file, int line);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_tray", RgGeomTraySetSize);
+RgGeom *CreateRgGeomTray(void)
+{
+    RgGeomTray *tray;
+
+    tray = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomTray), D_00A55228, 37);
+    _InitRgGeomTray((RgGeom *)tray);
+    return (RgGeom *)tray;
+}
+
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+
+void RgGeomTraySetSize(void *tray, float width, float height)
+{
+    RgGeomTray *pTray = tray;
+
+    if (pTray == 0) {
+        assert_prog(D_00A55218, D_00A55228, 48);
+    }
+    if (width <= 0.0f) {
+        width = 0.0f;
+    }
+    if (height <= 0.0f) {
+        height = 0.0f;
+    }
+    pTray->width = width;
+    pTray->height = height;
+}
 
 /*
  * The tray stores its local and inverse-local four-by-four matrices at byte

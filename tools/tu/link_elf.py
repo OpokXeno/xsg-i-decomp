@@ -40,7 +40,15 @@ def generate(unit_dir, unit, flavor, main_symbols=None):
     overlay = next((s.name for s in orig.sections if s.name.startswith("ov") and s.flags & 2), None)
     inputs = {}
     last = None
-    for obj, insec, pad in re.findall(r"(build/[\w/.\-]+\.o)\((\.\w+)\);|(\. \+= 0x[0-9A-Fa-f]+;)", rom_ld):
+    for obj, insec, pad, align in re.findall(r"(build/[\w/.\-]+\.o)\((\.\w+)\);|(\. \+= 0x[0-9A-Fa-f]+;)"
+                                             r"|(\. = ALIGN\(\d+\);)", rom_ld):
+        if align:
+            # a TU's declared tail alignment (tools/tu/tail_align.py), placed by
+            # tools/tu/ninja_ovl.py right after that TU's `.text`: it belongs to
+            # the same output section as the object before it.
+            if last is not None:
+                inputs[last].append(align[:-1])
+            continue
         if pad:
             # splat `pad` subsegment: inside an overlay section it is part of the
             # section (e.g. OV10's 2-byte tail); in MAIN pads are inter-section gaps

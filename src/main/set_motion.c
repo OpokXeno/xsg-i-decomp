@@ -14,7 +14,22 @@ INCLUDE_ASM("asm/main/nonmatchings/set_motion", Sound_FootStep);
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySound);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySoundEnd);
+extern int RES_GetEnemySeBank(int sound_id);
+extern void xglSoundEffectStopID(int sound_id, int flags);
+
+void EnemySoundEnd(Actor *actor, short sound_offset)
+{
+    xglSoundEffectStopID(
+        RES_GetEnemySeBank(*ACTOR_SOUND_EFFECT_ID(actor)) + (sound_offset & 0xffff),
+        ACTOR_NUMBER(actor) + 1);
+    /* The original keeps a real call here (jal xglSoundEffectStopID at
+     * 0x002d0868) followed by its own register restores and jr ra
+     * (0x002d0870..0x002d087c), instead of folding the call into a sibling
+     * jump. This no-op loop keeps the call out of tail position and
+     * reproduces that real call plus epilogue. */
+    do {
+    } while (0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySound_StopAll);
 
@@ -22,7 +37,13 @@ INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySound_Stop);
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", Get_JAVAReaction);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_motion", Get_DefaultMotion);
+short Get_DefaultMotion(Actor *actor, short motion_number)
+{
+    short *motion_table;
+
+    motion_table = ACTOR_DEFAULT_MOTION_TABLE(actor);
+    return motion_table[motion_number];
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", Before_Talk);
 

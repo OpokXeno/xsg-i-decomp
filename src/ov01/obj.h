@@ -40,6 +40,46 @@ typedef struct {
     ObjectTaskCallback exec;        /* +0x18 */
 } ObjectTaskNode;
 
+/* The bit curCmdSet (src/ov01/battle_init.c) sets on the same object's flags
+ * word when it installs a command whose selector is non-zero, and
+ * objCmdClear clears. */
+#define OBJCMD_QUEUE_PENDING 0x2
+
+/* One 20-byte queued command (the record curCmdSet copies in
+ * src/ov01/battle_init.c); objCmdPtrGet/objCmdTailGet/objCmdPop index it. */
+typedef struct {
+    int selector;
+    int argument;
+    int word08;
+    int word0c;
+    int word10;
+} ObjectCommandEntry;
+
+typedef struct {
+    int flags;
+    ObjectCommandEntry entries[5];
+    int writeIndex;
+    int readIndex;
+    int word70;
+    int word74;
+} ObjectCommandQueue;
+
+/*
+ * A ring of indices fifoInit establishes and fifoPop/fifoEdGet/fifoStGet/
+ * fifoNumGet read: base is the wraparound reset value (0 in every evidenced
+ * call), maxIndex is the highest valid cursor value (capacity - 1),
+ * readIndex/writeIndex are the cursors fifoStGet/fifoEdGet return, and count
+ * is the element count fifoNumGet returns.  No element storage is modelled:
+ * this unit only tracks the cursors into a buffer its callers own.
+ */
+typedef struct {
+    int base;       /* +0x00 */
+    int maxIndex;   /* +0x04 */
+    int readIndex;  /* +0x08 */
+    int writeIndex; /* +0x0C */
+    int count;      /* +0x10 */
+} Fifo;
+
 int xglTaskRemove(XglTaskPrefix *task);
 
 void objInit(void);
@@ -52,9 +92,13 @@ extern void objExecSub(void *manager);
 
 void objExec2(void);
 
+void objEntry(void *argument);
+
 ObjectTask *objEntry2(void *argument, ObjectTaskCallback callback);
 
 extern ObjectTask *objEntrySub(void *manager, void *argument, int reverse);
+
+void objEntryRev(void *argument);
 
 void objRemove(ObjectTask *task);
 
@@ -65,5 +109,27 @@ extern int printf(const char *format, ...);
 extern const char objRemoveError[];
 
 extern const char objRemovePureError[];
+
+void objCmdClear(ObjectTask *task);
+
+void *objCmdPtrGet(ObjectTask *task);
+
+void *objCmdTailGet(ObjectTask *task);
+
+extern const char D_00A438A0[];
+
+void *objCmdPop(ObjectTask *task);
+
+void fifoInit(Fifo *fifo, int capacity);
+
+extern const char D_00A438D8[];
+
+int fifoPop(Fifo *fifo);
+
+int fifoEdGet(Fifo *fifo);
+
+int fifoStGet(Fifo *fifo);
+
+int fifoNumGet(Fifo *fifo);
 
 #endif /* SRC_OV01_OBJ_H */

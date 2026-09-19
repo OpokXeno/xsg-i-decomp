@@ -139,7 +139,9 @@ extern void nmlPacketAddTransData(NmlMaterialRenderState *material);
 
 extern void nmlPacketAddWaitMicrocode(void);
 
-extern NmlPacket s_pPacket;
+extern XglPacket *s_pPacket;
+
+void nmlPacketSetCurrent(void);
 
 extern int s_nReflRotType;
 

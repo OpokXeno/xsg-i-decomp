@@ -2,9 +2,13 @@
 #include "shared.h"
 #include "main/xgl_2.h"
 #include "nml_packet_add.h"
+#include "main/xgl_packet.h"
 
 /* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
 #define VIF_CODE_MSCAL 0x14000000
+
+/* VIF command FLUSH: wait for the VU1 microprogram to finish. */
+#define VIF_CODE_FLUSH 0x11000000
 
 /*
  * One s_aUcodeTbl row (0x1c bytes; the 168-byte symbol holds six rows).
@@ -55,7 +59,12 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddScreen);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddPixelTestPacket);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddWaitMicrocode);
+void nmlPacketAddWaitMicrocode(void)
+{
+    s_pPacket = xglPacketGetCurrent();
+    sceVif1PkCnt(s_pPacket, 0);
+    sceVif1PkAddCode(s_pPacket, VIF_CODE_FLUSH);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddBlockMaterial);
 
@@ -65,9 +74,31 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSendCircleTexture);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketTextureTrans);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketClrTextureCache);
+/* The cached texture built by the (still asm) texture cache builder;
+ * cleared to invalidate it, like s_pMatrixCache/s_pModelCache/
+ * s_pModelLayout/s_pLightLayout below. */
+extern void *s_pCacheTexture;
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketClrModelCache);
+void nmlPacketClrTextureCache(void)
+{
+    s_pCacheTexture = 0;
+}
+
+/* The cached VU1 upload state a model was last sent with: matrix data,
+ * model geometry and the light/model attribute layouts. Cleared together
+ * to force the next nmlPacket* draw call to resend all four. */
+extern void *s_pMatrixCache;
+extern void *s_pModelCache;
+extern void *s_pModelLayout;
+extern void *s_pLightLayout;
+
+void nmlPacketClrModelCache(void)
+{
+    s_pMatrixCache = 0;
+    s_pModelCache = 0;
+    s_pModelLayout = 0;
+    s_pLightLayout = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddTexture);
 
@@ -361,7 +392,28 @@ void nmlPacketAddExecProg(NmlMaterialRenderState *material,
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddTransData);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData);
+extern void *memcpy(void *destination, const void *source, unsigned int count);
+
+/*
+ * Both allocators here (and nmlPacketSetAttributeData16N/64/64N, still
+ * INCLUDE_ASM in this TU) share one pattern: fetch the current packet,
+ * decrement its cursor (main/xgl_packet.h, "+0x24: the write cursor") by the
+ * requested size, and hand back the new cursor as the reserved storage's
+ * address. A plain `packet->cursor` read after the subtraction lets gcc 2.96
+ * -O2 prove the earlier write cannot alias it and cache the value across the
+ * memcpy call, dropping the reload the original object performs; reading
+ * through a cast on the field's own address defeats that alias proof.
+ */
+u8 *nmlPacketSetAttributeData(const void *data, u32 size)
+{
+    XglPacket *packet;
+
+    packet = xglPacketGetCurrent();
+    s_pPacket = packet;
+    *(u8 **)&packet->cursor -= size;
+    memcpy(*(u8 **)&s_pPacket->cursor, data, size);
+    return *(u8 **)&s_pPacket->cursor;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData64);
 
@@ -369,7 +421,16 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData64N
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData16N);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeAlloc16N);
+/* Same aliasing proof as nmlPacketSetAttributeData above (main 0x00238e00). */
+u8 *nmlPacketSetAttributeAlloc16N(u32 count)
+{
+    XglPacket *packet;
+
+    packet = xglPacketGetCurrent();
+    s_pPacket = packet;
+    *(u8 **)&packet->cursor -= count * 0x10;
+    return *(u8 **)&s_pPacket->cursor;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGifTag);
 
@@ -381,7 +442,10 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddPixelControl);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketDirectData);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetCurrent);
+void nmlPacketSetCurrent(void)
+{
+    s_pPacket = xglPacketGetCurrent();
+}
 
 void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
                          const NmlModelRenderState *model)
@@ -418,7 +482,12 @@ void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddScreenClear);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketGsInit);
+extern int g_nGsEntry;
+
+void nmlPacketGsInit(void)
+{
+    g_nGsEntry = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsClamp);
 

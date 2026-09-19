@@ -5,6 +5,22 @@
 #ifndef SRC_OV12_RG_SELECT_ROBOT_H
 #define SRC_OV12_RG_SELECT_ROBOT_H
 
+typedef struct RgSelectRobot RgSelectRobot;
+
+/*
+ * The observed access view: RgSelectRobotScreenPos writes the preview
+ * screen-position interpolation value at +0x138. CreateRgSelectRobot
+ * allocates 0x168 bytes for one; no member or size beyond +0x138 is
+ * claimed.
+ */
+struct RgSelectRobot {
+    unsigned char unmodeled_00[0x138];
+    float screenPos;
+};
+
+/* The allocation size CreateRgSelectRobot requests for one RgSelectRobot. */
+#define RG_SELECT_ROBOT_SIZE 0x168
+
 /* Loader state evidenced by the bounded adjacent load routines. */
 extern int s_bLoading;
 

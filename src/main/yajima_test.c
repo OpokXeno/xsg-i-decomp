@@ -21,6 +21,18 @@ extern int xglHddActivate(int state);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern void xglSleep(void);
 
+/* tya* are defined in main/tu133 (tyaCaptureStart, tyaCaptureEnd),
+ * main/tu134 (tyaMenuBgEntry), main/tu135 (tyaElevatorTask), main/tu136
+ * (tyaDisplaySetting) and main/tu137 (tyaDrawGauge), none recovered yet;
+ * every call in this TU passes literal 0 arguments, so only the argument
+ * count is evidenced. */
+extern void tyaCaptureStart(int, int);
+extern void tyaCaptureEnd(void);
+extern void tyaMenuBgEntry(int, int);
+extern void tyaElevatorTask(int);
+extern void tyaDisplaySetting(int);
+extern void tyaDrawGauge(int);
+
 /* "hdd0:" (0x004DA2D0) and "hdd:" (0x004DA2E0): HddTestFormat's record spelled
  * the first one hdd_device_name, which HddTestShutdown's record uses for the
  * second. The merged TU keeps hdd_device for 0x004DA2D0 (canon, HddTest.c).
@@ -88,6 +100,10 @@ extern PadDataRawView PadData;
 static void HddTestMountCommon(void);
 static void HddTestMakeYourSaves(void);
 static void HddTestUnmountCommon(void);
+
+/* xtxdec_sleep (below) is still INCLUDE_ASM; declare it so xtxdec_error does
+ * not see an implicit declaration. */
+static int xtxdec_sleep(void);
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", testfunc);
 
@@ -342,10 +358,26 @@ INCLUDE_ASM("asm/main/nonmatchings/yajima_test", xtxdec_sub);
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", xtxdec_sleep);
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", xtxdec_error);
+static void xtxdec_error(int y, const char *message)
+{
+    while (xtxdec_sleep() == 0) {
+        xglFontDebugPrintf(0, y, message);
+        if (PAD_U16_AT(42) & 0x20) {
+            break;
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", XtxDecode);
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", Dummy);
+static void Dummy(void)
+{
+    tyaCaptureStart(0, 0);
+    tyaCaptureEnd();
+    tyaElevatorTask(0);
+    tyaMenuBgEntry(0, 0);
+    tyaDisplaySetting(0);
+    tyaDrawGauge(0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", YajimaTest);

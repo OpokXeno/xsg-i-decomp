@@ -19,13 +19,17 @@
  *   therefore `int`-typed.
  * - The sequence command wrappers in main/tu113 return the word at +0x08.
  *   Its protocol meaning is not yet known, so the neutral name is `value`.
+ * - SsdGetResultValue (main:0x002402a0) reads +0x00 as a signed halfword
+ *   (lh v0,128(a1)) and branches on it being negative before reporting the
+ *   "Rssd get result error !" message, i.e. it is a per-command error code
+ *   distinct from the RPC-level `result` at +0x02.
  */
 typedef struct RssdRpcResponse {
-    unsigned short _unmodeled_00; /* +0x00 */
-    short result;                 /* +0x02: nonzero -> error status (-1) */
-    int _unmodeled_04;            /* +0x04: 32-bit word, meaning not recovered */
-    int value;                    /* +0x08: command result value */
-    int _unmodeled_0c[5];         /* +0x0c..0x1f: 32-bit words, not read here */
+    short error_code;              /* +0x00: negative -> per-command error */
+    short result;                  /* +0x02: nonzero -> error status (-1) */
+    int _unmodeled_04;             /* +0x04: 32-bit word, meaning not recovered */
+    int value;                     /* +0x08: command result value */
+    int _unmodeled_0c[5];          /* +0x0c..0x1f: 32-bit words, not read here */
 } RssdRpcResponse;
 
 /* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
@@ -42,7 +46,15 @@ typedef struct RssdWorkFlags {
     int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
     unsigned char _unmodeled_004[0x0c];   /* +0x004..0x00f */
     unsigned short sample_rate;           /* +0x010: samples per second used by SsdGetTimeCode */
-    unsigned char _unmodeled_012[0x16];   /* +0x012..0x027 */
+    unsigned char _unmodeled_012[0x0e];   /* +0x012..0x01f */
+    /*
+     * Stored verbatim by SsdSetServerCallback (main:0x002403b0)
+     * `sw $5,36($2)` / `sw $4,32($2)`, $2 = &RssdWork. No recovered function
+     * reads them back, so their call signature is not evidenced and they
+     * stay untyped pointers named after the store site.
+     */
+    void *server_callback;                /* +0x020: SsdSetServerCallback arg0 */
+    void *server_callback_arg;            /* +0x024: SsdSetServerCallback arg1 */
     void (*complete_callback)(int status, RssdRpcResponse *response,
                               void *arg); /* +0x028: one-shot, cleared after use */
     void *callback_arg;                   /* +0x02c: third complete_callback argument */
@@ -50,7 +62,16 @@ typedef struct RssdWorkFlags {
     RssdRpcResponse *response_source;     /* +0x034: SIF RPC receive buffer */
     unsigned char _unmodeled_038[0x48];   /* +0x038..0x07f */
     RssdRpcResponse response;             /* +0x080..0x09f: copy of *response_source */
-    unsigned char _unmodeled_0a0[0x104];  /* +0x0a0..0x1a3 */
+    unsigned char _unmodeled_0a0[0xec];   /* +0x0a0..0x18b */
+    /*
+     * The SIF RPC receive queue RSsdSifRpcThread (main:0x0023fb90) hands to
+     * sceSifRpcLoop after RssdInitIop returns (`addiu a0,v0,-24052` off
+     * `lui v0,0x4b`, v0 = &RssdWork, i.e. &RssdWork + 0x18c). Its internal
+     * layout belongs to the SIF RPC middleware, not this TU, and is not
+     * evidenced by any recovered function; the reserved extent runs to the
+     * next evidenced field at +0x1a4.
+     */
+    unsigned char rpc_queue[0x18];        /* +0x18c..0x1a3: sceSifRpcLoop queue */
     /*
      * The two service threads SsdInit (main:0x0023f960) creates, each stored
      * as the (thread id, stack) pair the create/start idiom produces
@@ -86,7 +107,14 @@ typedef struct RssdWorkFlags {
     void *sample_dma_callback_arg;        /* +0x1ec: SsdSetSampleDmaCallback arg1 */
     void *sample_keyoff_callback;         /* +0x1f0: SsdSetSampleKeyoffCallback arg0 */
     void *sample_keyoff_callback_arg;     /* +0x1f4: SsdSetSampleKeyoffCallback arg1 */
-    unsigned char _unmodeled_1f8[0x08];   /* +0x1f8..0x1ff */
+    /*
+     * Stored verbatim by SsdSetStreamEndCallback (main:0x002403e0)
+     * `sw $5,508($2)` / `sw $4,504($2)`, $2 = &RssdWork. No recovered
+     * function reads them back, so their call signature is not evidenced
+     * and they stay untyped pointers named after the store site.
+     */
+    void *stream_end_callback;            /* +0x1f8: SsdSetStreamEndCallback arg0 */
+    void *stream_end_callback_arg;        /* +0x1fc: SsdSetStreamEndCallback arg1 */
 } RssdWorkFlags;
 
 /* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */

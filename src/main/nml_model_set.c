@@ -24,33 +24,130 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_LAYOUT_MODEL);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_CIRCLR_SHADOW);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_ALPHA_GROUP);
+static void CONSTRUCT_ALPHA_GROUP(void)
+{
+    s_nAlphaGroup = 0;
+    s_nNonAlphaGroup = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", INIT_ALPHA_GROUP);
+static void INIT_ALPHA_GROUP(void)
+{
+    CONSTRUCT_ALPHA_GROUP();
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_ALPHA_GROUP);
+static void FLUSH_ALPHA_GROUP(void)
+{
+    s_nAlphaGroup = 0;
+    s_nNonAlphaGroup = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_PROREAL);
+/*
+ * The only word this TU's CLEAR_PROREAL evidences within its caller's
+ * "proreal" render block (nmlModelClear passes &s_inProReal, main
+ * 0x0095b940, further modeled in part by src/main/nml_packet_add.h's
+ * NmlProRealParam at its own +0x11c field): nothing else in this
+ * allocation reads or writes byte offset 0x1c0, so it stays a named
+ * array index rather than a guessed struct member.
+ */
+static void CLEAR_PROREAL(int *proReal)
+{
+    proReal[0x1c0 / 4] = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_BACK_BUFFER);
+/*
+ * s_inBackBuffer (main 0x0095bb20, see the header comment) is reset one
+ * word at a time below; only +0x10 and +0x1c/+0x24 have evidenced roles
+ * within this allocation:
+ *   - +0x10 "owner index": set to -1 (no owner) by CONSTRUCT/INIT.
+ *   - +0x1c: D_0095BB3C, the flag nmlModelIsBackBufferRequest reads and
+ *     nmlModelSendPacketChangeSignal clears (both above, this TU).
+ *   - +0x24: D_0095BB44, the value nmlModelSetMpeg2CrossFadeTime writes;
+ *     INIT_BACK_BUFFER is the only one of these three that leaves it
+ *     untouched, preserving the configured cross-fade time.
+ */
+static void CONSTRUCT_BACK_BUFFER(void)
+{
+    s_inBackBuffer[0x10 / 4] = -1;
+    s_inBackBuffer[0x14 / 4] = 0;
+    s_inBackBuffer[0x00 / 4] = 0;
+    s_inBackBuffer[0x04 / 4] = 0;
+    s_inBackBuffer[0x08 / 4] = 0;
+    s_inBackBuffer[0x0c / 4] = 0;
+    s_inBackBuffer[0x18 / 4] = 0;
+    s_inBackBuffer[0x1c / 4] = 0;
+    s_inBackBuffer[0x20 / 4] = 0;
+    s_inBackBuffer[0x24 / 4] = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", INIT_BACK_BUFFER);
+static void INIT_BACK_BUFFER(void)
+{
+    s_inBackBuffer[0x10 / 4] = -1;
+    s_inBackBuffer[0x14 / 4] = 0;
+    s_inBackBuffer[0x00 / 4] = 0;
+    s_inBackBuffer[0x04 / 4] = 0;
+    s_inBackBuffer[0x08 / 4] = 0;
+    s_inBackBuffer[0x0c / 4] = 0;
+    s_inBackBuffer[0x18 / 4] = 0;
+    s_inBackBuffer[0x1c / 4] = 0;
+    s_inBackBuffer[0x20 / 4] = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_BACK_BUFFER);
+/*
+ * The active-request word FLUSH_BACK_BUFFER's caller (nmlModelFlushClear)
+ * clears once per frame; CONSTRUCT/INIT_BACK_BUFFER reset it the same way
+ * among the other words above.
+ */
+static void FLUSH_BACK_BUFFER(void)
+{
+    s_inBackBuffer[0x00 / 4] = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_PARENT_BUF);
+static void CONSTRUCT_PARENT_BUF(void)
+{
+    s_nParentBuf = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", INIT_PARENT_BUF);
+static void INIT_PARENT_BUF(void)
+{
+    CONSTRUCT_PARENT_BUF();
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_PARENT_BUF);
+static void FLUSH_PARENT_BUF(void)
+{
+    s_nParentBuf = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_MAP_HANDLE);
+/*
+ * mapHandle[0] and mapHandle[1] are the two words this TU's
+ * CONSTRUCT_MAP_HANDLE/CLEAR_MAP_HANDLE/FLUSH_MAP_HANDLE evidence within
+ * the caller's map-handle record (nmlModelConstruct passes &s_inMapHandle,
+ * main 0x0095db50): CLEAR_MAP_HANDLE resets only mapHandle[0] and
+ * FLUSH_MAP_HANDLE resets only mapHandle[1], so the two words are kept
+ * separate rather than folded into one guessed struct member.
+ */
+static void CONSTRUCT_MAP_HANDLE(int *mapHandle)
+{
+    /*
+     * The original writes word 0 and puts the word-1 store in the return's
+     * delay slot; the two stores are independent, and in declaration order
+     * cc1 schedules them the other way round (form 01, build/form-01,
+     * first difference at 0x6e8: sw zero,4(a0) for sw zero,0(a0)).
+     */
+    mapHandle[1] = 0;
+    mapHandle[0] = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", INIT_MAP_HANDLE);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_MAP_HANDLE);
+static void CLEAR_MAP_HANDLE(int *mapHandle)
+{
+    mapHandle[0] = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_MAP_HANDLE);
+static void FLUSH_MAP_HANDLE(int *mapHandle)
+{
+    mapHandle[1] = 0;
+}
 
 static void CONSTRUCT_FADE_CONTROL(FadeControl *control)
 {
@@ -72,11 +169,21 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_MODEL_ENTRY);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_MODELSYSTEM);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", INIT_MODELSYSTEM);
+/* CONSTRUCT_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so its
+ * caller does not see an implicit declaration. */
+static void CONSTRUCT_MODELSYSTEM(void);
+
+static void INIT_MODELSYSTEM(void)
+{
+    CONSTRUCT_MODELSYSTEM();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", FLUSH_MODELSYSTEM);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetBackBufferClear);
+void nmlModelSetBackBufferClear(void)
+{
+    INIT_BACK_BUFFER();
+}
 
 void nmlModelSetFaceModel(int enabled)
 {
@@ -154,7 +261,18 @@ void nmlModelSendPacketChangeSignal(void)
     D_0095BB3C[0] = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSendSignalMovieStart);
+/* INIT_BACK_BUFFER (above) is still INCLUDE_ASM; declare it so its caller
+ * does not see an implicit declaration. */
+static void INIT_BACK_BUFFER(void);
+
+void nmlModelSendSignalMovieStart(void)
+{
+    INIT_BACK_BUFFER();
+    INIT_FADE_CONTROL(&s_inFadeIn);
+    INIT_FADE_CONTROL(&s_inFadeOut);
+    INIT_FADE_CONTROL(&s_inActiveFadeIn);
+    INIT_FADE_CONTROL(&s_inActiveFadeOut);
+}
 
 void nmlModelSetMpeg2CrossFadeTime(int time)
 {
@@ -185,7 +303,10 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFadeOutCancel);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFadeDoit);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFadeDoit);
+void nmlModelSetFadeDoit(void)
+{
+    s_nFadeDoit = 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFadeOutDispose);
 
@@ -213,13 +334,19 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetBackBufferToEventS
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetBackBuffer);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetEffectWrite);
+void nmlModelSetEffectWrite(int enabled)
+{
+    s_nEffectWrite = enabled;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelUseSubWindow);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetWindow);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetSortOffset);
+void nmlModelSetSortOffset(float offset)
+{
+    s_fSortOffsetEntry = offset;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetGlobalPointLight);
 
@@ -233,7 +360,9 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetPointLight);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetSpecularOff);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetShadowMapId);
+void nmlModelSetShadowMapId(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetShadowHeight);
 
@@ -247,7 +376,10 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetTexProreal);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetAxisSymmetry);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetParent);
+void nmlModelSetParent(int parent)
+{
+    s_nParent = parent;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetRenderStatus);
 
@@ -376,7 +508,17 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFogCol);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFogPara);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFogDist);
+/* nmlModelFogPara (above) is still INCLUDE_ASM; declare it so its caller
+ * does not see an implicit declaration. */
+static void nmlModelFogPara(LayoutSlot *fog);
+
+#define NML_RENDER_FOG 0x2u
+
+void nmlModelSetFogDist(void)
+{
+    nmlModelFogPara(&s_inLayout.slots[0x1d0 / 4]);
+    s_inLayout.fields.render_status |= NML_RENDER_FOG;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetGlobalFogCol);
 
@@ -400,7 +542,10 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetMapShadowParts);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetMapLastEntry);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetMapLastInit);
+void nmlModelSetMapLastInit(void)
+{
+    s_nMapLast = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetPartsVisible);
 

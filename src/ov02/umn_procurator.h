@@ -5,8 +5,9 @@
 #ifndef SRC_OV02_UMN_PROCURATOR_H
 #define SRC_OV02_UMN_PROCURATOR_H
 
-extern void xglMatrixStackRotZ(float angle);
-
-extern void xglMatrixStackTrans(float *);
+/*
+ * The xglMatrixStack* wrappers Rotation calls come from their definer,
+ * main/tu100 xgl_2.c, through include/main/xgl_2.h.
+ */
 
 #endif /* SRC_OV02_UMN_PROCURATOR_H */

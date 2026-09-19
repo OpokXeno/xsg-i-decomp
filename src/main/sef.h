@@ -16,6 +16,33 @@ SchedulerState *sefGetNowScheduler(void);
 
 extern SchedulerState *_nowScheduler;
 
+/*
+ * SchedulerState's flags word, the only field of the 0xab0-byte record this
+ * TU dereferences by name: sefRewindEffectCf (main:0x002e7948) sets bit 0x1
+ * of it, and sefFreeScheduler (main:0x002e51a8, still assembly) tests the
+ * same word with a wider mask (0x202). Bytes before it are not yet evidenced
+ * by any accepted function in this TU.
+ */
+/*
+ * sefDestroyScriptScheduler2 (main:0x002e5320) reads a script_id/task_id
+ * pair right after flags, matched against its own two parameters to find
+ * the slot to free. The compiler materializes their common base (the
+ * record + 0xa90) once and reads both fields off it with small
+ * displacements, so this sub-record is named on its own instead of two
+ * flat members of SchedulerState.
+ */
+typedef struct ScriptBinding {
+    unsigned char unmodeled_0[2];
+    short script_id;
+    short task_id;
+} ScriptBinding;
+
+struct SchedulerState {
+    unsigned char unmodeled_0[0xa8c];
+    int flags;
+    ScriptBinding scriptBinding;
+};
+
 /* sefGetDirMatrix (main:0x002e2818) is still INCLUDE_ASM in this TU; declared
  * here so sefGetVecMatrix (main:0x002e2908) can call it. Caller evidence
  * (a0 unchanged destination matrix, a1 the temporary direction vector). */

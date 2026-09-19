@@ -113,7 +113,19 @@ INCLUDE_ASM("asm/main/nonmatchings/game", InitCfSystem);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", checkAttr);
 
-INCLUDE_ASM("asm/main/nonmatchings/game", getScriptFlag);
+#define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
+
+/*
+ * The actor record's layout beyond this field is not recovered here.
+ * talktoObserver (src/main/script.c) reads the same object's flags through
+ * this function and tests bit 3 (0x8) to decide whether pending pad input
+ * cancels a talk in progress.
+ */
+int getScriptFlag(SceneObject object)
+{
+    int *script_flags = (int *)((SceneByte *)object + ACTOR_SCRIPT_FLAGS_OFFSET);
+    return *script_flags;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game", checkTalk);
 

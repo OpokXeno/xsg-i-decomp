@@ -426,7 +426,24 @@ void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
     );
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglRotTransPers);
+/* xgl_studio.c owns StudioCamera and this accessor; no header is published
+ * for xgl_studio.c yet. */
+extern StudioCamera *xglStudioGetCamera2(int cameraId);
+
+float xglRotTransPers(Vector4 *out, const Matrix4 matrix, Vector4 *point, int cameraId)
+{
+    StudioCamera *camera;
+
+    xglMatrixStackPush();
+    camera = xglStudioGetCamera2(cameraId);
+    xglMatrixStackLoad(camera->viewMatrix);
+    if (matrix != 0) {
+        xglMatrixStackMul(matrix);
+    }
+    xglMatrixStackRTPS(out, point, &camera->screenScale, &camera->screenOffset);
+    xglMatrixStackPop(1);
+    return out->w;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglRotTransPersN);
 
@@ -1242,7 +1259,10 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglFSrand);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", F2I);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", I2F);
+float I2F(int value)
+{
+    return (float) value;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglSin);
 

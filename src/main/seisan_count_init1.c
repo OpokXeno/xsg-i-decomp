@@ -11,7 +11,12 @@ INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanNumberCount);
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanCountMain);
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", TskObjectSet2);
+void TskObjectSet2(TskObject *task, TskObjectWorker worker, void *data)
+{
+    task->data = data;
+    task->worker = worker;
+    task->state = 0;
+}
 
 void tskTskMain2(TskObject *task)
 {
@@ -47,15 +52,54 @@ INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanHissatuCheck00)
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanHissatuCheck01);
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanEtherCheck);
+int subSeisanEtherCheck(void)
+{
+    return 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanItemCheck);
+int subSeisanItemCheck(void)
+{
+    return 0x80;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanCheck);
+void subSeisanCheck(void)
+{
+    switch (SeisanWork[SEISAN_WORK_STATE]) {
+    case 0x20:
+        SeisanWork[SEISAN_WORK_NEXT_STATE] =
+            subSeisanHissatuCheck00(SeisanWork);
+        if (SeisanWork[SEISAN_WORK_NEXT_STATE] != 0)
+            break;
+        /* fallthrough */
+    case 0x50:
+        SeisanWork[SEISAN_WORK_NEXT_STATE] = subSeisanHissatuCheck01();
+        if (SeisanWork[SEISAN_WORK_NEXT_STATE] != 0)
+            break;
+        /* fallthrough */
+    case 0x58:
+        SeisanWork[SEISAN_WORK_NEXT_STATE] = subSeisanEtherCheck();
+        if (SeisanWork[SEISAN_WORK_NEXT_STATE] != 0)
+            break;
+        /* fallthrough */
+    case 0x60:
+        SeisanWork[SEISAN_WORK_NEXT_STATE] = subSeisanItemCheck();
+        if (SeisanWork[SEISAN_WORK_NEXT_STATE] != 0)
+            break;
+        /* fallthrough */
+    case 0x80:
+        SeisanWork[SEISAN_WORK_NEXT_STATE] = SEISAN_STATE_CLOSING;
+        SeisanWork[SEISAN_WORK_FLAGS] |= 4;
+        break;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanMain);
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanMain);
+int SeisanMain(void)
+{
+    subSeisanMain();
+    return SeisanWork[SEISAN_WORK_STATE] != SEISAN_STATE_FINISHED;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanDisp);
 

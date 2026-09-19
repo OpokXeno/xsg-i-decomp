@@ -4,7 +4,18 @@
 #include "common.h"
 #include "m_ef.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfCheckWorkSize);
+/*
+ * Rejects and logs an effect work request whose size exceeds the fixed
+ * 0x400-byte work buffer; accepts everything at or below it.
+ */
+int MEfCheckWorkSize(const char *name, int size)
+{
+    if (size >= 0x401) {
+        MOutputDebugStringWarn(D_00A512B0, name, size, 0x400);
+        return 0;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfCalcAngle);
 
@@ -14,7 +25,18 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfGetActorMatrix);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfGetActorCoord);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfDrawModel);
+/*
+ * Optionally binds the entry's texture, applies its placement matrix, then
+ * tail-calls the model system to draw the given entry.
+ */
+void MEfDrawModel(const Vector4 *place, int entry, const char *texture)
+{
+    if (texture != 0) {
+        nmlModelSetTexture(texture);
+    }
+    nmlModelSetPlace(place);
+    nmlModelEntry(entry);
+}
 
 /*
  * Builds the four corners of a square of the given half-size around source,

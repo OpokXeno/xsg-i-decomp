@@ -54,6 +54,10 @@ extern u8 cd_filename[];
 
 extern int xglHddCheck(void);
 
+extern void xglHddErrorScreen(void);
+
+extern void xglCdArcCheck(void);
+
 extern int sceMount(char *mount_point, char *device, int flags,
                     void *payload, unsigned int payload_length);
 

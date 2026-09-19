@@ -132,7 +132,22 @@ INCLUDE_ASM("asm/main/nonmatchings/get", Check_CrossingOver);
 
 INCLUDE_ASM("asm/main/nonmatchings/get", Check_InsideFan);
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Check_InsideFan_Wooo);
+/* Check_Angle: defined below in this file, still assembler. */
+extern int Check_Angle(float angle, float rangeStart, float rangeEnd);
+
+int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
+                         float facing, float radius, float fanWidthDegrees)
+{
+    int inside = 0;
+
+    if (!(radius < Get_Distance3D(origin, target))) {
+        float angle = Get_Angle(origin, target);
+        float halfWidth = (fanWidthDegrees / 180.0f) * D_004D81C8 * 0.5f;
+
+        inside = Check_Angle(angle, facing - halfWidth, facing + halfWidth) != 0;
+    }
+    return inside;
+}
 
 /* MARK: provisional extern block. All eight words are _gp-relative .sdata
    witnesses at 0x004d81cc..0x004d81e8. They are not proven original

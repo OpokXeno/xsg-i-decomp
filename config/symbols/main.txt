@@ -6816,3 +6816,5 @@ uet_file_end = 0x00A10D14; // size:0x4 segment:ov02
 UmnHistoryTreeBuf = 0x00A10D18; // size:0x4 segment:ov02
 UmnMailHeaderBuf = 0x00A10D1C; // size:0x4 segment:ov02
 umn_text = 0x00A10D20; // size:0x4 segment:ov02
+HddInstallParam = 0x00A13658; // original ELF symbol (NOTYPE LOCAL) segment:ov02
+base_tbl = 0x00A13668; // original ELF symbol (NOTYPE LOCAL) segment:ov02

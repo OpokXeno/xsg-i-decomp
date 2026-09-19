@@ -21,7 +21,9 @@ INCLUDE_ASM("asm/main/nonmatchings/endou_test", eModelTestMain);
 
 INCLUDE_ASM("asm/main/nonmatchings/endou_test", eModelTest);
 
-INCLUDE_ASM("asm/main/nonmatchings/endou_test", ePrintTest);
+void ePrintTest(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/endou_test", eMessageTest);
 
@@ -29,7 +31,9 @@ INCLUDE_ASM("asm/main/nonmatchings/endou_test", BgTest);
 
 INCLUDE_ASM("asm/main/nonmatchings/endou_test", TexturTest);
 
-INCLUDE_ASM("asm/main/nonmatchings/endou_test", UmnPrintTest);
+void UmnPrintTest(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/endou_test", UmnMailDispTest);
 

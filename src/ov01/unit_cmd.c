@@ -2,8 +2,19 @@
  * OV01 original TU 2: 0x00a00d60..0x00a07770 (119 functions)
  */
 #include "common.h"
+#include "shared.h"
+#include "unit_cmd.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitInit);
+extern unsigned char unitTbl[0x20];
+extern int unitPlNum;
+extern int unitEnNum;
+
+void unitInit(void)
+{
+    memset(unitTbl, 0, 0x20);
+    unitPlNum = 0;
+    unitEnNum = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTblGet);
 
@@ -19,7 +30,18 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitLiveNumGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitLiveNumGet2);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCidGet);
+int unitCidGet(ObjectTask *unit)
+{
+    int cid;
+
+    cid = dataCidGet(calcUPGet(unit)->charaId);
+    if (calcStatGet(unit, 7, 2) != 0) {
+        cid = 0x14;
+    } else if (calcStatGet(unit, 7, 1) != 0) {
+        cid = 0x15;
+    }
+    return cid;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitPlCreate);
 
@@ -33,11 +55,46 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitRemoveActor);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitRemove);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitLoad);
+void unitLoad(ObjectTask *unit, int mode)
+{
+    CalcUnitParam *up;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitActupdate);
+    up = calcUPGet(unit);
+    if (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3) {
+        if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY)) {
+            sefSetupPlayer(up->charaId, up->sefSetupParams[0],
+                           up->sefSetupParams[1], up->sefSetupParams[2]);
+        } else {
+            sefSetupEnemy(up->charaId);
+        }
+    }
+    dataUnitFileLoad(unit, mode);
+    dataSndSeRegLoad(unit);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitActdraw);
+void unitActupdate(Actor *actor)
+{
+    if (actor->flags & 0x8) { /* motion update does not run while set. */
+        return;
+    }
+    if (actor->flags & ACTOR_FLAG_ENEMY) {
+        actor->position.y = UnduGet(actor->position.x, actor->position.z);
+    }
+    actor->motionFrame += 1;
+    ACT_updateMotion(actor);
+}
+
+void unitActdraw(Actor *actor)
+{
+    float transparency;
+
+    transparency = actor->transparency;
+    if (transparency < 1.0f) {
+        nmlModelSetTransparency(transparency);
+        nmlModelSetToumei(1);
+        nmlModelSetZwrite(1);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitParaInit);
 
@@ -47,23 +104,49 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitEnInit);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitClipSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitPlFunc);
+void unitPlFunc(ObjectTask *unit)
+{
+    unitCmdExec(unit);
+    statEffProc(unit);
+    unitClipSet(unit);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitEnFunc);
+void unitEnFunc(ObjectTask *unit)
+{
+    unitCmdExec(unit);
+    statEffProc(unit);
+    unitClipSet(unit);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdClear);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdTailGet);
+void *unitCmdTailGet(ObjectTask *unit)
+{
+    return objCmdTailGet(unit);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdPtrGet);
+void *unitCmdPtrGet(ObjectTask *unit)
+{
+    return objCmdPtrGet(unit);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdNext);
+int unitCmdNext(ObjectTask *unit)
+{
+    return objCmdNext(unit);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdSet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdExec);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdFree);
+int unitCmdFree(ObjectTask *unit)
+{
+    Actor *actor;
+
+    actor = unit->work;
+    actor->flags &= ~ACTOR_FLAG_CMD_PENDING;
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdAtk);
 
@@ -81,7 +164,44 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdItem);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdItemSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMove);
+int unitCmdMove(UnitRecord *unit)
+{
+    Actor *actor;
+    CalcUnitParam *calcParam;
+    int useWarp;
+
+    actor = unit->task.work;
+    unitCmdPtrGet(&unit->task);
+    if (!(*(u32 *)unit->task.work & ACTOR_FLAG_ENEMY)) {
+        calcParam = calcUPGet(&unit->task);
+        useWarp = calcParam->flags & 0x40;
+    } else {
+        calcParam = calcUPGet(&unit->task);
+        useWarp = calcParam->moveKindId == 4;
+    }
+    switch (actor->moveState) {
+    case 0:
+        unitCmdDstSet(&unit->task, 3, 1);
+        if (!useWarp) {
+            unitCmdDirSet(unit);
+        }
+        calcUPGet(&unit->task);
+        unitCmdVASet(&unit->task, 3, 0);
+        actor->movePhase = 0;
+        actor->moveState++;
+        break;
+    case 1:
+        if (!useWarp) {
+            if (unitCmdJump(&unit->task, 3, 1, 1) != 0) {
+                unitCmdMoveNext(&unit->task, 1);
+            }
+        } else if (unitCmdWarp(&unit->task, 3, 1) != 0) {
+            unitCmdMoveNext(&unit->task, 1);
+        }
+        break;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdGuard);
 
@@ -91,7 +211,10 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdUnitChange);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdStand);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdEnd);
+int unitCmdEnd(ObjectTask *unit)
+{
+    return unitCmdStand(unit);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDmg);
 
@@ -169,11 +292,35 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdWarp);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDstSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDirSet);
+float unitCmdDirSet(UnitRecord *unit)
+{
+    float zero = 0.0f;
+    Actor *self = unit->task.work;
+    Vector4 *target = &self->cmdTarget;
+    Actor *motionActor = unit->motionActor;
+    float dx = target->x - motionActor->position.x;
+
+    if (dx != zero || (target->z - motionActor->position.z) != zero) {
+        motionActor->rotation.y = atan2f(dx, target->z - motionActor->position.z);
+        if (motionActor->rotation.y < zero) {
+            motionActor->rotation.y += 6.2831855f;
+        }
+    }
+    return motionActor->rotation.y;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdLenGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDivSet);
+void unitCmdDivSet(UnitRecord *unit, float distance, float step)
+{
+    Actor *self = unit->task.work;
+    Vector4 *target = &self->cmdTarget;
+    float ratio = step / distance;
+    Actor *motionActor = unit->motionActor;
+
+    target->x = motionActor->position.x + (target->x - motionActor->position.x) * ratio;
+    target->z = motionActor->position.z + (target->z - motionActor->position.z) * ratio;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdVASet);
 
@@ -187,7 +334,28 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdBtst);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdBted);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMtdProc);
+void unitMtdProc(UnitRecord *unit)
+{
+    int defaultWeapon;
+
+    defaultWeapon = dataDefWpnGet(unit);
+    if (dataMtdRead(unit, 2) == 1) {
+        transWepIn(unit, defaultWeapon);
+    }
+    if (dataMtdRead(unit, 3) == 1) {
+        transWepOut(unit, defaultWeapon);
+    }
+    if (dataMtdRead(unit, 6) == 1) {
+        transWepIn(unit, defaultWeapon);
+    }
+    if (dataMtdRead(unit, 6) == 1) {
+        transWepIn(unit, 1);
+    }
+    if (dataMtdRead(unit, 7) != 1) {
+        return;
+    }
+    transWepOut(unit, 1);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdRec);
 
@@ -221,13 +389,33 @@ void unitSetInterp(void *unit)
     *(int *)((unsigned char *)object + 0x100) = 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitSetInterpTime);
+void unitSetInterpTime(ObjectTask *unit, float time)
+{
+    ((UnitRecord *)unit)->motionActor->interpTime = time;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitWpnMotSet);
+void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
+{
+    Actor *actor;
+    unsigned int dataId;
+
+    if (weaponIndex >= 0) {
+        actor = ((UnitRecord *)unit)->wpnActor[weaponIndex & 3];
+        if (actor != 0) {
+            dataId = (animGroup << 8) + motion - 1;
+            if (ACT_animGetData(actor, dataId) != 0 || motion == 0xFF) {
+                ACT_setMotion(actor, dataId);
+            }
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitFaceMotSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotGet);
+int unitMotGet(ObjectTask *unit)
+{
+    return ((UnitRecord *)unit)->motionActor->motion + 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotStandSet);
 
@@ -245,8 +433,17 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitAgwsChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitIdChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDispOnAll);
+/* Defined later in this TU (a local sibling still in asm). */
+extern void unitDispOnOff(int flag);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDispOffAll);
+void unitDispOnAll(void)
+{
+    unitDispOnOff(0);
+}
+
+void unitDispOffAll(void)
+{
+    unitDispOnOff(1);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDispOnOff);

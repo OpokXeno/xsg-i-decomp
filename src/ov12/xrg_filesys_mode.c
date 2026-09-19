@@ -28,6 +28,11 @@ extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
 extern void RgError(const char *message, const char *source_file, int line, ...);
 extern RgHeap *InstanceOfRgHeapData(void);
 extern RgHeap *InstanceOfRgHeap(void);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
+                       int line);
+extern int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr);
+/* Assertion text "pBuf != NIL"; scaffold-owned .rodata keeps its splat name. */
+extern const char D_00A58F00[];
 
 static void _PushMode(int eMode)
 {
@@ -49,9 +54,15 @@ static int _CurMode(void)
     return s_aeModeStack[s_uStackTop - 1];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_filesys_mode", XrgFileSysPushMode);
+void XrgFileSysPushMode(int eMode)
+{
+    _PushMode(eMode);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_filesys_mode", XrgFileSysPopMode);
+void XrgFileSysPopMode(void)
+{
+    _PopMode();
+}
 
 int XrgFileSysModeGet(void)
 {
@@ -83,4 +94,13 @@ void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile, int iLine)
     return pBuf;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_filesys_mode", XrgFileSysFree);
+void XrgFileSysFree(void *pBuf, const char *pszFile, int iLine)
+{
+    if (pBuf == 0)
+        assert_prog(D_00A58F00, mode_source_file, 84);
+
+    if (RgHeapIsInSelf(InstanceOfRgHeap(), pBuf))
+        RgHeapFree(InstanceOfRgHeap(), pBuf, pszFile, iLine);
+    else
+        RgHeapFree(InstanceOfRgHeapData(), pBuf, pszFile, iLine);
+}

@@ -55,4 +55,22 @@ extern float MMathMakeRandom(void);
  */
 extern void *MEfCalcAngle(Vector4 *destination, const Vector4 *from, const Vector4 *to);
 
+/*
+ * MOutputDebugStringWarn: main-owned diagnostic logger (main:0x002eef50,
+ * config/tu/main/tu218.json), declared only to call it. D_00A512B0 is this
+ * TU's own rodata (data ownership window 0x00a51265..0x00a51380), the
+ * "%s has overflowed" format string MEfCheckWorkSize passes.
+ */
+extern void MOutputDebugStringWarn(const char *format, ...);
+extern const char D_00A512B0[];
+
+/*
+ * nmlModelSetTexture (main:0x0022fe60, src/main/nml_model_set.c),
+ * nmlModelSetPlace (main:0x0022fed8) and nmlModelEntry (main:0x00232b00):
+ * main-owned model system entry points, declared only to call them.
+ */
+extern void nmlModelSetTexture(const char *texture);
+extern void nmlModelSetPlace(const Vector4 *place);
+extern void nmlModelEntry(int entry);
+
 #endif /* SRC_OV01_M_EF_H */

@@ -5,9 +5,34 @@
 #include "shared.h"
 #include "rg_char.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", _nonControlMethod);
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(void *heap, unsigned int size,
+                         const char *source_file, int line);
+extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
+                       int line);
+extern RgCharMgr *InstanceOfRgCharMgr(void);
+extern void RgCharMgrEntry(RgCharMgr *manager, RgChar *pChar);
+extern void InitRgChar(RgChar *pChar, int type);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", _nonDispMethod);
+/*
+ * External file-backed witnesses, not candidate-emitted data: this window is
+ * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
+ *
+ * ov12:0x00a51808 contains the source filename "../rg_char.euc.c".
+ * ov12:0x00a51820 contains the assertion expression "pChar != NIL".
+ */
+extern const char D_00A51808[];
+extern const char D_00A51820[];
+
+static void _nonControlMethod(RgChar *pChar)
+{
+}
+
+static void _nonDispMethod(RgChar *pChar)
+{
+}
 
 void RgCalcLocalForChar(RgMatrix dest_matrix, RgVector position,
                         RgVector facing, RgVector up_ref)
@@ -20,26 +45,121 @@ void RgCalcLocalForChar(RgMatrix dest_matrix, RgVector position,
     XrgCopyVectorXYZ(&dest_matrix[12], position);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharAlloc);
+RgChar *RgCharAlloc(unsigned int size, int type)
+{
+    RgChar *pChar;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharFree);
+    pChar = RgHeapAlloc(InstanceOfRgHeap(), size, D_00A51808, 49);
+    InitRgChar(pChar, type);
+    pChar->mgr = InstanceOfRgCharMgr();
+    RgCharMgrEntry(InstanceOfRgCharMgr(), pChar);
+    return pChar;
+}
+
+void RgCharFree(RgChar *pChar)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 59);
+    }
+
+    if (pChar->mgr != 0) {
+        /*
+         * A manager-owned character is not freed here: mark it deleted and
+         * let the manager's own garbage collection destroy and release it.
+         */
+        pChar->freedType = pChar->type;
+        pChar->type = RG_CHAR_TYPE_DELETED;
+        return;
+    }
+
+    if (pChar->destructMethod != 0) {
+        pChar->destructMethod(pChar);
+    }
+    RgHeapFree(InstanceOfRgHeap(), pChar, D_00A51808, 76);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", InitRgChar);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharGetType);
+int RgCharGetType(RgChar *pChar)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 104);
+    }
+    return pChar->type;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharSetType);
+void RgCharSetType(RgChar *pChar, int type)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 114);
+    }
+    pChar->type = type;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharControlMethod);
+void RgCharControlMethod(RgChar *pChar, RgCharControlFunc controlMethod)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 125);
+    }
+    pChar->controlMethod = controlMethod;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharDispMethod);
+void RgCharDispMethod(RgChar *pChar, RgCharDispFunc dispMethod)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 133);
+    }
+    pChar->dispMethod = dispMethod;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharDestructMethod);
+void RgCharDestructMethod(RgChar *pChar, RgCharDestructFunc destructMethod)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 141);
+    }
+    pChar->destructMethod = destructMethod;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharPassTimeMethod);
+void RgCharPassTimeMethod(RgChar *pChar, RgCharPassTimeFunc passTimeMethod)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 149);
+    }
+    pChar->passTimeMethod = passTimeMethod;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharControl);
+void RgCharControl(RgChar *pChar)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 158);
+    }
+    if (pChar->type != RG_CHAR_TYPE_DELETED) {
+        if (pChar->controlMethod != 0) {
+            pChar->controlMethod(pChar);
+        }
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharPassTime);
+void RgCharPassTime(RgChar *pChar, float deltaTime)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 168);
+    }
+    if (pChar->type != RG_CHAR_TYPE_DELETED) {
+        if (pChar->passTimeMethod != 0) {
+            pChar->passTimeMethod(pChar, deltaTime);
+        }
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", RgCharDisp);
+void RgCharDisp(RgChar *pChar)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 184);
+    }
+    if (pChar->type != RG_CHAR_TYPE_DELETED) {
+        if (pChar->dispMethod != 0) {
+            pChar->dispMethod(pChar);
+        }
+    }
+}

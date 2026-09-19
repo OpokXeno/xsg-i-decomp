@@ -5,7 +5,24 @@ INCLUDE_ASM("asm/main/nonmatchings/call_java_method", Call_JavaMethod);
 
 INCLUDE_ASM("asm/main/nonmatchings/call_java_method", EventCheck_Line_Button);
 
-INCLUDE_ASM("asm/main/nonmatchings/call_java_method", EventCheck_Line_Touch);
+/* Call_JavaMethod is defined above in this TU (still assembler); both
+ * arguments are proven by its own body: it dereferences actor at +0x80 for
+ * the enepc-table index and takes the method id in $a1 ($a2, reused there as
+ * a local constant, is never supplied by any caller in this TU). */
+extern void Call_JavaMethod(void *actor, int method_id);
+
+/* Check_InsideID (0x002d67e8, still assembler in this TU) is defined with
+ * three parameters (Check_Locater passes actor plus the two UnduDataGetHeader
+ * results), but these two call sites pass only actor: an old-style,
+ * unspecified-argument declaration reproduces exactly that call without
+ * overclaiming the arity used elsewhere in the TU. */
+extern int Check_InsideID();
+
+void EventCheck_Line_Touch(void *actor) {
+    if (Check_InsideID(actor) != 0) {
+        Call_JavaMethod(actor, 2);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/call_java_method", EventCheck_Circle_Button);
 
@@ -13,7 +30,11 @@ INCLUDE_ASM("asm/main/nonmatchings/call_java_method", EventCheck_Square_Button_C
 
 INCLUDE_ASM("asm/main/nonmatchings/call_java_method", EventCheck_Square_Button);
 
-INCLUDE_ASM("asm/main/nonmatchings/call_java_method", EventCheck_Square_Touch);
+void EventCheck_Square_Touch(void *actor) {
+    if (Check_InsideID(actor) != 0) {
+        Call_JavaMethod(actor, 6);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/call_java_method", Check_Locater);
 

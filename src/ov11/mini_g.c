@@ -2,8 +2,13 @@
  * OV11 original TU 1: 0x00a00100..0x00a091f8 (135 functions)
  */
 #include "common.h"
+#include "shared.h"
 #include "res.h"
 #include "mini_g.h"
+
+/* xglCdReadFile is main:0x0021e310 (src/main/xgl_cd.c); every call below
+ * passes it an asset path string and a fixed EE main RAM staging address. */
+extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", dprintf);
 
@@ -17,7 +22,18 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SetRegAD);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", ResetRGBA);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SetRGBA);
+/* ov11:0x00a007e0. Stores the four caller-supplied components in the
+ * shared untextured box color state (original LOCAL data symbol
+ * BoxRGBA, ov11:0x00a0df78). */
+extern short BoxRGBA[4];
+
+static void SetRGBA(short red, short green, short blue, short alpha)
+{
+    BoxRGBA[0] = red;
+    BoxRGBA[1] = green;
+    BoxRGBA[2] = blue;
+    BoxRGBA[3] = alpha;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MakeBoxPos);
 
@@ -80,7 +96,18 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", RES_SoundEffect);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", RES_SoundEffectStop);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", RES_Load);
+/* ov11:0x00a00af0. Loads the casino resource table (CASINO.res) into the
+ * fixed asset staging address and records it as ResData, the same
+ * (void *)FIXED_ADDRESS pattern PokerInit and the other loaders below use. */
+extern const char D_00A0BC08[]; /* "data\\tanaka\\CASINO.res" */
+
+#define CASINO_RES_BUFFER 0x01000000
+
+static void RES_Load(void)
+{
+    xglCdReadFile(D_00A0BC08, (void *)CASINO_RES_BUFFER, 0, 0);
+    ResData = (CasinoResourcePrefix *)CASINO_RES_BUFFER;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", AddCoin);
 
@@ -94,7 +121,15 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlCashPrint);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", pay_print);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", total_pay_print);
+/* ov11:0x00a01060. Draws the three-digit slot total stake at its fixed
+ * screen position through decprint (ov11:0x00a00de0, LOCAL asm sibling). */
+static int decprint(int value, int digits, int x, int y);
+extern short D_00A0DD74;
+
+static void total_pay_print(void)
+{
+    decprint(D_00A0DD74, 3, 0x1DC, 0x1B);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", check_mode);
 
@@ -118,7 +153,30 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlGuidPrint);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", point_control);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlBgDraw);
+/* ov11:0x00a01e28. Configures background draw state, then emits the fixed
+ * slot background sprite built from BoxRect (ov11:0x00a0a0e0) into BoxSpr
+ * (ov11:0x00a0a0c0). MakeSprite, SetDrawStatus and SetTest are LOCAL asm
+ * siblings whose parameter roles beyond this one call site are not evidenced. */
+static void MakeSprite(void *sprite, void *rect);
+static void SetDrawStatus(int mode, int enable);
+static void SetTest(int value);
+extern unsigned char BoxSpr[0x1C];
+extern unsigned char BoxRect[0x10];
+
+static void SlBgDraw(void)
+{
+    SetDrawStatus(3, 0);
+    SetTest(0x5000D);
+
+    /* MakeSprite is the last statement of this void function and gcc 2.96
+     * compiles a trailing call like that as a sibling jump; the original
+     * keeps a real jal plus the shared epilogue (ld $31/jr $31). Wrapping
+     * only this call in do{}while(0) defeats the sibcall pass instead
+     * (CP-0288, config/compiler-patterns.json). */
+    do {
+        MakeSprite(BoxSpr, BoxRect);
+    } while (0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlCoinEntry);
 
@@ -126,7 +184,17 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlPrizeCheck);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlLineCheck);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", check_real);
+/* ov11:0x00a02460. Runs the complete slot line evaluation and reports
+ * whether the resulting payout is nonzero. SlLineCheck is a LOCAL asm
+ * sibling. */
+static void SlLineCheck(void);
+extern int D_00A0DDC8;
+
+static int check_real(void)
+{
+    SlLineCheck();
+    return D_00A0DDC8 != 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", paid_action);
 
@@ -144,11 +212,50 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlHelpMode);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", slot_main);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", init_slot);
+/* ov11:0x00a034d8. Loads the five slot-machine texture resources into their
+ * fixed rendering buffers through the resource loader. */
+extern const char D_00A0BE10[]; /* "data\\tanaka\\slot_1.xtx" */
+extern const char D_00A0BE28[]; /* "data\\tanaka\\slot_2.xtx" */
+extern const char D_00A0BE40[]; /* "data\\tanaka\\base.xtx" */
+extern const char D_00A0BE58[]; /* "data\\tanaka\\w1.xtx" */
+extern const char D_00A0BE70[]; /* "data\\tanaka\\help_all.xtx" */
+
+#define SLOT_1_TEX_BUFFER 0x01008000
+#define SLOT_2_TEX_BUFFER 0x01048800
+#define SLOT_BASE_TEX_BUFFER 0x01089000
+#define SLOT_W1_TEX_BUFFER 0x010C9800
+#define SLOT_HELP_TEX_BUFFER 0x0110A000
+
+static void init_slot(void)
+{
+    xglCdReadFile(D_00A0BE10, (void *)SLOT_1_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0BE28, (void *)SLOT_2_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0BE40, (void *)SLOT_BASE_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0BE58, (void *)SLOT_W1_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0BE70, (void *)SLOT_HELP_TEX_BUFFER, 0, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgTimePrint);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgPaidPrint);
+/* ov11:0x00a03610. Draws the pending nine-reel payout at its fixed screen
+ * position, multiplied by the current power-of-two streak factor. pow
+ * (main/tu284) computes the streak factor; litodp and dptoli (main/tu330,
+ * main/tu331) are this compiler's own int<->double conversion routines.
+ * They pass a double as a raw 64-bit value in an integer register (this
+ * target has no hardware double support); a genuinely double-typed call
+ * chain here schedules the calls' delay slots differently from the
+ * original bytes, so the encoded form is required. DOUBLE_TWO is the
+ * IEEE-754 double-precision encoding of the literal 2.0. */
+#define DOUBLE_TWO 0x4000000000000000ULL
+
+extern unsigned long long litodp(int value);
+extern int dptoli(unsigned long long value);
+extern int pow(unsigned long long base, unsigned long long exponent);
+
+static void NgPaidPrint(void)
+{
+    decprint(Gwork[42] * dptoli(pow(DOUBLE_TWO, litodp(Gwork[46]))), 7, 0x1B2, 0x182);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgGetsDownBtnPrint);
 
@@ -204,7 +311,16 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoCardDrawAnime);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoBonusCardAnime);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoRateTableDraw);
+/* ov11:0x00a05358. Emits the single fixed poker payout table sprite.
+ * MakeSprite is a LOCAL asm sibling. */
+static void MakeSprite(void *sprite, void *rect);
+extern unsigned char tex_80[0x1C];
+extern unsigned char rect_81[0x10];
+
+static void PoRateTableDraw(void)
+{
+    MakeSprite(tex_80, rect_81);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoBonusBGDraw);
 
@@ -228,37 +344,261 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoMultiChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoFlushChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk1);
+/* PoMultiChk classifies the sorted hand's rank multiplicities and
+ * PoFlushChk classifies same-suit runs. dprintf is the overlay's debug
+ * printf. */
+static int PoMultiChk(void);
+static int PoFlushChk(void);
+extern void dprintf(const char *fmt, ...);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk2);
+/* ov11:0x00a05de0. Reports category 1, printing D_00A0C078 through
+ * dprintf, when PoMultiChk's multiplicity equals 1. */
+extern const char D_00A0C078[];
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk3);
+static int PoChk1(void)
+{
+    if (PoMultiChk() == 1) {
+        dprintf(D_00A0C078);
+        return 1;
+    }
+    return 0;
+}
+
+/* ov11:0x00a05e20. Reports category 2, printing D_00A0C088 through
+ * dprintf, when PoMultiChk's multiplicity equals 2. */
+extern const char D_00A0C088[];
+
+static int PoChk2(void)
+{
+    if (PoMultiChk() == 2) {
+        dprintf(D_00A0C088);
+        return 2;
+    }
+    return 0;
+}
+
+/* ov11:0x00a05e60. Reports category 3, printing D_00A0C098 through
+ * dprintf, when PoMultiChk's multiplicity equals 3. */
+extern const char D_00A0C098[];
+
+static int PoChk3(void)
+{
+    if (PoMultiChk() == 3) {
+        dprintf(D_00A0C098);
+        return 3;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk4);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk5);
+/* ov11:0x00a05fb0. Substitutes category 5 and prints D_00A0C0B8 through
+ * dprintf whenever PoFlushChk returns nonzero; PoFlushChk's own nonzero
+ * value is discarded rather than reused as the category. */
+extern const char D_00A0C0B8[];
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk6);
+static int PoChk5(void)
+{
+    int category = PoFlushChk();
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk7);
+    if (category != 0) {
+        dprintf(D_00A0C0B8);
+        category = 5;
+    }
+    return category;
+}
+
+/* ov11:0x00a05fe8. Reports category 6, printing D_00A0C0C8 through
+ * dprintf, when PoMultiChk's multiplicity equals 4. */
+extern const char D_00A0C0C8[];
+
+static int PoChk6(void)
+{
+    if (PoMultiChk() == 4) {
+        dprintf(D_00A0C0C8);
+        return 6;
+    }
+    return 0;
+}
+
+/* ov11:0x00a06028. Reports category 7, printing D_00A0C0D8 through
+ * dprintf, when PoMultiChk's multiplicity equals 5. */
+extern const char D_00A0C0D8[];
+
+static int PoChk7(void)
+{
+    if (PoMultiChk() == 5) {
+        dprintf(D_00A0C0D8);
+        return 7;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk8);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk9);
+/* ov11:0x00a060e8. Reports category 9 when PoFlushChk finds a flush and
+ * the sorted hand's ranks, read from the Gwork work block, form a
+ * consecutive run starting at the lowest card: base, base+9, base+0xA,
+ * base+0xB, base+0xC. PoGetBase is a LOCAL asm sibling; the double
+ * PoGetBase(PoGetBase(base)) round trip is the original's own check, not
+ * a simplification. Any other outcome, including a flush that is not
+ * this run, reports 0. */
+#define POKER_HAND_RANK_INDEX 0xD1 /* short index; 0x1A2 / sizeof(short) */
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoCardCheck);
+static short PoGetBase(short cardValue);
+extern const char D_00A0C100[];
+
+static int PoChk9(void)
+{
+    short *hand;
+    short base;
+
+    if (PoFlushChk() == 0) {
+        return 0;
+    }
+
+    hand = (short *)Gwork;
+    base = hand[POKER_HAND_RANK_INDEX];
+    if (base == PoGetBase(PoGetBase(base))) {
+        if (hand[POKER_HAND_RANK_INDEX + 1] == base + 9 &&
+            hand[POKER_HAND_RANK_INDEX + 2] == base + 0xA &&
+            hand[POKER_HAND_RANK_INDEX + 3] == base + 0xB &&
+            hand[POKER_HAND_RANK_INDEX + 4] == base + 0xC) {
+            dprintf(D_00A0C100);
+            return 9;
+        }
+    }
+    return 0;
+}
+
+/* ov11:0x00a06190. Sorts the hand, then checks hand-rank categories from
+ * nine downward until one reports nonzero, plays one of three sound tiers
+ * for the result, and reports it through the same debug printf as the
+ * PoChk* family (D_00A0C120, "result = %d\n").
+ *
+ * The nested PoChk9..PoChk1 chain and the shared-tail-block `goto
+ * defaultSound` are the shape recorded as CP-0254 in
+ * config/compiler-patterns.json: a flat "if (category == 0) category =
+ * PoChkN();" per-line chain lets cc1 2.96's range analysis fold the
+ * repeated zero tests together with the sound-tier comparisons instead of
+ * keeping each PoChkN call, and a fully structured if/else-if/else sound
+ * dispatch duplicates the shared RES_SoundEffect(0x3A) call into two
+ * physical blocks instead of the original's single call reached from both
+ * the category<=0 and category>=0xA paths. */
+static void PoSortCard(void);
+static int PoChk4(void);
+static int PoChk8(void);
+static int PoChk9(void);
+static void RES_SoundEffect(int soundId);
+extern const char D_00A0C120[];
+
+static int PoCardCheck(void)
+{
+    int category;
+
+    PoSortCard();
+    category = PoChk9();
+    if (category == 0) {
+        category = PoChk8();
+        if (category == 0) {
+            category = PoChk7();
+            if (category == 0) {
+                category = PoChk6();
+                if (category == 0) {
+                    category = PoChk5();
+                    if (category == 0) {
+                        category = PoChk4();
+                        if (category == 0) {
+                            category = PoChk3();
+                            if (category == 0) {
+                                category = PoChk2();
+                                if (category == 0) {
+                                    category = PoChk1();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (category > 0) {
+        if (category >= 6) {
+            if (category < 0xA) {
+                RES_SoundEffect(0x39);
+            } else {
+                goto defaultSound;
+            }
+        } else {
+            RES_SoundEffect(0x38);
+        }
+    } else {
+defaultSound:
+        RES_SoundEffect(0x3A);
+    }
+
+    dprintf(D_00A0C120, category);
+    return category;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoResultLamp);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoSeqChange);
+/* ov11:0x00a06308. Stores the caller-supplied poker sequence state in the
+ * global sequence word. */
+extern int D_00A0DEA8;
+
+static void PoSeqChange(int sequenceState)
+{
+    D_00A0DEA8 = sequenceState;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PokerReadyMes);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PokerMain);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoInitWork);
+/* ov11:0x00a06c08. Resets five Gwork work-state words used by the poker
+ * minigame: its only caller, GameModeChange, uses it to clear the main
+ * sequence, display flags, bonus mode and bonus round index before a
+ * poker session starts. Field identities beyond their byte offsets are
+ * not separately evidenced. */
+static void PoInitWork(void)
+{
+    Gwork[96] = 0;
+    Gwork[97] = 0;
+    Gwork[100] = 0;
+    Gwork[101] = 0;
+    Gwork[98] = 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PokerInit);
+/* ov11:0x00a06c28. Loads the six poker minigame textures (four suits plus
+ * two poker-table backgrounds; the "data\\tanaka\\*.xtx" paths are these
+ * D_00A0Cxxx strings themselves) into fixed EE main RAM staging addresses,
+ * following the same (void *)FIXED_ADDRESS pattern as src/main/game_over.c's
+ * IMAGE_LOAD_BUFFER. */
+extern const char D_00A0C270[]; /* "data\\tanaka\\spade.xtx" */
+extern const char D_00A0C288[]; /* "data\\tanaka\\clover.xtx" */
+extern const char D_00A0C2A0[]; /* "data\\tanaka\\heart.xtx" */
+extern const char D_00A0C2B8[]; /* "data\\tanaka\\dia.xtx" */
+extern const char D_00A0C2D0[]; /* "data\\tanaka\\poker_1.xtx" */
+extern const char D_00A0C2E8[]; /* "data\\tanaka\\poker_2.xtx" */
+
+#define POKER_SPADE_TEX_BUFFER  0x0128D000
+#define POKER_CLOVER_TEX_BUFFER 0x012CD800
+#define POKER_HEART_TEX_BUFFER  0x0130E000
+#define POKER_DIA_TEX_BUFFER    0x0134E800
+#define POKER_TABLE1_TEX_BUFFER 0x0138F000
+#define POKER_TABLE2_TEX_BUFFER 0x013CF800
+
+static void PokerInit(void)
+{
+    xglCdReadFile(D_00A0C270, (void *)POKER_SPADE_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C288, (void *)POKER_CLOVER_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C2A0, (void *)POKER_HEART_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C2B8, (void *)POKER_DIA_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C2D0, (void *)POKER_TABLE1_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C2E8, (void *)POKER_TABLE2_TEX_BUFFER, 0, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", GameModeChange);
 
@@ -266,15 +606,71 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", sub_window);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", submenu_select);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", level_select);
+/* ov11:0x00a07000. Draws a four-choice submenu bound to the shared game
+ * level selection. sub_window's own body (asm/nonmatchings/ov11/mini_g/
+ * sub_window.s) overwrites its first argument before using it, so windowId
+ * only reaches submenu_select; y and x are the row/column submenu_select
+ * stores for the first icon (offset there by 0x34 and 0xC before laying the
+ * remaining icons out, per its and exchange_select's own disassembly).
+ * level_select's own tail call (`j submenu_select`) is why its return value
+ * is submenu_select's, and menu_mode branches on it (`beqz $2` right after
+ * `jal level_select`). */
+static void sub_window(int windowId, int y, int x);
+static int submenu_select(int windowId, int y, int x, int iconCount,
+                          void *icons, int *selected);
+extern unsigned char Level_Tex[];
+extern int D_00A0DD2C;
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", exchange_select);
+static int level_select(int windowId, int y, int x)
+{
+    sub_window(windowId, y, x);
+    return submenu_select(windowId, y, x, 4, Level_Tex, &D_00A0DD2C);
+}
+
+/* ov11:0x00a07060. Draws a three-choice submenu bound to the shared exchange
+ * mode selection, the same sub_window()+submenu_select() shape level_select
+ * uses above; exchange_select's own tail call (`j submenu_select`) is why its
+ * return value is submenu_select's. */
+extern unsigned char ExChange_Tex[];
+extern int D_00A0DD24;
+
+static int exchange_select(int windowId, int y, int x)
+{
+    sub_window(windowId, y, x);
+    return submenu_select(windowId, y, x, 3, ExChange_Tex, &D_00A0DD24);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", menu_mode);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", init_menu_mode);
+/* ov11:0x00a07410. Loads the menu background and window textures, then
+ * resets the menu mode and game level selection in the Gwork work
+ * block. */
+extern const char D_00A0C320[]; /* "data\\tanaka\\BG.xtx" */
+extern const char D_00A0C338[]; /* "data\\tanaka\\window.xtx" */
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", init_test_mode);
+#define MENU_BG_TEX_BUFFER 0x0114A800
+#define MENU_WINDOW_TEX_BUFFER 0x0118B000
+#define MENU_LEVEL_INDEX 8 /* short index; 0x10 / sizeof(short) */
+
+static void init_menu_mode(void)
+{
+    xglCdReadFile(D_00A0C320, (void *)MENU_BG_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C338, (void *)MENU_WINDOW_TEX_BUFFER, 0, 0);
+
+    Gwork[3] = 0;
+    ((short *)Gwork)[MENU_LEVEL_INDEX] = 0;
+}
+
+/* ov11:0x00a07470. Loads the casino test-mode background texture. */
+extern const char D_00A0BE40[]; /* "data\\tanaka\\base.xtx" */
+
+#define BASE_TEX_BUFFER            0x01089000
+#define TEST_MODE_BASE_TEX_BUFFER  0x01593000
+
+static void init_test_mode(void)
+{
+    xglCdReadFile(D_00A0BE40, (void *)TEST_MODE_BASE_TEX_BUFFER, 0, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", test_mode);
 
@@ -284,15 +680,48 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", UtlCurPrint);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", coin_main);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", init_coin);
+/* ov11:0x00a07c38. Loads the casino coin-exchange minigame's background and
+ * exchange textures (D_00A0BE40 is the same "base.xtx" path init_test_mode
+ * uses, into a different fixed buffer address here). */
+extern const char D_00A0C390[]; /* "data\\tanaka\\exchange2.xtx" */
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", init_shop);
+#define COIN_EXCHANGE_TEX_BUFFER 0x011CB800
+
+static void init_coin(void)
+{
+    xglCdReadFile(D_00A0BE40, (void *)BASE_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C390, (void *)COIN_EXCHANGE_TEX_BUFFER, 0, 0);
+}
+
+/* ov11:0x00a07c80. Loads the casino shop's exchange and background textures
+ * (D_00A0BE40 "base.xtx" again, into the same fixed buffer init_coin uses). */
+extern const char D_00A0C3B0[]; /* "data\\tanaka\\exchange1.xtx" */
+
+#define SHOP_EXCHANGE_TEX_BUFFER 0x0120C000
+
+static void init_shop(void)
+{
+    xglCdReadFile(D_00A0C3B0, (void *)SHOP_EXCHANGE_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0BE40, (void *)BASE_TEX_BUFFER, 0, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", init_shpmenu);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", shop_main);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", VW_Init);
+/* ov11:0x00a083f8. Loads the data-viewer minigame's dataviewer and sampler
+ * textures. */
+extern const char D_00A0C590[]; /* "data\\tanaka\\dataviewer.xtx" */
+extern const char D_00A0C5B0[]; /* "data\\tanaka\\sam.xtx" */
+
+#define VW_DATAVIEWER_TEX_BUFFER 0x0124C800
+#define VW_SAM_TEX_BUFFER        0x01410000
+
+static void VW_Init(void)
+{
+    xglCdReadFile(D_00A0C590, (void *)VW_DATAVIEWER_TEX_BUFFER, 0, 0);
+    xglCdReadFile(D_00A0C5B0, (void *)VW_SAM_TEX_BUFFER, 0, 0);
+}
 
 /* Build the compact list of the 30 sampler slots enabled in SaveWork. */
 static __inline void sampler_offset(int **base, int *count)
@@ -337,6 +766,15 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MUSIC_CALL);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", InitWork);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MiniG_Init);
+/* ov11:0x00a09020. Logs the configured heap address, then delegates all
+ * casino state initialization to InitWork (LOCAL asm sibling). */
+static void InitWork(void);
+extern const char D_00A0C6D0[]; /* "work size = %x\n" */
+
+void MiniG_Init(void)
+{
+    dprintf(D_00A0C6D0, 0x7CF000);
+    InitWork();
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MiniG_Main);

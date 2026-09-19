@@ -34,6 +34,25 @@ typedef struct ChrScaleCall {
     u8 wait;
 } ChrScaleCall;
 
+/*
+ * Call blocks of Java_xeno_Chr_move__* and Java_xeno_Chr_rot{X,Y,Z}__*: their
+ * trampolines forward the pointer unread, and CHR_moveXZ/CHR_rotX/CHR_rotY/
+ * CHR_rotZ (still asm here) read it with a different field type per mode
+ * (CHR_moveXZ: object +0x0 in every mode; modes 0-1 then +0x4/+0x8/+0xC and
+ * the wait byte +0x10, modes 2-3 +0x4/+0x8 and the wait byte +0xC;
+ * 0x002fcf3c..0x002fd178), so it stays an incomplete type until those callees
+ * are recovered.
+ */
+typedef struct ChrMoveCall ChrMoveCall;
+typedef struct ChrRotCall ChrRotCall;
+
+/*
+ * Call block of Java_xeno_Chr_mtn__*: their trampolines forward the pointer
+ * unread to CHR_motion (still asm here, 0x002fe5f8..0x002fe804), so it stays
+ * an incomplete type until that callee is recovered.
+ */
+typedef struct ChrMotionCall ChrMotionCall;
+
 /* Verbatim the engine's four-float vector record of include/shared.h and of
  * src/main/near_dir.h, which defines the actor below with it. */
 typedef struct Vector4 {

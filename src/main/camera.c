@@ -71,17 +71,37 @@ INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_transCNS__Ljava_lan
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", CAMERA_transSPL);
 
-INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_transSPL__aFI);
+void Java_xeno_Camera_transSPL__aFI(JavaEnvironment *environment,
+                                    CameraSplineRequest *request,
+                                    void *result)
+{
+    CAMERA_transSPL(0, environment, request, result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_transSPL__aFIII);
+void Java_xeno_Camera_transSPL__aFIII(JavaEnvironment *environment,
+                                      CameraSplineRequest *request,
+                                      void *result)
+{
+    CAMERA_transSPL(1, environment, request, result);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_viewCNS__Ljava_lang_Object_FFF);
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", CAMERA_viewSPL);
 
-INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_viewSPL__aFI);
+void Java_xeno_Camera_viewSPL__aFI(JavaEnvironment *environment,
+                                   CameraSplineRequest *request,
+                                   void *result)
+{
+    CAMERA_viewSPL(0, environment, request, result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_viewSPL__aFIII);
+void Java_xeno_Camera_viewSPL__aFIII(JavaEnvironment *environment,
+                                     CameraSplineRequest *request,
+                                     void *result)
+{
+    CAMERA_viewSPL(1, environment, request, result);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_rollSPL__aFI);
 

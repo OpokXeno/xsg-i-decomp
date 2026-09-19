@@ -8,7 +8,9 @@ INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", WindowTexAddrGet);
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuWorkEndGet);
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuWorkEndCheck);
+void MenuWorkEndCheck(void)
+{
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", ChangeTopLevel);
 
@@ -114,13 +116,31 @@ void MenuLoadInit(void)
     MenuLoadCount = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuLoadEnd);
+void MenuLoadEnd(void)
+{
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuLoadCancel);
+void MenuLoadCancel(void)
+{
+    if (MenuLoadSync() != 0) {
+        MenuLoadCount = 0;
+        xglCdReadCancel();
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuBibrationSet);
+void MenuBibrationSet(unsigned char pad, unsigned char act, unsigned char speed,
+                      unsigned char count)
+{
+    MenuBibrationCount = count;
+    MenuBibrationAct = act;
+    MenuBibrationSpeed = speed;
+    MenuBibrationPad = pad;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuBibrationInit);
+void MenuBibrationInit(void)
+{
+    MenuBibrationSet(0, 0, 0, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", MenuBibrationMain);
 
@@ -142,7 +162,10 @@ INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", CharactorAllRecovery);
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", AgwsAllRecovery);
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnkosmosSpecialInit);
+void UmnkosmosSpecialInit(void)
+{
+    memset(UmnKosmosSpecialBox, 0, sizeof(UmnKosmosSpecialBox));
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnkosmosSpecialSet);
 
@@ -152,7 +175,10 @@ INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnMailMain);
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnMailBoxSet);
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnMailDataGet);
+unsigned char *UmnMailDataGet(int box_id)
+{
+    return &SaveData[SAVE_UMN_MAIL_DATA + box_id * 2];
+}
 
 /* The external data witness covers these 0x9c bytes; the spans around the
  * two evidenced bit sets remain unmodelled (see UmnDataBase). */
