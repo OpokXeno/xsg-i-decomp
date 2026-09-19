@@ -1,4 +1,7 @@
 # Xenosaga Episode I
+[![Code](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?mode=shield&label=Code)](https://decomp.dev/OpokXeno/xsg-i-decomp)
+[![Functions](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/OpokXeno/xsg-i-decomp)
+[![Linked](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?mode=shield&measure=complete_code&label=Linked)](https://decomp.dev/OpokXeno/xsg-i-decomp)
 
 > This project is developed with AI assistance.
 
@@ -22,6 +25,8 @@ Recovered 2,335 of 7,645 in-scope game function(s) (30.543%).
 | NTSC-U | `OV12.OVL` | 917 / 1,788 | 51.286% |
 | NTSC-U | `SSD.IRX` | 0 / 442 | 0.000% |
 | NTSC-U | `RSSD.IRX` | 0 / 53 | 0.000% |
+
+[![Progress map](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?w=950&h=475)](https://decomp.dev/OpokXeno/xsg-i-decomp)
 
 ## Building
 
