@@ -10,6 +10,7 @@
 #                            the compilers and assemblers
 #   configure.py tools/      the build system
 #   README.md                how to build it
+#   .github/                 the CI job that publishes the decomp.dev report
 #
 
 /*
@@ -22,6 +23,7 @@
 !/config/
 !/tools/
 !/scripts/
+!/.github/
 
 # ---------------------------------------------------------------- config/
 # The build inputs
@@ -43,6 +45,7 @@
 !/tools/configure.py
 !/tools/elf_gate.py
 !/tools/coverage_report.py
+!/tools/objdiff_report.py
 !/tools/tu_edit.py
 !/tools/tu/
 

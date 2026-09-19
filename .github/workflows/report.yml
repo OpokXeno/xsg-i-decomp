@@ -1,0 +1,33 @@
+# Publishes the decomp.dev progress report: an objdiff report (schema v2) in an
+# artifact named `<version>_report`. The report is derived from the tracked
+# object tables and the source by tools/objdiff_report.py, so this job needs
+# neither the originals nor the toolchain.
+name: Progress report
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [SLUS_204.69]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate progress report
+        run: python3 -B tools/objdiff_report.py -o build/report.json
+
+      - name: Upload progress report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.version }}_report
+          path: build/report.json
