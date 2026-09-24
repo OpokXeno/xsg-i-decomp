@@ -31,4 +31,12 @@ struct RgChar {
 
 RgChar *RgCharAlloc(unsigned int size, int type);
 
+void RgCharFree(RgChar *pChar);
+
+void RgCharDispMethod(RgChar *pChar, RgCharDispFunc dispMethod);
+
+void RgCharDestructMethod(RgChar *pChar, RgCharDestructFunc destructMethod);
+
+void RgCharPassTimeMethod(RgChar *pChar, RgCharPassTimeFunc passTimeMethod);
+
 #endif /* INCLUDE_OV12_RG_CHAR_H */

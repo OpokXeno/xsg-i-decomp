@@ -91,41 +91,8 @@ typedef struct XrgPaint2DRect {
     float angle;
 } XrgPaint2DRect;
 
-/*
- * The heap-allocated 2D paint renderer CreateXrgPaint2D_sub allocates
- * (XRG_PAINT2D_SIZE bytes, below) and DisposeXrgPaint2D_sub releases.  Only
- * the two fields this allocation's own setters touch are named:
- *
- *   prio    XrgPaint2DSetDrawPrio (0x00a4b9e8) stores its argument here
- *           unconditionally after asserting the object is non-nil.
- *   drawID  XrgPaint2DSetDrawID (0x00a4b998) stores its argument here the
- *           same way.
- *
- * The rest of the object (its draw-request ring at +0xD014, the debug
- * allocation-site name _InitPaint copies to +0xD018, and everything else
- * _Geom2D, _CalcOffset, _InitPaint, XrgPaint2DUseTexture and the sibling
- * XrgPaint2DOffset and XrgPaint2DSetUV setters read) is outside this
- * allocation's evidence and is not modeled here.
- */
-#define XRG_PAINT2D_SIZE 0xD060
-
+typedef struct XrgPaint2D XrgPaint2D;
 typedef struct XrgPaint2DDrawReq XrgPaint2DDrawReq;
-
-typedef struct XrgPaint2D {
-    int prio;
-    int drawID;
-    /*
-     * XrgPaint2DOffsetResult and XrgPaint2DUseTexture (0x00a4bca0/0x00a4be70)
-     * are the first functions of this allocation to reach through the
-     * pointer at +0xD014 the earlier comment names: both read it as the
-     * draw-request object XrgPaint2DDrawReq (below) describes, so it is
-     * named `request` here. The 0xD00C bytes before it stay unmodeled for
-     * the same reason as above: nothing in this allocation reads or writes
-     * them.
-     */
-    unsigned char unmodeled_08[0xD014 - 8];
-    XrgPaint2DDrawReq *request;
-} XrgPaint2D;
 
 /*
  * The draw-request object CreateXrgPaint2D_sub's paint keeps a pointer to at
@@ -172,6 +139,19 @@ typedef union XrgPaint2DOffset {
         int z;
         int w;
     } i;
+    /*
+     * XrgPaint2DOffset3DForce (0x00a4bc18) stores its float argument into
+     * this union's first word (the same word `i.x` names) with a plain
+     * float store (swc1), not the int store every other writer of this
+     * union uses; `f` is the same four-float layout as `i` for that one
+     * write.
+     */
+    struct {
+        float x;
+        float y;
+        float z;
+        float w;
+    } f;
     long long quadword[2];
 } XrgPaint2DOffset;
 
@@ -211,7 +191,20 @@ typedef struct XrgPaint2DDrawReq {
     XrgPaint2DOffset offsetAnchor;
     XrgPaint2DOffset offsetResult;
     void *texture;
-    unsigned char unmodeled_74[0x24];
+    unsigned char unmodeled_74[0xC];
+    /*
+     * XrgPaint2DColor (0x00a4bd38) copies its own 16-byte argument in here
+     * as one COP2 quadword transfer (lqc2/sqc2); nothing in this allocation
+     * reads it back, so no individual channel is named.
+     */
+    unsigned int color[4];
+    /*
+     * XrgPaint2DAlpha (0x00a4bd98) stores one of six fixed GS ALPHA_1-shaped
+     * 64-bit blend-equation values here, selected by its own mode argument;
+     * see that function for the values. Nothing in this allocation reads it
+     * back.
+     */
+    long long alpha;
     long long tex0;
     int uLow;
     int vLow;
@@ -224,6 +217,55 @@ typedef struct XrgPaint2DDrawReq {
     int uSize;
     int vSize;
 } XrgPaint2DDrawReq;
+
+/*
+ * The heap-allocated 2D paint renderer CreateXrgPaint2D_sub allocates
+ * (XRG_PAINT2D_SIZE bytes, below) and DisposeXrgPaint2D_sub releases.  Only
+ * the two fields this allocation's own setters touch are named:
+ *
+ *   prio    XrgPaint2DSetDrawPrio (0x00a4b9e8) stores its argument here
+ *           unconditionally after asserting the object is non-nil.
+ *   drawID  XrgPaint2DSetDrawID (0x00a4b998) stores its argument here the
+ *           same way.
+ *
+ * The rest of the object (its draw-request ring at +0xD014, the debug
+ * allocation-site name _InitPaint copies to +0xD018, and everything else
+ * _Geom2D, _CalcOffset, _InitPaint, XrgPaint2DUseTexture and the sibling
+ * XrgPaint2DOffset and XrgPaint2DSetUV setters read) is outside this
+ * allocation's evidence and is not modeled here.
+ */
+#define XRG_PAINT2D_SIZE 0xD060
+
+typedef struct XrgPaint2D {
+    int prio;
+    int drawID;
+    /*
+     * XrgPaint2DOffsetResult and XrgPaint2DUseTexture (0x00a4bca0/0x00a4be70)
+     * are the first functions of this allocation to reach through the
+     * pointer at +0xD014 the earlier comment names: both read it as the
+     * draw-request object XrgPaint2DDrawReq (below) describes, so it is
+     * named `request` here. The 0xD00C bytes before it stay unmodeled for
+     * the same reason as above: nothing in this allocation reads or writes
+     * them.
+     */
+    /*
+     * _Paint2DClearReq (0x00a4c780) takes the address of the +0x10 word,
+     * hands it to _InitReq (0x00a4a728, outside this allocation) and stores
+     * that same address into `request` right after: this is the first
+     * element of the embedded draw-request array `request` points into once
+     * (re)initialized, so it is typed and named `req` here. Nothing in this
+     * allocation resolves the rest of that array.
+     */
+    unsigned char unmodeled_08[0x10 - 8];
+    XrgPaint2DDrawReq req;
+    unsigned char unmodeled_e0[0xD010 - 0xE0];
+    /*
+     * _Paint2DClearReq always zeroes this word right before rewinding
+     * `request` to `req`: the count of queued draw requests it also resets.
+     */
+    int reqCount;
+    XrgPaint2DDrawReq *request;
+} XrgPaint2D;
 
 /*
  * The four corners _CalcRectangle (0x00a4a7b8) expands one XYWH rectangle

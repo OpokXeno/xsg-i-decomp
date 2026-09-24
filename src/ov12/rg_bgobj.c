@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_char.h"
+#include "ov12/rg_debug_flags.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -46,20 +47,63 @@ typedef struct RgBgObj {
     unsigned int hideState;         /* 0x28 */
     float hideDuration;             /* 0x2C */
     float hideElapsed;              /* 0x30 */
-    unsigned char unmodeled_34[4];  /* 0x34 */
+    float transparent;              /* 0x34 */
     float hardness;                 /* 0x38 */
     int notUseGeomLocal;            /* 0x3C */
 } RgBgObj;
 
+/*
+ * _InitRgBgObj sets the field at 0x34 to -1.0f to disable it; _Draw reads it
+ * and, when it is not negative, passes it to RgDispModelSetTransparent as
+ * the dispModel's transparency override.
+ */
+
 /* Defined later in this TU. */
-extern void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray);
+static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray);
+static void _Draw(RgBgObj *pObj);
+void _PassTime(RgChar *pChar, float deltaTime);
+static void _Destruct(RgBgObj *pObj);
 
 /* Defined by other TUs. */
 extern void DisposeRgDispModel(void *dispModel);
 extern void RgGeomFree(RgGeom *geom);
+extern void RgGeomSetParent(RgGeom *pGeom, void *parent);
 extern void RgGeomTraySetLocal(void *tray, Matrix4 source);
+extern void RgGeomTrayGetLocal(void *tray, Matrix4 destination);
+extern void RgDispModelSetMode(void *dispModel, int mode);
+extern void RgDispModelSetLocal(void *dispModel, Matrix4 local);
+extern void RgDispModelSetTransparent(void *dispModel, float transparent);
+extern void RgDispModelDisplay(void *dispModel);
+extern RgDebugFlags *InstanceOfRgDebugFlags(void);
+extern void XrgUnitMatrix(RgMatrix destination);
+extern void CreateRgHitEffectPos(RgVector position, const char *effectFile,
+                                 const char *defaultEffectFile);
+extern unsigned char D_00A529D8[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", _InitRgBgObj);
+static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray)
+{
+    if (pObj == 0) {
+        assert_prog(D_00A529B0, D_00A529C0, 70);
+    }
+    RgCharDispMethod(&pObj->rgChar, (void (*)(RgChar *)) _Draw);
+    RgCharPassTimeMethod(&pObj->rgChar, _PassTime);
+    RgCharDestructMethod(&pObj->rgChar, (void (*)(RgChar *)) _Destruct);
+    pObj->dispModel = dispModel;
+    pObj->geomTray = geomTray;
+    if (dispModel != 0) {
+        RgDispModelSetMode(dispModel, 8);
+    }
+    pObj->flags = 0;
+    pObj->hideState = 0;
+    pObj->hideElapsed = 0.0f;
+    pObj->hideDuration = 0.0f;
+    pObj->transparent = -1.0f;
+    pObj->notUseGeomLocal = 0;
+    pObj->hardness = -1.0f;
+    if (geomTray != 0) {
+        RgGeomSetParent(geomTray, pObj);
+    }
+}
 
 RgBgObj *CreateRgBgObj(void *dispModel, RgGeom *geomTray)
 {
@@ -88,7 +132,39 @@ static void _Destruct(RgBgObj *pObj)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", _PassTime_00A12B90);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", _Draw);
+/*
+ * InstanceOfRgDebugFlags()->flags[1] is one of the individual debug toggles
+ * _InitRgDebugFlags enables by default (include/ov12/rg_debug_flags.h), so
+ * background objects draw normally unless a developer disables it.
+ */
+static void _Draw(RgBgObj *pObj)
+{
+    void *dispModel;
+    Matrix4 local;
+    float transparent;
+
+    if (InstanceOfRgDebugFlags()->flags[1] != 0) {
+        if (pObj == 0) {
+            assert_prog(D_00A529B0, D_00A529C0, 179);
+        }
+        if (pObj->hideState != 2) {
+            dispModel = pObj->dispModel;
+            if (dispModel != 0) {
+                if (pObj->notUseGeomLocal != 0) {
+                    XrgUnitMatrix((float *)local);
+                } else {
+                    RgGeomTrayGetLocal(pObj->geomTray, local);
+                }
+                RgDispModelSetLocal(dispModel, local);
+                transparent = pObj->transparent;
+                if (transparent >= 0.0f) {
+                    RgDispModelSetTransparent(dispModel, transparent);
+                }
+                RgDispModelDisplay(dispModel);
+            }
+        }
+    }
+}
 
 void RgBgObjSetLocal(RgBgObj *pObj, Matrix4 local)
 {
@@ -153,9 +229,51 @@ void *RgBgObjGetDispModel(RgBgObj *pObj)
     return pObj->dispModel;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", RgBgObjTryToBreak);
+int RgBgObjTryToBreak(int bgObject, float damage)
+{
+    RgBgObj *pObj = (RgBgObj *)bgObject;
+    Matrix4 local;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", RgBgObjTryToBodyAttack);
+    if (pObj == 0) {
+        assert_prog(D_00A529B0, D_00A529C0, 294);
+    }
+    if (pObj->hardness < 0.0f) {
+        return 0;
+    }
+    if (pObj->hardness < damage) {
+        if (pObj->geomTray != 0) {
+            RgGeomTrayGetLocal(pObj->geomTray, local);
+            local[3][1] += 2.0f;
+            CreateRgHitEffectPos(local[3], D_00A529D8, 0);
+        }
+        RgCharFree(&pObj->rgChar);
+    } else {
+        pObj->hardness -= damage;
+    }
+    return 1;
+}
+
+void RgBgObjTryToBodyAttack(void *bgObject, float energy)
+{
+    RgBgObj *pObj = (RgBgObj *)bgObject;
+    Matrix4 local;
+
+    if (pObj == 0) {
+        assert_prog(D_00A529B0, D_00A529C0, 324);
+    }
+    if (energy < 288000.0f) {
+        return;
+    }
+    if (!(pObj->flags & RGBGOBJ_FLAG_BODY_ATTACK_ENABLED)) {
+        return;
+    }
+    if (pObj->geomTray != 0) {
+        RgGeomTrayGetLocal(pObj->geomTray, local);
+        local[3][1] += 2.0f;
+        CreateRgHitEffectPos(local[3], D_00A529D8, 0);
+    }
+    RgCharFree(&pObj->rgChar);
+}
 
 float StaticRgBgObjGetBlight(void)
 {

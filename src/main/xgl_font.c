@@ -14,9 +14,28 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintSub);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintDirectCore);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintf);
+extern unsigned char D_00881188[];
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrint);
+static void set_xyz(int x, int y, int color);
+static void xglFontPrintSub(void *args);
+
+void xglFontPrintf(int x, int y, unsigned int color, void *arg)
+{
+    if (*(unsigned short *)D_00881188 & 1 & 0xFFFF) {
+        set_xyz(x, y, color);
+        xglFontPrintSub(arg);
+    }
+}
+
+static void xglFontPrintDirectCore(const char *text);
+
+void xglFontPrint(int x, int y, int color, const char *text)
+{
+    if (*(unsigned short *)D_00881188 & 1 & 0xFFFF) {
+        set_xyz(x, y, color);
+        xglFontPrintDirectCore(text);
+    }
+}
 
 /* Prints text straight away into ordering-table slot ot (passed to set_ot). */
 extern void xglFontPrintDirectOT(int ot, const char *text);
@@ -26,7 +45,15 @@ void xglFontPrintDirect(const char *text)
     xglFontPrintDirectOT(0, text);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintDirectOT);
+static void set_ot(int ot);
+
+void xglFontPrintDirectOT(int ot, const char *text)
+{
+    if (*(unsigned short *)D_00881188 & 1 & 0xFFFF) {
+        set_ot(ot);
+        xglFontPrintDirectCore(text);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintExtFunc);
 
@@ -34,7 +61,50 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontDebugPrintf);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontDebugHex);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", buffer_reset);
+/*
+ * Each 4-byte slot of the font print-queue buffer at D_008811A0 (16 slots,
+ * scaffold-owned splat name): link is the byte offset, from this array's
+ * base, of the next queued record for this bucket (0 marks the bucket
+ * empty -- xglFontFlush follows it as a chain), and selfOffset is the
+ * slot's own byte offset within the array.
+ */
+typedef struct FontQueueSlot {
+    unsigned short link;
+    unsigned short selfOffset;
+} FontQueueSlot;
+
+extern FontQueueSlot D_008811A0[16];
+
+/*
+ * buffer_reset also reaches two fields 0x20 bytes before the queue buffer:
+ * a reset flag byte and the queue's free-cursor pointer. The header these
+ * belong to is not otherwise evidenced within this allocation, so they are
+ * reached by byte offset from the queue symbol instead of a named member
+ * (matching src/ov11/res.c's RES_IsDebugMode).
+ */
+#define FONT_QUEUE_HEADER_OFFSET 0x20
+#define FONT_QUEUE_HEADER_RESET_FLAG_OFFSET 0x11
+#define FONT_QUEUE_HEADER_CURSOR_OFFSET 0x1C
+
+static void buffer_reset(void)
+{
+    FontQueueSlot *slot;
+    unsigned char *header;
+    int remaining;
+
+    remaining = 15;
+    slot = D_008811A0;
+    do {
+        slot->selfOffset = (unsigned char *)slot - (unsigned char *)D_008811A0;
+        remaining--;
+        slot->link = 0;
+        slot++;
+    } while (remaining >= 0);
+
+    header = (unsigned char *)D_008811A0 - FONT_QUEUE_HEADER_OFFSET;
+    *(FontQueueSlot **)(header + FONT_QUEUE_HEADER_CURSOR_OFFSET) = slot;
+    header[FONT_QUEUE_HEADER_RESET_FLAG_OFFSET] = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontFlushSub);
 
@@ -70,13 +140,37 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontFlush);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontGetStringWidth2);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontGetStringWidth);
+extern int xglFontGetStringWidth2(const char *text, int);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontGetLoadAddress);
+int xglFontGetStringWidth(const char *text)
+{
+    return xglFontGetStringWidth2(text, 0);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontGetFlags);
+/* The font resource's load address (scaffold-owned real symbol, offset 0:
+ * xglFontGetLoadAddress reads its whole first word; the object's further
+ * extent is not evidenced within this allocation). */
+extern unsigned char FS[];
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontSetFlags);
+void *xglFontGetLoadAddress(void)
+{
+    return *(void **)FS;
+}
+
+/* The font module's flags word (scaffold-owned splat name; xglFontGetFlags
+ * and xglFontSetFlags are its only accessors in this allocation, and its
+ * further extent is not evidenced here). */
+extern unsigned char D_00881188[];
+
+unsigned short xglFontGetFlags(void)
+{
+    return *(unsigned short *)D_00881188;
+}
+
+void xglFontSetFlags(int flags)
+{
+    *(unsigned short *)D_00881188 = flags & 0xFFFD;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontLoad);
 

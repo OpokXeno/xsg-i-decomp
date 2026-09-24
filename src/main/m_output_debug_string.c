@@ -20,4 +20,12 @@ void MOutputDebugString(const char *format, ...)
     va_end(args);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_output_debug_string", MOutputDebugStringWarn);
+void MOutputDebugStringWarn(const char *format, ...)
+{
+    va_list args;
+
+    va_start(args, format);
+    sprintf(dstr, D_004CCA58, format);
+    vprintf(dstr, args);
+    va_end(args);
+}

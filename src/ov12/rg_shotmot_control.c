@@ -25,6 +25,12 @@ extern MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pParentActor,
                                                    XrgActor *attachActor,
                                                    XrgActor *attachedActor,
                                                    int combineSelector);
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
+                         const char *source_file, int line);
+extern XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent);
+extern void XrgActorSetDraw(XrgActor *pActor, int draw);
+extern void DisposeXrgActor(XrgActor *pActor);
+extern void XrgActorDisposeEffector(XrgActor *pActor, MatrixEffector *effector);
 
 /*
  * ov12:0x00a53d18 "pParentActor != NIL"
@@ -43,6 +49,15 @@ extern const char D_00A53D50[];
 extern const char D_00A53D98[];
 extern const char D_00A53DB8[];
 extern const char D_00A53DD0[];
+
+/*
+ * ov12:0x00a53de0 "pCont->m_pMatEff != NIL"
+ * ov12:0x00a53df8 "pCont->m_pParent != NIL"
+ * Same scaffold .rodata as the six strings above, no config/symbols/ov12.txt
+ * entry.
+ */
+extern const char D_00A53DE0[];
+extern const char D_00A53DF8[];
 
 /*
  * RgEquipType slot count and the BACK slot _CreateMatEffector rejects,
@@ -72,7 +87,7 @@ extern const char D_00A53DD0[];
  */
 typedef struct RgShotMotCont {
     int active;                     /* 0x00 */
-    unsigned char unmodeled_004[4]; /* 0x04: set by _InitCont */
+    XrgActor *m_pParent;            /* 0x04 */
     MatrixEffector *effector;       /* 0x08 */
     XrgActor *shadowActor;          /* 0x0c */
     XrgActor *attachedActor;        /* 0x10 */
@@ -80,7 +95,7 @@ typedef struct RgShotMotCont {
 } RgShotMotCont;
 
 /* Defined later in this TU (still INCLUDE_ASM); called by the function below. */
-extern void _DestructCont(RgShotMotCont *pCont);
+static void _DestructCont(RgShotMotCont *pCont);
 
 static MatrixEffector *_CreateMatEffector(XrgActor *pParentActor,
                                           XrgActor *shadowActor,
@@ -111,11 +126,59 @@ static MatrixEffector *_CreateMatEffector(XrgActor *pParentActor,
                                        attachedActor, combineSelector);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shotmot_control", _InitCont);
+static void _InitCont(RgShotMotCont *pCont, XrgActor *pParentActor,
+                      XrgActor *attachActor, unsigned int eArmType)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A53DD0, D_00A53D30, 71);
+    }
+    if (eArmType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(D_00A53D50, D_00A53D30, 72);
+    }
+    pCont->active = 0;
+    pCont->m_pParent = pParentActor;
+    pCont->shadowActor = DuplicateXrgActor(pParentActor, 0);
+    pCont->attachedActor = DuplicateXrgActor(attachActor, pCont->shadowActor);
+    pCont->effector = _CreateMatEffector(pParentActor, pCont->shadowActor, attachActor,
+                                         pCont->attachedActor, eArmType);
+    if (pCont->effector == 0) {
+        assert_prog(D_00A53DE0, D_00A53D30, 83);
+    }
+    RgMatricesEffectorSetActivity(pCont->effector, 0);
+    XrgActorSetDraw(pCont->shadowActor, 0);
+    XrgActorSetDraw(pCont->attachedActor, 0);
+    pCont->motion = -1;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shotmot_control", _DestructCont);
+static void _DestructCont(RgShotMotCont *pCont)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A53DD0, D_00A53D30, 96);
+    }
+    DisposeXrgActor(pCont->attachedActor);
+    DisposeXrgActor(pCont->shadowActor);
+    if (pCont->effector == 0) {
+        return;
+    }
+    if (pCont->m_pParent == 0) {
+        assert_prog(D_00A53DF8, D_00A53D30, 100);
+    }
+    XrgActorDisposeEffector(pCont->m_pParent, pCont->effector);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shotmot_control", CreateRgShotMotCont);
+RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor, XrgActor *attachActor,
+                                   unsigned int eArmType)
+{
+    RgShotMotCont *pCont;
+
+    pCont = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgShotMotCont), D_00A53D30, 110);
+    if (pCont == 0) {
+        assert_prog(D_00A53DD0, D_00A53D30, 111);
+    }
+    _InitCont(pCont, pParentActor, attachActor, eArmType);
+    pCont->motion = -1;
+    return pCont;
+}
 
 void DisposeRgShotMotCont(RgShotMotCont *pCont)
 {

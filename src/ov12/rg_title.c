@@ -45,10 +45,12 @@ typedef struct XrgColor {
 extern void XrgPaint2DColor(XrgPaint2D *paint, const XrgColor *color);
 extern XrgColor s_aCol;
 
+#include "rg_title.h"
+
 typedef struct RgTitle RgTitle;
 
-extern void _InitTitle(RgTitle *pTitle, int count);
-extern void _DestructTitle(RgTitle *pTitle);
+static void _InitTitle(RgTitle *pTitle, int count);
+static void _DestructTitle(RgTitle *pTitle);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_title", _disp_blight);
 
@@ -97,7 +99,26 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_title", _disp_add_blight);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_title", _InitTitle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_title", _DestructTitle);
+extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
+                                  int line);
+extern void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine);
+
+static void _DestructTitle(RgTitle *pTitle)
+{
+    if (pTitle == 0) {
+        assert_prog(D_00A57150, D_00A57128, 218);
+    }
+    DisposeXrgPaint2D_sub(pTitle->paint, D_00A57128, 219);
+    DisposeRgBxx_sub(pTitle->bxx[0], D_00A57128, 221);
+    DisposeRgBxx_sub(pTitle->bxx[1], D_00A57128, 222);
+    DisposeRgBxx_sub(pTitle->bxx[2], D_00A57128, 223);
+    DisposeRgBxx_sub(pTitle->bxx[3], D_00A57128, 224);
+    DisposeRgBxx_sub(pTitle->bxx[4], D_00A57128, 225);
+    DisposeRgBxx_sub(pTitle->bxx[5], D_00A57128, 226);
+    DisposeRgBxx_sub(pTitle->bxx[6], D_00A57128, 227);
+    DisposeRgBxx_sub(pTitle->bxx[7], D_00A57128, 228);
+    DisposeRgBxx_sub(pTitle->bxx[8], D_00A57128, 229);
+}
 
 RgTitle *CreateRgTitle(int count)
 {

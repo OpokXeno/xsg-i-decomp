@@ -10,13 +10,28 @@ extern void assert_prog(const char *expression, const char *source_file,
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
-extern void _InitGauge(RgGauge *pGauge);
+static void _InitGauge(RgGauge *pGauge);
 extern void DisposeRgGaugeDisp(RgGaugeDisp *disp);
 extern void RgGaugeDispSetValue(RgGaugeDisp *disp, float currentValue,
                                 float maxValue);
 extern void RgGaugeDispDraw(RgGaugeDisp *disp, void *pPaint);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
+                       int line);
+extern RgGaugeDisp *CreateRgGaugeDisp(void);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_gauge", _InitGauge);
+void _InitGauge(RgGauge *pGauge)
+{
+    if (pGauge == 0) {
+        assert_prog(D_00A54608, D_00A54618, 29);
+    }
+    pGauge->changeSpeed = 100.0f;
+    pGauge->currentValue = 1.0f;
+    pGauge->maxValue = 1.0f;
+    pGauge->targetValue = 1.0f;
+    pGauge->initialized = 0;
+    pGauge->active = 1;
+    pGauge->disp = CreateRgGaugeDisp();
+}
 
 static void _DestructGauge(RgGauge *pGauge)
 {
@@ -35,7 +50,14 @@ RgGauge *CreateRgGauge(void)
     return pGauge;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_gauge", DisposeRgGauge);
+void DisposeRgGauge(RgGauge *pGauge)
+{
+    if (pGauge == 0) {
+        assert_prog(D_00A54608, D_00A54618, 57);
+    }
+    _DestructGauge(pGauge);
+    RgHeapFree(InstanceOfRgHeap(), pGauge, D_00A54618, 59);
+}
 
 void RgGaugeSetValue(RgGauge *pGauge, float value)
 {

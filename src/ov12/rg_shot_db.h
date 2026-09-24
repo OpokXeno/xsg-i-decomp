@@ -9,6 +9,6 @@
 
 RgSimpleDB *InstanceOfRgShotDB(void);
 
-extern void _EntryTemporariesShotDB(RgSimpleDB *database);
+static void _EntryTemporariesShotDB(RgSimpleDB *database);
 
 #endif /* SRC_OV12_RG_SHOT_DB_H */

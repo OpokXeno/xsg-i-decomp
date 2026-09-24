@@ -27,6 +27,30 @@ typedef struct RgDrawStudio RgDrawStudio;
 typedef struct RgGeomGroup RgGeomGroup;
 
 /*
+ * Opaque handles owned by other TUs: this allocation only creates, forwards
+ * or disposes of them, it never reads or writes a member.
+ *   RgGameCollision       - ov12/tu060 (src/ov12/rg_game_collision.h),
+ *                           CreateRgGameCollision's result
+ *   RgDispWpn1P           - ov12/tu041 (src/ov12/rg_disp_wpn1p.h),
+ *                           CreateRgDispWpn1P's result
+ *   RgDispWpn2P           - ov12/tu042 (src/ov12/rg_disp_wpn2p.h),
+ *                           CreateRgDispWpn2P's result
+ *   RgBattleCommonDataEnv - ov12/tu001 (src/ov12/rg_main.h),
+ *                           InstanceOfRgBattleCommonData's singleton
+ *   RgDispGameInfo        - ov12/tu038 (src/ov12/rg_disp_gameinfo.h),
+ *                           _DrawDispInfoOnePlayer's game-info argument
+ *   XrgPaint2D            - ov12/tu086 (src/ov12/xrg_paint2d.h),
+ *                           InstanceOfXrgPaint2D's result, forwarded to the
+ *                           XrgPaint2D draw calls by _DispBattle
+ */
+typedef struct RgGameCollision RgGameCollision;
+typedef struct RgDispWpn1P RgDispWpn1P;
+typedef struct RgDispWpn2P RgDispWpn2P;
+typedef struct RgBattleCommonDataEnv RgBattleCommonDataEnv;
+typedef struct RgDispGameInfo RgDispGameInfo;
+typedef struct XrgPaint2D XrgPaint2D;
+
+/*
  * Opaque handles owned by other TUs: RgBattleMgrGetPlayerDamage only ever
  * forwards a robot pointer to RgPlayerGetRobot/RgRobotGetLife/
  * RgRobotGetLifeMax, it never reads or writes a member of it. Declared here
@@ -54,11 +78,17 @@ typedef struct PlayerList {
  * exactly this type's size) and _InitBattleField (still INCLUDE_ASM) fills.
  * Only the geometry-group pointer this allocation's _DestructBattleField/
  * _GetGeomGroupBattleField read or dispose of is modeled here.
+ *
+ * _InitBattleField also clears the slot count and studio[2]/studio[3] and
+ * both camera slots; _GetStudioBattleField/_GetCameraBattleField (both
+ * still INCLUDE_ASM) bound-check their index against count before indexing
+ * studio[index] (base +0x08) or camera[index] (base +0x18).
  */
 typedef struct BattleField {
-    unsigned char unmodeled_00[4];  /* +0x00 */
-    RgGeomGroup *geomGroup;         /* +0x04 */
-    unsigned char unmodeled_08[24]; /* +0x08, rest of the 0x20-byte allocation */
+    int count;                /* +0x00, bound for the studio/camera indices */
+    RgGeomGroup *geomGroup;   /* +0x04 */
+    RgDrawStudio *studio[4];  /* +0x08 */
+    RgCamera *camera[2];      /* +0x18 */
 } BattleField;
 
 /*
@@ -89,6 +119,14 @@ typedef struct DispInfo {
  * This allocation also models +0x0c: RgBattleMgrGetPlayerDamage reads the
  * player-list pointer there and forwards it to _GetInPlayerList (still
  * INCLUDE_ASM) to look up the player owning the requested robot.
+ *
+ * _InitBattleMgr now fills every other member too, and _DisposeBattleMgr
+ * (still INCLUDE_ASM) disposes each handle and clears playerList,
+ * geomGroup, battleField, dispInfo and fileSysData back to 0. fileSysData
+ * (+0x30) is only ever cleared to 0 by this allocation; _DisposeBattleMgr
+ * reads it and forwards a non-zero value to DisposeRgFileSysData_sub before
+ * clearing it, so it is a file-system handle this allocation never
+ * populates.
  */
 typedef struct RgBattleMgr {
     int mode;                       /* +0x00, RgBattleMgrGetMode */
@@ -97,8 +135,14 @@ typedef struct RgBattleMgr {
     PlayerList *playerList;         /* +0x0c, RgBattleMgrGetPlayerDamage */
     int playerControl;              /* +0x10, _BattleMgrPlayerControl */
     int timerActive;                /* +0x14, _BattleMgrActivateTime */
-    unsigned char unmodeled_18[4];  /* +0x18 */
+    DispInfo *dispInfo;             /* +0x18 */
     RgDispLife *dispLife;           /* +0x1c, RgBattleMgrGetDispLife */
+    RgDispWpn1P *dispWpn1P;         /* +0x20 */
+    RgDispWpn2P *dispWpn2P;         /* +0x24 */
+    RgGameCollision *gameCollision; /* +0x28 */
+    RgGeomGroup *geomGroup;         /* +0x2c */
+    RgFileSysData *fileSysData;     /* +0x30 */
+    BattleField *battleField;       /* +0x34 */
 } RgBattleMgr;
 
 #endif /* SRC_OV12_RG_BATTLEMGR_H */

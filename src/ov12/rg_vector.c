@@ -29,9 +29,31 @@ static void _InitRgVector(RgVectorPrefix *vector, unsigned int capacity)
     vector->m_nLine = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", CreateRgVector);
+extern char *strncpy(char *dest, const char *src, unsigned int n);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", DisposeRgVector);
+RgVectorPrefix *CreateRgVector(unsigned int capacity, const char *file, int line)
+{
+    RgVectorPrefix *vector;
+
+    vector = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgVectorPrefix), D_00A54F90, 45);
+    if (vector == 0)
+        _VecAssert(vector, D_00A54FD8, file, line);
+    _InitRgVector(vector, capacity);
+    strncpy(vector->m_szFile, file, sizeof(vector->m_szFile) - 1);
+    vector->m_szFile[sizeof(vector->m_szFile) - 1] = 0;
+    vector->m_nLine = line;
+    return vector;
+}
+
+extern void RgHeapFree(void *heap, void *pointer, const char *source_file, int line);
+
+void DisposeRgVector(RgVectorPrefix *vector, const char *file, int line)
+{
+    if (vector == 0)
+        _VecAssert(vector, rg_vector_not_null_message, file, line);
+    RgHeapFree(InstanceOfRgHeap(), vector->m_apList, D_00A54F90, 60);
+    RgHeapFree(InstanceOfRgHeap(), vector, D_00A54F90, 61);
+}
 
 void RgVectorPush(RgVectorPrefix *vector, void *element)
 {
@@ -97,7 +119,22 @@ void RgVectorAssign(RgVectorPrefix *vector, unsigned int index, void *element)
     vector->m_apList[index] = element;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", RgVectorDup);
+void RgVectorDup(RgVectorPrefix *vector, void **dest)
+{
+    void **src;
+    int count;
+
+    if (vector == 0)
+        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 169);
+    count = vector->m_uSize;
+    src = vector->m_apList;
+    if (count > 0) {
+        do {
+            *dest++ = *src++;
+            count--;
+        } while (count > 0);
+    }
+}
 
 void **RgVectorGetArray(RgVectorPrefix *vector)
 {

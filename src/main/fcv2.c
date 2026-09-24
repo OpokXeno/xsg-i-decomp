@@ -45,7 +45,12 @@ void FCV_resetPack(FCVPack *pack, FCVKeyData *source)
     pack->key_index = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV_skipPack);
+static f32 FCV_getPackVal2f(FCVPack *pack, s32 keyCount, f32 frame);
+
+void FCV_skipPack(FCVPack *pack, s32 keyCount)
+{
+    FCV_getPackVal2f(pack, keyCount, 0.0f);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV_getPackValue);
 
@@ -68,7 +73,7 @@ INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_getPackVal);
 
 INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_getVal);
 
-extern f32 FCV2_getVal(void *output, void *data, u16 key, f32 frame);
+static f32 FCV2_getVal(void *output, void *data, u16 key, f32 frame);
 
 /*
  * FCV2Value is the curve FCV2_getValue samples: a cursor into its key table,
@@ -96,7 +101,22 @@ f32 FCV2_getValue(FCV2Value *curve, f32 frame)
     return 0.0f;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_getValueAndKey);
+/*
+ * key is zeroed unconditionally, then forwarded to FCV2_getVal as its
+ * output parameter only while walking a spline (curve->type == 3);
+ * FCV2_getValue's equivalent call passes a null output there instead.
+ */
+f32 FCV2_getValueAndKey(s32 *key, FCV2Value *curve, f32 frame)
+{
+    *key = 0;
+    if (curve->type == 3) {
+        return FCV2_getVal(key, &curve->value, curve->cursor, frame);
+    }
+    if (curve->type == 1) {
+        return curve->value;
+    }
+    return 0.0f;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_readAttribute);
 

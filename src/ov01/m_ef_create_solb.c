@@ -8,12 +8,12 @@
 
 extern void *memset(void *destination, int value, unsigned int count);
 extern void MEfGetActorCoord(void *dst, u32 actor, u32 coord);
-extern void makePath(void *work);
-extern void makeHermiteParam(int mode, void *work);
+static void makePath(void *work);
+static void makeHermiteParam(int mode, void *work);
 extern void MGsGPInit(void *work, int flags, int mode);
-extern void fnSOLB_PR000(void);
-extern void fnSOLB_DP000(void);
-extern void fnSOLB_PO000(void);
+static void fnSOLB_PR000(void *self, void *work);
+static void fnSOLB_DP000(void *self, void *work);
+static void fnSOLB_PO000(void *self, void *work);
 
 int MEfCreate_SOLB(void *work)
 {
@@ -80,4 +80,20 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_solb", fnSOLB_PR000);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_solb", fnSOLB_DP000);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_solb", fnSOLB_PO000);
+/* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
+ * still asm in their defining TU; declared locally until published there. */
+extern void MEfObjDestroy(void *self);
+extern void sefHitEffect(void);
+
+static void fnSOLB_PO000(void *self, void *work)
+{
+    SolbState *state = (SolbState *)work;
+
+    state->age++;
+    if (state->age == 0x17) {
+        sefHitEffect();
+    }
+    if (state->age >= 0x35) {
+        MEfObjDestroy(self);
+    }
+}

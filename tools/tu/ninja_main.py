@@ -36,6 +36,7 @@ sys.path.insert(0, str(HERE))
 from elfinfo import Elf  # noqa: E402
 from toolchain import Toolchain  # noqa: E402
 import tail_align  # noqa: E402
+import data_carve  # noqa: E402
 
 
 def resolve_tools(root):
@@ -230,6 +231,16 @@ def main(argv=None):
     UNIT_DIR = (a.unit_dir.resolve() if a.unit_dir is not None else ROOT / "build/main")
     unit_dir = UNIT_DIR
     m = json.loads((unit_dir / "tu-manifest.json").read_bytes())
+    # Declared C-owned data runs (config/tu/data-carves.json, tools/tu/data_carve.py):
+    # the jump tables and literals recovered C functions generate, cut out of their
+    # TU's scaffold piece. Nothing declared: `m` is the tracked manifest unchanged.
+    m, carve_report = data_carve.apply_main(ROOT, unit_dir, m)
+    manifest_name = "tu-manifest.json"
+    if carve_report:
+        manifest_name = "tu-manifest.carved.json"
+        write_if_changed(unit_dir / manifest_name, json.dumps(m, indent=1) + "\n")
+    elif (unit_dir / "tu-manifest.carved.json").exists():
+        (unit_dir / "tu-manifest.carved.json").unlink()
     orig = Elf((unit_dir / "orig/SLUS_204.69").read_bytes())
     S = {x.name: x for x in orig.sections}
     tus = m["tus"]
@@ -366,7 +377,8 @@ def main(argv=None):
 
     for sec, v in m["sections"].items():
         for pc in v["order"]:
-            edges.append(f"build {dobj(pc['piece'], sec)}: as asm/main/data/{pc['piece']}.{sec[1:]}.s")
+            src = pc.get("file") or f"asm/main/data/{pc['piece']}.{sec[1:]}.s"
+            edges.append(f"build {dobj(pc['piece'], sec)}: as {src}")
     for sec, name in ((".sbss", "linker/scommon"), (".bss", "linker/common")):
         edges.append(f"build {dobj(name, sec)}: as asm/main/data/{name}.{sec[1:]}.s")
     for b in ("reginfo", "ctors", "dtors", "eh_frame"):
@@ -541,7 +553,8 @@ def main(argv=None):
         for sec, p in t["sections"].items():
             for pc in p.get("pieces", [dict(name=n, start=p["start"], c_split=False)]):
                 if t["owners"].get(sec) == "c" or (t["owners"].get(sec) == "split" and pc["c_split"]):
-                    owned.append((sec, int(pc["start"], 16), [unit_dir / f"asm/main/data/{pc['name']}.{sec[1:]}.s"]))
+                    owned.append((sec, int(pc["start"], 16),
+                                  [unit_dir / (pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s")]))
         for sec, base, files in owned:
             for f in files:
                 cur = None
@@ -651,7 +664,8 @@ def main(argv=None):
          "rule flat", "  command = $objcopy -O binary $in $out", "  description = OBJCOPY $out",
          "rule compare", f"  command = $py {HERE}/compare.py $mode --original orig/SLUS_204.69 --rebuilt $in --report $out",
          "  description = COMPARE $in",
-         "rule mapcheck", f"  command = {T} $py {HERE}/mapcheck.py --map $in.map --report $out --rom $carve",
+         "rule mapcheck", f"  command = {T} $py {HERE}/mapcheck.py --map $in.map --report $out --rom $carve"
+         + (f" --manifest {manifest_name}" if carve_report else ""),
          "  description = MAPCHECK $in",
          "# ACCEPTED_ASM/INCLUDE_ASM provenance (tu-main-v2 review finding 3)",
          "rule provenance",
@@ -685,12 +699,12 @@ def main(argv=None):
           "build build/main.bin: flat build/main.rom.elf",
           "build build/main.compare.json: compare build/main.bin", "  mode =",
           f"build build/accepted_asm.json: provenance | tu-manifest.json {HERE}/accepted_asm_gate.py " + " ".join(prov_deps),
-          f"build build/main.mapcheck.json: mapcheck build/main.rom.elf | tu-manifest.json {HERE}/mapcheck.py " + " ".join(o for (n, k), o in obj.items() if k == "c"), "  carve =",
+          f"build build/main.mapcheck.json: mapcheck build/main.rom.elf | {manifest_name} {HERE}/mapcheck.py " + " ".join(o for (n, k), o in obj.items() if k == "c"), "  carve =",
           f"build build/carve/main.rom.elf: ld | {' '.join(carve_objs)} main.carve.rom.ld {common} build/carve/main.undefined.ld",
           "  script = main.carve.rom.ld", "  extra =", "  undef = build/carve/main.undefined.ld",
           "build build/carve/main.bin: flat build/carve/main.rom.elf",
           "build build/carve/main.compare.json: compare build/carve/main.bin", "  mode =",
-          f"build build/carve/main.mapcheck.json: mapcheck build/carve/main.rom.elf | tu-manifest.json {HERE}/mapcheck.py",
+          f"build build/carve/main.mapcheck.json: mapcheck build/carve/main.rom.elf | {manifest_name} {HERE}/mapcheck.py",
           "  carve = --carve",
           f"build build/main.elf: ld_elf | {' '.join(elf_objs)} main.elf.ld {common} c_aliases.ld externals.ld build/main.undefined.ld",
           "  script = main.elf.ld", "  extra = -T c_aliases.ld -T externals.ld", "  undef = build/main.undefined.ld",

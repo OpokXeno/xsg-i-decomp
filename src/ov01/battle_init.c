@@ -5,11 +5,23 @@
 #include "shared.h"
 #include "battle_init.h"
 #include "ov01/calc.h"
+#include "main/party.h"
 
 #define CURSOR_STATE_OFF 0x10
 #define STATE_FLAGS_OFF 0x00
 #define STATE_UNK70_OFF 0x70
 #define STATE_UNK74_OFF 0x74
+
+/*
+ * Two CalcUnitParam (include/ov01/calc.h, defined in ov01/tu004) bytes
+ * battleCtrlBoostPl/battleCtrlBoostEn read as signed: the enemy AI's own
+ * boost chance percentage (lb at +0x20, inside calc.h's unmodeled_1e span)
+ * and the boost-level value both functions log (lb at +0x3C, inside
+ * calc.h's unmodeled_3a span). calc.h is owned by a different TU and is not
+ * completed here.
+ */
+#define CALC_PARAM_BOOST_CHANCE_OFF 0x20
+#define CALC_PARAM_BOOST_LEVEL_OFF 0x3C
 
 extern int escapeFlag;
 extern const char D_00A44080[];
@@ -57,11 +69,40 @@ typedef struct Actor {
  */
 typedef struct BattleUnit BattleUnit;
 struct BattleUnit {
-    unsigned char unmodeled_00[0x14];
+    unsigned char unmodeled_00[0x10];
+    Actor *work;       /* +0x10 */
     Actor *actor;      /* +0x14 */
     unsigned char unmodeled_18[0x1C - 0x18];
     Actor *weapon[4];  /* +0x1C */
 };
+
+/*
+ * BattleUnit's own ObjectTask.work slot at +0x10 (inside unmodeled_00 above,
+ * not completed here): camEventTurnStartSet reads it as the same Actor
+ * pointer src/ov01/unit_cmd.c and src/ov01/snd.c already read through
+ * ObjectTask.work on their own unit records, testing bit 0x40 of
+ * Actor.flags (the enemy bit src/ov01/unit_cmd.h names ACTOR_FLAG_ENEMY).
+ */
+#define BATTLE_UNIT_WORK_OFF 0x10
+
+/*
+ * The camera-event request record camEventExec (defined elsewhere, still
+ * INCLUDE_ASM there) consumes: camEventTurnStartSet writes type 6, the
+ * acting/target units and, in param, whether the acting unit is an enemy.
+ * battleCtrlMan writes type 8 with only unit/target, leaving param at
+ * whatever the record already held. Data still asm-owned; the original ELF
+ * local symbol is "camEv", not yet in config/symbols/ov01.txt, so the splat
+ * placeholder name is kept here.
+ */
+typedef struct CamEvent {
+    int type;           /* +0x00 */
+    int param;           /* +0x04 */
+    BattleUnit *unit;     /* +0x08 */
+    BattleUnit *target;   /* +0x0C */
+} CamEvent;
+extern CamEvent D_00A57B80;
+
+extern void camEventExec(CamEvent *event, BattleUnit *unit);
 
 /*
  * The scenario-battle exec record the scenarioBatExecPhase* handlers work on
@@ -106,6 +147,7 @@ extern int D_00A57C80;
 extern BattleUnit *pActUnit;
 extern BattleUnit *pLastUnit;
 BattleUnit **tgtUnitAdrGet(void);
+BattleUnit *tgtUnitGet(void);
 
 /*
  * manWorkGet's return type. Only the two fields menuKeyGuideObjDraw (src/
@@ -154,10 +196,15 @@ typedef struct ScenarioStep {
     int stride; /* +0x10: added into ScenarioBatState.index by scenarioBatNext */
 } ScenarioStep;
 typedef void (*ScenarioPhaseFunc)(void);
+/*
+ * scenarioBatInit also writes +0x08, the destination buffer scenarioBatInit
+ * pairs with source: both are set from the fixed scenarioSrc/scenarioDst
+ * byte arrays, so dest is typed the same as source's own backing array.
+ */
 typedef struct ScenarioBatState {
     int count;                    /* +0x00: index is clamped to this */
     int index;                    /* +0x04: advanced by source->stride each call */
-    unsigned char unmodeled_08[0x0C - 0x08];
+    unsigned char *dest;          /* +0x08 */
     ScenarioStep *source;         /* +0x0C */
     ScenarioPhaseFunc nextPhase; /* +0x10 */
     int phaseTimer;              /* +0x14 */
@@ -233,15 +280,50 @@ int battleCtrlHelpGet(void)
     return helpFlag;
 }
 
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
+extern int unitTblGet(int side, BattleUnit ***table);
+extern int calcBoostChk(BattleUnit *unit, int mode);
+extern int calcBoost(BattleUnit *unit, int mode);
+
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlBoostPl);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlBoostEn);
+extern int rnd(int max);
+extern const char D_00A43D90[];
+
+int battleCtrlBoostEn(void)
+{
+    BattleUnit **table;
+    int count;
+    int chance;
+    int i;
+
+    count = unitTblGet(1, &table);
+    for (i = 0; i < count; i++) {
+        if (table[i] != 0) {
+            chance = ((signed char *)calcUPGet((ObjectTask *)table[i]))[CALC_PARAM_BOOST_CHANCE_OFF];
+            if (calcBoostChk(table[i], 1) != 0 && rnd(100) < chance) {
+                printf(D_00A43D90, calcUPGet((ObjectTask *)table[i])->charaId, chance,
+                       ((signed char *)calcUPGet((ObjectTask *)table[i]))[CALC_PARAM_BOOST_LEVEL_OFF]);
+                calcBoost(table[i], 1);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlMan);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", manInput);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", camEventTurnStartSet);
+void camEventTurnStartSet(void)
+{
+    D_00A57B80.type = 6;
+    D_00A57B80.unit = pActUnit;
+    D_00A57B80.target = tgtUnitGet();
+    D_00A57B80.param = (*(int *)*(void **)((char *)pActUnit + BATTLE_UNIT_WORK_OFF) >> 6) & 1;
+    camEventExec(&D_00A57B80, pActUnit);
+}
 
 /*
  * The two command-list buffers cmdListSet/cmdListChange/unitCmdListSet/
@@ -333,7 +415,51 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyBuffChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", busyUnitChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actUnitTblMake);
+/*
+ * Collects the units of one side that are still taking part in the battle
+ * and returns how many there are. The test is on the flags word of the
+ * unit's own actor (the same word transWepIn and camEventTurnStartSet
+ * read): bit 0x8 must be set and bit 0x80 clear.
+ * A null actUnits only counts them; otherwise the collected units are
+ * stored in it in table order.
+ */
+int actUnitTblMake(int side, BattleUnit **actUnits)
+{
+    BattleUnit **table;
+    BattleUnit **next;
+    BattleUnit **out;
+    BattleUnit *unit;
+    u32 flags;
+    int remaining;
+    int count;
+    int made;
+
+    count = unitTblGet(side, &table);
+    made = 0;
+    if (count > 0) {
+        next = table;
+        remaining = count;
+        out = actUnits;
+        do {
+            unit = *next;
+            next++;
+            if (unit != 0) {
+                flags = unit->work->flags;
+                if (!(flags & 0x80)) {
+                    if (flags & 8) {
+                        if (actUnits != 0) {
+                            *out = unit;
+                        }
+                        out++;
+                        made++;
+                    }
+                }
+            }
+            remaining--;
+        } while (remaining != 0);
+    }
+    return made;
+}
 
 /*
  * Defined in ov01/tu004 src/ov01/calc.c; not yet published there.
@@ -376,25 +502,130 @@ void thinkNoSet(int thinkNo)
     D_00A57C80 = thinkNo;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", plUnitTblGet);
+/*
+ * The party's per-slot attack assignment (src/main/party.h
+ * PartyAttackPosition: that TU-local header cannot be included from here).
+ * Only the 4-byte stride and the two fields plUnitTblGet copies are modeled.
+ */
+typedef struct PartyAttackSlot {
+    unsigned short partyId;      /* +0x0 */
+    signed char attackPosition;  /* +0x2 */
+} PartyAttackSlot;
+
+/*
+ * plTbl (data still asm-owned; original ELF symbol name): three 8-byte
+ * entries. plUnitTblGet writes only the first two fields of each; the
+ * remaining four bytes are written by plUnitTblSet (still INCLUDE_ASM).
+ */
+typedef struct PlUnitEntry {
+    short partyId;         /* +0x0 */
+    short attackPosition;  /* +0x2 */
+    unsigned char unmodeled_04[4];
+} PlUnitEntry;
+extern PlUnitEntry plTbl[3];
+
+PlUnitEntry *plUnitTblGet(void) {
+    PartyAttackSlot *slot;
+    PlUnitEntry *entry;
+    int i;
+
+    slot = (PartyAttackSlot *)(PartyDataGet() + 0x30);
+    entry = plTbl;
+    for (i = 0; i < 3; i++) {
+        entry->partyId = (short)slot->partyId;
+        entry->attackPosition = (short)slot->attackPosition;
+        slot++;
+        entry++;
+    }
+    return plTbl;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", plUnitTblSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", monsSetNoGet);
+/*
+ * GameLoopState (config/symbols/main.txt, data still asm-owned) is a
+ * 0x2A030-byte record several TUs each model only where they touch it (for
+ * example src/main/script.h's GameLoopState+0x29F40 event byte); the active
+ * monster-set number monsSetNoGet/monsSetNoSet share lives at +0x29F90 as a
+ * signed halfword. The rest of the record is not recovered here.
+ */
+typedef struct GameLoopMonsSetView {
+    unsigned char unmodeled_00[0x29F90];
+    short monsSetNo; /* +0x29F90 */
+} GameLoopMonsSetView;
+extern GameLoopMonsSetView GameLoopState;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", monsSetNoSet);
+int monsSetNoGet(void)
+{
+    return GameLoopState.monsSetNo;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", mapNoGet);
+void monsSetNoSet(int monsSetNo)
+{
+    GameLoopState.monsSetNo = monsSetNo;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", mapNoSet);
+/*
+ * GameLoopState also carries the current map number at +0x29F92, directly
+ * after the monster-set number above; the published GameLoopMonsSetView
+ * cannot be extended to reach it, so this TU models it through its own
+ * prefix view of the same object; the rest of the record is not recovered
+ * here.
+ */
+typedef struct GameLoopMapNoPrefix {
+    unsigned char unmodeled_00[0x29F92];
+    short mapNo; /* +0x29F92 */
+} GameLoopMapNoPrefix;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cfEncountGet);
+int mapNoGet(void)
+{
+    GameLoopMapNoPrefix *mapNoView = (GameLoopMapNoPrefix *)&GameLoopState;
+    return mapNoView->mapNo;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cfEncountSet);
+void mapNoSet(int mapNo)
+{
+    GameLoopMapNoPrefix *mapNoView = (GameLoopMapNoPrefix *)&GameLoopState;
+    mapNoView->mapNo = mapNo;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cfEventGet);
+/*
+ * GameLoopState also carries the encounter/event configuration bytes at
+ * +0x29F96 and +0x29F97 (lbu/sb against 0x00362616/0x00362617, base
+ * 0x338680 + 0x29F96/+0x29F97, the same base the monster-set view above
+ * uses). The published GameLoopMonsSetView above cannot be extended to
+ * reach these bytes, so this TU models them through their own prefix view
+ * of the same object; the rest of the record is not recovered here.
+ */
+typedef struct GameLoopCfConfigPrefix {
+    unsigned char unmodeled_00[0x29F96];
+    u8 cfEncount; /* +0x29F96 */
+    u8 cfEvent;   /* +0x29F97 */
+} GameLoopCfConfigPrefix;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cfEventSet);
+u8 cfEncountGet(void)
+{
+    GameLoopCfConfigPrefix *cfConfig = (GameLoopCfConfigPrefix *)&GameLoopState;
+    return cfConfig->cfEncount;
+}
+
+void cfEncountSet(u8 cfEncount)
+{
+    GameLoopCfConfigPrefix *cfConfig = (GameLoopCfConfigPrefix *)&GameLoopState;
+    cfConfig->cfEncount = cfEncount;
+}
+
+u8 cfEventGet(void)
+{
+    GameLoopCfConfigPrefix *cfConfig = (GameLoopCfConfigPrefix *)&GameLoopState;
+    return cfConfig->cfEvent;
+}
+
+void cfEventSet(u8 cfEvent)
+{
+    GameLoopCfConfigPrefix *cfConfig = (GameLoopCfConfigPrefix *)&GameLoopState;
+    cfConfig->cfEvent = cfEvent;
+}
 
 BattleUnit *actUnitGet(void)
 {
@@ -436,7 +667,20 @@ void scenarioPtrFuncSet(ScenarioPhaseFunc func)
     scenarioPtr.phaseTimer = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatInit);
+void scenarioBatExecPhase10(void);
+extern void sndInit2(void);
+extern unsigned char scenarioDst[];
+extern unsigned char scenarioSrc[];
+
+void scenarioBatInit(void)
+{
+    sndInit2();
+    scenarioPtr.source = (ScenarioStep *)scenarioSrc;
+    scenarioPtr.count = 0;
+    scenarioPtr.index = 0;
+    scenarioPtr.dest = scenarioDst;
+    scenarioPtrFuncSet(scenarioBatExecPhase10);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioSrcSet);
 
@@ -571,7 +815,52 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecDst);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", decoEffCall);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", decoEffCallSub);
+/*
+ * decoEffCallSub's own signed byte inside calc.h's unmodeled_10 span (that
+ * header is owned by ov01/tu004 and not completed here); shared-header need.
+ */
+#define CALC_PARAM_DECO_EFF_OFF 0x15
+
+/*
+ * calc.h's own charaId (+0x38) is signed; decoEffCallSub reads it here with
+ * an unsigned halfword load (lhu, not the lh every other charaId read in
+ * this TU uses), so it is read through this raw offset instead of the
+ * shared ->charaId member.
+ */
+#define CALC_PARAM_CHARA_ID_OFF 0x38
+
+extern void sefCreateEffect(int *params);
+
+/*
+ * The local effect-request block sefCreateEffect reads (evidenced only by
+ * this call: only the fields decoEffCallSub itself stores are named).
+ */
+typedef struct DecoEffParams {
+    Actor *actor;              /* +0x00 */
+    unsigned char unmodeled_04[0xC - 0x4];
+    short moveVariant;         /* +0x0C */
+    unsigned char unmodeled_0e[0x10 - 0xE];
+    short charaId;             /* +0x10 */
+    unsigned char unmodeled_12[0x14 - 0x12];
+    short subId;               /* +0x14 */
+    unsigned char unmodeled_16[0x1A - 0x16];
+    short flags;               /* +0x1A */
+    unsigned char unmodeled_1c[0x24 - 0x1C];
+} DecoEffParams;
+
+void decoEffCallSub(BattleUnit *unit, int subId) {
+    DecoEffParams params;
+    unsigned short charaId;
+
+    memset(&params, 0, sizeof(params));
+    params.actor = unit->actor;
+    params.moveVariant = (signed char)((signed char *)calcUPGet((ObjectTask *)unit))[CALC_PARAM_DECO_EFF_OFF];
+    charaId = *(unsigned short *)((unsigned char *)calcUPGet((ObjectTask *)unit) + CALC_PARAM_CHARA_ID_OFF);
+    params.subId = (short)subId;
+    params.charaId = charaId;
+    params.flags = (short)calcUPGet((ObjectTask *)unit)->flags;
+    sefCreateEffect((int *)&params);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioEffCall);
 
@@ -605,11 +894,33 @@ void scenarioMtd(ScenarioBatExec *exec)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", spWepDispOn);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", spWepDispOnSub);
+/*
+ * spWepDispOn's worker: with fade clear the weapon actor in slot `slot & 3`
+ * is revealed at once, otherwise transWepIn fades it in.
+ */
+void spWepDispOnSub(BattleUnit *unit, int slot, int fade)
+{
+    if (fade == 0) {
+        unit->weapon[slot & 3]->flags &= ~WEAPON_HIDDEN_BIT;
+        return;
+    }
+    transWepIn(unit, slot);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", spWepDispOff);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", spWepDispOffSub);
+/*
+ * spWepDispOff's worker: with fade clear the weapon actor in slot
+ * `slot & 3` is hidden at once, otherwise transWepOut fades it out.
+ */
+void spWepDispOffSub(BattleUnit *unit, int slot, int fade)
+{
+    if (fade == 0) {
+        unit->weapon[slot & 3]->flags |= WEAPON_HIDDEN_BIT;
+        return;
+    }
+    transWepOut(unit, slot);
+}
 
 void transWepIn(BattleUnit *unit, int slot)
 {
@@ -623,7 +934,19 @@ void transWepIn(BattleUnit *unit, int slot)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", transWepInDraw);
+extern void unitActdraw(void);
+
+void transWepInDraw(Actor *actor) {
+    float transparency;
+
+    unitActdraw();
+    transparency = actor->transparency + 0.1f;
+    actor->transparency = transparency;
+    if (transparency >= 1.0f) {
+        actor->transparency = 1.0f;
+        actor->draw = 0;
+    }
+}
 
 void transWepOut(BattleUnit *unit, int slot)
 {
@@ -636,7 +959,18 @@ void transWepOut(BattleUnit *unit, int slot)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", transWepOutDraw);
+void transWepOutDraw(Actor *actor) {
+    float transparency;
+
+    unitActdraw();
+    transparency = actor->transparency - 0.1f;
+    actor->transparency = transparency;
+    if (transparency <= 0.0f) {
+        actor->transparency = 0.0f;
+        actor->draw = 0;
+        actor->flags |= WEAPON_HIDDEN_BIT;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioSrcEndChk);
 
@@ -735,7 +1069,55 @@ void statEffOff(ObjectTask *unit)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objEnCurCreate);
+/*
+ * objEntry2 and objStdInit are defined by ov01/tu001 obj.c (src/ov01/obj.h
+ * is that TU-local header and is not includable here);
+ * src/ov01/entry_first_init.c already redeclares them the same way.
+ */
+extern ObjectTask *objEntry2(void *argument, void (*callback)(ObjectTask *task));
+extern void objStdInit(ObjectTask *task);
+
+/*
+ * The enemy cursor's own task callbacks, both defined further down in this
+ * TU: objCur (still asm) reaches the cursor's state record through
+ * CURSOR_STATE_OFF exactly as objCurDraw right after it does.
+ */
+void objCur(CursorObject *cursor);
+void objCurDraw(CursorObject *cursor);
+
+/*
+ * Further evidenced words on the cursor's state record (CURSOR_STATE_OFF,
+ * the object's own work pointer):
+ *   state + 0x04 and state + 0x78 are cleared when the cursor is created;
+ *   state + 0x80 is the target address curSel below compares and updates;
+ *   state + 0x90 starts the three coordinate floats the caller supplies.
+ * The 0x40 bit objEnCurCreate sets in the flags word at STATE_FLAGS_OFF is
+ * the enemy-side bit objCurDraw reads back to pick objDispEnCur.
+ */
+#define STATE_UNK04_OFF 0x04
+#define STATE_UNK78_OFF 0x78
+#define STATE_TARGET_OFF 0x80
+#define STATE_POS_OFF 0x90
+
+ObjectTask *objEnCurCreate(float x, float y, float z)
+{
+    ObjectTask *task;
+    CursorCommandState *state;
+    float *pos;
+
+    task = objEntry2(objCur, (void (*)(ObjectTask *))objCurDraw);
+    state = task->work;
+    objStdInit(task);
+    pos = (float *)((char *)state + STATE_POS_OFF);
+    pos[0] = x;
+    pos[1] = y;
+    pos[2] = z;
+    *(unsigned int *)((char *)state + STATE_FLAGS_OFF) |= 0x40;
+    *(int *)((char *)state + STATE_UNK04_OFF) = 0;
+    *(void **)((char *)state + STATE_TARGET_OFF) = 0;
+    *(int *)((char *)state + STATE_UNK78_OFF) = 0;
+    return task;
+}
 
 /*
  * objRemove is defined by ov01/tu001 obj.c; menu.c already redeclares it
@@ -755,7 +1137,32 @@ void objCurRemove(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objCur);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objCurDraw);
+extern void objDispPlCur(void);
+extern void objDispEnCur(CursorObject *cursor);
+
+/*
+ * cursor + 0x10 (CURSOR_STATE_OFF) reaches the same state record curCmdSet
+ * writes; this function reads back state + 0x00 (STATE_FLAGS_OFF) and
+ * returns without drawing when bit 0x4 is set, otherwise dispatches to the
+ * enemy-side draw callee (bit 0x40 set) or the player-side one (objDispPlCur,
+ * which takes no argument).
+ */
+void objCurDraw(CursorObject *cursor)
+{
+    CursorCommandState *state;
+    unsigned int flags;
+
+    state = *(CursorCommandState **)((char *)cursor + CURSOR_STATE_OFF);
+    flags = *(unsigned int *)((char *)state + STATE_FLAGS_OFF);
+    if (flags & 4) {
+        return;
+    }
+    if (!(flags & 0x40)) {
+        objDispPlCur();
+        return;
+    }
+    objDispEnCur(cursor);
+}
 
 /*
  * Evidenced word offsets on the opaque state/cursor handles. Each offset is
@@ -786,7 +1193,75 @@ void curCmdSet(CursorObject *cursor, const CursorCommand *command)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curSel);
+/*
+ * Battle cursor selection list. entries[] holds the target address of each
+ * selectable item, indexed by curIdx (word width, stride 4); count bounds
+ * curIdx on both ends; prevIdx is a snapshot of curIdx taken on entry and
+ * compared again after the target update to decide whether to play the
+ * selection sound. Earlier bytes are unmodeled; entries[] is sized to the
+ * gap its own offset leaves before count (0x24..0x47, stride 4 = 9 words).
+ */
+typedef struct CursorSelectList {
+    unsigned char unmodeled_00[0x24];
+    void *entries[9]; /* +0x24..+0x47 */
+    int count;         /* +0x48 */
+    int curIdx;         /* +0x4C */
+    int prevIdx;         /* +0x50 */
+} CursorSelectList;
+
+/*
+ * dataPadRead is defined by ov01/tu005 data_unit_org_get.c (still asm);
+ * declared here to call it from this TU.
+ */
+extern int dataPadRead(int padNo);
+
+/*
+ * curMove2Pos is defined later in this TU (still asm); forward-declared to
+ * call it here.
+ */
+extern void curMove2Pos(CursorObject *cursor, CursorSelectList *list);
+
+/*
+ * sndSysSePlay is defined by ov01/tu013 snd.c (still asm); other TUs already
+ * redeclare it the same way to call it from a different TU.
+ */
+extern int sndSysSePlay(int soundId);
+
+/*
+ * +0x80 on the cursor's state record (CURSOR_STATE_OFF above): the target
+ * address curMove2Pos last moved the cursor toward.
+ */
+#define STATE_TARGET_OFF 0x80
+
+int curSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int prevMask)
+{
+    CursorCommandState *state;
+    void *target;
+
+    list->prevIdx = list->curIdx;
+    if (dataPadRead(1) & nextMask) {
+        list->curIdx++;
+        if (list->curIdx >= list->count) {
+            list->curIdx = 0;
+        }
+    } else if (dataPadRead(1) & prevMask) {
+        list->curIdx--;
+        if (list->curIdx < 0) {
+            list->curIdx = list->count - 1;
+        }
+    }
+
+    state = *(CursorCommandState **)((char *)cursor + CURSOR_STATE_OFF);
+    target = list->entries[list->curIdx];
+    if (*(void **)((char *)state + STATE_TARGET_OFF) != target) {
+        *(void **)((char *)state + STATE_TARGET_OFF) = target;
+        curMove2Pos(cursor, list);
+        if (list->curIdx != list->prevIdx) {
+            sndSysSePlay(0xA);
+        }
+    }
+    return list->curIdx;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curGrpSel);
 
@@ -866,6 +1341,44 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispCurSubEn);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curPutSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curTexTrans);
+/*
+ * grGpInit's own record (src/ov01/gr_gp_init.c, still asm there; that TU
+ * owns the layout and has not published it through a header yet -- shared-
+ * header need). curTexTrans only ever takes this local's address and never
+ * reads it back, so the storage is left untyped here rather than restating
+ * the owner's struct.
+ */
+extern void grGpInit(void *packet);
+extern void grGsRegSet(void *packet, int reg, int value);
+extern void grPacketSend(void *packet);
+
+/*
+ * dataXtxFileGet's own table entry (src/ov01/data_unit_org_get.c, still
+ * asm); only the word at +0x4 is evidenced here, forwarded unchanged to
+ * xglPacketTextureTrans.
+ */
+typedef struct XtxFile {
+    unsigned char unmodeled_00[4];
+    int textureId; /* +0x4 */
+} XtxFile;
+
+extern XtxFile *dataXtxFileGet(int index);
+extern void xglPacketTextureTrans(int textureId);
+
+#define CURSOR_XTX_SLOT 2
+/* GS register 0x3F (TEXFLUSH): any write flushes the texture cache after a
+ * texture upload, matching the dataXtxFileGet(2) transfer just above it. */
+#define GS_REG_TEXFLUSH 0x3F
+
+void curTexTrans(void)
+{
+    int packet[2]; /* grGpInit's own record: a data pointer and an element
+                     * count (this call site's own evidence for the size). */
+
+    xglPacketTextureTrans(dataXtxFileGet(CURSOR_XTX_SLOT)->textureId);
+    grGpInit(packet);
+    grGsRegSet(packet, GS_REG_TEXFLUSH, 1);
+    grPacketSend(packet);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curEnvMake);

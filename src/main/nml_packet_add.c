@@ -21,6 +21,18 @@ typedef struct UcodeTableRow {
 
 extern UcodeTableRow s_aUcodeTbl[];
 
+extern int g_aSubWindow[4];
+
+/* One VIF unpack value passed to sceVif1PkAddUpkData128 by value. */
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
+typedef union NmlPacketData128 {
+    u32 words[4];
+    Quadword quad;
+} NmlPacketData128;
+
+extern void sceVif1PkAddUpkData128(NmlPacket packet, Quadword data);
+
 /*
  * Every case ends with its own "queue the program or clear result" tail.  The
  * compiler cross-jumps the seven copies back into the single tail seen in the
@@ -29,21 +41,208 @@ extern UcodeTableRow s_aUcodeTbl[];
  * the stack and the program pointers take s4..s8 instead.
  */
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurMatrixSet);
+/*
+ * _CurMatrixSet loads a 4x4 matrix into vf27..vf30, the VU0 macro-mode
+ * registers this TU's packet builder keeps as its persistent "current
+ * matrix" across _CurMatrixMul and _CurApplyMatrix (main VA 0x00236448,
+ * ee-vu-cop2, docs/ps2-capabilities.md).
+ */
+static void _CurMatrixSet(const Matrix4 matrix)
+{
+    __asm__ __volatile__(
+        "lqc2 vf27, 0(%0)\n\t"
+        "lqc2 vf28, 16(%0)\n\t"
+        "lqc2 vf29, 32(%0)\n\t"
+        "lqc2 vf30, 48(%0)\n\t"
+        "nop"
+        :
+        : "r"(matrix)
+        : "memory"
+    );
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurMatrixGet);
+/*
+ * _CurMatrixGet stores the VU0 macro-mode "current matrix" vf27..vf30
+ * _CurMatrixSet/_CurSetMatrix left live back into the caller's 4x4 matrix
+ * (main VA 0x00236460, ee-vu-cop2, docs/ps2-capabilities.md).
+ */
+static void _CurMatrixGet(Matrix4 matrix)
+{
+    __asm__ __volatile__(
+        "sqc2 vf27, 0(%0)\n\t"
+        "sqc2 vf28, 16(%0)\n\t"
+        "sqc2 vf29, 32(%0)\n\t"
+        "sqc2 vf30, 48(%0)\n\t"
+        "nop"
+        :
+        : "r"(matrix)
+        : "memory"
+    );
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurMatrixMul);
+/*
+ * _CurMatrixMul loads a 4x4 matrix and concatenates it onto the VU0
+ * macro-mode "current matrix" _CurMatrixSet left in vf27..vf30, writing the
+ * product's three scaled rows back into vf27..vf29 (main VA 0x00236478,
+ * ee-vu-cop2, docs/ps2-capabilities.md).
+ */
+static void _CurMatrixMul(const Matrix4 matrix)
+{
+    __asm__ __volatile__(
+        "lqc2 vf2, 0(%0)\n\t"
+        "lqc2 vf3, 16(%0)\n\t"
+        "lqc2 vf4, 32(%0)\n\t"
+        "lqc2 vf5, 48(%0)\n\t"
+        "vmulax.xyzw ACC, vf27, vf2x\n\t"
+        "vmadday.xyzw ACC, vf28, vf2y\n\t"
+        "vmaddaz.xyzw ACC, vf29, vf2z\n\t"
+        "vmaddw.xyzw vf2, vf30, vf2w\n\t"
+        "vmulax.xyzw ACC, vf27, vf3x\n\t"
+        "vmadday.xyzw ACC, vf28, vf3y\n\t"
+        "vmaddaz.xyzw ACC, vf29, vf3z\n\t"
+        "vmaddw.xyzw vf3, vf30, vf3w\n\t"
+        "vmulax.xyzw ACC, vf27, vf4x\n\t"
+        "vmadday.xyzw ACC, vf28, vf4y\n\t"
+        "vmaddaz.xyzw ACC, vf29, vf4z\n\t"
+        "vmaddw.xyzw vf4, vf30, vf4w\n\t"
+        "vmulax.xyzw ACC, vf27, vf5x\n\t"
+        "vmadday.xyzw ACC, vf28, vf5y\n\t"
+        "vmaddaz.xyzw ACC, vf29, vf5z\n\t"
+        "vmaddw.xyzw vf30, vf30, vf5w\n\t"
+        "vmulw.xyzw vf27, vf2, vf0w\n\t"
+        "vmulw.xyzw vf28, vf3, vf0w\n\t"
+        "vmulw.xyzw vf29, vf4, vf0w\n\t"
+        "nop"
+        :
+        : "r"(matrix)
+        : "memory"
+    );
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurApplyMatrix_002364E0);
+/*
+ * _CurApplyMatrix transforms one vector by the VU0 macro-mode "current
+ * matrix" (vf27..vf30) a prior _CurMatrixSet/_CurMatrixMul left live,
+ * storing the result to destination (main VA 0x002364e0, ee-vu-cop2,
+ * docs/ps2-capabilities.md).
+ */
+static void _CurApplyMatrix(Vector4 *destination, const Vector4 *source)
+{
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%0)\n\t"
+        "vmulax.xyzw ACC, vf27, vf31x\n\t"
+        "vmadday.xyzw ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyzw ACC, vf29, vf31z\n\t"
+        "vmaddw.xyzw vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%1)\n\t"
+        "nop"
+        :
+        : "r"(source), "r"(destination)
+        : "memory"
+    );
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurMatrixMul33norm);
+/*
+ * _CurMatrixMul33norm transforms the caller's three-row orientation matrix
+ * by the VU0 macro-mode "current matrix" vf27..vf29 a prior _CurMatrixSet/
+ * _CurMatrixMul left live, normalizes each transformed row to unit length
+ * and stores the three rows to destination (main VA 0x00236500,
+ * ee-vu-cop2, docs/ps2-capabilities.md).
+ */
+static void _CurMatrixMul33norm(Vector4 *destination, const Vector4 *source)
+{
+    __asm__ __volatile__(
+        "lqc2 vf20, 0(%0)\n\t"
+        "lqc2 vf21, 16(%0)\n\t"
+        "lqc2 vf22, 32(%0)\n\t"
+        "vmulax.xyz ACC, vf27, vf20x\n\t"
+        "vmadday.xyz ACC, vf28, vf20y\n\t"
+        "vmaddz.xyz vf20, vf29, vf20z\n\t"
+        "vmulax.xyz ACC, vf27, vf21x\n\t"
+        "vmadday.xyz ACC, vf28, vf21y\n\t"
+        "vmaddz.xyz vf21, vf29, vf21z\n\t"
+        "vmulax.xyz ACC, vf27, vf22x\n\t"
+        "vmadday.xyz ACC, vf28, vf22y\n\t"
+        "vmaddz.xyz vf22, vf29, vf22z\n\t"
+        "vaddz.x vf25, vf0, vf20z\n\t"
+        "vaddy.x vf24, vf0, vf20y\n\t"
+        "vaddx.x vf23, vf0, vf20x\n\t"
+        "vaddz.y vf25, vf0, vf21z\n\t"
+        "vaddy.y vf24, vf0, vf21y\n\t"
+        "vaddx.y vf23, vf0, vf21x\n\t"
+        "vaddz.z vf25, vf0, vf22z\n\t"
+        "vaddy.z vf24, vf0, vf22y\n\t"
+        "vaddx.z vf23, vf0, vf22x\n\t"
+        "vmula.xyz ACC, vf23, vf23\n\t"
+        "vmadda.xyz ACC, vf24, vf24\n\t"
+        "vmadd.xyz vf10, vf25, vf25\n\t"
+        "vrsqrt Q, vf0w, vf10x\n\t"
+        "vwaitq\n\t"
+        "vmulq.x vf23, vf23, Q\n\t"
+        "vmulq.x vf24, vf24, Q\n\t"
+        "vmulq.x vf25, vf25, Q\n\t"
+        "vnop\n\t"
+        "vnop\n\t"
+        "vrsqrt Q, vf0w, vf10y\n\t"
+        "vwaitq\n\t"
+        "vmulq.y vf23, vf23, Q\n\t"
+        "vmulq.y vf24, vf24, Q\n\t"
+        "vmulq.y vf25, vf25, Q\n\t"
+        "vnop\n\t"
+        "vnop\n\t"
+        "vrsqrt Q, vf0w, vf10z\n\t"
+        "vwaitq\n\t"
+        "vmulq.z vf23, vf23, Q\n\t"
+        "vmulq.z vf24, vf24, Q\n\t"
+        "vmulq.z vf25, vf25, Q\n\t"
+        "sqc2 vf23, 0(%1)\n\t"
+        "sqc2 vf24, 16(%1)\n\t"
+        "sqc2 vf25, 32(%1)\n\t"
+        "nop"
+        :
+        : "r"(source), "r"(destination)
+        : "memory"
+    );
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurSetViewScaleTrans_002365C0);
+/*
+ * _CurSetViewScaleTrans loads the view-scale vector into the VU0 macro-mode
+ * register vf25 and the view-translation vector into vf26, the same
+ * persistent "current matrix" state family the _CurMatrixSet/_CurMatrixMul/
+ * _CurApplyMatrix group reads (main VA 0x002365c0, ee-vu-cop2,
+ * docs/ps2-capabilities.md).
+ */
+static void _CurSetViewScaleTrans(const Vector4 *view_scale, const Vector4 *view_translation)
+{
+    __asm__ __volatile__(
+        "lqc2 vf25, 0(%0)\n\t"
+        "lqc2 vf26, 0(%1)\n\t"
+        "nop"
+        :
+        : "r"(view_scale), "r"(view_translation)
+        : "memory"
+    );
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurRotTransPersClip_002365D0);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurSetMatrix_00236640);
+/*
+ * _CurSetMatrix loads a 4x4 matrix into the VU0 macro-mode "current matrix"
+ * registers vf27..vf30, the same persistent state _CurMatrixSet writes (main
+ * VA 0x00236640, ee-vu-cop2, docs/ps2-capabilities.md).
+ */
+static void _CurSetMatrix(const Matrix4 matrix)
+{
+    __asm__ __volatile__(
+        "lqc2 vf27, 0(%0)\n\t"
+        "lqc2 vf28, 16(%0)\n\t"
+        "lqc2 vf29, 32(%0)\n\t"
+        "lqc2 vf30, 48(%0)\n\t"
+        "nop"
+        :
+        : "r"(matrix)
+        : "memory"
+    );
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFlush);
 
@@ -434,9 +633,37 @@ u8 *nmlPacketSetAttributeAlloc16N(u32 count)
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGifTag);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGifTagStandard);
+void nmlPacketAddGifTagStandard(int eop, int count)
+{
+    NmlPacketData128 gif_tag;
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddFog);
+    s_pPacket = xglPacketGetCurrent();
+    sceVif1PkCnt(s_pPacket, 0);
+
+    gif_tag.words[0] = 0x8000;
+    gif_tag.words[1] = ((u32)eop << 0x13) | ((u32)count << 0x15) | 0x30064000;
+    gif_tag.words[2] = 0x412;
+    gif_tag.words[3] = 0;
+    sceVif1PkOpenUpkCode(s_pPacket, 0x3f3, 0x6c, 1, 1);
+    sceVif1PkAddUpkData128(s_pPacket, gif_tag.quad);
+    sceVif1PkCloseUpkCode(s_pPacket);
+}
+
+void nmlPacketAddFog(NmlModelRenderState *model, int viewport_index)
+{
+    s_pPacket = xglPacketGetCurrent();
+    sceVif1PkCnt(s_pPacket, 0);
+
+    if (g_aSubWindow[viewport_index] != 0)
+        model->fog_color[3] = ((int)(model->fog_intensity[viewport_index] * 255.0f)) << 4;
+
+    sceVif1PkOpenUpkCode(s_pPacket, 998, 108, 1, 1);
+    sceVif1PkAddUpkData128N(s_pPacket, model->fog_color, 1);
+    sceVif1PkCloseUpkCode(s_pPacket);
+    sceVif1PkOpenUpkCode(s_pPacket, 1007, 108, 1, 1);
+    sceVif1PkAddUpkData128N(s_pPacket, model->fog_parameters, 1);
+    sceVif1PkCloseUpkCode(s_pPacket);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddPixelControl);
 

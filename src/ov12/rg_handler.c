@@ -6,17 +6,62 @@
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerRobotVsRobot);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerShotVsRobot);
-
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerWeaponVsRobot);
-
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerShotVsBG);
-
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerWeaponVsBG);
-
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerCameraVsBG);
-
 extern void *RgGeomGetParent(RgGeom *pGeom);
+extern void RgShotHitRobot(void *shot, int robot, RgVector position);
+extern void RgWeaponHitRobot(void *weapon, int robotId, int damage);
+extern void RgShotHitBg(void *shot, int bgObject, RgVector position);
+extern void RgWeaponHitBG(void *weapon, int bgObject, int damage);
+extern void RgBgObjSetHide(void *pObj, float duration);
+
+/*
+ * Each of RgShotHitRobot/RgWeaponHitRobot/RgShotHitBg/RgWeaponHitBG forwards
+ * this handler's own collision record unchanged as its trailing
+ * position/damage argument (ov12:0x00a2acd8..0x00a2adf7): none of them
+ * dereference it along this call path, so it is passed opaquely, cast to
+ * whatever scalar or vector shape that parameter declares.
+ */
+void RgHandlerShotVsRobot(RgGeom *shotGeom, RgBgCollision *collision)
+{
+    void *shot;
+
+    shot = RgGeomGetParent(shotGeom);
+    RgShotHitRobot(shot, (int) RgGeomGetParent(collision->geom), (float *) collision);
+}
+
+void RgHandlerWeaponVsRobot(RgGeom *weaponGeom, RgBgCollision *collision)
+{
+    void *weapon;
+
+    weapon = RgGeomGetParent(weaponGeom);
+    RgWeaponHitRobot(weapon, (int) RgGeomGetParent(collision->geom), (int) collision);
+}
+
+void RgHandlerShotVsBG(RgGeom *shotGeom, RgBgCollision *collision)
+{
+    void *shot;
+
+    shot = RgGeomGetParent(shotGeom);
+    RgShotHitBg(shot, (int) RgGeomGetParent(collision->geom), (float *) collision);
+}
+
+void RgHandlerWeaponVsBG(RgGeom *weaponGeom, RgBgCollision *collision)
+{
+    void *weapon;
+
+    weapon = RgGeomGetParent(weaponGeom);
+    RgWeaponHitBG(weapon, (int) RgGeomGetParent(collision->geom), (int) collision);
+}
+
+void RgHandlerCameraVsBG(RgGeom *cameraGeom, RgBgCollision *collision)
+{
+    void *bgObject;
+
+    bgObject = RgGeomGetParent(collision->geom);
+    if (bgObject != 0) {
+        RgBgObjSetHide(bgObject, 0.5f);
+    }
+}
+
 extern float RgGeomPointGetSpeed(RgGeomPoint *point);
 extern float RgGeomPointGetWeight(RgGeomPoint *point);
 extern void RgRobotHitBG(void *robot, RgVector direction);
@@ -44,4 +89,9 @@ void RgHandlerRobotVsBG(RgGeomPoint *point, RgBgCollision *collision)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerRobotAdvVsBG);
+extern void RgRobotNearBG(void *pRobot, RgVector direction);
+
+void RgHandlerRobotAdvVsBG(RgGeom *robotGeom, RgBgCollision *collision)
+{
+    RgRobotNearBG(RgGeomGetParent(robotGeom), collision->direction);
+}

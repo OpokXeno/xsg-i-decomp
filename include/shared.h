@@ -115,7 +115,9 @@ typedef struct StudioCamera {
     Vector4 screenScale;
     u8 unmodeled_90[0x10];
     Vector4 rotation;
-    u8 unmodeled_b0[0x3c0];
+    u8 unmodeled_b0[0x20];
+    Vector4 position;
+    u8 unmodeled_e0[0x390];
     Matrix4 viewMatrix;
     u8 unmodeled_4b0[0x140];
 } StudioCamera;
@@ -125,6 +127,8 @@ typedef struct SceneClassName SceneClassName;
 typedef struct SceneField SceneField;
 
 typedef struct SceneTypeDescriptor SceneTypeDescriptor;
+
+typedef struct SceneWindow SceneWindow;
 
 /*
  * These are bounded partial views, not complete object layouts. Offsets
@@ -156,6 +160,8 @@ struct SceneField {
 };
 
 typedef struct SceneMethod SceneMethod;
+
+typedef struct SceneType SceneType;
 
 typedef struct SceneThread SceneThread;
 
@@ -219,6 +225,8 @@ typedef struct PartySkillLevelArray {
     unsigned char level_by_character[8];
 } PartySkillLevelArray;
 
+typedef void (*ObjectTaskCallback)(ObjectTask *task);
+
 struct ObjectTask {
     XglTaskPrefix task; /* the scheduler header xglTaskEntryNext maintains. */
     void *work; /* objRemove passes this slot to objWorkFree. */
@@ -229,7 +237,17 @@ typedef struct RgSimpleDB RgSimpleDB;
 
 typedef struct RgCharMgr RgCharMgr;
 
+typedef struct StreamXssBuffer StreamXssBuffer;
+
+typedef struct StreamRing StreamRing;
+
 typedef unsigned char byte;
+
+typedef unsigned int DataBufferWord;
+
+typedef struct DataBuffer DataBuffer;
+
+typedef DataBufferWord (*DataBufferReader)(DataBuffer *, int);
 
 typedef struct RgFileSys RgFileSys;
 
@@ -241,7 +259,8 @@ struct RgFileSysData {
     unsigned int mode;
     RgFileSys *owner;
     unsigned int ref_count;
-    unsigned char unmodeled_14[0x1C - 0x14];
+    unsigned int allocated;
+    RgFileSysData *dupOf;
     char name[0x60 - 0x1C];
 };
 
@@ -281,8 +300,6 @@ extern unsigned char SaveData[];
 
 extern void sceVif1PkRef(XglPacket *packet, const void *environment,
                          int count, int mode, int offset, int flags);
-
-extern void xglFontPrint(int x, int y, int color, const char *text);
 
 extern void *classJava_xeno_Unit;
 

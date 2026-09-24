@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_weapon.h"
+#include "ov12/rg_matrices_effector.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -63,7 +64,7 @@ extern void _InitEnergyType(RgWeaponEnergyType *weapon,
 extern void _InitEssenceCommon(void *essence);
 static int _GetNumAttach(RgWeaponAttach *pAttach);
 extern void _CommonPassTime(RgWeapon *weapon, float dt);
-extern int _GetDefShotPosDir(RgWeaponShotRequest *info);
+extern int _GetDefShotPosDir(RgWeaponShotRequest *info, RgVector position, RgVector direction);
 extern int RgRobotGetCharID(int robotId);
 extern void *RgRobotGetTarget(int robotId);
 extern int RgRobotIsConfused(int robotId);
@@ -86,7 +87,19 @@ static void _InitAttach(RgWeaponAttach *pAttach)
     pAttach->m_uAttachNum = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _ReleaseAttach);
+extern void RgShotRelease(RgShot *shot);
+
+static void _ReleaseAttach(RgWeaponAttach *pAttach)
+{
+    unsigned int i;
+
+    if (pAttach == 0) {
+        assert_prog(D_00A53648, D_00A53658, 46);
+    }
+    for (i = 0; i < pAttach->m_uAttachNum; i++) {
+        RgShotRelease(pAttach->shots[i]);
+    }
+}
 
 static int _GetNumAttach(RgWeaponAttach *pAttach)
 {
@@ -96,7 +109,18 @@ static int _GetNumAttach(RgWeaponAttach *pAttach)
     return pAttach->m_uAttachNum;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _GetAllAttach);
+static unsigned int _GetAllAttach(RgWeaponAttach *pAttach, RgShot **shots)
+{
+    unsigned int i;
+
+    if (pAttach == 0) {
+        assert_prog(D_00A53648, D_00A53658, 62);
+    }
+    for (i = 0; i < pAttach->m_uAttachNum; i++) {
+        shots[i] = pAttach->shots[i];
+    }
+    return pAttach->m_uAttachNum;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _AddShotAttach);
 
@@ -108,11 +132,80 @@ void _CommonDispose(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _CommonPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _CommonDisp);
+/* Opaque here: rg_matrices_effector.c (ov12/tu068) owns MatrixConstraint's definition. */
+typedef struct MatrixConstraint MatrixConstraint;
+extern void RgMatricesEffectorSetActivity(MatrixEffector *effector, int activity);
+extern void RgMatEffConstraintSetTarget(MatrixConstraint *constraint, RgVector target);
+extern void XrgClearVector(RgVector vector);
+extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
+extern void XrgNormalizeVector(RgVector destination, RgVector source);
+extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
+extern void XrgSubVector(RgVector destination, RgVector first, RgVector second);
+/* Opaque here: rg_geom_point.c (ov12/tu052) owns the RgPointVector definition. */
+typedef struct RgPointVector RgPointVector;
+extern void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
+                                const char *source_file, int source_line);
+extern int _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector direction);
+void _CheckLockOn(RgWeapon *weapon);
+
+void _CommonDisp(RgWeapon *weapon)
+{
+    RgVector position;
+    RgVector fromPosition;
+    RgVector toPosition;
+    RgVector aimPoint;
+    void *target;
+    int robotId;
+
+    robotId = weapon->robotId;
+    _CheckLockOn(weapon);
+    if (weapon->lockedOn != 0) {
+        target = RgRobotGetTarget(robotId);
+        if (target != 0) {
+            __RgGeomPointGetPos(target, (RgPointVector *) position, D_00A53658, 287);
+        } else {
+            XrgClearVector(position);
+        }
+        if (weapon->lockOnEffector != 0) {
+            RgMatricesEffectorSetActivity((MatrixEffector *) weapon->lockOnEffector, 1);
+            RgMatEffConstraintSetTarget((MatrixConstraint *) weapon->lockOnEffector, position);
+        }
+    } else if (weapon->lockOnEffector != 0) {
+        if (weapon->equipped != 0 && (weapon->controlFlags & 0x20)) {
+            _GetDefShotPosDirFunc(weapon, fromPosition, toPosition);
+            XrgSubVector(aimPoint, toPosition, fromPosition);
+            XrgNormalizeVector(aimPoint, aimPoint);
+            XrgScaleVector(aimPoint, aimPoint, 100.0f);
+            XrgAddVector(aimPoint, fromPosition, aimPoint);
+            RgMatricesEffectorSetActivity((MatrixEffector *) weapon->lockOnEffector, 1);
+            RgMatEffConstraintSetTarget((MatrixConstraint *) weapon->lockOnEffector, aimPoint);
+        } else {
+            RgMatricesEffectorSetActivity((MatrixEffector *) weapon->lockOnEffector, 0);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _InitWeaponCommon);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _DestructWeaponCommon);
+extern void DisposeXrgActor(XrgActor *actor);
+
+void _DestructWeaponCommon(RgWeapon *weapon)
+{
+    XrgActor *actor;
+
+    _ReleaseAttach(&weapon->shotAttach);
+    actor = weapon->actor;
+    if (actor != 0) {
+        DisposeXrgActor(actor);
+    }
+    if (weapon->lockOnEffector == 0) {
+        return;
+    }
+    if (weapon->robotId == 0) {
+        return;
+    }
+    XrgActorDisposeEffector(RgRobotGetActor(weapon->robotId), weapon->lockOnEffector);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _InitEssenceCommon);
 
@@ -134,7 +227,18 @@ void _ShotTypeFree(RgWeaponShotType *weapon)
     weapon->cooldown = 0.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _ShotTypePassTime);
+void _ShotTypePassTime(RgWeaponShotType *weapon, float dt)
+{
+    float cooldown;
+
+    if (_GetNumAttach(&weapon->common.shotAttach) == 0) {
+        cooldown = weapon->cooldown - dt;
+        weapon->cooldown = cooldown;
+        if (cooldown < 0.0f) {
+            weapon->cooldown = 0.0f;
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _InitWeaponCommonEffector);
 
@@ -162,7 +266,18 @@ RgWeaponShotType *_CreateWeaponShotType(RgWeaponShotEssence *pEss,
     return pWpn;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", InitRgWeaponShotEssence);
+void InitRgWeaponShotEssence(RgWeaponShotEssence *pEss)
+{
+    RgWeaponShotEssenceInit *init = (RgWeaponShotEssenceInit *) pEss;
+
+    if (pEss == 0) {
+        assert_prog(D_00A53710, D_00A53658, 684);
+    }
+    _InitEssenceCommon(pEss);
+    init->m_pCreateMethod = _CreateWeaponShotType;
+    init->controlMode = 0x20;
+    init->busyTime = 0.4f;
+}
 
 int _ShotAttackType(RgWeaponAttackType *weapon)
 {
@@ -186,7 +301,48 @@ void _ShotStopAttackType(RgWeaponAttackType *weapon)
     weapon->active = 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _PassTimeAttackType);
+extern int RgGeomGetStatus(int geom);
+extern void RgGeomPointMovePos(int geom, RgVector position);
+extern void RgGeomPointSetPos(int geom, RgVector position);
+extern void RgGeomResetStatus(int geom, int status);
+extern void RgGeomSetStatus(int geom, int status);
+extern int XrgActorGetJointLocal(XrgActor *actor, int joint, RgMatrix local);
+extern void XrgCopyVector(RgVector destination, RgVector source);
+
+void _PassTimeAttackType(RgWeaponAttackType *weapon)
+{
+    /*
+     * XrgActorGetJointLocal fills the whole 4x4 local transform of the
+     * followed joint; only its translation row (the last four floats) is a
+     * position, read below through &jointLocal[12].
+     */
+    RgMatrix jointLocal;
+
+    if (weapon->followActor != 0 &&
+            XrgActorGetJointLocal(weapon->followActor, weapon->followJoint, jointLocal) != 0) {
+        /*
+         * shotRequested and active are the original's two separate early-exit
+         * tests, not one "if / else if" condition: folding them into a single
+         * else-if compiles the guard scheduling for this pair differently, so
+         * shotRequested's test keeps its own goto to the shared reset call.
+         */
+        if (weapon->common.shotRequested == 0) {
+            goto resetStatus;
+        }
+        if (weapon->active != 0) {
+            if (!(RgGeomGetStatus(weapon->geom) & 1)) {
+                RgGeomSetStatus(weapon->geom, 1);
+                XrgCopyVector(weapon->followPosition, &jointLocal[12]);
+            }
+            RgGeomPointSetPos(weapon->geom, weapon->followPosition);
+            RgGeomPointMovePos(weapon->geom, &jointLocal[12]);
+            XrgCopyVector(weapon->followPosition, &jointLocal[12]);
+        } else {
+resetStatus:
+            RgGeomResetStatus(weapon->geom, 1);
+        }
+    }
+}
 
 extern void RgGeomFree(int geom);
 
@@ -202,7 +358,47 @@ void _HitBgAttackType(RgWeaponAttackType *weapon, int bgObject)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _HitRobotAttackType);
+extern void CreateRgHitEffectPosDir(int id, RgVector direction, void *param3, void *param4);
+extern int RgRobotGetGeom(int robotId);
+extern void RgRobotGiveDamage(int robotId, RgVector direction, int flags, float damage);
+extern void RgRobotInvalidAttack(int robotId, RgVector direction, float damage);
+extern int RgRobotIsInvalidAttack(int robotId, RgVector direction);
+extern unsigned char *RgWeaponEssCastToAttack(int ess);
+extern unsigned char D_00A53730[];
+extern unsigned char D_00A53740[];
+
+void _HitRobotAttackType(RgWeaponAttackType *weapon, int robotId, int damage)
+{
+    RgVector ownPosition;
+    RgVector targetPosition;
+    RgVector direction;
+    int ownGeom;
+    int targetGeom;
+    unsigned char *attackEssence;
+
+    if (weapon == 0) {
+        assert_prog(D_00A536F0, D_00A53658, 802);
+    }
+    if (weapon->common.robotId != 0) {
+        ownGeom = RgRobotGetGeom(weapon->common.robotId);
+        targetGeom = RgRobotGetGeom(robotId);
+        __RgGeomPointGetPos((RgGeomPoint *) ownGeom, (RgPointVector *) ownPosition, D_00A53658, 811);
+        __RgGeomPointGetPos((RgGeomPoint *) targetGeom, (RgPointVector *) targetPosition, D_00A53658, 812);
+        weapon->active = 0;
+        XrgSubVector(direction, ownPosition, targetPosition);
+        if (RgRobotIsInvalidAttack(robotId, direction) == 0) {
+            attackEssence = RgWeaponEssCastToAttack(weapon->common.ess);
+            if (attackEssence != 0) {
+                CreateRgHitEffectPosDir(damage, direction, attackEssence + 0x3bc, D_00A53730);
+            }
+            RgRobotGiveDamage(robotId, direction, 0, weapon->damage);
+            XrgSoundRingVol(weapon->common.sound, weapon->common.robotHitSound, weapon->common.robotHitVolume);
+            return;
+        }
+        CreateRgHitEffectPosDir(damage, direction, D_00A53740, 0);
+        RgRobotInvalidAttack(robotId, direction, weapon->damage);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _InitWeaponAttack);
 
@@ -248,7 +444,33 @@ RgWeapon *_CreateWeaponUnArmedType(RgWeaponUnArmedEssence *pEss,
     return pWpn;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", InitRgWeaponUnArmedEssence);
+extern void InitRgWeaponAttackEssence(void *essence);
+
+void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss)
+{
+    /*
+     * pEss really addresses the RgWeaponUnArmedEssenceInit layout this
+     * allocation evidences (see the header: the tag RgWeaponUnArmedEssence
+     * itself is left opaque because ov12/tu027 already completes it for its
+     * own, unrelated, non-overlapping field layout).
+     */
+    RgWeaponUnArmedEssenceInit *init = (RgWeaponUnArmedEssenceInit *) pEss;
+    unsigned int i;
+
+    if (pEss == 0) {
+        assert_prog(D_00A53710, D_00A53658, 988);
+    }
+    InitRgWeaponAttackEssence(pEss);
+    init->m_pCreateMethod = _CreateWeaponUnArmedType;
+    init->resetFlag = 0;
+    init->controlMode = 76;
+    for (i = 0; i < RG_ACTOR_CHAR_ROBNUM; i++) {
+        init->shotMotionTable[i][0] = 0x15;
+        init->shotMotionTable[i][1] = 0x16;
+        init->shotMotionTable[i][2] = -1;
+    }
+    init->terminator = -1;
+}
 
 int _ShotShieldType(RgWeapon *weapon)
 {
@@ -358,7 +580,21 @@ RgWeaponEnergyType *_CreateWeaponEnergyType(RgWeaponEnergyEssence *pEss,
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", InitRgWeaponEnergyEssence);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", CreateRgWeaponFromEssence);
+/* ov12:0x00a53768 "pEss != NIL && pInfo != NIL" */
+extern unsigned char D_00A53768[];
+/* ov12:0x00a53788 "pEss->m_pCreateMethod != NIL" */
+extern unsigned char D_00A53788[];
+
+RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssenceCommon *pEss, RgWeaponCreateInfo *pInfo)
+{
+    if (pEss == 0 || pInfo == 0) {
+        assert_prog((char *) D_00A53768, D_00A53658, 1340);
+    }
+    if (pEss->m_pCreateMethod == 0) {
+        assert_prog((char *) D_00A53788, D_00A53658, 1341);
+    }
+    return pEss->m_pCreateMethod(pEss, pInfo);
+}
 
 void DisposeRgWeapon(RgWeapon *weapon)
 {
@@ -460,7 +696,13 @@ float RgWeaponGetWeight(RgWeapon *weapon)
     return weapon->weight;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", RgWeaponIsAttachedShot);
+int RgWeaponIsAttachedShot(RgWeapon *weapon)
+{
+    if (weapon == 0) {
+        assert_prog(D_00A536F0, D_00A53658, 1525);
+    }
+    return _GetNumAttach(&weapon->shotAttach) != 0;
+}
 
 int RgWeaponGetControlFlag(RgWeapon *weapon)
 {
@@ -647,7 +889,74 @@ void RgWeaponPassTime(RgWeapon *weapon, float dt)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _CheckLockOn);
+extern void RgGeomRobotCalcLocal(int geom, RgMatrix local);
+extern int RgRobotGetStatusFlags(int robotId);
+extern float atan2f(float y, float x);
+
+void _CheckLockOn(RgWeapon *weapon)
+{
+    RgMatrix local;
+    RgMatrix invLocal;
+    RgVector targetLocal;
+    RgVector targetWorld;
+    float angle;
+    int robotId;
+    int statusFlags;
+    int wasLockedOn;
+    int lockedOn;
+    void *target;
+
+    robotId = weapon->robotId;
+    if (weapon == 0) {
+        assert_prog(D_00A536F0, D_00A53658, 1779);
+    }
+    wasLockedOn = weapon->lockedOn;
+    weapon->targeting = 0;
+    weapon->lockedOn = 0;
+    statusFlags = RgRobotGetStatusFlags(robotId);
+    if (robotId != 0 && (statusFlags & 1) && RgRobotIsConfused(robotId) == 0 &&
+            !(statusFlags & 0x100) && weapon->lockOnStopped == 0) {
+        RgGeomRobotCalcLocal(RgRobotGetGeom(robotId), local);
+        XrgInvMatrix(invLocal, local);
+        target = RgRobotGetTarget(robotId);
+        if (target != 0) {
+            __RgGeomPointGetPos((RgGeomPoint *) target, (RgPointVector *) targetWorld, D_00A53658, 1819);
+            __asm__ __volatile__(
+                "lqc2 $vf2, 0(%0)\n\t"
+                "lqc2 $vf3, 0(%1)\n\t"
+                "lqc2 $vf4, 16(%1)\n\t"
+                "lqc2 $vf5, 32(%1)\n\t"
+                "lqc2 $vf6, 48(%1)\n\t"
+                "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+                "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+                "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+                "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+                "sqc2 $vf2, 0(%2)\n\t"
+                : : "r"(targetWorld), "r"(invLocal), "r"(targetLocal) : "memory");
+            angle = atan2f(targetLocal[0], targetLocal[2]) + 3.1415927f;
+            while (angle > 3.1415927f) {
+                angle -= 6.2831855f;
+            }
+            if (angle < -3.1415927f) {
+                do {
+                    angle += 6.2831855f;
+                } while (angle < -3.1415927f);
+            }
+            lockedOn = 0;
+            if (weapon->lockOnAngleMin <= angle && angle <= weapon->lockOnAngleMax) {
+                lockedOn = 1;
+            }
+            weapon->targeting = lockedOn;
+            if (weapon->controlFlags & 0x20) {
+                weapon->lockedOn = lockedOn;
+            }
+            XrgCopyVector(weapon->targetPosition, targetWorld);
+        }
+        if (wasLockedOn == 0 && _GetNumAttach(&weapon->shotAttach) != 0 && weapon->lockedOn != 0) {
+            weapon->lockedOn = 0;
+        }
+    }
+}
 
 int _GetParentCharID(RgWeapon *weapon)
 {

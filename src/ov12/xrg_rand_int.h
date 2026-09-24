@@ -43,6 +43,6 @@ void XrgMulMatStack(RgMatrix matrix);
 void XrgRotMatStack(float angle_x, float angle_y, float angle_z);
 float *XrgTopMatStack(void);
 void XrgCopyMatStack(RgMatrix destination);
-void XrgCalcPlane(RgVector plane, RgVector point);
+void XrgCalcPlane(RgVector plane, RgVector p0, RgVector p1, RgVector p2);
 
 #endif /* SRC_OV12_XRG_RAND_INT_H */

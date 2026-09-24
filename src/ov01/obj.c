@@ -9,7 +9,7 @@
 
 extern unsigned char taskBuf[];
 extern void *memset(void *destination, int value, unsigned int size);
-extern void xglTaskInitial(void *manager, int capacity, int flags);
+extern void *xglTaskInitial(void *manager, int capacity, int flags);
 extern void objWorkInit(void);
 
 void objInit(void) {
@@ -73,7 +73,15 @@ void objEntryRev(void *argument) {
     objEntrySub(&taskMan, argument, 1);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntry2Rev);
+ObjectTask *objEntry2Rev(void *argument, ObjectTaskCallback callback) {
+    ObjectTask *task;
+
+    task = objEntrySub(&taskMan, argument, 1);
+    if (task != 0) {
+        ((ObjectTaskNode *)task)->exec = callback;
+    }
+    return task;
+}
 
 void objRemove(ObjectTask *task)
 {
@@ -98,13 +106,41 @@ void objRemovePure(ObjectTask *task)
     xglTaskRemove(&task->task);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objWorkInit);
+void objWorkInit(void)
+{
+    int index;
+
+    for (index = 59; index >= 0; index--) {
+        objWork[index].used = 0;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objWorkGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objWorkFree);
+void objWorkFree(void *work) {
+    ObjectWork *slot;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objStdInit);
+    slot = work;
+    if (slot < objWork || &objWork[60] < slot) {
+        printf(D_00A43860, work);
+        return;
+    }
+    slot->used = 0;
+}
+
+void objStdInit(ObjectTask *task)
+{
+    ObjectWorkTransform *transform;
+
+    transform = &((ObjectWork *)task->work)->transform;
+    memset(transform, 0, sizeof(*transform));
+    transform->scale.w = 1.0f;
+    transform->scale.z = 1.0f;
+    transform->scale.y = 1.0f;
+    transform->scale.x = 1.0f;
+    transform->homogeneousVector.w = 1.0f;
+    objCmdClear(task);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objStdMove);
 
@@ -155,7 +191,22 @@ void *objCmdPop(ObjectTask *task) {
     return &queue->entries[index];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdNext);
+int objCmdNext(ObjectTask *task)
+{
+    ObjectCommandQueue *queue;
+    int index;
+
+    queue = task->work;
+    index = queue->writeIndex + 1;
+    queue->writeIndex = index;
+    if (index >= queue->readIndex) {
+        objCmdClear(task);
+        return 0;
+    }
+    queue->word70 = 0;
+    queue->word74 = 0;
+    return 1;
+}
 
 void fifoInit(Fifo *fifo, int capacity) {
     fifo->base = 0;

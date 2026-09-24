@@ -34,10 +34,25 @@
  * The two request arrays themselves (+0x08 and +0xCC) belong to the
  * functions that index them, outside this allocation.
  */
+/*
+ * One entry of the 16-slot pending-calc request array XrgParticleDriver
+ * stores at +0x08: XrgParticleDriverPassTime (ov12:0x00a49b50) reads all
+ * three fields of each of the m_uReqCalcNum live entries in order (count,
+ * particle, rate) and forwards them unchanged, together with its own
+ * elapsed-time argument, to _Calc (ov12:0x00a48da0, outside this
+ * allocation), which dereferences the particle pointer as the base of a
+ * per-object record.
+ */
+typedef struct XrgParticleCalcReq {
+    int count;                          /* +0x00 */
+    struct XrgParticle *particle;       /* +0x04 */
+    float rate;                         /* +0x08 */
+} XrgParticleCalcReq;
+
 typedef struct XrgParticleDriver {
     int params0;                        /* +0x00 */
     int params1;                        /* +0x04 */
-    unsigned char unmodeled_008[0xC8 - 0x08];
+    XrgParticleCalcReq calcReq[16];     /* +0x08 */
     unsigned int m_uReqCalcNum;         /* +0xC8 */
     unsigned char unmodeled_0cc[0x30CC - 0xCC];
     unsigned int m_uReqDispNum;         /* +0x30CC */
@@ -48,6 +63,18 @@ typedef struct XrgParticleDriver {
  * returns its block to RgHeapFree.
  */
 void DisposeXrgParticleDriver(XrgParticleDriver *driver);
+
+/*
+ * Runs _Calc (ov12:0x00a48da0, outside this allocation) for every queued
+ * calc request and resets m_uReqCalcNum to 0.
+ */
+void XrgParticleDriverPassTime(XrgParticleDriver *pDrv, float elapsed);
+
+/*
+ * Queues the driver's own draw and clear callbacks with RgDrawReq
+ * (ov12:0x00a28028, outside this allocation).
+ */
+void XrgParticleDriverDisp(XrgParticleDriver *driver);
 
 /*
  * DisposeArrayOfXrgParticle (ov12:0x00a49f08) only frees the block this

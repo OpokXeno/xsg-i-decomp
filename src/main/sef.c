@@ -16,7 +16,86 @@ typedef struct SefProgressState {
 
 float MMathCalcLength(float *vec);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", srsAtan2);
+/*
+ * The original routine keeps each literal-pool access as a distinct volatile
+ * read across its quadrant branches; the pool addresses and load order are
+ * evidenced by the function's original instructions.
+ */
+extern volatile const float D_004D82B4;
+extern volatile const float D_004D82B8;
+extern volatile const float D_004D82BC;
+extern volatile const float D_004D82C0;
+extern volatile const float D_004D82C4;
+extern volatile const float D_004D82C8;
+extern volatile const float D_004D82CC;
+extern volatile const float D_004D82D0;
+extern volatile const float D_004D82D4;
+extern float *atanTbl_0;
+
+float srsAtan2(float x, float y)
+{
+    int y_is_positive;
+    int x_is_positive;
+    float result = 0.0f;
+    float angle;
+
+    y_is_positive = y >= 0.0f;
+    x_is_positive = x >= 0.0f;
+
+    if (y == 0.0f) {
+        if (x != 0.0f) {
+            result = D_004D82B4;
+            if (!x_is_positive) {
+                return D_004D82B8;
+            }
+        }
+        return result;
+    }
+
+    if (x == 0.0f) {
+        if (!y_is_positive) {
+            return D_004D82BC;
+        }
+        return result;
+    }
+
+    if (!y_is_positive) {
+        y = -y;
+    }
+    if (!x_is_positive) {
+        x = -x;
+    }
+
+    if (x <= y) {
+        angle = atanTbl_0[(int)(x * 1024.0f / y)];
+
+        if (y_is_positive) {
+            if (!x_is_positive) {
+                angle = -angle;
+            }
+        } else if (x_is_positive) {
+            angle = D_004D82C0 - angle;
+        } else {
+            angle += D_004D82C4;
+        }
+    } else {
+        angle = atanTbl_0[(int)(y * 1024.0f / x)];
+
+        if (y_is_positive) {
+            if (x_is_positive) {
+                angle = D_004D82C8 - angle;
+            } else {
+                angle = -(D_004D82CC - angle);
+            }
+        } else if (x_is_positive) {
+            angle += D_004D82D0;
+        } else {
+            angle = D_004D82D4 - angle;
+        }
+    }
+
+    return angle;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefRandf);
 
@@ -29,17 +108,133 @@ static int sefIsBossID(int character_id)
     return (unsigned int)(character_id - 0x97) < 0x24;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefMemZero);
+/*
+ * GNU EE native TI storage/copy type (docs/native-ti.md), used only for the
+ * 16-byte aligned zero-fill blocks sefMemZero clears with por+sq; no wide
+ * arithmetic is done on it.
+ */
+typedef unsigned int Quadword __attribute__((mode(TI)));
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefCalcRotTransSMatrix);
+typedef union SefQuadBlock {
+    Quadword quad;
+} SefQuadBlock;
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefCalcInvView);
+/*
+ * sefMemZero (main:0x002e11f8): clears `size` bytes at `dest` in aligned
+ * 16-byte blocks, then any remaining 4-byte word. sefInitLineData,
+ * sefCreateParticle, sefInitScheduler, sefPushEffect, sefPopEffect,
+ * sdvInitAlter and sdvDestroyAlter (all still assembly in this TU) are its
+ * callers.
+ */
+void sefMemZero(void *dest, int size)
+{
+    SefQuadBlock *blocks = (SefQuadBlock *)dest;
+    int block_count = size >> 4;
+    int word_count = (size & 0xf) >> 2;
+    int *words = (int *)(blocks + block_count);
+    int i;
+
+    for (i = 0; i < block_count; i++) {
+        blocks[i].quad = 0;
+    }
+    for (i = 0; i < word_count; i++) {
+        words[i] = 0;
+    }
+}
+
+extern Matrix4 *MMathRotateMatrixXYZ(Matrix4 *out, Matrix4 *matrix, Vector4 *angles);
+extern Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, Vector4 *scale);
+
+/*
+ * sefCalcRotTransSMatrix (main:0x002e1270): builds `matrix` as a
+ * translation-only matrix from `translation` (VU0 macro-mode broadcast of
+ * vf0's own one-hot rows for the identity part, the same idiom
+ * sefCalcInvView below uses, with vf1's own W lane forced to vf0's own W
+ * and its XYZ lanes loaded from `translation`), then rotates it in place by
+ * `angles` and scales it by `scale`. sefGetMotionNullMatrix,
+ * sefGetParentMatrix and sefExecScheduler are its callers.
+ */
+void sefCalcRotTransSMatrix(Vector4 *angles, Vector4 *translation, Vector4 *scale, Matrix4 *matrix)
+{
+    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(translation) : "memory");
+    __asm__ __volatile__("vmove.w vf1, vf0" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf2, vf0" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf3, vf2" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf4, vf3" : : : "memory");
+    __asm__ __volatile__("sqc2 vf1, 48(%0)" : : "r"(matrix) : "memory");
+    __asm__ __volatile__("sqc2 vf2, 32(%0)" : : "r"(matrix) : "memory");
+    __asm__ __volatile__("sqc2 vf3, 16(%0)" : : "r"(matrix) : "memory");
+    __asm__ __volatile__("sqc2 vf4, 0(%0)" : : "r"(matrix) : "memory");
+    MMathRotateMatrixXYZ(matrix, matrix, angles);
+    MMathScaleMatrix(matrix, matrix, scale);
+}
+
+extern StudioCamera *xglStudioGetActiveCamera(void);
+extern Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, Matrix4 *matrix, Vector4 *angles);
+
+/*
+ * sefCalcInvView (main:0x002e12e0): writes the identity matrix into `matrix`
+ * (VU0 macro-mode broadcast of vf0's own one-hot rows, the same idiom
+ * sefCalcRotChange's own identity block below uses), then rotates it in
+ * place by the active studio camera's own rotation (StudioCamera::rotation,
+ * include/shared.h, at +0xA0) in YXZ order. sefDrawEffect is its only
+ * caller.
+ */
+static void sefCalcInvView(Matrix4 *matrix) {
+    StudioCamera *camera = xglStudioGetActiveCamera();
+
+    __asm__ __volatile__("vmr32.xyzw vf1, vf0" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf2, vf1" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf3, vf2" : : : "memory");
+    __asm__ __volatile__("sqc2 vf0, 48(%0)" : : "r"(matrix) : "memory");
+    __asm__ __volatile__("sqc2 vf1, 32(%0)" : : "r"(matrix) : "memory");
+    __asm__ __volatile__("sqc2 vf2, 16(%0)" : : "r"(matrix) : "memory");
+    __asm__ __volatile__("sqc2 vf3, 0(%0)" : : "r"(matrix) : "memory");
+    MMathRotateMatrixYXZ(matrix, matrix, &camera->rotation);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefSearchMapperIndex2);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSearchMapperIndex);
+extern int sefSearchMapperIndex2(int effect_id, int number, int category);
+extern int srsAnalyzeEftNo(int effect_id, int *number, int *category);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sevInitPtAllocator);
+/*
+ * sefSearchMapperIndex (main:0x002e1540): decomposes the effect id into a
+ * number/category pair via srsAnalyzeEftNo, then feeds them to the mapper
+ * lookup sefSearchMapperIndex2, discarding its result.
+ */
+void sefSearchMapperIndex(int effect_id) {
+    int number;
+    int category;
+
+    srsAnalyzeEftNo(effect_id, &number, &category);
+    sefSearchMapperIndex2(effect_id, number, category);
+}
+
+extern unsigned char _battleData[];
+extern unsigned char _ptAlloc[];
+
+/*
+ * sevInitPtAllocator (main:0x002e1580): clears the whole _ptAlloc particle
+ * allocator table and _battleData, then rebuilds _ptAlloc's own trailing
+ * free-index queue (1024 entries, main VA 0x00794110's 0xa07fe-byte offset)
+ * with the descending indices 0x3ff..0. sefInitEffect is its only caller.
+ */
+static void sevInitPtAllocator(void)
+{
+    short *slot;
+    int index;
+
+    memset(_ptAlloc, 0, 0xA0810);
+    slot = (short *)(_ptAlloc + 0xA07FE);
+    memset(_battleData, 0, 0x230);
+    index = 0x3FF;
+    do {
+        *slot = (short)index;
+        index--;
+        slot--;
+    } while (index >= 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sevAllocPtAllocator);
 
@@ -65,7 +260,48 @@ static void sefProgressKey3(SefKey3 *keys, SefProgressState *state)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefProgressKey5);
+/*
+ * A 10-byte keyed-animation record (config/units, sefProgressKey5): the
+ * end_frame this function tests against 1024 and the following record's own
+ * jump index are the only fields any accepted function of this TU touches;
+ * the six bytes between them are not yet evidenced.
+ */
+typedef struct SefKey5 {
+    short end_frame;
+    unsigned char unmodeled_2[6];
+    short jump;
+} SefKey5;
+
+/*
+ * sefProgressKey5 (main:0x002e1740): like sefProgressKey3 above, but on the
+ * wider 10-byte SefKey5 keys sefLerpVector/sefLerpIVector/sefLerpIVector2
+ * (all still assembly in this TU) share: advances `state`'s frame, and once
+ * it reaches the current key's own end_frame either follows the next key's
+ * jump index or moves to the next key in sequence, returning the active key.
+ */
+static SefKey5 *sefProgressKey5(SefKey5 *keys, SefProgressState *state)
+{
+    int key_index = state->key_index;
+    int frame = state->frame + 1;
+    SefKey5 *key = keys + key_index;
+    short jump;
+
+    state->frame = frame;
+    if (frame < 1024) {
+        if (key->end_frame != 1024 && frame >= key[1].end_frame) {
+            key++;
+            jump = key->jump;
+            if (jump >= 0) {
+                state->key_index = jump;
+                key = keys + jump;
+                state->frame = key->end_frame;
+            } else {
+                state->key_index = key_index + 1;
+            }
+        }
+    }
+    return key;
+}
 
 /*
  * sefLerpVectorA (main:0x002e17c8), re-treated from the accepted assembly
@@ -202,7 +438,23 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetWeaponPosition);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetPoint);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetPosition);
+extern void sefGetPoint(Vector4 *position, unsigned char *source);
+extern unsigned char _zeroPos_004CBF00[];
+
+/*
+ * sefGetPosition (main:0x002e2240): fills `position`'s XYZ via sefGetPoint
+ * from `source` (or the shared zero-position table when source is NULL),
+ * then forces the resulting vector's W lane to 1.0f.
+ */
+void sefGetPosition(Vector4 *position, unsigned char *source) {
+    unsigned char *point = source;
+
+    if (point == 0) {
+        point = _zeroPos_004CBF00;
+    }
+    sefGetPoint(position, point);
+    position->w = 1.0f;
+}
 
 /*
  * sefGetCirclePos (main:0x002e2280): draws one random unit scalar, scales it
@@ -257,17 +509,19 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetCubePosBtm);
 /*
  * sefGetCubePosBtm (main:0x002e23c8) is still INCLUDE_ASM in this TU;
  * declared here so sefGetCubePosTop (main:0x002e24c0) can call it. Both are
- * LOCAL in the original, so both stay static.
+ * LOCAL in the original, so both stay static. `extent` is the cube's
+ * integer extent vector (four ints, loaded with lqc2 and converted with
+ * vitof0); the Top variant forwards it untouched.
  */
-static void sefGetCubePosBtm(Vector4 *pos);
+static void sefGetCubePosBtm(Vector4 *pos, const int *extent);
 
 /*
  * sefGetCubePosTop (main:0x002e24c0): fills `pos` with the bottom corner via
  * sefGetCubePosBtm, then negates its Y component to mirror it to the top.
  */
-static void sefGetCubePosTop(Vector4 *pos)
+static void sefGetCubePosTop(Vector4 *pos, const int *extent)
 {
-    sefGetCubePosBtm(pos);
+    sefGetCubePosBtm(pos, extent);
     pos->y = -pos->y;
 }
 
@@ -301,11 +555,71 @@ void sefGetVecMatrix(Matrix4 *dest, Vector4 *source_a, Vector4 *source_b)
     sefGetDirMatrix(dest, &dir);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetDirVector);
+/*
+ * sefGetDirVector (main:0x002e2938): a single VU0 macro-mode sequence with
+ * no general-purpose instruction of its own (all 7 hardware operations,
+ * leaf, no calls; sefGetSpeed is the only caller). Negates `source`'s Z
+ * lane against the VU0 architectural constant vf0 (0,0,0,1), accumulates it
+ * against the caller's own vf7/vf8/vf3/vf4 basis (ACC = vf7*x + vf8*y +
+ * vf3*(-z), then vf1 = ACC + vf4*w) and stores the four-lane result to
+ * `dest`. vf7/vf8/vf3/vf4 are whatever sefGetSpeed already loaded into VU0
+ * before this call; this function neither reads nor writes them as C state.
+ */
+static void sefGetDirVector(void *dest, void *source) {
+    __asm__ __volatile__("lqc2 vf1, 0(%0)\n\tvsub.z vf1, vf0, vf1\n\tvmulax.xyzw ACC, vf7, vf1x\n\tvmadday.xyzw ACC, vf8, vf1y\n\tvmaddaz.xyzw ACC, vf3, vf1z\n\tvmaddw.xyzw vf1, vf4, vf1w\n\tsqc2 vf1, 0(%1)\n\tnop" :  : "r"(source), "r"(dest) : "memory");
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetStartPos);
+extern void sefGetOfsRange(void *position, unsigned char *offset_table, short index);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetTargetPos);
+/*
+ * SefParticleOffset (sefGetStartPos/sefGetTargetPos, main:0x002e2960 and
+ * main:0x002e29b0): the only fields sefCreateParticle's effect record these
+ * two functions evidence -- a start and a target position vector, and a
+ * start and a target offset-table/index pair consumed opaquely by
+ * sefGetOfsRange (still assembly). The bytes between and around them are
+ * not evidenced by any accepted function in this TU.
+ */
+typedef struct SefParticleOffset {
+    unsigned char unmodeled_00[0x30];
+    Vector4 start_position;                  /* +0x030 */
+    unsigned char unmodeled_40[0x10];
+    Vector4 target_position;                 /* +0x050 */
+    unsigned char unmodeled_60[0x110];
+    unsigned char start_offset_table[0x20];  /* +0x170 */
+    unsigned char target_offset_table[0x20]; /* +0x190 */
+    unsigned char unmodeled_1b0[0x24];
+    short *start_index;                      /* +0x1D4 */
+    unsigned char unmodeled_1d8[4];
+    short *target_index;                     /* +0x1DC */
+} SefParticleOffset;
+
+/*
+ * sefGetStartPos (main:0x002e2960): looks up the configured start offset
+ * through sefGetOfsRange using the record's own start offset table and the
+ * index its start_index points to, then adds the record's own
+ * start_position vector into the caller's own position accumulator.
+ * sefCreateParticle is its only caller.
+ */
+static void sefGetStartPos(Vector4 *position, SefParticleOffset *record) {
+    sefGetOfsRange(position, record->start_offset_table, *record->start_index);
+    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&record->start_position) : "memory");
+    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(position) : "memory");
+    __asm__ __volatile__("vadd.xyz vf1, vf1, vf2" : : : "memory");
+    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(position) : "memory");
+}
+
+/*
+ * sefGetTargetPos (main:0x002e29b0): identical in shape to sefGetStartPos
+ * above, at the record's target fields instead of its start fields.
+ * sefCreateParticle is also its only caller.
+ */
+static void sefGetTargetPos(Vector4 *position, SefParticleOffset *record) {
+    sefGetOfsRange(position, record->target_offset_table, *record->target_index);
+    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&record->target_position) : "memory");
+    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(position) : "memory");
+    __asm__ __volatile__("vadd.xyz vf1, vf1, vf2" : : : "memory");
+    __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(position) : "memory");
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetSpeed);
 
@@ -575,7 +889,32 @@ static void sefCalcRotChange(unsigned char *record, int flags, int update)
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefExecLineLocalData);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeLocalData);
+extern void sevFreePtAllocator(short handle);
+
+#define SEF_LOCAL_DATA_PT_TABLE 0x600
+
+/*
+ * sefFreeLocalData (main:0x002e34e0): releases the particle allocator slot
+ * this line owns at index `index` (SEF_LOCAL_DATA_PT_TABLE, an array of
+ * allocator handles) and clears it to -1. The slot is only touched when
+ * `index` is valid (< 256); an out-of-range index still returns the byte
+ * offset that would have been used, which neither caller
+ * (sefExecLineLocalData, sefDestroyLocalData) treats as anything but a
+ * non-(-1) sentinel.
+ */
+static int sefFreeLocalData(unsigned char *line_data, unsigned int index) {
+    int valid = index < 0x100;
+    int offset = (int)(index * 2) + SEF_LOCAL_DATA_PT_TABLE;
+
+    if (valid) {
+        short *slot = (short *)(line_data + offset);
+
+        sevFreePtAllocator(*slot);
+        offset = -1;
+        *slot = -1;
+    }
+    return offset;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefAllocLocalData);
 
@@ -597,7 +936,38 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefExecLineGlobalData);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefExecLineData);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffectData);
+/*
+ * PARTIAL ACCESSED VIEW of an effect-table record (sefInitEffectData): the
+ * first 0x20 bytes are filled with 0xff by memset and are not otherwise
+ * touched by this function; owner, effect_no and category are the fields it
+ * sets from its own parameters, flags and frame are reset to 0. The 2-byte
+ * gap after flags is not yet evidenced by any accepted function of this TU.
+ */
+typedef struct EffectData {
+    unsigned char unmodeled_00[0x20];
+    int owner;
+    short category;
+    short effect_no;
+    short flags;
+    unsigned char unmodeled_2a[2];
+    short frame;
+} EffectData;
+
+/*
+ * sefInitEffectData (main:0x002e49e8): fills `effect`'s first 0x20 bytes
+ * with 0xff, then sets owner/effect_no/category from its own parameters and
+ * resets flags/frame to 0. sefInitScheduler and sefInitEffectTbl are its
+ * callers.
+ */
+static void sefInitEffectData(EffectData *effect, int owner, int effect_no, int category)
+{
+    memset(effect, -1, 0x20);
+    effect->owner = owner;
+    effect->effect_no = (short)effect_no;
+    effect->category = (short)category;
+    effect->frame = 0;
+    effect->flags = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyEffectData);
 
@@ -605,7 +975,17 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefAllocEffectData);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeEffectData);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefCheckFinish);
+/*
+ * sefCheckFinish (main:0x002e4b80): when `condition` carries the 0x4000
+ * "loop ended" bit, marks the current scheduler's own record finished
+ * (SchedulerState::flags |= 0x40, sef.h). The first parameter is not read
+ * by this function.
+ */
+static void sefCheckFinish(int effect_no, int condition) {
+    if (condition & 0x4000) {
+        _nowScheduler->flags |= 0x40;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefExecEffectData);
 
@@ -613,7 +993,40 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitScheduler);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefAllocScheduler);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeSchedulerCf);
+extern void xglSoundEffectStopID(int soundId, int channel);
+static void sefDestroyEffectData(unsigned char *effect);
+
+/*
+ * sefFreeSchedulerCf (main:0x002e5118): releases an active scheduler
+ * record -- stops its currently playing sound effect if any, destroys each
+ * of its 32 effect slots, and clears the record's script binding. A NULL
+ * scheduler or one that is already free (inUse == 0) does nothing.
+ * sefDeleteEffect2 and sefDeleteEffectCf (this file) tail-call this with
+ * their own scheduler argument unchanged.
+ */
+void sefFreeSchedulerCf(SchedulerState *scheduler)
+{
+  int soundId;
+  int i;
+
+  if (scheduler != 0 && scheduler->inUse != 0)
+  {
+    soundId = scheduler->soundId;
+    if (soundId > 0)
+    {
+      xglSoundEffectStopID(soundId, 0);
+      scheduler->soundId = 0;
+    }
+    for (i = 0; i < 32; i++)
+    {
+      sefDestroyEffectData(scheduler->effects[i]);
+    }
+    scheduler->scriptBinding.state = 0;
+    scheduler->inUse = 0;
+    scheduler->scriptBinding.script_id = -1;
+    scheduler->scriptBinding.task_id = -1;
+  }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeScheduler);
 
@@ -652,9 +1065,30 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffectTbl);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateScheduler2);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateScheduler);
+extern int sefCreateScheduler2(int effect_no, int value2, int value3, int value4, int flags, int value5);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetSizeOffset);
+/*
+ * sefCreateScheduler (main:0x002e5900): forwards to the scheduler allocator
+ * sefCreateScheduler2 with a plain 0 for its own flags slot, and returns its
+ * handle unchanged: scEFFECTScript/scEFFECT2Script/scEFFECT3Script store
+ * that handle as `effect_scheduler` (src/main/sc_get.h). value2/value3/
+ * value4/value5 are forwarded unchanged; this allocation has no further
+ * evidence for them.
+ */
+int sefCreateScheduler(int effect_no, int value2, int value3, int value4, int value5) {
+    return sefCreateScheduler2(effect_no, value2, value3, value4, 0, value5);
+}
+
+extern int offset_2[];
+
+/*
+ * sefGetSizeOffset (main:0x002e5920): returns the size-offset table entry at
+ * `offset_2[index]` (config/symbols/main.txt, offset_2 @ 0x004CBF48, 5
+ * ints); sefCreateReactionEffect and sefCnvDeathEffectNo are its callers.
+ */
+static int sefGetSizeOffset(int index) {
+    return offset_2[index];
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateReactionEffect);
 
@@ -700,7 +1134,45 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsSeSignal);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefAddLightActor);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffect);
+extern void smInitilize(void *pool, unsigned int poolSize);
+extern void sresInitMemoryRes(void);
+extern void srsInitCdRead(void);
+extern void svInitImageMapper(void);
+extern void sefInitScheduler(void);
+extern void scInitScript(void);
+extern void sdvInitSpecialWork(void);
+extern void sdvInitAmbient(void);
+extern void sresLoadCommonMemory(void);
+extern unsigned char _eftBuffer[];
+extern unsigned char _battlePrm[];
+extern int _sefLoadEftQue;
+extern short _initialize;
+
+/*
+ * sefInitEffect (main:0x002e6b60): the effect subsystem's one-time
+ * bring-up. Initializes the effect memory pool (_eftBuffer, 0xd4800 bytes),
+ * the resource/CD-read/particle-allocator/image-mapper/scheduler/script
+ * subsystems, clears the battle parameter and battle-data tables, brings
+ * up the special-work and ambient renderers and the common resource set,
+ * clears the pending load queue and marks the subsystem initialized.
+ */
+void sefInitEffect(void)
+{
+    smInitilize(_eftBuffer, 0xD4800);
+    sresInitMemoryRes();
+    srsInitCdRead();
+    sevInitPtAllocator();
+    svInitImageMapper();
+    sefInitScheduler();
+    scInitScript();
+    memset(_battlePrm, 0, 0x34);
+    memset(_battleData, 0, 0x230);
+    sdvInitSpecialWork();
+    sdvInitAmbient();
+    sresLoadCommonMemory();
+    _sefLoadEftQue = 0;
+    _initialize = 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffectBattle);
 
@@ -712,13 +1184,79 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetupEnemy);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefReleaseID);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetupEffect);
+extern void sresLoadBattleData(unsigned char *battle_prm);
+extern unsigned char _battlePrm[];
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsEntryBoss);
+/*
+ * sefSetupEffect (main:0x002e6fe0): loads battle effect resources into
+ * _battlePrm (main VA 0x00794340). sefSetupPlayer and sefSetupEnemy are its
+ * only callers besides the seffectDebugBattle debug entry point.
+ */
+void sefSetupEffect(void) {
+    sresLoadBattleData(_battlePrm);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyEffect);
+/*
+ * sefIsEntryBoss (main:0x002e7000): 0x00794370 is _battlePrm + 0x30
+ * (_battlePrm at main VA 0x00794340, cleared to 0x34 bytes by sefInitEffect
+ * and loaded by sresLoadBattleData in sefSetupEffect above). Compiled in
+ * isolation, the original relocates directly against this narrower address
+ * rather than folding +0x30 onto _battlePrm's own relocation, so this
+ * declaration keeps the scaffold's own splat name.
+ */
+extern int D_00794370[];
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyEffectCf);
+int sefIsEntryBoss(void) {
+    return D_00794370[0];
+}
+
+extern void scDestroyScriptAll(void);
+extern void sdvDestroyAlters(void);
+extern void sdvInitAmbient(void);
+extern void sresFreeReloaderMemory(int reload_bgm);
+extern unsigned char _battleActor[];
+extern int _sefLoadEftQue;
+void sefKillEffect(int effect_no);
+
+/*
+ * sefDestroyEffect (main:0x002e7010): tears down the whole battle effect
+ * state -- clears the load queue, kills every running scheduler, resets the
+ * ambient/script/reload-memory subsystems and the battle parameter/state/
+ * actor tables, then destroys every alter. sresFreeReloaderMemory's own
+ * argument selects the disk-side reloader (1). SimajiriTest and
+ * sefInitEffectBattle are its callers.
+ */
+void sefDestroyEffect(void)
+{
+    _sefLoadEftQue = 0;
+    sefKillEffect(-1);
+    sdvInitAmbient();
+    scDestroyScriptAll();
+    sresFreeReloaderMemory(1);
+    memset(_battlePrm, 0, 0x34);
+    memset(_battleData, 0, 0x230);
+    memset(_battleActor, 0, 0xDA0);
+    sdvDestroyAlters();
+}
+
+/*
+ * sefDestroyEffectCf (main:0x002e7088): the character-file variant of
+ * sefDestroyEffect above, identical except sresFreeReloaderMemory's own
+ * argument selects the memory-card-side reloader (0). seffectDebugCf,
+ * seffectDebugBattle and sefInitEffectCf are its callers.
+ */
+void sefDestroyEffectCf(void)
+{
+    _sefLoadEftQue = 0;
+    sefKillEffect(-1);
+    sdvInitAmbient();
+    scDestroyScriptAll();
+    sresFreeReloaderMemory(0);
+    memset(_battlePrm, 0, 0x34);
+    memset(_battleData, 0, 0x230);
+    memset(_battleActor, 0, 0xDA0);
+    sdvDestroyAlters();
+}
 
 /*
  * sefCnvEtEffectNo (main:0x002e74e0) is still assembly in this TU and LOCAL
@@ -800,9 +1338,50 @@ void sefProgressEffect(int frame_count)
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefDrawEffect);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDrawEffect3D);
+extern void svDrawScheduler3D(int flags);
+extern short _initialize;
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDrawEffect2D);
+/*
+ * GameLoopState (main VA 0x00338680, src/main/game_camera.c) is a
+ * 0x2a030-byte global; only its +0x10 flags word is evidenced here (the
+ * same field main/tu148 models as GameLoopFlagsPrefix, src/main/script.h).
+ */
+typedef struct {
+    unsigned char unmodeled_00[0x10];
+    int flags;
+} GameLoopFlagsView;
+
+extern GameLoopFlagsView GameLoopState;
+
+#define SEF_DRAW_FLAG_PENDING 0x04000000
+
+/*
+ * sefDrawEffect3D (main:0x002e7220): while `_initialize` is set and
+ * GameLoopState's flags word does not already carry SEF_DRAW_FLAG_PENDING,
+ * calls svDrawScheduler3D with that same bit as its argument. xglRenderMove
+ * is its only caller.
+ */
+void sefDrawEffect3D(void) {
+    if (_initialize != 0) {
+        if (!(GameLoopState.flags & SEF_DRAW_FLAG_PENDING)) {
+            svDrawScheduler3D(SEF_DRAW_FLAG_PENDING);
+        }
+    }
+}
+
+extern void svDrawScheduler2D(int flags);
+
+/*
+ * sefDrawEffect2D (main:0x002e7260): the same gate as sefDrawEffect3D above,
+ * calling svDrawScheduler2D instead.
+ */
+void sefDrawEffect2D(void) {
+    if (_initialize != 0) {
+        if (!(GameLoopState.flags & SEF_DRAW_FLAG_PENDING)) {
+            svDrawScheduler2D(SEF_DRAW_FLAG_PENDING);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCnvDeathEffectNo);
 
@@ -896,7 +1475,18 @@ int sefLoadMemoryEffectCfName(int cf_id, int effect_name, int buffer)
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateEffectCf2);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateEffectCf);
+extern void sefCreateEffectCf2(int cf_id, int effect_no, int value3, int value4);
+
+/*
+ * sefCreateEffectCf (main:0x002e7918): forwards to the CF effect allocator
+ * sefCreateEffectCf2 with a fixed -1 for its own 4th parameter; cf_id and
+ * effect_no follow the naming srsFileLoadCf's callers already evidence for
+ * this file's other Cf functions (sefLoadEffectCf above). value3 is
+ * forwarded unchanged; this allocation has no further evidence for it.
+ */
+void sefCreateEffectCf(int cf_id, int effect_no, int value3) {
+    sefCreateEffectCf2(cf_id, effect_no, value3, -1);
+}
 
 /*
  * sefDeleteEffectCf (main:0x002e7930) is another tail call to
@@ -1112,7 +1702,17 @@ unsigned char *sefGetParentLine(int line, int parent_local)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefScaleIVectorAdd);
+/*
+ * sefScaleIVectorAdd (main:0x002e7f18): converts the integer vector at
+ * `scale_source` to float (VU0 macro-mode vitof0), scales its XYZ lanes by
+ * `scale` (moved into vf2.x through the GPR the compiler's own mfc1
+ * materializes for the "r" operand, matching the original's own transfer),
+ * adds `addend`'s XYZ lanes and stores the sum to `dest`. Leaf, no calls,
+ * no evidenced caller in this allocation.
+ */
+void sefScaleIVectorAdd(void *dest, void *scale_source, void *addend, float scale) {
+    __asm__ __volatile__("lqc2 vf1, 0(%0)\n\tlqc2 vf3, 0(%1)\n\tvitof0.xyzw vf1, vf1\n\tqmtc2.ni %2, vf2\n\tvmulx.xyz vf1, vf1, vf2x\n\tvadd.xyz vf3, vf1, vf3\n\tsqc2 vf3, 0(%3)\n\tnop" :  : "r"(scale_source), "r"(addend), "r"(scale), "r"(dest) : "memory");
+}
 
 /*
  * config/units/math-main-w3-002e7f40.json: scale the XYZ lanes of an aligned

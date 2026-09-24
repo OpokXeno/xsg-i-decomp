@@ -18,7 +18,42 @@ extern DrillMapUnit MapUnit[64];
 
 INCLUDE_ASM("asm/main/nonmatchings/init_drill", InitDrill);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_drill", SetContainer);
+int CreateContainer(int, int);
+extern unsigned char D_004CA960[];
+int printf(const char *, ...);
+void DrillClearContainer(void);
+
+/*
+ * Clears every existing drill container, then creates `count` new ones at
+ * random serials in 0x7014..0x7027. A creation that fails (a full container
+ * slot table) retries once with a fixed serial (0x7014..0x7017) chosen by
+ * xglSRand() & 3.
+ */
+void SetContainer(int count)
+{
+    printf((char *) D_004CA960);
+    DrillClearContainer();
+    if (count > 0) {
+        do {
+            if (CreateContainer(-1, (xglSRand() % 20U) + 0x7014) == 0) {
+                switch (xglSRand() & 3) {
+                case 0:
+                    CreateContainer(-1, 0x7014);
+                    break;
+                case 1:
+                    CreateContainer(-1, 0x7015);
+                    break;
+                case 2:
+                    CreateContainer(-1, 0x7016);
+                    break;
+                case 3:
+                    CreateContainer(-1, 0x7017);
+                    break;
+                }
+            }
+        } while (--count != 0);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_drill", CreateContainer);
 

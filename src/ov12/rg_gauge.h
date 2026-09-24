@@ -29,7 +29,9 @@ typedef struct RgGauge {
     float currentValue;            /* +0x08: RgGaugeSetValue, RgGaugeGetValue, RgGaugeDraw */
     float maxValue;                /* +0x0c: RgGaugeSetValue, RgGaugeGetMax, RgGaugeDraw */
     float targetValue;             /* +0x10: RgGaugeSetValue */
-    unsigned char unmodeled_14[4]; /* +0x14: untouched by this allocation */
+    float changeSpeed;             /* +0x14: _InitGauge; RgGaugePassTime moves
+                                       currentValue toward targetValue by this
+                                       many units per second */
     RgGaugeDisp *disp;             /* +0x18: _InitGauge, _DestructGauge, RgGaugeGetDisp, RgGaugeDraw */
 } RgGauge;
 

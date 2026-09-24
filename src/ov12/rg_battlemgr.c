@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_battlemgr.h"
+#include "ov12/rg_draw.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -90,7 +91,30 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _GetInPlayerList);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _AddPlayerList);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _ClearPlayerList);
+extern void DisposeRgPlayer(RgPlayer *pPlayer);
+
+static void _ClearPlayerList(PlayerList *pList)
+{
+    RgPlayer **pSlot;
+    RgPlayer *player;
+    u32 slotIndex;
+
+    if (pList == 0) {
+        assert_prog(D_00A54CE8, D_00A54CC0, 0x9C);
+    }
+    slotIndex = 0;
+    pSlot = &pList->player1P;
+    do {
+        player = *pSlot;
+        slotIndex += 1;
+        if (player != 0) {
+            DisposeRgPlayer(player);
+            *pSlot = 0;
+        }
+        pSlot += 1;
+    } while (slotIndex < 2U);
+    pList->count = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _ControlPlayerList);
 
@@ -115,9 +139,23 @@ static void _DestructPlayerList(PlayerList *pList)
     _ClearPlayerList(pList);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _CreatePlayerList);
+static PlayerList *_CreatePlayerList(void)
+{
+    PlayerList *pList = RgHeapAlloc(InstanceOfRgHeap(), sizeof(PlayerList),
+                                    D_00A54CC0, 0xDC);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DisposePlayerList);
+    _InitPlayerList(pList);
+    return pList;
+}
+
+static void _DisposePlayerList(PlayerList *pList)
+{
+    if (pList == 0) {
+        assert_prog(D_00A54CE8, D_00A54CC0, 0xE3);
+    }
+    _DestructPlayerList(pList);
+    RgHeapFree(InstanceOfRgHeap(), pList, D_00A54CC0, 0xE5);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _GetStudioBattleField);
 
@@ -125,7 +163,38 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _GetCameraBattleField);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _ClearBattleField);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _InitBattleField);
+extern RgGeomGroup *CreateRgGeomGroup(void);
+extern RgDraw *InstanceOfRgDraw(void);
+extern void RgDrawCreateDrawStudioFullScreen(RgDraw *pDraw);
+
+static void _InitBattleField(BattleField *pField)
+{
+    RgGeomGroup *pGroup;
+    u8 *pStudioBase;
+    u8 *pCameraSlot;
+    u8 *pStudioSlot;
+    u32 offset;
+    u32 pass;
+
+    if (pField == 0) {
+        assert_prog(D_00A54D50, D_00A54CC0, 0x11C);
+    }
+    pField->count = 0;
+    pGroup = CreateRgGeomGroup();
+    pass = 0;
+    pField->geomGroup = pGroup;
+    pStudioBase = (u8 *) pField->studio;
+    offset = 0x10;
+    do {
+        pass += 1;
+        pCameraSlot = &pStudioBase[offset];
+        pStudioSlot = (u8 *) pField + offset;
+        offset += 4;
+        *(int *) pCameraSlot = 0;
+        *(int *) pStudioSlot = 0;
+    } while (pass < 2U);
+    RgDrawCreateDrawStudioFullScreen(InstanceOfRgDraw());
+}
 
 static void _ClearBattleField(BattleField *pField);
 
@@ -149,7 +218,14 @@ static BattleField *_CreateBattleField(void)
     return pField;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DisposeBattleField);
+static void _DisposeBattleField(BattleField *pField)
+{
+    if (pField == 0) {
+        assert_prog(D_00A54D50, D_00A54CC0, 0x139);
+    }
+    _DestructBattleField(pField);
+    RgHeapFree(InstanceOfRgHeap(), pField, D_00A54CC0, 0x13B);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _FullScreenBattleField);
 
@@ -169,7 +245,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _InitDispInfo);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DestructDispInfo);
 
-void _InitDispInfo(DispInfo *pInfo);
+static void _InitDispInfo(DispInfo *pInfo);
 
 static DispInfo *_CreateDispInfo(void)
 {
@@ -179,7 +255,7 @@ static DispInfo *_CreateDispInfo(void)
     return pInfo;
 }
 
-void _DestructDispInfo(DispInfo *pInfo);
+static void _DestructDispInfo(DispInfo *pInfo);
 
 static void _DisposeDispInfo(DispInfo *pInfo)
 {
@@ -201,11 +277,79 @@ static void _SetDispInfo(DispInfo *pDisp, int mode, RgPlayer *player1P,
     pDisp->player2P = player2P;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DrawDispInfoOnePlayer);
+extern RgRobot *RgPlayerGetRobot(RgPlayer *pPlayer);
+extern void RgDispGameInfoSetHostRobot(RgDispGameInfo *pInfo, RgRobot *robot);
+extern void RgDispGameInfoSetSubRobot(RgDispGameInfo *pInfo, RgRobot *robot);
+extern void RgDispGameInfoPassTime(RgDispGameInfo *pInfo, float deltaTime);
+extern void RgDispGameInfoDisplay(RgDispGameInfo *pInfo);
+extern const char D_00A54DB8[];
+extern const char D_00A54DD0[];
+
+static void _DrawDispInfoOnePlayer(RgDispGameInfo *pInfo, RgPlayer **players,
+                                   u32 nHost, u32 nSub)
+{
+    RgPlayer *hostPlayer;
+    RgPlayer *subPlayer;
+
+    if (nHost >= 2U) {
+        assert_prog(D_00A54DB8, D_00A54CC0, 0x1F8);
+    }
+    if (nSub >= 2U) {
+        assert_prog(D_00A54DD0, D_00A54CC0, 0x1F9);
+    }
+    hostPlayer = players[nHost];
+    if (hostPlayer != 0) {
+        RgDispGameInfoSetHostRobot(pInfo, RgPlayerGetRobot(hostPlayer));
+        subPlayer = players[nSub];
+        if (subPlayer != 0) {
+            RgDispGameInfoSetSubRobot(pInfo, RgPlayerGetRobot(subPlayer));
+        }
+    }
+    RgDispGameInfoPassTime(pInfo, 0.033333335f);
+    RgDispGameInfoDisplay(pInfo);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DrawDispInfo);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _InitBattleMgr);
+extern RgBattleCommonDataEnv *InstanceOfRgBattleCommonData(void);
+extern int RgBattleCommonDataGetDispTex(RgBattleCommonDataEnv *pEnv);
+extern int RgBattleCommonDataTimeFont(RgBattleCommonDataEnv *pEnv);
+extern RgDispLife *CreateRgDispLife(int dispTex, int timeFont);
+/*
+ * This TU's own local prototype for CreateRgDispWpn1P (ov12/tu041): the
+ * accepted definition there takes no argument, but this call site's
+ * compiled bytes evaluate and pass RgBattleCommonDataGetDispTex's result
+ * anyway, so the argument is declared to match the call.
+ */
+extern RgDispWpn1P *CreateRgDispWpn1P(int dispTex);
+extern RgDispWpn2P *CreateRgDispWpn2P(void);
+extern RgGameCollision *CreateRgGameCollision(void);
+extern PlayerList *_CreatePlayerList(void);
+
+static void _InitBattleMgr(RgBattleMgr *pMgr)
+{
+    RgBattleCommonDataEnv *pData;
+    int dispTex;
+
+    pData = InstanceOfRgBattleCommonData();
+    if (pMgr == 0) {
+        assert_prog(D_00A54DE8, D_00A54CC0, 0x250);
+    }
+    pMgr->playerList = _CreatePlayerList();
+    pMgr->gameCollision = CreateRgGameCollision();
+    pMgr->geomGroup = CreateRgGeomGroup();
+    pMgr->battleField = _CreateBattleField();
+    pMgr->mode = 0;
+    pMgr->dispInfo = _CreateDispInfo();
+    dispTex = RgBattleCommonDataGetDispTex(pData);
+    pMgr->dispLife = CreateRgDispLife(dispTex, RgBattleCommonDataTimeFont(pData));
+    pMgr->dispWpn1P = CreateRgDispWpn1P(RgBattleCommonDataGetDispTex(pData));
+    pMgr->dispWpn2P = CreateRgDispWpn2P();
+    pMgr->fileSysData = 0;
+    pMgr->timerActive = 1;
+    pMgr->playerControl = 0;
+    pMgr->result = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DisposeBattleMgr);
 
@@ -227,13 +371,63 @@ static void _BattleMgrActivateTime(RgBattleMgr *pMgr, int active)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _InitBattle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _ControlBattle);
+extern RgCharMgr *InstanceOfRgCharMgr(void);
+extern void RgCharMgrControl(RgCharMgr *pMgr);
+extern void RgCharMgrGC(RgCharMgr *pMgr);
+static void _ControlPlayerList(PlayerList *pList);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _DispBattle);
+static void _ControlBattle(RgBattleMgr *pMgr)
+{
+    if (pMgr == 0) {
+        assert_prog(D_00A54DE8, D_00A54CC0, 0x359);
+    }
+    if (pMgr->playerControl != 0) {
+        _ControlPlayerList(pMgr->playerList);
+    }
+    RgCharMgrControl(InstanceOfRgCharMgr());
+    RgCharMgrGC(InstanceOfRgCharMgr());
+}
+
+extern XrgPaint2D *InstanceOfXrgPaint2D(void);
+extern void RgCharMgrDisp(RgCharMgr *pMgr);
+extern void RgDispLifeDisp(RgDispLife *pLife);
+extern void RgDispWpn1PDisp(RgDispWpn1P *pDisp);
+extern void RgDispWpn2PDisp(RgDispWpn2P *pDisp);
+extern void XrgPaint2DAlpha(XrgPaint2D *pPaint, int alpha);
+extern void XrgPaint2DColor(XrgPaint2D *pPaint, int *color);
+extern void XrgPaint2DDrawXYWH(XrgPaint2D *pPaint, int, int, int, int, int);
+static void _DispPlayerList(PlayerList *pList);
+static void _DrawDispInfo(DispInfo *pInfo);
+
+static void _DispBattle(RgBattleMgr *pMgr)
+{
+    int color[4];
+    XrgPaint2D *pPaint;
+    int mode;
+
+    if (pMgr == 0) {
+        assert_prog(D_00A54DE8, D_00A54CC0, 0x365);
+    }
+    mode = pMgr->mode;
+    if ((mode == 0) || (mode == 3)) {
+        memset(color, 0, sizeof(color));
+        color[3] = 0x50;
+        pPaint = InstanceOfXrgPaint2D();
+        XrgPaint2DAlpha(pPaint, 0);
+        XrgPaint2DColor(pPaint, color);
+        XrgPaint2DDrawXYWH(pPaint, 0, 0xFE, 0, 4, 0x1C0);
+    }
+    _DispPlayerList(pMgr->playerList);
+    RgCharMgrDisp(InstanceOfRgCharMgr());
+    _DrawDispInfo(pMgr->dispInfo);
+    RgDispLifeDisp(pMgr->dispLife);
+    RgDispWpn1PDisp(pMgr->dispWpn1P);
+    RgDispWpn2PDisp(pMgr->dispWpn2P);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", _PassTimeBattle);
 
-void _InitBattleMgr(RgBattleMgr *pMgr);
+static void _InitBattleMgr(RgBattleMgr *pMgr);
 
 RgBattleMgr *CreateRgBattleMgr(void)
 {
@@ -246,7 +440,7 @@ RgBattleMgr *CreateRgBattleMgr(void)
     return pMgr;
 }
 
-void _DisposeBattleMgr(RgBattleMgr *pMgr);
+static void _DisposeBattleMgr(RgBattleMgr *pMgr);
 
 void DisposeRgBattleMgr(RgBattleMgr *pMgr)
 {
@@ -257,9 +451,25 @@ void DisposeRgBattleMgr(RgBattleMgr *pMgr)
     RgHeapFree(InstanceOfRgHeap(), pMgr, D_00A54CC0, 1025);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", RgBattleMgrSetPlayerControl);
+static void _BattleMgrPlayerControl(RgBattleMgr *pMgr, int enable);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_battlemgr", RgBattleMgrActivateTimer);
+void RgBattleMgrSetPlayerControl(RgBattleMgr *pMgr, int enable)
+{
+    if (pMgr == 0) {
+        assert_prog(D_00A54DE8, D_00A54CC0, 0x40A);
+    }
+    _BattleMgrPlayerControl(pMgr, enable);
+}
+
+static void _BattleMgrActivateTime(RgBattleMgr *pMgr, int active);
+
+void RgBattleMgrActivateTimer(RgBattleMgr *pMgr, int active)
+{
+    if (pMgr == 0) {
+        assert_prog(D_00A54DE8, D_00A54CC0, 0x411);
+    }
+    _BattleMgrActivateTime(pMgr, active);
+}
 
 /* The battle's fixed time limit in seconds; RgBattleMgrGetPlayTime returns
  * the time played so far as the limit minus the remaining-time field. */

@@ -176,6 +176,26 @@ typedef struct Vector4 {
  *
  * +0x81..+0x4c7, +0x4cc..+0x6f3, +0x6f8..+0x823 and +0x828..+0x9bf are
  * unmodeled: nothing in this TU reads or writes them.
+ *
+ * ACT_initScene (0x0030b790) additionally resets four more words of each
+ * entry when it (re)initializes the 64-entry array for a new scene:
+ *
+ *   +0x84                a halfword ACT_initScene clears to 0
+ *                        (sh $0,132($16)); no function in this TU reads it,
+ *                        so nothing beyond "cleared on scene init" is
+ *                        evidenced.
+ *   +0x86 state_flags    ACT_initScene also clears it to 0, and ACT_setHand
+ *                        (0x0030b830) returns without acting whenever its
+ *                        upper nibble is set (andi $2,$2,0xf000; bnel), so it
+ *                        carries flag bits tested before a hand assignment is
+ *                        applied.
+ *   +0x90 shadow_kind, +0x91 shadow_size
+ *                        ACT_initScene writes the defaults 1 and 0x50 here;
+ *                        src/main/chr.h's own Actor view names the same pair
+ *                        of bytes the same way, from
+ *                        Java_xeno_Chr_setShadow__II's two byte arguments,
+ *                        corroborating both the offsets and the field
+ *                        widths.
  */
 typedef struct Actor {
     u32 flags;
@@ -190,7 +210,13 @@ typedef struct Actor {
     Vector4 scale;
     u8 unmodeled_70[0x80 - 0x70];
     u8 number;
-    u8 unmodeled_81[0x4c8 - 0x81];
+    u8 unmodeled_81[0x84 - 0x81];
+    short cleared_on_scene_init;                /* +0x84 */
+    short state_flags;                          /* +0x86 */
+    u8 unmodeled_88[0x90 - 0x88];
+    u8 shadow_kind;                              /* +0x90 */
+    u8 shadow_size;                              /* +0x91 */
+    u8 unmodeled_92[0x4c8 - 0x92];
     u32 undulation;
     u8 unmodeled_4cc[0x6f4 - 0x4cc];
     float motion_time;

@@ -38,7 +38,15 @@ void RgFontSetColor(RgFont *pFont, const RgFontColor *color)
     pFont->color.a = color->a;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_font", RgFontSetDefaultColor);
+void RgFontSetDefaultColor(RgFont *pFont)
+{
+    if (pFont == 0)
+        assert_prog(D_00A56F60, D_00A56F20, 61);
+    pFont->color.r = 0x80;
+    pFont->color.g = 0x80;
+    pFont->color.b = 0x80;
+    pFont->color.a = 0x7F;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_font", RgFontPut);
 

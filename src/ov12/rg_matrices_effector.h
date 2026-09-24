@@ -113,7 +113,7 @@ struct MatrixCombine {
     float weight;
 };
 
-extern void _ManiGet(void *manipulator, RgMatrix matrix);
+static void _ManiGet(void *manipulator, RgMatrix matrix);
 
 /*
  * _CreateConstraint (0x00a37848) has local binding in the original symbol

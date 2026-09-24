@@ -52,7 +52,17 @@ RgAnnounce *CreateRgAnnounce(void)
     return pAnn;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", DisposeRgAnnounce);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
+                       int line);
+
+void DisposeRgAnnounce(RgAnnounce *pAnn)
+{
+    if (pAnn == 0) {
+        assert_prog(D_00A57BB0, D_00A57BC0, 118);
+    }
+    _DestructAnn(pAnn);
+    RgHeapFree(InstanceOfRgHeap(), pAnn, D_00A57BC0, 120);
+}
 
 void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime)
 {
@@ -70,41 +80,128 @@ void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", RgAnnounceDisp);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _time_disp_title);
+/*
+ * The stack copy _time_disp_title and _damage_disp_title hand to _paint_uvwh.
+ * Both titles move their rectangle a word pair at a time: uvOffset is the
+ * u/v pair _paint_uvwh feeds to XrgPaint2DSetUVOffset, uvSize the w/h pair it
+ * feeds to XrgPaint2DSetUVSize and to the draw call's own width/height.
+ */
+typedef struct RgAnnounceUvRectHalves {
+    long long uvOffset;
+    long long uvSize;
+} RgAnnounceUvRectHalves;
+
+/*
+ * The two fixed title rectangles, asm-owned scaffold data (splat names, no
+ * config/symbols/ov12.txt entry): ov12:0x00a586b0 belongs to the time title
+ * and ov12:0x00a586c0 to the damage title.
+ */
+extern const RgAnnounceUvRectHalves D_00A586B0;
+extern const RgAnnounceUvRectHalves D_00A586C0;
+
+static void _paint_uvwh(RgAnnounce *pAnn, int index, int x, int y,
+                        const RgAnnounceUvRect *rect);
+
+static void _time_disp_title(RgAnnounce *pAnn, int x, int y)
+{
+    RgAnnounceUvRectHalves rect;
+
+    rect.uvSize = D_00A586B0.uvSize;
+    rect.uvOffset = D_00A586B0.uvOffset;
+    XrgPaint2DAlpha(pAnn->paint, XRG_PAINT2D_BLEND_ADD);
+    _paint_uvwh(pAnn, 0x17, x, y, (const RgAnnounceUvRect *) &rect);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _time_disp);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _damage_disp_title);
+static void _damage_disp_title(RgAnnounce *pAnn, int x, int y)
+{
+    RgAnnounceUvRectHalves rect;
+
+    rect.uvSize = D_00A586C0.uvSize;
+    rect.uvOffset = D_00A586C0.uvOffset;
+    XrgPaint2DAlpha(pAnn->paint, XRG_PAINT2D_BLEND_ADD);
+    _paint_uvwh(pAnn, 0x17, x, y, (const RgAnnounceUvRect *) &rect);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _damage_disp);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _round1);
+static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
+static void _paint_sub(RgAnnounce *pAnn, int index, int x, int y);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _round2);
+static void _round1(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x2B, 0, pAnn->dispY);
+    _paint_add(pAnn, 0, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _round3);
+static void _round2(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x2C, 0, pAnn->dispY);
+    _paint_add(pAnn, 1, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _ready);
+static void _round3(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x2D, 0, pAnn->dispY);
+    _paint_add(pAnn, 2, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _fight);
+static void _ready(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x2A, 0, pAnn->dispY);
+    _paint_add(pAnn, 3, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _youwin);
+static void _fight(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x27, 0, pAnn->dispY);
+    _paint_add(pAnn, 4, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _youlose);
+static void _youwin(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x1B, 0, pAnn->dispY);
+    _paint_add(pAnn, 5, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _draw);
+static void _youlose(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x30, 0, pAnn->dispY);
+    _paint_add(pAnn, 6, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _gameover);
+static void _draw(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x26, 0, pAnn->dispY);
+    _paint_add(pAnn, 7, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _timeover);
+static void _gameover(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x29, 0, pAnn->dispY);
+    _paint_add(pAnn, 9, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _stageclear);
+static void _timeover(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x2F, 0, pAnn->dispY);
+    _paint_add(pAnn, 8, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _gameclear);
+static void _stageclear(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x2E, 0, pAnn->dispY);
+    _paint_add(pAnn, 0xA, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _you_win_you_lose);
+static void _gameclear(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x28, 0, pAnn->dispY);
+    _paint_add(pAnn, 0xB, 0, pAnn->dispY);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _you_lose_you_win);
+static void _you_win_you_lose(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x1B, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, 5, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_sub(pAnn, 0x30, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, 6, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+}
+
+static void _you_lose_you_win(RgAnnounce *pAnn) {
+    _paint_sub(pAnn, 0x1B, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, 5, RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_sub(pAnn, 0x30, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+    _paint_add(pAnn, 6, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
+}
 
 static void _paint(XrgPaint2D *paint, int texture, int blend, int x, int y)
 {
@@ -146,7 +243,22 @@ static void _paint_flush(RgAnnounce *pAnn)
     XrgPaint2DFlush(pAnn->paint);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", RgAnnounceDispInit);
+extern RgAnnounceDrawFunc s_apFuncs_0[RG_ANNOUNCE_DRAW_KIND_COUNT];
+
+void RgAnnounceDispInit(RgAnnounce *pAnn, int kind)
+{
+    if (pAnn == 0) {
+        assert_prog(D_00A57BB0, D_00A57BC0, 466);
+    }
+    if ((unsigned int) kind < RG_ANNOUNCE_DRAW_KIND_COUNT) {
+        pAnn->timer = RG_ANNOUNCE_TIMER_INFINITE;
+        pAnn->drawFunc = s_apFuncs_0[kind];
+    } else {
+        pAnn->drawFunc = 0;
+    }
+    pAnn->dispY = pAnn->pendingDispY;
+    pAnn->pendingDispY = RG_ANNOUNCE_DISP_Y_DEFAULT;
+}
 
 void RgAnnounceDispInitTime(RgAnnounce *pAnn, int kind, float duration)
 {
@@ -177,4 +289,26 @@ void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
     pAnn->stageClearTick = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", RgAnnounceSetGameClear);
+/* "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])" */
+extern const char D_00A586D8[];
+
+void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
+                            const float *afDamage, unsigned int uStage)
+{
+    unsigned int i;
+
+    if (pAnn == 0) {
+        assert_prog(D_00A57BB0, D_00A57BC0, 521);
+    }
+    if (uStage >= RG_ANNOUNCE_GAMECLEAR_MAX) {
+        assert_prog(D_00A586D8, D_00A57BC0, 522);
+    }
+    for (i = 0; i < uStage; i++) {
+        pAnn->m_auTotalTime[i] = auTime[i];
+        pAnn->m_afTotalDamage[i] = afDamage[i];
+    }
+    pAnn->m_uStage = uStage;
+    pAnn->gameClearActive = 1;
+    pAnn->stageClearActive = 0;
+    pAnn->stageClearTick = 0;
+}

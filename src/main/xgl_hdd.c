@@ -80,7 +80,32 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCheckCore);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCheck);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcGetFree);
+int xglHddMcGetFree(void)
+{
+    int result;
+    int freeSpace;
+    int clusterSize;
+    int freeClusters;
+    int capacity;
+
+    result = xglHddMcLoadMount();
+    if (result >= 0) {
+        freeSpace = xglHddMcCheckYourSaves(-1);
+        if (freeSpace >= 0) {
+            if (sceDevctl(xgl_hdd_device, 0x480A, 0, 0, &capacity, 4) == 0
+                && capacity > 0x1FFFFF) {
+                freeSpace = 0x100000;
+            } else {
+                clusterSize = sceDevctl(hdd_mc_path, 0x5001, 0, 0, 0, 0);
+                freeClusters = sceDevctl(hdd_mc_path, 0x5002, 0, 0, 0, 0);
+                freeSpace = (freeClusters < 0 ? 0 : freeClusters) * (clusterSize / 1024);
+            }
+        }
+        xglHddMcUmount();
+        result = freeSpace;
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", create_file);
 
@@ -100,7 +125,33 @@ int xglHddUninstall(void)
     return result < 0 ? -5 : 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddInstallReadCB);
+static int xglHddInstallReadCB(int event, int value)
+{
+    HddInstallCBParam *cb;
+    int result;
+    int total;
+    int scaledValue;
+    int offset;
+
+    cb = HddInstallCBparam;
+    if (event == 1) {
+        cb->total = value + 1;
+        return 1;
+    }
+
+    result = 2;
+    if (event == 2) {
+        total = cb->total;
+        scaledValue = value * 0x10;
+        offset = cb->base * 0x10 + scaledValue / total;
+        result = cb->callback(6, offset, cb->param);
+        cb->status = result;
+        if (result != 0) {
+            return xglCdReadCancel();
+        }
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddInstall);
 

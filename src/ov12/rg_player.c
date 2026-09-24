@@ -20,13 +20,92 @@ extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
 extern void RgHeapFree(void *heap, void *ptr, const char *source_file, int line);
 extern RgHeap *InstanceOfRgHeap(void);
 
-extern void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat);
+static void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_player", InitRgPlayerEssence);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_player", _PlayerSetFromEssence);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_player", _InitRgPlayer);
+static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat);
+
+/*
+ * _InitRgPlayer is the only function of this TU that reads RgPlayerEssence,
+ * at the two offsets named below (the robot spec pointer RgRobotSetSpec
+ * receives when non-NULL, and the actor ID InitXrgActorEssence receives);
+ * every other byte stays unmodeled.
+ */
+struct RgPlayerEssence {
+    unsigned char unmodeled_00[0x20];
+    void *spec;                       /* +0x20 */
+    unsigned char unmodeled_24[0x3C - 0x24];
+    int actorID;                      /* +0x3C */
+};
+
+extern RgRobot *CreateRgRobot(void);
+extern RgGeomGroup *CreateRgGeomGroup(void);
+extern void RgRobotSetSpec(RgRobot *pRobot, void *spec);
+extern void *RgGeomGroupCreateRobot(RgGeomGroup *pGroup, void *parent);
+extern void RgRobotSetGeom(RgRobot *pRobot, void *geometry);
+extern void *RgGeomGroupCreateBall(RgGeomGroup *pGroup, void *parent);
+extern void RgRobotSetEyeGeom(RgRobot *pRobot, void *eyeGeometry);
+extern void RgGeomBallSetRadius(void *geomBall, float radius);
+extern void RgRobotSetAdvanceGeom(RgRobot *pRobot, void *advanceGeometry);
+extern void InitXrgActorEssence(void *pEss, int actorID);
+extern void RgRobotSetActor(RgRobot *pRobot, void *actor);
+extern int RgRobotGetCharID(RgRobot *pRobot);
+extern void *CreateXrgSound(int type, int kind);
+extern void XrgSoundSetVolume(void *sound, float volume);
+extern void RgRobotSetSoundDriver(RgRobot *pRobot, void *soundDriver);
+extern const char D_00A526F8[];
+
+void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat)
+{
+    int actorEssence[36];
+    RgRobot *pRobot;
+    RgGeomGroup *bodyGeoms;
+    RgGeomGroup *shotGeoms;
+    RgGeomGroup *atkGeoms;
+    RgGeomGroup *eyeGeoms;
+    RgGeomGroup *advGeoms;
+    void *advanceGeom;
+    void *spec;
+    void *sound;
+
+    if (pPlayer == 0) {
+        assert_prog(D_00A52740, D_00A52708, 123);
+    }
+    if (pDat == 0) {
+        assert_prog(D_00A526F8, D_00A52708, 124);
+    }
+    pRobot = CreateRgRobot();
+    pPlayer->control = 0;
+    pPlayer->robot = pRobot;
+    bodyGeoms = CreateRgGeomGroup();
+    pPlayer->bodyGeoms = bodyGeoms;
+    shotGeoms = CreateRgGeomGroup();
+    pPlayer->shotGeoms = shotGeoms;
+    atkGeoms = CreateRgGeomGroup();
+    pPlayer->atkGeoms = atkGeoms;
+    eyeGeoms = CreateRgGeomGroup();
+    pPlayer->eyeGeoms = eyeGeoms;
+    advGeoms = CreateRgGeomGroup();
+    spec = pDat->spec;
+    pPlayer->advGeoms = advGeoms;
+    if (spec != 0) {
+        RgRobotSetSpec(pPlayer->robot, spec);
+    }
+    RgRobotSetGeom(pPlayer->robot, RgGeomGroupCreateRobot(pPlayer->bodyGeoms, pPlayer->robot));
+    RgRobotSetEyeGeom(pPlayer->robot, RgGeomGroupCreateBall(pPlayer->eyeGeoms, pPlayer->robot));
+    advanceGeom = RgGeomGroupCreateBall(pPlayer->advGeoms, pPlayer->robot);
+    RgGeomBallSetRadius(advanceGeom, 0.1f);
+    RgRobotSetAdvanceGeom(pPlayer->robot, advanceGeom);
+    InitXrgActorEssence(actorEssence, pDat->actorID);
+    RgRobotSetActor(pPlayer->robot, actorEssence);
+    sound = CreateXrgSound(1, RgRobotGetCharID(pPlayer->robot));
+    XrgSoundSetVolume(sound, 1.0f);
+    RgRobotSetSoundDriver(pPlayer->robot, sound);
+    _PlayerSetFromEssence(pPlayer, pDat);
+}
 
 RgPlayer *CreateRgPlayer(RgPlayerEssence *pDat)
 {
@@ -80,7 +159,18 @@ void RgPlayerSetControl(RgPlayer *pPlayer, RgRobotControl *pControl)
     pPlayer->control = pControl;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_player", RgPlayerSetTraceCamera);
+void RgPlayerSetTraceCamera(RgPlayer *pPlayer, RgCamera *pCamera)
+{
+    void *sound;
+
+    if (pPlayer == 0) {
+        assert_prog(D_00A52740, D_00A52708, 222);
+    }
+    pPlayer->traceCamera = pCamera;
+    sound = CreateXrgSound(1, RgRobotGetCharID(pPlayer->robot));
+    XrgSoundSetVolume(sound, 1.0f);
+    RgRobotSetSoundDriver(pPlayer->robot, sound);
+}
 
 extern RgActor *RgRobotGetActor(RgRobot *pRobot);
 extern void XrgActorSetLightCost(RgActor *pActor);

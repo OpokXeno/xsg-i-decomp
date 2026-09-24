@@ -38,9 +38,18 @@ typedef struct RgFog {
  * (ov12:0x00a54b40) names m_pView. Offsets 0x0 and 0x4 stay an explicit
  * unmodeled span: they are real fields _InitRgDrawStudio owns, not ones
  * this allocation claims.
+ *
+ * This allocation now also claims _InitRgDrawStudio itself: it stores its
+ * screenIndex parameter at offset 0x0 and its pFog parameter at offset 0x4,
+ * in that order, so the two offsets above are named m_ScreenIndex and
+ * m_pFog below rather than staying unmodeled. RgDrawViewSetPosition/
+ * SetRotateX/SetRotateY/SetRotateZ (ov12:0x00a27ab0/0x00a27b50/0x00a27bd8/
+ * 0x00a27c60, this allocation) read m_ScreenIndex back through a
+ * RgDrawView's own m_pParentStudio pointer.
  */
 struct RgDrawStudio {
-    unsigned char unmodeled_00[8];
+    int m_ScreenIndex;
+    RgFog *m_pFog;
     RgDrawView *m_pView;
 };
 
@@ -65,31 +74,57 @@ typedef struct RgRect {
  * other field the view carries (position, rotation, the studio it belongs
  * to) is set up by RgDrawViewInit and friends, all still outside this
  * allocation, so offsets 0x0..0x6f stay an explicit unmodeled span.
+ *
+ * This allocation now also claims RgDrawViewSetPosition/SetRotateX/
+ * SetRotateY/SetRotateZ (ov12:0x00a27ab0/0x00a27b50/0x00a27bd8/0x00a27c60):
+ * each reads a RgDrawStudio pointer at offset 0x68
+ * (`*(*(s32 **)(pView + 0x68))` reads that pointer, then its screenIndex
+ * word at the RgDrawStudio's own offset 0x0) to find the screen the view
+ * belongs to -- the role the comment above already names, and the same
+ * concept _CreateRgDrawView's own "pParentStudio" parameter names. Offset
+ * 0x68 is named m_pParentStudio below; offsets 0x0..0x67 and 0x6c..0x6f stay
+ * explicit unmodeled spans.
  */
 struct RgDrawView {
-    unsigned char unmodeled_00[0x70];
+    unsigned char unmodeled_00[0x68];
+    RgDrawStudio *m_pParentStudio;
+    unsigned char unmodeled_6c[4];
     RgRect screenRect;
 };
 
 /*
- * The observed access view of the singleton RgDraw object InstanceOfRgDraw
- * (ov12:0x00a27740, outside this allocation) returns. RgDrawGetGlobalFog and
- * RgDrawSetGlobalFog (ov12:0x00a27908/0x00a27978) pass this object's own
- * +0xa20 to _CopyFog as the RgFog side, matching the RgDrawStudio comment
- * above that names +0xa20 as "the parent RgDraw's own fog block". Nothing in
- * this allocation evidences offsets 0x0..0xa1f, which precede it. Between
- * the fog block and the studio array below, offsets 0xa3c..0xa3f stay an
- * explicit unmodeled span. RgDrawGetStudio (ov12:0x00a277e0) reads a two
- * entry array of RgDrawStudio pointers at +0xa40 for screenIndex 0 and 1
- * (screenIndex -1 returns NULL without touching memory, and any other value
- * reaches RgError); _ClearStudioList/_FullScreenStudio/_DoubleScreenStudio,
- * all still outside this allocation, are the array's likely writers.
+ * One entry of RgDraw's request array at +0x10 (RgDrawReq, ov12:0x00a28028,
+ * and _DrawMain, ov12:0x00a28320, both still assembly, outside this
+ * allocation). Per src/ov12/xrg_dispmodel_impl.c's own citation of
+ * RgDrawReq, one 20-byte entry stores the request's object, its draw
+ * callback, its clear callback and RgDrawReq's last two int parameters
+ * (prio, drawID), in that order. _DrawReqTerminate (this allocation) calls
+ * only the clear callback at offset 0x8 with the object at offset 0x0 as
+ * its single argument, so the other three words stay an explicit unmodeled
+ * span here.
  */
+typedef struct RgDrawRequest {
+    void *pObject;
+    unsigned char unmodeled_04[4];
+    void (*clearFunc)(void *pObject);
+    unsigned char unmodeled_0c[8];
+} RgDrawRequest;
+
 struct RgDraw {
-    unsigned char unmodeled_00[0xa20];
+    int m_Enabled;
+    unsigned char unmodeled_04[0xc];
+    RgDrawRequest m_Requests[128];
+    unsigned int m_RequestCount;
+    unsigned char unmodeled_a14[0xc];
     RgFog m_Fog;
-    unsigned char unmodeled_0a3c[4];
+    RgDrawStudio *m_pDefaultStudio;
     RgDrawStudio *m_pStudios[2];
+    unsigned int m_ActiveStudioMask;
+    int m_FullScreenMode;
+    int m_FullScreenParam;
+    int m_FadeCounter;
+    int m_FadeParam;
+    unsigned char unmodeled_a5c[4];
 };
 
 #endif /* INCLUDE_OV12_RG_DRAW_H */

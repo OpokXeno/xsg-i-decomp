@@ -5,6 +5,8 @@
 #ifndef SRC_OV12_RG_DEBUG_FLAGS_H
 #define SRC_OV12_RG_DEBUG_FLAGS_H
 
+#include "shared.h"
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
@@ -18,5 +20,7 @@ typedef struct RgDebugFlags {
     int flags[5];    /* 0x00: individual debug toggles, all enabled at init */
     int modeEnabled; /* 0x14: nonzero enables the game-mode debug shortcut */
 } RgDebugFlags;
+
+RgDebugFlags *InstanceOfRgDebugFlags(void);
 
 #endif /* SRC_OV12_RG_DEBUG_FLAGS_H */

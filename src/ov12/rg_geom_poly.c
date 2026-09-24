@@ -10,7 +10,28 @@
 #define RgGeomLocalMatricesConstAt(geom) \
     ((const RgGeomLocalMatrices *)((const unsigned char *)(geom) + 0x20))
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", _InitRgGeomPoly);
+/* RgGeomInit and RgGeomSetType are original functions of the base geometry
+ * TU (rg_geom.c, ov12/tu051), already recovered as C. */
+extern void RgGeomInit(RgGeom *pGeom);
+extern void RgGeomSetType(RgGeom *pGeom, int type);
+
+/* The type tag _InitRgGeomPoly passes to RgGeomSetType; no other OV12
+ * translation unit names this value yet. */
+#define RG_GEOM_TYPE_POLY 3
+
+static void _InitRgGeomPoly(RgGeom *geom)
+{
+    RgGeomPoly *poly = (RgGeomPoly *)geom;
+
+    if (geom == 0) {
+        assert_prog(D_00A551A8, D_00A551B8, 21);
+    }
+    RgGeomInit(geom);
+    RgGeomSetType(geom, RG_GEOM_TYPE_POLY);
+    poly->coliData = 0;
+    XrgUnitMatrix(poly->local);
+    XrgUnitMatrix(poly->inverseLocal);
+}
 
 /*
  * The failed-allocation assert reuses "pData != NIL" (D_00A551A8), not the

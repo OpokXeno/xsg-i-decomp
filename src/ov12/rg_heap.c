@@ -12,9 +12,9 @@ extern void assert_prog(const char *expression, const char *source_file,
  * when pHeap is not NIL dumps that heap ("heap = %p top = %p size = %d")
  * through RgHeapDump_sub; InitRgHeap has no heap to dump yet and passes NIL.
  */
-extern void _Error(const char *expression, const char *tag, RgHeap *pHeap,
+static void _Error(const char *expression, const char *tag, RgHeap *pHeap,
                    const char *source_file, int line);
-extern struct RgHeapBlock *_SetHeapHead(void *pTop, u32 nBufSize);
+static struct RgHeapBlock *_SetHeapHead(void *pTop, u32 nBufSize);
 extern void XrgLog(const char *format, const char *source_file, int line,
                    ...);
 extern int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr);
@@ -81,9 +81,19 @@ static void _Link(struct RgHeapBlock *pBlock, struct RgHeapBlock *pPre,
     pBlock->next = pNext;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _InsertPre);
+static void _InsertPre(struct RgHeapBlock *pBlock, struct RgHeapBlock *pNew)
+{
+    _Link(pNew, pBlock->pre, pBlock);
+    pBlock->pre->next = pNew;
+    pBlock->pre = pNew;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _InsertNext);
+static void _InsertNext(struct RgHeapBlock *pBlock, struct RgHeapBlock *pNew)
+{
+    _Link(pNew, pBlock, pBlock->next);
+    pBlock->next->pre = pNew;
+    pBlock->next = pNew;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _Unlink);
 
@@ -102,11 +112,43 @@ static int _IsAllocated(struct RgHeapBlock *pBlock)
     return pBlock->mark != 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _SetMagicString);
+/*
+ * s_szMagicString is a pointer to the 15-character stamp copied into every
+ * block's magic field (lw of the symbol itself, not an inline array).
+ */
+extern const unsigned char *s_szMagicString;
+
+static void _SetMagicString(struct RgHeapBlock *pBlock)
+{
+    int i;
+
+    for (i = 0; i < 0xF; i++) {
+        pBlock->magic[i] = s_szMagicString[i];
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _IsCollectMagicString);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _SetHeapHead);
+/*
+ * ov12:0x00a52af0 contains the assertion expression
+ *      "HEAD_SIZE < nBlockSize".
+ * ov12:0x00a52b08 contains the tag "make block".
+ */
+extern const char D_00A52AF0[];
+extern const char D_00A52B08[];
+
+static struct RgHeapBlock *_SetHeapHead(void *pTop, u32 nBufSize)
+{
+    struct RgHeapBlock *pHead;
+
+    pHead = (struct RgHeapBlock *)pTop;
+    if (nBufSize < 0x41) {
+        _Error(D_00A52AF0, D_00A52B08, 0, D_00A52A68, 130);
+    }
+    _Link(pHead, pHead, pHead);
+    pHead->size = nBufSize;
+    return pHead;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _MergeBlocks);
 
@@ -176,7 +218,50 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapIsInSelf);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapIsInvalidMemory);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapDump_sub);
+/*
+ * ov12:0x00a52e88 contains the format string
+ *      "\n\n---------------------------------\n".
+ * ov12:0x00a52eb0 contains the format string "HEAD DUMP %p from %s %d\n".
+ * ov12:0x00a52ed0 contains the format string
+ *      "***** FREE MAP top %p (comment %s)\n".
+ * ov12:0x00a52ef8 contains the format string
+ *      "%p : size = %x(%d) next:%p\n".
+ * ov12:0x00a52f18 contains the format string
+ *      "***** ALLOC MAP top %p (comment %s)\n".
+ * ov12:0x00a52f40 contains the format string
+ *      "%p : size = %x(%d) next:%p allocated at %s,%d\n".
+ */
+extern const char D_00A52E88[];
+extern const char D_00A52EB0[];
+extern const char D_00A52ED0[];
+extern const char D_00A52EF8[];
+extern const char D_00A52F18[];
+extern const char D_00A52F40[];
+
+void RgHeapDump_sub(RgHeap *pHeap, const char *comment, const char *source_file,
+                    int line)
+{
+    struct RgHeapBlock *pBlock;
+
+    pBlock = pHeap->pHead;
+    XrgLog(D_00A52E88, D_00A52A68, 439);
+    XrgLog(D_00A52EB0, D_00A52A68, 440, pHeap, source_file, line);
+    XrgLog(D_00A52ED0, D_00A52A68, 441, pBlock, comment);
+    do {
+        XrgLog(D_00A52EF8, D_00A52A68, 443, pBlock, pBlock->size, pBlock->size,
+              pBlock->next);
+        pBlock = pBlock->next;
+    } while (pBlock != pHeap->pHead);
+    pBlock = pHeap->pAlloc;
+    XrgLog(D_00A52F18, D_00A52A68, 448, pBlock, comment);
+    if (pBlock != 0) {
+        do {
+            XrgLog(D_00A52F40, D_00A52A68, 453, pBlock, pBlock->size,
+                  pBlock->size, pBlock->next, pBlock->module, pBlock->line);
+            pBlock = pBlock->next;
+        } while (pBlock != pHeap->pAlloc);
+    }
+}
 
 void RgHeapDumpBlock(RgHeap *pHeap, void *pPtr)
 {

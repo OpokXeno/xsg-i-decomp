@@ -1,7 +1,21 @@
 #include "common.h"
 #include "chr.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getPlayer__);
+void Java_xeno_Chr_getPlayer__(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    u8 *object;
+
+    /*
+     * Unlike every other Chr native here, this one does not chase through
+     * the peer pointer's target: it stores GameLoopState's own +0x4 word
+     * directly into the Java object's `peer` field (0x002fcd28..0x002fcd34).
+     */
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    *(unsigned int *)(object + peer_field->offset) = GameLoopState[1];
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setPlayer__);
 
@@ -144,7 +158,53 @@ void Java_xeno_Chr_rotZ__Ljava_lang_Object_FZ(JThread *thread,
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_start__ILjava_lang_Object_);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_stop__);
+/*
+ * JTHREAD_get is local to jthread.c (still asm there) and only that TU
+ * declares its own SceneThread-typed view; this TU needs its own prototype
+ * over JThread, the type it already completes above (jal JTHREAD_get at
+ * 0x002fe49c).
+ */
+extern JThread *JTHREAD_get(void *object);
+
+void Java_xeno_Chr_stop__(JThread *thread, ChrObjectCall *arguments,
+                          u32 *failure_result)
+{
+    JavaField *field;
+    Actor *peer;
+    JThread *chr_thread;
+    u8 *object;
+
+    object = arguments->object;
+    if (JNI_isInstanceOf(object, classJava_xeno_Chr) == 0) {
+        *failure_result = 0;
+        return;
+    }
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + field->offset);
+    chr_thread = JTHREAD_get(object);
+    if (chr_thread != 0) {
+        chr_thread->flags &= ~0x10;
+    }
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1A0, -1), 0);
+    *(float *)(object + field->offset) = peer->position.x;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1A8, -1), 0);
+    *(float *)(object + field->offset) = peer->position.y;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1B0, -1), 0);
+    *(float *)(object + field->offset) = peer->position.z;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1B8, -1), 0);
+    *(float *)(object + field->offset) = peer->rotation.x;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1C0, -1), 0);
+    *(float *)(object + field->offset) = peer->rotation.y;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1C8, -1), 0);
+    *(float *)(object + field->offset) = peer->rotation.z;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", CHR_motion);
 
@@ -168,25 +228,175 @@ void Java_xeno_Chr_mtn__IIFZ(JThread *thread, ChrMotionCall *arguments,
     CHR_motion(0, thread, arguments, failure_result);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_signal__I);
+void Java_xeno_Chr_signal__I(JThread *thread, ChrSignalCall *arguments,
+                             u32 *failure_result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getSignal__);
+    object = arguments->object;
+    if (JNI_isInstanceOf(object, classJava_xeno_Chr) == 0) {
+        *failure_result = 0;
+        return;
+    }
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->signal = arguments->value;
+}
+
+void Java_xeno_Chr_getSignal__(JThread *thread, ChrObjectCall *arguments,
+                               u32 *failure_result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    if (JNI_isInstanceOf(object, classJava_xeno_Chr) == 0) {
+        *failure_result = 0;
+        return;
+    }
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    *failure_result = peer->signal;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setRotate__);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setTranslate__);
+/*
+ * The state byte at Actor+0xa40, past this TU's recovered head above:
+ * growing the struct there would move data_header and every field after it
+ * that other accepted functions in this file already read at their current
+ * offsets, so this one narrowly evidenced access stays a byte view, exactly
+ * as ACTOR_SLOT_NUMBER_OFFSET above does for +0x80. Only
+ * Java_xeno_Chr_setTranslate__ reads or writes it here: it tests bit 0 and,
+ * when set, stores the literal 2 back (lbu/andi/sb at
+ * 0x002feb9c-0x002febb0).
+ */
+#define ACTOR_TRANSLATE_STATE_OFFSET 0xa40
+
+void Java_xeno_Chr_setTranslate__(JThread *thread, ChrObjectCall *arguments)
+{
+    JavaField *field;
+    Actor *peer;
+    Vector4 *position;
+    u8 *object;
+    float z;
+
+    object = arguments->object;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + field->offset);
+    position = &peer->position;
+
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1A0, -1), 0);
+    position->x = *(float *)(object + field->offset);
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1A8, -1), 0);
+    position->y = *(float *)(object + field->offset);
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1B0, -1), 0);
+    z = *(float *)(object + field->offset);
+
+    peer->status_flags |= 0x1000;
+    position->z = z;
+    peer->translate_y = position->y;
+    if (((u8 *)peer)[ACTOR_TRANSLATE_STATE_OFFSET] & 1) {
+        ((u8 *)peer)[ACTOR_TRANSLATE_STATE_OFFSET] = 2;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getRotate__);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getTranslate__);
+void Java_xeno_Chr_getTranslate__(JThread *thread, ChrScaleCall *arguments,
+                                  u32 *failure_result)
+{
+    JavaField *field;
+    Actor *peer;
+    Vector4 *position;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setVisible__Z);
+    /* Each Java field has a runtime class offset, rather than a fixed C member. */
+    object = arguments->object;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + field->offset);
+    position = &peer->position;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setVisible__IZ);
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1A0, -1), 0);
+    *(float *)(object + field->offset) = position->x;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1A8, -1), 0);
+    *(float *)(object + field->offset) = position->y;
+    field = lookupClassField(classJava_xeno_Chr,
+                             loadConstString(D_004DC1B0, -1), 0);
+    *(float *)(object + field->offset) = position->z;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setCollision__Z);
+void Java_xeno_Chr_setVisible__Z(JThread *thread, ChrBoolCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setHand__I);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->flag != 0) {
+        peer->flags &= ~8;
+    } else {
+        peer->flags |= 8;
+    }
+}
+
+void Java_xeno_Chr_setVisible__IZ(JThread *thread, ChrVisibleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    ACT_setVisible(peer, arguments->part, arguments->visible);
+}
+
+void Java_xeno_Chr_setCollision__Z(JThread *thread, ChrBoolCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->flag != 0) {
+        peer->flags |= 0x40;
+    } else {
+        peer->flags &= ~0x40;
+    }
+}
+
+void Java_xeno_Chr_setHand__I(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    ACT_setHand(peer, arguments->first.integer);
+}
 
 static void copyArgs(u8 *dst, u8 *src, int count)
 {
@@ -206,15 +416,103 @@ static void copyArgs(u8 *dst, u8 *src, int count)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setArgs__III);
+void Java_xeno_Chr_setArgs__III(JThread *thread, ChrArgsWordCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    int value;
+    u8 *object;
+    int offset;
+    int size;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getArgs__II);
+    value = arguments->value;
+    object = arguments->object;
+    offset = arguments->offset;
+    size = arguments->size;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if ((unsigned int)(size - 1) < 4U) {
+        copyArgs(peer->args + offset, (u8 *)&value, size);
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setArgs__ILjava_lang_Object_I);
+void Java_xeno_Chr_getArgs__II(JThread *thread, ChrArgsReadCall *arguments,
+                               int *result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    int value;
+    u8 *object;
+    int offset;
+    int size;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getSerial__);
+    object = arguments->object;
+    offset = arguments->offset;
+    size = arguments->size;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if ((unsigned int)(size - 1) < 4U) {
+        copyArgs((u8 *)&value, peer->args + offset, size);
+        *result = value;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getState__);
+void Java_xeno_Chr_setArgs__ILjava_lang_Object_I(JThread *thread,
+                                                 ChrArgsObjectCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    ChrScaleCall *source;
+    int offset;
+    u8 *object;
+    int second;
+    int first;
+
+    source = arguments->source;
+    offset = arguments->offset;
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    second = source->second.integer;
+    peer = *(Actor **)(object + peer_field->offset);
+    first = source->first.integer;
+    *(int *)(peer->args + offset) = second;
+    *(int *)(peer->args + offset + 4) = first;
+}
+
+void Java_xeno_Chr_getSerial__(JThread *thread, ChrScaleCall *arguments,
+                               unsigned int *result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    result[0] = ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET];
+}
+
+void Java_xeno_Chr_getState__(JThread *thread, ChrObjectCall *arguments,
+                              u32 *failure_result)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    SequenceState *entry;
+    unsigned char slot;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    slot = ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET];
+    entry = (SequenceState *)(actSequence + slot * SEQUENCE_STRIDE);
+    *failure_result = entry->state_flags;
+}
 
 /*
  * Unimplemented native: it looks up the peer field descriptor the same way
@@ -238,7 +536,20 @@ void Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_(JThread *thread,
     } while (0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setScale__FFF);
+void Java_xeno_Chr_setScale__FFF(JThread *thread, ChrVector3Call *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->scale.x = arguments->x;
+    peer->scale.y = arguments->y;
+    peer->scale.z = arguments->z;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getScale__);
 
@@ -565,19 +876,89 @@ void Java_xeno_Chr_relax__II(JThread *thread, ChrScaleCall *arguments,
     peer = *(Actor **)(arguments->object + peer_field->offset);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_getFlags__);
+void Java_xeno_Chr_getFlags__(JThread *thread, ChrScaleCall *arguments,
+                              unsigned int *result)
+{
+    JavaField *peer_field;
+    Actor *peer;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setFlags__I);
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+    result[0] = peer->flags;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setEdgeFall__I);
+void Java_xeno_Chr_setFlags__I(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setShadow__II);
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+    peer->flags = arguments->first.integer;
+}
+
+void Java_xeno_Chr_setEdgeFall__I(JThread *thread, ChrIntCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+    if (arguments->value == 0) {
+        /* Also clears every other status_flags bit: andi v0,v0,8 at
+         * 0x002ffe48, not a mask of ~8. */
+        peer->status_flags &= 8;
+    } else {
+        peer->status_flags |= 8;
+    }
+}
+
+void Java_xeno_Chr_setShadow__II(JThread *thread, ChrShadowCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+    peer->flags |= 0x20;
+    peer->shadow_kind = arguments->kind;
+    peer->shadow_size = arguments->size;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setShadow__aB);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setID__I);
+void Java_xeno_Chr_setID__I(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setElevatorMode__I);
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+    peer->data_header = UnduDataGetHeader(0, arguments->first.integer);
+    peer->status_flags |= 0x1000;
+}
+
+void Java_xeno_Chr_setElevatorMode__I(JThread *thread, ChrIntCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(arguments->object + peer_field->offset);
+    if (arguments->value == 0) {
+        /* Also clears every other status_flags bit: andi v0,v0,0x20 at
+         * 0x003000f8, not a mask of ~0x20. */
+        peer->status_flags &= 0x20;
+    } else {
+        peer->status_flags |= 0x20;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setParent__Lxeno_Chr_III);
 
@@ -585,13 +966,71 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setMotionFlags__IZ);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setFilter__I);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setFilterParam__aF);
+void Java_xeno_Chr_setFilterParam__aF(JThread *thread,
+                                      ChrFilterParamCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    ChrFilterParamValue *value;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setClip__I);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    value = arguments->array->value;
+    peer->filter_param[0] = value->components[0];
+    peer->filter_param[1] = value->components[3];
+    peer->filter_param[2] = value->components[2];
+    peer->filter_param[3] = value->components[1];
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setSymmetryY__I);
+void Java_xeno_Chr_setClip__I(JThread *thread, ChrIntCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setSortOffset__F);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->value != 0) {
+        peer->render_flags |= 0x200;
+    } else {
+        peer->render_flags &= ~0x200;
+    }
+}
+
+void Java_xeno_Chr_setSymmetryY__I(JThread *thread, ChrIntCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->value != 0) {
+        peer->render_flags |= 0x10;
+    } else {
+        peer->render_flags &= ~0x10;
+    }
+}
+
+void Java_xeno_Chr_setSortOffset__F(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->sort_offset = arguments->first.floating;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setPointLightCol__IFFF);
 
@@ -599,21 +1038,104 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setPointLightPos__IFFF);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setPointLightReset__);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_talkto__Ljava_lang_String_);
+void Java_xeno_Chr_talkto__Ljava_lang_String_(JThread *thread,
+                                              ChrTalkCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_touchto__Ljava_lang_String_);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->talk_message = arguments->message->value->message_id;
+}
+
+void Java_xeno_Chr_touchto__Ljava_lang_String_(JThread *thread,
+                                               ChrTalkCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->touch_message = arguments->message->value->message_id;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_childGetPeer__II);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setPeer__Ljava_lang_Object_);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_dispRadar__Z);
+void Java_xeno_Chr_dispRadar__Z(JThread *thread, ChrBoolCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_camera__);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->flag != 0) {
+        peer->flags &= ~0x80;
+    } else {
+        peer->flags |= 0x80;
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_char__Ljava_lang_Object_);
+void Java_xeno_Chr_look_camera__(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_unit__Ljava_lang_Object_);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->look_mode = 2;
+}
+
+void Java_xeno_Chr_look_char__Ljava_lang_Object_(JThread *thread,
+                                                 ChrWeaponCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    Actor *target;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    target = *(Actor **)(arguments->other + peer_field->offset);
+    peer->look_mode = 4;
+    peer->look_target = target;
+}
+
+void Java_xeno_Chr_look_unit__Ljava_lang_Object_(JThread *thread,
+                                                 ChrWeaponCall *arguments)
+{
+    JavaField *peer_field;
+    JavaField *unit_peer_field;
+    Actor *peer;
+    void *target;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    unit_peer_field = lookupClassField(classJava_xeno_Unit,
+                                       loadConstString(chr_peer_string, -1), 0);
+    target = *(void **)(arguments->other + unit_peer_field->offset);
+    peer->look_mode = 5;
+    peer->look_target = target;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_default__);
 
@@ -621,33 +1143,161 @@ INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_point__FFF);
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_eye_set__FF);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_eye_control__I);
+void Java_xeno_Chr_look_eye_control__I(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_speed__F);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->look_eye_control = arguments->first.integer;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_eye_speed__F);
+void Java_xeno_Chr_look_speed__F(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_renderCommand__I);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->look_speed = arguments->first.floating;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_shadow_clip_scale__F);
+void Java_xeno_Chr_look_eye_speed__F(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->look_eye_speed = arguments->first.floating;
+}
+
+void Java_xeno_Chr_renderCommand__I(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->render_command = arguments->first.integer;
+}
+
+void Java_xeno_Chr_shadow_clip_scale__F(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->shadow_clip_scale = arguments->first.floating;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_shadow_map_id__I);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_shadow_map_reset__);
+void Java_xeno_Chr_shadow_map_reset__(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_hairStop__II);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->shadow_map = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_pixelAlpha__I);
+void Java_xeno_Chr_hairStop__II(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->hair_stop_a = arguments->first.integer;
+    peer->hair_stop_b = arguments->second.integer;
+}
+
+void Java_xeno_Chr_pixelAlpha__I(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->pixel_alpha = arguments->first.integer;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_pixelAlphaParts__II);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_pixelAlphaPartsReset__);
+void Java_xeno_Chr_pixelAlphaPartsReset__(JThread *thread, ChrScaleCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->pixel_alpha_parts = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setMotNoUpdate__I);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setWeaponR__Lxeno_Chr_);
+void Java_xeno_Chr_setWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    Actor *other_peer;
+    u8 *object;
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_resetWeaponR__Lxeno_Chr_);
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    object = arguments->other;
+    other_peer = *(Actor **)(object + peer_field->offset);
+    ACT_setArms(peer, other_peer, 0x108, 2);
+}
+
+void Java_xeno_Chr_resetWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    Actor *other_peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    object = arguments->other;
+    other_peer = *(Actor **)(object + peer_field->offset);
+    ACT_resetArms(peer, other_peer, 0x108);
+}
 
 void Java_xeno_Chr_resetHand__(void)
 {
@@ -657,4 +1307,19 @@ void Java_xeno_Chr_resetEnv__(void)
 {
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_ignoreShape__I);
+void Java_xeno_Chr_ignoreShape__I(JThread *thread, ChrIntCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->value != 0) {
+        peer->render_flags |= 0x400;
+    } else {
+        peer->render_flags &= ~0x400;
+    }
+}

@@ -124,9 +124,20 @@ typedef struct RgPicDebug RgPicDebug;
  * itself. Nothing before that offset is read or written here, so it stays an
  * explicit unmodeled span.
  */
+/*
+ * CreateRgPicDebug (ov12:0x00a41640) allocates sizeof(RgPicDebug) == 0x14
+ * bytes and fills every field: bxx is the archive handed in, stored unchanged
+ * and forwarded to CreateRgPicList; mode starts at 1 (RgPicDebugControl,
+ * still INCLUDE_ASM in this TU, dispatches on this field); index starts at
+ * -1 (no picture selected); picId starts at 0 (the archive picture index
+ * RgPicDebugControl scrolls before calling RgBxxGetPicID).
+ */
 struct RgPicDebug {
-    unsigned char unmodeled_00[0x04];
+    RgBxx *bxx;      /* 0x00 */
     RgPicList *list; /* 0x04 */
+    int mode;        /* 0x08 */
+    int index;       /* 0x0C */
+    int picId;       /* 0x10 */
 };
 
 #endif /* SRC_OV12_RG_PICLIST_H */

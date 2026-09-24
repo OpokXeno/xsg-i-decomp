@@ -6,6 +6,7 @@
 #define SRC_OV01_DATA_UNIT_ORG_GET_H
 
 #include "shared.h"
+#include "ov01/calc.h"
 
 void dataCdSyncClear(void);
 
@@ -65,5 +66,35 @@ extern int dataSpecBaseGet(int cid);
  * is out of the zero-to-0x10 range. */
 extern int printf(const char *format, ...);
 extern const char D_00A457B0[];
+
+/* The six unit-file records are selected by dataUnitFileGet. */
+typedef struct UnitFileInfo {
+    int charaId;
+    unsigned char unmodeled_4[0x12c];
+} UnitFileInfo;
+
+extern UnitFileInfo unitFileInfo[6];
+
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
+
+/* Partial motion and actor records used by the allocated load helpers. */
+typedef struct MotionAdrTable {
+    unsigned char unmodeled_0[0x8dc];
+    int slot[1];
+} MotionAdrTable;
+
+typedef struct EquipActor {
+    unsigned char unmodeled_0[0x8e0];
+    int motionAdr;
+} EquipActor;
+
+typedef struct UnitEquipInfo {
+    unsigned char unmodeled_00[0x14];
+    MotionAdrTable *motionTable;
+    unsigned char unmodeled_18[4];
+    EquipActor *equipActor[4];
+} UnitEquipInfo;
+
+extern void dataMotAdrSet(MotionAdrTable *table, int motionId);
 
 #endif /* SRC_OV01_DATA_UNIT_ORG_GET_H */

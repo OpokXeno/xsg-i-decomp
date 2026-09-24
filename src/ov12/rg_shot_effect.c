@@ -52,6 +52,19 @@ extern void DisposeRgParticleEffect(RgParticleEffect *particleEffect);
 extern void RgParticleEffectStopAlive(RgParticleEffect *particleEffect, float time);
 extern int RgParticleEffectIsAlive(RgParticleEffect *particleEffect);
 extern void RgParticleEffectPassTime(RgParticleEffect *particleEffect, float time);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
+                       int line);
+extern int RgEffectEnvGetParticleData(RgEffectEnv *effectEnv, char *name,
+                                      void *buffer);
+typedef struct RgParticleEffectEssence RgParticleEffectEssence;
+extern RgParticleEffect *CreateRgParticleEffect(RgParticleEffectEssence *essence,
+                                                int context);
+
+/*
+ * Linker witnesses for the original literals at ov12:0x00a53418,
+ * 0x00a53428 and 0x00a53440; this TU's .rodata stays scaffold-owned
+ * (config/tu-build.json).
+ */
 
 /*
  * Linker witnesses for the original literals at ov12:0x00a53418 and
@@ -59,11 +72,12 @@ extern void RgParticleEffectPassTime(RgParticleEffect *particleEffect, float tim
  */
 extern const char D_00A53418[];
 extern const char D_00A53428[];
+extern const char D_00A53440[];
 
 /* The one evidenced RgDispModelSetMode mode this TU passes. */
 #define RG_DISP_MODEL_MODE_ADD_ALPHA 4
 
-void _InitEffect(RgShotEffect *pEff);
+static void _InitEffect(RgShotEffect *pEff);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_effect", _InitEffect_00A17C90);
 
@@ -89,7 +103,14 @@ RgShotEffect *CreateRgShotEffect(void)
     return pEff;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_effect", DisposeRgShotEffect);
+void DisposeRgShotEffect(RgShotEffect *pShotEff)
+{
+    if (pShotEff == 0) {
+        assert_prog(D_00A53440, D_00A53428, 83);
+    }
+    _DestructEffect(pShotEff);
+    RgHeapFree(InstanceOfRgHeap(), pShotEff, D_00A53428, 85);
+}
 
 void RgShotEffectStopAlive(RgShotEffect *pEff, float time)
 {
@@ -118,7 +139,21 @@ void RgShotEffectSetModel(RgShotEffect *pEff, const char *variant)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_effect", RgShotEffectSetParticle);
+void RgShotEffectSetParticle(RgShotEffect *pEff, char *name)
+{
+    /* Raw particle-essence lookup buffer, opaque to this TU; see
+     * RgRobotEffectStartJet (ov12/rg_robot_effect.c). */
+    int shotData[0xB0];
+    int shotCount;
+
+    if (pEff == 0) {
+        assert_prog(D_00A53418, D_00A53428, 127);
+    }
+    shotCount = RgEffectEnvGetParticleData(InstanceOfRgEffectEnv(), name, shotData);
+    if (shotCount != 0) {
+        pEff->particleEffect = CreateRgParticleEffect((RgParticleEffectEssence *) shotData, shotCount);
+    }
+}
 
 void RgShotEffectSetParticleShootReverse(RgShotEffect *pEff)
 {
@@ -158,7 +193,14 @@ void RgShotEffectSetTexLineModelSize(RgShotEffect *pEff, float width, float heig
     pEff->texLineModelHeight = height;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_effect", RgShotEffectSetTexLineModelColor);
+void RgShotEffectSetTexLineModelColor(RgShotEffect *pEff, const int *color)
+{
+    if (pEff == 0) {
+        assert_prog(D_00A53418, D_00A53428, 177);
+    }
+    __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
+                         : : "r"(color), "r"(pEff->texLineModelColor) : "memory");
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_effect", RgShotEffectSetPos);
 

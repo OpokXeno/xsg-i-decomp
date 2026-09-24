@@ -20,6 +20,12 @@ extern int getScriptFlag(SceneObject object);
 extern void XTK_setWindowOwner(int owner);
 extern void talkCancel(ScriptObserverTask *task);
 extern void actTalkAfter(SceneObject object);
+extern void initVM(void);
+extern SceneThread *defaultVM;
+extern SceneThread *JNI_createThread(int kind, int stack_words,
+                                     int frame_words);
+extern void JNI_pushFrame(void);
+extern void JNI_loadNativeClass(void);
 extern SceneThread *stageVM;
 extern SceneThread *evtVM[2];
 extern int UseVMFlag;
@@ -30,6 +36,14 @@ extern void createTalkTask(void *actor, const char *method_name);
 extern const char call_method_signature_void[4];
 extern const char call_method_signature_int[5];
 extern const char call_method_signature_int_int[6];
+/* These TU-local signature literals remain assembler-owned data. Their ELF
+ * local-symbol names are required by the CallMethod-family relocations. */
+extern const char sig_2[4];
+extern const char sig_3[5];
+extern const char sig_4[6];
+#define call_method_signature_void sig_2
+#define call_method_signature_int sig_3
+#define call_method_signature_int_int sig_4
 extern const char func_observer_debug_text[16];
 extern void funcObserver(ScriptObserverTask *task);
 int getEmptyVM(ScriptObserverTask *observer);
@@ -281,7 +295,27 @@ void SCRIPT_frameLock2Battle(void)
     s_nScriptFrameLockEntry = 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_reset);
+/* Rebuild the default, stage, and two event VMs after a script runtime jump. */
+void SCRIPT_reset(void)
+{
+    SceneThread **event_vm;
+    int remaining_vms;
+
+    event_vm = evtVM;
+    remaining_vms = 1;
+    initVM();
+    defaultVM = JNI_createThread(0, 8, 0x80);
+    stageVM = JNI_createThread(0, 8, 0x46);
+    do {
+        --remaining_vms;
+        *event_vm = JNI_createThread(0, 8, 0x40);
+        ++event_vm;
+    } while (remaining_vms >= 0);
+    UseVMFlag = 0;
+    JNI_pushFrame();
+    JNI_pushFrame();
+    JNI_loadNativeClass();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_init);
 

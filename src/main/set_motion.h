@@ -196,4 +196,46 @@ typedef struct Actor {
 #define ACTOR_SOUND_EFFECT_ID(actor) \
     ((short *)((unsigned char *)(actor) + ACTOR_SOUND_EFFECT_ID_OFFSET))
 
+/* The actor's look-at countdown, in frames. Actor_LookAt_Init clears it to 0
+ * (`sh $0,0x9EC($4)` at main:0x002d2d2c); Actor_LookAt treats a value below 2
+ * as "not looking" and returns without reading the target below (`lhu
+ * $2,0x9EC($5)` / `addiu $2,$2,-1` / `sltiu $2,$2,2` / `beqz` at
+ * main:0x002d2ba8..0x002d2bbc). It is 8 bytes past ACTOR_TARGET_ANGLE_OFFSET,
+ * with nothing between them recovered, so it cannot be a member of Actor
+ * without inventing that span (docs/naming.md); naming the offset is
+ * docs/style.md rule 2's documented fallback. */
+#define ACTOR_LOOKAT_TIMER_OFFSET 0x9ec
+
+#define ACTOR_LOOKAT_TIMER(actor) \
+    ((short *)((unsigned char *)(actor) + ACTOR_LOOKAT_TIMER_OFFSET))
+
+/* The actor's look-at target: another `actor` slot index, or -1 for none.
+ * Actor_LookAt_Init sets it to -1 (`addiu $2,$0,-1` / `sh $2,0x9EE($4)` at
+ * main:0x002d2d28/0x002d2d30); Actor_LookAt reads it and treats -1 as "no
+ * target" (`lh $4,0x9EE($5)` / `beq $4,$2,.L002D2C54` at
+ * main:0x002d2bc4..0x002d2bcc), otherwise multiplying it by the `actor`
+ * array's own 0xa70 stride to reach the target's record. */
+#define ACTOR_LOOKAT_TARGET_OFFSET 0x9ee
+
+#define ACTOR_LOOKAT_TARGET(actor) \
+    ((short *)((unsigned char *)(actor) + ACTOR_LOOKAT_TARGET_OFFSET))
+
+/* A per-enepc-entry pointer, cleared by Actor_LookAt_Init (`sw
+ * $0,0x386C($1)` at main:0x002d2d40) and set by Actor_LookAt to the address
+ * of the same entry's +0x3890 once a look-at target is found (`addiu
+ * $5,$6,0x3890` / `sw $5,0x386C($6)` at main:0x002d2be0/0x002d2be4). Only the
+ * pointer identity is claimed here; +0x3890's own contents belong to
+ * Actor_LookAt, still unrecovered. */
+#define ENEMY_LOOKAT_POINT_OFFSET 0x386c
+
+#define ENEMY_LOOKAT_POINT(entry) \
+    ((void **)((unsigned char *)(entry) + ENEMY_LOOKAT_POINT_OFFSET))
+
+/* The per-enepc-entry reaction value Get_JAVAReaction reads and returns
+ * unchanged (`lw $2,%lo(enepc + 0x37E0)($2)` at main:0x002d09f4). */
+#define ENEMY_JAVA_REACTION_OFFSET 0x37e0
+
+#define ENEMY_JAVA_REACTION(entry) \
+    ((int *)((unsigned char *)(entry) + ENEMY_JAVA_REACTION_OFFSET))
+
 #endif /* SRC_MAIN_SET_MOTION_H */

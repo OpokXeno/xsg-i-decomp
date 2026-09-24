@@ -161,6 +161,58 @@ typedef struct CameraSplineRequest {
 extern StudioCamera *xglStudioGetCamera2(int camera_id);
 
 /*
+ * Call block of the camera "this"-only natives: Java_xeno_Camera_getRotateX__/
+ * getRotateY__/getRotateZ__/getFov__ (0x002fb390/0x002fb3e0/0x002fb430/
+ * 0x002fbe00) each read only the object reference at +0x00, the same slot
+ * CameraSplineRequest.camera occupies.
+ */
+typedef struct CameraGetterArgs {
+    CameraWork *camera; /* +0x00: the jobject */
+} CameraGetterArgs;
+
+/*
+ * Call block of Java_xeno_Camera_create__I (0x002fb790): the single Java int
+ * argument, the studio camera index to allocate.
+ */
+typedef struct CameraCreateArgs {
+    int camera_id; /* +0x00 */
+} CameraCreateArgs;
+
+/*
+ * Call block of Java_xeno_Camera_start__ILjava_lang_Object_ (0x002fbea0):
+ * `this`, the new state and the optional Chr peer whose `peer` field seeds
+ * CameraWork+0x12b0.
+ */
+typedef struct CameraStartArgs {
+    CameraWork *camera; /* +0x00: the jobject */
+    int state;          /* +0x04 */
+    SceneObject peer;   /* +0x08 */
+} CameraStartArgs;
+
+/*
+ * Call block of Java_xeno_Camera_setActive__Z (0x002fb758): `this` and the
+ * boolean argument. The boolean occupies a whole four-byte slot like every
+ * other Java argument, but the body reads only its low byte (lbu 4($16) at
+ * 0x002fb76c); the upper three bytes are never read.
+ */
+typedef struct CameraSetActiveArgs {
+    CameraWork *camera;      /* +0x00: the jobject */
+    unsigned char active;    /* +0x04: the boolean argument's low byte */
+    unsigned char unmodeled_05[3]; /* +0x05: unread bytes of the same slot */
+} CameraSetActiveArgs;
+
+/*
+ * Call block of Java_xeno_Camera_setClipRange__FF (0x002fc940): `this` and
+ * the two Java float arguments, stored into StudioCamera's own nearClip and
+ * farClip (include/shared.h) unchanged.
+ */
+typedef struct CameraSetClipRangeArgs {
+    CameraWork *camera; /* +0x00: the jobject */
+    float nearClip;     /* +0x04 */
+    float farClip;      /* +0x08 */
+} CameraSetClipRangeArgs;
+
+/*
  * CAMERA_transSPL (main:0x002fb900) and CAMERA_viewSPL (main:0x002fbb30) are
  * local to this file in the original, still asm here, and share
  * CAMERA_rotateSPL's shape: `selection` picks the case, `request` is the
@@ -179,5 +231,22 @@ static void CAMERA_transSPL(int selection, JavaEnvironment *environment,
                             CameraSplineRequest *request, void *result);
 static void CAMERA_viewSPL(int selection, JavaEnvironment *environment,
                            CameraSplineRequest *request, void *result);
+
+/*
+ * Call block of Java_xeno_Camera_changeID__III (0x002fc7c8): `this` and the
+ * three Java int arguments forwarded unchanged to GameCameraChangeID's own
+ * first, second and third arguments (still asm, src/main/game_camera.c). That
+ * function only reads its first argument, storing it as the new camera id
+ * (lhu/sh GameLoopState+0xc4 at main:0x00246bd0/0x00246c2c); it never loads
+ * its second or third.
+ */
+typedef struct CameraChangeIDArgs {
+    unsigned char unmodeled_00[4]; /* +0x00: the jobject, not read here */
+    int id;  /* +0x04: GameCameraChangeID's own first argument */
+    int id2; /* +0x08: forwarded, not read by GameCameraChangeID */
+    int id3; /* +0x0c: forwarded, not read by GameCameraChangeID */
+} CameraChangeIDArgs;
+
+extern void GameCameraChangeID(int, int, int);
 
 #endif /* SRC_MAIN_CAMERA_H */

@@ -28,7 +28,27 @@ void XrgSystemInit(void) {
     XrgLogSys(xrg_system_init_log_8, source_file, 0x7a);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sysinit", XrgSystemDispose);
+extern void ACT_init(void);
+extern void RgHeapDump_sub(RgHeap *pHeap, const char *comment,
+                           const char *source_file, int line);
+extern void RgSingletonDispose(void);
+
+/*
+ * External file-backed witnesses, not candidate-emitted data.
+ *
+ * ov12:0x00a591c0 contains the tag "system dispose".
+ * ov12:0x00a591d0 contains the tag "system dispose 2".
+ */
+extern const char D_00A591C0[];
+extern const char D_00A591D0[];
+
+void XrgSystemDispose(void) {
+    RgSingletonDispose();
+    RgHeapDump_sub(InstanceOfRgHeap(), D_00A591C0, xrg_system_init_source_file, 0x85);
+    RgHeapDump_sub(InstanceOfRgHeapData(), D_00A591D0, xrg_system_init_source_file, 0x86);
+    ClearRgHeap(InstanceOfRgHeap());
+    ACT_init();
+}
 
 void XrgSleep(void) {
     xglSleep();

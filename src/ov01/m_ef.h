@@ -50,6 +50,19 @@ extern void MMathRotateMatrixYX(Vector4 *destination, const Vector4 *source, con
 extern float MMathMakeRandom(void);
 
 /*
+ * MMathCalcLengthXZ: main math-library helper (main:0x002ef338), defined as C
+ * in src/main/m_math.c. Declared TU-locally here the same way that TU's own
+ * source declares srsAtan2 below.
+ */
+extern float MMathCalcLengthXZ(const Vector4 *vector);
+
+/*
+ * srsAtan2 (main:0x002e1000): library routine with no C definition in this
+ * codebase; src/main/m_math.c declares it the same way.
+ */
+extern float srsAtan2(float deltaX, float deltaZ);
+
+/*
  * MEfCalcAngle: sibling function of this same TU, still INCLUDE_ASM
  * scaffolding and untouched by this allocation; declared only to call it.
  */

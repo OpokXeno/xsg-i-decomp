@@ -195,9 +195,32 @@ float Get_Multi_Max_Under(float value, float step, float maximum)
     return value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Get_HeightAttr);
+void Get_HeightAttr(const Point4 *position, int mapIndex, int attrMask,
+                    UnduParam *param)
+{
+    UnduParamInit(param);
+    param->attrMask = (short)(attrMask | 0x800);
+    param->queryFlags = 0;
+    if (mapIndex == 0) {
+        param->header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
+    } else {
+        param->header = UnduDataGetHeader(mapIndex, 0x8000);
+    }
+    UnduCheck(position, 0, param);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Get_Height);
+void Get_Height(const Point4 *position, int mapIndex, int attrMask)
+{
+    UnduParamInit(&UnduTest);
+    UnduTest.queryFlags = 0;
+    UnduTest.attrMask = (short)(attrMask | 0x800);
+    if (mapIndex == 0) {
+        UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
+    } else {
+        UnduTest.header = UnduDataGetHeader(mapIndex, 0x8000);
+    }
+    UnduCheck(position, 0, &UnduTest);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/get", Get_Attr);
 

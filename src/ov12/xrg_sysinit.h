@@ -39,7 +39,7 @@ extern void RgSingletonIDClear(void);
 
 extern void ClearRgHeap(RgHeap *);
 
-extern void _SetDefaultLight(void);
+static void _SetDefaultLight(void);
 
 extern void xglRenderClearFrame(void);
 

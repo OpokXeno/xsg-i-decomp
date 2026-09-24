@@ -1,4 +1,5 @@
 #include "common.h"
+#include "shared.h"
 #include "srs.h"
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetEffect2Idx);
@@ -29,7 +30,13 @@ int srsGetLoadMode(void)
     return srsLoadMode;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsSetViewPath);
+extern unsigned char srsViewPath[];
+extern unsigned char *strcpy(unsigned char *destination, const unsigned char *source);
+
+void srsSetViewPath(unsigned char *path)
+{
+    strcpy(srsViewPath, path);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsMakeFileName);
 
@@ -60,17 +67,82 @@ INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetEffectName);
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetWeaponEffectIdx);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsEftNoWeaponEffectID);
+extern int srsGetWeaponEffectIdx(void);
+
+/*
+ * One _weaponTbl row (8 bytes; the 0x168-byte symbol holds 45 rows).
+ * srsEftNo2WeaponID reads weaponID at the row start; srsEftNoWeaponEffectID
+ * reads weaponEffectID right after it.
+ */
+typedef struct WeaponTblEntry {
+    short weaponID;
+    short weaponEffectID;
+    unsigned char unmodeled_04[4];
+} WeaponTblEntry;
+
+extern WeaponTblEntry _weaponTbl[];
+
+short srsEftNoWeaponEffectID(void)
+{
+    int index;
+    short weaponEffectID;
+
+    index = srsGetWeaponEffectIdx();
+    weaponEffectID = 0;
+    if (index >= 0) {
+        weaponEffectID = _weaponTbl[index].weaponEffectID;
+    }
+    return weaponEffectID;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsWeapon2EffectID);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsEftNo2WeaponID);
+short srsEftNo2WeaponID(void)
+{
+    int index;
+    short weaponID;
+
+    index = srsGetWeaponEffectIdx();
+    weaponID = 0;
+    if (index >= 0) {
+        weaponID = _weaponTbl[index].weaponID;
+    }
+    return weaponID;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetEffectName2);
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetComboName);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", srsGetEffectType);
+/*
+ * The ranges are disjoint, evidenced value windows over effectNo; no source
+ * for their meaning is available beyond the compiled comparisons.
+ */
+int srsGetEffectType(int effectNo)
+{
+    int effectType;
+
+    effectType = 0;
+    if ((u32) (effectNo - 0xA28) >= 0x3E) {
+        effectType = 2;
+        if ((u32) (effectNo - 0x9C4) >= 0x64 && effectNo >= 0x64) {
+            effectType = 0xE;
+            if ((u32) (effectNo - 0x7D0) >= 0xDB) {
+                effectType = 0xB;
+                if ((u32) (effectNo - 0xF0) >= 0x9D) {
+                    effectType = 0xE;
+                    if ((u32) (effectNo - 0x8FC) >= 0xB6) {
+                        effectType = 2;
+                        if ((u32) (effectNo - 0xAF0) >= 0xC8) {
+                            effectType = ((u32) (effectNo - 0x258) < 0x190) ? 0xF : 0xE;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return effectType;
+}
 
 void srsInitCdRead(void)
 {
@@ -95,7 +167,12 @@ int srsLoadEffectData(void *buffer, int effectNo)
     return fileLoad(buffer, name, 1);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", sresInitMemoryRes);
+extern unsigned char _srsMemRes[];
+
+void sresInitMemoryRes(void)
+{
+    memset(_srsMemRes, 0, 0x1A0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", sresLoadCommonMemory);
 
@@ -105,7 +182,32 @@ INCLUDE_ASM("asm/main/nonmatchings/srs", sresFreeReloaderMemoryNo);
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", sresFreeReloaderMemory);
 
-INCLUDE_ASM("asm/main/nonmatchings/srs", sresFreeMemoryRes);
+/*
+ * _srsMemRes's own additive view: only the leading pointer sresFreeMemoryRes
+ * tests and clears is modeled, the rest of the 0x1A0-byte record (zeroed
+ * whole by sresInitMemoryRes) stays an explicit unmodeled span.
+ */
+typedef struct SrsMemRes {
+    void *image; /* +0x00 */
+    unsigned char unmodeled_04[0x19c];
+} SrsMemRes;
+
+extern void smFree(void *block);
+extern void sresFreeReloaderMemory(int reload_bgm);
+extern void svDeleteImageMapper(int type);
+
+void sresFreeMemoryRes(void)
+{
+    SrsMemRes *memRes;
+
+    sresFreeReloaderMemory(1);
+    memRes = (SrsMemRes *) _srsMemRes;
+    if (memRes->image != 0) {
+        svDeleteImageMapper(0);
+        smFree(memRes->image);
+        memRes->image = 0;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/srs", sresDataMapping);
 

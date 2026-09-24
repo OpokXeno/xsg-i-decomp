@@ -7,11 +7,45 @@ INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_initUnit);
 
 INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_createUnit);
 
-INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_updateUnit);
+#define NULL ((void *)0)
+
+/*
+ * Bit 0x10 of a unit's flags, tested for every MapUnit[] entry, skips both
+ * per-frame callbacks below when set; the bit's own meaning is not
+ * otherwise evidenced in this TU.
+ */
+void MAP_updateUnit(void)
+{
+    MapUnitSlot *unit = MapUnit;
+    int i;
+
+    for (i = 0; i < 64; i++) {
+        if (unit->serial >= 0 && !(unit->flags & 0x10)) {
+            if (unit->update != NULL) {
+                unit->update(unit);
+            }
+            if (unit->typeUpdate != NULL) {
+                unit->typeUpdate(unit);
+            }
+        }
+        unit++;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_drawUnitAt);
 
-INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_drawUnit);
+void MAP_drawUnit(void)
+{
+    MapUnitSlot *unit = MapUnit;
+    int i;
+
+    for (i = 0; i < 64; i++) {
+        if (unit->serial >= 0) {
+            MAP_drawUnitAt(unit);
+        }
+        unit++;
+    }
+}
 
 void MAP_getHeight(MapPosition *position)
 {

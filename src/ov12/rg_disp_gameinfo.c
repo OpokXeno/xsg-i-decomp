@@ -5,7 +5,39 @@
 #include "shared.h"
 #include "rg_disp_gameinfo.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", _InitInfo);
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+extern const char D_00A54560[];
+extern const char D_00A54570[];
+extern void *InstanceOfRgBattleCommonData(void);
+extern int RgBattleCommonDataGetDispTex(void *env);
+extern XrgPaint2D *CreateXrgPaint2D_sub(const char *sourceFile, int line);
+extern void XrgPaint2DSetDrawPrio(XrgPaint2D *paint, int prio);
+extern void XrgPaint2DSetDrawID(XrgPaint2D *paint, int drawID);
+
+void _InitInfo(RgDispGameInfo *pInfo)
+{
+    int dispTex;
+    XrgPaint2D *paint;
+
+    if (pInfo == 0) {
+        assert_prog(D_00A54560, D_00A54570, 73);
+    }
+    pInfo->hostRobot = 0;
+    pInfo->subRobot = 0;
+    dispTex = RgBattleCommonDataGetDispTex(InstanceOfRgBattleCommonData());
+    pInfo->value1 = 1.0f;
+    pInfo->value2 = 1.0f;
+    pInfo->value3 = 2;
+    pInfo->studio = -2;
+    pInfo->dispTex = dispTex;
+    paint = CreateXrgPaint2D_sub(D_00A54570, 90);
+    pInfo->paint = paint;
+    XrgPaint2DSetDrawPrio(paint, 4);
+    XrgPaint2DSetDrawID(pInfo->paint, pInfo->studio);
+    pInfo->value4 = 0;
+    pInfo->value5 = 0;
+}
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -87,7 +119,10 @@ void _paint_one_texture_alpha(RgDispGameInfo *pInfo, const char *pictureName,
                        0, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", _paint_one_texture);
+void _paint_one_texture(RgDispGameInfo *pInfo, const char *pictureName, int x,
+                        int y) {
+    _paint_one_texture_alpha(pInfo, pictureName, x, y, 0);
+}
 
 void _paint_set_tex_alpha(RgDispGameInfo *pInfo, const char *pictureName,
                           int blendMode) {
@@ -119,11 +154,30 @@ RgDispGameInfo *CreateRgDispGameInfo(void) {
     return pInfo;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", DisposeRgDispGameInfo);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
+                       int line);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", RgDispGameInfoSetHostRobot);
+void DisposeRgDispGameInfo(RgDispGameInfo *pInfo) {
+    if (pInfo == 0) {
+        assert_prog(D_00A54560, D_00A54570, 367);
+    }
+    _DisposeInfo(pInfo);
+    RgHeapFree(InstanceOfRgHeap(), pInfo, D_00A54570, 369);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", RgDispGameInfoSetSubRobot);
+void RgDispGameInfoSetHostRobot(RgDispGameInfo *pInfo, void *hostRobot) {
+    if (pInfo == 0) {
+        assert_prog(D_00A54560, D_00A54570, 378);
+    }
+    _SetHostRobot(pInfo, hostRobot);
+}
+
+void RgDispGameInfoSetSubRobot(RgDispGameInfo *pInfo, void *subRobot) {
+    if (pInfo == 0) {
+        assert_prog(D_00A54560, D_00A54570, 385);
+    }
+    _SetSubRobot(pInfo, subRobot);
+}
 
 extern void XrgPaint2DSetDrawID(XrgPaint2D *paint, int drawId);
 
@@ -135,7 +189,12 @@ void RgDispGameInfoSetStudio(RgDispGameInfo *pInfo, int studio) {
     XrgPaint2DSetDrawID(pInfo->paint, studio);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", RgDispGameInfoPassTime);
+void RgDispGameInfoPassTime(RgDispGameInfo *pInfo, float deltaTime) {
+    if (pInfo == 0) {
+        assert_prog(D_00A54560, D_00A54570, 405);
+    }
+    _PassTimeInfo(pInfo, deltaTime);
+}
 
 extern void _DispInfo(RgDispGameInfo *pInfo);
 

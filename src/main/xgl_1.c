@@ -38,7 +38,34 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_1", audioCallback);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1", nodataCallback);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1", errorCallback);
+/*
+ * errorCallback (main:0x00222158) is registered as the MPEG movie decoder's
+ * error handler. The original bytes read a pointer at arg1+0x04 and pass it
+ * as the "%s\n" argument of D_004DC328's printf, then read, increment and
+ * store back an unsigned byte at arg2+0x98 and clear a byte at arg2+0x99
+ * right after it (lbu/sb at those fixed offsets).
+ */
+typedef struct {
+    unsigned char unmodeled_00[4];
+    const char *message;
+} MpegErrorInfo;
+
+typedef struct {
+    unsigned char unmodeled_00[0x98];
+    unsigned char errorCount;
+    unsigned char errorFlag;
+} MpegCallbackState;
+
+extern int printf(const char *format, ...);
+extern const char D_004DC328[];
+
+static int errorCallback(int event, MpegErrorInfo *error, MpegCallbackState *state)
+{
+    printf(D_004DC328, error->message);
+    state->errorCount++;
+    state->errorFlag = 0;
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1", xglMpeg2Open);
 
@@ -46,7 +73,43 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_1", setLoadImageTags);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1", xglMpeg2Play);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1", xglMpeg2Close);
+/*
+ * xglCdStreamClose's own parameter type (CdStreamParam, main/tu092
+ * src/main/xgl_cd.c) is TU-local to that file; this TU only forwards a
+ * pointer to it and does not access its members, so the tag stays opaque.
+ */
+typedef struct CdStreamParam CdStreamParam;
+
+extern void SsdDisposeVagStream(void);
+extern int SsdGetResultValue(int *value);
+extern void SsdStopVagStream(int channel);
+extern void sceMpegDelete(void *mpegHandle);
+extern void sceMpegReset(void *mpegHandle);
+extern int xglCdStreamClose(CdStreamParam *stream);
+
+/*
+ * arg0+0x30 (temp_16 = s1+0x30 in the original) is passed to sceMpegReset
+ * and sceMpegDelete as a raw address; sceMpegReset/sceMpegDelete have no
+ * public prototype (docs/naming.md), so the embedded MPEG handle stays an
+ * untyped pointer computed by byte offset from the stream object.
+ */
+int xglMpeg2Close(unsigned char *stream)
+{
+    void *mpegHandle;
+    int value;
+
+    mpegHandle = stream + 0x30;
+    sceMpegReset(mpegHandle);
+    sceMpegDelete(mpegHandle);
+    SsdStopVagStream(0);
+    do {
+    } while (SsdGetResultValue(&value) < 0);
+    SsdDisposeVagStream();
+    do {
+    } while (SsdGetResultValue(&value) < 0);
+    xglCdStreamClose((CdStreamParam *) stream);
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1", xglMpeg2InfoInit2);
 

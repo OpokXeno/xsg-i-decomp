@@ -36,4 +36,49 @@ typedef void (*CursorCallback)(void *argument);
 
 void VW_setCursorFunc(CursorCallback callback, void *argument);
 
+/*
+ * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
+ * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
+ * src/main/enemy_2.h and src/main/set_motion.h). prevActor only reads
+ * +0x00 flags (bit 0x8, hidden) and +0x86, the in-use id ACT_create writes
+ * and ACT_update skips a slot on when it is zero; the offsets between them
+ * are not evidenced by this TU and stay unmodeled.
+ */
+#define ACTOR_COUNT 64
+#define ACTOR_IN_USE_ID_OFFSET 0x86
+
+typedef struct {
+    u32 flags;
+    u8 unmodeled_04[ACTOR_IN_USE_ID_OFFSET - 0x04];
+    short inUseId;
+    u8 unmodeled_88[0xA70 - (ACTOR_IN_USE_ID_OFFSET + 2)];
+} ActorHead;
+
+extern ActorHead actor[ACTOR_COUNT];
+
+void MAP_serach(void);
+
+void changeCameraMode(void);
+
+/*
+ * cursor[0].x's fourth `sw`-not-`swc1` raw word (VW_setCursorMode's own
+ * store target): the visualizer's current camera/cursor mode selector,
+ * read back as an int by changeCameraMode. It shares the same slot's other
+ * three words with the position float fields of CURSOR_CALLBACK_OFFSET's
+ * comment; the mode selector is this array's first word, so its offset is 0.
+ */
+#define CURSOR_MODE_OFFSET 0x0
+
+void drawAxis(Matrix4 matrix, float scale);
+
+void EvtTools(void);
+void updateCursor(int mode);
+void ACT_update(void);
+void JTHREAD_cntl(void);
+void MAP_updateUnit(void);
+void PLAY_ctrl(void);
+void TCAMERA_update(void);
+extern PadPrefix PadData;
+extern int mode_004DC5A8;
+
 #endif /* SRC_MAIN_DB_LIGHT_WRITE_H */

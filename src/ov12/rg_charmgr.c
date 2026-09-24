@@ -20,6 +20,13 @@ typedef struct RgChar RgChar;
 #include "ov12/rg_char.h"
 
 /*
+ * RgSingletonIDGet/RgSingletonIDEntry are defined and declared by their own
+ * owning TU (include/ov12/rg_singleton_id.h); InstanceOfRgCharMgr uses the
+ * registry to keep one lazily-allocated RgCharMgr singleton.
+ */
+#include "ov12/rg_singleton_id.h"
+
+/*
  * External file-backed witnesses, not candidate-emitted data: this window is
  * asm-owned scaffold data (config/tu/ov12/tu021.json data_ownership window
  * 0x00a53085..0x00a531f0, no config/symbols/ov12.txt entry).
@@ -41,12 +48,14 @@ extern const char D_00A53118[];
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
+                         const char *source_file, int line);
 extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
                        int line);
 
-extern unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
+static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
                               RgChar *pChar);
-extern unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
+static unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
                                RgChar *pChar);
 /*
  * RgCharFree is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
@@ -55,9 +64,9 @@ extern unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
  * TU's own src header.
  */
 extern void RgCharFree(RgChar *pChar);
-extern void _RgCharMgrCallControl(RgCharMgr *manager);
-extern void _RgCharMgrCallPassTime(RgCharMgr *manager);
-extern void _RgCharMgrCallDisp(RgCharMgr *manager);
+static void _RgCharMgrCallControl(RgCharMgr *manager);
+static void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime);
+static void _RgCharMgrCallDisp(RgCharMgr *manager);
 
 /*
  * The observed access view: up to 256 registered character pointers at
@@ -102,24 +111,102 @@ void RgCharMgrFree(RgCharMgr *manager, RgChar *pChar)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", RgCharMgrSearch);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", RgCharMgrIsFullOfBuffer);
+int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
+{
+    if (manager == 0) {
+        assert_prog(D_00A53138, D_00A530B8, 93);
+    }
+    if (manager->count + count < 0x100) {
+        return 0;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", RgCharMgrGC);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _RgCharMgrCallControl);
+/*
+ * RgCharControl is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
+ * that TU's own header does not publish it, so this follows the RgCharFree
+ * precedent above instead of including that TU's own src header.
+ */
+extern void RgCharControl(RgChar *pChar);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _RgCharMgrCallDisp);
+void _RgCharMgrCallControl(RgCharMgr *manager)
+{
+    RgChar *chars[256];
+    unsigned int count;
+    unsigned int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _RgCharMgrCallPassTime);
+    if (manager == 0) {
+        assert_prog(D_00A53138, D_00A530B8, 132);
+    }
+    count = manager->count;
+    for (i = 0; i < count; i++) {
+        chars[i] = manager->chars[i];
+    }
+    for (i = 0; i < count; i++) {
+        RgCharControl(chars[i]);
+    }
+}
+
+/*
+ * RgCharDisp is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
+ * that TU's own header does not publish it, so this follows the RgCharFree
+ * precedent above instead of including that TU's own src header.
+ */
+extern void RgCharDisp(RgChar *pChar);
+
+void _RgCharMgrCallDisp(RgCharMgr *manager)
+{
+    RgChar *chars[256];
+    unsigned int count;
+    unsigned int i;
+
+    if (manager == 0) {
+        assert_prog(D_00A53138, D_00A530B8, 162);
+    }
+    count = manager->count;
+    for (i = 0; i < count; i++) {
+        chars[i] = manager->chars[i];
+    }
+    for (i = 0; i < count; i++) {
+        RgCharDisp(chars[i]);
+    }
+}
+
+/*
+ * RgCharPassTime is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
+ * that TU's own header does not publish it, so this follows the RgCharFree
+ * precedent above instead of including that TU's own src header.
+ */
+extern void RgCharPassTime(RgChar *pChar, float deltaTime);
+
+void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime)
+{
+    RgChar *chars[256];
+    unsigned int count;
+    unsigned int i;
+
+    if (manager == 0) {
+        assert_prog(D_00A53138, D_00A530B8, 182);
+    }
+    count = manager->count;
+    for (i = 0; i < count; i++) {
+        chars[i] = manager->chars[i];
+    }
+    for (i = 0; i < count; i++) {
+        RgCharPassTime(chars[i], deltaTime);
+    }
+}
 
 void RgCharMgrControl(RgCharMgr *manager)
 {
     _RgCharMgrCallControl(manager);
 }
 
-void RgCharMgrPassTime(RgCharMgr *manager)
+void RgCharMgrPassTime(RgCharMgr *manager, float deltaTime)
 {
-    _RgCharMgrCallPassTime(manager);
+    _RgCharMgrCallPassTime(manager, deltaTime);
 }
 
 void RgCharMgrDisp(RgCharMgr *manager)
@@ -143,7 +230,19 @@ void InitRgCharMgr(RgCharMgr *manager)
     manager->count = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", InstanceOfRgCharMgr);
+RgCharMgr *InstanceOfRgCharMgr(void)
+{
+    RgCharMgr *manager;
+
+    manager = RgSingletonIDGet(0);
+    if (manager == 0) {
+        manager = RgHeapAlloc(InstanceOfRgHeap(), 0x404, D_00A530B8, 277);
+        InitRgCharMgr(manager);
+        RgSingletonIDEntry(0, (RgSimpleDB *) manager,
+                           (void (*)(RgSimpleDB *)) _DisposeCharMgr);
+    }
+    return manager;
+}
 
 RgCharMgr *InstanceOfRgCharMgrClear(void)
 {

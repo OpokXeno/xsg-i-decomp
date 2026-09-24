@@ -26,7 +26,15 @@ extern const char D_00A52978[];
 /* ov12:0x00a52998 "  me=%p enemy=%p\n" */
 extern const char D_00A52998[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _SetBit);
+static int _SetBit(int *flags, int bit, int value)
+{
+    if (value != 0) {
+        *flags |= 1 << bit;
+    } else {
+        *flags &= ~(1 << bit);
+    }
+    return *flags;
+}
 
 static int _CheckBit(int flags, int bit)
 {
@@ -127,7 +135,23 @@ static int _IsActionDash(RgCamera *camera)
     return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 3);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _IsActionTargetInScrn);
+extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
+extern int RgDrawViewIsPointInView(RgDrawView *view, RgPointVector *point, float margin);
+
+static void _IsActionTargetInScrn(RgCamera *camera)
+{
+    /*
+     * A RgPointVector-sized scratch buffer (rg_geom_point.c owns the type);
+     * __RgGeomPointGetPos fills it and RgDrawViewIsPointInView reads it back.
+     */
+    unsigned char position[sizeof(RgVector)];
+
+    /* actionState[3] (+0x4c) is the "enemy" geometry point of RgCameraDump's log. */
+    __RgGeomPointGetPos((RgGeomPoint *)camera->actionState[3],
+                         (RgPointVector *)position, D_00A52760, 220);
+    RgDrawViewIsPointInView(RgDrawStudioGetView(camera->studio),
+                             (RgPointVector *)position, 0.0f);
+}
 
 static int _IsActionTrue(void)
 {
@@ -179,7 +203,19 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _LoadVersion3);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _PassTimeVersion3);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _InitVersion3);
+static int _SetVersion3Extent(RgCamera *camera);
+static void _LoadVersion3(RgCamera *camera, void *reader);
+
+static void _InitVersion3(RgCamera *camera, RgDrawStudio *studio)
+{
+    if (camera == 0) {
+        assert_prog(D_00A52750, D_00A52760, 652);
+    }
+    _InitAbstructCamera(camera, studio);
+    camera->actionState[5] = (int) _SettingVersion3;
+    camera->actionState[6] = (int) _LoadVersion3;
+    _SetVersion3Extent(camera);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", CreateRgCamera);
 
@@ -213,7 +249,17 @@ void RgCameraLoadText(RgCamera *pCam, void *pReader)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", RgCameraSetFarMode);
+void RgCameraSetFarMode(RgCamera *pCam, int enable)
+{
+    if (pCam == 0) {
+        assert_prog(D_00A52750, D_00A52760, 737);
+    }
+    if (enable != 0) {
+        pCam->farDistance = 14.0f;
+    } else {
+        pCam->farDistance = 8.0f;
+    }
+}
 
 void RgCameraSelectableFar(RgCamera *pCam, int level)
 {

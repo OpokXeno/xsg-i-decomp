@@ -43,4 +43,9 @@ INCLUDE_ASM("asm/main/nonmatchings/Undulate", UnduCheck);
 
 INCLUDE_ASM("asm/main/nonmatchings/Undulate", UnduGet2);
 
-INCLUDE_ASM("asm/main/nonmatchings/Undulate", UnduGet);
+extern float UnduGet2(int flag, float x, float z);
+
+float UnduGet(float x, float z)
+{
+    return UnduGet2(0, x, z);
+}

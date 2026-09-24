@@ -105,7 +105,13 @@ static void HddTestUnmountCommon(void);
  * not see an implicit declaration. */
 static int xtxdec_sleep(void);
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", testfunc);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern unsigned char TestEnv_0_0036A030[];
+
+/* Only the packet handle at +0x00 is evidenced. */
+static void testfunc(XglPacket **packet) {
+    sceVif1PkAddDirectDataN(*packet, TestEnv_0_0036A030, 9);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", FontTestSub);
 
@@ -113,7 +119,37 @@ INCLUDE_ASM("asm/main/nonmatchings/yajima_test", FontTestP0);
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", FontTestP1);
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", FontTestLine);
+extern void nmlModelDirectSend(int mode, u8 *data, int count);
+
+/*
+ * TestEnv_34 is a 6-entry, 0x10-byte-stride vertex template (matches its
+ * config/symbols/main.txt size 0x60); FontTestLine only touches the x/y of
+ * the last two entries (the line's two endpoints), so the rest of each entry
+ * and every earlier entry (set elsewhere, still unresolved in this TU) stays
+ * unmodeled.
+ */
+typedef struct TestLineVertex {
+    int x;
+    int y;
+    unsigned char unmodeled_08[8];
+} TestLineVertex;
+
+extern TestLineVertex TestEnv_34[6];
+
+static void FontTestLine(int xIndex, int yIndex, int width)
+{
+  int x0;
+  int y;
+  int x1;
+  x0 = (xIndex * 0x10) + 0x6FF8;
+  y = (yIndex * 0x10) + 0x71F7;
+  x1 = x0 + (width * 0x10);
+  TestEnv_34[5].x = x1;
+  TestEnv_34[4].y = y;
+  TestEnv_34[5].y = y;
+  TestEnv_34[4].x = x0;
+  nmlModelDirectSend(1, (u8 *) TestEnv_34, 6);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", FontTestP2);
 

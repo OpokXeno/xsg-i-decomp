@@ -34,7 +34,7 @@ extern void assert_prog(const char *expression, const char *source_file,
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
-extern void _InitRgGeomRobot(RgGeom *geom);
+static void _InitRgGeomRobot(RgGeom *geom);
 
 /*
  * External file-backed witnesses, not candidate-emitted data: this window is

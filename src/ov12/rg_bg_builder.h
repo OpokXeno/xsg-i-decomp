@@ -46,4 +46,38 @@ void DisposeRgBgBuilder(RgBgBuilder *pBuilder);
 void *RgBgBuilderGetLoadData(RgBgBuilder *pBuilder);
 void RgBgBuilderGetLight(RgBgBuilder *pBuilder, void *pGetBuf);
 
+/*
+ * RgDispModel is defined by src/ov12/rg_dispmodel.c (ov12/tu049); only the
+ * pointer identity CreateXrgDispModelImpl returns and RgDispModelSetMode
+ * takes is used here.
+ */
+typedef struct RgDispModel RgDispModel;
+
+/*
+ * A collision-box entry _EntryColi allocates (RgHeapAlloc size 0x14) and
+ * registers by name into a RgSimpleDB. halfWidth/halfHeight are half of
+ * the width/height arguments, each scaled by 0.5f before the store; id is
+ * stored unchanged. value1/value2 are also stored unchanged from
+ * _EntryColi's own float arguments; the only caller, RgBgBuilderBuildFromText,
+ * is not recovered in this allocation, so there is no further evidence for
+ * their role.
+ */
+typedef struct RgColiEntry {
+    int id;           /* +0x00 */
+    float halfWidth;  /* +0x04 */
+    float halfHeight; /* +0x08 */
+    float value1;     /* +0x0C */
+    float value2;     /* +0x10 */
+} RgColiEntry;
+
+/*
+ * A background-object definition RgBgBuilderBuildFromText builds from
+ * parsed text keywords (not recovered in this allocation). _NewBgObj reads
+ * only the name string at its head; the rest of the record is untouched by
+ * any function claimed here.
+ */
+typedef struct RgBgObjDef {
+    const char *name; /* +0x00 */
+} RgBgObjDef;
+
 #endif /* SRC_OV12_RG_BG_BUILDER_H */

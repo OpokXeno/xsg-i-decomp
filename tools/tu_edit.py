@@ -538,6 +538,78 @@ _VA_SUFFIX = re.compile(r'^(.+)_([0-9A-Fa-f]{8})$')
 _DOT_SUFFIX = re.compile(r'^(.+)\.([0-9]+)$')
 _US_SUFFIX = re.compile(r'^(.+)_([0-9]+)$')
 
+# A nested definition belongs to its enclosing TU-level C block. The editor
+# binds unique original names; the audit checks the declared identity/parent.
+GNU_NESTED_REGISTRY = 'config/gnu-nested-functions.json'
+_GNU_NESTED_DEF = re.compile(r'([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{')
+_GNU_NESTED_KEYWORDS = frozenset(('if', 'for', 'while', 'switch', 'catch'))
+
+
+def gnu_nested_mask(text):
+    """Mask comments and literals while preserving offsets and newlines."""
+    return re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|/\*.*?\*/|//[^\n]*',
+                  lambda m: ''.join('\n' if c == '\n' else ' ' for c in m[0]),
+                  text, flags=re.S)
+
+
+def gnu_nested_definitions(text):
+    """Return structural function definitions with lexical parent metadata."""
+    masked = gnu_nested_mask(text)
+    definitions = []
+    for match in _GNU_NESTED_DEF.finditer(masked):
+        if match.group(1) in _GNU_NESTED_KEYWORDS:
+            continue
+        opening = masked.find('{', match.start(), match.end())
+        if opening < 0:
+            continue
+        depth = sum(1 if c == '{' else -1 for c in masked[:match.start()]
+                    if c in '{}')
+        balance = 0
+        closing = None
+        for index in range(opening, len(masked)):
+            if masked[index] == '{':
+                balance += 1
+            elif masked[index] == '}':
+                balance -= 1
+                if balance == 0:
+                    closing = index
+                    break
+        definitions.append(dict(name=match.group(1), start=match.start(),
+                                opening=opening, closing=closing, depth=depth,
+                                parent=None))
+    for definition in definitions:
+        parents = [candidate for candidate in definitions
+                   if candidate is not definition and candidate['opening'] < definition['start']
+                   and candidate['closing'] is not None and definition['start'] < candidate['closing']]
+        if parents:
+            definition['parent'] = max(parents, key=lambda candidate: candidate['start'])['name']
+    return definitions
+
+
+def gnu_nested_parent(text, parent, child):
+    """Whether *child* is a real nested definition directly in *parent*."""
+    return any(item['name'] == child and item['parent'] == parent
+               for item in gnu_nested_definitions(text))
+
+
+def gnu_nested_specs(root, tu_id):
+    """Merge discovered groups with durable/private per-TU source declarations."""
+    result = {}
+    root = Path(root)
+    discovery = root / GNU_NESTED_REGISTRY
+    if discovery.is_file():
+        data = json.loads(discovery.read_text())
+        if data.get('schema') != 'gnu-nested-functions/1':
+            raise ParseError(f'{discovery}: unsupported nested-function registry schema')
+        result.update((data.get('tus', {}).get(tu_id, {}).get('functions') or {}))
+    classes = root / 'config/tu/source-classes.json'
+    if classes.is_file():
+        entry = json.loads(classes.read_text()).get('tus', {}).get(tu_id, {})
+        for parent, spec in (entry.get('functions') or {}).items():
+            if spec.get('nested_functions') is not None:
+                result[parent] = dict(result.get(parent, {}), **spec)
+    return result
+
 
 def name_stem(name):
     m = _VA_SUFFIX.match(name)
@@ -640,6 +712,8 @@ class TU:
             self.by_name.setdefault(b.name, b)
         for b in self.blocks:
             self.by_name.setdefault(b.key, b)
+            for covered in b.covers:
+                self.by_name.setdefault(covered, b)
 
     def _bind(self, functions):
         """Bind blocks to the original function list, in order.
@@ -662,6 +736,24 @@ class TU:
                 continue
             b.key, b.role = match, 'function'
             pending.remove(match)
+            # A GNU nested function is emitted as a local symbol but its C
+            # definition is lexically inside its parent, so it has no separate
+            # non-overlapping Block. Bind unique nested originals to the parent while
+            # retaining the original child name for claims and audits.
+            if b.state == 'c':
+                body = self.text[b.core_start:b.core_end]
+                for definition in gnu_nested_definitions(body):
+                    if definition['depth'] == 0:
+                        continue
+                    hits = [name for name in pending if name == definition['name'] or
+                            re.fullmatch(re.escape(definition['name']) + r'\.\d+', name)]
+                    if len(hits) > 1:
+                        raise ParseError(f'ambiguous original nested binding for {match}/{definition["name"]}: {hits}')
+                    if hits:
+                        nested = hits[0]
+                        b.covers.append(nested)
+                        self.covered[nested] = b.key
+                        pending.remove(nested)
         for b in [x for x in self.blocks if x.state != 'c']:
             if not pending:
                 break
@@ -1612,7 +1704,8 @@ MEMBER_SIZES = {'char': 1, 'signed char': 1, 'unsigned char': 1, 'u8': 1, 's8': 
                 'int': 4, 'signed int': 4, 'unsigned int': 4, 'unsigned': 4, 'signed': 4,
                 'long': 4, 'unsigned long': 4, 'u32': 4, 's32': 4, 'float': 4,
                 'long long': 8, 'unsigned long long': 8, 'u64': 8, 's64': 8, 'double': 8}
-UNMODELED_MEMBER = re.compile(r'\bunmodell?ed_\w*')
+# `_unmodeled_0a0` (leading underscore) is the same span spelling as `unmodeled_0a0`
+UNMODELED_MEMBER = re.compile(r'(?<![A-Za-z0-9])_?unmodell?ed_\w*')
 
 
 def member_dim(expr):

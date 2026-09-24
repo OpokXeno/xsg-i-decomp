@@ -75,8 +75,29 @@ typedef struct RgEquip {
  * address; the slots' pointee type belongs to another translation unit and
  * no byte of the interior is claimed here.
  */
+/*
+ * ATTACH_MAX is the original identifier baked into the assert string at
+ * ov12:0x00a53670 ("pAttach->m_uAttachNum < ATTACH_MAX") that _AddShotAttach
+ * cites; RgWeaponAttach's slot count below evidences its value as 8.
+ */
+#define ATTACH_MAX 8
+
+/*
+ * _ReleaseAttach and _GetAllAttach (ov12:0x00a193c8/0x00a19488) evidence the
+ * slot array's own identity: _ReleaseAttach passes each entry unchanged to
+ * RgShotRelease(RgShot *), and _GetAllAttach copies each entry to its
+ * caller's array unchanged. Only the pointer identity is claimed; RgShot's
+ * interior belongs to src/ov12/rg_shot.c, not yet recovered here.
+ *
+ * RgShot *shots[ATTACH_MAX] is ATTACH_MAX (8) 4-byte pointers = 0x20 bytes,
+ * exactly the unmodeled_00[0x20] span it replaces; the trailing
+ * unsigned int m_uAttachNum is untouched, so RgWeaponAttach's total size
+ * (0x24 bytes) is unchanged.
+ */
+typedef struct RgShot RgShot;
+
 typedef struct RgWeaponAttach {
-    unsigned char unmodeled_00[0x20];
+    RgShot *shots[ATTACH_MAX];
     unsigned int m_uAttachNum;
 } RgWeaponAttach;
 
@@ -103,7 +124,30 @@ struct RgWeapon {
     RgEquip equip;
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    unsigned char unmodeled_13c[0x64];
+    unsigned char unmodeled_13c[0x48];
+    /*
+     * _CheckLockOn (ov12:0x00a1c098) computes the locked-on target's angle
+     * in the weapon's own local XZ-plane (atan2f of the inverse-local-space
+     * transform's x/z) and compares it against this inclusive [min, max]
+     * range to decide whether the target counts as locked on.
+     *
+     * The published unmodeled_13c[0x64] (0x13c..0x1a0, 100 bytes) is split
+     * here into unmodeled_13c[0x48] (0x13c..0x184, 72 bytes) + lockOnAngleMin
+     * (4) + lockOnAngleMax (4) + unmodeled_18c[4] (0x18c..0x190, 4 bytes) +
+     * targetPosition (RgVector, 16 bytes): 0x48+4+4+4+0x10 = 0x64, so the
+     * total size and the following member's offset (targeting at 0x1a0) are
+     * unchanged.
+     */
+    float lockOnAngleMin;
+    float lockOnAngleMax;
+    unsigned char unmodeled_18c[4];
+    /*
+     * _CheckLockOn (ov12:0x00a1c098) copies the locked-on target's last read
+     * world position here (XrgCopyVector from __RgGeomPointGetPos's result)
+     * whenever a target is present, whether or not it is within
+     * lockOnAngleMin/lockOnAngleMax.
+     */
+    RgVector targetPosition;
     int targeting;
     int lockedOn;
     int shotMotionOffset;
@@ -120,11 +164,28 @@ struct RgWeapon {
      * driver; no other function of this allocation touches either field.
      */
     int shotSound;
-    unsigned char unmodeled_1cc[4];
+    /*
+     * _HitRobotAttackType (ov12:0x00a1a720) plays a distinct impact sound
+     * through XrgSoundRingVol using sound as the driver: this is its own
+     * soundId, separate from shotSound above. This int exactly fills the
+     * published unmodeled_1cc[4] span (4 bytes), so bgHitSound's offset
+     * (0x1d0) is unchanged.
+     */
+    int robotHitSound;
     int bgHitSound;
     unsigned char unmodeled_1d4[4];
     int shotVolume;
-    unsigned char unmodeled_1dc[0x14];
+    /*
+     * _HitRobotAttackType (ov12:0x00a1a720) reads this as XrgSoundRingVol's
+     * volume argument for robotHitSound above.
+     *
+     * The published unmodeled_1dc[0x14] (0x1dc..0x1f0, 20 bytes) is split
+     * into this int robotHitVolume (4 bytes) + unmodeled_1e0[0x10]
+     * (0x1e0..0x1f0, 16 bytes): 4+0x10 = 0x14, so RgWeapon's total size
+     * (0x1f0 bytes) is unchanged.
+     */
+    int robotHitVolume;
+    unsigned char unmodeled_1e0[0x10];
 };
 
 /*
@@ -137,7 +198,20 @@ struct RgWeapon {
  */
 typedef struct RgWeaponAttackType {
     RgWeapon common;
-    unsigned char unmodeled_1f0[0x0c];
+    /*
+     * _PassTimeAttackType (ov12:0x00a1a5f0) reads followJoint/followActor as
+     * XrgActorGetJointLocal's joint/actor pair (only sampled while
+     * followActor is non-zero) to keep the attack's tracking geometry point
+     * riding the actor's joint each frame.
+     *
+     * The published unmodeled_1f0[0x0c] (0x1f0..0x1fc, 12 bytes) is split
+     * into this int followJoint (4) + unmodeled_1f4[4] (0x1f4..0x1f8, 4
+     * bytes) + XrgActor *followActor (4): 4+4+4 = 0xc, so damage's offset
+     * (0x1fc) is unchanged.
+     */
+    int followJoint;
+    unsigned char unmodeled_1f4[4];
+    XrgActor *followActor;
     float damage;
     /*
      * _DestructAttackType (ov12:0x00a1a6d0) reads this as the collision
@@ -145,7 +219,19 @@ typedef struct RgWeaponAttackType {
      * allocation touches it.
      */
     int geom;
-    unsigned char unmodeled_204[0x1c];
+    unsigned char unmodeled_204[0x0c];
+    /*
+     * _PassTimeAttackType (ov12:0x00a1a5f0) keeps the tracking geometry
+     * point's own copy of the position RgGeomPointMovePos last moved it to,
+     * so a frame with no new joint sample (followActor == 0) still has a
+     * position to fall back to.
+     *
+     * The published unmodeled_204[0x1c] (0x204..0x220, 28 bytes) is split
+     * into unmodeled_204[0x0c] (0x204..0x210, 12 bytes) + this RgVector
+     * followPosition (16 bytes): 0xc+0x10 = 0x1c, so active's offset (0x220)
+     * is unchanged.
+     */
+    RgVector followPosition;
     int active;
     /*
      * _ShotAttackType/_ShotStopAttackType (ov12:0x00a1a540/0x00a1a5a8) guard
@@ -200,6 +286,72 @@ typedef struct RgWeaponAttackEssence RgWeaponAttackEssence;
 typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
 typedef struct RgWeaponShieldEssence RgWeaponShieldEssence;
 typedef struct RgWeaponEnergyEssence RgWeaponEnergyEssence;
+
+/*
+ * CreateRgWeaponFromEssence (ov12:0x00a1b420) is the shared essence -> weapon
+ * front end every concrete essence type's create-info pair goes through: it
+ * only ever reads the create-method slot every essence type places at +0x00
+ * (RgWeaponShieldEssence.m_pCreateMethod below, RgWeaponUnArmedEssenceInit's
+ * own m_pCreateMethod further below), so only that one member is claimed
+ * through this generic view.
+ */
+typedef struct RgWeaponEssenceCommon {
+    RgWeapon *(*m_pCreateMethod)(void *essence, RgWeaponCreateInfo *info);
+} RgWeaponEssenceCommon;
+
+/*
+ * InitRgWeaponShotEssence (ov12:0x00a1a4d8) evidences an in-memory
+ * essence/init object at RgWeaponShotEssence's own address: a create-method
+ * slot at +0x00 it points at _CreateWeaponShotType, a mode word at +0x04 it
+ * sets to 0x20 (the same bit _CommonDisp tests as weapon->controlFlags &
+ * 0x20), and a float at +0x3B0 it sets to 0.4f: the same offset
+ * include/ov12/rg_weapon_db.h's own RgWeaponShotEssence.busyTime names from
+ * the weapon database's "busy" key, so this allocation's own view of that
+ * span keeps the same field name. No byte outside these spans is claimed.
+ */
+typedef struct RgWeaponShotEssenceInit {
+    RgWeaponShotType *(*m_pCreateMethod)(RgWeaponShotEssence *pEss,
+                                          RgWeaponCreateInfo *pInfo);
+    int controlMode;
+    unsigned char unmodeled_08[0x3a8];
+    float busyTime;
+} RgWeaponShotEssenceInit;
+
+/*
+ * InitRgWeaponUnArmedEssence (ov12:0x00a1ac90) evidences an in-memory
+ * essence/init object at RgWeaponUnArmedEssence's own address: a create-method
+ * slot at +0x00 it points at _CreateWeaponUnArmedType (the same
+ * m_pCreateMethod pattern InitRgWeaponShieldEssence's RgWeaponShieldEssence
+ * uses below), a mode word at +0x04 it sets to 76, a six-row table at +0xB0
+ * (RG_ACTOR_CHAR_ROBNUM rows of 3, the same offset and shape as
+ * RgWeaponShieldEssence's own table) it fills with motion IDs 21 and 22 and a
+ * trailing -1 per row, an int at +0x188 it always clears to 0 (no function of
+ * this allocation reads it back), and a terminator int at +0x3B0 it always
+ * sets to -1. No byte outside these spans is claimed.
+ *
+ * ov12/tu027's src/ov12/rg_weapon_db.c (include/ov12/rg_weapon_db.h)
+ * independently completes the SAME tag, RgWeaponUnArmedEssence, as a
+ * data-driven weapon-database record: unmodeled_000[0x3b8] + damage at +0x3b8
+ * + hitEffectName at +0x3bc (0x3e0 bytes total). That is a different field
+ * layout at overlapping offsets (a float at +0x3b8 where this evidence claims
+ * no member up to the terminator at +0x3b0..+0x3b4), not a partial view of
+ * this same object, so RgWeaponUnArmedEssence itself is left exactly as
+ * published above (an opaque forward declaration only: _CreateWeaponUnArmedType
+ * already uses it that way) and this allocation's own evidence is named
+ * RgWeaponUnArmedEssenceInit instead, cast from the RgWeaponUnArmedEssence
+ * pointer InitRgWeaponUnArmedEssence receives.
+ */
+typedef struct RgWeaponUnArmedEssenceInit {
+    RgWeapon *(*m_pCreateMethod)(RgWeaponUnArmedEssence *pEss,
+                                  RgWeaponCreateInfo *pInfo);
+    int controlMode;
+    unsigned char unmodeled_08[0xa8];
+    int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
+    unsigned char unmodeled_f8[0x90];
+    int resetFlag;
+    unsigned char unmodeled_18c[0x224];
+    int terminator;
+} RgWeaponUnArmedEssenceInit;
 
 /*
  * InitRgWeaponShieldEssence (ov12:0x00a1aed8) evidences the interior of
@@ -267,7 +419,8 @@ struct RgWeaponShieldEssence {
  * extent is not claimed here.
  */
 typedef struct RgWeaponShotRequest RgWeaponShotRequest;
-typedef int (*RgWeaponGetPosDirFunc)(RgWeaponShotRequest *info);
+typedef int (*RgWeaponGetPosDirFunc)(RgWeaponShotRequest *info, RgVector position,
+                                     RgVector direction);
 
 struct RgWeaponShotRequest {
     RgWeapon *weapon;

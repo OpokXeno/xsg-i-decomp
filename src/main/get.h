@@ -114,6 +114,60 @@ extern void Get_MiddlePoint(const float *start, const float *following,
 
 float Get_Multi_Max_Under(float value, float step, float maximum);
 
+/*
+ * UnduDataGetHeader's result type: src/main/layout.h, src/main/call_java_method.h
+ * and src/main/chr.h already declare this tag the same way (canon:
+ * config/header-canon.json, src/math/main/review09-002f6c50/private.h);
+ * this TU only carries a pointer to it, so it stays opaque here.
+ */
+typedef struct LayoutHeader LayoutHeader;
+
+/* canon: config/header-canon.json (src/math/main/review09-002f6c50/private.h) */
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+
+/*
+ * The player's own Actor pointer at GameLoopState[1], documented the same
+ * way by src/main/chr.h and src/main/enemy_2.h (main VA 0x00338680, +0x4
+ * word). src/main/chr.h and src/main/near_dir.h already own the "Actor" tag
+ * with their own full struct definitions, so this TU reads the one field it
+ * needs through its own minimal, differently-named view instead of a second
+ * definition of that tag: src/main/chr.h documents data_header at the same
+ * +0x4e0 offset.
+ */
+typedef unsigned int GameLoopStateWords[];
+extern GameLoopStateWords GameLoopState;
+
+typedef struct PlayerActorHeaderView {
+    unsigned char unmodeled_000[0x4e0];
+    LayoutHeader *data_header;             /* +0x4e0 */
+} PlayerActorHeaderView;
+
+/*
+ * UnduParamInit and UnduCheck are still original bytes in src/main/Undulate.c
+ * (main); this is their query parameter block, TU-local until that TU has
+ * its own header. Only the fields Get_HeightAttr/Get_Height touch are
+ * modeled.
+ */
+typedef struct UnduParam {
+    int queryFlags;                        /* +0x00 */
+    unsigned char unmodeled_04[0x08 - 0x04];
+    short attrMask;                        /* +0x08 */
+    unsigned char unmodeled_0a[0x18 - 0x0a];
+    LayoutHeader *header;                  /* +0x18 */
+} UnduParam;
+
+extern void UnduParamInit(UnduParam *param);
+extern void UnduCheck(const Point4 *position, void *exclude, UnduParam *param);
+
+/* Original symbol UnduTest, main VA 0x003b2610, size 0x40
+   (config/symbols/main.txt); Undulate.c has no header of its own yet. */
+extern UnduParam UnduTest;
+
+void Get_HeightAttr(const Point4 *position, int mapIndex, int attrMask,
+                    UnduParam *param);
+
+void Get_Height(const Point4 *position, int mapIndex, int attrMask);
+
 int Get_Rnd(int min, int max);
 
 extern const float D_004D81C8;

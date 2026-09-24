@@ -170,4 +170,30 @@ extern int D_0095BB44[];
  */
 extern int s_inBackBuffer[];
 
+/*
+ * One named mesh block in a loaded model.  The name matcher below witnesses
+ * the block name at +0x00, its visibility flags at +0x20, and the first
+ * block's material flags at +0xc0.
+ */
+typedef struct NmlModelBlock {
+    char name[0x20];
+    u32 flags;
+    unsigned char unmodeled_024[0x9c];
+    u32 materialFlags;
+} NmlModelBlock;
+
+#define NML_BLOCK_HIDDEN 0x8u
+#define NML_BLOCK_MATERIAL_NAMED_PARTS 0x10u
+
+/*
+ * A loaded model resource.  Its block count is +0x44 and the table at +0xb0
+ * holds byte offsets from this record to individual NmlModelBlock records.
+ */
+typedef struct NmlModel {
+    unsigned char unmodeled_000[0x44];
+    int blockCount;
+    unsigned char unmodeled_048[0x68];
+    int blockOffsets[1];
+} NmlModel;
+
 #endif /* SRC_MAIN_NML_MODEL_SET_H */

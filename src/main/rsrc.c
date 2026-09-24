@@ -103,7 +103,13 @@ void RSRC_init(RsrcManager *manager)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/rsrc", RSRC_check);
+int RSRC_check(RsrcManager *manager, int size)
+{
+    if ((u32)((manager->heap_cursor + size) - manager->heap_origin) < manager->heap_bound) {
+        return 0;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/rsrc", RSRC_alloc);
 

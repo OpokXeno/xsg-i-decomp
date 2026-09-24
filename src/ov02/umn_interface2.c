@@ -20,8 +20,10 @@ typedef struct UmnInterface2State {
     unsigned char intensity_b; /* decremented by 2 each frame until zero */
 } UmnInterface2State;
 
-extern void DrawUmnInterface2(void);
-extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(void), void *arg);
+/* The font queue calls draw(context, arg) with the arg registered below;
+ * the context record (read at +0x00 and +0x30) is not yet recovered. */
+static void DrawUmnInterface2(void *context, void *arg);
+extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(void *context, void *arg), void *arg);
 extern UmnInterface2State *UmnInterface2;
 
 void UmnInterface2Main(void) {

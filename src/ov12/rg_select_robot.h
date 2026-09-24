@@ -13,9 +13,15 @@ typedef struct RgSelectRobot RgSelectRobot;
  * allocates 0x168 bytes for one; no member or size beyond +0x138 is
  * claimed.
  */
+/*
+ * _InitSelRob stores the preview-actor heap arena's base pointer at
+ * +0x164; _DestructSelRob frees it back from the same field.
+ */
 struct RgSelectRobot {
     unsigned char unmodeled_00[0x138];
     float screenPos;
+    unsigned char unmodeled_13c[0x28];
+    void *heapBuffer;
 };
 
 /* The allocation size CreateRgSelectRobot requests for one RgSelectRobot. */

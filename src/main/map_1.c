@@ -45,7 +45,7 @@ extern XglPacket *xglPacketGetCurrent(void);
 extern void xglRenderDrawFlipPk(XglPacket *packet);
 extern void nmlModelSetFadeInCancel(int model_id);
 extern void nmlModelSetFadeOutCancel(int model_id);
-extern void taskMapChange(void *task);
+static void taskMapChange(void *task);
 extern MapTaskState tsk;
 extern MapRenderState sRender;
 

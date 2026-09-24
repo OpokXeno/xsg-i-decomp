@@ -38,7 +38,66 @@ INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeRegRemove);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeRegChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeLoadSub);
+#include "ov01/calc.h"
+
+/* calcUPGet's return type comes from its definer, ov01/tu004 calc.c
+ * (published include/ov01/calc.h); calcUPGet itself is still asm there, so
+ * this TU declares it the same way ov01/tu002 unit_cmd.c does. */
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
+
+/*
+ * dataSndSeLoadSub's output descriptor. Only the three words the function
+ * itself touches are evidenced: seType (sw zero,0(s2) ov01:0x00a2d504; sw
+ * s3,0(s2) ov01:0x00a2d574), dest (lw a1,4(s2) ov01:0x00a2d540, read only)
+ * and size (sw a1,8(s2) ov01:0x00a2d570).
+ */
+typedef struct {
+    int seType; /* +0x00: echoes the resolved sound-effect index; 0 on lookup failure */
+    void *dest; /* +0x04: destination address dataFileLoadNB loads into */
+    int size;   /* +0x08: file size rounded up to a 2048-byte CD sector */
+} SndSeLoadWork;
+
+extern int dataSndSeNameGet(char *name, ObjectTask *unit, int seType);
+extern void dataFileLoadNB(void *buffer, void *address);
+extern char *strcpy(char *destination, const char *source);
+extern char *strcat(char *destination, const char *source);
+extern int xglCdGetFileSize(const char *name);
+extern int printf(const char *format, ...);
+extern char fileName[];
+extern char *sndSeNameBase;
+extern char *sndSeNameExt;
+extern const char D_00A4E6A8[];
+extern const char D_00A4E6D0[];
+
+int dataSndSeLoadSub(ObjectTask *unit, int seType, SndSeLoadWork *work)
+{
+    char name;
+    int fileSize;
+    int withSlack;
+    int clamped;
+    int roundedSize;
+
+    dataSndSeNameGet(&name, unit, seType);
+    if (name == 0) {
+        printf(D_00A4E6A8, calcUPGet(unit)->charaId, seType);
+        work->seType = 0;
+        return 0;
+    }
+
+    strcpy(fileName, sndSeNameBase);
+    strcat(fileName, &name);
+    strcat(fileName, sndSeNameExt);
+    dataFileLoadNB(fileName, work->dest);
+
+    fileSize = xglCdGetFileSize(fileName);
+    withSlack = fileSize + 0x7FF;
+    clamped = (withSlack < 0) ? (fileSize + 0xFFE) : withSlack;
+    roundedSize = (clamped >> 0xB) << 0xB;
+    work->size = roundedSize;
+    printf(D_00A4E6D0, roundedSize);
+    work->seType = seType;
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeLoad);
 
@@ -54,7 +113,21 @@ INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSysSePlay);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSePlay);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeStop);
+extern int sndBankGet(void);
+extern void xglSoundEffectStopID(int sound_id, int flags);
+extern const char D_00A4E810[];
+
+int sndSeStop(int unused, int pack)
+{
+    int stopped = 0;
+
+    if (pack != 0) {
+        xglSoundEffectStopID(sndBankGet() << 0x10, 0);
+        printf(D_00A4E810, pack);
+        stopped = 1;
+    }
+    return stopped;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndConvRegNo);
 
@@ -62,12 +135,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndBankGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndConvSpid);
 
-#include "ov01/calc.h"
-
-/* calcUPGet's return type comes from its definer, ov01/tu004 calc.c
- * (published include/ov01/calc.h); calcUPGet itself is still asm there, so
- * this TU declares it the same way ov01/tu002 unit_cmd.c does. */
-extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 extern int dataNormIdxGet(ObjectTask *unit, int seType);
 
 /*
@@ -110,7 +177,21 @@ int sndConvSe(ObjectTask *unit, int mode, int seType)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndConvHitSe);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeTransPlay);
+extern void *objEntryPure();
+extern int sndSeTrans(int seId, int volume);
+void sndSeTransPlayObj(SndSePlayTask *task);
+
+void sndSeTransPlay(int seId, int volume, int pan)
+{
+    SndSePlayTask *task;
+
+    if (sndSeTrans(seId, volume) != 0) {
+        task = objEntryPure(sndSeTransPlayObj);
+        task->seId = seId;
+        task->volume = volume;
+        task->pan = pan;
+    }
+}
 
 void sndSeTransPlayObj(SndSePlayTask *task)
 {
@@ -151,7 +232,16 @@ void sndMuFadeIn(void)
     xglSoundSequenceNormal3(0, SND_MU_VOLUME_MAX, SND_MU_FADE_TIME);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndMuTransPlay);
+extern const char D_00A4E860[];
+void sndMuTransPlayObj(ObjectTask *task);
+
+void sndMuTransPlay(int mode)
+{
+    if (sndMuTrans(mode) != 0) {
+        printf(D_00A4E860, mode);
+        objEntryPure(sndMuTransPlayObj);
+    }
+}
 
 void sndMuTransPlayObj(ObjectTask *task)
 {

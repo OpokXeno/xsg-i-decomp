@@ -63,13 +63,35 @@ static void _KillLoad(void)
     s_pWhoAreYou = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _KillLoadIfMe);
+static void _KillLoadIfMe(void *owner)
+{
+    if (s_uReqNum != 0) {
+        if (s_pWhoAreYou == owner) {
+            _KillLoad();
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ReqLoad);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _IsEndOfLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _JobLoad);
+extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
+extern void *s_apBuf[4];
+extern char s_aszData[4][64];
+
+static void _JobLoad(void)
+{
+    if (s_uReqNum != 0 && s_uOkNum < s_uReqNum) {
+        if (s_bLoading == 0 &&
+            xglCdReadFile(s_aszData[s_uOkNum], s_apBuf[s_uOkNum], 1,
+                          (int) _ReadCallback) >= 0) {
+            s_bLoading = 1;
+        }
+        return;
+    }
+    s_pWhoAreYou = 0;
+}
 
 /*
  * Reset the paired request-completion counters through the helper interface
@@ -96,7 +118,17 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _InitAct);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _select_light);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ActorPos);
+extern void XrgLinearIntpVector(RgVector destination, RgVector first,
+                                 RgVector second, float weight);
+/* The two positions _ActorPos interpolates between, weighted by
+   RgSelectRobot::screenPos: index 1 is the weighted argument, index 0 the
+   complement-weighted one. */
+extern RgVector s_aPos_1[2];
+
+static void _ActorPos(RgSelectRobot *pCont, RgVector position)
+{
+    XrgLinearIntpVector(position, s_aPos_1[1], s_aPos_1[0], pCont->screenPos);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ActorPosUpdate);
 
@@ -110,9 +142,35 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _JobAct);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _DrawAct);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _InitSelRob);
+extern RgHeap *InstanceOfRgHeapData(void);
+static void _InitAct(RgSelectRobot *pCont, void *heap, int regionBytes, int count);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _DestructSelRob);
+void _InitSelRob(RgSelectRobot *pCont)
+{
+    void *heapBuffer;
+
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 720);
+    }
+    _InitLoad();
+    heapBuffer = RgHeapAlloc(InstanceOfRgHeapData(), 0xC00000U, D_00A56DA0, 726);
+    pCont->heapBuffer = heapBuffer;
+    _InitAct(pCont, heapBuffer, 0xC0000, 1);
+}
+
+extern void ACT_init(void);
+static void _DestructAct(RgSelectRobot *pCont);
+
+void _DestructSelRob(RgSelectRobot *pCont)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 734);
+    }
+    _KillLoad();
+    _DestructAct(pCont);
+    RgHeapFree(InstanceOfRgHeapData(), pCont->heapBuffer, D_00A56DA0, 737);
+    ACT_init();
+}
 
 RgSelectRobot *CreateRgSelectRobot(void)
 {
@@ -144,7 +202,23 @@ void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotSetMode);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotSet);
+extern void InitXrgActorEssence(void *essence, int actorID);
+static void _ReqAct(RgSelectRobot *pCont, void *essence, int *accessoryIDs,
+                     int *extra);
+
+void RgSelectRobotSet(RgSelectRobot *pCont, int *selection)
+{
+    /* Sized to match InitXrgActorEssence's record (xrg_actor.c,
+       ov12/tu080); RgSelectRobotSet never reads or writes its fields
+       directly. */
+    unsigned char essence[0x88];
+
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 801);
+    }
+    InitXrgActorEssence(essence, selection[0]);
+    _ReqAct(pCont, essence, selection + 1, selection + 4);
+}
 
 void RgSelectRobotPassTime(RgSelectRobot *pCont, float deltaTime)
 {

@@ -36,7 +36,16 @@ struct RgCamera {
     RgVector target;                   /* +0x20 */
     RgVector up;                       /* +0x30 */
     int actionState[7];                /* +0x40..+0x58 */
+    unsigned char unmodeled_5c[0x14];  /* +0x5c */
+    float farDistance;                 /* +0x70 */
 };
+
+/*
+ * RgCameraSetFarMode (ov12:0x00a124c8) is the only claimed function that
+ * reaches past the action-state block; it writes farDistance to 14.0 or 8.0
+ * according to its enable argument. The bytes between the action-state
+ * block (+0x5c) and this field are not recovered yet.
+ */
 
 /* The predicate-gated countdown timer used by the Version3 camera mode. */
 typedef struct RgVer3Timer {

@@ -13,7 +13,7 @@ int sceRead(int descriptor, void *buffer, int bytes);
 
 int xglHddCheck2(void);
 
-extern int xglHddCheckCore(void);
+static int xglHddCheckCore(void);
 
 extern int xglHddMcUmount(void);
 
@@ -70,6 +70,27 @@ extern int sceDevctl(const char *device, int command, const void *input,
  */
 extern int sceOpen(const char *path, int flags, ...);
 
+extern int xglHddMcCheckYourSaves(int);
+
 extern int xglHddMcGetFree(void);
+
+/*
+ * HddInstallCBparam (main:0x004DC3B0) points at the install context
+ * xglHddInstallReadCB reports progress through: callback is invoked with
+ * command 6 and a computed offset built from base and the current read
+ * value, param is passed through unchanged, status keeps callback's last
+ * result, and total is the read count the first (event == 1) call records.
+ */
+typedef struct HddInstallCBParam {
+    int (*callback)(int command, int offset, int param);
+    int base;
+    int param;
+    int status;
+    int total;
+} HddInstallCBParam;
+
+extern HddInstallCBParam *HddInstallCBparam;
+
+extern int xglCdReadCancel(void);
 
 #endif /* SRC_MAIN_XGL_HDD_H */

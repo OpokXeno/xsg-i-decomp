@@ -3,7 +3,52 @@
 #include "main/xgl_task.h"
 #include "xgl_task.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_task", xglTaskInitial);
+extern int sceGsResetGraph(int interlace, int omode, int ffmode, int errorjump);
+
+/*
+ * manager is a caller-allocated block: an XglTaskScheduler header followed
+ * immediately by a capacity-element task pool, each element reserving
+ * 0x80 bytes although only the leading XglTaskPrefix of it is modeled
+ * (include/shared.h). This links every element into the scheduler's free
+ * list and returns the address right after the pool.
+ */
+void *xglTaskInitial(void *manager, int capacity, int flags)
+{
+    XglTaskScheduler *scheduler;
+    XglTaskPrefix *task;
+    XglTaskPrefix *next;
+    void *afterPool;
+    int remaining;
+
+    afterPool = 0;
+    scheduler = (XglTaskScheduler *) manager;
+    task = (XglTaskPrefix *)((char *) manager + sizeof(XglTaskScheduler));
+    if (capacity != 0)
+    {
+        if (flags != 0)
+        {
+            sceGsResetGraph(1, 0, 0, 0);
+        }
+        remaining = capacity - 1;
+        scheduler->free_tasks = task;
+        if (remaining > 0)
+        {
+            do
+            {
+                next = (XglTaskPrefix *)((char *) task + 0x80);
+                remaining -= 1;
+                task->next = next;
+                task = next;
+            }
+            while (remaining != 0);
+        }
+        task->next = 0;
+        afterPool = (char *) task + 0x80;
+        scheduler->active_head = 0;
+        scheduler->active_tail = 0;
+    }
+    return afterPool;
+}
 
 XglTaskPrefix *xglTaskEntryPrev(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),

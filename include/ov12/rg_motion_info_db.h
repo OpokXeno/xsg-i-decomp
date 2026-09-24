@@ -10,7 +10,12 @@ typedef struct RgMotionShotInfo RgMotionShotInfo;
  */
 struct RgMotionInfoDB
 {
-    unsigned char unmodeled_000[0x200]; /* +0x000..+0x1FF: the sorted entry-pointer table */
+    /*
+     * +0x000..+0x1FF: the sorted entry-pointer table, indexed 0..entryCount-1;
+     * each slot heads a next-chain of same-index RgMotionShotInfo entries
+     * (_TableFree walks and frees them).
+     */
+    RgMotionShotInfo *table[0x80];
     int entryCount;                     /* +0x200: m_uTblSize, cleared by _TableInit */
     unsigned char unmodeled_204[0xC];   /* +0x204..+0x20F: untouched by this allocation */
     RgMotionShotInfo defaultShotInfo;   /* +0x210: fallback RgMotionInfoDBGet returns when no match is found */

@@ -2,15 +2,105 @@
 #include "shared.h"
 #include "main/xgl_packet.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetImageItem);
+/*
+ * One 0x24-byte entry of the working image list svImageListCreate clears
+ * and svGetImageItem indexes; only its address is ever taken in this
+ * allocation, so its fields stay unmodeled.
+ */
+typedef struct SvImageItem {
+    unsigned char unmodeled_00[0x24];
+} SvImageItem;
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svImageListCreate);
+/*
+ * The single working image list: a 0x1C-byte header (untouched by this
+ * allocation) followed by 0x100 SvImageItem entries (0x1C + 0x100*0x24 =
+ * 0x241C, svImageListCreate's own clear size).
+ */
+typedef struct SvImageList {
+    unsigned char unmodeled_header[0x1C];
+    SvImageItem items[0x100];
+} SvImageList;
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svImageListDestroy);
+extern SvImageList _imageList;
+
+void *svGetImageItem(int index) {
+    return &_imageList.items[index];
+}
+
+void svImageListCreate(void) {
+    memset(&_imageList, 0, sizeof(SvImageList));
+}
+
+/*
+ * One 0x24-byte entry of an image mapper's item table: only the leading
+ * dword svImageListDestroy clears is modeled.
+ */
+typedef struct SvImageMapperItem {
+    int used; /* 0x00, cleared when non-zero */
+    unsigned char unmodeled_04[0x24 - 4];
+} SvImageMapperItem;
+
+/*
+ * SvTypeListFields and SvTypeList (below, next to svDeleteImageMapper) name
+ * the same physical 0x241C-byte per-type record svGetTypeList indexes; they
+ * are not two different objects. svDeleteImageMapper's own text completes
+ * the SvTypeList tag with only its one evidenced field (entryCount, +0x14)
+ * and is published, unallocated prelude here, so it is restated byte-
+ * identical and never grown (AGENTS.md, "Source and acceptance": a
+ * published struct cannot grow). svImageListDestroy and svAddImageMapper
+ * (this allocation) sit earlier in the file and evidence more of the same
+ * record than that completion models, so they read/write it through this
+ * second tag naming only their own fields, at the identical offsets:
+ * `total` (+0x00, unconditionally cleared), `size` (+0x04, read and
+ * archived into `savedSize` at +0x0C before the clear), `width`/`height`
+ * (+0x10/+0x12, the two fields svAddImageMapper stores its own second and
+ * fourth arguments into, both cleared here) and `entryCount` (+0x14, the
+ * same field and offset SvTypeList already names). Bytes 0x08-0x0B stay an
+ * explicit unmodeled span; nothing in this allocation touches them.
+ */
+typedef struct SvTypeList SvTypeList;
+
+typedef struct SvTypeListFields {
+    int total;         /* 0x00 */
+    int size;           /* 0x04 */
+    unsigned char unmodeled_08[4];
+    int savedSize;       /* 0x0C */
+    short width;          /* 0x10 */
+    short height;         /* 0x12 */
+    short entryCount;     /* 0x14 */
+} SvTypeListFields;
+
+void svImageListDestroy(SvTypeList *typeList)
+{
+  SvTypeListFields *header = (SvTypeListFields *) typeList;
+  SvImageMapperItem *item = (SvImageMapperItem *) (((unsigned char *) typeList) + 0x24);
+  int count = 0xFF;
+
+  do
+  {
+    if (item->used != 0)
+    {
+      item->used = 0;
+    }
+    count -= 1;
+    item += 1;
+  }
+  while (count >= 0);
+
+  header->savedSize = header->size;
+  header->total = 0;
+  header->width = 0;
+  header->height = 0;
+  header->entryCount = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svImageListAlloc);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetTypeList);
+extern unsigned char _imageMapper[];
+
+static SvTypeList * svGetTypeList(int type) {
+    return (SvTypeList *) (_imageMapper + (type * 0x241C));
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetImageListItemSub);
 
@@ -63,7 +153,31 @@ void svLoadClut(ClutUploadRequest *clut)
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svLoadImageList);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svLoadMapperList);
+s16 svLoadImageList(void *);
+
+s16 svLoadMapperList(void)
+{
+  s16 ret;
+  s16 loadResult;
+  int reverseIndex;
+  int typeOffset;
+
+  typeOffset = 0;
+  reverseIndex = 0x27;
+  do
+  {
+    ret = *((s16 *) (((unsigned char *) (((s16 *) ((s16 *) (((int) ((void *) _imageMapper)) + 0x14))) + ((reverseIndex - 39) * -4622))) + 0));
+    if (ret > 0)
+    {
+      loadResult = svLoadImageList((void *) (typeOffset + ((int) ((void *) _imageMapper))));
+      ret = loadResult;
+    }
+    typeOffset += 0x241C;
+    reverseIndex -= 1;
+  }
+  while (reverseIndex >= 0);
+  return ret;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetSizeBit);
 
@@ -75,7 +189,59 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddModel);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddScript2);
+int svImageListAlloc();
+
+/*
+ * One svAddScript2 sub-record, at +0x1C of a 0x24-byte slot of the type
+ * list's item array. Only the fields this function itself writes are
+ * modeled, at their byte offset from this sub-record's own base: `codePtr`
+ * (+0x00, the script's own +0xC0 address), `active` (+0x08, always 1),
+ * `kind` (+0x0C, always 5, matching this function's own "script" name),
+ * `id` (+0x0E, the script's own +0xA halfword), two cleared halfwords
+ * (+0x18/+0x1A) and `dataPtr` (+0x20, the script's own +0x14 address).
+ * +0x20 (slot +0x3C) lands past the slot's own 0x24-byte stride, into the
+ * next slot's leading bytes -- evidenced by the original bytes, not
+ * treated as a bug.
+ */
+typedef struct SvScriptSlot {
+    void *codePtr;                  /* 0x00 */
+    unsigned char unmodeled_04[4];
+    int active;                      /* 0x08 */
+    short kind;                       /* 0x0C */
+    short id;                          /* 0x0E */
+    unsigned char unmodeled_10[8];
+    short clearedA;                     /* 0x18 */
+    short clearedB;                      /* 0x1A */
+    unsigned char unmodeled_1C[4];
+    void *dataPtr;                        /* 0x20 */
+} SvScriptSlot;
+
+static int svAddScript2(int typeListAddr, void *script)
+{
+  int index;
+  void *codePtr;
+  void *dataPtr;
+  void *slot;
+  SvScriptSlot *sub;
+
+  index = svImageListAlloc(typeListAddr);
+  codePtr = (unsigned char *) script + 0xC0;
+  dataPtr = (unsigned char *) script + 0x14;
+  slot = (void *) (typeListAddr + (index * 0x24));
+  if (index < 0)
+  {
+    return -1;
+  }
+  sub = (SvScriptSlot *) ((unsigned char *) slot + 0x1C);
+  sub->kind = 5;
+  sub->dataPtr = dataPtr;
+  sub->codePtr = codePtr;
+  sub->id = (short) *((u16 *) (((unsigned char *) script) + 0xA));
+  sub->active = 1;
+  sub->clearedB = 0;
+  sub->clearedA = 0;
+  return index;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAnalyzeChunk);
 
@@ -83,7 +249,22 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svInitImageMapper);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svInitRefImage);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddImageMapper);
+int svAnalyzeChunk(SvTypeList *typeList, void *chunk);
+
+void svAddImageMapper(int type, int width, void *chunk, int height) {
+    SvTypeList *typeList;
+    SvTypeListFields *header;
+
+    typeList = svGetTypeList(type);
+    header = (SvTypeListFields *) typeList;
+    if (header->entryCount != 0) {
+        svImageListDestroy(typeList);
+    }
+    header->height = (short) height;
+    header->width = (short) width;
+    header->entryCount = (short) ((u16) header->entryCount + 1);
+    svAnalyzeChunk(typeList, chunk);
+}
 
 /*
  * One image mapper's list: svGetTypeList (LOCAL in the original symbol
@@ -165,7 +346,9 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsSetZTestEnv);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsRestoreEnv);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", sefInitClipViewVolume);
+static void sefInitClipViewVolume(void *view) {
+    __asm__ __volatile__("lqc2 vf12, 0(%0)\n\tlqc2 vf13, 16(%0)\n\tlqc2 vf14, 32(%0)\n\tlqc2 vf15, 48(%0)\n\tlqc2 vf16, 64(%0)\n\tlqc2 vf17, 80(%0)\n\tlqc2 vf18, 96(%0)\n\tlqc2 vf19, 112(%0)\n\tnop" :  : "r"(view) : "memory");
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", sefClipViewVolumeA);
 
@@ -326,12 +509,13 @@ static void svDrawSchedulerBlk(int eftCate, int eftNo)
 
 extern int _draw3D;
 
-void sdvDrawAlters(void);
+/* Draws the alters whose group (+0x0E) equals layer. */
+void sdvDrawAlters(int layer);
 
-static void svDrawAlters(void)
+static void svDrawAlters(int layer)
 {
     if (_draw3D == 0) {
-        sdvDrawAlters();
+        sdvDrawAlters(layer);
     }
 }
 
@@ -353,7 +537,7 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDrawSchedulerParticle);
 extern int _nEffect2D;
 extern int _nowImage;
 
-void svDrawSchedulerParticle(void);
+static void svDrawSchedulerParticle(void);
 
 void svDrawScheduler2D(void)
 {
@@ -413,7 +597,9 @@ void SGsInitGifPacket(SGsPacket *packet)
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsOpenGifPacket);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsCloseGifPacket);
+void SGsCloseGifPacket(SGsPacket *packet) {
+    packet->base[packet->tagIndex].dword[0] |= packet->loopCount;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsAddReg);
 

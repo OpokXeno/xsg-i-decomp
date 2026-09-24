@@ -4,11 +4,55 @@
 #include "common.h"
 #include "shared.h"
 #include "ov12/rg_bxx.h"
+#include "ov12/rg_piclist.h"
+#include "ov12/rg_draw.h"
 #include "rg_select_agws.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _disp_pic);
+/*
+ * The 2D paint context (defined by ov12/tu086 xrg_paint2d.c); this TU only
+ * forwards the pointer to the XrgPaint2D* calls, matching src/ov12/
+ * rg_announce.h's own opaque typedef for the same handle.
+ */
+typedef struct XrgPaint2D XrgPaint2D;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _disp_pic_pl);
+extern void XrgPaint2DUseTexture(XrgPaint2D *paint, void *pic);
+extern void XrgPaint2DAlpha(XrgPaint2D *paint, int blendMode);
+extern void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
+                               int width, int height);
+
+/*
+ * XrgPaint2DDrawXYWH's mode word: bit 0x20 takes the drawn extent from the
+ * bound picture instead of the width/height arguments (same convention as
+ * src/ov12/rg_announce.h's XRG_PAINT2D_MODE_USE_PIC_SIZE).
+ */
+#define XRG_PAINT2D_MODE_USE_PIC_SIZE 0x20
+#define XRG_PAINT2D_BLEND_LINEAR 0
+
+static void _disp_pic(XrgPaint2D *paint, void *pic, int x, int y)
+{
+    XrgPaint2DUseTexture(paint, pic);
+    XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
+    XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+}
+
+/*
+ * Each entry is one player's paint tint, copied wholesale into the paint
+ * context by XrgPaint2DColor with a single quadword (the same 0x10-byte
+ * record src/ov12/rg_title.c's own XrgColor names, owned by that TU);
+ * s_aPlayerCol's own size:0x20 (config/symbols/ov12.txt) is two such
+ * entries, indexed here without completing that type.
+ */
+extern void XrgPaint2DColor(XrgPaint2D *paint, const void *color);
+extern unsigned char s_aPlayerCol[2][0x10];
+
+static void _disp_pic_pl(XrgPaint2D *paint, void *pic, int x, int y,
+                         int playerIndex)
+{
+    XrgPaint2DUseTexture(paint, pic);
+    XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
+    XrgPaint2DColor(paint, s_aPlayerCol[playerIndex]);
+    XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+}
 
 extern unsigned char s_aFontTbl_0[];
 
@@ -98,7 +142,7 @@ static void _InitSelectChar(SelChar *pSelChar)
 }
 
 /* Defined above (scaffold); returns s_aeCharTbl[charCursor], or -1 past the table. */
-extern int _CharCursorToCharID(int charCursor);
+static int _CharCursorToCharID(int charCursor);
 
 static int _GetSelectChar(SelChar *pSelChar)
 {
@@ -295,9 +339,49 @@ static void _PassTimeSelWep(SelWep *pSelWep)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _EquipCurIDToEquipType);
+extern const char D_00A56720[]; /* "unknown type select ID %d" */
+extern void RgError(const char *message, const char *source_file, int line, ...);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetSelTypeCursor);
+static int _EquipCurIDToEquipType(int curID)
+{
+    int eType;
+
+    eType = -1;
+    switch (curID) {
+    case 0:
+        eType = 0;
+        break;
+    case 1:
+        eType = 1;
+        break;
+    case 2:
+        eType = 2;
+        break;
+    case 3:
+    case 4:
+        break;
+    default:
+        RgError(D_00A56720, D_00A56660, 0x1EC, curID);
+        break;
+    }
+    return eType;
+}
+
+extern const char D_00A56758[]; /* "pSelType != NIL" */
+
+static void _SetSelTypeCursor(SelType *pSelType, int mode)
+{
+    int cursor;
+
+    if (pSelType == 0) {
+        assert_prog(D_00A56758, D_00A56660, 0x1F5);
+    }
+    cursor = pSelType->cursor;
+    if (cursor != mode) {
+        pSelType->oldCursor = cursor;
+        pSelType->cursor = mode;
+    }
+}
 
 static void _ResumeSelTypeOldCursor(SelType *pSelType)
 {
@@ -313,10 +397,6 @@ static int _GetCursorSelType(SelType *pSelType)
     }
     return pSelType->cursor;
 }
-
-/* _EquipCurIDToEquipType (above) is still INCLUDE_ASM; declare it so its
- * caller does not see an implicit declaration. */
-static int _EquipCurIDToEquipType(int curID);
 
 static int _GetTypeSelType(SelType *pSelType)
 {
@@ -344,10 +424,6 @@ static int _GetConfrictSelType(SelType *pSelType, int charIndex)
     return pSelType->confrict[charIndex];
 }
 
-/* _SetSelTypeCursor (above) is still INCLUDE_ASM; declare it so its
- * callers do not see an implicit declaration. */
-static void _SetSelTypeCursor(SelType *pSelType, int mode);
-
 static void _SetDetermModeSelType(SelType *pSelType)
 {
     if (pSelType == 0) {
@@ -364,11 +440,50 @@ static void _SetSpecModeSelType(SelType *pSelType, int mode)
     _SetSelTypeCursor(pSelType, mode);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetCurrentConfrictSelType);
+/*
+ * ov12:0x00a56768 "eType != RG_EQUIP_TYPE_INVALID": the original bound on
+ * _EquipCurIDToEquipType's -1 "unknown type" result, which both functions
+ * below fail on.
+ */
+#define RG_EQUIP_TYPE_INVALID (-1)
+extern const char D_00A56768[]; /* "eType != RG_EQUIP_TYPE_INVALID" */
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetCurrentWeaponSelType);
+static int _GetCurrentConfrictSelType(SelType *pSelType)
+{
+    int eType;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetAllSelType);
+    if (pSelType == 0) {
+        assert_prog(D_00A56758, D_00A56660, 0x23F);
+    }
+    eType = _EquipCurIDToEquipType(pSelType->cursor);
+    if (eType == RG_EQUIP_TYPE_INVALID) {
+        assert_prog(D_00A56768, D_00A56660, 0x241);
+    }
+    return pSelType->confrict[eType];
+}
+
+static void _GetCurrentWeaponSelType(SelType *pSelType)
+{
+    int eType;
+
+    if (pSelType == 0) {
+        assert_prog(D_00A56758, D_00A56660, 0x24A);
+    }
+    eType = _EquipCurIDToEquipType(pSelType->cursor);
+    if (eType == RG_EQUIP_TYPE_INVALID) {
+        assert_prog(D_00A56768, D_00A56660, 0x24C);
+    }
+    _GetEssSelWep(&pSelType->wepList[eType]);
+}
+
+static void _GetAllSelType(SelType *pSelType, int *out)
+{
+    unsigned int i;
+
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+        out[i] = _GetEssSelWep(&pSelType->wepList[i]);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetAllNameOnCursorSelType);
 
@@ -376,7 +491,28 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _CheckConfrictSelType);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetAllCursorByNameSelType);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _InitSelType);
+/*
+ * ov12:0x00a568f0 "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP"
+ * (_TransitToWeaponSelect below) is this allocation's own evidence for the
+ * original sentinel value _InitSelType resets SelType::charID to.
+ */
+#define RG_ACTOR_CHAR_NOP (-1)
+
+static void _InitSelType(SelType *pSelType)
+{
+    unsigned int i;
+
+    if (pSelType == 0) {
+        assert_prog(D_00A56758, D_00A56660, 0x283);
+    }
+    pSelType->cursor = 0;
+    pSelType->oldCursor = 0;
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+        _InitSelWep(&pSelType->wepList[i]);
+        pSelType->confrict[i] = 0;
+    }
+    pSelType->charID = RG_ACTOR_CHAR_NOP;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _InitByCharSelType);
 
@@ -421,7 +557,17 @@ static void _DestructWepListDisp(WepListDisp *pDisp)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DisposeWepListDisp);
+extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
+                       int line);
+
+static void _DisposeWepListDisp(WepListDisp *pDisp)
+{
+    if (pDisp == 0) {
+        assert_prog(D_00A56798, D_00A56660, 0x30F);
+    }
+    _DestructWepListDisp(pDisp);
+    RgHeapFree(InstanceOfRgHeap(), pDisp, D_00A56660, 0x311);
+}
 
 static void _SetSelectorWepListDisp(WepListDisp *pDisp, SelType *pSelType)
 {
@@ -435,11 +581,62 @@ static void _SetSelectorWepListDisp(WepListDisp *pDisp, SelType *pSelType)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DrawWepListDisp);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _InitSelectData);
+extern const char D_00A56838[]; /* "pSelDat != NIL" */
+
+/*
+ * InitRgSelectAGWSData (ov12:0x00a3c248) is still INCLUDE_ASM; this call
+ * only forwards the confrict scratch address below, so no stronger
+ * prototype is evidenced within this allocation.
+ */
+extern void InitRgSelectAGWSData(int *confrict);
+
+/*
+ * _InitByCharSelType (ov12:0x00a39458) is still INCLUDE_ASM; it tail-calls
+ * _CheckConfrictSelType (ov12:0x00a39280, also unallocated), so its return
+ * type follows that unresolved callee. This call's own result is unused.
+ */
+static int _InitByCharSelType(SelType *pSelType, int charID);
+
+static void _InitSelectData(SelDat *pSelDat)
+{
+    SelChar *pSelChar;
+    SelType *pSelType;
+
+    pSelChar = &pSelDat->selChar;
+    pSelType = &pSelDat->selType;
+    if (pSelDat == 0) {
+        assert_prog(D_00A56838, D_00A56660, 0x3CD);
+    }
+    pSelDat->mode = 0;
+    pSelDat->playerMode = 0;
+    _InitSelectChar(pSelChar);
+    _InitSelType(pSelType);
+    _InitByCharSelType(pSelType, _GetSelectChar(pSelChar));
+    InitRgSelectAGWSData(&pSelType->confrict[3]);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DumpSelect__);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SaveCharSelectData);
+extern const char D_00A568C0[]; /* "pData != NIL" */
+
+/*
+ * _GetSelectableSelectChar (ov12, still INCLUDE_ASM) is a sibling of the
+ * accepted _SetSelectableSelectChar below; declare it so this caller does
+ * not see an implicit declaration.
+ */
+static int _GetSelectableSelectChar(SelChar *pSelChar);
+
+static void _SaveCharSelectData(SelDat *pSelDat, int *pData)
+{
+    if (pSelDat == 0) {
+        assert_prog(D_00A56838, D_00A56660, 0x3E9);
+    }
+    if (pData == 0) {
+        assert_prog(D_00A568C0, D_00A56660, 0x3EA);
+    }
+    pData[0] = _GetSelectChar(&pSelDat->selChar);
+    pData[1] = _GetSelectableSelectChar(&pSelDat->selChar);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SaveWepSelectData);
 
@@ -479,12 +676,6 @@ static int _GetModeSelectData(SelDat *pSelDat)
     return pSelDat->mode;
 }
 
-/*
- * _InitSelectData (above) is still INCLUDE_ASM; declare it so this caller
- * does not see an implicit declaration.
- */
-static void _InitSelectData(SelDat *pSelDat);
-
 static SelDat *_CreateSelectData(void)
 {
     SelDat *pSelDat;
@@ -506,11 +697,60 @@ static void _DisposeSelectData(SelDat *pSelDat)
     RgHeapFree(InstanceOfRgHeap(), pSelDat, D_00A56660, 1100);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _TransitToWeaponSelect);
+extern const char D_00A568E0[]; /* "pSel != NIL" */
+extern const char D_00A568F0[]; /* "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP" */
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _TransitToCharSelect);
+/*
+ * _LoadWepSelectData (ov12, still INCLUDE_ASM) mirrors the accepted
+ * _LoadCharSelectData(SelDat *, int *) shape; declare it so this caller does
+ * not see an implicit declaration.
+ */
+static void _LoadWepSelectData(SelDat *pSel, int *pData);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SaveToBaseData);
+static void _TransitToWeaponSelect(SelDat *pSel)
+{
+    int *pData;
+
+    pData = &pSel->selType.confrict[3];
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 0x452);
+    }
+    if (_GetSelectChar(&pSel->selChar) == RG_ACTOR_CHAR_NOP) {
+        assert_prog(D_00A568F0, D_00A56660, 0x453);
+    }
+    pSel->mode = 1;
+    _SaveCharSelectData(pSel, pData);
+    _LoadWepSelectData(pSel, pData);
+}
+
+/*
+ * _SaveWepSelectData (ov12, still INCLUDE_ASM) mirrors the accepted
+ * _LoadCharSelectData(SelDat *, int *) shape; declare it so this caller does
+ * not see an implicit declaration.
+ */
+static void _SaveWepSelectData(SelDat *pSel, int *pData);
+
+static void _TransitToCharSelect(SelDat *pSel)
+{
+    int *pData;
+
+    pData = &pSel->selType.confrict[3];
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 0x462);
+    }
+    _SaveWepSelectData(pSel, pData);
+    _LoadCharSelectData(pSel, pData);
+    pSel->mode = 0;
+}
+
+static void _SaveToBaseData(SelDat *pSel)
+{
+    int *pData;
+
+    pData = &pSel->selType.confrict[3];
+    _SaveWepSelectData(pSel, pData);
+    _SaveCharSelectData(pSel, pData);
+}
 
 extern const char D_00A568E0[]; /* "pSel != NIL" */
 
@@ -522,7 +762,13 @@ static void _TransitToOffSelect(SelDat *pSel)
     pSel->mode = 2;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetPlayerModeSelectData);
+static void _SetPlayerModeSelectData(SelDat *pSelDat, int mode)
+{
+    if (pSelDat == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 1150);
+    }
+    pSelDat->playerMode = mode;
+}
 
 static int _GetPlayerModeSelectData(SelDat *pSel)
 {
@@ -563,9 +809,28 @@ static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetSelectCharID);
+static int _GetSelectCharID(SelDat *pSelDat)
+{
+    if (pSelDat == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 1187);
+    }
+    return _GetSelectChar(&pSelDat->selChar);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetSelectWeps);
+static void _GetSelectWeps(SelDat *pSel, int *essences, int *confricts)
+{
+    SelType *pSelType;
+    unsigned int i;
+
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 0x4AC);
+    }
+    pSelType = &pSel->selType;
+    _GetAllSelType(pSelType, essences);
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+        confricts[i] = _GetConfrictSelType(pSelType, i);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetWepSelection);
 
@@ -728,13 +993,95 @@ static void _init_camera(RgDrawView *pView)
     RgDrawViewInit(pView);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _set_camera);
+extern void XrgClearVector(RgVector vector);
+extern void RgDrawViewSetPosition(RgDrawView *pView, RgVector position);
+extern void RgDrawViewSetRotateX(RgDrawView *pView, float angle);
+extern void RgDrawViewSetRotateY(RgDrawView *pView, float angle);
+extern void RgDrawViewSetRotateZ(RgDrawView *pView, float angle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _Destruct_00A3B940);
+static void _set_camera(RgDrawView *pView)
+{
+    RgVector position;
+
+    XrgClearVector(position);
+    position[1] = 1.0f;
+    position[2] = 4.0f;
+    RgDrawViewSetPosition(pView, position);
+    RgDrawViewSetRotateX(pView, 0.0f);
+    RgDrawViewSetRotateY(pView, 0.0f);
+    RgDrawViewSetRotateZ(pView, 0.0f);
+}
+
+extern const char D_00A568E0[]; /* "pSel != NIL" */
+
+extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
+                                  int line);
+extern void DisposeRgPicList(RgPicList *pList);
+extern void DisposeRgSelectRobot(RgSelectRobot *pRobot);
+extern void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine);
+
+void _Destruct(RgSelectAGWS *pSel) {
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 0x6F0);
+    }
+    DisposeXrgPaint2D_sub(pSel->paint, D_00A56660, 0x6F2);
+    DisposeRgPicList(pSel->pWepSel);
+    DisposeRgPicList(pSel->pWepSelTop);
+    DisposeRgPicList(pSel->pAgwsSel);
+    DisposeRgPicList(pSel->pAgwsSelTop);
+    _DisposeSelectData(pSel->pSelDat);
+    _DisposeWepListDisp(pSel->pWepListDisp);
+    DisposeRgSelectRobot(pSel->pRobot);
+    DisposeRgBxx_sub(pSel->pBxx, D_00A56660, 0x6FA);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _PassTime_00A3B9E8);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _Disp_00A3BE70);
+/*
+ * The picture handle RgPicListGetPic indexes out of a RgPicList (owned by
+ * ov12/tu075, src/ov12/rg_piclist.c, RgPic tag not published yet). This
+ * allocation only forwards it to RgPicSetAlpha and never dereferences it,
+ * so it is passed as void *, matching src/ov12/rg_disp_wpn2p.h's own
+ * convention for a foreign handle its own TU only forwards.
+ */
+extern void RgPicListDraw(RgPicList *pList, XrgPaint2D *paint);
+extern void *RgPicListGetPic(RgPicList *pList, int index);
+extern void RgPicSetAlpha(void *pic, int alpha);
+extern void RgPicListSetOffset(RgPicList *pList, int ofsX, int ofsY);
+extern void RgSelectRobotDisp(RgSelectRobot *pRobot);
+extern void XrgPaint2DFlush(XrgPaint2D *paint);
+extern void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat,
+                                int ofsX, int ofsY);
+extern void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode);
+extern void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
+                             int ofsY);
+extern void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode);
+extern void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat);
+
+void _Disp(RgSelectAGWS *pSel) {
+    SelDat *pSelDat;
+
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 0x7DA);
+    }
+    pSelDat = pSel->pSelDat;
+    _SinPassTime();
+    RgSelectRobotDisp(pSel->pRobot);
+    _DrawPlayerMode(pSel->paint, pSel->pBxx, _GetPlayerModeSelectData(pSelDat));
+    _SetCharSelDisp(pSel->pAgwsSel, &pSelDat->selChar, _GetPlayerModeSelectData(pSelDat));
+    _SetWepSelPicList(pSel->pWepSel, pSelDat);
+    _DrawWepListDisp(pSel->pWepListDisp, pSel->paint, pSel->ofsX, pSel->ofsY);
+    RgPicSetAlpha(RgPicListGetPic(pSel->pAgwsSelTop, 0), 3);
+    RgPicSetAlpha(RgPicListGetPic(pSel->pWepSelTop, 0x19), 3);
+    RgPicListDraw(pSel->pAgwsSelTop, pSel->paint);
+    RgPicListDraw(pSel->pWepSelTop, pSel->paint);
+    RgPicListSetOffset(pSel->pAgwsSel, pSel->ofsX, pSel->ofsY);
+    RgPicListSetOffset(pSel->pWepSel, pSel->ofsX, pSel->ofsY);
+    RgPicListDraw(pSel->pAgwsSel, pSel->paint);
+    RgPicListDraw(pSel->pWepSel, pSel->paint);
+    _DispWepSelOverlaps(pSel->paint, pSel->pBxx, pSelDat, pSel->ofsX, pSel->ofsY);
+    XrgPaint2DFlush(pSel->paint);
+}
 
 extern RgFileSys *InstanceOfRgFileSys(void);
 extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
@@ -775,7 +1122,64 @@ static struct RgPicList *_LoadPicList(const char *pszFileName, struct RgBxx *pBx
     return pList;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _InitSelect);
+/*
+ * This TU's own declaration of CreateRgSelectRobot: _InitSelect forwards
+ * its studio handle to it, while the accepted definition
+ * (ov12/rg_select_robot.c) takes and ignores no argument at all.
+ */
+extern RgSelectRobot *CreateRgSelectRobot(RgDrawStudio *pStudio);
+extern XrgPaint2D *CreateXrgPaint2D_sub(const char *source_file, int line);
+extern RgDraw *InstanceOfRgDraw(void);
+extern RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
+                            int nMode);
+extern RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex);
+extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
+extern void RgPicListSetDrawEnable(RgPicList *pList, int enable);
+
+extern const char D_00A56CB8[]; /* "select.bxx" */
+extern const char D_00A56CC8[]; /* "cannot load select.bxx" */
+extern const char D_00A56CE0[]; /* "agwsseltop.r2d" */
+extern const char D_00A56CF0[]; /* "agwssel.r2d" */
+extern const char D_00A56D00[]; /* "wepseltop.r2d" */
+extern const char D_00A56D10[]; /* "wepsel.r2d" */
+
+void _InitSelect(RgSelectAGWS *pSel) {
+    RgBxx *pBxx;
+    RgDrawStudio *pStudio;
+
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 0x810);
+    }
+    pSel->state = 4;
+    pSel->pSelDat = _CreateSelectData();
+    pStudio = RgDrawGetStudio(InstanceOfRgDraw(), 0);
+    pSel->pStudio = pStudio;
+    _init_camera(RgDrawStudioGetView(pStudio));
+    _set_camera(RgDrawStudioGetView(pSel->pStudio));
+    pBxx = LoadRgBxx_sub(D_00A56CB8, D_00A56660, 0x827);
+    pSel->pBxx = pBxx;
+    if (pBxx == 0) {
+        RgError(D_00A56CC8, D_00A56660, 0x829);
+    }
+    pSel->pAgwsSelTop = _LoadPicList(D_00A56CE0, pSel->pBxx);
+    pSel->pAgwsSel = _LoadPicList(D_00A56CF0, pSel->pBxx);
+    pSel->pWepSelTop = _LoadPicList(D_00A56D00, pSel->pBxx);
+    pSel->pWepSel = _LoadPicList(D_00A56D10, pSel->pBxx);
+    RgPicListSetOffset(pSel->pAgwsSelTop, 0, 0);
+    RgPicListSetOffset(pSel->pAgwsSel, 0, 0);
+    RgPicListSetOffset(pSel->pWepSelTop, 0, 0);
+    RgPicListSetOffset(pSel->pWepSel, 0, 0);
+    RgPicListSetDrawEnable(pSel->pAgwsSelTop, 1);
+    RgPicListSetDrawEnable(pSel->pAgwsSel, 1);
+    RgPicListSetDrawEnable(pSel->pWepSelTop, 0);
+    RgPicListSetDrawEnable(pSel->pWepSel, 1);
+    pSel->ofsY = 0;
+    pSel->ofsX = 0;
+    pSel->pWepListDisp = _CreateWepListDisp((int) pSel->pBxx);
+    pSel->paint = CreateXrgPaint2D_sub(D_00A56660, 0x841);
+    pSel->pRobot = CreateRgSelectRobot(pSel->pStudio);
+    _SinInit();
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", InitRgSelectAGWSData);
 

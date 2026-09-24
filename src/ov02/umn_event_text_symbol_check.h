@@ -50,4 +50,7 @@ extern unsigned char *UmnMailDataGet(int box_id);
 /* main:0x002751B0, defined in src/main/window_tex_load.c. */
 extern int MenuLoadFile(const char *name, void *buffer);
 
+/* Attachment table, 3 bytes per entry (ov02 .data, 0x45 bytes). */
+extern unsigned char umn_attach_tbl[];
+
 #endif /* SRC_OV02_UMN_EVENT_TEXT_SYMBOL_CHECK_H */

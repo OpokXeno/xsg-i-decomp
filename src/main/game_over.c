@@ -48,13 +48,53 @@ extern GameLoopStatePrefix GameLoopState;
         xglSleep();                                                     \
     } while (0)
 
-INCLUDE_ASM("asm/main/nonmatchings/game_over", DrawImage);
+/*
+ * sRender's destination-buffer selector: folded (with a fixed high bit)
+ * into the register DrawImage primes at TestEnv0[4] before the two-part
+ * image transfer below. Only this halfword is evidenced here (see
+ * src/main/map_1.c's MapRenderState for the same object's callback member
+ * and src/main/window_tex_load.c's UmnRenderSize for the screen-size
+ * halfwords).
+ */
+typedef struct {
+    u8 unmodeled_00[0x20];
+    u16 buffer_select;
+} DrawImageRenderState;
+
+extern DrawImageRenderState sRender;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+extern u64 TestEnv_0_00369CC0[12];
+extern unsigned char TransEnv_1_00369D20[];
+extern unsigned char FlushEnv_2_00369D40[];
+
+static void DrawImage(void *framebuffer)
+{
+    XglPacket *packet;
+
+    packet = xglPacketGetCurrent();
+    TestEnv_0_00369CC0[4] = ((u64)sRender.buffer_select << 0x25) | ((u64)0x8000 << 0x24);
+    sceVif1PkCnt(packet, 0);
+    sceVif1PkAddDataN(packet, TestEnv_0_00369CC0, 0x18);
+    sceVif1PkRef(packet, TransEnv_1_00369D20, 2, 0, 0, 0);
+    sceVif1PkRef(packet, framebuffer, 0x7000, 0, 0x51007000, 0);
+    sceVif1PkRef(packet, TransEnv_1_00369D20, 2, 0, 0, 0);
+    sceVif1PkRef(packet, (u8 *)framebuffer + 0x70000, 0x7000, 0, 0x51007000, 0);
+    sceVif1PkRef(packet, FlushEnv_2_00369D40, 3, 0, 0, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_over", DrawBack);
 
 INCLUDE_ASM("asm/main/nonmatchings/game_over", copyframe);
 
-INCLUDE_ASM("asm/main/nonmatchings/game_over", redraw_frame);
+static void redraw_frame(void *framebuffer) {
+    xglSleep();
+    DrawImage(framebuffer);
+    xglSleep();
+    DrawImage(framebuffer);
+    xglSleep();
+}
 
 /* The ending screen: fade the ending image in, ask whether to save, and
  * either run the save menu or (after a second confirmation) fade out. */

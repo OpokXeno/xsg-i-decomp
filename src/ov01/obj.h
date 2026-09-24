@@ -80,6 +80,39 @@ typedef struct {
     int count;      /* +0x10 */
 } Fifo;
 
+/*
+ * The +0x90..+0x110 tail of an objWork slot (declared below): objStdInit
+ * clears all 0x80 bytes then seeds two homogeneous components to 1.0f.
+ * The Vector4 at +0x00 has no evidenced role beyond that write: objStdInit
+ * sets only its w component (the classic homogeneous-point default; x/y/z
+ * stay at the preceding memset's zero) and no claimed function in this TU
+ * reads it back. The Vector4 at +0x30 is `scale`: objStdInit sets all four
+ * of its components to 1.0f, the standard multiplicative-identity pattern.
+ */
+typedef struct {
+    Vector4 homogeneousVector;         /* +0x00: only .w is evidenced */
+    unsigned char unmodeled_10[0x20];  /* +0x10 */
+    Vector4 scale;                     /* +0x30 */
+    unsigned char unmodeled_40[0x40];  /* +0x40 */
+} ObjectWorkTransform;
+
+/*
+ * One 0x110-byte slot of the 60-entry objWork pool (config/symbols/ov01.txt:
+ * objWork, 0x00A51970). objWorkInit clears `used` for every slot at startup
+ * (sw $0,0(slot) x60 at 0x00a00558) and objWorkFree clears it when a slot
+ * returns to the pool (sw $0,0($4) at 0x00a00628); objStdInit initializes
+ * the `transform` tail. src/ov01/menu.c independently models this same
+ * slot's +0x70..+0x84 span as DmgNumWork once objEntry2 hands it to an
+ * objDmgNum task, a span that does not overlap `used` or `transform`.
+ */
+typedef struct {
+    int used;                         /* +0x00 */
+    unsigned char unmodeled_04[0x8C]; /* +0x04 */
+    ObjectWorkTransform transform;    /* +0x90 */
+} ObjectWork;
+
+extern ObjectWork objWork[60];
+
 int xglTaskRemove(XglTaskPrefix *task);
 
 void objInit(void);
@@ -100,9 +133,17 @@ extern ObjectTask *objEntrySub(void *manager, void *argument, int reverse);
 
 void objEntryRev(void *argument);
 
+ObjectTask *objEntry2Rev(void *argument, ObjectTaskCallback callback);
+
 void objRemove(ObjectTask *task);
 
+void objWorkInit(void);
+
 extern void objWorkFree(void *work);
+
+extern const char D_00A43860[];
+
+void objStdInit(ObjectTask *task);
 
 extern int printf(const char *format, ...);
 
@@ -119,6 +160,8 @@ void *objCmdTailGet(ObjectTask *task);
 extern const char D_00A438A0[];
 
 void *objCmdPop(ObjectTask *task);
+
+int objCmdNext(ObjectTask *task);
 
 void fifoInit(Fifo *fifo, int capacity);
 

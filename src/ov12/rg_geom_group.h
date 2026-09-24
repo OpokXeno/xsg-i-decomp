@@ -26,7 +26,7 @@ extern int RgVectorFind_sub(void *vector, void *element,
 
 extern void RgVectorPush(void *vector, void *element);
 
-extern void _DisposeGroup(RgGeomGroup *group);
+static void _DisposeGroup(RgGeomGroup *group);
 
 extern void RgGeomFree(RgGeom *geom);
 
@@ -35,16 +35,37 @@ extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
 
 extern RgHeap *InstanceOfRgHeap(void);
 
-extern void RgGeomGroupRemoveElm(RgGeomGroup *group, void *element);
+static void RgGeomGroupRemoveElm(RgGeomGroup *group, void *element);
 
-extern RgGeom *_CreatePointWithGroup(RgGeomGroup *group);
-extern RgGeom *_CreateBallWithGroup(RgGeomGroup *group);
-extern RgGeom *_CreateRobotWithGroup(RgGeomGroup *group);
-extern RgGeom *_CreatePolyWithGroup(RgGeomGroup *group);
-extern RgGeom *_CreateTrayWithGroup(RgGeomGroup *group);
-extern RgGeom *_CreatePillarWithGroup(RgGeomGroup *group);
+static RgGeom *_CreatePointWithGroup(RgGeomGroup *group);
+static RgGeom *_CreateBallWithGroup(RgGeomGroup *group);
+static RgGeom *_CreateRobotWithGroup(RgGeomGroup *group);
+static RgGeom *_CreatePolyWithGroup(RgGeomGroup *group);
+static RgGeom *_CreateTrayWithGroup(RgGeomGroup *group);
+static RgGeom *_CreatePillarWithGroup(RgGeomGroup *group);
 
 extern void RgGeomSetParent(RgGeom *geom, RgGeom *parent);
+
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
+                         const char *source_file, int line);
+
+extern int RgVectorRemove(void *vector, void *element,
+                          const char *source_file, int line);
+
+/*
+ * InitRgGeomPoint and InitRgGeomBall are original functions of
+ * rg_geom_point.c and rg_geom_ball.c; those TUs type their first parameter
+ * as RgGeomPoint * / RgGeomBall *, both TU-local types this TU has no access
+ * to, so this TU declares the same pointer it actually holds here, RgGeom *.
+ */
+extern void InitRgGeomPoint(RgGeom *point, float weight);
+extern void InitRgGeomBall(RgGeom *ball, float radius, float weight);
+extern void InitRgGeomRobot(RgGeom *geom);
+extern void InitRgGeomPoly(RgGeom *geom);
+extern void InitRgGeomTray(RgGeom *geom);
+extern void InitRgGeomPillar(RgGeom *geom);
+
+extern void RgGeomSetDestructMethod(RgGeom *geom, void (*method)(RgGeom *));
 
 /*
  * The collision data a poly geometry points at (defined by ov12/tu062

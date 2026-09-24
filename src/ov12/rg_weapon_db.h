@@ -9,6 +9,6 @@
 
 RgSimpleDB *InstanceOfRgWeaponDB(void);
 
-extern void _EntryTemporaries(RgSimpleDB *database);
+static void _EntryTemporaries(RgSimpleDB *database);
 
 #endif /* SRC_OV12_RG_WEAPON_DB_H */

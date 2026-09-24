@@ -1,6 +1,12 @@
 #include "common.h"
+#include "shared.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/game_bg_draw_type", clear);
+extern unsigned char TestEnv_0_00367AA0[];
+
+static void clear(void)
+{
+    sceVif1PkRef(xglPacketGetCurrent(), TestEnv_0_00367AA0, 6, 0, 0, 0);
+}
 
 /* Background draw type 0 draws nothing; Game calls it directly. */
 void GameBgDrawType0(void)

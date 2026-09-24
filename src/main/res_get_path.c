@@ -1,15 +1,15 @@
 #include "common.h"
 #include "shared.h"
 
-extern char *command_enenpcse(int command, char *cursor, int mode);
+static char *command_enenpcse(int command, char *cursor, int mode);
 extern void GameDiskChange(int disk_number);
 extern void Intermission(int save_number);
 extern int xglCdGetFileSize(const char *name);
 extern int arcfilepreload;
 extern char scene_txt_buffer[];
 extern void SCRIPT_fade(int time);
-extern char *command_mpeg2_core(int command, char *cursor, int mode);
-extern int next_arc_size(void *address);
+static char *command_mpeg2_core(int command, char *cursor, int mode);
+static int next_arc_size(void *address);
 extern void Enemy_LoadPreset(void *address, const char *name);
 extern u32 *arcfileaddr;
 extern void *AdrsEnemyPreset;
@@ -130,7 +130,35 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", GameResourceGetFreeAddr);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", GameResourceWorkAlloc);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", GameResourceWorkReload);
+/*
+ * The game loop's own record, as far as this TU reads it. Two spans are
+ * evidenced: the runtime flags word command_player_lock ORs a bit into
+ * (lw/ori/sw +0x10, main:0x0024c188) and the scene id GameResourceWorkReload
+ * reloads by (lw +0x18, main:0x0024a998). Nothing else is modelled; the
+ * object is still owned by the generated .sdata scaffolding.
+ */
+typedef struct {
+    u8 unmodeled_00[0x10];
+    u32 flags;      /* +0x10 */
+    u8 unmodeled_14[4];
+    int scene_id;   /* +0x18 */
+} GameLoopStatePrefix;
+
+extern GameLoopStatePrefix GameLoopState;
+extern u8 GameResourceWorkReloadTable[];
+extern void ACT_init(void);
+extern void MapChangeFadeSet(void);
+extern void GameResourceLoad(int scene_id);
+
+void GameResourceWorkReload(void)
+{
+    if (GameResourceWorkReloadTable[0] != 0) {
+        ACT_init();
+        GameResourceLoad(GameLoopState.scene_id);
+        return;
+    }
+    MapChangeFadeSet();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", GameResourceAlloc);
 
@@ -148,9 +176,27 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_reset);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadmap);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadact);
+extern int RES_loadFile(int command, int callback, int resource_id, int flags);
+static char *search_key(char *cursor, u8 *table, int *id);
+extern u8 model[];
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadface);
+static char *command_loadact(int command, char *cursor, int mode)
+{
+    int resource_id = 0;
+    char *next_cursor = search_key(cursor, model, &resource_id);
+
+    RES_loadFile(command, 0, resource_id, 0);
+    return next_cursor;
+}
+
+static char *command_loadface(int command, char *cursor, int mode)
+{
+    int resource_id = 0;
+    char *next_cursor = search_key(cursor, model, &resource_id);
+
+    RES_loadFile(command, 0, resource_id + 0x10000, 0);
+    return next_cursor;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadmot);
 
@@ -196,7 +242,17 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadtex);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadmovie);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadeffect_sub);
+extern int sefLoadEffectCfName(int cf_id, int effect_name);
+extern int sefLoadMemoryEffectCfName(int cf_id, int effect_name, int buffer);
+
+static void command_loadeffect_sub(int type, int effect_name, void *address)
+{
+    if (arcfileaddr != 0) {
+        sefLoadMemoryEffectCfName((int)address, effect_name, next_arc_size(address));
+        return;
+    }
+    sefLoadEffectCfName((int)address, effect_name);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadeffect);
 
@@ -215,7 +271,13 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadene);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_script);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_player);
+extern void GameCfPlayerLoadResource(int resource_set);
+
+static char *command_player(int command, char *cursor, int mode)
+{
+    GameCfPlayerLoadResource(0);
+    return cursor;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_dummy);
 
@@ -229,7 +291,10 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadsmd);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2_core);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2);
+static char *command_mpeg2(int command, char *cursor)
+{
+    return command_mpeg2_core(command, cursor, 2);
+}
 
 static char *command_mpeg2battle(int command, char *cursor, int mode)
 {
@@ -237,11 +302,24 @@ static char *command_mpeg2battle(int command, char *cursor, int mode)
     return command_mpeg2_core(command, cursor, 1);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_mpeg2nofade);
+static char *command_mpeg2nofade(int command, char *cursor)
+{
+    return command_mpeg2_core(command, cursor, 5);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_event2battle);
+extern void SCRIPT_frameLock2Battle(void);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_player_lock);
+static char *command_event2battle(int command, char *cursor, int mode)
+{
+    SCRIPT_frameLock2Battle();
+    return cursor;
+}
+
+static char *command_player_lock(int command, char *cursor, int mode)
+{
+    GameLoopState.flags |= 0x8000;
+    return cursor;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_enenpcse);
 

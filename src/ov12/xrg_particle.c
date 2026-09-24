@@ -4,13 +4,67 @@
 #include "common.h"
 #include "shared.h"
 #include "xrg_particle.h"
+#include "ov12/rg_draw.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", _openVifGif_00A48C08);
+/*
+ * _openVifGif and _openVifGifAD build the 128-bit VIF1 GIF tag
+ * sceVif1PkOpenGifTag takes in the single register the original loads with
+ * one `lq`; no wide arithmetic is done on it: bit 15 is EOP, bit 46 is PRE,
+ * bits 47..57 are PRIM, bits 60..63 are NREG, and the high 64 bits are the
+ * REGS descriptor. The union lets the two halves be stored as ordinary
+ * 64-bit fields and the whole 16 bytes be read back as the single register
+ * sceVif1PkOpenGifTag takes.
+ */
+typedef unsigned int Quadword __attribute__((mode(TI)));
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", _openVifGifAD_00A48C80);
+typedef union XrgParticleGifTag {
+    struct {
+        u64 lo;
+        u64 hi;
+    } part;
+    Quadword quad;
+} XrgParticleGifTag;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAlign(XglPacket *packet, int align, int size);
+extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkOpenGifTag(XglPacket *packet, Quadword tag);
+
+static void _openVifGif(XglPacket *packet, unsigned int prim,
+                        unsigned int nreg, u64 regs)
+{
+    XrgParticleGifTag tag;
+
+    tag.part.lo = (1u << 15) | (1ULL << 46) | ((u64)prim << 47) |
+                  ((u64)nreg << 60);
+    tag.part.hi = regs;
+    sceVif1PkAlign(packet, 2, 3);
+    sceVif1PkCnt(packet, 0);
+    sceVif1PkOpenDirectHLCode(packet, 0);
+    sceVif1PkOpenGifTag(packet, tag.quad);
+}
+
+/*
+ * ov12:0x00a58f10 is a fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D
+ * address+data register code), the constant _openVifGifAD passes to
+ * sceVif1PkOpenGifTag.
+ */
+extern const XrgParticleGifTag D_00A58F10;
+
+static void _openVifGifAD(XglPacket *packet)
+{
+    XrgParticleGifTag tag;
+
+    tag = D_00A58F10;
+    sceVif1PkCnt(packet, 0);
+    sceVif1PkAlign(packet, 2, 3);
+    sceVif1PkOpenDirectCode(packet, 0);
+    sceVif1PkOpenGifTag(packet, tag.quad);
+}
 
 /*
  * Both libvifpk closers take the packet being built: _closeVifGif keeps its
@@ -50,9 +104,31 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", _Calc);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", _Disp_00A49318);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", CreateXrgParticleDriver);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
+                         const char *source_file, int line);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", DisposeXrgParticleDriver);
+static XrgParticleDriver *CreateXrgParticleDriver(void)
+{
+    XrgParticleDriver *driver;
+
+    driver = RgHeapAlloc(InstanceOfRgHeap(), sizeof(XrgParticleDriver),
+                         D_00A58F30, 340);
+    _InitDriver(driver);
+    return driver;
+}
+
+extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
+                       int line);
+
+void DisposeXrgParticleDriver(XrgParticleDriver *pDrv)
+{
+    if (pDrv == 0) {
+        assert_prog(D_00A58F20, D_00A58F30, 347);
+    }
+    _DisposeDriver(pDrv);
+    RgHeapFree(InstanceOfRgHeap(), pDrv, D_00A58F30, 349);
+}
 
 /*
  * The singleton destructor: it forwards the instance it is handed ($a0,
@@ -79,7 +155,23 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", XrgParticleDriverPassTimeReq);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", XrgParticleDriverDispReq);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", XrgParticleDriverPassTime);
+static void _Calc(struct XrgParticle *particle, int count, float rate,
+                  float elapsed);
+
+void XrgParticleDriverPassTime(XrgParticleDriver *pDrv, float elapsed)
+{
+    unsigned int i;
+    XrgParticleCalcReq *req;
+
+    if (pDrv == 0) {
+        assert_prog(D_00A58F20, D_00A58F30, 438);
+    }
+    for (i = 0; i < pDrv->m_uReqCalcNum; i++) {
+        req = &pDrv->calcReq[i];
+        _Calc(req->particle, req->count, req->rate, elapsed);
+    }
+    pDrv->m_uReqCalcNum = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", _DrawDriver);
 
@@ -91,7 +183,22 @@ static void _ClearReqDisp(XrgParticleDriver *driver)
     driver->m_uReqDispNum = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", XrgParticleDriverDisp);
+extern RgDraw *InstanceOfRgDraw(void);
+extern void RgDrawReq(RgDraw *pDraw, XrgParticleDriver *driver,
+                      void (*drawFunc)(XrgParticleDriver *driver, void *pStudio),
+                      void (*clearFunc)(XrgParticleDriver *driver, void *pStudio),
+                      int prio, int drawID);
+extern const char D_00A59008[];
+void _DrawDriver(XrgParticleDriver *driver, void *pStudio);
+
+void XrgParticleDriverDisp(XrgParticleDriver *driver)
+{
+    if (driver == 0) {
+        assert_prog(D_00A59008, D_00A58F30, 511);
+    }
+    RgDrawReq(InstanceOfRgDraw(), driver, _DrawDriver,
+             (void (*)(XrgParticleDriver *, void *))_ClearReqDisp, 2, -2);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", CreateArrayOfXrgParticle);
 

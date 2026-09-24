@@ -7,7 +7,8 @@
 
 #include "shared.h"
 
-typedef void (*SOLBCallback)(void);
+/* (effect task, SolbState record) like the other MEf effects' callbacks. */
+typedef void (*SOLBCallback)(void *self, void *work);
 
 /* The neighboring MSP02 constructor establishes the process, model-draw,
  * draw-packet and post-process callback ordering.  SOLB initializes the

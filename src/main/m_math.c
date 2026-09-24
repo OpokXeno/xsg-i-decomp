@@ -398,33 +398,260 @@ INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcAngle);
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcAngleCam);
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathAddRotateVectorY);
+/*
+ * MMathAddRotateVectorY: rotate "offset" about the Y axis by "angle" (VU0
+ * macro-mode sin/cos at 0xe8/0x20) and add the result to "base", storing the
+ * sum at "destination".
+ */
+Vector4 *MMathAddRotateVectorY(Vector4 *destination, float angle, const Vector4 *base, const Vector4 *offset)
+{
+    __asm__ __volatile__(
+        "mfc1 $8, %0\n\t"
+        "qmtc2.ni $8, vf6\n\t"
+        "vmove.x vf4, vf6\n\t"
+        "vcallms 0xE8\n\t"
+        "vmove.x vf5, vf1\n\t"
+        "vmove.x vf4, vf6\n\t"
+        "vcallms 0x20\n\t"
+        "vmove.x vf6, vf1\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "lqc2 vf3, 0(%2)\n\t"
+        "vaddz.x vf4, vf0, vf3z\n\t"
+        "vsubx.z vf4, vf0, vf3x\n\t"
+        "vmulax.xz ACC, vf3, vf5x\n\t"
+        "vmaddx.xz vf3, vf4, vf6x\n\t"
+        "vadd.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%3)\n\t"
+        "nop"
+        : : "f"(angle), "r"(base), "r"(offset), "r"(destination) : "$8", "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcOffset);
+/*
+ * MMathCalcOffset: compose a position offset from two lane-packed angles
+ * (yaw in "first"'s w and "second"'s y, pitch chained through "second"'s x)
+ * with VU0 macro-mode sin/cos (0xe8/0x20), scale it by "second"'s w and add
+ * it to "first", storing the sum at "destination".
+ */
+Vector4 *MMathCalcOffset(Vector4 *destination, const Vector4 *first, const Vector4 *second)
+{
+    __asm__ __volatile__(
+        "lqc2 vf5, 0(%0)\n\t"
+        "lqc2 vf6, 0(%1)\n\t"
+        "vaddy.w vf7, vf5, vf6y\n\t"
+        "vaddw.x vf4, vf0, vf7w\n\t"
+        "vcallms 0xE8\n\t"
+        "vaddx.z vf7, vf0, vf1x\n\t"
+        "vaddw.x vf4, vf0, vf7w\n\t"
+        "vcallms 0x20\n\t"
+        "vmove.x vf7, vf1\n\t"
+        "vmove.x vf4, vf6\n\t"
+        "vcallms 0x20\n\t"
+        "vaddx.y vf7, vf0, vf1x\n\t"
+        "vmove.x vf4, vf6\n\t"
+        "vcallms 0xE8\n\t"
+        "vmulx.xz vf7, vf7, vf1x\n\t"
+        "vmulaw.xyz ACC, vf7, vf6w\n\t"
+        "vmaddw.xyz vf5, vf5, vf0w\n\t"
+        "sqc2 vf5, 0(%2)\n\t"
+        "nop"
+        : : "r"(first), "r"(second), "r"(destination) : "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcOffsetXYZ);
+/*
+ * MMathCalcOffsetXYZ: the single-angle-chain counterpart of MMathCalcOffset
+ * (angle taken from "first"'s w only), same VU0 macro-mode sin/cos shape.
+ */
+Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, const Vector4 *second)
+{
+    __asm__ __volatile__(
+        "lqc2 vf5, 0(%0)\n\t"
+        "lqc2 vf6, 0(%1)\n\t"
+        "vaddw.x vf4, vf0, vf5w\n\t"
+        "vcallms 0xE8\n\t"
+        "vmove.x vf7, vf1\n\t"
+        "vaddw.x vf4, vf0, vf5w\n\t"
+        "vcallms 0x20\n\t"
+        "vaddz.x vf2, vf0, vf6z\n\t"
+        "vsubx.z vf2, vf0, vf6x\n\t"
+        "vmulax.xz ACC, vf6, vf7x\n\t"
+        "vmaddx.xz vf6, vf2, vf1x\n\t"
+        "vadd.xyz vf5, vf5, vf6\n\t"
+        "sqc2 vf5, 0(%2)\n\t"
+        "nop"
+        : : "r"(first), "r"(second), "r"(destination) : "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathSubVectorMulS);
+/* MMathSubVectorMulS: destination = (first - second) * scale (xyz only). */
+Vector4 *MMathSubVectorMulS(Vector4 *destination, const Vector4 *first, const Vector4 *second, float scale)
+{
+    __asm__ __volatile__(
+        "mfc1 $8, %0\n\t"
+        "qmtc2.ni $8, vf3\n\t"
+        "lqc2 vf1, 0(%1)\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "vsub.xyz vf1, vf1, vf2\n\t"
+        "vmulx.xyz vf1, vf1, vf3x\n\t"
+        "sqc2 vf1, 0(%3)\n\t"
+        "nop"
+        : : "f"(scale), "r"(first), "r"(second), "r"(destination) : "$8", "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathSubVectorDivS);
+/* MMathSubVectorDivS: destination = (first - second) / scale (xyz only). */
+Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first, const Vector4 *second, float scale)
+{
+    __asm__ __volatile__(
+        "mfc1 $8, %0\n\t"
+        "qmtc2.ni $8, vf3\n\t"
+        "lqc2 vf1, 0(%1)\n\t"
+        "vdiv Q, vf0w, vf3x\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "vsub.xyz vf1, vf1, vf2\n\t"
+        "vwaitq\n\t"
+        "vmulq.xyz vf1, vf1, Q\n\t"
+        "sqc2 vf1, 0(%3)\n\t"
+        "nop"
+        : : "f"(scale), "r"(first), "r"(second), "r"(destination) : "$8", "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathDivVector);
+/*
+ * MMathDivVector: destination.xyz = first.xyz / second.xyz (lane by lane,
+ * VU0 macro-mode divider unit); destination.w is passed through from first.
+ */
+Vector4 *MMathDivVector(Vector4 *destination, const Vector4 *first, const Vector4 *second)
+{
+    __asm__ __volatile__(
+        "lqc2 vf1, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vdiv Q, vf1x, vf2x\n\t"
+        "vmove.w vf3, vf1\n\t"
+        "vwaitq\n\t"
+        "vaddq.x vf3, vf0, Q\n\t"
+        "vdiv Q, vf1y, vf2y\n\t"
+        "vwaitq\n\t"
+        "vaddq.y vf3, vf0, Q\n\t"
+        "vdiv Q, vf1z, vf2z\n\t"
+        "vwaitq\n\t"
+        "vaddq.z vf3, vf0, Q\n\t"
+        "sqc2 vf3, 0(%2)\n\t"
+        "nop"
+        : : "r"(first), "r"(second), "r"(destination) : "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathDivVectorS);
+/* MMathDivVectorS: destination.xyz = source.xyz / scale. */
+Vector4 *MMathDivVectorS(Vector4 *destination, const Vector4 *source, float scale)
+{
+    __asm__ __volatile__(
+        "mfc1 $8, %0\n\t"
+        "qmtc2.ni $8, vf2\n\t"
+        "lqc2 vf1, 0(%1)\n\t"
+        "vdiv Q, vf0w, vf2x\n\t"
+        "vwaitq\n\t"
+        "vmulq.xyz vf1, vf1, Q\n\t"
+        "sqc2 vf1, 0(%2)\n\t"
+        "nop"
+        : : "f"(scale), "r"(source), "r"(destination) : "$8", "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathDivVector4);
+/* MMathDivVector4: destination = first / second, all four lanes. */
+Vector4 *MMathDivVector4(Vector4 *destination, const Vector4 *first, const Vector4 *second)
+{
+    __asm__ __volatile__(
+        "lqc2 vf1, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vdiv Q, vf1x, vf2x\n\t"
+        "vsub.w vf3, vf3, vf3\n\t"
+        "vwaitq\n\t"
+        "vaddq.x vf3, vf0, Q\n\t"
+        "vdiv Q, vf1y, vf2y\n\t"
+        "vwaitq\n\t"
+        "vaddq.y vf3, vf0, Q\n\t"
+        "vdiv Q, vf1z, vf2z\n\t"
+        "vwaitq\n\t"
+        "vaddq.z vf3, vf0, Q\n\t"
+        "vdiv Q, vf1w, vf2w\n\t"
+        "vwaitq\n\t"
+        "vaddq.w vf3, vf3, Q\n\t"
+        "sqc2 vf3, 0(%2)\n\t"
+        "nop"
+        : : "r"(first), "r"(second), "r"(destination) : "memory");
+    return destination;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathDivVectorS4);
+/* MMathDivVectorS4: destination = source / scale, all four lanes. */
+Vector4 *MMathDivVectorS4(Vector4 *destination, const Vector4 *source, float scale)
+{
+    __asm__ __volatile__(
+        "mfc1 $8, %0\n\t"
+        "qmtc2.ni $8, vf2\n\t"
+        "lqc2 vf1, 0(%1)\n\t"
+        "vdiv Q, vf0w, vf2x\n\t"
+        "vwaitq\n\t"
+        "vmulq.xyzw vf1, vf1, Q\n\t"
+        "sqc2 vf1, 0(%2)\n\t"
+        "nop"
+        : : "f"(scale), "r"(source), "r"(destination) : "$8", "memory");
+    return destination;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathIsVectorEqual);
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathIsVectorEqual4);
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathVectorDotProduct);
+/* MMathVectorDotProduct: xyz dot product, reduced through vf1's x lane. */
+float MMathVectorDotProduct(const Vector4 *first, const Vector4 *second)
+{
+    float result;
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathVectorCrossProduct);
+    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(first) : "memory");
+    __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(second) : "memory");
+    __asm__ __volatile__("vmul.xyz vf1, vf1, vf2" : : : "memory");
+    __asm__ __volatile__("vaddy.x vf1, vf1, vf1y" : : : "memory");
+    __asm__ __volatile__("vaddz.x vf1, vf1, vf1z" : : : "memory");
+    __asm__ __volatile__(
+        "qmfc2.ni $8, vf1\n\t"
+        "mtc1 $8, %0"
+        : "=f"(result) :  : "$8", "memory");
+    return result;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathVectorInterpolation);
+/* MMathVectorCrossProduct: destination.xyz = first x second, w forced to 1.0. */
+Vector4 *MMathVectorCrossProduct(Vector4 *destination, const Vector4 *first, const Vector4 *second)
+{
+    __asm__ __volatile__(
+        "lqc2 vf1, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vopmula.xyz ACC, vf1, vf2\n\t"
+        "vopmsub.xyz vf1, vf2, vf1\n\t"
+        "vmove.w vf1, vf0\n\t"
+        "sqc2 vf1, 0(%2)\n\t"
+        "nop"
+        : : "r"(first), "r"(second), "r"(destination) : "memory");
+    return destination;
+}
+
+/* MMathVectorInterpolation: destination = first * (1 - parameter) + second * parameter. */
+Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first, const Vector4 *second, float parameter)
+{
+    __asm__ __volatile__(
+        "mfc1 $8, %0\n\t"
+        "qmtc2.ni $8, vf3\n\t"
+        "vsubx.w vf3, vf0, vf3x\n\t"
+        "lqc2 vf1, 0(%1)\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "vmulaw.xyz ACC, vf1, vf3w\n\t"
+        "vmaddx.xyz vf1, vf2, vf3x\n\t"
+        "sqc2 vf1, 0(%3)\n\t"
+        "nop"
+        : : "f"(parameter), "r"(first), "r"(second), "r"(destination) : "$8", "memory");
+    return destination;
+}
 
 ACCEPTED_ASM("src/main/m_math", MMathSpecialVectorSub);
 
@@ -816,7 +1043,36 @@ Matrix4 *MMathTranslateMatrix(Matrix4 *out, const Matrix4 *matrix, const Vector4
     return out;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcMatrixVector);
+/*
+ * MMathCalcMatrixVector: build an orientation matrix that faces "direction",
+ * starting from the identity (built in VU0 registers via vmr32 rotations of
+ * the hardwired vf0 = (0,0,0,1), instead of loading McMathUnitMatrix from
+ * memory) and then applying a yaw rotation (atan2 of direction.x,
+ * direction.z) followed by a pitch rotation (atan2 of direction.y, the
+ * vector's XZ length). When direction has no XZ component the yaw rotation
+ * is skipped (undefined for a vector pointing straight up/down).
+ */
+Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
+{
+    float directionX;
+
+    __asm__ __volatile__("vmr32.xyzw vf1, vf0" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf2, vf1" : : : "memory");
+    __asm__ __volatile__("vmr32.xyzw vf3, vf2" : : : "memory");
+    __asm__ __volatile__("sqc2 vf0, 48(%0)" : : "r"(out) : "memory");
+    __asm__ __volatile__("sqc2 vf1, 32(%0)" : : "r"(out) : "memory");
+    __asm__ __volatile__("sqc2 vf2, 16(%0)" : : "r"(out) : "memory");
+    __asm__ __volatile__("sqc2 vf3, 0(%0)" : : "r"(out) : "memory");
+
+    directionX = direction->x;
+    if (directionX == 0.0f && direction->z == 0.0f) {
+        MMathRotateMatrixX(out, (const Matrix4 *) out, srsAtan2(direction->y, 0.0f));
+    } else {
+        MMathRotateMatrixY(out, (const Matrix4 *) out, srsAtan2(directionX, direction->z));
+        MMathRotateMatrixX(out, (const Matrix4 *) out, srsAtan2(direction->y, MMathCalcLengthXZ(direction)));
+    }
+    return out;
+}
 
 /*
  * MMathCalcVectorMatrix: loads the matrix row at offset 0x20 (the third row)
@@ -834,8 +1090,54 @@ Vector4 *MMathCalcVectorMatrix(Vector4 *out, const Matrix4 *matrix)
     return out;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcAngleMatrix);
+/*
+ * MMathCalcAngleMatrix: recover the yaw/pitch pair of "matrix" from the
+ * direction vector MMathCalcVectorMatrix reads out of its third row. out->z
+ * and out->w come from the leading "sqc2 vf0" (VU0's hardwired (0,0,0,1))
+ * and are never overwritten; out->x is yaw, out->y is pitch.
+ */
+Vector4 *MMathCalcAngleMatrix(Vector4 *out, const Matrix4 *matrix)
+{
+    Vector4 direction;
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathRotTransPers);
+    MMathCalcVectorMatrix(&direction, matrix);
+    __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(out) : "memory");
+    out->x = srsAtan2(direction.y, MMathCalcLengthXZ(&direction));
+    out->y = srsAtan2(direction.x, direction.z);
+    return out;
+}
+
+/*
+ * MMathRotTransPers: transform "point" by "matrix", perspective-divide by
+ * the resulting w, then scale/offset it into screen space with
+ * camera->screenScale and camera->screenOffset (fields at 0x80/0x70,
+ * StudioCamera) and store the fixed-point result at "destination".
+ */
+void MMathRotTransPers(Vector4 *destination, const StudioCamera *camera, const Matrix4 *matrix, const Vector4 *point)
+{
+    __asm__ __volatile__(
+        "lqc2 vf1, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "lqc2 vf3, 16(%1)\n\t"
+        "lqc2 vf4, 32(%1)\n\t"
+        "lqc2 vf5, 48(%1)\n\t"
+        "vmulax.xyzw ACC, vf2, vf1x\n\t"
+        "vmadday.xyzw ACC, vf3, vf1y\n\t"
+        "vmaddaz.xyzw ACC, vf4, vf1z\n\t"
+        "vmaddw.xyzw vf1, vf5, vf1w\n\t"
+        "vdiv Q, vf0w, vf1w\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "lqc2 vf3, 0(%3)\n\t"
+        "vsub.xyzw vf4, vf0, vf0\n\t"
+        "vwaitq\n\t"
+        "vmulq.xyz vf1, vf1, Q\n\t"
+        "vmula.xyz ACC, vf1, vf2\n\t"
+        "vmaddw.xyz vf4, vf3, vf0w\n\t"
+        "vftoi4.xy vf1, vf4\n\t"
+        "vftoi0.zw vf1, vf4\n\t"
+        "sqc2 vf1, 0(%4)\n\t"
+        "nop"
+        : : "r"(point), "r"(matrix), "r"(&camera->screenScale), "r"(&camera->screenOffset), "r"(destination) : "memory");
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathRotTransPersClip);

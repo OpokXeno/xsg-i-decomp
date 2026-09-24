@@ -86,7 +86,7 @@ void tskTskMain(TskObject *task)
 {
     TskObjectWorker worker = task->worker;
 
-    if (FileWork[3] == 0xff) {
+    if (FileWork->state == 0xff) {
         xglTaskWaitRemove(&task->base);
         return;
     }

@@ -24,10 +24,16 @@ typedef struct RgVectorPrefix {
     int m_nLine;
 } RgVectorPrefix;
 
+RgVectorPrefix *CreateRgVector(unsigned int capacity, const char *file, int line);
+
+void DisposeRgVector(RgVectorPrefix *vector, const char *file, int line);
+
+void RgVectorDup(RgVectorPrefix *vector, void **dest);
+
 void *RgVectorIndex(RgVectorPrefix *vector, unsigned int index,
                     const char *file, int line);
 
-extern void _VecAssert(RgVectorPrefix *vector, const char *message,
+static void _VecAssert(RgVectorPrefix *vector, const char *message,
                        const char *file, int line);
 
 void RgVectorPush(RgVectorPrefix *vector, void *element);
@@ -55,5 +61,7 @@ extern const char D_00A54FA8[]; /* "uCapa > 0" */
 extern const char D_00A54FB8[]; /* "pVector->m_apList != NIL" */
 extern const char D_00A54FE8[]; /* "vec(%p) capa over (capa %d size %d)" */
 extern const char D_00A55060[]; /* "0 <= uIndex && uIndex < pVector->m_uSize" */
+
+extern const char D_00A54FD8[]; /* "pVec != NIL" */
 
 #endif /* SRC_OV12_RG_VECTOR_H */

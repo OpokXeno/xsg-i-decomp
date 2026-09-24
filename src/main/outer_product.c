@@ -22,7 +22,30 @@ void OuterProduct(const OuterProductVector *left, const OuterProductVector *righ
 
 INCLUDE_ASM("asm/main/nonmatchings/outer_product", CalcVerticalVector);
 
-INCLUDE_ASM("asm/main/nonmatchings/outer_product", CalcLength);
+extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
+                               const Vector4 *third, Vector4 *vertical);
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
+extern void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
+
+float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *third)
+{
+    Vector4 vertical;
+    Vector4 delta;
+    float length;
+
+    CalcVerticalVector(first, second, third, &vertical);
+    xglVectorNormal(&vertical, &vertical);
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%2)"
+        :
+        : "r"(third), "r"(first), "r"(&delta)
+        : "memory");
+    xglVectorInner(&length, &vertical, &delta);
+    return length;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/outer_product", CalcCrossPoint);
 

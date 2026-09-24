@@ -19,7 +19,34 @@ int MEfCheckWorkSize(const char *name, int size)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfCalcAngle);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfCalcAngleMatrix);
+/*
+ * MEfCalcAngleMatrix: recover the yaw/pitch pair of "matrix" from the
+ * direction "matrix" rotates its local -Z axis (0,0,-1,1) to. out->z and
+ * out->w come from the trailing "sqc2 vf0" (VU0's hardwired (0,0,0,1)) and
+ * are never overwritten; out->x is pitch, out->y is yaw. Compare
+ * src/main/m_math.c's MMathCalcAngleMatrix, which recovers the same pair from
+ * a direction it reads directly out of the matrix's third row instead of by
+ * rotating a fixed local axis, hence that sibling's un-negated
+ * MMathCalcLengthXZ where this one negates it.
+ */
+Vector4 *MEfCalcAngleMatrix(Vector4 *out, const Vector4 *matrix)
+{
+    Vector4 direction;
+
+    __asm__ __volatile__(
+        "vmove.xyzw vf1, vf0\n\t"
+        "vsubw.z vf1, vf0, vf0w\n\t"
+        "sqc2 vf1, 0(%0)"
+        :
+        : "r"(&direction)
+        : "memory"
+    );
+    MMathApplyMatrix(&direction, matrix, &direction);
+    __asm__ __volatile__("sqc2 vf0, 0(%0)" : : "r"(out) : "memory");
+    out->x = srsAtan2(direction.y, -MMathCalcLengthXZ(&direction));
+    out->y = srsAtan2(direction.x, direction.z);
+    return out;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfGetActorMatrix);
 

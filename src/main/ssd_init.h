@@ -62,7 +62,16 @@ typedef struct RssdWorkFlags {
     RssdRpcResponse *response_source;     /* +0x034: SIF RPC receive buffer */
     unsigned char _unmodeled_038[0x48];   /* +0x038..0x07f */
     RssdRpcResponse response;             /* +0x080..0x09f: copy of *response_source */
-    unsigned char _unmodeled_0a0[0xec];   /* +0x0a0..0x18b */
+    unsigned char _unmodeled_0a0[0xa8];   /* +0x0a0..0x147 */
+    /*
+     * The SCE SDK RPC server registration record: RssdInitIop
+     * (main:0x0023fbb8, still asm) passes its address as the `sd` argument of
+     * sceSifRegisterRpc (`addiu $4,$17,0x148`), and SsdQuit (main:0x0023fb08)
+     * passes the same address to sceSifRemoveRpc to unregister it on the way
+     * out. Its internal layout belongs to the SIF RPC middleware, not this
+     * TU, so the reserved extent runs to the next evidenced field at +0x18c.
+     */
+    unsigned char rpc_server[0x44];       /* +0x148..0x18b: sceSifRpcServerData_t */
     /*
      * The SIF RPC receive queue RSsdSifRpcThread (main:0x0023fb90) hands to
      * sceSifRpcLoop after RssdInitIop returns (`addiu a0,v0,-24052` off
@@ -94,7 +103,15 @@ typedef struct RssdWorkFlags {
     int next_wave_thread_id;              /* +0x1ac: RssdBackNextWaveThread */
     void *next_wave_thread_stack;         /* +0x1b0: MYwaveTransThStack */
     int sema_id;                          /* +0x1b4: signalled when the RPC completes */
-    unsigned char _unmodeled_1b8[0x30];   /* +0x1b8..0x1e7 */
+    unsigned char _unmodeled_1b8[0x18];   /* +0x1b8..0x1cf */
+    /*
+     * Running destination pointer for streamed sample data. RssdSpuRead
+     * (main:0x0023feb8) copies each request's payload here with
+     * SsdCopyMemory and advances it by the copied byte count; SsdSpuDirectRead
+     * (main:0x00240690, still asm) sets it from its own destination argument.
+     */
+    unsigned char *spu_write_ptr;         /* +0x1d0: streamed sample write position */
+    unsigned char _unmodeled_1d4[0x14];   /* +0x1d4..0x1e7 */
     /*
      * Two (callback, argument) pairs stored verbatim by main/tu112:
      * SsdSetSampleDmaCallback (main:0x002410a0) `sw $4,488($2)` /

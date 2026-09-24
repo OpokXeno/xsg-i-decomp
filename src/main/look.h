@@ -26,4 +26,14 @@ extern const float xglAsin_pi_over_two_approx;
 /* MARK provisional: .lit4 0x004d8560 */
 extern const float xglAsin_pi_over_two;
 
+void LOOK_eyeL_cont(int model, int target, int step);
+
+/* MARK provisional: .lit4 0x004d85a8 */
+extern const float D_004D85A8;
+
+void LOOK_eyeR_cont(int model, int target, int step);
+
+/* MARK provisional: .lit4 0x004d85ac */
+extern const float D_004D85AC;
+
 #endif /* SRC_MAIN_LOOK_H */

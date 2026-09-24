@@ -2,7 +2,26 @@
 
 INCLUDE_ASM("asm/main/nonmatchings/game_movie", GameMovieMain);
 
-INCLUDE_ASM("asm/main/nonmatchings/game_movie", GameMovieStop);
+/* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
+extern int xglMovieClose(void *movie);
+
+/*
+ * Partial view of the movie handle xglMovieClose closes; only the
+ * playback-state field GameMovieStop clears is modeled, the rest of the
+ * layout is not recovered.
+ */
+typedef struct MovieInfo {
+    unsigned char unmodeled_00[0x40];
+    short state;
+} MovieInfo;
+
+extern MovieInfo mi;
+
+void GameMovieStop(void)
+{
+    xglMovieClose(&mi);
+    mi.state = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_movie", GameMoviePlay);
 

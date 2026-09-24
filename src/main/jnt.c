@@ -38,7 +38,22 @@
  *     $3 = lw 0x7AC($17) -- 0x7AC is the table it reads, value_records.
  */
 typedef struct JntWork {
-    unsigned char unmodeled_000[0x7A4];
+    unsigned char unmodeled_000[0x2C];
+    /*
+     * JNT_getStaticVal2/JNT_getVal2 read this as the default matrix slot for
+     * their CUR_MATRIX_Get call and unconditionally increment it once per
+     * call (`lw/sw ...,44($.)`).
+     */
+    int current_index; /* 0x2C */
+    unsigned char unmodeled_030[0x770];
+    /*
+     * JNT_getStaticVal2/JNT_getVal2 read this as the matrix table their
+     * CUR_MATRIX_Set/Get calls index by joint slot (`lw ...,1952($.)`);
+     * JNT_setMatrix/JNT_setMatrix2 write it through JNT_MATRIX_BUFFER_OFFSET
+     * above (same 0x7A0 slot, kept as a raw offset there for the codegen
+     * reason given on that macro).
+     */
+    JntMatrix *matrix_buffer; /* 0x7A0 */
     JntMatrixBuffer interp_matrix; /* 0x7A4, JNT_setInterpMatrix */
     void *static_value_records;    /* 0x7A8, JNT_setCurve arg0; read by JNT_getStaticVal */
     void *value_records;           /* 0x7AC, JNT_setCurve arg1; read by JNT_getVal */
@@ -110,7 +125,81 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getVal_staticChain);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_constructMatrix);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getStaticVal2);
+/*
+ * CUR_MATRIX_* (defined in another TU, not yet recovered there) form a
+ * current-matrix-register API: Set/Get load and store a JntMatrix through
+ * it, Txyz4s/Rzyx4s apply a translation/rotation from a float triple onto it.
+ */
+void CUR_MATRIX_Set(JntMatrix *matrix);
+void CUR_MATRIX_Get(JntMatrix *matrix);
+void CUR_MATRIX_Txyz4s(float *translate);
+void CUR_MATRIX_Rzyx4s(float *rotate);
+
+/*
+ * A joint static-value channel: JNT_getStaticVal2 reads its type (dispatch,
+ * only types 1-5 apply a transform), its target joint slot and the
+ * translate/rotate triples it feeds to CUR_MATRIX_Txyz4s/Rzyx4s, then
+ * returns the following channel (`channel + 1`), which fixes its size at
+ * 0x40 bytes, the same stride as JntElement.
+ */
+typedef struct JntStaticChannel {
+    unsigned short type;           /* 0x00 */
+    unsigned char unmodeled_02[0x0C];
+    unsigned short matrix_index;   /* 0x0E */
+    float translate[3];            /* 0x10 */
+    unsigned char unmodeled_1c[4];
+    float rotate[3];               /* 0x20 */
+    unsigned char unmodeled_2C[0x14];
+} JntStaticChannel;
+
+/*
+ * The type-1..4 body below (label apply_index) and the type==5 body above it
+ * are byte-identical in the original (both do
+ * CUR_MATRIX_Set/Txyz4s/Rzyx4s/Get on the same arguments), but the original
+ * still emits them as two separate instruction sequences: the type==5 copy
+ * falls straight through into an unconditional jump to the shared tail,
+ * while the type 1..4 copy is a separate out-of-line block that falls
+ * straight through into that same tail. A structured if/else-if or two
+ * independent ifs both let 2.96 fold the two identical call sequences into
+ * one shared block reached from two jumps, which the original does not do;
+ * the goto below reproduces the original's two independently-placed copies.
+ */
+void *JNT_getStaticVal2(JntWork *work, JntStaticChannel *channel)
+{
+    int type;
+    float *translate;
+    float *rotate;
+    void *next;
+
+    type = channel->type;
+    translate = channel->translate;
+    rotate = channel->rotate;
+    next = channel + 1;
+
+    if (type < 5) {
+        if (type == 0) {
+            goto done;
+        }
+        goto apply_index;
+    }
+    if (type == 5) {
+        CUR_MATRIX_Set(&work->matrix_buffer[channel->matrix_index]);
+        CUR_MATRIX_Txyz4s(translate);
+        CUR_MATRIX_Rzyx4s(rotate);
+        CUR_MATRIX_Get(&work->matrix_buffer[work->current_index]);
+    }
+    goto done;
+
+apply_index:
+    CUR_MATRIX_Set(&work->matrix_buffer[channel->matrix_index]);
+    CUR_MATRIX_Txyz4s(translate);
+    CUR_MATRIX_Rzyx4s(rotate);
+    CUR_MATRIX_Get(&work->matrix_buffer[work->current_index]);
+
+done:
+    work->current_index++;
+    return next;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getVal2);
 

@@ -354,4 +354,32 @@ extern void Enemy_Pause(Actor *actor);
 #define ENEMY_TYPE(work) \
     (*(unsigned char *)((unsigned char *)(work) + ENEMY_TYPE_OFFSET))
 
+/* Enemy_Command_Target's own state: the enepc entry's target actor number,
+ * a halfword two bytes after ENEMY_TURN_LOCK (sh at 0x002d3164/0x002d3178).
+ * Enemy_Command_Target below is the only function of this TU that writes
+ * it. */
+#define ENEMY_TARGET_OFFSET 0x37a4
+
+#define ENEMY_TARGET(work) \
+    (*(short *)((unsigned char *)(work) + ENEMY_TARGET_OFFSET))
+
+/*
+ * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared
+ * type is TU-local by canon (config/header-canon.json): this TU evidences
+ * only the word at +0x4 (lw $3,-31100($2) with $2=0x340000 at 0x002d3144,
+ * 0x340000-31100 = 0x338684), which Enemy_Command_Target below reads as a
+ * pointer to the player's Actor and takes the actor number (+0x80) out of.
+ * src/main/chr.h documents the same word as the value
+ * Java_xeno_Chr_getPlayer__ copies into a character's own `peer` field, so
+ * it is the player's own Actor pointer.
+ */
+typedef unsigned int GameLoopStateWords[];
+extern GameLoopStateWords GameLoopState;
+
+/* Sibling of this TU, still original bytes (INCLUDE_ASM above): converts a
+ * command's target selector into the enepc/Actor index Enemy_Command_Target
+ * below stores, the same numbering ACT_create hands out into Actor.number
+ * (+0x80). */
+extern int Get_ActorNumber(int target);
+
 #endif /* SRC_MAIN_ENEMY_2_H */

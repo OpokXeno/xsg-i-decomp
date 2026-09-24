@@ -126,7 +126,7 @@ int xglTaskRemove(XglTaskPrefix *task);
 
 void DISP_on(int countdown);
 
-extern int disptest(XglTaskPrefix *task);
+static int disptest(XglTaskPrefix *task);
 
 void DISP_off(int countdown);
 

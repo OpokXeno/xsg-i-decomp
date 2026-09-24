@@ -75,6 +75,15 @@ def align_of(addr, cap=128):
     return min(a, cap)
 
 
+def original_zero_fill(orig, sec, lo, hi):
+    """True when the original image holds only zero bytes in [lo, hi) of `sec`."""
+    for x in orig.sections:
+        if x.name == sec and x.type != 8 and x.addr <= lo and hi <= x.addr + x.size:
+            off = x.offset + lo - x.addr
+            return not any(orig.data[off:off + hi - lo])
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--map", type=Path, required=True)
@@ -247,7 +256,15 @@ def main():
                     symbols=[dict(symbol=s.name, va=f"0x{s.value:08X}") for s in osyms
                              if sec_by_index[s.shndx] == sec and carried[0] <= s.value < hi])
             if gap < 0 or (gap > 0 and gap >= align_of(hi, 16 if sec != ".text" else 8)):
-                problems.append(dict(kind="C piece gap is not alignment padding", tu=n, section=sec, **piece))
+                # A .text piece that ends on a 16-byte boundary may carry up to
+                # 15 bytes of zero fill in the original (the next object is
+                # 16-aligned); that is alignment padding exactly when the original
+                # bytes of the gap are all zero. An original symbol inside the gap
+                # is still reported below, and the whole-file gate compares the bytes.
+                if sec == ".text" and 0 < gap < align_of(hi, 16) and original_zero_fill(orig, sec, c_end, hi):
+                    piece["zero_fill_16"] = True
+                else:
+                    problems.append(dict(kind="C piece gap is not alignment padding", tu=n, section=sec, **piece))
             for s in inside:
                 # .text: the strict rule covers functions and the compiler markers; other
                 # original labels retained inside a scaffold body (asm loop labels like

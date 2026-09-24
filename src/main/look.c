@@ -72,8 +72,19 @@ INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_sebo_cont);
 
 INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_head_cont);
 
-INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_eyeL_cont);
+void LOOK_eye_cont(int model, int target, int step, int side);
+extern float s_fEyeOffset;
 
-INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_eyeR_cont);
+void LOOK_eyeL_cont(int model, int target, int step)
+{
+    s_fEyeOffset = D_004D85A8;
+    LOOK_eye_cont(model, target, step, 0);
+}
+
+void LOOK_eyeR_cont(int model, int target, int step)
+{
+    s_fEyeOffset = D_004D85AC;
+    LOOK_eye_cont(model, target, step, 1);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/look", LOOK_eye_cont);

@@ -8,7 +8,31 @@ void JNI_initSystem(xheap_block *heap, int size)
     xheap_init(0, heap, size);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", JNI_loadNativeClass);
+void JNI_loadNativeClass(void)
+{
+    loadStaticClass(&classJava_xeno_vm_System, D_004CCA70);
+    loadStaticClass(&classJava_xeno_util_Format, D_004CCA80);
+    loadStaticClass(&classJava_xeno_util_Menu, D_004CCA98);
+    loadStaticClass(&classJava_xeno_util_Window, D_004CCAA8);
+    loadStaticClass(&classJava_xeno_util_Input, D_004CCAC0);
+    loadStaticClass(&classJava_xeno_util_Layout, D_004CCAD0);
+    loadStaticClass(&classJava_xeno_util_Runtime, D_004CCAE8);
+    loadStaticClass(&classJava_xeno_util_Toolkit, D_004CCB00);
+    loadStaticClass(&classJava_xeno_util_TCHParams, D_004CCB18);
+    loadStaticClass(&classJava_xeno_util_Spline, D_004CCB30);
+    loadStaticClass(&classJava_xeno_util_Vector4f, D_004CCB48);
+    loadStaticClass(&classJava_xeno_Camera, D_004CCB60);
+    loadStaticClass(&classJava_xeno_Effect, D_004CCB70);
+    loadStaticClass(&classJava_xeno_Light, D_004CCB80);
+    loadStaticClass(&classJava_xeno_Chr, D_004CCB90);
+    loadStaticClass(&classJava_xeno_Enepc, D_004CCBA0);
+    loadStaticClass(&classJava_xeno_Unit, D_004CCBB0);
+    loadStaticClass(&classJava_xeno_Uwamono, D_004CCBC0);
+    loadStaticClass(&classJava_xeno_Stage, D_004CCBD0);
+    loadStaticClass(&classJava_xeno_Scene, D_004CCBE0);
+    loadStaticClass(&classJava_xeno_PlayControl, D_004CCBF0);
+    loadStaticClass(&classJava_xeno_Movie, D_004CCC08);
+}
 
 void JNI_pushFrame(void)
 {
@@ -32,7 +56,30 @@ int JNI_isInstanceOf(SceneObject object, SceneClass *target_class)
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", JNI_loadClassDB);
+int JNI_loadClassDB(int class_id, int value)
+{
+    int slot;
+
+    if (class_id < 0) {
+        for (slot = 0; slot < 8; slot++) {
+            if (classDB[slot] == 0) {
+                class_id = slot;
+                break;
+            }
+        }
+        if (class_id < 0) {
+            return 0;
+        }
+    }
+
+    if (class_id >= 0x100) {
+        value = classDB[class_id & 0xFF];
+    } else {
+        classDB[class_id] = value;
+    }
+
+    return value;
+}
 
 void JNI_callMethod(SceneVm *vm, SceneMethod *method, SceneObject *arguments,
                     int *output)
@@ -97,8 +144,67 @@ INCLUDE_ASM("asm/main/nonmatchings/jni", checkClass);
 
 INCLUDE_ASM("asm/main/nonmatchings/jni", getStrIndex_002F0A58);
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", JNI_searchClasses);
+static int checkClass(void *buffer, const char *name, int target);
+
+static const char *getStrIndex(const char *name, int delimiter);
+
+int JNI_searchClasses(int class_id, const char *names, int target, int *skip_count)
+{
+    PdbClassGroup *group;
+    PdbClassEntry *entry;
+    void *groups;
+    void *data;
+    int group_count;
+    int group_index;
+    int length;
+    int remaining;
+    int buffer[8];
+    int result;
+    const char *current_name;
+
+    current_name = names;
+    PDB_getEntry(class_id, &groups, &group_count);
+    *skip_count = 0;
+
+    for (;;) {
+        group_index = 0;
+        group = groups;
+        if (group_count > 0) {
+            do {
+                remaining = group->entry_count;
+                entry = (PdbClassEntry *)((unsigned char *)group + 8);
+                if (remaining > 0) {
+                    do {
+                        data = entry->data;
+                        length = entry->length;
+                        entry++;
+                        DataBuffer_init((DataBuffer *)buffer, data, length, 1);
+                        result = checkClass(buffer, current_name, target);
+                        if (result != 0) {
+                            return result;
+                        }
+                        remaining--;
+                    } while (remaining > 0);
+                }
+                group_index++;
+                group = (PdbClassGroup *)entry;
+            } while (group_index < group_count);
+        }
+        current_name = getStrIndex(current_name, ':');
+        result = 0;
+        if (current_name != 0) {
+            (*skip_count)++;
+            continue;
+        }
+        break;
+    }
+
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jni", JNI_loadClassLibrary);
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", JNI_getRegister);
+int JNI_getRegister(int register_index)
+{
+    return VMRegister[register_index & 0x1f];
+}

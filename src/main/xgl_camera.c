@@ -28,13 +28,21 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_camera", xglCameraViewTravel);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_camera", xglCameraViewVolume);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_camera", xglCameraInit);
+static void xglCameraScreenInit(StudioCamera *camera);
+static void xglCameraTravelInit(StudioCamera *camera);
+
+void xglCameraInit(StudioCamera *camera)
+{
+    xglCameraControlInit(camera);
+    xglCameraScreenInit(camera);
+    xglCameraTravelInit(camera);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_camera", xglCameraMove);
 
-extern void xglCameraViewScreen(StudioCamera *camera);
-extern void xglCameraViewTravel(StudioCamera *camera, Vector4 *offset);
-extern void xglCameraViewVolume(StudioCamera *camera, Vector4 *offset);
+static void xglCameraViewScreen(StudioCamera *camera);
+static void xglCameraViewTravel(StudioCamera *camera, Vector4 *offset);
+static void xglCameraViewVolume(StudioCamera *camera, Vector4 *offset);
 
 void xglCameraMoveOffset(StudioCamera *camera, Vector4 *offset)
 {

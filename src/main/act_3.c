@@ -1,4 +1,5 @@
 #include "common.h"
+#include "shared.h"
 
 INCLUDE_ASM("asm/main/nonmatchings/act_3", Footstep);
 
@@ -22,7 +23,13 @@ INCLUDE_ASM("asm/main/nonmatchings/act_3", DrawDropCircle);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_3", ACT_DrawShadowBegin);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_3", ACT_DrawShadowEnd);
+extern void nmlModelDirectSend(int mode, u8 *data, int count);
+extern u8 Tail_10[];
+
+void ACT_DrawShadowEnd(void)
+{
+    nmlModelDirectSend(1, Tail_10, 3);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_3", ACT_DrawShadow);
 

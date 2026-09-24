@@ -37,6 +37,16 @@ void FileSinkiSaveDataPush(void);
 
 int xglTaskWaitRemove(XglTaskPrefix *task);
 
-extern unsigned char *FileWork;
+/*
+ * The file menu's work block: MenuFileMain takes 0x80 bytes, 0x80-aligned, from
+ * the menu work area, clears them and stores the pointer in FileWork.
+ */
+typedef struct FileWorkBlock {
+    unsigned char unmodeled_00[0x03];
+    unsigned char state; /* 0xff ends the file menu */
+    unsigned char unmodeled_04[0x80 - 0x04];
+} FileWorkBlock;
+
+extern FileWorkBlock *FileWork;
 
 #endif /* MAIN_GAME_167_FILE_H */

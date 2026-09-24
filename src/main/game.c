@@ -30,14 +30,24 @@ typedef union QuadVector {
  * bodies; the remainder of the object beyond 0x29f62 is unmodeled. The name
  * is TU-local by canon
  */
+/*
+ * GameStateSave/GameStateRestore back up and restore two more GameLoopState
+ * halfwords (main VA 0x00243278/0x002432f0): +0x0e kindDetail, the halfword
+ * GameStateSave copies alongside +0x0c kind, and the +0xe0/+0xe2 backup slot
+ * GameStateSave writes them into and GameStateRestore reads back to restore
+ * kind and kindDetail.
+ */
 typedef struct GameLoopStateLayout {
     u8 _unmodeled_00[0x0c];
     u16 kind;
-    u8 _unmodeled_0e[2];
+    u16 kindDetail;
     u32 flags;
     u8 _unmodeled_14[0x14];
     GameModeCameraCallback camera_callback;
-    u8 _unmodeled_2c[0x29f14];
+    u8 _unmodeled_2c[0xe0 - 0x2c];
+    u16 restoreKind;
+    u16 restoreKindDetail;
+    u8 _unmodeled_e4[0x29f40 - 0xe4];
     u8 status;
     u8 _unmodeled_29f41[0x0f];
     QuadVector pause_vector;
@@ -103,7 +113,16 @@ INCLUDE_ASM("asm/main/nonmatchings/game", GameStateRestoreCameraLight);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GameStateSave);
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameStateRestore);
+extern void GameStateRestoreCameraLight(void);
+extern void GameStateRestoreKoware(void);
+
+void GameStateRestore(void)
+{
+    GameLoopState.kind = GameLoopState.restoreKind;
+    GameLoopState.kindDetail = GameLoopState.restoreKindDetail;
+    GameStateRestoreCameraLight();
+    GameStateRestoreKoware();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GamePushSaveDataUser);
 
@@ -139,7 +158,52 @@ INCLUDE_ASM("asm/main/nonmatchings/game", CheckGameSymbol);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GameDispTag);
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameDrawShadow);
+/*
+ * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
+ * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
+ * src/main/enemy_2.h, src/main/set_motion.h, src/main/db_light_write.h and
+ * src/main/tya.c, which name the same two fields for the same reason).
+ * GameDrawShadow only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the
+ * in-use id ACT_create writes and ACT_update skips a slot on when it is
+ * zero; the offsets between them are not evidenced by this TU and stay
+ * unmodeled.
+ */
+#define ACTOR_COUNT 64
+#define ACTOR_IN_USE_ID_OFFSET 0x86
+
+typedef struct {
+    u32 flags;
+    u8 unmodeled_04[ACTOR_IN_USE_ID_OFFSET - 0x04];
+    short inUseId;
+    u8 unmodeled_88[0xA70 - (ACTOR_IN_USE_ID_OFFSET + 2)];
+} ActorHead;
+
+extern ActorHead actor[ACTOR_COUNT];
+
+/* Defined in src/main/act_3.c (main/tu265), not yet published in
+ * include/main/act_3.h. */
+void ACT_DrawShadowBegin(void);
+void ACT_DrawShadow(ActorHead *unit);
+void ACT_DrawShadowEnd(void);
+
+void GameDrawShadow(void)
+{
+    ActorHead *unit;
+    int i;
+
+    unit = actor;
+    ACT_DrawShadowBegin();
+    for (i = ACTOR_COUNT - 1; i >= 0; i--, unit++) {
+        if (unit->inUseId != 0) {
+            if (!(unit->flags & 8)) {
+                if (unit->flags & 0x20) {
+                    ACT_DrawShadow(unit);
+                }
+            }
+        }
+    }
+    ACT_DrawShadowEnd();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GameDrawSync);
 

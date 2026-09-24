@@ -14,4 +14,11 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_menu", xglMenuDrawType1);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_menu", xglMenuDraw);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_menu", xglMenuInitial);
+void xglMenuInitial(void)
+{
+    int i;
+
+    for (i = MENU_TABLE_COUNT - 1; i >= 0; i--) {
+        menutbl[i].active = 0;
+    }
+}

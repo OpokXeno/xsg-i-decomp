@@ -121,7 +121,18 @@ void Enemy_Command_Code(Actor *actor, int code)
     } while (0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Target);
+void Enemy_Command_Target(Actor *actor, int target)
+{
+    EnemyWork *work;
+
+    work = &enepc[actor->number];
+
+    if (target == 100) {
+        ENEMY_TARGET(work) = ((Actor *)GameLoopState[1])->number;
+        return;
+    }
+    ENEMY_TARGET(work) = Get_ActorNumber(target);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_LookAt);
 

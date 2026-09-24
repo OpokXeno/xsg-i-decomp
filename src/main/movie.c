@@ -12,7 +12,14 @@ extern void GameMovieStop(void);
  */
 typedef struct JThread JThread;
 
-INCLUDE_ASM("asm/main/nonmatchings/movie", Java_xeno_Movie_init__I);
+/* GameMovieInit is defined in main/tu125 (src/main/game_movie.c), not yet
+ * recovered. */
+extern void GameMovieInit(int size);
+
+void Java_xeno_Movie_init__I(JThread *thread, int *arguments, unsigned int *result)
+{
+    GameMovieInit(arguments[1] << 10);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/movie", Java_xeno_Movie_start__I);
 

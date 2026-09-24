@@ -37,4 +37,28 @@ int RgDispWpnDat_CreateRestNumStr(RgWeapon *weapon, char *buffer)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp", RgDispWpnDat_GetNameUVWH);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp", RgDispWpnDat_CreateSpeedStr);
+extern RgGeomPoint *RgRobotGetGeom(RgStatus *robot);
+extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
+extern float XrgLengthVector(RgVector vector);
+extern int XrgRandInt(void);
+
+/* ov12:0x00a54ab0 "%d k" */
+extern const char D_00A54AB0[];
+
+void RgDispWpnDat_CreateSpeedStr(RgStatus *robot, char *buffer)
+{
+    RgVector velocity;
+    int speed;
+
+    if (robot == 0) {
+        *buffer = 0;
+        return;
+    }
+    RgGeomPointGetVel(RgRobotGetGeom(robot), velocity);
+    velocity[1] = 0.0f;
+    speed = (int) ((float) (int) XrgLengthVector(velocity) * 6.0f * 6.0f / 10.0f);
+    if (speed > 0) {
+        speed = speed + (XrgRandInt() & 3) - 1;
+    }
+    sprintf(buffer, D_00A54AB0, speed);
+}

@@ -10,6 +10,9 @@
 
 typedef struct RgStatus RgStatus;
 
+/* Opaque here: rg_robot_effect.c (ov12/tu010) owns the RgRobotEffect definition. */
+typedef struct RgRobotEffect RgRobotEffect;
+
 /* Number of equip sides a body carries (RgRobotGetWeapon's own range check,
  * ov12:0x00a51be0, "RG_EQUIP_TYPE_MIN <= (eSide) && (eSide) < RG_EQUIP_TYPE_NUM"). */
 #define RG_EQUIP_TYPE_NUM 3
@@ -65,13 +68,57 @@ typedef struct RgHomingThread {
  *                    ov12:0x00a06c1c)
  * Bytes 0x10-0x13 and 0x18-0x1b stay unmodeled.
  */
+/*
+ * _ExecAccelarateCmd and _BodyAdvanceForAttack evidence two trailing
+ * RgRobotSpec fields, each read by exactly one lwc1 at the offset shown:
+ *   +0x20 accelRate         the scale _ExecAccelarateCmd hands
+ *                            RgRobSubAcceralate directly (lwc1 0x20($18),
+ *                            ov12:0x00a075dc) and _BodyAdvanceForAttack
+ *                            multiplies by attackAdvanceRate (lwc1 0x20($16),
+ *                            ov12:0x00a06008)
+ *   +0x34 attackAdvanceRate multiplied by accelRate for
+ *                            _BodyAdvanceForAttack's own acceleration scale
+ *                            (lwc1 0x34($16), ov12:0x00a0600c)
+ * Bytes 0x24-0x33 stay unmodeled; the struct is not known to end at 0x38.
+ */
+/*
+ * _ExecDashContinueCmd reads one leading field, gating whether the DashVR
+ * status is re-entered when compared against 1 (lw 0x4($2), ov12:0x00a07ad0):
+ *   +0x04 type
+ * Bytes 0x00-0x03 and 0x08-0x0b stay unmodeled.
+ */
+/*
+ * _ExecRotateCmd evidences one more field in that gap, read by exactly one
+ * lwc1 at the offset shown:
+ *   +0x24 rotateForce scale applied to the queued command's own rotate
+ *                      sign before RgGeomRobotAddRotForce (lwc1 0x24($2),
+ *                      ov12:0x00a07688)
+ */
+/*
+ * _BodySetGeom evidences two more fields within that same gap, each read
+ * by exactly one lwc1 at the offset shown:
+ *   +0x28 moveResist scaled linear move resistance, handed to
+ *                     RgGeomPointSetMoveResist (lwc1 0x28($16),
+ *                     ov12:0x00a061e4)
+ *   +0x2c rotResist   scaled rotational resistance, handed to
+ *                     RgGeomRobotSetRotResist (lwc1 0x2c($16),
+ *                     ov12:0x00a061fc)
+ */
 typedef struct RgRobotSpec {
-    unsigned char unmodeled_00[0xc]; /* +0x00 */
+    unsigned char unmodeled_00[4];   /* +0x00 */
+    int type;                        /* +0x04 */
+    unsigned char unmodeled_08[4];   /* +0x08 */
     float baseSpeed;                 /* +0x0c */
     unsigned char unmodeled_10[4];   /* +0x10 */
     float turnRate;                  /* +0x14 */
     unsigned char unmodeled_18[4];   /* +0x18 */
     float speedRating;                /* +0x1c */
+    float accelRate;                 /* +0x20 */
+    float rotateForce;               /* +0x24 */
+    float moveResist;                /* +0x28 */
+    float rotResist;                 /* +0x2c */
+    unsigned char unmodeled_30[4];   /* +0x30 */
+    float attackAdvanceRate;          /* +0x34 */
 } RgRobotSpec;
 
 /*
@@ -108,6 +155,24 @@ typedef struct RgRobotSpec {
  * is reached.
  */
 /*
+ * _BodySetEyeGeom/_BodySetAdvanceGeom evidence two more geometry pointers,
+ * each read and overwritten by lw/sw at the offset shown:
+ *   +0x64 eyeGeometry      _BodySetEyeGeom (lw 0x64($16), sw 0x64($16),
+ *                           ov12:0x00a0627c/0x00a06284)
+ *   +0x68 advanceGeometry  _BodySetAdvanceGeom (lw 0x68($17), sw 0x68($17),
+ *                           ov12:0x00a062e8/0x00a0630c); _AdvanceGeomPassTime
+ *                           reads it and hands it to RgGeomPassTime/
+ *                           RgGeomPointSetPos/RgGeomPointMovePos
+ *                           (lw 0x68($4), ov12:0x00a06d44)
+ * Bytes 0x6c-0x6f stay unmodeled.
+ *
+ * _BodyPlayMotion/_BodyPlayMotionLoop evidence one more boolean-shaped
+ * field, tested by exactly one lw at the offset shown:
+ *   +0xa0 smoothSuppressed when nonzero, forces XrgActorSetSmoothPlay's
+ *          smoothPlay argument to 0 instead of motSmooth (lw 0xA0($4),
+ *          ov12:0x00a05ee4/0x00a05f64)
+ */
+/*
  * _BodyExecCmd (still asm) ORs each executed command's (1 << type) bit into
  * +0x04 while _PassTimeRobot runs the queue; _PassTimeRobot itself moves that
  * accumulated mask to +0x08 and clears +0x04 before running the new frame's
@@ -131,6 +196,44 @@ typedef struct RgRobotSpec {
  * 0xB0, ov12:0x00a074c0), 4 bytes past landingSoundID; nothing claimed
  * touches that trailing span.
  */
+/*
+ * _BodySetGeom evidences the last unmodeled geometry-pointer byte as the
+ * robot's own damped rotation, written from RgGeomRobotGetRotate's return
+ * every time the geometry changes (swc1 0x6c($18), ov12:0x00a0620c).
+ */
+/*
+ * _DashVRExit reads one more field, passed unchanged as the argument to
+ * both RgRobotEffectTermJet and RgRobotEffectTermDash (lw 0x98($16),
+ * ov12:0x00a05660/0x00a05668):
+ *   +0x98 effect
+ * Bytes 0x88-0x97 stay unmodeled.
+ */
+/*
+ * _AttackExit reads one more field within that same span, the homing
+ * thread the Attack status started for the robot's own ranged weapon,
+ * read to stop it (lw 0x94($18), ov12:0x00a03324):
+ *   +0x94 homingThread
+ * Bytes 0x88-0x93 stay unmodeled.
+ */
+/*
+ * _ExecWeakDamageCmd evidences four more fields, each touched at the
+ * offset shown:
+ *   +0x20 weakHitMotion  the queued command's own scratch3, stored back
+ *                        only while the accumulated hits stay below the
+ *                        command's own threshold (swc1 0x20($16),
+ *                        ov12:0x00a07d94)
+ *   +0x24 weakHitPower   the queued command's own scratch4, stored back
+ *                        alongside weakHitMotion (swc1 0x24($16),
+ *                        ov12:0x00a07d98)
+ *   +0x28 weakHitAccum   the running total of RgCmd.scratch0 across
+ *                        consecutive weak hits, compared against
+ *                        RgCmd.scratch1 to trigger Damage status (swc1
+ *                        0x28($16), ov12:0x00a07d64)
+ *   +0x2c weakHitWindow  reseeded from the queued command's own scratch2
+ *                        whenever it has decayed to zero or less, alongside
+ *                        clearing weakHitAccum (swc1 0x2c($16),
+ *                        ov12:0x00a07d54)
+ */
 typedef struct RgBody {
     unsigned int flags;               /* +0x00 */
     int cmdMask;                      /* +0x04 */
@@ -140,18 +243,26 @@ typedef struct RgBody {
     float lifeMax;                    /* +0x14 */
     int autoHomingEnv;                /* +0x18 */
     int charID;                       /* +0x1c */
-    unsigned char unmodeled_20[0x30]; /* +0x20 */
+    float weakHitMotion;              /* +0x20 */
+    float weakHitPower;               /* +0x24 */
+    float weakHitAccum;               /* +0x28 */
+    float weakHitWindow;              /* +0x2c */
+    unsigned char unmodeled_30[0x20]; /* +0x30 */
     float dashTime;                   /* +0x50 */
     RgRobotSpec *spec;                /* +0x54 */
     void *target;                     /* +0x58 */
     void *actor;                      /* +0x5c */
     RgGeomPoint *geometry;            /* +0x60 */
-    unsigned char unmodeled_64[0xc];  /* +0x64 */
+    RgGeomPoint *eyeGeometry;         /* +0x64 */
+    RgGeomPoint *advanceGeometry;     /* +0x68 */
+    float rotate;                     /* +0x6c */
     void *weapon[RG_EQUIP_TYPE_NUM];  /* +0x70 */
     int spareWeapon[RG_EQUIP_TYPE_NUM]; /* +0x7c */
-    unsigned char unmodeled_88[0x14]; /* +0x88 */
+    unsigned char unmodeled_88[0xc];  /* +0x88 */
+    RgHomingThread *homingThread;     /* +0x94 */
+    RgRobotEffect *effect;            /* +0x98 */
     int motSmooth;                    /* +0x9c */
-    unsigned char unmodeled_a0[4];    /* +0xa0 */
+    int smoothSuppressed;             /* +0xa0 */
     float confuse;                    /* +0xa4 */
     int landingSoundID;               /* +0xa8 */
     unsigned char unmodeled_ac[4];    /* +0xac */
@@ -250,12 +361,26 @@ typedef void (*RgStatusExitFunc)(RgRobotStatus *status, RgBody *body);
  *   scratchTimer (+0x0c) DashVR's countdown timer, set to 0.1 by
  *                     _DashVRMainToFollow
  */
+/*
+ * _AttackExit evidences the Attack status's own reuse of two scratch words
+ * and one more field of the 0x10-0x3f span:
+ *   scratch1 (+0x04) the ranged weapon handle passed to RgWeaponGetEss and
+ *                     RgWeaponPlayMotion (lw 0x4($17), ov12:0x00a0330c);
+ *                     also the RgWeaponShotStop argument on entry
+ *   scratch2 (+0x08) the weapon handle passed to RgWeaponRestartLockon on
+ *                     exit (lw 0x8($17), ov12:0x00a0336c)
+ *   eSide (+0x18) the attacking equip side, combined with the robot's
+ *                 charID to index the weapon-essence motion table (lw
+ *                 0x18($17), ov12:0x00a0334c)
+ */
 struct RgRobotStatus {
     int scratch0;                         /* +0x00 */
     int scratch1;                         /* +0x04 */
     int scratch2;                         /* +0x08 */
     float scratchTimer;                   /* +0x0c */
-    unsigned char unmodeled_10[0x30];     /* +0x10 */
+    unsigned char unmodeled_10[8];        /* +0x10 */
+    int eSide;                            /* +0x18 */
+    unsigned char unmodeled_1c[0x24];     /* +0x1c */
     int type;                            /* +0x40 */
     float elapsedTime;                   /* +0x44 */
     RgStatusExecCmdFunc execCmdMethod;   /* +0x48 */
@@ -271,9 +396,66 @@ struct RgRobotStatus {
  * given as the equip side to drop. No other byte of either allocation is
  * claimed.
  */
+/*
+ * RgRobotAccelarate/RgRobotShot/RgRobotTargetting/RgRobotDash/
+ * RgRobotGiveDamage/RgRobotDropWeapon/RgRobotInvalidAttack/RgRobotHitBG/
+ * RgRobotNearBG evidence every queuer's own writes into the entry
+ * _EntryCmdQueue (still asm) returns; bytes 0x00-0x0f hold a direction
+ * vector for the vector-shaped commands (Accelarate/Dash/GiveDamage/
+ * InvalidAttack/HitBG/NearBG, written through XrgCopyVector/
+ * XrgNormalizeVector's destination cast at that address) and reuse +0x00 as
+ * a plain int for the value-shaped commands (param below, written by
+ * Shot/Targetting/DropWeapon). scratch0/scratch1 are each written by
+ * exactly one command's queuer, at the offset shown:
+ *   +0x10 scratch0 RgRobotGiveDamage's own damage magnitude (swc1 0x10($2),
+ *                   ov12:0x00a09064); RgRobotInvalidAttack's own scale,
+ *                   reusing the same offset for its own command type
+ *                   (swc1 0x10($16), ov12:0x00a09348)
+ *   +0x14 scratch1 RgRobotGiveDamage's own damage type (sw 0x14($2),
+ *                   ov12:0x00a09068)
+ * Bytes 0x18-0x2f stay unmodeled.
+ */
+/*
+ * RgRobotGiveWeakDamage/RgRobotHitByBody evidence four more scratch words
+ * of that same span, each written by exactly one queuer, plus a float
+ * reuse of scratch1; _ExecWeakDamageCmd/_ExecHitByBody read them back:
+ *   +0x14 scratch1 read as a float threshold by _ExecWeakDamageCmd (lwc1
+ *                   0x14($2), ov12:0x00a07d38), compared against the
+ *                   accumulated scratch0 hits
+ *   +0x18 scratch2 RgRobotGiveWeakDamage's own third float argument (swc1
+ *                   0x18($16), ov12:0x00a09130); the reseed value
+ *                   _ExecWeakDamageCmd stores into RgBody's own
+ *                   weakHitWindow (lwc1 0x18($2), ov12:0x00a07d48)
+ *   +0x1c scratch3 RgRobotGiveWeakDamage's own fourth float argument (swc1
+ *                   0x1c($16), ov12:0x00a09134); read back into RgBody's
+ *                   weakHitMotion (lwc1 0x1c($2), ov12:0x00a07d90)
+ *   +0x20 scratch4 RgRobotGiveWeakDamage's own fifth float argument (swc1
+ *                   0x20($16), ov12:0x00a0912c), read back into RgBody's
+ *                   weakHitPower (lwc1 0x20($2), ov12:0x00a07d98);
+ *                   RgRobotHitByBody's own damage magnitude, reusing the
+ *                   same offset for its own command type (swc1 0x20($16),
+ *                   ov12:0x00a091e0), subtracted from RgBody's life by
+ *                   _ExecHitByBody (lwc1 0x20($16), ov12:0x00a07c9c)
+ *   +0x24 scratch5 RgRobotHitByBody's own force scale (swc1 0x24($16),
+ *                   ov12:0x00a091dc), handed to XrgScaleVector by
+ *                   _ExecHitByBody (lwc1 0x24($16), ov12:0x00a07c74)
+ * RgRobotHitByBody also copies its own direction argument into
+ * scratch0..scratch3 as an inline RgVector (XrgCopyVector destination cast
+ * at &scratch0, ov12:0x00a091c8), and its own position argument into
+ * param..+0xc the same way (ov12:0x00a091d4), both read back by
+ * _ExecHitByBody through the same casts (ov12:0x00a07c6c/0x00a07c74).
+ * Bytes 0x28-0x2f stay unmodeled.
+ */
 typedef struct RgCmd {
     int param;                       /* +0x00 */
-    unsigned char unmodeled_04[0x2c]; /* +0x04 */
+    unsigned char unmodeled_04[0xc]; /* +0x04 */
+    float scratch0;                  /* +0x10 */
+    int scratch1;                    /* +0x14 */
+    float scratch2;                  /* +0x18 */
+    float scratch3;                  /* +0x1c */
+    float scratch4;                  /* +0x20 */
+    float scratch5;                  /* +0x24 */
+    unsigned char unmodeled_28[8];   /* +0x28 */
     int type;                        /* +0x30 */
     unsigned char unmodeled_34[0xc]; /* +0x34 */
 } RgCmd;
@@ -305,12 +487,13 @@ typedef struct RgCmdQueue {
 extern void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
                            float rotational_scale);
 
-extern void _InitBreakingStatus(RgStatus *status, RgBody *body);
+static void _InitBreakingStatus(RgStatus *status, RgBody *body);
 
-extern void _EntryCmdQueue(void *cmdQueue, int cmdType);
+/* Returns the accepted entry, or 0 when the ring is full or the type invalid. */
+static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType);
 
-extern void _BodyEquipWeapon(RgBody *body, int eSide, int weaponID);
+static void _BodyEquipWeapon(RgBody *body, int eSide, int weaponID);
 
-extern void _BodySetSpareWeapon(RgBody *body, int eSide, int weaponID);
+static void _BodySetSpareWeapon(RgBody *body, int eSide, int weaponID);
 
 #endif /* SRC_OV12_RG_ROBOT_H */

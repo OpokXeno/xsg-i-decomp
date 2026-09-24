@@ -33,7 +33,40 @@ float RgGetGeomGravity(void)
     return 60.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", InitRgGeomPoint);
+/*
+ * RgGeomInit, RgGeomSetType and RgGeomSetPassTimeMeshod are original
+ * functions of the base geometry TU (rg_geom.c, ov12/tu051), already
+ * recovered as C.
+ */
+extern void RgGeomInit(RgGeom *pGeom);
+extern void RgGeomSetType(RgGeom *pGeom, int type);
+extern void RgGeomSetPassTimeMeshod(RgGeom *pGeom,
+                                     void (*method)(RgGeom *, float));
+extern void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime);
+
+/* The type tag InitRgGeomPoint passes to RgGeomSetType; no other OV12
+   translation unit names this value yet. */
+#define RG_GEOM_TYPE_POINT 0
+
+void InitRgGeomPoint(RgGeomPoint *point, float weight)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 32);
+    }
+    if (!(weight > 0.0f)) {
+        assert_prog(D_00A55118, D_00A55100, 33);
+    }
+    RgGeomInit((RgGeom *)point);
+    RgGeomSetType((RgGeom *)point, RG_GEOM_TYPE_POINT);
+    RgGeomSetPassTimeMeshod((RgGeom *)point,
+                            (void (*)(RgGeom *, float))RgGeomPointPassTime);
+    XrgClearVector(point->position);
+    XrgClearVector(point->velocity);
+    XrgClearVector(point->force);
+    XrgClearVector(point->oldPosition);
+    point->moveResist = 0.0f;
+    point->maxXYSpd = 1e8f;
+}
 
 RgGeomPoint *CreateRgGeomPoint(float weight)
 {
@@ -48,13 +81,38 @@ RgGeomPoint *CreateRgGeomPoint(float weight)
     return point;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetPos);
+void RgGeomPointSetPos(RgGeomPoint *point, RgVector position)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 64);
+    }
+    XrgCopyVector(point->position, position);
+    XrgCopyVector(point->oldPosition, position);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointMovePos);
+void RgGeomPointMovePos(RgGeomPoint *point, RgVector position)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 71);
+    }
+    XrgCopyVector(point->position, position);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointResetPos);
+void RgGeomPointResetPos(RgGeomPoint *point)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 77);
+    }
+    XrgCopyVector(point->oldPosition, point->position);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointSetVel);
+void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 84);
+    }
+    XrgCopyVector(point->velocity, velocity);
+}
 
 void RgGeomPointAddForce(RgGeomPoint *point, RgVector force)
 {
@@ -119,7 +177,13 @@ void __RgGeomPointGetOldPos(RgGeomPoint *point, RgPointVector *destination,
                   (float *)((const char *)point + 0x30));
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_point", RgGeomPointGetVel);
+void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity)
+{
+    if (point == 0) {
+        assert_prog(rg_point_assert_expression, D_00A55100, 139);
+    }
+    XrgCopyVector(velocity, point->velocity);
+}
 
 float RgGeomPointGetSpeed(RgGeomPoint *point)
 {

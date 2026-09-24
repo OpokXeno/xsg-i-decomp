@@ -16,7 +16,17 @@ static void _InitGroup(RgGeomGroup *pGroup)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _DisposeGroup);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", CreateRgGeomGroup);
+RgGeomGroup *CreateRgGeomGroup(void)
+{
+    RgGeomGroup *pGroup;
+
+    pGroup = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomGroup), D_00A55348, 62);
+    if (pGroup == 0) {
+        assert_prog(D_00A55338, D_00A55348, 63);
+    }
+    _InitGroup(pGroup);
+    return pGroup;
+}
 
 void DisposeRgGeomGroup(RgGeomGroup *pGroup)
 {
@@ -38,7 +48,13 @@ static void RgGeomGroupAddElm(RgGeomGroup *pGroup, void *pElm)
     RgVectorPush(pGroup->m_pList, pElm);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", RgGeomGroupRemoveElm);
+static void RgGeomGroupRemoveElm(RgGeomGroup *group, void *element)
+{
+    if ((group == 0) || (element == 0)) {
+        assert_prog(D_00A55360, D_00A55348, 91);
+    }
+    RgVectorRemove(group->m_pList, element, D_00A55348, 93);
+}
 
 /*
  * Every geometry kind a group creates stores the RgGeomGroup that owns it
@@ -121,17 +137,95 @@ static void _DestructPillarMadeByGroup(RgGeom *pGeom)
         pGeom);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _CreatePointWithGroup);
+static RgGeom *_CreatePointWithGroup(RgGeomGroup *group)
+{
+    RgGeom *geom;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _CreateBallWithGroup);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0x80, D_00A55348, 170);
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 171);
+    }
+    InitRgGeomPoint(geom, 1.0f);
+    RgGeomSetDestructMethod(geom, _DestructPointMadeByGroup);
+    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_POINT_GROUP_OFFSET) = group;
+    RgGeomGroupAddElm(group, geom);
+    return geom;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _CreateRobotWithGroup);
+static RgGeom *_CreateBallWithGroup(RgGeomGroup *group)
+{
+    RgGeom *geom;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _CreatePolyWithGroup);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0x90, D_00A55348, 184);
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 185);
+    }
+    InitRgGeomBall(geom, 1.0f, 1.0f);
+    RgGeomSetDestructMethod(geom, _DestructBallMadeByGroup);
+    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_BALL_GROUP_OFFSET) = group;
+    RgGeomGroupAddElm(group, geom);
+    return geom;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _CreateTrayWithGroup);
+static RgGeom *_CreateRobotWithGroup(RgGeomGroup *group)
+{
+    RgGeom *geom;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _CreatePillarWithGroup);
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 199);
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 200);
+    }
+    InitRgGeomRobot(geom);
+    RgGeomSetDestructMethod(geom, _DestructRobotMadeByGroup);
+    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_ROBOT_GROUP_OFFSET) = group;
+    RgGeomGroupAddElm(group, geom);
+    return geom;
+}
+
+static RgGeom *_CreatePolyWithGroup(RgGeomGroup *group)
+{
+    RgGeom *geom;
+
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 214);
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 215);
+    }
+    InitRgGeomPoly(geom);
+    RgGeomSetDestructMethod(geom, _DestructPolyMadeByGroup);
+    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_POLY_GROUP_OFFSET) = group;
+    RgGeomGroupAddElm(group, geom);
+    return geom;
+}
+
+static RgGeom *_CreateTrayWithGroup(RgGeomGroup *group)
+{
+    RgGeom *geom;
+
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 229);
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 230);
+    }
+    InitRgGeomTray(geom);
+    RgGeomSetDestructMethod(geom, _DestructTrayMadeByGroup);
+    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_TRAY_GROUP_OFFSET) = group;
+    RgGeomGroupAddElm(group, geom);
+    return geom;
+}
+
+static RgGeom *_CreatePillarWithGroup(RgGeomGroup *group)
+{
+    RgGeom *geom;
+
+    geom = RgHeapAlloc(InstanceOfRgHeap(), 0xB0, D_00A55348, 244);
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 245);
+    }
+    InitRgGeomPillar(geom);
+    RgGeomSetDestructMethod(geom, _DestructPillarMadeByGroup);
+    *(RgGeomGroup **)((unsigned char *)geom + RG_GEOM_PILLAR_GROUP_OFFSET) = group;
+    RgGeomGroupAddElm(group, geom);
+    return geom;
+}
 
 RgGeom *RgGeomGroupCreatePoint(RgGeomGroup *pGroup, RgGeom *parent)
 {

@@ -126,7 +126,7 @@ void eBattleWinClose4(void);
 
 int eBattleWinPageCheck4(void);
 
-void eBattleWinInit2(void *arg);
+void *eBattleWinInit2(void *arg);
 
 /* Not yet recovered (src/main/window_tex_load.c); matches the prototype
  * already used at its other call sites (src/main/party.c). */

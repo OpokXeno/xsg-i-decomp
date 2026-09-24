@@ -22,8 +22,18 @@ extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
 extern const char D_00A51C20[];
 extern const char D_00A51C30[];
 
-extern void _InitControlInput(RgControlInput *pInput, RgRobot *pRobot,
+/*
+ * ov12:0x00a51c50 contains the assertion expression "pCam != NIL", the same
+ * asm-owned scaffold data window as above; _InitControlInput reuses it as a
+ * generic non-null check on its pEssence argument.
+ */
+extern const char D_00A51C50[];
+
+extern void InitXrgInput(void *pBuffer, int padId);
+
+static void _InitControlInput(RgControlInput *pInput, RgRobot *pRobot,
                               void *pEssence, int padId);
+static void _jobControlInput(RgRobotControl *pControl);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_control", _jobControlInput);
 
@@ -56,9 +66,37 @@ void InitRgRobotControlCommon(RgRobotControl *pControl, RgRobot *pRobot)
     pControl->destructMethod = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_control", _InitControlInput);
+static void _InitControlInput(RgControlInput *pInput, RgRobot *pRobot,
+                              void *pEssence, int padId)
+{
+    void *pBuffer;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_control", CreateRgRobotControlNul);
+    if (pInput == 0) {
+        assert_prog(D_00A51C20, D_00A51C30, 204);
+    }
+    if (pEssence == 0) {
+        assert_prog(D_00A51C50, D_00A51C30, 205);
+    }
+    InitRgRobotControlCommon(&pInput->control, pRobot);
+    pInput->control.destructMethod = _DestructControlInput;
+    pInput->control.jobMethod = _jobControlInput;
+    pBuffer = RgHeapAlloc(InstanceOfRgHeap(), 48, D_00A51C30, 213);
+    pInput->buffer = pBuffer;
+    InitXrgInput(pBuffer, padId);
+    pInput->essence = pEssence;
+}
+
+RgRobotControl *CreateRgRobotControlNul(RgRobot *pRobot)
+{
+    RgRobotControl *pControl;
+
+    pControl = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgRobotControl), D_00A51C30, 224);
+    if (pControl == 0) {
+        assert_prog(D_00A51C20, D_00A51C30, 225);
+    }
+    InitRgRobotControlCommon(pControl, pRobot);
+    return pControl;
+}
 
 RgRobotControl *CreateRgRobotControlInput(RgRobot *pRobot, void *pEssence,
                                           int padId)

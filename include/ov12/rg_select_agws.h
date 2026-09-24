@@ -1,0 +1,6 @@
+#ifndef INCLUDE_OV12_RG_SELECT_AGWS_H
+#define INCLUDE_OV12_RG_SELECT_AGWS_H
+
+typedef struct RgSelectAGWS RgSelectAGWS;
+
+#endif /* INCLUDE_OV12_RG_SELECT_AGWS_H */

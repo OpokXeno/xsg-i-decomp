@@ -39,4 +39,22 @@ typedef struct RgGaugeDisp {
 extern const char D_00A54640[];
 extern const char D_00A54650[];
 
+/*
+ * The 2D paint context (defined by ov12/tu086 xrg_paint2d); this TU only
+ * passes the pointer through to the XrgPaint2D* calls.
+ */
+typedef struct XrgPaint2D XrgPaint2D;
+
+/*
+ * The rectangle _disp_bar computes for the drawn bar's remainder and hands
+ * to _disp_bar_rest: x, y are the screen origin and width, height the size
+ * XrgPaint2DDrawXYWH draws the remainder with.
+ */
+typedef struct RgGaugeDispRect {
+    int x;
+    int y;
+    int width;
+    int height;
+} RgGaugeDispRect;
+
 #endif /* SRC_OV12_RG_GAUGE_DISP_H */

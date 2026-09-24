@@ -14,28 +14,23 @@ INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CardEnemySet);
  * of one side's CardHand (include/ov10/cgp.h, owned by ov10/tu008). */
 extern int CardPlayHandCnt(CardHand *hand);
 
-/* Byte offsets of the two CardHand records inside CardGameWork (owned by
- * ov10/tu008), which names them playerHand and enemyHand. */
-#define CARD_HAND_PLAYER_OFFSET 0x45C
-#define CARD_HAND_ENEMY_OFFSET 0x2F08
-
 /* AI command-request handler; defined in ov10/tu010 (still assembler). */
 extern void CC_Kara_CommRequest(int side, CardGameWork *work);
 
 void CardEnemyCommandRequest(int side, CardGameWork *work) {
     CardPlayHandCnt(side == 0
-        ? (CardHand *) ((u8 *) work + CARD_HAND_PLAYER_OFFSET)
-        : (CardHand *) ((u8 *) work + CARD_HAND_ENEMY_OFFSET));
+        ? &work->player.hand
+        : &work->enemy.hand);
     CC_Kara_CommRequest(side, work);
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CardEnemyOperationPlay);
 
 /* AI command-play handler; defined in ov10/tu010 (still assembler). */
-extern void CC_Kara_CommPlay(void);
+extern void CC_Kara_CommPlay(int side, CardGameWork *work);
 
-void CardEnemyCommandPlay(void) {
-    CC_Kara_CommPlay();
+void CardEnemyCommandPlay(int side, CardGameWork *work) {
+    CC_Kara_CommPlay(side, work);
 }
 
 /* AI first-answer handler; defined in ov10/tu010 (still assembler). */
@@ -43,8 +38,8 @@ extern void CC_Kara_1stAnswer(int side, CardGameWork *work);
 
 void CardEnemy1stAnswer(int side, CardGameWork *work) {
     CardPlayHandCnt(side == 0
-        ? (CardHand *) ((u8 *) work + CARD_HAND_PLAYER_OFFSET)
-        : (CardHand *) ((u8 *) work + CARD_HAND_ENEMY_OFFSET));
+        ? &work->player.hand
+        : &work->enemy.hand);
     CC_Kara_1stAnswer(side, work);
 }
 
@@ -58,7 +53,17 @@ INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CGPEnemyExecOperation);
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CGPEnemyLv10SetSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CardEnemyComm);
+/* AI comm-phase handler; defined in ov10/tu010 (still assembler). */
+extern int CC_Kara_CommFase(int side, CardGameWork *work);
+
+/* Advances the card game turn; defined in ov10/tu008 (still assembler). */
+extern void CGPNextTurnSub(CardGameWork *work);
+
+void CardEnemyComm(int side, CardGameWork *work) {
+    if (CC_Kara_CommFase(side, work) == 1) {
+        CGPNextTurnSub(work);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CardEnemyAnswerSionSearch);
 
@@ -72,8 +77,8 @@ void CardEnemyEnd(int side, CardGameWork *work) {
     int endFaseResult = 1;
 
     if (CardPlayHandCnt(side == 0
-            ? (CardHand *) ((u8 *) work + CARD_HAND_PLAYER_OFFSET)
-            : (CardHand *) ((u8 *) work + CARD_HAND_ENEMY_OFFSET)) >= 7) {
+            ? &work->player.hand
+            : &work->enemy.hand) >= 7) {
         endFaseResult = CC_Kara_EndFase(side, work);
     }
     if (endFaseResult == 0) {

@@ -46,7 +46,17 @@ float ball2point(const Vector4 *cursor_position,
     return -1.0f;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", prevActor);
+void *prevActor(int startIndex)
+{
+    int i;
+
+    for (i = startIndex; i >= 0; i--) {
+        if (actor[i].inUseId != 0 && !(actor[i].flags & 8)) {
+            return &actor[i];
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", nextActor);
 
@@ -62,7 +72,18 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", changeCameraMode);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateCursor);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", drawCursor);
+void drawCursor(void)
+{
+    Matrix4 matrix;
+    HomogeneousVector *position;
+
+    position = &cursor[1];
+    position->w = 1.0f;
+    xglMatrixStackUnit();
+    xglMatrixStackTrans(&position->x);
+    xglMatrixStackSave(matrix);
+    drawAxis(matrix, 1.0f);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", initCursor);
 
@@ -70,7 +91,24 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", printM);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", MAP_serach);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", EvtTools);
+void EvtTools(void)
+{
+    if ((PadData.half_2a & 0x10) && (PadData.half_28 & 0x100)) {
+        mode_004DC5A8 = (mode_004DC5A8 + 1) & 1;
+    }
+    MAP_serach();
+    if (mode_004DC5A8 == 1) {
+        JTHREAD_cntl();
+        PLAY_ctrl();
+    }
+    TCAMERA_update();
+    if (mode_004DC5A8 == 1) {
+        ACT_update();
+        MAP_updateUnit();
+    }
+    updateCursor(0);
+    drawCursor();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", initLight3);
 
@@ -82,7 +120,11 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateLight);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateWind);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", VW_setCursorMode);
+void VW_setCursorMode(int mode)
+{
+    *(int *)((unsigned char *)cursor + CURSOR_MODE_OFFSET) = mode;
+    changeCameraMode();
+}
 
 void VW_setCursorFunc(CursorCallback callback, void *argument)
 {

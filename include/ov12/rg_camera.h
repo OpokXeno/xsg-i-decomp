@@ -21,6 +21,8 @@ struct RgCamera {
     RgVector target;                   /* +0x20 */
     RgVector up;                       /* +0x30 */
     int actionState[7];                /* +0x40..+0x58 */
+    unsigned char unmodeled_5c[0x14];  /* +0x5c */
+    float farDistance;                 /* +0x70 */
 };
 
 #endif /* INCLUDE_OV12_RG_CAMERA_H */

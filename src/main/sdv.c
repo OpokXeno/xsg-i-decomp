@@ -11,7 +11,20 @@ void sdvInitAmbient(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSaveAmbient);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetAmbStateSub);
+static void sdvSetAmbStateSub(int state, int effect_no, int force)
+{
+    if (force != 0) {
+        _sdvAmbState = state;
+        return;
+    }
+
+    srsAnalyzeEftNo(effect_no, &charID_0, &eftCate_1);
+    if (eftCate_1 == 0xE || effect_no == 0xB25) {
+        if ((unsigned int)(effect_no - 0x8FC) >= 0xB6) {
+            _sdvAmbState = state;
+        }
+    }
+}
 
 void sdvSetAmbState(int state, int effect_no)
 {
@@ -73,13 +86,49 @@ static void sdvSetCameraOffset(SdvCamOffset *cam, int kind,
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvProgressPrm);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvScheduleCamera);
+void sdvScheduleCamera(SdvCameraTask *task)
+{
+    float params[44];
+
+    if (_sefBattleMode != 0 && task != 0 && task->active != 0) {
+        if (task->pos.active != 0) {
+            sdvProgressPrm(0, &task->pos, 0xC);
+        }
+        if (task->angle.active != 0) {
+            sdvProgressPrm(1, &task->angle, 0xC);
+        }
+        if (task->scale.active != 0) {
+            sdvProgressPrm(3, &task->scale, 4);
+        } else {
+            memset(params, 0, sizeof(params));
+            func_A31920(2, params);
+            params[41] = 40.0f;
+            func_A31920(3, params);
+        }
+        if (task->offset.active != 0) {
+            sdvProgressPrm(0x41, &task->offset, 6);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvTransOffset);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvInitSpecialWork);
+void sdvInitSpecialWork(void)
+{
+    memset(_sdvSpecialBuf, 0, sizeof(_sdvSpecialBuf));
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvClearSpecialWork);
+void sdvClearSpecialWork(void)
+{
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        if (_sdvSpecialBuf[i] != 0) {
+            GameDefocusSet(i, 0, 0);
+            _sdvSpecialBuf[i] = 0;
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvAllocSpecialWork);
 
@@ -89,11 +138,19 @@ INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvDrawSpecial);
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvScheduleAlter);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvInitAlter);
+extern void sefMemZero(void *data, unsigned int size);
+
+void sdvInitAlter(SdvAlter *alter)
+{
+    sefMemZero(alter, sizeof(*alter));
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvCreateAlter);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvDestroyAlter);
+void sdvDestroyAlter(SdvAlter *alter)
+{
+    sefMemZero(alter, sizeof(*alter));
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvKillAlter);
 
@@ -101,10 +158,36 @@ INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecAlter);
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvDrawAlter);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvInitAlters);
+void sdvInitAlters(void)
+{
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvDestroyAlters);
+    for (i = 0; i < 16; i++) {
+        sdvInitAlter(&_sdvAlter[i]);
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecAlters);
+void sdvDestroyAlters(void)
+{
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        sdvDestroyAlter(&_sdvAlter[i]);
+    }
+}
+
+unsigned short sdvExecAlters(void)
+{
+    int i;
+    unsigned short status;
+
+    for (i = 0; i < 16; i++) {
+        status = _sdvAlter[i].active;
+        if (status != 0) {
+            status = sdvExecAlter(&_sdvAlter[i]);
+        }
+    }
+    return status;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvDrawAlters);

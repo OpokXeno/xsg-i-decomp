@@ -94,12 +94,117 @@ void Java_xeno_util_Toolkit_call__Ljava_lang_Object_Ljava_lang_String_(void)
 {
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I);
+/*
+ * Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I
+ * (main VA 0x002f9c00, 340 bytes, GLOBAL binding).
+ * Loads the id-selected resource into the peer of a xeno.Chr or xeno.Unit
+ * object: a Chr peer gets ACT_loadResource/ACT_loadMotion (tail call,
+ * using the toolkit's current resource id as the motion category); a Unit
+ * peer whose "algorithm" field has none of bits 0x100-0x800 set gets
+ * MAP_loadUnitResource (tail call); any other case returns that masked
+ * algorithm value (0 for an object that is neither).
+ */
+int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I(
+    JThread *thread, ToolkitResourceCall *arguments)
+{
+    JavaField *field;
+    Actor *chr_peer;
+    ToolkitUnitPeer *unit_peer;
+    u8 *object;
+    int id;
+    int resource_id;
+    int result;
 
-INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_loadResource__Ljava_lang_String_);
+    resource_id = XTK_getResourceID();
+    object = arguments->object;
+    id = arguments->id;
+
+    if (JNI_isInstanceOf(object, classJava_xeno_Chr)) {
+        field = lookupClassField(classJava_xeno_Chr,
+                                 loadConstString(unit_field_peer, -1), 0);
+        chr_peer = JAVA_OBJECT_FIELD(object, field);
+        ACT_loadResource(chr_peer, id);
+        return ACT_loadMotion(chr_peer, id, resource_id);
+    }
+
+    result = JNI_isInstanceOf(object, classJava_xeno_Unit);
+    if (result != 0) {
+        field = lookupClassField(classJava_xeno_Unit,
+                                 loadConstString(unit_field_peer, -1), 0);
+        unit_peer = JAVA_OBJECT_FIELD(object, field);
+        field = lookupClassField(classJava_xeno_Unit,
+                                 loadConstString(unit_field_algorithm, -1), 0);
+        result = JAVA_INT_FIELD(object, field) & 0xF00;
+        if (result == 0)
+            return MAP_loadUnitResource(unit_peer, id);
+    }
+    return result;
+}
+
+/*
+ * Java_xeno_util_Toolkit_loadResource__Ljava_lang_String_
+ * (main VA 0x002f9d58, 52 bytes, GLOBAL binding).
+ * Reads the byte pointer out of the Java String argument's storage record
+ * and writes XTK_findFile's result through the output pointer.
+ */
+void Java_xeno_util_Toolkit_loadResource__Ljava_lang_String_(
+    JThread *thread, ToolkitStringCall *arguments, int *result)
+{
+    *result = XTK_findFile(arguments->name->storage->bytes);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I);
 
-INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II);
+/*
+ * Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II
+ * (main VA 0x002f9eb0, 348 bytes, GLOBAL binding).
+ * Same object-type dispatch as ...Object_I's, with a second int argument:
+ * a Chr peer gets ACT_loadResource/ACT_loadMotion (tail call, with the
+ * fixed motion category 3; the toolkit's current resource id is still
+ * queried but its result is unused, matching the compiled call sequence).
+ * A Unit peer whose "algorithm" field has none of bits 0x100-0x800 set
+ * gets MAP_loadUnitResource, then RES_loadFile(-1, 2, resource_id +
+ * 0x03000000, 0) with its result stored into the peer's +0xDC slot.
+ */
+int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II(
+    JThread *thread, ToolkitResourceIndexCall *arguments)
+{
+    JavaField *field;
+    Actor *chr_peer;
+    ToolkitUnitPeer *unit_peer;
+    u8 *object;
+    int id;
+    int resource_id;
+    int result;
+
+    XTK_getResourceID();
+    object = arguments->object;
+    id = arguments->id;
+    resource_id = arguments->resource_id;
+
+    if (JNI_isInstanceOf(object, classJava_xeno_Chr)) {
+        field = lookupClassField(classJava_xeno_Chr,
+                                 loadConstString(unit_field_peer, -1), 0);
+        chr_peer = JAVA_OBJECT_FIELD(object, field);
+        ACT_loadResource(chr_peer, id);
+        return ACT_loadMotion(chr_peer, resource_id, 3);
+    }
+
+    result = JNI_isInstanceOf(object, classJava_xeno_Unit);
+    if (result != 0) {
+        field = lookupClassField(classJava_xeno_Unit,
+                                 loadConstString(unit_field_peer, -1), 0);
+        unit_peer = JAVA_OBJECT_FIELD(object, field);
+        field = lookupClassField(classJava_xeno_Unit,
+                                 loadConstString(unit_field_algorithm, -1), 0);
+        result = JAVA_INT_FIELD(object, field) & 0xF00;
+        if (result == 0) {
+            MAP_loadUnitResource(unit_peer, id);
+            result = RES_loadFile(-1, 2, resource_id + 0x03000000, 0);
+            unit_peer->resource = result;
+        }
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/toolkit", Java_xeno_util_Toolkit_peerSetGroup__II);

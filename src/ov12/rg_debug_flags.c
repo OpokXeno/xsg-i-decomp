@@ -2,6 +2,8 @@
  * OV12 original TU 12: 0x00a0f340..0x00a0f490 (4 functions)
  */
 #include "common.h"
+#include "shared.h"
+#include "ov12/rg_singleton_id.h"
 #include "rg_debug_flags.h"
 
 /*
@@ -11,6 +13,14 @@
  */
 extern const char D_00A52438[];
 extern const char D_00A52448[];
+
+extern void assert_prog(const char *expression, const char *source_file,
+                        int line);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(void *heap, unsigned int size,
+                         const char *source_file, int line);
+extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
+                       int line);
 
 static void _InitRgDebugFlags(RgDebugFlags *flags)
 {
@@ -32,6 +42,23 @@ static void _DestructRgDebugFlags(RgDebugFlags *flags)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_debug_flags", _WrapperDestruct_00A0F3D8);
+static void _WrapperDestruct(RgDebugFlags *pFlags)
+{
+    _DestructRgDebugFlags(pFlags);
+    RgHeapFree(InstanceOfRgHeap(), pFlags, D_00A52448, 29);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_debug_flags", InstanceOfRgDebugFlags);
+RgDebugFlags *InstanceOfRgDebugFlags(void)
+{
+    RgDebugFlags *pFlags;
+
+    pFlags = RgSingletonIDGet(13);
+    if (pFlags == 0) {
+        pFlags = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgDebugFlags),
+                             D_00A52448, 39);
+        _InitRgDebugFlags(pFlags);
+        RgSingletonIDEntry(13, (RgSimpleDB *) pFlags,
+                           (void (*)(RgSimpleDB *)) _WrapperDestruct);
+    }
+    return pFlags;
+}

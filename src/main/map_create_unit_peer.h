@@ -36,6 +36,39 @@ typedef struct MapUnitRecord {
 extern float UnduGet(float x, float z);
 
 /*
+ * A second, wider view of the same MapUnit[] entry MapUnitRecord models the
+ * head of: MAP_setUnitMotion and MAP_updateUnitMPack, below, evidence its
+ * embedded animation-player state at +0x100, which ANM_resetDefault (still
+ * asm) otherwise owns. `position`/`rotation`/`scale`/`matrix` repeat
+ * MapUnitRecord's own transform fields at the same offsets for
+ * MAP_updateUnitMPack's matrix-stack sequence (MapUnitRecord itself cannot
+ * grow to add the animation fields: MAP_updateUnitDefault, outside this
+ * allocation, already uses it at its published size).
+ */
+typedef struct MapUnitAnmState {
+    unsigned char unmodeled_00[0x04];
+    float motionTime; /* +0x04: MAP_updateUnitMPack mirrors PLAY_getCurrent's
+                          own +0x44 float here every update. */
+    unsigned char unmodeled_08[0x14 - 0x08];
+    short motionId;   /* +0x14: MAP_setUnitMotion sets this from its own
+                          argument before calling ANM_resetDefault. */
+} MapUnitAnmState;
+
+typedef struct MapUnitMotionRecord {
+    unsigned char unmodeled_00[0x10];
+    Vector4 position; /* +0x10 */
+    Vector4 rotation; /* +0x20 */
+    Vector4 scale;    /* +0x30 */
+    Matrix4 matrix;   /* +0x40 */
+    unsigned char unmodeled_80[0xDC - 0x80];
+    int animResetParam; /* +0xDC: MAP_setUnitMotion forwards this straight to
+                            ANM_resetDefault's own second argument, whose role
+                            that still-asm function does not evidence here. */
+    unsigned char unmodeled_E0[0x100 - 0xE0];
+    MapUnitAnmState anim; /* +0x100 */
+} MapUnitMotionRecord;
+
+/*
  * Defined in src/main/xgl_2.c (main/tu100) with this spelling, but not in
  * include/main/xgl_2.h: src/ov02/umn_procurator.h declares it as
  * `void xglMatrixStackTrans(float *)`, and header_harvest shares no name

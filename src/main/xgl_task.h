@@ -18,6 +18,6 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
 
 int xglTaskRemove(XglTaskPrefix *task);
 
-extern void xglTaskInitial(void *manager, int capacity, int flags);
+extern void *xglTaskInitial(void *manager, int capacity, int flags);
 
 #endif /* SRC_MAIN_XGL_TASK_H */

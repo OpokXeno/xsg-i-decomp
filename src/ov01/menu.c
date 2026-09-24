@@ -82,7 +82,55 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuResultItm);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatDispCreate);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatDispRemove);
+extern ObjectTask *pPreObj;
+extern ObjectTask *pAtbObj;
+extern ObjectTask *pKeyGuideObj;
+extern ObjectTask *pBoostObj;
+extern ObjectTask *pCritObj;
+extern ObjectTask *pStatObj[4];
+extern ObjectTask *pStockObj[5];
+
+void menuStatDispRemove(void) {
+    int i;
+
+    if (pPreObj != 0) {
+        objRemove(pPreObj);
+        pPreObj = 0;
+    }
+    if (pAtbObj != 0) {
+        objRemove(pAtbObj);
+        pAtbObj = 0;
+    }
+    if (pKeyGuideObj != 0) {
+        objRemove(pKeyGuideObj);
+        pKeyGuideObj = 0;
+    }
+    if (pBoostObj != 0) {
+        objRemove(pBoostObj);
+        pBoostObj = 0;
+    }
+    if (pCritObj != 0) {
+        objRemove(pCritObj);
+        pCritObj = 0;
+    }
+    for (i = 0; i < 5; i++) {
+        if (pStockObj[i] != 0) {
+            objRemove(pStockObj[i]);
+            pStockObj[i] = 0;
+        }
+    }
+    for (i = 0; i < 3; i++) {
+        if (pStatObj[i] != 0) {
+            objRemove(pStatObj[i]);
+            pStatObj[i] = 0;
+        }
+    }
+    if (pMenuBat != 0) {
+        menuCloseBat();
+    }
+    menuCloseEth();
+    menuCloseItm();
+}
 
 /* 0x00a27278: `jr $31; nop`, an empty body in the original. */
 void menuStatPreObj(void) {
@@ -132,7 +180,24 @@ void menuBoostObj(ObjectTask *task) {
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBoostObjDraw);
+/*
+ * actStockGet (ov01/tu003 battle_init.c, exact_c) returns &actStock; calcBoost's
+ * own bounded view of the same record (src/ov01/calc.h CalcActStock) already
+ * names the per-mode ObjectTask *slot[2] at +0x10. menuBoostObjDraw reads
+ * the same two words only to test them for null, so it indexes actStockGet()
+ * the same way rather than repeating a third bounded view of the record.
+ */
+extern int *actStockGet(void);
+void menuBoostObjDrawCha(ObjectTask *task);
+void menuBoostObjDrawSel(ObjectTask *task);
+
+void menuBoostObjDraw(ObjectTask *task) {
+    if (actStockGet()[4] == 0 && actStockGet()[5] == 0) {
+        menuBoostObjDrawSel(task);
+        return;
+    }
+    menuBoostObjDrawCha(task);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBoostObjDrawCha);
 
@@ -167,7 +232,55 @@ void menuCritDispOff(void)
     *(int *)pCritObj->work |= 4; /* set hidden bit 2 */
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuCritObj);
+int objCmdNext(ObjectTask *task);
+int objHatoVec(ObjectTask *task, int direction);
+int objStdMove(ObjectTask *task);
+
+/*
+ * objCmdPtrGet's return, as far as menuCritObj reads it: `lw $3,0x0($2)`
+ * loads the word at +0x00. obj.c's own view of the same 20-byte record
+ * (src/ov01/obj.h ObjectCommandEntry.selector) already names that word;
+ * this TU cannot redefine that tag, so it names its own bounded view of
+ * the same record instead.
+ */
+typedef struct MenuCmdEntryView MenuCmdEntryView;
+struct MenuCmdEntryView {
+    int selector; /* +0x00 */
+};
+
+/*
+ * The battle actor task->work points at, as far as menuCritObj reads it
+ * (0x00a281f4..0x00a28200): `lw $2,0x10($16)` loads task->work, then
+ * `lw $6,0x80($2)` reads one word at +0x80. ov01/tu002 unit_cmd.c's own
+ * view of the same object (src/ov01/unit_cmd.h Actor) already evidences an
+ * ObjectTask *targetUnit at the same offset, set by unitCmdDstSet; this TU
+ * cannot redefine that tag, so it names its own bounded view of the same
+ * object instead.
+ */
+typedef struct MenuCritActorView MenuCritActorView;
+struct MenuCritActorView {
+    unsigned char unmodeled_00[0x80];
+    ObjectTask *targetUnit; /* +0x80 */
+};
+
+int menuCritObj(ObjectTask *task)
+{
+    MenuCmdEntryView *entry;
+    MenuCritActorView *actor;
+    int result;
+
+    result = 1;
+    entry = objCmdPtrGet(task);
+    if (entry->selector == 1) {
+        actor = task->work;
+        objHatoVec(task, (actor->targetUnit == 0) ? 4 : 2);
+        result = objStdMove(task);
+        if (result != 0) {
+            result = objCmdNext(task);
+        }
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuCritObjDraw);
 
@@ -277,7 +390,43 @@ int menuTimeXGet(void) {
     return eventTimerX;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatObjDraw);
+extern BattleUnit *actUnitGet(void);
+void grGpInit(int packet);
+void grPacketSend(int packet);
+void menuPlStatPut(ObjectTask *task, int packet, BattleUnit *unit);
+void menuStatNamePut(ObjectTask *task);
+
+/*
+ * The status-icon task's own work record, as far as menuStatObjDraw and
+ * menuStatNamePut read it. menuStatNamePut (0x00a2a5c0..0x00a2a5c8) loads
+ * `lw $17,0x78($2)` / `lw $5,0x7c($2)` from task->work and passes them to
+ * menuStatIconChk/dataStatNameGet as the character id and the icon slot to
+ * check; menuStatObjDraw (0x00a29bf4..0x00a29c00) loads `lw $17,0x80($2)`
+ * from the same block and compares it against actUnitGet()'s BattleUnit *,
+ * showing the name popup only for the currently active unit.
+ */
+typedef struct MenuStatObjWork MenuStatObjWork;
+struct MenuStatObjWork {
+    unsigned char unmodeled_00[0x78];
+    int charaId;       /* +0x78 */
+    int iconSlot;       /* +0x7C */
+    BattleUnit *unit;   /* +0x80 */
+};
+
+void menuStatObjDraw(ObjectTask *task) {
+    int packet;
+    MenuStatObjWork *work;
+    BattleUnit *unit;
+
+    grGpInit((int)&packet);
+    work = task->work;
+    unit = work->unit;
+    menuPlStatPut(task, (int)&packet, unit);
+    grPacketSend((int)&packet);
+    if (unit == actUnitGet()) {
+        menuStatNamePut(task);
+    }
+}
 
 #include "ov01/calc.h"
 
@@ -329,7 +478,51 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatIconChk);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatIconPut);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatNamePut);
+/*
+ * eBattleWinOpen2's own argument words (src/main/e_battle_win_open.c, still
+ * asm there, no published parameter type). The header shape (textId/
+ * speaker/flags/priority/target) and the flags constant 0x00FFFFFD match
+ * src/ov01/cmd.c's BattleMsgOpenParams, the same window family's argument
+ * record for the sibling eBattleWinOpen4; only flags and target are
+ * confirmed for this callee, the textId/speaker/priority names are carried
+ * over from that sibling record's field order. This call adds one more
+ * word, an icon graphic table pointer, that eBattleWinOpen4 does not take.
+ */
+struct StatNameOpenParams {
+    int textId;                /* +0x00: 8 at this call site */
+    int speaker;                /* +0x04: 0x68 at this call site */
+    int flags;                   /* +0x08: 0x00FFFFFD */
+    int priority;                 /* +0x0C: 0x800000B0 at this call site */
+    int target;                    /* +0x10: dataStatNameGet's resolved name id */
+    unsigned char *iconGraphic;    /* +0x14: D_00A468E8 */
+};
+int *dataStatNameGet(int charaId, int iconSlot);
+void eBattleWinOpen2(struct StatNameOpenParams *params);
+int menuStatIconChk(int charaId, int iconSlot);
+extern unsigned char D_00A468E8[];
+extern void eBattleWinMain2(void);
+
+void menuStatNamePut(ObjectTask *task)
+{
+    struct StatNameOpenParams params;
+    MenuStatObjWork *work;
+    int charaId;
+    int icon;
+
+    work = task->work;
+    charaId = work->charaId;
+    icon = menuStatIconChk(charaId, work->iconSlot);
+    if (icon != -1 && menuOpenChkBat() != 0) {
+        params.textId = 8;
+        params.speaker = 0x68;
+        params.flags = 0xFFFFFD;
+        params.priority = 0x800000B0;
+        params.target = *dataStatNameGet(charaId, icon);
+        params.iconGraphic = D_00A468E8;
+        eBattleWinOpen2(&params);
+        eBattleWinMain2();
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuKeyGuideDisp);
 
@@ -393,7 +586,22 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontIdxGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuDFontIdxGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontPutSub);
+void menuStatSprite(int packet, int x, int y, int width, int height, int srcX, int srcY, int srcRow);
+
+/* The font sheet is a 25-column grid of 0xA x 0x12 (10x18) glyph cells. */
+#define FONT_GLYPH_COLUMNS 25
+#define FONT_GLYPH_WIDTH 0xA
+#define FONT_GLYPH_HEIGHT 0x12
+
+void menuFontPutSub(int packet, int x, int y, int charCode) {
+    int row;
+    int col;
+
+    row = charCode / FONT_GLYPH_COLUMNS;
+    col = charCode % FONT_GLYPH_COLUMNS;
+    menuStatSprite(packet, x, y, FONT_GLYPH_WIDTH, FONT_GLYPH_HEIGHT,
+                   col * FONT_GLYPH_WIDTH, row * FONT_GLYPH_HEIGHT, row);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontPut);
 
@@ -407,9 +615,27 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatSpriteRGB);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatSprite2RGB);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuTexTrans);
+/* dataXtxFileGet's record: only the texture id at +0x4 is read here. */
+extern int *dataXtxFileGet(int index);
+extern void xglPacketTextureTrans(int textureId);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatTexTrans);
+void menuTexTrans(void) {
+    int packet;
+
+    xglPacketTextureTrans(dataXtxFileGet(1)[1]);
+    grGpInit((int)&packet);
+    grGsRegSet((int)&packet, 0x3F, 1);
+    grPacketSend((int)&packet);
+}
+
+void menuStatTexTrans(void) {
+    int packet;
+
+    xglPacketTextureTrans(dataXtxFileGet(0)[1]);
+    grGpInit((int)&packet);
+    grGsRegSet((int)&packet, 0x3F, 1);
+    grPacketSend((int)&packet);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuEnvMake);
 

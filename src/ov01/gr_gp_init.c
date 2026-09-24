@@ -154,23 +154,67 @@ INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grVramCopy);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenF2);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grCloseF2);
+/*
+ * grOpenF2/grOpenF4/grOpenFT4/grOpenFT4STQ/grOpenSpr (siblings, not decoded
+ * here) each save the caller's packet into their own GpSave static and zero
+ * their Num static; grPutXxx then advances GpSave.count as it appends
+ * primitives. The quadword at GpSave.data[GpSave.count] is left for the
+ * trailing GIF tag: grCloseXxx patches its low 8 bytes with the final Num
+ * (the accumulated NLOOP) so the tag matches how many primitives were put.
+ */
+typedef struct GrGifTag {
+    long long control;             /* +0x00: NLOOP/EOP/PRE/PRIM/FLG/NREG */
+    unsigned char unmodeled_08[8]; /* +0x08: REGS */
+} GrGifTag;
+
+extern GrPacket f2GpSave;
+extern int f2Num;
+extern GrPacket f4GpSave;
+extern int f4Num;
+extern GrPacket ft4GpSave;
+extern int ft4Num;
+extern GrPacket ft4STQGpSave;
+extern int ft4STQNum;
+extern GrPacket sprGpSave;
+extern int sprNum;
+
+void grCloseF2(void)
+{
+    GrGifTag *tags = (GrGifTag *)f2GpSave.data;
+    tags[f2GpSave.count].control |= f2Num;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenF4);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grCloseF4);
+void grCloseF4(void)
+{
+    GrGifTag *tags = (GrGifTag *)f4GpSave.data;
+    tags[f4GpSave.count].control |= f4Num;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenFT4);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grCloseFT4);
+void grCloseFT4(void)
+{
+    GrGifTag *tags = (GrGifTag *)ft4GpSave.data;
+    tags[ft4GpSave.count].control |= ft4Num;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenFT4STQ);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grCloseFT4STQ);
+void grCloseFT4STQ(void)
+{
+    GrGifTag *tags = (GrGifTag *)ft4STQGpSave.data;
+    tags[ft4STQGpSave.count].control |= ft4STQNum;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenSpr);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grCloseSpr);
+void grCloseSpr(void)
+{
+    GrGifTag *tags = (GrGifTag *)sprGpSave.data;
+    tags[sprGpSave.count].control |= sprNum;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grPutF2);
 
@@ -236,7 +280,73 @@ void grRotMatrix(Matrix *destination, Matrix *source, FloatVector3 *angles)
     xglMatrixStackSave((float (*)[4])destination);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grRotTransPers);
+/*
+ * grRotTransPers's output vertex: the screen-space X/Y grPutXxx (siblings,
+ * not decoded here) feed to the GS in 12.4 fixed point (the *16.0f below),
+ * the projected depth as a plain integer, and the out-of-frustum bit
+ * (0x8000) grRotTransPers itself copies from *clipFlags.
+ */
+typedef struct GrScreenVertex {
+    int x;      /* +0x00 */
+    int y;      /* +0x04 */
+    int z;      /* +0x08 */
+    int flags;  /* +0x0c */
+} GrScreenVertex;
+
+extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
+                            const Vector4 *vector);
+extern void xglVectorMulAdd(Vector4 *destination, const Vector4 *left,
+                            const Vector4 *right, const Vector4 *addend);
+
+/*
+ * Transforms point by matrix, perspective-divides by the result's W and
+ * tests the divided X/Y/Z against the [-1, 1] clip volume. In bounds, the
+ * point is mapped to screen space by the current camera's screen scale and
+ * offset; out of bounds, *clipFlags gets the 0x8000 bit set and the point is
+ * written back in clip space instead. Either way vertex->flags picks up
+ * *clipFlags's 0x8000 bit, and the reciprocal of W is returned (grPutXxx
+ * uses it to scale billboard extents by depth).
+ */
+float grRotTransPers(GrScreenVertex *vertex, const Matrix4 matrix,
+                     const Vector4 *point, int *clipFlags)
+{
+    Vector4 local;
+    StudioCamera *camera;
+    float invW;
+    int outOfBounds;
+
+    xglVectorMulMat(&local, matrix, point);
+
+    outOfBounds = 0;
+    invW = 1.0f / local.w;
+    local.w = 1.0f;
+    local.x *= invW;
+    local.y *= invW;
+    local.z *= invW;
+    if (local.x > 1.0f || local.x < -1.0f) {
+        outOfBounds = 1;
+    }
+    if (local.y > 1.0f || local.y < -1.0f) {
+        outOfBounds += 1;
+    }
+    if (local.z > 1.0f || local.z < -1.0f) {
+        outOfBounds += 1;
+    }
+
+    if (outOfBounds == 0) {
+        xglStudioGetCamera(&camera, 0);
+        xglVectorMulAdd(&local, &local, &camera->screenScale,
+                        &camera->screenOffset);
+    } else {
+        *clipFlags |= 0x8000;
+    }
+
+    vertex->z = (int)local.z;
+    vertex->y = (int)(local.y * 16.0f);
+    vertex->x = (int)(local.x * 16.0f);
+    vertex->flags = *clipFlags & 0x8000;
+    return invW;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grBBCalc);
 

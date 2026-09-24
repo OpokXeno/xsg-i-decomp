@@ -27,6 +27,8 @@ void xglClockRead(XglClock *clock);
 
 extern void xglFlagsInitial(void);
 
+extern void xglFontPrint(int x, int y, int color, const char *text);
+
 int xglHddMount(void);
 extern int xglHddActivate(int state);
 

@@ -3,6 +3,11 @@
 
 #include "shared.h"
 
+/*
+ * RgDispModel is defined by src/ov12/rg_dispmodel.c (ov12/tu049); only the
+ * pointer identity CreateXrgDispModelImpl returns and RgDispModelSetMode
+ * takes is used here.
+ */
 typedef struct RgDispModel RgDispModel;
 
 typedef void (*RgDispModelDispFunc)(RgDispModel *pDispModel);

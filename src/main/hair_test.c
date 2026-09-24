@@ -37,7 +37,38 @@ typedef struct FpkFcvHeader {
 
 INCLUDE_ASM("asm/main/nonmatchings/hair_test", InitTest_002DA1D8);
 
-INCLUDE_ASM("asm/main/nonmatchings/hair_test", PrintDisp_002DA3F8);
+extern int listpos;
+extern int mot;
+extern int pause;
+extern char D_004CBBF0[];
+extern char D_004CBC00[];
+extern char D_004CBC10[];
+extern char D_004CBC20[];
+extern unsigned char list[];
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+static int getNumFCV(FpkFcvHeader *header);
+
+/*
+ * The object pAct_004DC638 points to: only the FCV header pointer at +0x724
+ * is evidenced here (main VA 0x002da3f8, lw $2,pAct_004DC638 / lw
+ * $4,0x724($2)); the rest stays an unmodeled span (docs/naming.md).
+ */
+typedef struct HairTestAct {
+    unsigned char unmodeled_000[0x724];
+    FpkFcvHeader *fcvHeader;
+} HairTestAct;
+
+extern HairTestAct *pAct_004DC638;
+
+static void PrintDisp(void)
+{
+    xglFontDebugPrintf(0, 0, D_004CBBF0);
+    xglFontDebugPrintf(0x64, 0xC, D_004CBC00, listpos, list + 4 + listpos * 0x10);
+    xglFontDebugPrintf(0x5C, 0x14, D_004CBC10, mot, getNumFCV(pAct_004DC638->fcvHeader) - 1);
+    if (pause != 0) {
+        xglFontDebugPrintf(0x50, 0, D_004CBC20);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/hair_test", HairTest);
 

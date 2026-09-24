@@ -69,11 +69,65 @@ INCLUDE_ASM("asm/main/nonmatchings/msg_init", MIF2_gaiji);
 
 INCLUDE_ASM("asm/main/nonmatchings/msg_init", MIF2_code);
 
-INCLUDE_ASM("asm/main/nonmatchings/msg_init", findMsgFunc);
+int strcmp(const char *, const char *);
+
+/*
+ * One row of the mfunc[] control-code table, which a NULL name terminates.
+ * MSG_convert (still asm) calls the matched row's handler as
+ * handler(out, argc), the same two parameters the placeholder row's own
+ * MIF2_dummy above declares, and continues writing at the pointer it returns.
+ */
+typedef struct MsgFuncEntry {
+    char *(*handler)(char *out, int argc);
+    const char *name;
+} MsgFuncEntry;
+
+extern MsgFuncEntry mfunc[];
+
+/*
+ * Looks up name in the mfunc[] control-code table and returns the matching
+ * row, or NULL if the table is empty or no row's name matches.
+ */
+static MsgFuncEntry *findMsgFunc(const char *name)
+{
+    MsgFuncEntry *entry = mfunc;
+
+    if (entry->name != 0) {
+        do {
+            if (strcmp(name, entry->name) == 0) {
+                return entry;
+            }
+            entry++;
+        } while (entry->name != 0);
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/msg_init", MSG_convert);
 
-INCLUDE_ASM("asm/main/nonmatchings/msg_init", MBUF_init);
+/*
+ * One record of the 8-slot mbuf pool msg_buffer reserves (2064 bytes each,
+ * 8 * 2064 = msg_buffer's own 0x4080 size). MBUF_dispose (below) evidences
+ * the leading word as a plain int, the same field MBUF_init clears here for
+ * every slot.
+ */
+typedef struct MsgBuffer {
+    int count;
+    unsigned char unmodeled_04[2064 - 4];
+} MsgBuffer;
+
+extern MsgBuffer msg_buffer[8];
+
+void MBUF_init(void)
+{
+    int slot;
+
+    slot = 7;
+    do {
+        msg_buffer[slot].count = 0;
+        slot--;
+    } while (slot >= 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/msg_init", MBUF_create2);
 

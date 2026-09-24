@@ -1,4 +1,5 @@
 #include "common.h"
+#include "ssd_4.h"
 
 /*
  * libkernel syscall stubs (main:0x00208fe0 / main:0x00209028).
@@ -62,7 +63,19 @@ void SsdDisposeMemoryPtr(void *ptr)
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_4", iSsdDisposeMemoryPtr);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_4", SsdGetBlockMemorySize);
+/*
+ * Returns the payload size recorded in a sound-memory allocation header:
+ * `ptr` minus one SsdMemoryBlock header is the header itself (same
+ * convention as SsdDisposeMemoryPtr above), and `end` is the absolute
+ * address just past the payload.
+ */
+int SsdGetBlockMemorySize(void *ptr)
+{
+    SsdMemoryBlock *block;
+
+    block = (SsdMemoryBlock *)ptr - 1;
+    return block->end - (int)block;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_4", SsdGetMemoryFreeSize);
 

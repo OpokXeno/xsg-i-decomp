@@ -127,24 +127,138 @@ static void _init_mode_left(RgHelp *pHelp)
     pHelp->blinkTimer = 0.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _control_mode_left);
+/*
+ * s_anMoveTbl_2 (ov12:0x00a50760, size 0x100) is a 16-entry table indexed by
+ * the current cursor position; the member for whichever Xrg pad direction
+ * the player just pressed gives the cursor value that press moves to.
+ */
+typedef struct RgHelpMoveEntry {
+    int up;
+    int down;
+    int left;
+    int right;
+} RgHelpMoveEntry;
+
+extern const RgHelpMoveEntry s_anMoveTbl_2[16];
+extern int XrgPadIsUp(void);
+extern int XrgPadIsDown(void);
+extern int XrgPadIsLeft(void);
+extern int XrgPadIsRight(void);
+extern int XrgPadIsMaru(void);
+extern void XrgSoundSystemCursor(void);
+
+static void _control_mode_left(RgHelp *pHelp)
+{
+    int cursor;
+    int next;
+
+    next = -1;
+    cursor = pHelp->cursor;
+    XrgPadSetID(0);
+    if (XrgPadIsUp()) {
+        next = s_anMoveTbl_2[cursor].up;
+    }
+    if (XrgPadIsDown()) {
+        next = s_anMoveTbl_2[cursor].down;
+    }
+    if (XrgPadIsLeft()) {
+        next = s_anMoveTbl_2[cursor].left;
+    }
+    if (XrgPadIsRight() || XrgPadIsMaru()) {
+        next = s_anMoveTbl_2[cursor].right;
+    }
+    if (next >= 0) {
+        if ((unsigned int) next >= 0x10) {
+            next = 0;
+        }
+        if (pHelp->cursor != next) {
+            XrgSoundSystemCursor();
+        }
+        pHelp->cursor = next;
+    }
+    if (pHelp->blinkTimer > 2.0f) {
+        pHelp->blinkTimer = 0.0f;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _color);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _paint_00A428A8);
+/*
+ * _paint_lin/_paint_add/_paint_sub each hand XrgPaint2DAlpha one of exactly
+ * these three values: 0 pastes the source over the destination, 1 adds it,
+ * 2 subtracts it.
+ */
+#define XRG_PAINT2D_BLEND_LINEAR 0
+#define XRG_PAINT2D_BLEND_ADD 1
+#define XRG_PAINT2D_BLEND_SUB 2
+
+/*
+ * XrgPaint2DDrawXYWH's mode word: bit 0x20 takes the drawn extent from the
+ * bound picture instead of the width/height arguments (_paint).
+ */
+#define XRG_PAINT2D_MODE_USE_PIC_SIZE 0x20
+
+extern void XrgPaint2DUseTexture(void *paintContext, RgBxxPic *pic);
+extern void XrgPaint2DAlpha(void *paintContext, int blendMode);
+extern void XrgPaint2DDrawXYWH(void *paintContext, int mode, int x, int y,
+                               int width, int height);
+extern void _color(void *paintContext, int color);
+
+static void _paint(void *paintContext, RgBxxPic *pic, int blendMode, int x, int y)
+{
+    if (pic != 0) {
+        XrgPaint2DUseTexture(paintContext, pic);
+        XrgPaint2DAlpha(paintContext, blendMode);
+        _color(paintContext, 0);
+        XrgPaint2DDrawXYWH(paintContext, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _paint_b);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _paint_lin_00A42A40);
+static void _paint_lin(void *paintContext, RgBxxPic *pic, int x, int y)
+{
+    _paint(paintContext, pic, XRG_PAINT2D_BLEND_LINEAR, x, y);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _paint_lin_uvwh);
+/*
+ * The rectangle _paint_lin_uvwh's caller builds: u,v feed XrgPaint2DSetUVOffset
+ * and, added to x,y, the screen position this call draws at; w,h feed both
+ * XrgPaint2DSetUVSize and the draw call's own width/height.
+ */
+typedef struct RgHelpUvRect {
+    int u;
+    int v;
+    int w;
+    int h;
+} RgHelpUvRect;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _paint_add_00A42B40);
+extern void XrgPaint2DSetUVOffset(void *paintContext, int u, int v);
+extern void XrgPaint2DSetUVSize(void *paintContext, int width, int height);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_help", _paint_sub_00A42B68);
+static void _paint_lin_uvwh(void *paintContext, RgBxxPic *pic, int x, int y,
+                            const RgHelpUvRect *rect)
+{
+    XrgPaint2DSetUVOffset(paintContext, rect->u, rect->v);
+    XrgPaint2DSetUVSize(paintContext, rect->w, rect->h);
+    if (pic != 0) {
+        XrgPaint2DUseTexture(paintContext, pic);
+        XrgPaint2DAlpha(paintContext, XRG_PAINT2D_BLEND_LINEAR);
+        _color(paintContext, 0);
+        XrgPaint2DDrawXYWH(paintContext, 0, x + rect->u, y + rect->v, rect->w,
+                           rect->h);
+    }
+}
 
-static void _paint(void *paintContext, RgBxxPic *pic, int blendMode, int x,
-                   int y);
+static void _paint_add(void *paintContext, RgBxxPic *pic, int x, int y)
+{
+    _paint(paintContext, pic, XRG_PAINT2D_BLEND_ADD, x, y);
+}
+
+static void _paint_sub(void *paintContext, RgBxxPic *pic, int x, int y)
+{
+    _paint(paintContext, pic, XRG_PAINT2D_BLEND_SUB, x, y);
+}
 
 static void _paint_bg_lower(RgHelp *pHelp)
 {

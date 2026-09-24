@@ -98,15 +98,103 @@ INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_dispose);
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_addComponent);
 
-INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_drawContainer);
+/*
+ * Shared 0x28-byte ewComponent table-slot header (top-of-file comment):
+ * flags encodes both the widget type and its enabled bit. EW_sendPacket
+ * and EW_draw test the type via (flags & 0xE000) == 0xC000; EW_drawContainer
+ * tests only the enabled bit via flags & 0x4000.
+ */
+typedef struct EwWidget {
+    unsigned short flags;
+    unsigned char unmodeled_02[0x26];
+} EwWidget;
+
+extern void EW_drawComoponent(int context, EwWidget *widget);
+
+void EW_drawContainer(int context, EwContainerState *container)
+{
+    EwWidget **firstChild;
+    EwWidget **children;
+    EwWidget *child;
+    short capacity;
+    int count;
+
+    firstChild = (EwWidget **) container->children;
+    if (firstChild != 0)
+    {
+        capacity = container->childCapacity;
+        if (capacity > 0)
+        {
+            children = firstChild;
+            count = capacity;
+            do
+            {
+                child = *children;
+                children++;
+                if (child != 0 && (child->flags & 0x4000))
+                {
+                    EW_drawComoponent(context, child);
+                }
+                count--;
+            } while (count != 0);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_drawComoponent);
 
-INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_init);
+extern EwWidget ewComponent[64];
 
-INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_sendPacket);
+void EW_init(void)
+{
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_draw);
+    for (i = 63; i >= 0; i--)
+    {
+        ewComponent[i].flags = 0;
+    }
+}
+
+extern void EW_setDrawEnv(int context);
+extern void xglFontReloadTexture(int context, int mode);
+extern int ew_send_mode;
+
+void EW_sendPacket(int context)
+{
+    int i;
+
+    xglFontReloadTexture(context, 2);
+    ew_send_mode = 1;
+    EW_setDrawEnv(context);
+    for (i = 0; i < 64; i++)
+    {
+        if ((ewComponent[i].flags & 0xE000) == 0xC000)
+        {
+            EW_drawComoponent(context, &ewComponent[i]);
+        }
+    }
+    xglFontReloadTexture(context, 1);
+    ew_send_mode = 0;
+}
+
+/* Registers EW_sendPacket with the font print queue; the context argument
+   position is passed 0 (unused by EW_sendPacket's own logic here). */
+extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(int context), void *arg);
+
+void EW_draw(void)
+{
+    int i;
+
+    xglFontPrintExtFunc(0x00FFFFF0, EW_sendPacket, 0);
+    ew_send_mode = 2;
+    for (i = 0; i < 64; i++)
+    {
+        if ((ewComponent[i].flags & 0xE000) == 0xC000)
+        {
+            EW_drawComoponent(0, &ewComponent[i]);
+        }
+    }
+}
 
 static void container_init(EwContainerState *container)
 {

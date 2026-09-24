@@ -16,7 +16,45 @@ extern void sceSifRpcLoop(void *queue);
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdInit);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdQuit);
+enum {
+    RSSD_CMD_QUIT    = 0x02,
+    RSSD_CMD_RESUME  = 0x05,
+    RSSD_CMD_SUSPEND = 0x06
+};
+
+/*
+ * libkernel syscall stubs.
+ */
+extern int DeleteSema(int sema_id);
+extern int DeleteThread(int thread_id);
+extern int TerminateThread(int thread_id);
+
+/*
+ * This TU's own RPC completion handler (its body is still scaffold below);
+ * sceSifRemoveRpc is the SCE SDK RPC server deregistration call.
+ */
+extern void RssdFuncCallCompleted(int status);
+extern void *sceSifRemoveRpc(void *sd, void *qd);
+
+/*
+ * Sends the quit command, then tears down the RPC receive callback, the SIF
+ * RPC server registration and the two service threads SsdInit started.
+ */
+void SsdQuit(void)
+{
+    RssdRequest request;
+
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_QUIT, &request, 0, 0);
+    RssdFuncCallCompleted(1);
+    DeleteSema(RssdWork.sema_id);
+    sceSifRemoveRpc(RssdWork.rpc_server, RssdWork.rpc_queue);
+    TerminateThread(RssdWork.rpc_thread_id);
+    DeleteThread(RssdWork.rpc_thread_id);
+    TerminateThread(RssdWork.next_wave_thread_id);
+    DeleteThread(RssdWork.next_wave_thread_id);
+    RssdWork.flags = 0;
+}
 
 /*
  * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
@@ -34,7 +72,27 @@ INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdSifRpcServer);
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdBusy);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdSpuRead);
+/* SIF RPC middleware bulk memory copy. */
+extern void SsdCopyMemory(void *dst, void *src, int size);
+
+/*
+ * Copies one streamed sample chunk (the payload following the RssdRequest
+ * header) to the running SPU write pointer and advances it by the copied
+ * byte count; clears the streaming-busy flag once the request reports no
+ * more data is coming.
+ */
+void RssdSpuRead(RssdRequest *request)
+{
+    int size;
+    int more_data;
+
+    size = request->arg[1].value;
+    more_data = request->arg[2].value;
+    SsdCopyMemory(RssdWork.spu_write_ptr, request + 1, size);
+    RssdWork.spu_write_ptr += size;
+    if (more_data == 0)
+        RssdWork.flags &= ~4;
+}
 
 void RssdBackgroundNextWave(const int *request)
 {
@@ -130,6 +188,18 @@ void SsdSetStreamEndCallback(void *callback, void *arg)
     RssdWork.stream_end_callback_arg = arg;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdResume);
+void SsdResume(void)
+{
+    RssdRequest request;
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdSuspend);
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_RESUME, &request, 0, 0);
+}
+
+void SsdSuspend(void)
+{
+    RssdRequest request;
+
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_SUSPEND, &request, 0, 0);
+}

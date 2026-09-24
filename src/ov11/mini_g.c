@@ -10,7 +10,29 @@
  * passes it an asset path string and a fixed EE main RAM staging address. */
 extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", dprintf);
+typedef char *va_list;
+#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
+#define va_end(ap) ((void)0)
+
+/* Partial newlib struct _reent: only the _stderr file pointer this debug
+ * printf forwards to is touched; the preceding _errno/_stdin/_stdout
+ * fields (newlib 1.9.0 libc/include/sys/reent.h field order) stay
+ * unmodeled. _impure_ptr is the reentrant global newlib state pointer. */
+struct Reent {
+    unsigned char unmodeled_00[0xC];
+    void *stderr_file;
+};
+extern struct Reent *_impure_ptr;
+extern int vfprintf(void *stream, const char *format, va_list args);
+
+void dprintf(const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    vfprintf(_impure_ptr->stderr_file, fmt, args);
+    va_end(args);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MakeSprite);
 
@@ -92,9 +114,33 @@ static char *RES_Coin_Info(int offer_index)
     return ResData->coin_offers[offer_index].description;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", RES_SoundEffect);
+/* The sound-effect ID table sits between the known CasinoResourcePrefix
+ * prefix and CASINO_DEBUG_SETTING_OFFSET (0x1d3c); its own extent past this
+ * indexed access is not proven, so it is reached by byte offset rather than
+ * a named CasinoResourcePrefix member (matching RES_IsDebugMode above). */
+#define CASINO_SOUND_ID_TABLE_OFFSET 0x193C
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", RES_SoundEffectStop);
+extern void xglSoundEffectNormalID(int soundEffectId, int variant);
+extern const char D_00A0BBB0[]; /* "Sound Req = SE_%.3d:Sound num = %x\n" */
+
+static void RES_SoundEffect(int soundId)
+{
+    int soundEffectId = *(int *)((unsigned char *)ResData + soundId * 4 + CASINO_SOUND_ID_TABLE_OFFSET);
+
+    dprintf(D_00A0BBB0, soundId, soundEffectId);
+    xglSoundEffectNormalID(soundEffectId, 0);
+}
+
+extern void xglSoundEffectStopDirect(int soundEffectId);
+extern const char D_00A0BBD8[]; /* "Sound Req = SE_%.3d:Sound Stop num = %x\n" */
+
+static void RES_SoundEffectStop(int soundId)
+{
+    int soundEffectId = *(int *)((unsigned char *)ResData + soundId * 4 + CASINO_SOUND_ID_TABLE_OFFSET);
+
+    dprintf(D_00A0BBD8, soundId, soundEffectId);
+    xglSoundEffectStopDirect(soundEffectId);
+}
 
 /* ov11:0x00a00af0. Loads the casino resource table (CASINO.res) into the
  * fixed asset staging address and records it as ResData, the same
@@ -263,7 +309,25 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgSpinBtnPrint);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgLamp);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NineGameBG_Draw);
+/* ov11:0x00a038c0. Selects the loaded nine-game slot background texture
+ * (SLOT_2_TEX_BUFFER, the "slot_2.xtx" buffer init_slot fills), sets the
+ * packet's GS register write and draw state, then emits the fixed
+ * nine-game background sprite. SetRegAD and Pkt are this overlay's own
+ * LOCAL data/sibling; xglPacketTextureTrans is main:0x0022c268
+ * (src/main/xgl_packet.c, still INCLUDE_ASM there). */
+extern void xglPacketTextureTrans(void *buffer);
+static void SetRegAD(XglPacket *packet, int reg, int value);
+extern XglPacket *Pkt;
+extern unsigned char NineGameBG_Tex_43[0x1C];
+extern unsigned char NineGameBG_Rect_44[0x10];
+
+static void NineGameBG_Draw(void)
+{
+    xglPacketTextureTrans((void *)SLOT_2_TEX_BUFFER);
+    SetRegAD(Pkt, 0x3F, 0);
+    SetDrawStatus(3, 0);
+    MakeSprite(NineGameBG_Tex_43, NineGameBG_Rect_44);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgStopGuidPt);
 
@@ -303,7 +367,20 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoWindowMessage);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoDialog);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoBgDraw);
+/* ov11:0x00a04dc0. Selects the loaded poker table-1 background texture
+ * (0x0138f000, the "poker_1.xtx" buffer PokerInit below fills as
+ * POKER_TABLE1_TEX_BUFFER) and emits the fixed poker background sprite. */
+extern unsigned char tex_68[0x1C];
+extern unsigned char rect_69[0x10];
+
+static void PoBgDraw(void)
+{
+    SetDrawStatus(3, 0);
+    xglPacketTextureTrans((void *)0x0138F000);
+    SetRegAD(Pkt, 0x3F, 0);
+    SetDrawStatus(3, 0);
+    MakeSprite(tex_68, rect_69);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoCardDraw);
 
@@ -334,7 +411,79 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoKey);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoCardFlip);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoGetMark);
+/* ov11:0x00a05a78. Maps a 0..0x33 standard 52-card value (13 ranks per
+ * suit) to its suit index. Callers (PoChk4 and PokerMain) read cardValue
+ * as a signed `lh` from the sorted hand in Gwork; any value outside
+ * 0..0x33 reports 0, matching the pre-switch init below. */
+static int PoGetMark(int cardValue)
+{
+    int mark;
+
+    mark = 0;
+    switch (cardValue) {
+    case 0x0:
+    case 0x1:
+    case 0x2:
+    case 0x3:
+    case 0x4:
+    case 0x5:
+    case 0x6:
+    case 0x7:
+    case 0x8:
+    case 0x9:
+    case 0xA:
+    case 0xB:
+    case 0xC:
+        mark = 0;
+        break;
+    case 0xD:
+    case 0xE:
+    case 0xF:
+    case 0x10:
+    case 0x11:
+    case 0x12:
+    case 0x13:
+    case 0x14:
+    case 0x15:
+    case 0x16:
+    case 0x17:
+    case 0x18:
+    case 0x19:
+        mark = 1;
+        break;
+    case 0x1A:
+    case 0x1B:
+    case 0x1C:
+    case 0x1D:
+    case 0x1E:
+    case 0x1F:
+    case 0x20:
+    case 0x21:
+    case 0x22:
+    case 0x23:
+    case 0x24:
+    case 0x25:
+    case 0x26:
+        mark = 2;
+        break;
+    case 0x27:
+    case 0x28:
+    case 0x29:
+    case 0x2A:
+    case 0x2B:
+    case 0x2C:
+    case 0x2D:
+    case 0x2E:
+    case 0x2F:
+    case 0x30:
+    case 0x31:
+    case 0x32:
+    case 0x33:
+        mark = 3;
+        break;
+    }
+    return mark;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoGetBase);
 
@@ -542,7 +691,19 @@ defaultSound:
     return category;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoResultLamp);
+/* ov11:0x00a062b8. Draws the poker result lamp sprite for hand category
+ * index category, selecting its fixed rect from a shared row of 0x10-byte
+ * rects (the same tex/rect MakeSprite pair shape used throughout this TU;
+ * the row's entry count beyond this stride is not separately evidenced). */
+extern unsigned char tex_98[0x1C];
+extern unsigned char result_rect_97[][0x10];
+
+static void PoResultLamp(int category)
+{
+    SetDrawStatus(0, 0);
+    MakeSprite(tex_98, result_rect_97[category]);
+    SetDrawStatus(3, 0);
+}
 
 /* ov11:0x00a06308. Stores the caller-supplied poker sequence state in the
  * global sequence word. */
@@ -553,7 +714,35 @@ static void PoSeqChange(int sequenceState)
     D_00A0DEA8 = sequenceState;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PokerReadyMes);
+/* ov11:0x00a06318. Looks up the currently selected bet level's ready
+ * message and message-box width from two fixed four-entry tables and
+ * forwards both to the message window renderer. D_00A0DD2C is the level
+ * index level_select stores (0..3); the four strings are the "Play N
+ * coins" prompts for the four bet levels. The compiled form copies each
+ * table onto the stack as a 16-byte aggregate before indexing it, which is
+ * why each table is typed as a one-member array struct rather than a bare
+ * array (a bare array cannot be copied by value in C). PoWindowMessage is
+ * a LOCAL asm sibling. */
+typedef struct {
+    const char *text[4];
+} PokerReadyMessageTable;
+
+typedef struct {
+    int width[4];
+} PokerReadyWidthTable;
+
+static void PoWindowMessage(const char *message, int width);
+extern int D_00A0DD2C;
+extern const PokerReadyMessageTable D_00A0C1B8; /* "Play 5/10/30/100 coins" */
+extern const PokerReadyWidthTable D_00A0C1C8;
+
+static void PokerReadyMes(void)
+{
+    PokerReadyMessageTable readyMessage = D_00A0C1B8;
+    PokerReadyWidthTable readyWidth = D_00A0C1C8;
+
+    PoWindowMessage(readyMessage.text[D_00A0DD2C], readyWidth.width[D_00A0DD2C]);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PokerMain);
 
@@ -602,7 +791,32 @@ static void PokerInit(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", GameModeChange);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", sub_window);
+/* ov11:0x00a06df0. Builds a fixed 0xB8x0x70 rect at the caller-supplied
+ * (y, x) origin on the stack and draws the submenu window sprite into it;
+ * this is the same {y, x, width, height} rect layout MakeSprite's other
+ * (data-supplied) rect arguments use elsewhere in this TU. windowId itself
+ * is not read here; level_select and exchange_select forward it on to
+ * submenu_select right after calling sub_window. */
+typedef struct {
+    int y;
+    int x;
+    int width;
+    int height;
+} SubWindowRect;
+
+extern unsigned char SubWindow_Tex[0x1C];
+
+static void sub_window(int windowId, int y, int x)
+{
+    SubWindowRect rect;
+
+    SetDrawStatus(1, 0);
+    rect.y = y;
+    rect.x = x;
+    rect.width = 0xB8;
+    rect.height = 0x70;
+    MakeSprite(SubWindow_Tex, &rect);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", submenu_select);
 
@@ -672,7 +886,27 @@ static void init_test_mode(void)
     xglCdReadFile(D_00A0BE40, (void *)TEST_MODE_BASE_TEX_BUFFER, 0, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", test_mode);
+/* ov11:0x00a074a0. Lazily loads the test-mode background texture on first
+ * entry (flg_104 latches this), then selects it and draws the fixed
+ * test-mode background sprite. xglPacketGetCurrent is main:0x0022c450
+ * (src/main/xgl_packet.c). */
+extern XglPacket *xglPacketGetCurrent(void);
+extern unsigned char BGTEST_Tex[0x1C];
+extern unsigned char BGTEST_Rect[0x10];
+extern int flg_104;
+
+static void test_mode(void)
+{
+    if (flg_104 == 0) {
+        init_test_mode();
+        flg_104 = 1;
+    }
+    Pkt = xglPacketGetCurrent();
+    xglPacketTextureTrans((void *)TEST_MODE_BASE_TEX_BUFFER);
+    SetRegAD(Pkt, 0x3F, 0);
+    SetDrawStatus(3, 0);
+    MakeSprite(BGTEST_Tex, BGTEST_Rect);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", DecPrint2);
 
@@ -764,7 +998,80 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", VW_Main);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MUSIC_CALL);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", InitWork);
+/* xglFlagsSet1 is main:0x00222938 (src/main/xgl_flags.c, external linkage
+ * there). dataMoneyBoxInc is main:0x002BCE40, still INCLUDE_ASM there
+ * (src/main/data.c); src/main/runtime.c already forwards to it with this
+ * same signature. AddCoin (ov11:0x00a00b28) and MUSIC_CALL (ov11:0x00a08dc0)
+ * are LOCAL asm siblings of this TU. */
+extern int xglFlagsSet1(int bit_offset, int value);
+extern int dataMoneyBoxInc(int amount);
+static int AddCoin(int amount);
+static void MUSIC_CALL(int musicId);
+
+/* ov11:0x00a08f40. Resets the four leading Gwork words and the six Gwork
+ * shorts at 0x240-0x24A, loads the casino resource table and starts the
+ * background sound queue, applies four debug-mode config-flag unlocks and
+ * grants a near-maximum bank balance plus a matching coin total when
+ * RES_IsDebugMode() is set, then seeds six more Gwork shorts starting at
+ * 0x54 (a leading sentinel of 5 followed by a descending fill of the next
+ * five with 4..0). Field identities beyond their byte offsets are not
+ * separately evidenced. Its only caller, MiniG_Init, runs this once. */
+/* The original materializes Gwork's address once (%lo(Gwork)=0, so
+ * `addiu s0,v0,0`) and reaches every field below off that same register
+ * with an immediate byte offset; indexing Gwork as a word array and a
+ * short array through separate expressions instead recomputes the base at
+ * Gwork+0x240, which does not reproduce this. */
+#define WORK_RESET_WORD_0 0x0
+#define WORK_RESET_WORD_1 0x4
+#define WORK_RESET_WORD_2 0x8
+#define WORK_RESET_WORD_3 0xC
+#define WORK_MODE_SHORT_0 0x240
+#define WORK_MODE_SHORT_1 0x242
+#define WORK_MODE_SHORT_2 0x244
+#define WORK_MODE_SHORT_3 0x246
+#define WORK_MODE_SHORT_4 0x248
+#define WORK_MODE_SHORT_5 0x24A
+#define WORK_STAKE_SENTINEL 0x54
+#define WORK_STAKE_TABLE_END 0x5E
+
+static void InitWork(void)
+{
+    unsigned char *work = (unsigned char *)Gwork;
+    short *slot;
+    int value;
+
+    *(short *)(work + WORK_MODE_SHORT_0) = 0;
+    *(short *)(work + WORK_MODE_SHORT_1) = 0;
+    *(short *)(work + WORK_MODE_SHORT_2) = 0;
+    *(short *)(work + WORK_MODE_SHORT_3) = 0;
+    *(short *)(work + WORK_MODE_SHORT_4) = 0;
+    *(short *)(work + WORK_MODE_SHORT_5) = 0;
+    *(int *)(work + WORK_RESET_WORD_0) = 0;
+    *(int *)(work + WORK_RESET_WORD_1) = 0;
+    *(int *)(work + WORK_RESET_WORD_2) = 0;
+    *(int *)(work + WORK_RESET_WORD_3) = 0;
+
+    RES_Load();
+    MUSIC_CALL(0);
+
+    if (RES_IsDebugMode() != 0) {
+        xglFlagsSet1(0x73, 1);
+        xglFlagsSet1(0x12D, 1);
+        xglFlagsSet1(0x185, 1);
+        xglFlagsSet1(0x187, 1);
+        dataMoneyBoxInc(0x3B9AC9FF);
+        AddCoin(0x989298);
+    }
+
+    *(short *)(work + WORK_STAKE_SENTINEL) = 5;
+    slot = (short *)(work + WORK_STAKE_TABLE_END);
+    value = 4;
+    do {
+        *slot = value;
+        value--;
+        slot--;
+    } while (value >= 0);
+}
 
 /* ov11:0x00a09020. Logs the configured heap address, then delegates all
  * casino state initialization to InitWork (LOCAL asm sibling). */

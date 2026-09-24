@@ -4,17 +4,109 @@
 #include "common.h"
 #include "cgp.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPShuntPosSub);
+/*
+ * Shunt one side's cards aside before the computer opponent moves
+ * (CardEnemyMove, ov10 0x00a32570, passes it the player's or the enemy's
+ * CardPlaySide). Every occupied slot hands its effect position to the shunt
+ * position one slot record further on, the disposal board first and the
+ * battle board after it; the last disposal slot writes CardPlaySide's
+ * lastShuntPosition, the record that follows the disposal board.
+ */
+void CGPShuntPosSub(CardPlaySide *side)
+{
+    s32 i;
+
+    for (i = 0; i < 4; i++) {
+        if (side->disposal[i].battle.layers[0].cardId >= 0) {
+            side->disposal[i + 1].shuntPosition[0] = side->disposal[i].battle.position[0];
+            side->disposal[i + 1].shuntPosition[1] = side->disposal[i].battle.position[1];
+            side->disposal[i + 1].shuntPosition[2] = side->disposal[i].battle.position[2];
+        }
+    }
+
+    for (i = 0; i < 4; i++) {
+        if (side->battle[i].battle.layers[0].cardId >= 0) {
+            side->battle[i + 1].shuntPosition[0] = side->battle[i].battle.position[0];
+            side->battle[i + 1].shuntPosition[1] = side->battle[i].battle.position[1];
+            side->battle[i + 1].shuntPosition[2] = side->battle[i].battle.position[2];
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPRecalcPosSub);
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CCO143ExecSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPPrintYama);
+extern int printf(const char *format, ...);
+extern char D_00A4E4F0[]; /* "Yama[%2d]:" */
+extern char D_00A4E500[]; /* "%3d," */
+extern char D_00A4E508[]; /* "\n" */
+extern char D_00A4E510[]; /* "Junk[%2d]:" */
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPPrintJunk);
+void CGPPrintYama(CardPlaySide *side)
+{
+    s32 col;
+    s32 i;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPPrintSute);
+    col = 0;
+    for (i = 0; i < 40; i++) {
+        if (col == 0) {
+            printf(D_00A4E4F0, i);
+        }
+        col++;
+        printf(D_00A4E500, side->deck[i]);
+        if (col == 10) {
+            col = 0;
+            printf(D_00A4E508);
+        }
+    }
+    printf(D_00A4E508);
+}
+
+void CGPPrintJunk(CardPlaySide *side)
+{
+    s32 col;
+    s32 i;
+
+    col = 0;
+    for (i = 0; i < 40; i++) {
+        if (col == 0) {
+            printf(D_00A4E510, i);
+        }
+        col++;
+        printf(D_00A4E500, side->junk[i]);
+        if (col == 10) {
+            col = 0;
+            printf(D_00A4E508);
+        }
+    }
+    printf(D_00A4E508);
+}
+
+extern int printf(const char *format, ...);
+extern char D_00A4E500[]; /* "%3d," */
+extern char D_00A4E508[]; /* "\n" */
+extern char D_00A4E520[]; /* "Sute[%2d]:" */
+
+void CGPPrintSute(CardPlaySide *side)
+{
+    s32 col;
+    s32 i;
+
+    col = 0;
+    for (i = 0; i < 40; i++) {
+        if (col == 0) {
+            printf(D_00A4E520, i);
+        }
+        col++;
+        printf(D_00A4E500, side->sute[i]);
+        if (col == 10) {
+            col = 0;
+            printf(D_00A4E508);
+        }
+    }
+    printf(D_00A4E508);
+}
 
 void CGPSetMessage(CardGameWork *work, s32 index)
 {
@@ -54,13 +146,55 @@ void CGPSetErrorMessPlus(s8 code, CardGameWork *work, u8 reason, s16 value)
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPDispErrorMessCore);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPDispErrorMess3);
+/*
+ * Screen position and scale CGPDispErrorMessCore (still assembler in this TU)
+ * places the rendered message with; declared locally next to the callers
+ * that build one on their own stack.
+ */
+typedef struct CGPErrorLayout {
+    float x;
+    float y;
+    float scaleX;
+    float scaleY;
+} CGPErrorLayout;
+
+extern void CGPDispErrorMessCore(CardGameWork *work, u16 reason, s32 x, s32 y,
+                                  CGPErrorLayout *layout);
+
+void CGPDispErrorMess3(CardGameWork *work, s32 reason)
+{
+    CGPErrorLayout layout;
+
+    layout.x = 1.1f;
+    layout.y = 0.0f;
+    layout.scaleX = 0.5f;
+    layout.scaleY = 1.0f;
+    CGPDispErrorMessCore(work, reason, 230, 164, &layout);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPDispErrorMessPlus);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPDispErrorMess);
+void CGPDispErrorMess(CardGameWork *work, s32 reason)
+{
+    CGPErrorLayout layout;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPDispErrorMess2);
+    layout.x = 0.0f;
+    layout.y = 0.0f;
+    layout.scaleX = 0.5f;
+    layout.scaleY = 1.0f;
+    CGPDispErrorMessCore(work, reason, 124, 164, &layout);
+}
+
+void CGPDispErrorMess2(CardGameWork *work, s32 reason)
+{
+    CGPErrorLayout layout;
+
+    layout.x = 0.0f;
+    layout.y = 0.48f;
+    layout.scaleX = 0.5f;
+    layout.scaleY = 1.0f;
+    CGPDispErrorMessCore(work, reason, 124, 116, &layout);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CardPlayDispInfo);
 
@@ -74,7 +208,27 @@ INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CardDispEffect);
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPCheckTeMax);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPCommFinishSub);
+void CGPCommFinishSub(CGPCardDefSource *src, CardPlayHand *work, s32 index)
+{
+    s32 cost;
+    s32 j;
+    s32 junkCnt;
+
+    if (index >= 0) {
+        work->lastCardValue = work->cards[index];
+        work->cards[index] = -1;
+        CardPlayCleanHand(work);
+    }
+
+    cost = src->defs[work->lastCardValue].cost;
+    for (j = 0; j < cost; j++) {
+        CardPlayCostCard(work);
+    }
+
+    junkCnt = CardPlayJunkCnt(work);
+    work->junkPile[junkCnt] = work->lastCardValue;
+    work->lastCardValue = -1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CardGameInit);
 
@@ -137,7 +291,33 @@ INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPBattleCalcuration);
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPCalcPower);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPCalcPowerPlus);
+/*
+ * Power a card in play attacks with: its base power plus the two bonuses it
+ * carries, doubled once per boost. A card whose attack type is 4 spends its
+ * boosts instead of doubling.
+ */
+s32 CGPCalcPowerPlus(CardGameWork *work, CardPowerCard *card, s32 power)
+{
+    s32 boosts;
+
+    if (card->cardId < 0) {
+        power = 0;
+    } else {
+        power += card->powerPlus[0];
+        power += card->powerPlus[1];
+        if (CardChkAttackType(work->definitions, card) == 4) {
+            card->boostCount = 0;
+        }
+        boosts = card->boostCount;
+        if (boosts > 0) {
+            do {
+                boosts--;
+                power *= 2;
+            } while (boosts != 0);
+        }
+    }
+    return power;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPCalcPowerEnv);
 
@@ -149,7 +329,7 @@ INCLUDE_ASM("asm/nonmatchings/ov10/cgp", CGPBattleSub);
 
 void CGPRotStageSub(CardGameWork *work, u32 stage)
 {
-    if ((*work->objFlags & 0x10) && work->fase == 9 &&
+    if ((work->save->flags & CARD_SAVE_ROTATE_STAGE) && work->fase == 9 &&
         work->rotStageId != stage && work->rotStageCooldown == 0)
     {
         work->rotStageId = stage;

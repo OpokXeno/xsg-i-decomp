@@ -186,7 +186,7 @@ extern void *PLAY_getCurrent(void);
 /* Defined below in this file. */
 extern void SEQ_motion(Actor *actor);
 /* Undulate.c (main); no header is published for it yet. */
-extern void UnduGet2(void *destination, float x, float z);
+extern float UnduGet2(void *destination, float x, float z);
 /* include/main/xgl_2.h's own declaration: not included directly because it
  * (through include/shared.h) redefines struct Vector4, which this TU's own
  * near_dir.h already defines locally. */
@@ -211,9 +211,67 @@ void ACT_updateMPack(Actor *actor)
              linked_actor->velocity.z);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_initScene);
+/* Undulate.c (main); no header is published for it yet, and its own
+ * UnduWork type is TU-local there, so the destination stays opaque here,
+ * exactly as UnduGet2 above already does. */
+extern void UnduParamInit(void *undulation);
+/* The 64-entry array itself (see the Actor doc comment above); no accepted
+ * function in this TU has needed the symbol until now. */
+extern u8 actor[64 * 0xa70];
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_setHand);
+void ACT_initScene(void)
+{
+    Actor *entry;
+    int remaining;
+
+    entry = (Actor *)actor;
+    remaining = 63;
+    do {
+        remaining--;
+        entry->flags = 0x20;
+        entry->shadow_kind = 1;
+        entry->shadow_size = 0x50;
+        entry->cleared_on_scene_init = 0;
+        entry->state_flags = 0;
+        entry->update = 0;
+        entry->draw = 0;
+        entry->position.w = 1.0f;
+        entry->velocity.w = 0.0f;
+        entry->acceleration.w = 0.0f;
+        UnduParamInit(&entry->undulation);
+        entry = (Actor *)((u8 *)entry + 0xa70);
+    } while (remaining >= 0);
+}
+
+/* Still original asm (0x003083b8, main); ACT_setHand's own call to it is a
+ * genuine tail call (j, not jal), so its return value, if any, is never
+ * observed here. */
+extern void ACT_setHumanHand(Actor *actor, int hand);
+
+void ACT_setHand(Actor *actor, int hand)
+{
+    int category;
+    int code;
+
+    if (actor->state_flags & 0xf000) {
+        return;
+    }
+
+    category = hand & 0xf0;
+    code = hand & 0xf;
+    switch (category) {
+    case 0x00:
+        code |= code << 8;
+        break;
+    case 0x10:
+        code |= 0x8000;
+        break;
+    case 0x20:
+        code = (code << 8) | 0x80;
+        break;
+    }
+    ACT_setHumanHand(actor, code);
+}
 
 /* nml_model_set.c (main); no header is published for it yet. */
 extern void nmlModelSetToumei(int enabled);

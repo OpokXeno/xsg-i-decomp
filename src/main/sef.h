@@ -30,15 +30,33 @@ extern SchedulerState *_nowScheduler;
  * record + 0xa90) once and reads both fields off it with small
  * displacements, so this sub-record is named on its own instead of two
  * flat members of SchedulerState.
+ *
+ * sefFreeSchedulerCf (main:0x002e5118) also stores a zero half-word to the
+ * leading two bytes at the same time it resets script_id/task_id to -1; no
+ * other accepted function of this TU reads or writes it yet.
  */
 typedef struct ScriptBinding {
-    unsigned char unmodeled_0[2];
+    short state;
     short script_id;
     short task_id;
 } ScriptBinding;
 
+/*
+ * sefFreeSchedulerCf (main:0x002e5118) walks 32 records of 0x30 bytes each,
+ * starting at +0xb0, passing each one to sefDestroyEffectData; sefIsDeadSchduler
+ * (this file) and the SchedulerRecord view of a different TU
+ * (src/main/sv_get_image_item.c) already name the following int at +0x6b0
+ * "inUse". sefFreeSchedulerCf reads a second int at +0x6e0, the id of the
+ * scheduler's own currently playing sound effect passed to
+ * xglSoundEffectStopID, cleared once stopped.
+ */
 struct SchedulerState {
-    unsigned char unmodeled_0[0xa8c];
+    unsigned char unmodeled_0[0xb0];
+    unsigned char effects[32][0x30];
+    int inUse;                       /* +0x6b0 */
+    unsigned char unmodeled_6b4[0x6e0 - 0x6b4];
+    int soundId;                     /* +0x6e0 */
+    unsigned char unmodeled_6e4[0xa8c - 0x6e4];
     int flags;
     ScriptBinding scriptBinding;
 };
@@ -46,12 +64,12 @@ struct SchedulerState {
 /* sefGetDirMatrix (main:0x002e2818) is still INCLUDE_ASM in this TU; declared
  * here so sefGetVecMatrix (main:0x002e2908) can call it. Caller evidence
  * (a0 unchanged destination matrix, a1 the temporary direction vector). */
-void sefGetDirMatrix(Matrix4 *dest, Vector4 *dir);
+static void sefGetDirMatrix(Matrix4 *dest, Vector4 *dir);
 
 /* sefRandf (main:0x002e11b0) is still INCLUDE_ASM in this TU; declared here
  * so sefGetCirclePos (main:0x002e2280) can call it. Returns a unit random
  * scalar in f0. */
-float sefRandf(void);
+static float sefRandf(void);
 
 /* A named .lit4 literal (config/symbols/main.txt), read by sefGetCirclePos;
  * referencing it by symbol keeps the compiler's own literal pool from

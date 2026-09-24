@@ -40,8 +40,16 @@ def generate(unit_dir, unit, flavor, main_symbols=None):
     overlay = next((s.name for s in orig.sections if s.name.startswith("ov") and s.flags & 2), None)
     inputs = {}
     last = None
-    for obj, insec, pad, align in re.findall(r"(build/[\w/.\-]+\.o)\((\.\w+)\);|(\. \+= 0x[0-9A-Fa-f]+;)"
-                                             r"|(\. = ALIGN\(\d+\);)", rom_ld):
+    for obj, insec, pad, align, pin in re.findall(r"(build/[\w/.\-]+\.o)\((\.\w+)\);|(\. \+= 0x[0-9A-Fa-f]+;)"
+                                                  r"|(\. = ALIGN\(\d+\);)"
+                                                  r"|(\. = 0x[0-9A-Fa-f]+;)(?= /\* data-carve \*/)", rom_ld):
+        if pin:
+            # the end of a declared C data run (tools/tu/data_carve.py), placed by
+            # tools/tu/ninja_ovl.py after the C object's section: an offset inside
+            # the overlay section, which starts at the same address in both scripts.
+            if last is not None:
+                inputs[last].append(pin[:-1])
+            continue
         if align:
             # a TU's declared tail alignment (tools/tu/tail_align.py), placed by
             # tools/tu/ninja_ovl.py right after that TU's `.text`: it belongs to

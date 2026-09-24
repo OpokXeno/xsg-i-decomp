@@ -25,13 +25,31 @@ void DisposeXrgSoundSystem(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", _LoadSeq);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundSystemPlayBGM);
+extern void _LoadSeq(void);
+extern void xglSoundSequenceNormal2(int channel, int volume);
+
+void XrgSoundSystemPlayBGM(void)
+{
+    _LoadSeq();
+    if (s_eLoadedSeq != -1 && s_bNowPlaying == 0) {
+        xglSoundSequenceNormal2(0, 127);
+        s_bNowPlaying = 1;
+    }
+}
 
 void XrgSoundSystemPlayJingle(void)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundSystemStopSequence);
+extern void xglSoundSequenceFadeOut2(int channel, int time);
+
+void XrgSoundSystemStopSequence(void)
+{
+    if (s_eLoadedSeq != -1) {
+        xglSoundSequenceFadeOut2(0, 100);
+        s_bNowPlaying = 0;
+    }
+}
 
 /*
  * Forgets the loaded sequence. The body never reads sequenceId, but the one
@@ -49,7 +67,12 @@ void XrgSoundSystemStop(void)
     xglSoundEffectStopBank(2);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundSystemRing);
+void XrgSoundSystemRing(int soundId)
+{
+    if (soundId > 0) {
+        xglSoundEffectNormalID(soundId, 0);
+    }
+}
 
 void XrgSoundSystemCursor(void)
 {
@@ -86,7 +109,14 @@ static void _DestructSound(void)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", CreateXrgSound);
+XrgSound *CreateXrgSound(int unused, int kind)
+{
+    XrgSound *sound;
+
+    sound = RgHeapAlloc(InstanceOfRgHeap(), sizeof(XrgSound), D_00A59288, 253);
+    _InitSound(sound, kind);
+    return sound;
+}
 
 void DisposeXrgSound(XrgSound *sound)
 {
@@ -143,11 +173,25 @@ void XrgSoundRingStopMoving(XrgSound *sound)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundRing);
+void XrgSoundRing(XrgSound *sound, int soundId)
+{
+    if (sound != 0) {
+        if (soundId > 0) {
+            _ring(sound, soundId, 128);
+        }
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundRingVol);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundRingStop);
+void XrgSoundRingStop(XrgSound *sound, int soundId)
+{
+    if (sound != 0) {
+        if (soundId > 0) {
+            _stop(sound, soundId);
+        }
+    }
+}
 
 void XrgSoundPassTime(XrgSound *sound, float dt)
 {

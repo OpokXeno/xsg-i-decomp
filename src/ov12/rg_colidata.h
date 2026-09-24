@@ -32,10 +32,10 @@ typedef struct RgColiData {
     RgColiTriangle *m_pTriangles;
 } RgColiData;
 
-extern void _DisposeColiData(RgColiData *pData);
-extern void _InitTriangles(RgColiData *pData, int nCapa);
-extern void _AddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2);
-extern void _CheckIntersectBall(RgColiData *pPoly, void *pArg, void *pResult);
+static void _DisposeColiData(RgColiData *pData);
+static void _InitTriangles(RgColiData *pData, int nCapa);
+static void _AddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2);
+static void _CheckIntersectBall(RgColiData *pPoly, void *pArg, void *pResult);
 
 /* File-backed OV12 witnesses, this TU's own .rodata (scaffold-owned; kept
  * under their splat names, docs/naming.md "Scaffold-owned data keeps its
@@ -48,5 +48,8 @@ extern const char D_00A55500[];
 extern const char D_00A55518[];
 extern const char D_00A55528[];
 extern const char D_00A55670[];
+
+/* 0x00a55560 "pData->m_nCapaOfTri > pData->m_nNumOfTri" */
+extern const char D_00A55560[];
 
 #endif /* SRC_OV12_RG_COLIDATA_H */

@@ -6,6 +6,7 @@
 #define SRC_MAIN_INIT_CLASS_DB_H
 
 #include "shared.h"
+#include "main/data_buffer.h"
 
 typedef struct ClassDescriptor ClassDescriptor;
 
@@ -41,6 +42,42 @@ struct ClassDescriptor {
 void setupClass(ClassDescriptor *class_info, u32 this_class_index,
                 u32 super_class_index, u32 access_flags,
                 u32 class_loader);
+
+/*
+ * classDB (0x0099d430, size 0x20) is the native loader's 8-slot table of
+ * resolved classes indexed by class id (JNI_resolveClass in
+ * src/main/jni.c); initClassDB clears every slot at JNI_initSystem startup.
+ */
+extern int classDB[8];
+
+void initClassDB(void);
+
+/*
+ * SceneMethod (forward-declared by shared.h) is completed here from
+ * addCode's evidenced Code_attribute fields (JVM class file format): the
+ * code pointer at +0x14, max_stack/max_locals at +0x18/+0x1a and a
+ * 16-bit code_length at +0x1c holding the low half of the classfile's
+ * 32-bit attribute length. Earlier members are read by addField/addMethod
+ * (still asm in this TU) and stay unmodeled here.
+ */
+struct SceneMethod {
+    unsigned char unmodeled_00[0x14];
+    void *code;
+    u16 max_stack;
+    u16 max_locals;
+    u16 code_length;
+};
+
+/*
+ * DataBuffer_seek is defined by main/tu230 (src/main/data_buffer.c) but,
+ * like DataBuffer_getUShortAt/DataBuffer_getUIntAt above, is not declared
+ * by that TU's own src/main/data_buffer.h, so addCode's use of it is
+ * declared verbatim here too.
+ */
+void DataBuffer_seek(DataBuffer *buffer, int offset);
+
+void addCode(DataBuffer *buffer, ClassDescriptor *class_info,
+             SceneMethod *method);
 
 /*
  * DataBuffer and its readers are defined by main/tu230

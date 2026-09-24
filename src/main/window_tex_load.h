@@ -51,7 +51,7 @@ typedef struct UmnDataBase {
  */
 int MenuLoadFile(const char *name, void *buffer);
 
-extern int menuCallback(int event);
+static int menuCallback(int event);
 
 void UmnDataBaseMonsterSet(int monster_id);
 

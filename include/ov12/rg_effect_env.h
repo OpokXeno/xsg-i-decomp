@@ -2,9 +2,9 @@
 #define INCLUDE_OV12_RG_EFFECT_ENV_H
 
 /*
- * Several other TUs (rg_shot_effect.c, rg_piclist.h, rg_disp_wpn1p.h) forward
- * declare this tag locally and only ever hold it as an opaque pointer; this
- * TU is the owner and completes the body below.
+ * RgBxx is defined by ov12/tu073 (src/ov12/rg_bxx.c); this allocation only
+ * stores and forwards the pointer LoadRgBxx_sub returns and DisposeRgBxx_sub
+ * takes, so an incomplete type is enough here.
  */
 typedef struct RgBxx RgBxx;
 

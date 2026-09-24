@@ -7,7 +7,34 @@ INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanCountInit1);
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanCountInit2);
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanNumberCount);
+int SeisanNumberCount(int current, int target, int step, int *moving)
+{
+  int overshot;
+  int next;
+  next = current;
+  if (next != target)
+  {
+    if (next < target)
+    {
+      next += step;
+      overshot = target < next;
+    }
+    else
+    {
+      next -= step;
+      overshot = next < target;
+    }
+    if (overshot)
+    {
+      next = target;
+    }
+    else
+    {
+      *moving = 1;
+    }
+  }
+  return next;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanCountMain);
 

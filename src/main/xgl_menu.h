@@ -16,6 +16,16 @@
 typedef struct {
     unsigned char unmodeled_00[7];
     unsigned char active;               /* +0x07 */
+    /*
+     * xglMenuInitial (main 0x0021ce98) indexes menutbl by this stride to
+     * clear the active flag of every record; the rest of the record is not
+     * recovered.
+     */
+    unsigned char unmodeled_08[0x78];
 } XglMenuEntry;
+
+#define MENU_TABLE_COUNT 16
+
+extern XglMenuEntry menutbl[MENU_TABLE_COUNT];
 
 #endif

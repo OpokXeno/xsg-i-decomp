@@ -7,7 +7,7 @@
 /* CheckBallBoxCollision is an original function of this same TU and
  * XrgApplyVector and XrgSetVectorXYZ of a neighbouring xrg_* one; all three
  * are still assembly, so this TU declares them. */
-extern int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int flag);
+static int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int flag);
 extern void XrgApplyVector(RgVector destination, const RgMatrix matrix, const RgVector source);
 extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 

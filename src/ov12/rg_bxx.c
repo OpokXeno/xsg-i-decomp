@@ -136,7 +136,65 @@ void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine)
     RgHeapFree(InstanceOfRgHeap(), pBxx, D_00A56FA0, 83);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bxx", RgBxxSetData);
+/* ov12:0x00a57038 "pBxx->m_pLoad == NIL" */
+extern const char D_00A57038[];
+/* ov12:0x00a57050 "bxx data format error (link num %d)" */
+extern const char D_00A57050[];
+
+extern void InitRgLinkData(RgLinkData *pAna, void *pBuf);
+extern unsigned int RgLinkDataNumOfData(RgLinkData *pAna);
+
+int RgBxxGetTexNum(RgBxx *pBxx);
+
+/*
+ * _GetPicTop's picture array is 0x60 (96) bytes per RgBxxPic record
+ * (RgBxxGetPicID's own "id * 0x60" stepping); this allocation additionally
+ * evidences an owning-archive back-pointer at +0x58 of each record (the
+ * type stays incomplete for the reason noted on RgBxxPic above), so the
+ * store and the advance to the next record are both byte-offset pointer
+ * arithmetic in place of member/array access of a type this allocation
+ * does not size.
+ */
+void RgBxxSetData(RgBxx *pBxx, void *pData)
+{
+    RgHeap *heap;
+    RgLinkData *pLink;
+    RgBxxPic *pic;
+    unsigned int count;
+    unsigned int picIndex;
+
+    if (pBxx == 0) {
+        assert_prog(D_00A56F90, D_00A56FA0, 93);
+    }
+    if (pBxx->m_pLoad != 0) {
+        assert_prog(D_00A57038, D_00A56FA0, 94);
+    }
+    if (pBxx->m_pLink != 0) {
+        heap = InstanceOfRgHeap();
+        RgHeapFree(heap, pBxx->m_pLink, D_00A56FA0, 96);
+        pBxx->m_pLink = 0;
+    }
+    if (pData != 0) {
+        heap = InstanceOfRgHeap();
+        pLink = RgHeapAlloc(heap, 4, D_00A56FA0, 100);
+        pBxx->m_pLink = pLink;
+        InitRgLinkData(pLink, pData);
+        if (RgLinkDataNumOfData(pBxx->m_pLink) != 2) {
+            RgError(D_00A57050, D_00A56FA0, 103,
+                    RgLinkDataNumOfData(pBxx->m_pLink));
+        }
+        count = RgBxxGetTexNum(pBxx);
+        pic = _GetPicTop(pBxx);
+        picIndex = 0;
+        if (count != 0) {
+            do {
+                picIndex++;
+                *(RgBxx **)((char *)pic + 0x58) = pBxx;
+                pic = (RgBxxPic *)((char *)pic + 0x60);
+            } while (picIndex < count);
+        }
+    }
+}
 
 static RgBxxHeader *_GetHeader(RgBxx *pBxx)
 {

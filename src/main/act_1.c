@@ -12,11 +12,12 @@ INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_allocMatrix);
  * left by 6 (multiplying by 64) into the size argument, and main:0x00305a7c
  * moves this function's own tag argument into the third argument unchanged.
  */
-extern void RSRC_alloc(MatrixHeap *heap, int size, int tag);
+extern void *RSRC_alloc(MatrixHeap *heap, int size, int tag);
 
-void ACT_allocBlock(int tag, int blockCount)
+/* Returns the new block's storage (RSRC_alloc returns the item's +0x08 data). */
+void *ACT_allocBlock(int tag, int blockCount)
 {
-    RSRC_alloc(actMatrixHeap, blockCount << 6, tag);
+    return RSRC_alloc(actMatrixHeap, blockCount << 6, tag);
 }
 
 /*
@@ -57,13 +58,112 @@ INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_init);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_create);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_dispose);
+extern void RSRC_inactiveSource(MatrixHeap *heap, ActRecord *actor);
+extern void ACT_resetParent(ActRecord *self, ActRecord *parent);
+void ACT_dispose2(ActRecord *self, int quick);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_dispose2);
+/*
+ * The plain default-options entry: ActorAndResourceDispose (main:0x0027fec0)
+ * tail-calls it, and it always asks ACT_dispose2 for the full teardown
+ * (main:0x00305e64..0x00305e6c).
+ */
+void ACT_dispose(ActRecord *self)
+{
+    ACT_dispose2(self, 0);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_draw);
+/*
+ * Releases one actor entry: RSRC_inactiveSource retires its matrix-heap
+ * resources, a live parent link is handed to ACT_resetParent before it is
+ * cleared, and the entry's own hooks and in-use id go back to zero. `quick`
+ * skips the ten-word block immediately before the parent link
+ * (+0x8d4..+0x8f8) when it is nonzero; ACT_dispose always passes zero (full
+ * teardown).
+ */
+void ACT_dispose2(ActRecord *self, int quick)
+{
+    ActRecord *parent;
+    int *word;
+    int count;
 
-INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_update);
+    RSRC_inactiveSource(actMatrixHeap, self);
+    parent = self->parent;
+    if (parent != 0) {
+        ACT_resetParent(self, parent);
+    }
+    self->inUseId = 0;
+    self->update = 0;
+    self->draw = 0;
+    self->flags = 0;
+    if (!quick) {
+        word = (int *)((unsigned char *)self + ACTOR_LINKED_BLOCK_END_OFFSET);
+        count = 10;
+        do {
+            count -= 1;
+            *word = 0;
+            word -= 1;
+        } while (count >= 0);
+    }
+}
+
+extern void EXM_StepShakeWind(void);
+extern void ACT_info_00306090(void);
+extern void ACT_modelDraw(ActRecord *actor);
+
+/*
+ * Steps the wind simulation, refreshes the debug actor printer, then draws
+ * every in-use actor (ACT_info_00306090's own "ACT[%02x]"/in-use reading
+ * confirms the same test; see the ActRecord comment in act_1.h).
+ */
+void ACT_draw(void)
+{
+    ActRecord *cursor;
+    int remaining;
+
+    remaining = ACTOR_COUNT - 1;
+    EXM_StepShakeWind();
+    ACT_info_00306090();
+    cursor = actor;
+    do {
+        if (cursor->inUseId != 0) {
+            ACT_modelDraw(cursor);
+        }
+        remaining -= 1;
+        cursor += 1;
+    } while (remaining >= 0);
+}
+
+extern void xglStudioFlushActiveCamera(void);
+extern void DB_reset(int, int);
+extern void LOOK_target_doit(void);
+
+/*
+ * Refreshes the active camera, resets the debug light-write window with two
+ * literal arguments (the only values this TU ever passes), then runs every
+ * in-use actor's own per-frame update hook (main:0x00305f94: jalr through
+ * the entry's `update` member, skipped when null) before driving the
+ * look-at target.
+ */
+void ACT_update(void)
+{
+    ActRecord *cursor;
+    int remaining;
+
+    remaining = ACTOR_COUNT - 1;
+    xglStudioFlushActiveCamera();
+    DB_reset(8, 8);
+    cursor = actor;
+    do {
+        if (cursor->inUseId != 0) {
+            if (cursor->update != 0) {
+                cursor->update(cursor);
+            }
+        }
+        remaining -= 1;
+        cursor += 1;
+    } while (remaining >= 0);
+    LOOK_target_doit();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_pauseUpdate);
 

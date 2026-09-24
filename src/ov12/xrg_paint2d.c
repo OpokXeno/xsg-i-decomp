@@ -5,11 +5,65 @@
 #include "shared.h"
 #include "xrg_paint2d.h"
 #include "ov12/rg_draw.h"
+#include "ov12/rg_singleton_id.h"
 #include "ov12/xrg_rand_int.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _openVifGif_00A4A620);
+/*
+ * _openVifGif and _openVifGifAD build the 128-bit VIF1 GIF tag
+ * sceVif1PkOpenGifTag takes in the single register the original loads with
+ * one `lq`; no wide arithmetic is done on it: bit 15 is EOP, bit 46 is PRE,
+ * bits 47..57 are PRIM, bits 60..63 are NREG, and the high 64 bits are the
+ * REGS descriptor. The union lets the two halves be stored as ordinary
+ * 64-bit fields and the whole 16 bytes be read back as the single register
+ * sceVif1PkOpenGifTag takes.
+ */
+typedef unsigned int Quadword __attribute__((mode(TI)));
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _openVifGifAD_00A4A698);
+typedef union XrgPaint2DGifTag {
+    struct {
+        u64 lo;
+        u64 hi;
+    } part;
+    Quadword quad;
+} XrgPaint2DGifTag;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAlign(XglPacket *packet, int align, int size);
+extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkOpenGifTag(XglPacket *packet, Quadword tag);
+
+static void _openVifGif(XglPacket *packet, unsigned int prim,
+                        unsigned int nreg, u64 regs)
+{
+    XrgPaint2DGifTag tag;
+
+    tag.part.lo = (1u << 15) | (1ULL << 46) | ((u64)prim << 47) |
+                  ((u64)nreg << 60);
+    tag.part.hi = regs;
+    sceVif1PkAlign(packet, 2, 3);
+    sceVif1PkCnt(packet, 0);
+    sceVif1PkOpenDirectHLCode(packet, 0);
+    sceVif1PkOpenGifTag(packet, tag.quad);
+}
+
+/*
+ * ov12:0x00a59030 is a fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D
+ * address+data register code), the constant _openVifGifAD passes to
+ * sceVif1PkOpenGifTag.
+ */
+extern const XrgPaint2DGifTag D_00A59030;
+
+static void _openVifGifAD(XglPacket *packet)
+{
+    XrgPaint2DGifTag tag;
+
+    tag = D_00A59030;
+    sceVif1PkCnt(packet, 0);
+    sceVif1PkAlign(packet, 2, 3);
+    sceVif1PkOpenDirectCode(packet, 0);
+    sceVif1PkOpenGifTag(packet, tag.quad);
+}
 
 /*
  * The VIF1 direct/HL packet the paint renderer's draw calls build (_DrawNoTex,
@@ -69,7 +123,32 @@ static void _CalcRectangle(XrgPaint2DVertex corners[4], const XrgIntRect *rect,
     corners[0].prio = prio;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _CalcUV);
+/*
+ * _CalcUV expands one rectangle into the four vertices _CalcRectangle
+ * builds, after applying up to two independent overrides from a second
+ * rectangle-shaped argument: bit 0 of `mode` adds its x/y to the base
+ * rectangle's x/y, bit 1 replaces the base's width/height with its own.
+ * The base rectangle is brought in as one 16-byte COP2 quadword transfer
+ * (lqc2/sqc2), the same admitted idiom XrgPaint2DOffset3D and
+ * XrgPaint2DColor use elsewhere in this allocation.
+ */
+static void _CalcUV(XrgPaint2DVertex corners[4], const XrgIntRect *base,
+                    int mode, const XrgIntRect *override)
+{
+    XrgIntRect rect;
+
+    __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
+                         : : "r"(base), "r"(&rect) : "memory");
+    if (mode & 1) {
+        rect.x += override->x;
+        rect.y += override->y;
+    }
+    if (mode & 2) {
+        rect.width = override->width;
+        rect.height = override->height;
+    }
+    _CalcRectangle(corners, &rect, 0, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _CalcPosOnScreen);
 
@@ -98,7 +177,7 @@ extern void *RgHeapAlloc(RgHeap *heap, unsigned int size, const char *source_fil
                         int line);
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
                        int line);
-extern void _InitPaint(XrgPaint2D *paint, const char *sourceFile, int line);
+static void _InitPaint(XrgPaint2D *paint, const char *sourceFile, int line);
 
 XrgPaint2D *CreateXrgPaint2D_sub(const char *sourceFile, int line) {
     XrgPaint2D *paint;
@@ -116,9 +195,23 @@ void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *sourceFile, int line) 
     RgHeapFree(InstanceOfRgHeap(), paint, sourceFile, line);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _WrapperDestruct_00A4B910);
+static void _WrapperDestruct(RgSimpleDB *database) {
+    DisposeXrgPaint2D_sub((XrgPaint2D *) database, D_00A59058, 0x2DC);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", InstanceOfXrgPaint2D);
+void XrgPaint2DSetDrawPrio(XrgPaint2D *paint, int prio);
+
+XrgPaint2D *InstanceOfXrgPaint2D(void) {
+    XrgPaint2D *paint;
+
+    paint = RgSingletonIDGet(10);
+    if (paint == 0) {
+        paint = CreateXrgPaint2D_sub(D_00A59058, 742);
+        XrgPaint2DSetDrawPrio(paint, 3);
+        RgSingletonIDEntry(10, (RgSimpleDB *) paint, _WrapperDestruct);
+    }
+    return paint;
+}
 
 void XrgPaint2DSetDrawID(XrgPaint2D *paint, int drawID) {
     if (paint == 0) {
@@ -140,9 +233,39 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DOffset2DDot);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DOffsetCenter);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DOffset3D);
+void XrgPaint2DOffset3D(XrgPaint2D *paint, const XrgPaint2DOffset *anchor)
+{
+    XrgPaint2DDrawReq *req;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DOffset3DForce);
+    if (paint == 0) {
+        assert_prog(D_00A59098, D_00A59058, 804);
+    }
+    req = paint->request;
+    req->offsetMode = 2;
+    __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
+                         : : "r"(anchor), "r"(&req->offsetAnchor) : "memory");
+}
+
+/*
+ * XrgPaint2DOffset3DForce (0x00a4bc18) re-reads paint->request for the final
+ * store instead of reusing `req`: the original reloads it into a second
+ * register there rather than keeping the first one live across the COP2
+ * transfer.
+ */
+void XrgPaint2DOffset3DForce(XrgPaint2D *paint, const XrgPaint2DOffset *anchor,
+                             float force)
+{
+    XrgPaint2DDrawReq *req;
+
+    if (paint == 0) {
+        assert_prog(D_00A59098, D_00A59058, 812);
+    }
+    req = paint->request;
+    req->offsetMode = 3;
+    __asm__ __volatile__("lqc2 vf31, 0(%0)\n\tsqc2 vf31, 0(%1)"
+                         : : "r"(anchor), "r"(&req->offsetAnchor) : "memory");
+    paint->request->offsetResult.f.x = force;
+}
 
 /*
  * XrgPaint2DOffsetResult stores an explicit offset-result override into the
@@ -163,9 +286,54 @@ void XrgPaint2DOffsetResult(XrgPaint2D *paint, int value)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DOffsetLinear);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DColor);
+void XrgPaint2DColor(XrgPaint2D *paint, const unsigned int *color)
+{
+    unsigned int *dst;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DAlpha);
+    if (paint == 0) {
+        assert_prog(D_00A59098, D_00A59058, 843);
+    }
+    dst = paint->request->color;
+    __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(color) : "memory");
+    __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(dst) : "memory");
+}
+
+/*
+ * XrgPaint2DAlpha (0x00a4bd98) selects one of six fixed GS ALPHA_1-shaped
+ * 64-bit blend-equation values by its own mode argument; an out-of-range
+ * mode leaves the request's alpha at the zero this function seeds before
+ * the switch (the same value case 4 also selects).
+ */
+void XrgPaint2DAlpha(XrgPaint2D *paint, unsigned int mode)
+{
+    long long alpha;
+
+    alpha = 0;
+    if (paint == 0) {
+        assert_prog(D_00A59098, D_00A59058, 852);
+    }
+    switch (mode) {
+    case 0:
+        alpha = 0x44;
+        break;
+    case 1:
+        alpha = ((long long)0x80 << 32) | 0x68;
+        break;
+    case 3:
+        alpha = 0x48;
+        break;
+    case 2:
+        alpha = ((long long)0x60 << 32) | 0x62;
+        break;
+    case 4:
+        alpha = 0;
+        break;
+    case 5:
+        alpha = 0x42;
+        break;
+    }
+    paint->request->alpha = alpha;
+}
 
 extern void RgBxxGetHeader(int header);
 extern long long XrgBxxPs2Tex0(void *texture);
@@ -267,7 +435,20 @@ void InitXrgPaint2DRect(XrgPaint2DRect *rectangle, int mode)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DDrawRect);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DDrawXYWH);
+extern void XrgPaint2DDrawRect(XrgPaint2D *paint, XrgPaint2DRect *rect);
+
+void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
+                        int width, int height)
+{
+    XrgPaint2DRect rect;
+
+    InitXrgPaint2DRect(&rect, mode);
+    rect.x = x;
+    rect.y = y;
+    rect.width = width;
+    rect.height = height;
+    XrgPaint2DDrawRect(paint, &rect);
+}
 
 void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, float width)
 {
@@ -281,7 +462,16 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DDrawLine);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _Paint2DFlush);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", _Paint2DClearReq);
+static void _InitReq(XrgPaint2DDrawReq *req);
+
+static void _Paint2DClearReq(XrgPaint2D *paint, void *pStudio) {
+    if (paint == 0) {
+        assert_prog(D_00A59098, D_00A59058, 0x484);
+    }
+    paint->reqCount = 0;
+    paint->request = &paint->req;
+    _InitReq(&paint->req);
+}
 
 extern RgDraw *InstanceOfRgDraw(void);
 /*

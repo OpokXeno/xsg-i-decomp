@@ -7,6 +7,15 @@
 
 typedef struct JntMatrix JntMatrix;
 
+/*
+ * JNT_getStaticVal2/JNT_getVal2 index this type by joint slot
+ * (`matrix_buffer + index*sizeof(JntMatrix)`, `sll ...,0x6`), so its size is
+ * evidenced as 0x40 bytes; its own field layout is not recovered.
+ */
+struct JntMatrix {
+    unsigned char unmodeled_00[0x40];
+};
+
 typedef JntMatrix *JntMatrixBuffer;
 
 typedef unsigned int JntMatrixSelect;

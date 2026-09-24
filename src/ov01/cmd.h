@@ -51,9 +51,23 @@ extern int pThinkTop;
  * 0x00a1d7c0..0x00a1d7c8, i.e. index*4 + index, doubled) are untouched by any
  * function this TU claims.
  */
+/*
+ * thinkTurnStartExec (0x00a1dab0) and thinkTurnEndExec (0x00a1db78) read two
+ * further shorts of the same entry (lh $3,6($2) and lh $3,8($2)); the
+ * remaining four bytes of the stride stay untouched by any function this TU
+ * claims.
+ */
+/*
+ * thinkInitExec (0x00a1da30) reads a fourth short of the same entry (lh
+ * $2,4($3) at 0x00a1da4c), the current enemy set's optional initialization
+ * script offset.
+ */
 typedef struct MonsTblEntry {
     short script_offset;          /* +0x00 */
-    unsigned char unmodeled_2[8]; /* +0x02 */
+    unsigned char unmodeled_2[2]; /* +0x02 */
+    short initScript;             /* +0x04: thinkInitExec */
+    short turnStartScript;        /* +0x06: thinkTurnStartExec */
+    short turnEndScript;          /* +0x08: thinkTurnEndExec */
 } MonsTblEntry;
 
 /*
@@ -61,6 +75,23 @@ typedef struct MonsTblEntry {
  * number. Scaffold-owned data (docs/naming.md).
  */
 extern MonsTblEntry *pMonsSetTop;
+
+/*
+ * The current map's camera-control table entry. camInitExec (0x00a1d820) is
+ * the only claimed reader and touches only the initialization script offset
+ * (lh $2,2($2) at 0x00a1d82c); the leading two bytes stay untouched by any
+ * function this TU claims.
+ */
+typedef struct CamTopEntry {
+    unsigned char unmodeled_0[2];
+    short initScript;              /* +0x02: camInitExec */
+} CamTopEntry;
+
+/*
+ * Camera-control table entry the map's own init data selects. Scaffold-owned
+ * data (docs/naming.md).
+ */
+extern CamTopEntry *pCamTop;
 
 typedef struct MessageTask MessageTask;
 
@@ -164,6 +195,75 @@ extern ObjectTask *unitPtrGet(int unitNo);
  */
 extern int calcLineChk(ObjectTask *unit);
 
+/* calcUPGet's return type comes from its definer, ov01/tu004 calc.c
+ * (published include/ov01/calc.h); calcUPGet itself is still asm there, so
+ * it is redeclared here the same way src/ov01/snd.c, src/ov01/menu.c and
+ * src/ov01/battle_init.c already do. */
+#include "ov01/calc.h"
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
+
+/*
+ * CalcUnitParam is owned by a different TU (ov01/tu004 calc.c) and is not
+ * completed here. thinkUnitAtkExec (0x00a1dc40) reads a signed half two
+ * levels down: the pointer this offset holds (into calcUPGet's unmodeled_44
+ * span) points at one entry of this TU's own attack table (cmdAtktbl/
+ * cmdAtkset/cmdAtktblSort/cmdAtktblSortSub/cmdAtktblSearch below, all still
+ * asm), whose script-offset field thinkUnitAtkExec is the first claimed
+ * reader of.
+ */
+#define CALC_UNIT_PARAM_ATK_TBL_OFF 0x48
+
+/*
+ * thinkUnitDmgExec (0x00a1dd28) reads a second signed half of the same
+ * attack-table entry, immediately after script_offset: the script offset it
+ * runs when the unit takes damage instead of when it attacks.
+ */
+typedef struct AtkTblEntry {
+    unsigned char unmodeled_0[4];
+    short script_offset;   /* +0x4: thinkUnitAtkExec */
+    short dmgScript;        /* +0x6: thinkUnitDmgExec */
+} AtkTblEntry;
+
+/*
+ * thinkUnitDmgExec's second argument: attacker (+0x0) is the other unit
+ * involved, forwarded through unitNoGet the same way unit itself is;
+ * reg8015/reg8016/reg8017 (+0x4/+0x8/+0xC) are unsigned halves forwarded
+ * unchanged into the identically-numbered AI script registers, with no
+ * further evidenced role (scenarioBatEnd, the only claimed caller, is still
+ * asm).
+ */
+typedef struct UnitDmgInfo {
+    ObjectTask *attacker;         /* +0x0 */
+    unsigned short reg8015;       /* +0x4 */
+    unsigned char unmodeled_6[2];
+    unsigned short reg8016;       /* +0x8 */
+    unsigned char unmodeled_A[2];
+    unsigned short reg8017;       /* +0xC */
+} UnitDmgInfo;
+
+/*
+ * CalcUnitParam is owned by a different TU (ov01/tu004 calc.c) and is not
+ * completed here, the same way src/ov01/unit_cmd.c's
+ * CALC_UNIT_PARAM_UNK44_OFF and src/ov01/battle_init.c's
+ * CALC_PARAM_BOOST_*_OFF already read other bytes of its unmodeled spans.
+ * cmdHpPerGet (0x00a22028) reads a current-HP short at +0x34 (inside
+ * calcUPGet's unmodeled_1e span) and a max-HP short at +0x00 (inside its
+ * unmodeled_00 span) to compute a percentage.
+ */
+#define CALC_UNIT_PARAM_HP_OFF 0x34
+#define CALC_UNIT_PARAM_MAX_HP_OFF 0x00
+
+/*
+ * The battle actor object behind ObjectTask.work, as far as cmdStatChk
+ * reads it. Several TUs already model the same real object under other
+ * tags with more members evidenced (src/ov01/calc.h's CalcActorRecord,
+ * src/ov01/unit_cmd.h's Actor); this TU names only the one flags word it
+ * touches (bit-tested against the script operand).
+ */
+typedef struct CmdActorFlags {
+    int flags;   /* +0x00 */
+} CmdActorFlags;
+
 /*
  * monsSetNoGet (src/ov01/battle_init.c, still asm) returns the active
  * monster-set number; it takes no arguments.
@@ -189,10 +289,25 @@ extern int monsSetNoGet(void);
  * test the same offset the same way for their own wait conditions. No
  * claimed function establishes what sets it.
  */
+/*
+ * cmdWaitCnt (0x00a21dc8) reuses +0x14 as its own down-counter (initialized
+ * from its script operand on the first dispatch, decremented on every later
+ * poll) and cmdWaitCamMove (0x00a21e30) reuses it as a 0/1 camera-moving
+ * selector it passes to MCamIsMoving; neither is the sort mode
+ * cmdAtktblSort/cmdAtktblSortRev store there.
+ */
+/*
+ * This is the same processBuf entry thinkProcessExec (0x00a1d4f8) walks and
+ * hands to thinkProcessExecSub (0x00a1d558): +0x0 is the process's saved AI
+ * script data-segment base (thinkTopSet's argument), zero when the slot is
+ * free (thinkProcessDel clears it) and nonzero while a process is live;
+ * +0x8 is its saved AI execution context (thinkContextSet's argument).
+ */
 typedef struct ThinkProcess {
-    unsigned char unmodeled_0[4];
+    int dataTop;                    /* +0x0: thinkProcessExec/thinkProcessExecSub */
     short pc;                      /* +0x4 */
-    unsigned char unmodeled_6[0xC - 0x6];
+    unsigned char unmodeled_6[2];
+    int context;                    /* +0x8: thinkProcessExecSub */
     int waitActive;                /* +0xC */
     unsigned char unmodeled_10[0x14 - 0x10];
     int sortMode;                  /* +0x14 */
@@ -207,7 +322,7 @@ extern short thinkRegNo(short pc);
 extern int thinkRegGet(int regIndex);
 extern void thinkRegSet(int regIndex, int value);
 extern int cmdNum(short pc);
-extern void cmdThinksetSub(ThinkProcess *proc);
+extern int cmdThinksetSub(ThinkProcess *proc);
 extern void cmdAtktblSortSub(ThinkProcess *proc);
 
 /*
@@ -303,5 +418,114 @@ extern const char D_00A46308[];
  * name (docs/naming.md).
  */
 extern int cmdPutFlag;
+
+/*
+ * thinkExec (this TU, still asm) runs the AI script at the given offset;
+ * thinkTurnStartExec/thinkTurnEndExec/thinkUnitAtkExec (0x00a1dab0,
+ * 0x00a1db78, 0x00a1dc40) tail-call it with the monster-set/attack-table
+ * script offset they just read. unitLiveNumGet (src/ov01/battle_init.c,
+ * still asm) returns the live unit count for a side (0 or 1); the same three
+ * functions pass it to thinkRegSet for AI script registers 0x8019/0x801A.
+ */
+extern int thinkExec(short scriptOffset);
+extern int unitLiveNumGet(int side);
+
+/* "** thinkTurnStart ** %X\n" at 0x00a46160 (ov01 .rodata), the format
+ * string thinkTurnStartExec (0x00a1dab0) hands to printf with the script
+ * offset it is about to run. */
+extern const char D_00A46160[];
+
+/* "** thinkTurnEnd ** %X\n" at 0x00a46180 (ov01 .rodata), the format string
+ * thinkTurnEndExec (0x00a1db78) hands to printf with the script offset it is
+ * about to run. */
+extern const char D_00A46180[];
+
+/* "** think Atk (%d) ** %X\n" at 0x00a46198 (ov01 .rodata), the format
+ * string thinkUnitAtkExec (0x00a1dc40) hands to printf with the acting
+ * unit's number and the script offset it is about to run. */
+extern const char D_00A46198[];
+
+/* "** think Dmg (%d) ** %X\n" at 0x00a461b8 (ov01 .rodata), the format
+ * string thinkUnitDmgExec (0x00a1dd28) hands to printf with the damaged
+ * unit's number and the script offset it is about to run. */
+extern const char D_00A461B8[];
+
+/*
+ * cmdUnitpara (this TU, still asm) reads (mode 0) or writes (mode 1) one of
+ * a unit's AI-visible parameters selected by category; cmdUnitparaGet
+ * (0x00a1f508) and cmdUnitparaSet (0x00a1f5b0) are its only claimed callers.
+ */
+extern int cmdUnitpara(ObjectTask *unit, int category, int value, int mode);
+
+/*
+ * cmdTecpara/dataTecGet (this TU and src/ov01/data_unit_org_get.c, both
+ * still asm) look up a technique's parameter; cmdTecparaGet (0x00a20518) is
+ * the only claimed caller here.
+ */
+extern int cmdTecpara(int tec, int category);
+extern int dataTecGet(int tecId);
+
+/*
+ * mapMulSet's own parameter block is a different TU's union
+ * (MapMultiplier, src/ov01/map_disp.h, ov01/tu010) that a TU-local header
+ * cannot restate; cmdMapMulSet (0x00a21f38) only ever writes four
+ * consecutive scaled floats into it, the same layout as Vector4, so it is
+ * declared with that shared, layout-compatible type instead.
+ */
+extern void mapMulSet(Vector4 *value);
+
+/*
+ * cmdCamOffsAng (0x00a21548) writes its own three-float block right after
+ * offset below, using the same +0x70 enable flag (set to 2 here, instead of
+ * the 1 cmdCamOffsPos uses): x is scaled by 0.01 like offset.x/y/z, while y
+ * and z convert their operand from degrees to radians before storing it.
+ */
+typedef struct McamAngleOffset {
+    float x;   /* +0x00: scaled by 0.01 */
+    float y;   /* +0x04: degrees converted to radians */
+    float z;   /* +0x08: degrees converted to radians */
+} McamAngleOffset;
+
+/*
+ * mcamPtrGet (this TU, still asm) returns the camera-offset parameter block
+ * cmdCamOffsPos (0x00a21458) fills in; only the members that function
+ * touches are modeled. cmdCamOffsAng (this TU, still asm) reaches the same
+ * +0x70 enable flag for its own angle block, so it stays a separate,
+ * unmodeled span here.
+ */
+typedef struct McamParams {
+    unsigned char unmodeled_0[0x70];
+    int offsEnabled;                  /* +0x70 */
+    unsigned char unmodeled_74[0x80 - 0x74];
+    Vector4 offset;                   /* +0x80: x/y/z scaled by 0.01, w fixed at 1.0 */
+    McamAngleOffset angleOffset;      /* +0x90: cmdCamOffsAng */
+} McamParams;
+
+extern McamParams *mcamPtrGet(void);
+
+/*
+ * StudioLight's ambient_color (include/main/xgl_studio.h, main/tu101) is the
+ * quadword xglLightIntensityAmbient (src/main/xgl_light.c, still asm there)
+ * copies in verbatim; cmdLightAmb (0x00a20840) is the only claimed caller
+ * here.
+ */
+#include "main/xgl_studio.h"
+extern void xglLightIntensityAmbient(StudioLight *light, Vector4 *ambient);
+
+/*
+ * xglLightIntensityParallel/xglLightDirection (src/main/xgl_light.c,
+ * main/tu101) set one of a light block's three parallel entries' color or
+ * direction by index; cmdLightCol (0x00a20918) and cmdLightDir (0x00a20a18)
+ * are this TU's only callers. That TU still models the same light block
+ * under its own TU-local tag (XglLightSet, src/main/xgl_light.h, not yet
+ * published to include/main), which this TU cannot restate; xglLightDirection
+ * is already accepted there with that tag, so both declarations here reuse
+ * StudioLight instead, the same already-published, layout-compatible type
+ * cmdLightAmb above already gets from xglStudioGetLight (the same
+ * substitution mapMulSet's parameter block above uses for a different TU's
+ * type).
+ */
+extern void xglLightIntensityParallel(StudioLight *light, unsigned int index, const Vector4 *color);
+extern void xglLightDirection(StudioLight *light, unsigned int index, const Vector4 *direction);
 
 #endif /* SRC_OV01_CMD_H */

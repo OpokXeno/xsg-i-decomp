@@ -32,7 +32,44 @@ INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", InitUwamonoSys);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", Unit_CreateUwamono);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", MAP_LoadUwamonoResource);
+extern unsigned char D_004CA028[];
+extern int uwares_tbl[14];
+extern int xtxres_tbl[14];
+extern int printf(const char *format, ...);
+
+/*
+ * MAP_LoadUwamonoResource's own additive view of the same MapUnit[] record
+ * UwamonoMapUnit above already partially names; only the fields
+ * MAP_LoadUwamonoResource (VA 0x002be5f0) writes are named here: it stores
+ * uwares_tbl[index] and xtxres_tbl[index], where index = resourceId -
+ * 0x7001.
+ */
+typedef struct UwamonoResourceUnit {
+    unsigned char unmodeled_00[0xe0];
+    int uwaresId;                     /* +0xE0 */
+    int xtxresId;                     /* +0xE4 */
+} UwamonoResourceUnit;
+
+/*
+ * Valid resourceId values run 0x7001..0x700E (14 entries, the size of
+ * uwares_tbl and xtxres_tbl); 0x7012 is excluded explicitly ahead of the
+ * broader >= 0x1000 range check.
+ */
+void MAP_LoadUwamonoResource(UwamonoResourceUnit *unit, int resourceId)
+{
+    int index;
+    int uwaresId;
+    int xtxresId;
+
+    printf((const char *) D_004CA028);
+    if (resourceId != 0x7012 && resourceId >= 0x1000) {
+        index = resourceId - 0x7001;
+        uwaresId = uwares_tbl[index];
+        xtxresId = xtxres_tbl[index];
+        unit->xtxresId = xtxresId;
+        unit->uwaresId = uwaresId;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", GetPartsPos);
 
@@ -43,7 +80,54 @@ void SendBrokenSignal(UwamonoMapUnit *unit)
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", GetPartsSize);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", ClearUwamonoEffect);
+extern void sefDeleteEffectCf(int effectId);
+extern void xglSoundEffectStopID(int soundId, int channel);
+
+/*
+ * ClearUwamonoEffect's own additive view of the same MapUnit[] record
+ * UwamonoMapUnit above already partially names; only the fields
+ * ClearUwamonoEffect (VA 0x002be8c0) reads or writes are named here.
+ */
+typedef struct UwamonoEffectUnit {
+    unsigned char unmodeled_00[0xa0];
+    /* Read once (`lbu`), plus one, as the channel argument to
+     * xglSoundEffectStopID; no other role is evidenced here. */
+    unsigned char seChannel;           /* +0xA0 */
+    unsigned char unmodeled_a1[0x47];
+    /* Walked in order, deleting and zeroing each non-zero effect handle
+     * with sefDeleteEffectCf. */
+    int effectCf[3];                   /* +0xE8 */
+    unsigned char unmodeled_f4[0xac];
+    /*
+     * The original computes this sub-pointer once, ahead of the effect
+     * loop, and keeps it live (register evidence) across the whole
+     * function; UwamonoTimers below names the same +0x1A0 block for
+     * UwamonoCommonFunc's view.
+     */
+    struct UwamonoEffectTimers {
+        unsigned char unmodeled_00[0x48];
+        int bgmTimer;                   /* +0x48 (record +0x1E8) */
+    } timers;                           /* +0x1A0 */
+} UwamonoEffectUnit;
+
+void ClearUwamonoEffect(UwamonoEffectUnit *unit)
+{
+    int i;
+    int effectId;
+    struct UwamonoEffectTimers *timers = &unit->timers;
+
+    for (i = 0; i < 3; i++) {
+        effectId = unit->effectCf[i];
+        if (effectId != 0) {
+            sefDeleteEffectCf(effectId);
+            unit->effectCf[i] = 0;
+        }
+    }
+    if (timers->bgmTimer > 0) {
+        xglSoundEffectStopID(timers->bgmTimer, unit->seChannel + 1);
+        timers->bgmTimer = -1;
+    }
+}
 
 signed char GetUwamonoSignal(UwamonoMapUnit *unit)
 {
@@ -114,7 +198,17 @@ INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", HitCheckMapUnitWithNyuru);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", HitCheckMapUnitReverse);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", HitCheckMapUnitPos);
+/*
+ * HitCheckMapUnitPos (main:0x002c02f0): a thin tail call into
+ * HitCheckMapUnitPosSize with its distance threshold fixed at 0.0f (a
+ * true `j`, no `jal`, so this function's own return value is whatever
+ * HitCheckMapUnitPosSize returns).
+ */
+extern void HitCheckMapUnitPosSize(int unit, float threshold);
+
+void HitCheckMapUnitPos(int unit) {
+    HitCheckMapUnitPosSize(unit, 0.0f);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", HitCheckMapUnitPosSize);
 
@@ -301,7 +395,76 @@ void UwamonoCommonFunc(UwamonoCommonUnit *unit)
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", UwamonoBgmFunc);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", UwamonoBgmFadeOut);
+/*
+ * UwamonoBgmFadeOut's own additive view of the same MapUnit[] record the
+ * structs above already partially name; only the fields it reads are named
+ * here. flags (+0x00) is the same field UwamonoMapUnit and DrillMapUnit
+ * name; bit 0x10000 is the created/active flag CreateUwamonoCommon sets.
+ * seChannel (+0xA0) is the same field ClearUwamonoEffect's UwamonoEffectUnit
+ * names, used the same way (+1 as a channel-shaped argument). bgmTimer
+ * (+0x1E8) is the same field UwamonoTimers/UwamonoEffectTimers name; here
+ * its high halfword is a SoundWork effect-bank index and its low halfword
+ * a sub-id, combined below into the effect_id SsdFadeoutEffect takes.
+ */
+typedef struct UwamonoBgmFadeOutUnit {
+    u32 flags;                        /* +0x00 */
+    unsigned char unmodeled_04[0x9c];
+    unsigned char seChannel;          /* +0xA0 */
+    unsigned char unmodeled_a1[0x147];
+    int bgmTimer;                     /* +0x1E8 */
+    unsigned char unmodeled_1ec[0x114];
+} UwamonoBgmFadeOutUnit;
+
+extern unsigned char MapUnit[];
+
+/*
+ * UwamonoBgmFadeOut's own additive view of the global sound-engine
+ * SoundWork record src/main/xgl_sound.c names in full (main:0x004a8140,
+ * struct SoundWork); only the low halfword of each 4-byte effect-bank entry
+ * at +0x20 is read here -- the same field xgl_sound.c's SoundEffectBankEntry
+ * calls handle.
+ */
+typedef struct UwamonoSoundWorkView {
+    unsigned char unmodeled_00[0x20];
+    struct {
+        unsigned short handle;        /* +0x20 + bank * 4 */
+        unsigned char unmodeled_02[2];
+    } effectBanks[16];
+} UwamonoSoundWorkView;
+
+extern UwamonoSoundWorkView SoundWork;
+
+/* Defined in src/main/ssd_1.c (main/tu ssd_1), already C. */
+extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
+
+void UwamonoBgmFadeOut(void)
+{
+    UwamonoBgmFadeOutUnit *unit;
+    int i;
+    int bgmTimer;
+    int bank;
+    unsigned short handle;
+
+    unit = (UwamonoBgmFadeOutUnit *) MapUnit;
+    for (i = 0; i < 0x40; i++, unit++) {
+        if (!(unit->flags & 0x10000)) {
+            continue;
+        }
+        bgmTimer = unit->bgmTimer;
+        if (bgmTimer < 0) {
+            continue;
+        }
+        if (bgmTimer > 0xFFFFF) {
+            continue;
+        }
+        bank = bgmTimer >> 16;
+        handle = SoundWork.effectBanks[bank].handle;
+        if (handle == 0xFFFF) {
+            continue;
+        }
+        SsdFadeoutEffect((handle << 16) + (bgmTimer & 0xFFFF), 0x12C, unit->seChannel + 1);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", CheckUwamonoHeight);
 

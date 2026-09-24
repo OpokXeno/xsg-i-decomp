@@ -7,7 +7,7 @@
   "version": "2.96-ee-001003-1",
   "dir": "tool:ee-gcc2.96-realconv-lp7",
   "sha256": {
-   "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+   "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
    "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
    "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
   },
@@ -15,9 +15,9 @@
  },
  "assemblers": {
   "c_tu": {
-   "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+   "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
    "path": "tool:ee-as-la29-vsqrt",
-   "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+   "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
    "argv": "-EL -m5900 -mabi=eabi <G> -I .",
    "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
   },
@@ -58,7 +58,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -69,9 +69,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -142,7 +142,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -153,9 +153,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -299,7 +299,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -310,9 +310,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -491,7 +491,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -502,9 +502,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -710,7 +710,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -721,9 +721,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -896,7 +896,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -907,9 +907,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1064,7 +1064,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1075,9 +1075,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1282,7 +1282,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1293,9 +1293,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1407,7 +1407,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1418,9 +1418,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1527,7 +1527,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1538,9 +1538,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1690,7 +1690,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1701,9 +1701,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1768,7 +1768,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1779,9 +1779,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1847,7 +1847,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1858,9 +1858,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1917,7 +1917,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -1928,9 +1928,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2017,7 +2017,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2028,9 +2028,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2147,7 +2147,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2158,9 +2158,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2214,7 +2214,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2225,9 +2225,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2290,7 +2290,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2301,9 +2301,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2405,7 +2405,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2416,9 +2416,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2473,7 +2473,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2484,9 +2484,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2547,7 +2547,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2558,9 +2558,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2619,7 +2619,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2630,9 +2630,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2693,7 +2693,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2704,9 +2704,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2773,7 +2773,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2784,9 +2784,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2844,7 +2844,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2855,9 +2855,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2915,7 +2915,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2926,9 +2926,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2988,7 +2988,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -2999,9 +2999,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3055,7 +3055,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3066,9 +3066,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3132,7 +3132,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3143,9 +3143,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3222,7 +3222,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3233,9 +3233,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3314,7 +3314,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3325,9 +3325,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3401,7 +3401,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3412,9 +3412,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3489,7 +3489,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3500,9 +3500,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3569,7 +3569,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3580,9 +3580,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3639,7 +3639,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3650,9 +3650,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3710,7 +3710,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3721,9 +3721,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3790,7 +3790,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3801,9 +3801,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3865,7 +3865,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3876,9 +3876,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3937,7 +3937,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -3948,9 +3948,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4008,7 +4008,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4019,9 +4019,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4082,7 +4082,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4093,9 +4093,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4148,7 +4148,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4159,9 +4159,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4219,7 +4219,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4230,9 +4230,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4292,7 +4292,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4303,9 +4303,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4363,7 +4363,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4374,9 +4374,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4435,7 +4435,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4446,9 +4446,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4515,7 +4515,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4526,9 +4526,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4593,7 +4593,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4604,9 +4604,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4669,7 +4669,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4680,9 +4680,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4745,7 +4745,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4756,9 +4756,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4842,7 +4842,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4853,9 +4853,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4913,7 +4913,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -4924,9 +4924,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5003,7 +5003,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5014,9 +5014,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5073,7 +5073,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5084,9 +5084,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5154,7 +5154,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5165,9 +5165,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5321,7 +5321,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5332,9 +5332,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5416,7 +5416,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5427,9 +5427,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5487,7 +5487,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5498,9 +5498,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5558,7 +5558,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5569,9 +5569,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5651,7 +5651,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5662,9 +5662,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5720,7 +5720,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5731,9 +5731,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5854,7 +5854,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5865,9 +5865,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5935,7 +5935,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -5946,9 +5946,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6094,7 +6094,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6105,9 +6105,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6175,7 +6175,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6186,9 +6186,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6388,7 +6388,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6399,9 +6399,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6460,7 +6460,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6471,9 +6471,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6527,7 +6527,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6538,9 +6538,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6635,7 +6635,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6646,9 +6646,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6719,7 +6719,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6730,9 +6730,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6790,7 +6790,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -6801,9 +6801,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7012,7 +7012,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7023,9 +7023,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7087,7 +7087,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7098,9 +7098,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7162,7 +7162,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7173,9 +7173,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7236,7 +7236,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7247,9 +7247,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7312,7 +7312,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7323,9 +7323,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7391,7 +7391,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7402,9 +7402,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7489,7 +7489,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7500,9 +7500,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7565,7 +7565,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7576,9 +7576,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7637,7 +7637,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7648,9 +7648,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7726,7 +7726,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7737,9 +7737,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7795,7 +7795,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7806,9 +7806,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7878,7 +7878,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7889,9 +7889,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7987,7 +7987,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -7998,9 +7998,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8072,7 +8072,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8083,9 +8083,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8139,7 +8139,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8150,9 +8150,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8240,7 +8240,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8251,9 +8251,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8355,7 +8355,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8366,9 +8366,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8441,7 +8441,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8452,9 +8452,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8530,7 +8530,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8541,9 +8541,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8662,7 +8662,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8673,9 +8673,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8755,7 +8755,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8766,9 +8766,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8840,7 +8840,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -8851,9 +8851,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9001,7 +9001,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9012,9 +9012,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9093,7 +9093,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9104,9 +9104,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9168,7 +9168,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9179,9 +9179,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9245,7 +9245,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9256,9 +9256,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9322,7 +9322,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9333,9 +9333,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9394,7 +9394,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9405,9 +9405,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9463,7 +9463,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9474,9 +9474,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9542,7 +9542,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9553,9 +9553,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9630,7 +9630,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9641,9 +9641,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9726,7 +9726,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9737,9 +9737,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9815,7 +9815,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9826,9 +9826,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9883,7 +9883,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9894,9 +9894,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9966,7 +9966,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -9977,9 +9977,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10043,7 +10043,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10054,9 +10054,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10128,7 +10128,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10139,9 +10139,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10210,7 +10210,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10221,9 +10221,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10296,7 +10296,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10307,9 +10307,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10377,7 +10377,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10388,9 +10388,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10446,7 +10446,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10457,9 +10457,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10562,7 +10562,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10573,9 +10573,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10632,7 +10632,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10643,9 +10643,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10751,7 +10751,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10762,9 +10762,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10825,7 +10825,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10836,9 +10836,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10901,7 +10901,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10912,9 +10912,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10986,7 +10986,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -10997,9 +10997,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11070,7 +11070,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11081,9 +11081,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11157,7 +11157,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11168,9 +11168,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11230,7 +11230,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11241,9 +11241,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11318,7 +11318,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11329,9 +11329,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11422,7 +11422,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11433,9 +11433,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11514,7 +11514,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11525,9 +11525,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11612,7 +11612,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11623,9 +11623,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11693,7 +11693,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11704,9 +11704,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11787,7 +11787,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11798,9 +11798,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11865,7 +11865,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11876,9 +11876,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11933,7 +11933,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -11944,9 +11944,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12013,7 +12013,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12024,9 +12024,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12090,7 +12090,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12101,9 +12101,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12171,7 +12171,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12182,9 +12182,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12258,7 +12258,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12269,9 +12269,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12325,7 +12325,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12336,9 +12336,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12400,7 +12400,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12411,9 +12411,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12516,7 +12516,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12527,9 +12527,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12701,7 +12701,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12712,9 +12712,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12778,7 +12778,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12789,9 +12789,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12875,7 +12875,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12886,9 +12886,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12947,7 +12947,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -12958,9 +12958,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13028,7 +13028,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13039,9 +13039,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13106,7 +13106,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13117,9 +13117,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13218,7 +13218,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13229,9 +13229,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13310,7 +13310,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13321,9 +13321,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13420,7 +13420,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13431,9 +13431,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13499,7 +13499,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13510,9 +13510,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13572,7 +13572,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13583,9 +13583,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13701,7 +13701,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13712,9 +13712,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13776,7 +13776,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13787,9 +13787,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13860,7 +13860,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13871,9 +13871,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13968,7 +13968,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -13979,9 +13979,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14060,7 +14060,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14071,9 +14071,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14132,7 +14132,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14143,9 +14143,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14254,7 +14254,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14265,9 +14265,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14336,7 +14336,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14347,9 +14347,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14462,7 +14462,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14473,9 +14473,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14529,7 +14529,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14540,9 +14540,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14613,7 +14613,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14624,9 +14624,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14688,7 +14688,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14699,9 +14699,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14769,7 +14769,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14780,9 +14780,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14836,7 +14836,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14847,9 +14847,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14929,7 +14929,7 @@
       "version": "2.96-ee-001003-1",
       "dir": "tool:ee-gcc2.96-realconv-lp7",
       "sha256": {
-       "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+       "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
        "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
        "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
       },
@@ -14940,9 +14940,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt (ee-legacy-binutils-la29-vsqrt-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },

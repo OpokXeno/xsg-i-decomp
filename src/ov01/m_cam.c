@@ -174,7 +174,62 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Coord);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Bank);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Pers);
+/*
+ * MCamMoveProc_Pers (below) steps this move state every frame; this
+ * function's own lui/addiu is the TU's only relocation into it, so it is
+ * typed as MCamMoveState here instead of left as bytes.
+ */
+extern MCamMoveState D_00A5B5F8;
+
+/*
+ * The float 0x384 bytes before D_00A5B5F8: the compiled form reuses
+ * D_00A5B5F8's own base register with a negative immediate rather than a
+ * second relocation, so nothing here names a symbol for it or claims a
+ * struct spanning the two; MCamMove_Pers seeds its own `start` from it.
+ */
+#define MCAM_PREV_PERS_START_OFFSET (-0x384)
+
+/*
+ * The caller's own move-request object (its definer is outside this
+ * allocation, called through MCamMove, also outside this allocation): only
+ * the three fields MCamMove_Pers reads are evidenced.
+ */
+typedef struct MCamMoveRequest {
+    unsigned char unmodeled_00[0xA4];
+    float angle;
+    unsigned char unmodeled_a8[0xB4 - 0xA8];
+    int mode;
+    int duration;
+} MCamMoveRequest;
+
+static void MCamMove_Pers(MCamMoveRequest *request)
+{
+    MCamMoveState *state = &D_00A5B5F8;
+    int mode;
+    float start;
+    int duration;
+    float angle;
+    float angleRad;
+    float savedStart;
+
+    mode = request->mode;
+    start = *(float *)((unsigned char *) state + MCAM_PREV_PERS_START_OFFSET);
+    duration = request->duration;
+    state->start = start;
+    state->mode = mode;
+    angle = request->angle;
+    state->duration = duration;
+    state->elapsed = 0;
+    if (angle != 0.0f) {
+        angleRad = angle * 0.017453292f;
+    } else {
+        angleRad = 0.6981317f;
+    }
+    savedStart = state->start;
+    state->end = angleRad;
+    state->current = savedStart;
+    camFlags |= 0x800;
+}
 
 
 static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, unsigned int duration)

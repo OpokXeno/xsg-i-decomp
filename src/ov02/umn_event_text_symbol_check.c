@@ -69,7 +69,10 @@ int *UmnHistoryTreeGet(unsigned int history_id)
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnKosmosSpecialGetCheck);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnMailAttachGet);
+unsigned char *UmnMailAttachGet(int box_id)
+{
+    return umn_attach_tbl + box_id * 3;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnMailAttachSet);
 

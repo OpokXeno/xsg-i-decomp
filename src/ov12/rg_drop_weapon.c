@@ -16,7 +16,10 @@ extern void XrgActorDraw(XrgActor *actor);
 extern void DisposeXrgActor(XrgActor *actor);
 
 /* Defined later in this TU (still INCLUDE_ASM); called by CreateRgDropWeapon. */
-extern void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor);
+static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor);
+
+/* Defined later in this TU (still INCLUDE_ASM); passed to RgCharPassTimeMethod by _InitDrop. */
+void _PassTime(RgChar *pChar, float deltaTime);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_drop_weapon", _PassTime_00A1E618);
 
@@ -56,7 +59,18 @@ static void _Destruct(RgDropWeapon *pDrop)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_drop_weapon", _InitDrop);
+static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor)
+{
+    if (pDrop == 0) {
+        assert_prog(D_00A53CF0, D_00A53D00, 86);
+    }
+    RgCharDestructMethod(&pDrop->rgChar, (void (*)(RgChar *)) _Destruct);
+    RgCharPassTimeMethod(&pDrop->rgChar, _PassTime);
+    RgCharDispMethod(&pDrop->rgChar, (void (*)(RgChar *)) _Disp);
+    pDrop->hidden = 0;
+    pDrop->actor = actor;
+    pDrop->transparency = 1.0f;
+}
 
 RgDropWeapon *CreateRgDropWeapon(XrgActor *actor)
 {

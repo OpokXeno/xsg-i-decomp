@@ -19,6 +19,12 @@ typedef struct XrgPaint2D XrgPaint2D;
 #define RG_DISP_GAME_INFO_SIZE 0x70
 
 /*
+ * _InitInfo (ov12:0x00a22a78) is now part of this allocation. It writes
+ * +0x10/+0x50 (float), +0x54/+0x5c/+0x60 (int) and seeds studio with -2; see
+ * the member comment below for the named fields this adds past +0x58.
+ */
+
+/*
  * Field layout evidenced by this TU's own functions:
  *   hostRobot  +0x00  _SetHostRobot stores it (RgDispGameInfoSetHostRobot
  *              forwards to it).
@@ -37,13 +43,34 @@ typedef struct XrgPaint2D XrgPaint2D;
  * and ints at +0x5c/+0x60 (besides seeding studio with -2), none of which
  * any function of this allocation reads or writes.
  */
+/*
+ * _InitInfo now claims these fields inside the former +0x10..+0x57 gap and
+ * past +0x58 (the note above predates this TU's own _InitInfo allocation).
+ * Each is written exactly once by _InitInfo and never read by any claimed
+ * function in this TU (_PassTimeInfo's body is a no-op beyond its null
+ * check; _DispInfo, the only function that could plausibly read them back,
+ * is still INCLUDE_ASM). The seeded value is the only evidence, so the
+ * names below record offset and type, not an unproven role:
+ *   value1  +0x10  float, seeded to 1.0f.
+ *   value2  +0x50  float, seeded to 1.0f.
+ *   value3  +0x54  int, seeded to 2.
+ *   value4  +0x5C  int, seeded to 0.
+ *   value5  +0x60  int, seeded to 0; +0x64..+0x6F stays an untouched gap.
+ * +0x14..+0x4F stays an untouched gap between value1 and value2.
+ */
 typedef struct RgDispGameInfo {
     void *hostRobot;
     void *subRobot;
     XrgPaint2D *paint;
     int dispTex;
-    unsigned char unmodeled_10[0x58 - 0x10];
+    float value1;
+    unsigned char unmodeled_14[0x50 - 0x14];
+    float value2;
+    int value3;
     int studio;
+    int value4;
+    int value5;
+    unsigned char unmodeled_64[0x70 - 0x64];
 } RgDispGameInfo;
 
 #endif /* SRC_OV12_RG_DISP_GAMEINFO_H */

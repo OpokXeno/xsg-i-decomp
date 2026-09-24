@@ -1,6 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_thread.h"
+#include "main/xgl_packet.h"
 #include "xgl_render.h"
 
 extern int s_nClearFrame;
@@ -20,7 +21,15 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderDrawFlipPk);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderVSyncCallback);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderSyncInit);
+extern void xglRenderVSyncCallback(void);
+extern void *sceGsSyncVCallback(void (*func)(void));
+extern int VSyncCount;
+
+static void xglRenderSyncInit(void)
+{
+    sceGsSyncVCallback(xglRenderVSyncCallback);
+    VSyncCount = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderSyncMove);
 
@@ -76,7 +85,33 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderInit);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderFinalPacket);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderGlobalFadeInit);
+extern int s_nGblFadeInit;
+
+/*
+ * sRender's callback pointer at +0x44 (see src/main/map_1.c's
+ * MapRenderState and src/main/window_tex_load.c's UmnRenderSize for the
+ * same object's other evidenced fields): xglRenderGlobalFade (still asm,
+ * this TU, main 0x0022da90 `jalr $2`) calls it with the current packet
+ * when it is non-null, and xglRenderGlobalFadeInit clears it.
+ */
+typedef void (*XglRenderFadeCallback)(XglPacket *packet);
+
+typedef struct {
+    unsigned char unmodeled_00[0x44];
+    XglRenderFadeCallback fade_callback;  /* +0x44 */
+} XglRenderFadeView;
+
+extern XglRenderFadeView sRender;
+
+/* Forward: storage defined beside xglRenderGlobalFadeSet below. */
+extern int s_nGblFade;
+
+void xglRenderGlobalFadeInit(void)
+{
+    s_nGblFadeInit = 1;
+    sRender.fade_callback = 0;
+    s_nGblFade = 0;
+}
 
 /*
  * The packed global fade color that xglRenderGlobalFade (still asm, this TU)
@@ -138,7 +173,33 @@ void xglRenderClearOff(void)
     s_nClearFrame = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderClear);
+/*
+ * The six-qword (0x60-byte, config/symbols/main.txt size) direct-mode clear
+ * primitive xglRenderClear sends: only the copied colour words at +0x30/
+ * +0x34/+0x38 and the fixed alpha word at +0x3C are evidenced (lw 0x20/
+ * 0x24/0x28 from ClearEnv, sw 0x30/0x34/0x38/0x3C here); the GS-convention
+ * full-scale alpha 0x80 matches xglRenderGlobalFadeSet's own alpha packing
+ * above. Earlier bytes are the packet's DIRECT tag/header, built elsewhere.
+ */
+typedef struct {
+    unsigned char unmodeled_00[0x30];
+    u32 color_r;  /* +0x30 */
+    u32 color_g;  /* +0x34 */
+    u32 color_b;  /* +0x38 */
+    u32 color_a;  /* +0x3C */
+    unsigned char unmodeled_40[0x20];
+} GsClearPacket;
+
+extern GsClearPacket TestEnv_0_004A8E80;
+
+static void xglRenderClear(void)
+{
+    TestEnv_0_004A8E80.color_r = ClearEnv.color_r;
+    TestEnv_0_004A8E80.color_g = ClearEnv.color_g;
+    TestEnv_0_004A8E80.color_b = ClearEnv.color_b;
+    TestEnv_0_004A8E80.color_a = 0x80;
+    sceVif1PkRef(xglPacketGetCurrent(), &TestEnv_0_004A8E80, 6, 0, 0, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderMove);
 

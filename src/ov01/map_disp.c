@@ -21,9 +21,17 @@ MapMultiplier *mapMulGet(void) {
     return &mapMul;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispOn);
+void mapDispOn(int mapId) {
+    if (mapId < 2) {
+        mapDispWork[mapId] = 0;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDispOff);
+void mapDispOff(int mapId) {
+    if (mapId < 2) {
+        mapDispWork[mapId] = 1;
+    }
+}
 
 void mapDispOnAll(void)
 {

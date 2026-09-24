@@ -20,9 +20,15 @@ static void _vout_sys(const char *format, va_list args)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_v_log", XrgVLog);
+void XrgVLog(const char *format, const char *source_file, int line, va_list args)
+{
+    _vout(format, args);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_v_log", XrgVLogSys);
+void XrgVLogSys(const char *format, const char *source_file, int line, va_list args)
+{
+    _vout_sys(format, args);
+}
 
 void XrgVOut(const char *format, va_list args)
 {

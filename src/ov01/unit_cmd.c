@@ -43,9 +43,68 @@ int unitCidGet(ObjectTask *unit)
     return cid;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitPlCreate);
+extern int unitAgwsPilotGet(s16 charaId);
+extern const char D_00A438F0[];
+extern int printf(const char *format, ...);
+void unitPlFunc(ObjectTask *unit);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitEnCreate);
+/*
+ * unitCreate/unitTblSet/unitLoad are unitPlCreate's own siblings; unitCreate
+ * and unitTblSet are still asm in this TU (also forward-declared below for
+ * unitEnCreate's own use) and unitLoad is defined later in this file.
+ */
+extern ObjectTask *unitCreate(s16 *pl, int side, ObjectTaskCallback func);
+extern void unitTblSet(int side, ObjectTask *unit);
+void unitLoad(ObjectTask *unit, int mode);
+
+ObjectTask *unitPlCreate(s16 *pl)
+{
+    ObjectTask *unit;
+    ObjectTask *pilotUnit;
+    int pilotId;
+    s16 pilotPl[2];
+
+    unit = unitCreate(pl, 0, unitPlFunc);
+    if (unit != 0) {
+        unitTblSet(0, unit);
+        unitLoad(unit, pl[0]);
+    }
+    if (pl[0] >= 0x11) {
+        /* AGWS characters (charaId >= 0x11) also get a linked pilot unit,
+         * whose own CalcUnitParam is chained through linkedUnit. */
+        pilotId = unitAgwsPilotGet(pl[0]);
+        if (pilotId != 0) {
+            pilotPl[0] = (s16) pilotId;
+            pilotPl[1] = 1;
+            pilotUnit = unitCreate(pilotPl, 0, unitPlFunc);
+            calcUPGet(unit)->linkedUnit = calcUPGet(pilotUnit);
+        }
+        printf(D_00A438F0, pilotId);
+    }
+    return unit;
+}
+
+/*
+ * unitCreate/unitTblSet are unitEnCreate's own siblings, still asm in this
+ * TU; forward-declared for the calls it makes before their definitions
+ * appear later in the file.
+ */
+extern ObjectTask *unitCreate(s16 *pl, int side, ObjectTaskCallback func);
+extern void unitTblSet(int side, ObjectTask *unit);
+void unitLoad(ObjectTask *unit, int mode);
+void unitEnFunc(ObjectTask *unit);
+
+ObjectTask *unitEnCreate(s16 *pl)
+{
+    ObjectTask *unit;
+
+    unit = unitCreate(pl, 1, unitEnFunc);
+    if (unit != 0) {
+        unitTblSet(1, unit);
+        unitLoad(unit, *pl);
+    }
+    return unit;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitAgwsPilotGet);
 
@@ -98,7 +157,24 @@ void unitActdraw(Actor *actor)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitParaInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitPlInit);
+/*
+ * plTbl's stride (8 bytes per entry, three entries) and its leading short are
+ * the only bytes unitPlInit demonstrates; unitPlCreate is called with the
+ * entry pointer itself whenever that leading short is nonzero.
+ */
+void unitPlInit(short *plTbl)
+{
+    int count;
+
+    count = 2;
+    do {
+        if (*plTbl != 0) {
+            unitPlCreate(plTbl);
+        }
+        count -= 1;
+        plTbl += 4;
+    } while (count >= 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitEnInit);
 
@@ -118,7 +194,25 @@ void unitEnFunc(ObjectTask *unit)
     unitClipSet(unit);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdClear);
+/*
+ * Defined in a different translation unit (src/ov01/obj.c, ov01/tu001), its
+ * published exact_c; unitCmdClear forwards its own unit argument straight
+ * through to it.
+ */
+extern void objCmdClear(ObjectTask *unit);
+
+/*
+ * unitCmdClear also nulls out its unit's Actor.update callback (declared
+ * above), alongside clearing the shared object command queue.
+ */
+void unitCmdClear(ObjectTask *unit)
+{
+    Actor *actor;
+
+    objCmdClear(unit);
+    actor = unit->work;
+    actor->update = 0;
+}
 
 void *unitCmdTailGet(ObjectTask *unit)
 {
@@ -209,7 +303,18 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdAgws);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdUnitChange);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdStand);
+int unitCmdStand(ObjectTask *unit)
+{
+    Actor *actor;
+
+    actor = unit->work;
+    if (actor->moveState == 0) {
+        unitMotStandSet(unit);
+        actor->flags &= ~ACTOR_FLAG_CMD_PENDING;
+        actor->moveState++;
+    }
+    return unitCmdNext(unit);
+}
 
 int unitCmdEnd(ObjectTask *unit)
 {
@@ -224,7 +329,25 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDef);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDead);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDeadSpecChk);
+int unitDeadSpecChk(ObjectTask *unit)
+{
+    short charaId;
+
+    charaId = calcUPGet(unit)->charaId;
+    switch (charaId) {
+    case 0xA2:
+    case 0xAA:
+    case 0xAB:
+    case 0xB0:
+    case 0xB2:
+    case 0xB3:
+    case 0xB4:
+    case 0xB7:
+        return 0;
+    default:
+        return 1;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMot);
 
@@ -238,45 +361,183 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdTurnSubInit);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveCha);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveNext);
+/*
+ * calcUPGet(unit)+0x44 (ov01/tu004 calc.c's own unmodeled span) is the same
+ * position-table-index half unitCmdDstSet and unitCmdDirAdj read later in
+ * this file (CALC_UNIT_PARAM_UNK44_OFF below); unitCmdMoveNext is its only
+ * claimed writer, copying it from the queued command entry's own index at
+ * cmdEntry+0x4 (CMD_ENTRY_X_OR_IDX_OFF below, also read there). Offset
+ * 0x4C is a float this TU does not otherwise claim, restored into the
+ * motion actor's yaw on every call.
+ */
+#define CALC_UNIT_PARAM_UNK44_OFF 0x44
+#define CMD_ENTRY_X_OR_IDX_OFF 0x4
+#define CALC_UNIT_PARAM_DEFAULT_YAW_OFF 0x4C
+
+int unitCmdMoveNext(ObjectTask *unit, int mode)
+{
+    Actor *actor;
+    void *cmdEntry;
+
+    actor = ((UnitRecord *) unit)->motionActor;
+    cmdEntry = unitCmdPtrGet(unit);
+    actor->rotation.y = *(float *)((char *)calcUPGet(unit) + CALC_UNIT_PARAM_DEFAULT_YAW_OFF);
+    if (mode == 1) {
+        *(u16 *)((char *)calcUPGet(unit) + CALC_UNIT_PARAM_UNK44_OFF) =
+            *(u16 *)((char *)cmdEntry + CMD_ENTRY_X_OR_IDX_OFF);
+    } else {
+        unitCmdDstSet(unit, 0, 0);
+        unitCmdDirSet((UnitRecord *) unit);
+    }
+    if (mode == 1) {
+        unitMotStandSet(unit);
+    }
+    return unitCmdNext(unit);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaNorm);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaRun);
+int unitCmdMoveChaRun(ObjectTask *unit)
+{
+    if (unitCmdRun(unit, 1, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaJump);
+int unitCmdMoveChaJump(ObjectTask *unit)
+{
+    if (unitCmdJump(unit, 3, 0, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaHover);
+int unitCmdMoveChaHover(ObjectTask *unit)
+{
+    if (unitCmdHover(unit, 5, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaWarp);
+int unitCmdMoveChaWarp(ObjectTask *unit)
+{
+    if (unitCmdWarp(unit, 7, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaJump2);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaHover2);
+int unitCmdMoveChaHover2(ObjectTask *unit)
+{
+    if (unitCmdJump(unit, 9, 0, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaFloat);
+int unitCmdMoveChaFloat(ObjectTask *unit)
+{
+    if (unitCmdFloat(unit, 0xB, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveChaHover3);
+int unitCmdMoveChaHover3(ObjectTask *unit)
+{
+    if (unitCmdJump(unit, 0xD, 0, 0) != 0) {
+        unitCmdMoveNext(unit, 0);
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePos);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosNorm);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosRun);
+int unitCmdMovePosRun(ObjectTask *unit)
+{
+    if (unitCmdRun(unit, 2, 1) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosJump);
+int unitCmdMovePosJump(ObjectTask *unit)
+{
+    if (unitCmdJump(unit, 4, 1, 0) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosHover);
+int unitCmdMovePosHover(ObjectTask *unit)
+{
+    if (unitCmdHover(unit, 6, 1) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosWarp);
+int unitCmdMovePosWarp(ObjectTask *unit)
+{
+    if (unitCmdWarp(unit, 8, 1) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosHover2);
+int unitCmdMovePosHover2(ObjectTask *unit)
+{
+    if (unitCmdJump(unit, 0xA, 1, 0) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosFloat);
+int unitCmdMovePosFloat(ObjectTask *unit)
+{
+    if (unitCmdFloat(unit, 0xC, 1) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePosHover3);
+int unitCmdMovePosHover3(ObjectTask *unit)
+{
+    if (unitCmdJump(unit, 0xE, 1, 0) != 0) {
+        unitCmdMoveNext(unit, 1);
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDirAdj);
+/*
+ * ov01/tu004 calc.c owns CalcUnitParam and does not model this signed half;
+ * unitCmdDirAdj is the only claimed reader, using its sign to flip which side
+ * of the move target the retreat offset below is placed on.
+ */
+#define CALC_UNIT_PARAM_UNK44_OFF 0x44
+
+void unitCmdDirAdj(ObjectTask *unit, int cmdId, int flip)
+{
+    Actor *actor = unit->work;
+    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Vector4 *target = &actor->cmdTarget;
+    float offset = !flip ? -1.0f : 1.0f;
+
+    if (*(short *)((char *)calcUPGet(unit) + CALC_UNIT_PARAM_UNK44_OFF) < 0) {
+        offset = -offset;
+    }
+    motionActor->rotation.y = atan2f(target->x + offset - motionActor->position.x,
+                                      target->z - motionActor->position.z);
+    if (cmdId == 4 || cmdId == 2 || cmdId == 6 || cmdId == 0xA || cmdId == 0xE) {
+        motionActor->rotation.y += 3.14159274f;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdPosAdj);
 
@@ -288,9 +549,85 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdHover);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdFloat);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdWarp);
+int unitCmdWarp(ObjectTask *unit, int cmdId, int flag)
+{
+    Actor *actor = unit->work;
+    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Vector4 *target = &actor->cmdTarget;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDstSet);
+    switch (actor->movePhase) {
+    case 0:
+        unitMotStandSet(unit);
+        actor->movePhaseTimer = 0;
+        actor->movePhase++;
+        break;
+    case 1:
+        if (unitTelOut(unit) != 0) {
+            actor->movePhase++;
+        }
+        break;
+    case 2:
+        actor->movePhase = 3;
+        motionActor->position.x = target->x;
+        actor->movePhaseTimer = 0;
+        motionActor->position.y = target->y;
+        motionActor->position.z = target->z;
+        break;
+    default:
+        if (unitTelIn(unit) == 0) {
+            break;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * curCmdSet's queued command (src/ov01/battle_init.c, this TU's own
+ * ObjectCommandEntry-shaped record via unitCmdPtrGet) stores either a raw
+ * coordinate pair at +4/+0xC or a position-table index at +4, selected by
+ * mode; ov01/tu001 obj.c owns the record and types both as int, so the float
+ * reads below reinterpret the same bytes it does not model as float.
+ */
+#define CMD_ENTRY_X_OR_IDX_OFF 0x4
+#define CMD_ENTRY_Z_OFF 0xC
+
+void unitCmdDstSet(ObjectTask *unit, int cmdId, int mode)
+{
+    Actor *actor;
+    Vector4 *target;
+    void *cmdEntry;
+    int idx;
+
+    cmdEntry = unitCmdPtrGet(unit);
+    actor = unit->work;
+    target = &actor->cmdTarget;
+
+    if (mode == 0) {
+        ObjectTask *targetUnit = actor->targetUnit;
+
+        idx = *(short *)((char *)calcUPGet(targetUnit) + CALC_UNIT_PARAM_UNK44_OFF);
+        target->x = dataPosTblGet(idx)->x;
+        target->z = dataPosTblGet(idx)->z;
+        if (cmdId != 0) {
+            target->x -= unitColiGet(unit, targetUnit);
+        }
+        if (idx < 0) {
+            target->x = -target->x;
+        }
+    } else if (mode == 1) {
+        idx = *(int *)((char *)cmdEntry + CMD_ENTRY_X_OR_IDX_OFF);
+        target->x = dataPosTblGet(idx)->x;
+        target->z = dataPosTblGet(idx)->z;
+        if (idx < 0) {
+            target->x = -target->x;
+        }
+    } else {
+        target->x = *(float *)((char *)cmdEntry + CMD_ENTRY_X_OR_IDX_OFF);
+        target->z = *(float *)((char *)cmdEntry + CMD_ENTRY_Z_OFF);
+    }
+    target->y = 0.0f;
+}
 
 float unitCmdDirSet(UnitRecord *unit)
 {
@@ -357,11 +694,50 @@ void unitMtdProc(UnitRecord *unit)
     transWepOut(unit, 1);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdRec);
+/*
+ * unitCmdRec/unitCmdStat both read a flag word of the queued command entry
+ * (unitCmdPtrGet; unitCmdDstSet's own cmdEntry above reads its own command's
+ * first argument at this same offset): nonzero skips playing the stand
+ * motion below.
+ */
+typedef struct {
+    unsigned char unmodeled_00[0x4];
+    int flag; /* +0x4 */
+} UnitCmdRecEntry;
+
+void unitCmdRec(ObjectTask *unit)
+{
+    Actor *actor;
+    UnitCmdRecEntry *cmd;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    if (actor->moveState == 0) {
+        if (cmd->flag == 0) {
+            unitMotStandSet(unit);
+        }
+        actor->moveState++;
+    }
+    unitCmdNext(unit);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdWake);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdStat);
+void unitCmdStat(ObjectTask *unit)
+{
+    Actor *actor;
+    UnitCmdRecEntry *cmd;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    if (actor->moveState == 0) {
+        if (cmd->flag == 0) {
+            unitMotStandSet(unit);
+        }
+        actor->moveState++;
+    }
+    unitCmdNext(unit);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdReadWait);
 
@@ -373,7 +749,16 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdFadeIn);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdFadeOut);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotSet);
+/*
+ * unitMotSetEx is defined later in this TU, still asm; forward-declared for
+ * the tail call unitMotSet makes to it, always with a zero third argument.
+ */
+extern void unitMotSetEx(ObjectTask *unit, int motion, int);
+
+void unitMotSet(ObjectTask *unit, int motion)
+{
+    unitMotSetEx(unit, motion, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotSetEx);
 
@@ -421,9 +806,53 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotStandSet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitNoGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitPtrGet);
+extern const char D_00A43BF8[];
+extern int printf(const char *format, ...);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDispOn);
+/*
+ * unitTbl (declared above) is read here as a table of eight 4-byte slots;
+ * unitPtrGet is the only claimed reader of it besides unitInit's own clear.
+ */
+int unitPtrGet(int index)
+{
+    if (index < 8) {
+        return ((int *)unitTbl)[index];
+    }
+    printf(D_00A43BF8, index);
+    return 0;
+}
+
+/*
+ * unitDispOn's own sibling, still asm in this TU; this TU's own UnitRecord
+ * view of unitTblGet's table (already published identically as BattleUnit
+ * by src/ov01/battle_init.c and src/ov01/debug_entry.c, both ov01/tu003).
+ */
+extern int unitTblGet(int side, UnitRecord ***table);
+
+void unitDispOn(int side)
+{
+    UnitRecord **table;
+    int count;
+    UnitRecord **cur;
+    int remaining;
+    UnitRecord *unit;
+
+    count = unitTblGet(side, &table);
+    if (count > 0) {
+        cur = table;
+        remaining = count;
+        do {
+            unit = *cur;
+            cur++;
+            if (unit != 0) {
+                /* Clears the motion actor's hidden-draw flag (bit 0x8 of
+                 * Actor.flags); no other claimed function here touches it. */
+                unit->motionActor->flags &= ~8;
+            }
+            remaining--;
+        } while (remaining != 0);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDispOff);
 
@@ -446,4 +875,53 @@ void unitDispOffAll(void)
     unitDispOnOff(1);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitDispOnOff);
+extern void statEffOn(ObjectTask *unit);
+extern void statEffOff(ObjectTask *unit);
+
+/*
+ * calcUPGet(unit)+0x158, immediately before ov01/tu004 calc.c's own
+ * published statEffUnits[8] table at +0x15C, holds a pointer to the same
+ * kind of per-unit status-effect record statEffOn/statEffOff walk through
+ * that table (src/ov01/battle_init.c, ov01/tu003's own published UnitWork,
+ * include/ov01/battle_init.h). This TU does not own that record and cannot
+ * complete a second UnitWork of its own, so only the touched flag word is
+ * reached through a raw offset here.
+ */
+#define CALC_UNIT_PARAM_STAT_EFF_TARGET_OFF 0x158
+#define UNIT_WORK_FLAGS_OFF 0xA8C
+#define UNIT_WORK_STATUS_BLOCKED 0x100u
+
+void unitDispOnOff(int flag)
+{
+    UnitRecord **table;
+    int index;
+    int count;
+    UnitRecord *unit;
+    void *statEffTarget;
+
+    index = 0;
+    count = unitTblGet(2, &table);
+    if (count > 0) {
+        do {
+            unit = table[index];
+            if (unit != 0) {
+                if (flag == 0) {
+                    unit->motionActor->flags &= ~8;
+                    statEffTarget = *(void **)((char *)calcUPGet((ObjectTask *) unit) + CALC_UNIT_PARAM_STAT_EFF_TARGET_OFF);
+                    if (statEffTarget != 0) {
+                        *(unsigned int *)((char *)statEffTarget + UNIT_WORK_FLAGS_OFF) &= ~UNIT_WORK_STATUS_BLOCKED;
+                    }
+                    statEffOn((ObjectTask *) table[index]);
+                } else {
+                    unit->motionActor->flags |= 8;
+                    statEffTarget = *(void **)((char *)calcUPGet((ObjectTask *) unit) + CALC_UNIT_PARAM_STAT_EFF_TARGET_OFF);
+                    if (statEffTarget != 0) {
+                        *(unsigned int *)((char *)statEffTarget + UNIT_WORK_FLAGS_OFF) |= UNIT_WORK_STATUS_BLOCKED;
+                    }
+                    statEffOff((ObjectTask *) table[index]);
+                }
+            }
+            index++;
+        } while (index < count);
+    }
+}

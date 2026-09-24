@@ -50,6 +50,7 @@ typedef struct RgControlInput {
 
 void RgRobotControlSetRobot(RgRobotControl *pControl, RgRobot *pRobot);
 void InitRgRobotControlCommon(RgRobotControl *pControl, RgRobot *pRobot);
+RgRobotControl *CreateRgRobotControlNul(RgRobot *pRobot);
 RgRobotControl *CreateRgRobotControlInput(RgRobot *pRobot, void *pEssence,
                                           int padId);
 void DisposeRgRobotControl(RgRobotControl *pControl);

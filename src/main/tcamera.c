@@ -32,11 +32,79 @@ typedef struct TCamera TCamera;
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 extern float SPL_getValue(void *spline, int index, float frame);
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_get);
+/*
+ * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
+ * Java_xeno_Camera_create__I (src/main/camera.c) computes the same
+ * `tcamera + camera_id * 0x12c0` address for the same table.
+ */
+extern unsigned char tcamera[];
+
+TCamera *TCAMERA_get(int camera_id)
+{
+    return (TCamera *)(tcamera + camera_id * 0x12c0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_info);
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_transMPack);
+/*
+ * TCAMERA_transMPack samples eight consecutive values off the packed curve
+ * `source` at `frame` through one FCV_resetPack/FCV_getPackValue cursor
+ * (src/main/fcv2.c): translation xyz, an interest-point xyz (the same point
+ * TCAMERA_mpackGetInterest reads, this TU), then roll and field of view. The
+ * cursor lives in an FCVPack this function places at the EE scratchpad base
+ * (docs/ee-reference/memory-dma.md); every call below addresses that same
+ * fixed pack, matching the original's repeated `lui $4,0x7000` before each
+ * call (FCV_resetPack/FCV_getPackValue's own record types are TU-local to
+ * fcv2.c, so the pack and source are reached as opaque pointers here).
+ *
+ * The interest point and the translation just written feed the same VU0
+ * macro-mode subtraction TCAMERA_setView uses to turn a look-at point into
+ * yaw/pitch: direction = translation - interest, yaw = atan2(dx, dz), pitch =
+ * -atan2(dy, dx*sin(yaw) + dz*cos(yaw)). Roll and field of view are plain
+ * degrees-to-radians conversions, each with its own .lit4 pi constant
+ * (data_ownership in config/tu-build.json still owns that pool).
+ */
+#define TCAMERA_MPACK_SCRATCH ((void *)0x70000000)
+
+extern void FCV_resetPack(void *pack, void *source);
+extern float FCV_getPackValue(void *pack, float frame);
+extern const float D_004D8488;
+extern const float D_004D848C;
+
+void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
+{
+    Vector4 *translation = TCAMERA_TRANSLATION(camera);
+    Vector4 *rotation = TCAMERA_ROTATION(camera);
+    float interest[4];
+    Vector4 direction;
+    float yaw;
+    float radiansPerDegree;
+    float positionScale;
+
+    FCV_resetPack(TCAMERA_MPACK_SCRATCH, source);
+    positionScale = D_004D8488;
+    translation->x = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
+    translation->y = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
+    translation->z = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
+    interest[0] = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
+    interest[1] = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
+    interest[2] = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
+    __asm__ __volatile__(
+        "lqc2 $vf3, 0(%0)\n\t"
+        "lqc2 $vf2, 0(%1)\n\t"
+        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
+        "sqc2 $vf2, 0(%2)"
+        :
+        : "r"(interest), "r"(translation), "r"(&direction)
+        : "memory");
+    yaw = xglAtan2(direction.x, direction.z);
+    radiansPerDegree = D_004D848C;
+    rotation->y = yaw;
+    rotation->x = -xglAtan2(direction.y,
+                             direction.x * xglSin(yaw) + direction.z * xglCos(rotation->y));
+    rotation->z = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) / 180.0f * radiansPerDegree;
+    TCAMERA_FOV(camera) = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) / 180.0f * radiansPerDegree;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_mpackGetInterest);
 

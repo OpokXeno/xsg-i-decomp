@@ -1,6 +1,21 @@
 #include "common.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/js_init", JS_init);
+extern void *RSRC_alloc(int heap, int size, int tag);
+
+extern int numClass;
+extern int numPrimitive;
+extern void *primitive;
+extern void *classes;
+
+/* Resets the class/primitive tables and allocates their backing storage from
+ * the caller's resource heap, sized for the requested primitive and class
+ * capacities. */
+void JS_init(int heap, int primitiveCapacity, int classCapacity) {
+    numClass = 0;
+    numPrimitive = 0;
+    primitive = RSRC_alloc(heap, primitiveCapacity * 0xC, 0);
+    classes = RSRC_alloc(heap, classCapacity * 0x6C, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/js_init", JS_loadClass);
 

@@ -114,6 +114,6 @@ void xglCdArcCheck(void);
 
 extern unsigned char ArcHeader[];
 
-extern void xglCdArcInit(void);
+static void xglCdArcInit(void);
 
 #endif /* SRC_MAIN_XGL_CD_H */

@@ -24,6 +24,14 @@ extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
 /* The address of the file record's inline name buffer (+0x1C). */
 char *RgFileSysDataGetName(RgFileSysData *pFile);
 
+RgFileSys *InstanceOfRgFileSys(void);
+
+RgFileSysData *RgFileSysDup(RgFileSys *pSys, const char *pszName,
+                            const char *pszRoot);
+
+RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
+                                 void *pBuf, unsigned int nSize);
+
 extern const char pSys_not_nil[];
 
 extern const char rg_filesys_source_file[];

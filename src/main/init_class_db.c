@@ -2,7 +2,14 @@
 #include "shared.h"
 #include "init_class_db.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", initClassDB);
+void initClassDB(void)
+{
+    int i;
+
+    for (i = 7; i >= 0; i--) {
+        classDB[i] = 0;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", findClass);
 
@@ -37,7 +44,29 @@ ClassDescriptor *readClass(DataBuffer *buffer, ClassDescriptor *class_info,
     return class_info;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", addCode);
+void addCode(DataBuffer *buffer, ClassDescriptor *class_info, SceneMethod *method)
+{
+    u16 max_stack;
+    u16 max_locals;
+    u16 exception_table_count;
+    u32 code_length;
+
+    max_stack = DataBuffer_getUShortAt(buffer);
+    max_locals = DataBuffer_getUShortAt(buffer);
+    code_length = DataBuffer_getUIntAt(buffer);
+    if (code_length != 0) {
+        method->code = buffer->position;
+        DataBuffer_seek(buffer, code_length);
+    } else {
+        method->code = 0;
+    }
+    exception_table_count = DataBuffer_getUShortAt(buffer);
+    method->max_stack = max_stack;
+    method->max_locals = max_locals;
+    method->code_length = (u16) code_length;
+    DataBuffer_seek(buffer, exception_table_count * 8);
+    readAttributes(buffer, class_info, (int) method);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", addField);
 

@@ -40,8 +40,10 @@ struct RgReadText {
 };
 
 RgReadText *CreateRgReadText(const char *pszName);
+void DisposeRgReadText(RgReadText *pReader);
 int RgReadTextIsEOF(RgReadText *pReader);
 int RgReadTextIsOnDelimitor(RgReadText *pReader);
+void RgReadTextUnget(RgReadText *pReader, char *pszUngetToken);
 void RgReadTextRewind(RgReadText *pReader);
 void RgReadTextGetString(RgReadText *pReader, char *pszOut);
 float RgReadTextGetFloat(RgReadText *pReader);

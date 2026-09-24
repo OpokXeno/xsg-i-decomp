@@ -19,7 +19,7 @@ extern void assert_prog(const char *expression, const char *source_file,
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
-extern void _InitRgGeomPoly(RgGeom *geom);
+static void _InitRgGeomPoly(RgGeom *geom);
 
 /*
  * The collision data a poly-type RgGeom points at (RgGeomPolySetColiData,

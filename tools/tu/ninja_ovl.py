@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from toolchain import Toolchain  # noqa: E402
 import tail_align  # noqa: E402
+import data_carve  # noqa: E402
 
 # tools/tu/<tool>.py -> the repository root is two levels up.
 ROOT = HERE.parents[1]
@@ -156,6 +157,14 @@ def main():
     aligned = fix_tail_align(text, unit)
     if aligned != text:
         text = aligned
+        ld.write_text(text)
+    # Declared C-owned data runs (config/tu/data-carves.json, tools/tu/data_carve.py):
+    # a C TU's jump tables and literals cut out of its scaffold .rodata piece and
+    # placed from its object. An earlier carve is undone first; nothing declared
+    # leaves splat's script unchanged.
+    carved, _ = data_carve.apply_overlay(ROOT, unit_dir, unit, text)
+    if carved != text:
+        text = carved
         ld.write_text(text)
     yaml_text = (unit_dir / "splat.yaml").read_text()
     target = re.search(r"target_path: (\S+)", yaml_text)[1]

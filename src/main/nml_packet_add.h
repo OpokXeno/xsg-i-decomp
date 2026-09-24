@@ -75,7 +75,12 @@ struct NmlMaterialRenderState {
  * 0x004a91e0, 0x320 bytes) plus the per-entry copies in s_apModelLayout.
  */
 struct NmlModelRenderState {
-    unsigned char unmodeled_000[0x250];
+    unsigned char unmodeled_000[0x1c0];
+    /* +0x1c0: the fog color parcel; its fourth word is fog intensity. */
+    u32 fog_color[4];
+    /* +0x1d0: the fog-distance parcel sent after fog_color. */
+    u32 fog_parameters[4];
+    unsigned char unmodeled_1e0[0x70];
     /*
      * +0x250: the render-status word.  nmlModelSetRenderStatus is the setter
      * that names it, and it ORs the value it is given (main 0x0022fab0 sets
@@ -118,6 +123,9 @@ struct NmlModelRenderState {
      * own, so they stay literals.
      */
     u32 render_level;
+    unsigned char unmodeled_2b4[0x3c];
+    /* +0x2f0: one fog intensity multiplier for each viewport. */
+    float fog_intensity[4];
 };
 
 typedef void *NmlPacket;
@@ -166,5 +174,7 @@ extern int s_nProgType;
 
 void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
                                 const NmlModelRenderState *model);
+
+void nmlPacketAddFog(NmlModelRenderState *model, int viewport_index);
 
 #endif /* SRC_MAIN_NML_PACKET_ADD_H */

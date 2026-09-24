@@ -9,7 +9,7 @@
 
 void InitRgGeomTray(RgGeom *geom);
 
-extern void _InitRgGeomTray(RgGeom *geom);
+static void _InitRgGeomTray(RgGeom *geom);
 
 void RgGeomTraySetLocal(void *tray, Matrix4 source);
 
@@ -29,12 +29,16 @@ extern const char D_00A55228[];
  * RgGeomTraySetLocal and RgGeomTrayGetLocal already read/write the local and
  * inverse-local matrices at +0x20 and +0x60; RgGeomTraySetSize keeps the
  * tray's width and height immediately before them, at +0x18 and +0x1c.
+ * _InitRgGeomTray also seeds width/height to 100.0f and both matrices to
+ * identity (XrgUnitMatrix), which is the further evidence naming the two
+ * matrix members below.
  */
 typedef struct RgGeomTray {
     unsigned char unmodeled_00[0x18];
     float width;   /* +0x18: RgGeomTraySetSize */
     float height;  /* +0x1c: RgGeomTraySetSize */
-    unsigned char unmodeled_20[0x80];
+    RgMatrix local;          /* +0x20: RgGeomTraySetLocal/GetLocal */
+    RgMatrix inverse_local;  /* +0x60: RgGeomTraySetLocal */
 } RgGeomTray;
 
 RgGeom *CreateRgGeomTray(void);

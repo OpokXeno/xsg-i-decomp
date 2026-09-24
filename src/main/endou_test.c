@@ -1,4 +1,5 @@
 #include "common.h"
+#include "shared.h"
 #include "endou_test.h"
 
 extern void xglSleep(void);
@@ -37,7 +38,35 @@ void UmnPrintTest(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/endou_test", UmnMailDispTest);
 
-INCLUDE_ASM("asm/main/nonmatchings/endou_test", e_test);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern void *test_data;
+extern unsigned char TestEnv_66[];
+extern unsigned char WinTexEnv_65[];
+
+/*
+ * The context e_test's argument points to: only the VIF packet pointer at
+ * +0x00 is evidenced here (main VA 0x002728f8, lw $4,0x0($16) before each
+ * sceVif1Pk* call); the rest stays an unmodeled span (docs/naming.md).
+ */
+typedef struct ETestContext {
+    XglPacket *packet;
+} ETestContext;
+
+extern void xglFontReloadTexture(ETestContext *context, int mode);
+
+static void e_test(ETestContext *context)
+{
+    sceVif1PkCloseDirectHLCode(context->packet);
+    sceVif1PkRef(context->packet, WinTexEnv_65, 7, 0, 0, 0);
+    sceVif1PkRef(context->packet, (unsigned char *) test_data + 0x30, 0x4002, 0, 0, 0);
+    sceVif1PkCnt(context->packet, 0);
+    sceVif1PkOpenDirectHLCode(context->packet, 0);
+    sceVif1PkAddDirectDataN(context->packet, TestEnv_66, 8);
+    xglFontReloadTexture(context, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/endou_test", ReLoadTest);
 

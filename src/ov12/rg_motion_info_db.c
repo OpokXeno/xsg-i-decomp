@@ -49,9 +49,40 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableGetMatchChar);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableEntry);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableFree);
+extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
+                       int line);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _InitDB_00A0F828);
+static void _TableFree(RgMotionInfoDB *db)
+{
+    u32 i;
+    RgMotionShotInfo *info;
+    RgMotionShotInfo *next;
+
+    for (i = 0; i < (u32) db->entryCount; i++) {
+        info = db->table[i];
+        while (info != 0) {
+            next = info->next;
+            RgHeapFree(InstanceOfRgHeap(), info, D_00A52470, 189);
+            info = next;
+        }
+    }
+    db->entryCount = 0;
+}
+
+/* Same TU, not part of this allocation. */
+extern void _AddActionRgMotion(RgMotionShotInfo *, int, float, float);
+
+static void _InitDB(RgMotionInfoDB *db) {
+    RgMotionShotInfo *info;
+
+    info = &db->defaultShotInfo;
+    if (db == 0) {
+        assert_prog(D_00A524E0, D_00A52470, 200);
+    }
+    _TableInit(db);
+    _InitRgMotionShotInfo(info, -1);
+    _AddActionRgMotion(info, 0, 0.1f, 0.2f);
+}
 
 /* Same TU, not part of this allocation. */
 static void _TableFree(RgMotionInfoDB *db);
@@ -64,7 +95,10 @@ static void _DestructDB(RgMotionInfoDB *db)
     _TableFree(db);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _WrapperDestruct_00A0F8E8);
+static void _WrapperDestruct(RgMotionInfoDB *db) {
+    _DestructDB(db);
+    RgHeapFree(InstanceOfRgHeap(), db, D_00A52470, 215);
+}
 
 /* Same TU, not part of this allocation. */
 static void _InitDB(RgMotionInfoDB *db);

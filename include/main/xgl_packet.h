@@ -25,7 +25,19 @@ struct XglPacket {
      * buffer base (0x00c00000 and 0x00e00000).
      */
     u32 *start;
-    unsigned char unmodeled_08[0x18];
+    /*
+ * +0x08 and +0x0c: xglPrimAddGifTagDirect (main 0x00222c00 lw v0,8(s0);
+ * main 0x00222c0c lw v0,0xc(s0)) tests both for non-zero to decide
+ * whether a direct-mode block the sceVif1Pk* library opened is still
+ * open, so it appends to that block instead of resetting/opening/
+ * closing a new one (compare SGsSendPacket, src/main/sv_get_image_
+ * item.c, which always resets/opens/closes without this check).
+ * Neither word is written by any function of this TU, so both are set
+ * by the sceVif1Pk* library.
+ */
+    u32 directCode;
+    u32 directState;
+    unsigned char unmodeled_10[0x10];
     /*
      * +0x20: the packet's fixed top-of-buffer address. xglPacketInit sets it
      * once per entry after both sceVif1PkInit calls (main 0x0022c49c for the

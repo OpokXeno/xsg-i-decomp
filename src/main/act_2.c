@@ -37,13 +37,47 @@ int ACT_jointGetMoveElementID(Actor *actor)
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_jointGetAccessories);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_resetArms);
+extern void ACT_resetParent(Actor *actor, Actor *other);
+extern void ACT_setHumanHand(Actor *actor, int hand);
+
+/*
+ * acc_id 0x108 is the only accessory kind reset here: ACT_resetParent(actor,
+ * other) drops the parent link the accessory got from ACT_setArms, then
+ * ACT_setHumanHand(other, 0) puts the character's own hand back to its
+ * default (main:0x00306ae8..0x00306b1c).
+ */
+void ACT_resetArms(Actor *actor, Actor *other, int acc_id)
+{
+    if (acc_id == 0x108) {
+        ACT_resetParent(actor, other);
+        ACT_setHumanHand(other, 0);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setArms);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setRelation);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setFace);
+extern int ACT_setParent(Actor *actor, int type, Actor *parent, int joint, int id);
+extern void ACT_setVisible(Actor *actor, int part, unsigned char visible);
+
+/*
+ * Attaches `actor` to `parent` at joint 0x30 (type 2, id `faceId`); on
+ * success (main:0x00306d40..0x00306d64) it hides the base model's own FACE
+ * part with ACT_setVisible(parent, 0x46414345, 0) - 0x46414345 is "FACE"
+ * read from most- to least-significant byte, matching lui 0x4641/ori 0x4345
+ * at 0x00306d44/0x00306d5c.
+ */
+int ACT_setFace(Actor *actor, Actor *parent, int faceId)
+{
+    int result;
+
+    result = ACT_setParent(actor, 2, parent, 0x30, faceId);
+    if (result != 0) {
+        ACT_setVisible(parent, 0x46414345, 0);
+    }
+    return result;
+}
 
 void *ACT_animGetUserData(Actor *actor)
 {
@@ -57,9 +91,17 @@ int ACT_animCheckData(Actor *actor)
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_updateMotionCore);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_updateMotion);
+extern void ACT_updateMotionCore(Actor *actor, int pause);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_updateMotionPause);
+void ACT_updateMotion(Actor *actor)
+{
+    ACT_updateMotionCore(actor, 0);
+}
+
+void ACT_updateMotionPause(Actor *actor)
+{
+    ACT_updateMotionCore(actor, 1);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_updateMotionSub);
 
@@ -97,7 +139,14 @@ void *ACT_animGetData(Actor *actor, unsigned int dataId)
     return PACK_getEntry(actor->animPackTables[dataId >> 8], dataId & 0xff);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_animGetCurrent);
+extern void ANM_getEntry(ActorAnimSlot *slot, void *entry);
+
+void ACT_animGetCurrent(Actor *actor)
+{
+    ActorAnimSlot *slot = &actor->animSlot;
+
+    ANM_getEntry(slot, actor->animPackTables[(slot->currentDataId >> 8) & 7]);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_loadMotion);
 

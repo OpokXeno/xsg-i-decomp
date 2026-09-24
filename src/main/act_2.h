@@ -50,6 +50,22 @@
  * a0,0x8dc(v0)) and tail calls PACK_getEntry(table, id & 0xff) on it, so
  * each slot is a pointer.
  */
+
+/*
+ * +0x6f0 animSlot: ACT_animGetCurrent takes its address (main:0x003081fc,
+ * addiu a0,v1,0x6F0) and hands it to ANM_getEntry as the entry's owning
+ * slot, so it is an embedded record, not a pointer. Only its +0x14 halfword
+ * is read (main:0x00308200, lhu v0,20(a0)): bits 8-10 of that packed value
+ * select an animPackTables slot the same way ACT_animGetData's dataId does
+ * (srl v0,v0,0x6; andi v0,v0,0x1c is (currentDataId>>8&7)<<2 folded into one
+ * shift), so it caches a dataId like the one ACT_animGetData is called with.
+ * Nothing else in the slot is evidenced.
+ */
+typedef struct ActorAnimSlot {
+    unsigned char unmodeled_0[0x14];
+    unsigned short currentDataId;
+} ActorAnimSlot;
+
 typedef struct Actor {
     u32 flags;
     void (*update)(struct Actor *actor);
@@ -61,7 +77,9 @@ typedef struct Actor {
     Vector4 acceleration;
     Vector4 rotation;
     Vector4 scale;
-    unsigned char unmodeled_70[0x71c - 0x70];
+    unsigned char unmodeled_70[0x6f0 - 0x70];
+    ActorAnimSlot animSlot;
+    unsigned char unmodeled_706[0x71c - 0x706];
     void *animData;
     void *animUserData;
     unsigned char unmodeled_724[0x7fc - 0x724];
@@ -73,6 +91,10 @@ typedef struct Actor {
 
 int ACT_jointGetMoveElementID(Actor *actor);
 
+void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
+
+int ACT_setFace(Actor *actor, Actor *parent, int faceId);
+
 void *ACT_animGetUserData(Actor *actor);
 
 int ACT_animCheckData(Actor *actor);
@@ -80,5 +102,7 @@ int ACT_animCheckData(Actor *actor);
 void ACT_initMTNResource(void);
 
 void ACT_resourceInit(void);
+
+void ACT_animGetCurrent(Actor *actor);
 
 #endif /* SRC_MAIN_ACT_2_H */

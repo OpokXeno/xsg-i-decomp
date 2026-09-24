@@ -12,7 +12,39 @@ INCLUDE_ASM("asm/main/nonmatchings/set_motion", Set_Motion);
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", Sound_FootStep);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySound);
+extern int RES_GetEnemySeBank(int sound_id);
+extern int RES_GetEnemySeType(int sound_id);
+extern void xglSoundEffectPosID();
+
+/*
+ * Sound_FootStep and Enemy_ActionReady always pass 1 for `play`; when it is
+ * not 1 the positional call below is skipped and the function has no other
+ * effect. `ignore_se_type` is 0 at Enemy_ActionReady's one sound_index == 1
+ * call and 1 everywhere else (main:0x002d3930, 0x002d396c, 0x002d3a84,
+ * 0x002d06d8, 0x002d0710, 0x002d0744); when it is 0 and sound_index is 2 or
+ * 4, a bank whose RES_GetEnemySeType is 1 is skipped entirely.
+ */
+void EnemySound(Actor *actor, short sound_index, signed char play,
+                 signed char ignore_se_type)
+{
+    int bank;
+
+    if ((sound_index == 2 || sound_index == 4) && ignore_se_type == 0 &&
+        RES_GetEnemySeType(*ACTOR_SOUND_EFFECT_ID(actor)) == 1)
+    {
+        return;
+    }
+    if (actor->flags & 8)
+    {
+        return;
+    }
+    bank = RES_GetEnemySeBank(*ACTOR_SOUND_EFFECT_ID(actor));
+    if (bank != -1 && play == 1)
+    {
+        xglSoundEffectPosID(bank + (sound_index & 0xffff), &actor->position, 1,
+                             ACTOR_NUMBER(actor) + 1);
+    }
+}
 
 extern int RES_GetEnemySeBank(int sound_id);
 extern void xglSoundEffectStopID(int sound_id, int flags);
@@ -33,9 +65,54 @@ void EnemySoundEnd(Actor *actor, short sound_offset)
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySound_StopAll);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_motion", EnemySound_Stop);
+extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
+extern void xglSoundEffectStopDirect(int sound_id);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_motion", Get_JAVAReaction);
+/*
+ * A TU-local view of main/xgl_sound.c's struct SoundWork (main:0x004a8140),
+ * not yet reachable through a shared header. effect_banks starts at +0x20
+ * and each entry's low halfword is its handle (main/xgl_sound.c's
+ * SoundEffectBankEntry.handle), the same field xglSoundEffectStopDirect
+ * reads (main:0x00226720).
+ */
+typedef struct SetMotionSoundWork
+{
+    unsigned char unmodeled_00[0x20];
+    struct
+    {
+        unsigned short handle;
+        unsigned short file_handle;
+    } effect_banks[32];
+} SetMotionSoundWork;
+
+extern SetMotionSoundWork SoundWork;
+
+void EnemySound_Stop(Actor *actor, signed char which)
+{
+    int bank;
+    short channel;
+    int handle;
+
+    bank = RES_GetEnemySeBank(*ACTOR_SOUND_EFFECT_ID(actor));
+    for (channel = 1; channel < 8; channel++)
+    {
+        if (which == 1)
+        {
+            handle = SoundWork.effect_banks[(bank + (channel & 0xffff)) >> 16].handle;
+            SsdFadeoutEffect((handle << 16) + (channel & 0xffff), 300,
+                              ACTOR_NUMBER(actor) + 1);
+        }
+        else
+        {
+            xglSoundEffectStopDirect(bank + (channel & 0xffff));
+        }
+    }
+}
+
+int Get_JAVAReaction(Actor *actor)
+{
+    return *ENEMY_JAVA_REACTION(enepc[ACTOR_NUMBER(actor)]);
+}
 
 short Get_DefaultMotion(Actor *actor, short motion_number)
 {
@@ -138,4 +215,9 @@ INCLUDE_ASM("asm/main/nonmatchings/set_motion", Actor_LookAt_Set);
 
 INCLUDE_ASM("asm/main/nonmatchings/set_motion", Actor_LookAt_Release);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_motion", Actor_LookAt_Init);
+void Actor_LookAt_Init(Actor *actor)
+{
+    *ACTOR_LOOKAT_TIMER(actor) = 0;
+    *ACTOR_LOOKAT_TARGET(actor) = -1;
+    *ENEMY_LOOKAT_POINT(enepc[ACTOR_NUMBER(actor)]) = 0;
+}

@@ -18,10 +18,10 @@
  "tools": {
   "ee-gcc2.96-realconv-lp7": {
    "role": "cc1 of every GCC 2.96-family compile contract (game and runtime C)",
-   "dir": "ee-gcc2.96-realconv-lp7-v1/bin",
-   "version": "gcc 2.96-ee-001003-1 (cc1), locally patched: realconv + lp7",
+   "dir": "ee-gcc2.96-realconv-lp7-fsv3-v1/bin",
+   "version": "gcc 2.96-ee-001003-1 (cc1), locally patched: realconv + lp7 + fsv3",
    "files": {
-    "cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+    "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
     "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
     "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
    },
@@ -40,13 +40,13 @@
     },
     "rebuild": [
      "Download the base archive and check its SHA-256.",
-     "Extract lib/gcc-lib/ee/2.96-ee-001003-1/{cc1,cpp0} and bin/ee-gcc into <root>/ee-gcc2.96-realconv-lp7-v1/bin/.",
+     "Extract lib/gcc-lib/ee/2.96-ee-001003-1/{cc1,cpp0} and bin/ee-gcc into <root>/ee-gcc2.96-realconv-lp7-fsv3-v1/bin/.",
      "cpp0 and ee-gcc are used unmodified.",
-     "Apply the eight single-byte patches below to cc1, in file-offset order; the result must hash to the cc1 SHA-256 above."
+     "Apply the patches below to cc1, in file-offset order (eight single-byte patches and four multi-byte patches: fsv1 and fsv3); the result must hash to the cc1 SHA-256 above."
     ],
     "cc1_byte_patches": {
      "note": [
-      "Each entry patches one byte of the extracted cc1 at `file_offset`.",
+      "Each entry patches the bytes of the extracted cc1 at `file_offset` (one byte, except the fsv1 and fsv3 entries, which replace the given hex strings).",
       "`old` must be the byte already there; `new` replaces it.",
       "The six `realconv` patches turn the six MASK_MIPS5900 conversion gates",
       "of the bundled e-type float code into unconditional jumps, so decimal",
@@ -54,6 +54,18 @@
       "The two `lp7` patches raise the R5900 short-loop padding gate and loop",
       "bound in mips_r5900_lengthen_loops from 4 to 6, which reproduces the",
       "7-d padding ten original game objects carry.",
+      "The `fsv1` patch (user decision 2026-09-23, reports/cc1-fsv-clause1-losum.md)",
+      "rewrites clause 1 of the alias-analysis helper fixed_scalar_and_varying_struct_p",
+      "(cc1 0x080ee624) so that a LO_SUM address of the scalar mem1 counts as",
+      "non-varying: a store to a split (lui/%lo) global scalar no longer blocks a",
+      "later struct-field load with a varying address in sched1, as the original",
+      "CardMainProc (OV10 0x00A03AA0) shows. Clause 2 and rtx_varies_p are unchanged.",
+      "The three `fsv3` patches (user decision 2026-09-23, reports/cc1-fsv3-alias.md)",
+      "supersede fsv1 on top of it: clause 2 treats a LO_SUM mem2 address as non-varying",
+      "too (symmetric LO_SUM rule), and make_decl_rtl jumps to an 88-byte cave written",
+      "over debug_rtx_list (only called by the debug-only debug_rtx_find) that gives the",
+      "MEM of a non-function, non-small-data decl its type alias set by calling",
+      "set_mem_attributes before DECL_RTL is stored. The cave source is cave.s in the release.",
       "Why this is a patched binary and not a published one (public-compiler hunt,",
       "2026-09-12, .work/attempts/tu-public-compiler-hunt/attempt-1/artifact.json):",
       "all 15 public ee-gcc* entries of the pinned decompme catalog revision were",
@@ -134,6 +146,42 @@
        "governs": "decimal -> e-type, final round to target precision"
       },
       {
+       "group": "fsv3",
+       "file_offset": 564842,
+       "old": "8b550889425483c418",
+       "new": "e90d74000090909090",
+       "length": 9,
+       "function": "make_decl_rtl",
+       "governs": "after gen_rtx_MEM: jmp to the cave at 0x080d927c (replaces the DECL_RTL store and add $0x18,%esp)"
+      },
+      {
+       "group": "fsv3",
+       "file_offset": 594556,
+       "old": "5589e556538b4d088b450c85c0740a89c285d27d09f7daeb05ba0100000085c07d2089d0c1e81f8d1c10c1fb01eb08908d74260089c14b85db7e078b410c85c075f289d389ceeb0d56e886ffffff8b761483c404",
+       "new": "83c4188b5508807a081e742050ff7204e8073efaff83c40485d2751885c07e143b05e0eb23087f0c588b5508894254e9c38bffff588b550850c74254000000006a015250e8bf89feff83c40c588b5508894254e99f8bffff",
+       "length": 88,
+       "function": "debug_rtx_list (overwritten by the cave)",
+       "governs": "non-FUNCTION_DECL decl with int_size_in_bytes (TREE_TYPE) <= 0 or > mips_section_threshold: set_mem_attributes (mem, decl, 1) with DECL_RTL NULL, then DECL_RTL = mem; resume at 0x080d1e73"
+      },
+      {
+       "group": "fsv1",
+       "file_offset": 681544,
+       "old": "8b451050ffd783c40485c075118b451450ffd783c40485c0740489d8eb2c",
+       "new": "8b4510803890740750ffd785c0750fff7514ffd785c0740689d8eb2e9090",
+       "length": 30,
+       "function": "fixed_scalar_and_varying_struct_p",
+       "governs": "clause 1 (MEM_SCALAR_P (mem1) && MEM_IN_STRUCT_P (mem2) && !varies_p (mem1_addr) && varies_p (mem2_addr) -> no dependence): skip varies_p (mem1_addr), treating it as 0, when GET_CODE (mem1_addr) == LO_SUM (cmpb $0x90,(%eax))"
+      },
+      {
+       "group": "fsv3",
+       "file_offset": 681586,
+       "old": "8b451050ffd783c40485c074118b451450ffd785c0750789f0eb058d7600",
+       "new": "ff7510ffd785c074158b4514803890740750ffd785c0750689f0eb049090",
+       "length": 30,
+       "function": "fixed_scalar_and_varying_struct_p",
+       "governs": "clause 2: a LO_SUM mem2_addr counts as non-varying (cmpb $0x90,(%eax))"
+      },
+      {
        "group": "lp7",
        "file_offset": 1593246,
        "old": "0x04",
@@ -151,7 +199,9 @@
       }
      ],
      "intermediate_hashes": {
-      "realconv_only_cc1": "403fe76c8b2adc1a24c5d0491ac245a8100d57a8341c4d66956a38bd1ab4c754"
+      "realconv_only_cc1": "403fe76c8b2adc1a24c5d0491ac245a8100d57a8341c4d66956a38bd1ab4c754",
+      "realconv_lp7_cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
+      "realconv_lp7_fsv1_cc1": "7abe318da59f6dc6595a7a65766098581d9169a0732786c70db85f688c47f3bf"
      }
     },
     "license": "GPL-2.0-or-later (GCC).  The published binary ships without corresponding source; no 2.96-ee-001003 source tree is available, so this is a license reference, not corresponding-source proof.",
@@ -190,9 +240,9 @@
   },
   "ee-as-la29-vsqrt": {
    "role": "assembler of every game and runtime object (the -G of the object is passed per object)",
-   "path": "ee-legacy-binutils-la29-vsqrt-v1/bin/ee-as",
-   "version": "GNU assembler 2.9-ee-991111, locally patched: memmove + vsqrt",
-   "sha256": "33dae0133f60ee05179464f9defa83b1e391e4e6e4d3f8f3b71b43de10ec274d",
+   "path": "ee-legacy-binutils-la29-vsqrt-nolabel-v1/bin/ee-as",
+   "version": "GNU assembler 2.9-ee-991111, locally patched: memmove + vsqrt + nolabel",
+   "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
    "provenance": {
     "kind": "built_from_source_with_a_recorded_patch",
     "upstream": {
@@ -210,10 +260,11 @@
      "configure --target=ee --disable-nls --disable-shared, then build gas; install build/gas/as-new as ee-as (no strip).",
      "The build is not bit-reproducible across host compilers; the SHA-256 above is this project's build (host gcc 16.1.1).  A differently built ee-as that assembles the same bytes also reproduces the images, so the hash check can be relaxed with XENO_TOOLCHAIN_ALLOW=ee-as-la29-vsqrt (the build then says so)."
     ],
-    "source_diff": "--- a/gas/config/tc-mips.c\n+++ b/gas/config/tc-mips.c\n@@ -11707,7 +11707,8 @@\n       fixptr = fragp->fr_literal + fragp->fr_fix;\n \n       if (new > 0)\n-\tmemcpy (fixptr - old, fixptr, new);\n+\t/* Expanded alternatives can overlap their final destination.  */\n+\tmemmove (fixptr - old, fixptr, new);\n \n       fragp->fr_fix += new - old;\n     }\n--- a/opcodes/mips-opc.c\n+++ b/opcodes/mips-opc.c\n@@ -242,7 +242,7 @@\n {\"vrxor\", \"X,8\",\t0x4a00043f, 0xff9f07ff,\t0, \t\tT5},\n {\"vsqd\",  \"&2K,(--4)K\",\t0x4a00037f, 0xfe0007ff,\t0, \t\tT5},\n {\"vsqi\",  \"&2K,(4++)K\",\t0x4a00037d, 0xfe0007ff,\t0, \t\tT5},\n-{\"vsqrt\", \"Q,7\",\t0x4a0003bd, 0xfe60ffff,\t0, \t\tT5},\n+{\"vsqrt\", \"Q,7\",\t0x4a2003bd, 0xfe60ffff,\t0, \t\tT5}, /* masked bits 21-22 are 01 */\n {\"vsub\",  \"&3K,2K,1K\",\t0x4a00002c, 0xfe00003f,\t0, \t\tT5},\n {\"vsubi\", \"&3K,2K,J\",\t0x4a000026, 0xfe1f003f,\t0, \t\tT5},\n {\"vsubq\", \"&3K,2K,Q\",\t0x4a000024, 0xfe1f003f,\t0, \t\tT5},\n",
+    "source_diff": "--- a/gas/config/tc-mips.c\n+++ b/gas/config/tc-mips.c\n@@ -1629,7 +1629,6 @@\n \t  fragS *old_frag;\n \t  unsigned long old_frag_offset;\n \t  int i;\n-\t  struct insn_label_list *l;\n \n \t  old_frag = frag_now;\n \t  old_frag_offset = frag_now_fix ();\n@@ -1651,15 +1650,9 @@\n \t      frag_grow (40);\n \t    }\n \n-\t  for (l = insn_labels; l != NULL; l = l->next)\n-\t    {\n-\t      assert (S_GET_SEGMENT (l->label) == now_seg);\n-\t      l->label->sy_frag = frag_now;\n-\t      S_SET_VALUE (l->label, (valueT) frag_now_fix ());\n-\t      /* mips16 text labels are stored as odd.  */\n-\t      if (mips_opts.mips16)\n-\t\t++l->label->sy_value.X_add_number;\n-\t    }\n+\t  /* Leave any pending labels before the hazard nops (the\n+\t     original SCE assembler did not move them after the nops;\n+\t     mips_emit_delays still does).  */\n \n #ifndef NO_ECOFF_DEBUGGING\n \t  if (ECOFF_DEBUGGING)\n@@ -11707,7 +11700,8 @@\n       fixptr = fragp->fr_literal + fragp->fr_fix;\n \n       if (new > 0)\n-\tmemcpy (fixptr - old, fixptr, new);\n+\t/* Expanded alternatives can overlap their final destination.  */\n+\tmemmove (fixptr - old, fixptr, new);\n \n       fragp->fr_fix += new - old;\n     }\n--- a/opcodes/mips-opc.c\n+++ b/opcodes/mips-opc.c\n@@ -242,7 +242,7 @@\n {\"vrxor\", \"X,8\",\t0x4a00043f, 0xff9f07ff,\t0, \t\tT5},\n {\"vsqd\",  \"&2K,(--4)K\",\t0x4a00037f, 0xfe0007ff,\t0, \t\tT5},\n {\"vsqi\",  \"&2K,(4++)K\",\t0x4a00037d, 0xfe0007ff,\t0, \t\tT5},\n-{\"vsqrt\", \"Q,7\",\t0x4a0003bd, 0xfe60ffff,\t0, \t\tT5},\n+{\"vsqrt\", \"Q,7\",\t0x4a2003bd, 0xfe60ffff,\t0, \t\tT5}, /* masked bits 21-22 are 01 */\n {\"vsub\",  \"&3K,2K,1K\",\t0x4a00002c, 0xfe00003f,\t0, \t\tT5},\n {\"vsubi\", \"&3K,2K,J\",\t0x4a000026, 0xfe1f003f,\t0, \t\tT5},\n {\"vsubq\", \"&3K,2K,Q\",\t0x4a000024, 0xfe1f003f,\t0, \t\tT5},\n",
     "patch_reasons": [
      "md_convert_frag copies an expanded alternative over its own destination; memcpy corrupts the overlap on a modern libc, memmove does not.  Behaviour only, not an encoding change.",
-     "The vsqrt base opcode carries bits 21-22 = 01 in every original word, as GNU as 2.10-ee-001003-1 and ps2dev binutils encode it; the 2.9 table has 00 and assembles the wrong word silently."
+     "The vsqrt base opcode carries bits 21-22 = 01 in every original word, as GNU as 2.10-ee-001003-1 and ps2dev binutils encode it; the 2.9 table has 00 and assembles the wrong word silently.",
+     "append_insn moved every label pending before an instruction to after the hazard nops it inserts; the original objects keep such labels before the nop (14 mtc1 sites, e.g. CardMainProc 0x00A085E8), so the loop is removed (mips_emit_delays unchanged; user decision 2026-09-24, reports/as-la29-vsqrt-nolabel.md). The build embeds its absolute source paths; the pinned hash is this project's build from .work/tu-migration/as-nolabel-adopt/build/src/tc-mips.c."
     ],
     "license": "GPL-2.0-or-later (binutils)."
    }

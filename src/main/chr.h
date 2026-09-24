@@ -63,6 +63,16 @@ typedef struct Vector4 {
 } Vector4;
 
 /*
+ * UnduDataGetHeader's return type, defined by src/math/main/review09-002f6c50
+ * and declared with it by src/main/layout.h and src/main/call_java_method.h
+ * (canon: config/header-canon.json). This TU only stores the pointer
+ * Java_xeno_Chr_setID__I receives (Actor.data_header below) and never reads
+ * its components, so it stays an opaque forward declaration here rather than
+ * a second definition of a type another TU owns.
+ */
+typedef struct LayoutHeader LayoutHeader;
+
+/*
  * The engine's actor record, recovered head, defined here exactly as
  * src/main/near_dir.h (main/tu257) and src/main/set_motion.h (main/tu193)
  * define it; the full field-by-field evidence is in near_dir.h's copy and in
@@ -79,6 +89,86 @@ typedef struct Vector4 {
  * The type stops at +0x70 because that is where the evidence stops. The slot
  * number at +0x80 is past it and keeps the byte view below.
  */
+/*
+ * This TU's own Chr natives touch further Actor fields past the +0x70 head
+ * above; the byte ranges the evidence does not reach stay unmodeled_XX gaps.
+ *
+ *   +0x90 shadow_kind        Java_xeno_Chr_setShadow__II's first byte
+ *                            argument (sb v1,0x90(a1) at 0x002ffec4).
+ *   +0x91 shadow_size        its second byte argument (sb v0,0x91(a1) at
+ *                            0x002ffed0).
+ *   +0x4d0 status_flags      Java_xeno_Chr_setID__I ORs in bit 0x1000 after
+ *                            storing data_header (lhu/sh 0x4d0 at
+ *                            0x300088/0x300094).
+ *   +0x4e0 data_header       the UnduDataGetHeader result Java_xeno_Chr_setID__I
+ *                            stores here (sw v0,0x4e0(s0) at 0x30008c).
+ *   +0x62c look_eye_speed    Java_xeno_Chr_look_eye_speed__F's float argument
+ *                            (swc1 f0,0x62c(v0) at 0x300e6c).
+ *   +0x66c look_speed        Java_xeno_Chr_look_speed__F's float argument
+ *                            (swc1 f0,0x66c(v0) at 0x300e0c).
+ *   +0x670 shadow_clip_scale Java_xeno_Chr_shadow_clip_scale__F's float
+ *                            argument (swc1 f0,0x670(v0) at 0x300f2c).
+ *   +0x674 look_mode         Java_xeno_Chr_look_camera__ always sets it to 2
+ *                            (sh a0,0x674(v0) at 0x300a80).
+ *   +0x678 look_eye_control  Java_xeno_Chr_look_eye_control__I's int argument
+ *                            (sw a0,0x678(v0) at 0x300dac).
+ *   +0x690 shadow_map        Java_xeno_Chr_shadow_map_reset__ always clears
+ *                            it (sw zero,0x690(v0) at 0x301004).
+ *   +0x754 hair_stop_a       Java_xeno_Chr_hairStop__II's first int argument
+ *                            (sw a1,0x754(a0) at 0x301060).
+ *   +0x758 hair_stop_b       its second int argument (sw v0,0x758(a0) at
+ *                            0x30106c).
+ *   +0x9a4 render_command    Java_xeno_Chr_renderCommand__I's int argument
+ *                            (sw a0,0x9a4(v0) at 0x300ecc).
+ *   +0x9a8 pixel_alpha       Java_xeno_Chr_pixelAlpha__I's int argument
+ *                            (sw a0,0x9a8(v0) at 0x3010cc).
+ *   +0x9ac pixel_alpha_parts Java_xeno_Chr_pixelAlphaPartsReset__ always
+ *                            clears it (sw zero,0x9ac(v0) at 0x3011a4).
+ *   +0x9e0 sort_offset       Java_xeno_Chr_setSortOffset__F's float argument
+ *                            (swc1 f0,0x9e0(v0) at 0x30053c).
+ *   +0x9f4 talk_message      Java_xeno_Chr_talkto__Ljava_lang_String_'s
+ *                            message id (sw v0,0x9f4(v1) at 0x3007c4).
+ *   +0x9f8 touch_message     Java_xeno_Chr_touchto__Ljava_lang_String_'s
+ *                            message id (sw v0,0x9f8(v1) at 0x30082c).
+ */
+/*
+ * Five further fields, evidenced by other Chr natives, all still gaps in
+ * the byte ranges listed above:
+ *
+ *   +0x81 signal        Java_xeno_Chr_signal__I stores its argument's low
+ *                        byte here (sb v1,0x81(v0) at 0x002fe8d8) and
+ *                        Java_xeno_Chr_getSignal__ reads it back unsigned
+ *                        (lbu a0,0x81(v1) at 0x002fe95c).
+ *   +0xc0 args           the byte buffer Java_xeno_Chr_setArgs__III writes
+ *                        1-4 bytes into at a caller-supplied offset
+ *                        (jal copyArgs at 0x002ff060) and
+ *                        Java_xeno_Chr_setArgs__ILjava_lang_Object_I writes
+ *                        two full words into, also at that offset
+ *                        (sw a1,0xc0(v0) / sw a0,0xc4(v0) at
+ *                        0x002ff18c/0x002ff190).
+ *   +0x67c look_target   Java_xeno_Chr_look_char__Ljava_lang_Object_ stores
+ *                        the other character's own peer pointer here
+ *                        (sw a0,0x67c(v0) at 0x00300af4);
+ *                        Java_xeno_Chr_look_unit__Ljava_lang_Object_ stores
+ *                        a xeno.Unit's own peer word the same way
+ *                        (sw v0,0x67c(s0) at 0x00300b88). The two callers
+ *                        disagree on what it points to, so it stays void*.
+ *   +0x9a0 render_flags  a second flags word: Java_xeno_Chr_setClip__I sets
+ *                        or clears bit 0x200 (ori/andi at
+ *                        0x30043c/0x300444), Java_xeno_Chr_setSymmetryY__I
+ *                        bit 0x10 (0x3004bc/0x3004c4) and
+ *                        Java_xeno_Chr_ignoreShape__I bit 0x400
+ *                        (0x3013d4/0x3013dc).
+ *   +0x9c0 filter_param  the four floats Java_xeno_Chr_setFilterParam__aF
+ *                        copies from its argument's value object, in the
+ *                        reordered sequence its own source's +0x0/+0xc/
+ *                        +0x8/+0x4 give them (swc1 at
+ *                        0x3003c0..0x3003dc).
+ *
+ *   +0x4dc translate_y   Java_xeno_Chr_setTranslate__ mirrors the position.y
+ *                        it just wrote here too (swc1 $f1,0x4dc(s2) at
+ *                        0x002feb98); no other evidenced reader in this TU.
+ */
 typedef struct Actor {
     u32 flags;
     void (*update)(struct Actor *actor);
@@ -90,6 +180,43 @@ typedef struct Actor {
     Vector4 acceleration;
     Vector4 rotation;
     Vector4 scale;
+    unsigned char unmodeled_70[0x81 - 0x70];
+    u8 signal;                                   /* +0x81 */
+    unsigned char unmodeled_82[0x90 - 0x82];
+    unsigned char shadow_kind;                  /* +0x90 */
+    unsigned char shadow_size;                  /* +0x91 */
+    unsigned char unmodeled_92[0xc0 - 0x92];
+    unsigned char args[0x4d0 - 0xc0];            /* +0xc0 */
+    unsigned short status_flags;                /* +0x4d0 */
+    unsigned char unmodeled_4d2[0x4dc - 0x4d2];
+    float translate_y;                          /* +0x4dc */
+    LayoutHeader *data_header;                  /* +0x4e0 */
+    unsigned char unmodeled_4e4[0x62c - 0x4e4];
+    float look_eye_speed;                       /* +0x62c */
+    unsigned char unmodeled_630[0x66c - 0x630];
+    float look_speed;                           /* +0x66c */
+    float shadow_clip_scale;                    /* +0x670 */
+    short look_mode;                            /* +0x674 */
+    unsigned char unmodeled_676[0x678 - 0x676];
+    int look_eye_control;                       /* +0x678 */
+    void *look_target;                          /* +0x67c */
+    unsigned char unmodeled_680[0x690 - 0x680];
+    int shadow_map;                             /* +0x690 */
+    unsigned char unmodeled_694[0x754 - 0x694];
+    int hair_stop_a;                            /* +0x754 */
+    int hair_stop_b;                            /* +0x758 */
+    unsigned char unmodeled_75c[0x9a0 - 0x75c];
+    int render_flags;                           /* +0x9a0 */
+    int render_command;                         /* +0x9a4 */
+    int pixel_alpha;                            /* +0x9a8 */
+    int pixel_alpha_parts;                      /* +0x9ac */
+    unsigned char unmodeled_9b0[0x9c0 - 0x9b0];
+    float filter_param[4];                      /* +0x9c0 */
+    unsigned char unmodeled_9d0[0x9e0 - 0x9d0];
+    float sort_offset;                          /* +0x9e0 */
+    unsigned char unmodeled_9e4[0x9f4 - 0x9e4];
+    int talk_message;                           /* +0x9f4 */
+    int touch_message;                          /* +0x9f8 */
 } Actor;
 
 /* The actor's own slot in the 64-entry `actor` array at main 0x0043c1e0,
@@ -329,12 +456,234 @@ typedef struct SequenceScale {
  * why the entry's own head stops before it. */
 #define SEQUENCE_SCALE_OFFSET 0x1b8
 
+/*
+ * Call block of Java_xeno_Chr_setVisible__IZ (0x002fee70..0x002feecc): the
+ * boolean argument is a single byte at +0x8 (lbu a2,8(s1) at 0x002feeb0),
+ * not the 4-byte union ChrScaleCall's `second` models.
+ */
+typedef struct ChrVisibleCall {
+    u8 *object;
+    int part;
+    unsigned char visible;
+} ChrVisibleCall;
+
+/*
+ * Call block of Java_xeno_Chr_setShadow__II (0x002ffe70..0x002ffed8): both
+ * arguments are single bytes, at +0x4 and +0x8 (lbu v1,4(s0) / lbu v0,8(s0)
+ * at 0x002ffec0/0x002ffec8), each in its own 4-byte argument slot.
+ */
+typedef struct ChrShadowCall {
+    u8 *object;
+    unsigned char kind;
+    unsigned char unmodeled_5[3];
+    unsigned char size;
+} ChrShadowCall;
+
+/*
+ * The object a java.lang.String's own +0x4 reference points to: only its
+ * own +0x8 word is evidenced (lw v0,8(a1) at 0x003007b8/0x00300820), read
+ * back by talkto/touchto as the message id they forward to the peer.
+ */
+typedef struct JavaStringValue {
+    unsigned int : 32;
+    unsigned int : 32;
+    int message_id;
+} JavaStringValue;
+
+/*
+ * Head of a java.lang.String object as talkto/touchto read it: only the
+ * reference at +0x4 is evidenced (lw v1,4(s1) at 0x003007a0/0x00300808).
+ */
+typedef struct JavaString {
+    unsigned int : 32;
+    JavaStringValue *value;
+} JavaString;
+
+/*
+ * Call block of Java_xeno_Chr_talkto__Ljava_lang_String_ and
+ * Java_xeno_Chr_touchto__Ljava_lang_String_: the Java String argument at
+ * +0x4 (lw v1,4(s1) at 0x00300780/0x003007e8).
+ */
+typedef struct ChrTalkCall {
+    u8 *object;
+    JavaString *message;
+} ChrTalkCall;
+
+/*
+ * Call block of Java_xeno_Chr_setWeaponR__Lxeno_Chr_ and
+ * Java_xeno_Chr_resetWeaponR__Lxeno_Chr_: the other xeno.Chr Java argument
+ * at +0x4 (lw s1,4(s0) at 0x003012e4/0x00301350), read through the same
+ * peer field offset as `object`.
+ */
+typedef struct ChrWeaponCall {
+    u8 *object;
+    u8 *other;
+} ChrWeaponCall;
+
+/* Call block shape shared by every native below that reads only the object:
+ * Java_xeno_Chr_getSignal__ and Java_xeno_Chr_getState__. */
+typedef struct ChrObjectCall {
+    u8 *object;
+} ChrObjectCall;
+
+/*
+ * Call block of Java_xeno_Chr_signal__I: the value argument is a single
+ * byte at +0x4 (lbu v1,4(s1) at 0x002fe8c8), in its own 4-byte slot.
+ */
+typedef struct ChrSignalCall {
+    u8 *object;
+    u8 value;
+} ChrSignalCall;
+
+/*
+ * Call block shared by the boolean setters below: the flag is a single byte
+ * at +0x4 (lbu v0,4(s1) at 0x002fee2c, 0x002fef0c and 0x003009f4), used by
+ * Java_xeno_Chr_setVisible__Z, Java_xeno_Chr_setCollision__Z and
+ * Java_xeno_Chr_dispRadar__Z.
+ */
+typedef struct ChrBoolCall {
+    u8 *object;
+    u8 flag;
+} ChrBoolCall;
+
+/*
+ * Call block shared by the int setters below: the value is a full word at
+ * +0x4 (lw v0,4(s0) at 0x002ffe30 and the same offset in
+ * Java_xeno_Chr_setElevatorMode__I, Java_xeno_Chr_setClip__I,
+ * Java_xeno_Chr_setSymmetryY__I and Java_xeno_Chr_ignoreShape__I).
+ */
+typedef struct ChrIntCall {
+    u8 *object;
+    int value;
+} ChrIntCall;
+
+/*
+ * Call block of Java_xeno_Chr_setScale__FFF: three floats at +0x4/+0x8/+0xc
+ * (lwc1 $f1,4(s1) / $f0,8(s1) / $f1,12(s1) at
+ * 0x002ff2f0/0x002ff30c/0x002ff314).
+ */
+typedef struct ChrVector3Call {
+    u8 *object;
+    float x;
+    float y;
+    float z;
+} ChrVector3Call;
+
+/*
+ * Call block of Java_xeno_Chr_setArgs__III: object +0x0, offset +0x4, the
+ * value to copy from +0x8 and the byte count +0xc (lw v1,8(v0) / lw
+ * s0,0xc(v0) / lw s1,0(v0) / lw s2,4(v0) at
+ * 0x002ff014..0x002ff028).
+ */
+typedef struct ChrArgsWordCall {
+    u8 *object;
+    int offset;
+    int value;
+    int size;
+} ChrArgsWordCall;
+
+/*
+ * Call block of Java_xeno_Chr_setArgs__ILjava_lang_Object_I: object +0x0,
+ * offset +0x4, the Object argument at +0x8 (lw s1,8(v0) at 0x002ff144),
+ * read the same shape ChrScaleCall's `first`/`second` already model
+ * (lw a1,8(s1) / lw a0,4(s1) at 0x002ff164/0x002ff16c); the int at +0xc it
+ * never reads.
+ */
+typedef struct ChrArgsObjectCall {
+    u8 *object;
+    int offset;
+    ChrScaleCall *source;
+    unsigned char unmodeled_0c[4];
+} ChrArgsObjectCall;
+
+/*
+ * Call block of Java_xeno_Chr_getArgs__II: object +0x0, offset +0x4, the
+ * byte count +0x8, in that order (lw s1,0(v0) / lw s2,4(v0) / lw s0,8(v0)
+ * at 0x002ff0ac..0x002ff0b8); unlike ChrArgsWordCall above there is no value
+ * word to read.
+ */
+typedef struct ChrArgsReadCall {
+    u8 *object;
+    int offset;
+    int size;
+} ChrArgsReadCall;
+
+/*
+ * The four-float Java value object Java_xeno_Chr_setFilterParam__aF's
+ * array argument points to, reached through its own +0x8 pointer (lw
+ * v1,8(a0) at 0x003003a8); the array header before that pointer is never
+ * read.
+ */
+typedef struct ChrFilterParamValue {
+    float components[4];
+} ChrFilterParamValue;
+
+typedef struct ChrFilterParamArray {
+    unsigned char unmodeled_0[8];
+    ChrFilterParamValue *value;                 /* +0x8 */
+} ChrFilterParamArray;
+
+/* Call block of Java_xeno_Chr_setFilterParam__aF: object +0x0, the array
+ * argument at +0x4 (lw a0,4(s1) at 0x003003a0). */
+typedef struct ChrFilterParamCall {
+    u8 *object;
+    ChrFilterParamArray *array;
+} ChrFilterParamCall;
+
+/*
+ * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared
+ * type is TU-local by canon (config/header-canon.json): this TU evidences
+ * only the word at +0x4, which Java_xeno_Chr_getPlayer__ copies into a
+ * character's own `peer` field (lw v0,-31100(v1) with v1=0x340000 at
+ * 0x002fcd28, 0x340000-31100 = 0x338684).
+ */
+typedef unsigned int GameLoopStateWords[];
+extern GameLoopStateWords GameLoopState;
+
+/*
+ * ACT_setVisible/ACT_setHand/ACT_setArms/ACT_resetArms are defined in
+ * main/act_2.c and main/near_dir.c (still ASM there) and declared locally
+ * here as the sibling calls at 0x002feec8, 0x002fefa4, 0x003012fc and
+ * 0x00301368 pass them: an Actor pointer, then the character natives'
+ * remaining Java arguments. src/ov01/battle_init.c already declares
+ * ACT_setHand the same way for its own TU.
+ */
+extern void ACT_setVisible(Actor *actor, int part, unsigned char visible);
+extern void ACT_setHand(Actor *actor, int hand);
+extern void ACT_setArms(Actor *actor, Actor *other, int acc_id, int flags);
+extern void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
+
+/* canon: config/header-canon.json (src/math/main/review09-002f6c50/private.h),
+ * verbatim again here as src/main/layout.h and src/main/call_java_method.h
+ * already do. Java_xeno_Chr_setID__I passes a "type selector" 0 and this
+ * unit's id (a0=0, a1=id at 0x300070/0x300074), the same two-argument shape
+ * both other accepted call sites use. */
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+
 extern void *classJava_xeno_Chr;
+/* Verbatim the canonical spelling of include/shared.h (see JavaField above
+ * for why chr.h does not include shared.h itself):
+ * Java_xeno_Chr_look_unit__Ljava_lang_Object_ looks its target's own peer
+ * field up on xeno.Unit's class, not xeno.Chr's (lw a0,-13252(gp) at
+ * 0x00300b5c). */
+extern void *classJava_xeno_Unit;
 extern int JNI_isInstanceOf(void *object, void *class_object);
 extern void *loadConstString(const char *text, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern const char chr_peer_string[];
 extern const char chr_algorithm_string[];
+extern const char D_004DC1A0[];
+extern const char D_004DC1A8[];
+extern const char D_004DC1B0[];
+/*
+ * "rx"/"ry"/"rz", the rotation-field counterparts of the "px"/"py"/"pz"
+ * strings above: Java_xeno_Chr_stop__ reads the peer's rotation into the
+ * Java fields these name (lui/addiu at 0x002fe54c/0x002fe57c/0x002fe5ac),
+ * and Java_xeno_Chr_getRotate__ (still asm here) uses the same three.
+ */
+extern const char D_004DC1B8[];
+extern const char D_004DC1C0[];
+extern const char D_004DC1C8[];
 extern u8 actSequence[0x9800];
 extern float defaultOffset[];
 extern void SEQ_scale(void);

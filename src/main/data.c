@@ -2,7 +2,28 @@
 #include "shared.h"
 #include "data.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/data", dataBoxPtrGet);
+extern unsigned char accBox[0x1FE];
+extern unsigned char bltBox[0x1FE];
+extern unsigned char evtBox[0x1FE];
+extern unsigned char itmBox[0x1FE];
+extern unsigned char wpnBox[0x1FE];
+
+u16 *dataBoxPtrGet(int category) {
+    switch (category) {
+    case 0:
+        return (u16 *) itmBox;
+    case 1:
+        return (u16 *) wpnBox;
+    case 2:
+        return (u16 *) bltBox;
+    case 3:
+        return (u16 *) accBox;
+    case 10:
+        return (u16 *) evtBox;
+    default:
+        return 0;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/data", dataBoxChk);
 

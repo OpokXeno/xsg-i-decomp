@@ -59,10 +59,39 @@ void DB_params(const char *text)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", DB_println);
+typedef char *va_list;
+#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
+#define va_end(ap) ((void)0)
+
+extern int vsprintf(char *buffer, const char *format, va_list args);
+
+void DB_println(const char *format, ...)
+{
+    va_list args;
+    char buffer[0x100];
+
+    if ((xglFontGetFlags() & 3) == 3) {
+        va_start(args, format);
+        vsprintf(buffer, format, args);
+        va_end(args);
+        if (dbMODE == 0) {
+            xglFontPrint(dbCX, dbCY, dbCZ, buffer);
+        }
+        dbCY += dbCH;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", DB_printf);
 
 INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", DB_pathGetShortPath);
 
-INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", DB_pathFindName);
+#define NULL ((void *)0)
+
+extern char *strrchr(const char *s, int c);
+
+char *DB_pathFindName(char *path)
+{
+    char *slash = strrchr(path, '/');
+
+    return (slash != NULL) ? (slash + 1) : path;
+}

@@ -44,28 +44,44 @@ extern void ACT_initExMotion(XenoAct *pXenoAct, int useExtended, int weaponMotio
 extern void *InstanceOfRgBattleCommonData(void);
 extern int RgBattleCommonDataGetWeaponMot(void *battleCommonData);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _ActJntToAccID_sub);
+/* The 21-entry table _ActJntToAccID_sub indexes; s_aJntIDToAccID_0
+ * (config/symbols/ov12.txt) is 0x54 bytes, i.e. 21 ints. */
+extern const int s_aJntIDToAccID_0[21];
+extern const char D_00A587B0[]; /* "_ActJntToAccID_sub joint=%d error(%s:%d)" */
+extern void RgError(const char *message, const char *source_file, int line, ...);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorJntIDtoAccID);
+int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line)
+{
+    if ((unsigned int) jntID >= 21) {
+        RgError(D_00A587B0, D_00A587E0, 62, jntID, sourceFile, line);
+    }
+    return s_aJntIDToAccID_0[jntID];
+}
 
-extern void ACT_jointGetAccessories(XenoAct *pXenoAct, int jntID);
+int XrgActorJntIDtoAccID(int jntID)
+{
+    return _ActJntToAccID_sub(jntID, D_00A587E0, 71);
+}
 
-void _AccIDToJoint(XenoAct *pXenoAct, int jntID)
+/* Returns the joint's accessory entry (accessories[jntID]) or the default. */
+extern void *ACT_jointGetAccessories(XenoAct *pXenoAct, int jntID);
+
+void *_AccIDToJoint(XenoAct *pXenoAct, int jntID)
 {
     if (pXenoAct == 0) {
         assert_prog(D_00A587F8, D_00A587E0, 78);
     }
-    ACT_jointGetAccessories(pXenoAct, jntID);
+    return ACT_jointGetAccessories(pXenoAct, jntID);
 }
 
 extern int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line);
 
-void _ActJntToJoint(XenoAct *pXenoAct, int jntID)
+void *_ActJntToJoint(XenoAct *pXenoAct, int jntID)
 {
     if (pXenoAct == 0) {
         assert_prog(D_00A587F8, D_00A587E0, 86);
     }
-    _AccIDToJoint(pXenoAct, _ActJntToAccID_sub(jntID, D_00A587E0, 87));
+    return _AccIDToJoint(pXenoAct, _ActJntToAccID_sub(jntID, D_00A587E0, 87));
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _GetXenoDatEntry);
@@ -88,15 +104,15 @@ typedef struct SkeJointData {
  * dispatch pair plus the joint data and element index it is bound to.
  */
 typedef struct SkeMani {
-    void (*get)(void); /* 0x00 */
-    void (*set)(void); /* 0x04 */
+    void (*get)(struct SkeMani *mani, RgMatrix matrix); /* 0x00: joint matrix out */
+    void (*set)(struct SkeMani *mani, RgMatrix matrix); /* 0x04: joint matrix in */
     XenoAct *pXenoAct;  /* 0x08: NULL when this manipulator has no joint data */
     int elementIndex;    /* 0x0C: only set together with pXenoAct */
 } SkeMani;
 
 extern void RgWarn(const char *format, const char *source_file, int line, ...);
-extern void _SkeManiGet(void);
-extern void _SkeManiSet(void);
+extern void _SkeManiGet(SkeMani *mani, RgMatrix matrix);
+extern void _SkeManiSet(SkeMani *mani, RgMatrix matrix);
 extern const char D_00A58978[]; /* "joint id error (jnt:%d elm:%d)\nat %s %d" */
 extern const char D_00A589A0[]; /* "pJnt->numElement > 1" */
 
@@ -177,11 +193,59 @@ static void _store_matrix(RgMatrix dst, const RgMatrix src)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _PassTime_00A45D30);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _ActorDrawFunction);
+#include "ov12/rg_debug_flags.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _DrawActor);
+extern RgDebugFlags *InstanceOfRgDebugFlags(void);
+extern void nmlModelSetFogCol(float *);
+extern void nmlModelSetFogDist(float, float, float, float);
+extern void nmlModelSetRenderLevel(int);
+extern RgFog *s_pUseFog;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _SetMotionToXenoActorWithRgMotID);
+void _ActorDrawFunction(XenoAct *pXenoAct)
+{
+    RgFog *pFog;
+    float color[3];
+
+    if (InstanceOfRgDebugFlags()->flags[2] != 0) {
+        pFog = s_pUseFog;
+        if (pFog != 0) {
+            color[0] = pFog->color[0];
+            color[1] = pFog->color[1];
+            color[2] = pFog->color[2];
+            nmlModelSetFogCol(color);
+            nmlModelSetFogDist(pFog->dist[0], pFog->dist[1], pFog->dist[2], pFog->dist[3]);
+            if (pXenoAct->renderLevelFlag != 0) {
+                nmlModelSetRenderLevel(0x10);
+            }
+        }
+    }
+}
+
+extern RgFog *s_pUseFog; /* ov12.txt size 0x4: the fog block _ActorDrawFunction reads back */
+extern int ACT_modelDraw(XenoAct *pXenoAct);
+
+void _DrawActor(XrgActor *pActor, void *pStudio)
+{
+    RgDrawStudio *pDrawStudio;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8, D_00A587E0, 527);
+    }
+    pDrawStudio = pStudio;
+    s_pUseFog = pDrawStudio->m_pFog;
+    ACT_modelDraw(pActor->pXenoAct);
+}
+
+extern void ACT_setMotion2(XenoAct *, int, int, int);
+
+void _SetMotionToXenoActorWithRgMotID(XrgActor *pActor, int rgMotID, int playbackParam)
+{
+    if (rgMotID >= 0x800 && pActor->weaponMotionActive != 0) {
+        ACT_setMotion2(pActor->pXenoAct, (rgMotID - 0x800) | 0x100, playbackParam, playbackParam);
+        return;
+    }
+    ACT_setMotion2(pActor->pXenoAct, rgMotID, playbackParam, playbackParam);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _SetMotUseXenoActor);
 
@@ -326,7 +390,37 @@ void _SetBattleCommonWepMotion(XrgActor *pActor)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _InitAfterLoadXenoActor);
+extern void xglLightSetDefault(StudioLight *light);
+extern const char D_00A58AE0[]; /* "pActor->m_pXenoAct != NIL" */
+
+void _InitAfterLoadXenoActor(XrgActor *pActor)
+{
+    XenoAct *pXenoAct;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8, D_00A587E0, 790);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct == 0) {
+        assert_prog(D_00A58AE0, D_00A587E0, 791);
+        pXenoAct = pActor->pXenoAct;
+    }
+    pActor->motionComaStep = 0;
+    pActor->motionComaStepAccum = 0.0f;
+    xglLightSetDefault(&pXenoAct->light);
+    pXenoAct->drawFunc = _ActorDrawFunction;
+    pXenoAct->flags |= 0x8000;
+    ACT_allocMatrix(pXenoAct, -1);
+    ACT_setModelWrapper(pXenoAct, 0);
+    if (pActor->resourceFiles[0] != 0) {
+        ACT_initMotion(pXenoAct);
+        ACT_initExMotion(pXenoAct, 0, (int) pActor->resourceFiles[0]->data);
+        _SetBattleCommonWepMotion(pActor);
+    }
+    pXenoAct->lightCost[0] = 7;
+    pXenoAct->lightCost[1] = 0x30;
+    pXenoAct->renderFlags |= 0x40;
+}
 
 void XrgActorSetLightCost(XrgActor *pActor)
 {
@@ -436,7 +530,21 @@ void XrgActorSetLoopPlay(XrgActor *pActor, int loopPlay)
     pActor->loopPlay = loopPlay;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorDeriveMotion);
+void XrgActorDeriveMotion(XrgActor *pActor, XrgActor *pSrcActor)
+{
+    if (pActor == 0) {
+        assert_prog(D_00A589C8, D_00A587E0, 1059);
+    }
+    if (pSrcActor == 0) {
+        assert_prog(D_00A58AC8, D_00A587E0, 1060);
+    }
+    if (pSrcActor->resourceFiles[0] == 0) {
+        return;
+    }
+    ACT_initMotion(pActor->pXenoAct);
+    ACT_initExMotion(pActor->pXenoAct, 0, (int) pSrcActor->resourceFiles[0]->data);
+    _SetBattleCommonWepMotion(pActor);
+}
 
 void XrgActorSetMotionFrame(XrgActor *pActor, float frame)
 {
@@ -451,7 +559,23 @@ void XrgActorSetMotionFrame(XrgActor *pActor, float frame)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorSetDraw);
+void XrgActorSetDraw(XrgActor *pActor, int draw)
+{
+    XenoAct *pXenoAct;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8, D_00A587E0, 1084);
+    }
+    pXenoAct = pActor->pXenoAct;
+    if (pXenoAct != 0) {
+        if (draw == 0) {
+            pXenoAct->flags |= 8;
+            pXenoAct->renderFlags |= 0x100;
+        } else {
+            pXenoAct->flags &= ~8;
+        }
+    }
+}
 
 void XrgActorSetTransparent(XrgActor *pActor, float transparency)
 {
@@ -541,7 +665,7 @@ extern void RgDrawReq(RgDraw *pDraw, XrgActor *pActor,
                       void (*drawFunc)(XrgActor *pActor, void *pStudio),
                       void (*clearFunc)(XrgActor *pActor, void *pStudio),
                       int prio, int drawID);
-static void _DrawActor(XrgActor *pActor, void *pStudio);
+void _DrawActor(XrgActor *pActor, void *pStudio);
 
 void XrgActorDraw(XrgActor *pActor)
 {

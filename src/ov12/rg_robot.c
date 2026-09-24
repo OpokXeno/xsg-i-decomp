@@ -158,7 +158,14 @@ static void _InitStatus(RgRobotStatus *status)
     status->exitMethod = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _CreateStatue);
+static RgRobotStatus *_CreateStatue(void)
+{
+    RgRobotStatus *status;
+
+    status = RgHeapAlloc(InstanceOfRgHeap(), 0x60U, D_00A51840, 624);
+    _InitStatus(status);
+    return status;
+}
 
 static void _SetStatus(RgRobotStatus *status, int type, RgBody *body)
 {
@@ -231,27 +238,109 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowAllCmdInMoving);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowDamageCmd);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowDamageCmdNotVRDashHit);
+static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowDamageCmdNotPetrify);
+static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int result;
+
+    result = 0;
+    switch (command->type) {
+    case 8:
+        result = _ExecDamageCmd(status, body, command);
+        break;
+    case 9:
+        result = _ExecWeakDamageCmd(status, body, command);
+        break;
+    }
+    return result;
+}
+
+static int _AllowDamageCmdNotPetrify(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int result;
+    float life;
+
+    (void)status;
+    result = 0;
+    if (command->type != 8) {
+        if (command->type == 9) {
+            goto damage;
+        }
+    } else {
+damage:
+        life = body->life - command->scratch0;
+        body->life = life;
+        if (life < 0.0f) {
+            body->life = 0.0f;
+        }
+        result = 0x80;
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _MovingPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitMovingStatus);
+static int _AllowAllCmdInMoving(RgRobotStatus *status, int param, RgBody *body);
+static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
+
+static void _InitMovingStatus(RgRobotStatus *status, RgBody *body)
+{
+    _SetStatus(status, 1, body);
+    status->execCmdMethod = _AllowAllCmdInMoving;
+    status->passTimeMethod = _MovingPassTime;
+    status->scratch0 = -1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecCmdInAttack);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AttackPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AttackExit);
+extern void RgWeaponShotStop(void *weapon);
+extern char *RgWeaponGetEss(void *weapon);
+extern void RgWeaponPlayMotion(void *weapon, int motion);
+extern void RgWeaponRestartLockon(void *weapon);
+
+/*
+ * Motion-ID table offset within the weapon-essence record RgWeaponGetEss
+ * returns; only this field is evidenced here (docs/style.md, "Struct
+ * fields, not offset casts" -- narrowly evidenced scalar access).
+ */
+#define WEP_ESSENCE_ATTACK_MOTION_OFFSET 0x140
+
+static void _AttackExit(RgRobotStatus *status, RgBody *body)
+{
+    void *shotWeapon;
+    void *motionWeapon;
+    char *ess;
+
+    shotWeapon = (void *) status->scratch1;
+    if (shotWeapon != 0) {
+        RgWeaponShotStop(shotWeapon);
+    }
+    _StopHomingThread(body->homingThread);
+    motionWeapon = (void *) status->scratch1;
+    if (motionWeapon != 0) {
+        ess = RgWeaponGetEss(motionWeapon);
+        if (ess != 0) {
+            RgWeaponPlayMotion(motionWeapon,
+                *(int *) (ess + WEP_ESSENCE_ATTACK_MOTION_OFFSET
+                          + (body->charID * RG_EQUIP_TYPE_NUM + status->eSide) * 4));
+        }
+    }
+    if (status->scratch2 != 0) {
+        RgWeaponRestartLockon((void *) status->scratch2);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitAttackStatus);
 
-extern int _AllowDamageCmd(void);
+static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
-static void _ExecCmdInHissatu(void)
+static int _ExecCmdInHissatu(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
-    _AllowDamageCmd();
+    return _AllowDamageCmd(status, body, command);
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _HissatuPassTime);
@@ -292,7 +381,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExit);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDashStatus);
 
-extern void _BodyPlayMotion(RgBody *body, int motion);
+static void _BodyPlayMotion(RgBody *body, int motion);
 
 /*
  * Sets DashVR's own scratch0/scratchTimer (see RgRobotStatus): scratch0 is
@@ -311,12 +400,24 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRExecCmd);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRExit);
+extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
+extern void RgRobotEffectTermJet(RgRobotEffect *effect);
+extern void RgRobotEffectTermDash(RgRobotEffect *effect);
+extern void XrgSoundRingStopMoving(int soundID);
+
+static void _DashVRExit(RgRobotStatus *status, RgBody *body)
+{
+    (void)status;
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, body->spec->baseSpeed));
+    RgRobotEffectTermJet(body->effect);
+    RgRobotEffectTermDash(body->effect);
+    XrgSoundRingStopMoving(body->landingSoundID);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDashVRStatus);
 
-extern int _AllowDamageCmdNotVRDashHit(void);
-extern int _ExecDashCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command);
+static int _ExecDashCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
 /*
  * Damage status's own scratch1 (see RgRobotStatus) is nonzero while a
@@ -327,7 +428,7 @@ static int _DamageExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
 
-    result = _AllowDamageCmdNotVRDashHit();
+    result = _AllowDamageCmdNotVRDashHit(status, body, command);
     if (result == 0) {
         if (status->scratch1 != 0 && command->type == 5) {
             result = _ExecDashCmd(status, body, command);
@@ -340,9 +441,9 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DamagePassTime);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDamageStatus);
 
-extern int _AllowDamageCmd(void);
+static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 static int _GetDropMotion(int eSide);
-int _InitDropStatus(RgStatus *status, RgBody *body, int motion, int eSide);
+static int _InitDropStatus(RgStatus *status, RgBody *body, int motion, int eSide);
 
 /*
  * Drop status's own scratch0/scratch2 (see RgRobotStatus): scratch0 is the
@@ -354,7 +455,7 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int mask;
 
-    mask = _AllowDamageCmd();
+    mask = _AllowDamageCmd(status, body, command);
     if (command->type == 7
         && command->param != status->scratch0
         && command->param == 2
@@ -367,7 +468,7 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
 
 extern int RgMotionInfoGetActionInTime(int motion, int actionIndex,
                                        float elapsedTime);
-extern void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
+static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
 
 /*
  * Drop status's own scratch1 (see RgRobotStatus) is the drop motion id
@@ -420,7 +521,14 @@ static void _ClearCmdQueue(RgCmdQueue *cmdQueue)
     cmdQueue->count = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _CreateCmdQueue);
+static RgCmdQueue *_CreateCmdQueue(void)
+{
+    RgCmdQueue *cmdQueue;
+
+    cmdQueue = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgCmdQueue), D_00A51840, 2689);
+    _InitCmdQueue(cmdQueue);
+    return cmdQueue;
+}
 
 static void _DisposeCmdQueue(RgCmdQueue *cmdQueue)
 {
@@ -430,11 +538,63 @@ static void _DisposeCmdQueue(RgCmdQueue *cmdQueue)
     RgHeapFree(InstanceOfRgHeap(), cmdQueue, D_00A51840, 2698);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodyPlayMotion);
+typedef struct XrgActor XrgActor;
+extern void XrgActorSetMotion(XrgActor *actor, int motion);
+extern void XrgActorSetSmoothPlay(XrgActor *actor, int smoothPlay);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodyPlayMotionLoop);
+static void _BodyPlayMotion(RgBody *body, int motion)
+{
+    XrgActor *actor;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodyAdvanceForAttack);
+    actor = (XrgActor *) body->actor;
+    if (actor != 0) {
+        if (body->smoothSuppressed != 0) {
+            XrgActorSetSmoothPlay(actor, 0);
+        } else {
+            XrgActorSetSmoothPlay(actor, body->motSmooth);
+        }
+        XrgActorSetMotion(actor, motion);
+    }
+}
+
+extern void XrgActorSetLoopPlay(XrgActor *actor, int loopPlay);
+
+static void _BodyPlayMotionLoop(RgBody *body, int motion)
+{
+    XrgActor *actor;
+
+    actor = (XrgActor *) body->actor;
+    if (actor != 0) {
+        if (body->smoothSuppressed != 0) {
+            XrgActorSetSmoothPlay(actor, 0);
+        } else {
+            XrgActorSetSmoothPlay(actor, body->motSmooth);
+        }
+        XrgActorSetLoopPlay(actor, 1);
+        XrgActorSetMotion(actor, motion);
+    }
+}
+
+extern void RgGeomRobotCalcLocal(RgGeomPoint *geometry, RgVector local[4]);
+extern void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction,
+                               float scale);
+extern void XrgNegateVector(RgVector destination, RgVector source);
+
+static void _BodyAdvanceForAttack(RgBody *body, float attackPower,
+                                  float attackFactor)
+{
+    RgGeomPoint *geometry;
+    RgRobotSpec *spec;
+    RgVector direction;
+    RgVector localFrame[4];
+
+    geometry = body->geometry;
+    spec = body->spec;
+    RgGeomRobotCalcLocal(geometry, localFrame);
+    XrgNegateVector(direction, localFrame[2]);
+    RgRobSubAcceralate(geometry, direction,
+                       spec->accelRate * spec->attackAdvanceRate * 0.3f * attackFactor);
+}
 
 /* ov12:0x00a51a68 contains the assertion expression "pBody != NIL". */
 extern const char D_00A51A68[];
@@ -458,15 +618,110 @@ static int _BodyGetTargetPos(RgBody *body, RgPointVector *position)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetSpec);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetGeom);
+extern void RgGeomFree(RgGeomPoint *point);
+extern void RgGeomPointSetMoveResist(RgGeomPoint *point, float resist);
+extern void RgGeomPointSetWeight(RgGeomPoint *point, float weight);
+extern float RgGeomRobotGetRotate(RgGeomPoint *point);
+extern void RgGeomRobotSetRotResist(RgGeomPoint *point, float resist);
+extern void RgRobotEffectSetGeom(RgRobotEffect *effect, RgGeomPoint *geometry);
+/* ov12:0x00a51a78 contains the assertion expression "pGeom != NIL". */
+extern const char D_00A51A78[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetEyeGeom);
+static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry)
+{
+    RgGeomPoint *oldGeometry;
+    RgRobotSpec *spec;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetAdvanceGeom);
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 0xAEA);
+    }
+    if (geometry == 0) {
+        assert_prog(D_00A51A78, D_00A51840, 0xAEB);
+    }
+    oldGeometry = body->geometry;
+    if (geometry != oldGeometry) {
+        RgGeomFree(oldGeometry);
+    }
+    spec = body->spec;
+    body->geometry = geometry;
+    RgGeomPointSetWeight(geometry, spec->speedRating);
+    RgGeomPointSetMoveResist(geometry, spec->moveResist);
+    RgGeomRobotSetRotResist(geometry, spec->rotResist);
+    body->rotate = RgGeomRobotGetRotate(geometry);
+    RgRobotEffectSetGeom(body->effect, geometry);
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+}
+
+extern void RgGeomFree(RgGeomPoint *point);
+
+static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry)
+{
+    RgGeomPoint *oldEyeGeometry;
+
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 2816);
+    }
+    oldEyeGeometry = body->eyeGeometry;
+    if (oldEyeGeometry != 0 && oldEyeGeometry != eyeGeometry) {
+        RgGeomFree(oldEyeGeometry);
+    }
+    body->eyeGeometry = eyeGeometry;
+}
+
+/* ov12:0x00a51a78 contains the assertion expression "pGeom != NIL". */
+extern const char D_00A51A78[];
+
+static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry)
+{
+    RgGeomPoint *oldAdvanceGeometry;
+
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 2826);
+    }
+    if (advanceGeometry == 0) {
+        assert_prog(D_00A51A78, D_00A51840, 2827);
+    }
+    oldAdvanceGeometry = body->advanceGeometry;
+    if (oldAdvanceGeometry != 0 && oldAdvanceGeometry != advanceGeometry) {
+        RgGeomFree(oldAdvanceGeometry);
+    }
+    body->advanceGeometry = advanceGeometry;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetSound);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetActor);
+/*
+ * CreateXrgActor's published parameter is `int actorID` (src/ov12/xrg_actor.c,
+ * ov12/tu080); this caller passes the actorSpec pointer's own raw value as
+ * that argument (ov12:0x00a06438, daddu $4, $17, $0 straight into the call,
+ * no load first), then reads charID back from *actorSpec afterward
+ * (ov12:0x00a06440), so actorSpec is reinterpreted as actorID here.
+ */
+extern XrgActor *CreateXrgActor(int actorID);
+extern void DisposeXrgActor(XrgActor *actor);
+extern void RgRobotEffectSetActor(RgRobotEffect *effect, void *actor);
+
+static void _BodySetActor(RgBody *body, void *actorSpec)
+{
+    XrgActor *oldActor;
+    XrgActor *actor;
+
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 0xB2A);
+    }
+    oldActor = (XrgActor *) body->actor;
+    if (oldActor != 0) {
+        DisposeXrgActor(oldActor);
+    }
+    body->actor = 0;
+    if (actorSpec != 0) {
+        actor = CreateXrgActor((int) actorSpec);
+        body->actor = actor;
+        body->charID = *(int *) actorSpec;
+        RgRobotEffectSetActor(body->effect, actor);
+        _BodyPlayMotionLoop(body, 0);
+    }
+}
 
 static void _BodySetTarget(RgBody *body, void *target)
 {
@@ -490,7 +745,21 @@ static void _BodySetAutoHomingEnv(RgBody *body, int autoHomingEnv)
     body->autoHomingEnv = autoHomingEnv;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodyExecCmd);
+/* ov12:0x00a51b48 contains the assertion expression "pCmd != NIL". */
+extern const char D_00A51B48[];
+
+static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
+                        RgCmd *command)
+{
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 3152);
+    }
+    if (command == 0) {
+        assert_prog(D_00A51B48, D_00A51840, 3153);
+    }
+    body->cmdMask |= 1 << command->type;
+    return _StatusExecCmd(robotStatus, (RgBody *) command, (int) body);
+}
 
 extern float RgGeomPointGetSpeed(RgGeomPoint *point);
 extern void RgGeomRobotSetMaxRotVel(RgGeom *geom, float maxRotVel);
@@ -521,9 +790,51 @@ static void _BodyGeomPassTime(RgBody *body, float deltaTime)
     RgGeomPassTime((RgGeom *)geometry, deltaTime);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _EyeGeomPassTime);
+extern int RgGeomGetEventFlag(RgGeom *geom);
+extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
+extern void RgGeomPointMovePos(RgGeomPoint *point, RgVector position);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AdvanceGeomPassTime);
+static int _EyeGeomPassTime(RgBody *body, float deltaTime)
+{
+    RgGeom *eyeGeom;
+    int eventFlag;
+    RgVector position;
+
+    eyeGeom = (RgGeom *) body->eyeGeometry;
+    eventFlag = RgGeomGetEventFlag(eyeGeom);
+    RgGeomPassTime(eyeGeom, deltaTime);
+    __RgGeomPointGetPos(body->geometry, (RgPointVector *) position, D_00A51840, 0xC79);
+    RgGeomPointSetPos((RgGeomPoint *) eyeGeom, position);
+    if (body->target != 0) {
+        __RgGeomPointGetPos(body->target, (RgPointVector *) position, D_00A51840, 0xC7E);
+        RgGeomPointMovePos((RgGeomPoint *) eyeGeom, position);
+    }
+    return eventFlag;
+}
+
+extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
+extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
+extern void RgGeomPointMovePos(RgGeomPoint *point, RgVector position);
+extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
+extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
+
+static void _AdvanceGeomPassTime(RgBody *body, float deltaTime)
+{
+    RgGeom *advanceGeom;
+    RgGeomPoint *geometry;
+    RgVector position;
+    RgVector velocity;
+
+    advanceGeom = (RgGeom *) body->advanceGeometry;
+    geometry = body->geometry;
+    RgGeomPassTime(advanceGeom, deltaTime);
+    __RgGeomPointGetPos(geometry, (RgPointVector *) position, D_00A51840, 3213);
+    RgGeomPointSetPos((RgGeomPoint *) advanceGeom, position);
+    RgGeomPointGetVel(geometry, velocity);
+    XrgScaleVector(velocity, velocity, 0.5f);
+    XrgAddVector(position, position, velocity);
+    RgGeomPointMovePos((RgGeomPoint *) advanceGeom, position);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodyAutoHomingPassTime);
 
@@ -535,7 +846,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitBody);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DestructBody);
 
-void _InitBody(RgBody *body);
+static void _InitBody(RgBody *body);
 
 static RgBody *_CreateBody(void)
 {
@@ -549,7 +860,7 @@ static RgBody *_CreateBody(void)
 extern int RgHeapIsInvalidMemory(RgHeap *heap, void *ptr);
 extern void RgError(const char *message, const char *source_file, int line,
                      ...);
-void _DestructBody(RgBody *body);
+static void _DestructBody(RgBody *body);
 
 /* ov12:0x00a51b58 contains the format string "already disposed body %p". */
 extern const char D_00A51B58[];
@@ -566,9 +877,50 @@ static void _DisposeBody(RgBody *body)
     RgHeapFree(InstanceOfRgHeap(), body, D_00A51840, 3494);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecAccelarateCmd);
+extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
+extern void XrgSoundRingMoving(int soundID, int unused, float volume);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecRotateCmd);
+static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
+{
+    RgRobotSpec *spec;
+    RgGeomPoint *geometry;
+
+    spec = body->spec;
+    geometry = body->geometry;
+    RgGeomPointSetMaxXYSpd(geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+    RgRobSubAcceralate(geometry, (float *) command, spec->accelRate);
+    XrgSoundRingMoving(body->landingSoundID, 0, 0.2f);
+    return 1;
+}
+
+extern void RgGeomRobotAddRotForce(RgGeomPoint *point, float force);
+
+/*
+ * The queued command reuses its own +0x00 slot (RgCmd.param) as a plain
+ * float rotate delta for this command type (see RgCmd's own doc on that
+ * reuse); only its sign is used.
+ */
+static int _ExecRotateCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    float delta;
+    int rotateSign;
+
+    delta = *(float *) command;
+    if (delta > 0.0f) {
+        rotateSign = 1;
+    } else if (delta < 0.0f) {
+        rotateSign = -1;
+    } else {
+        rotateSign = 0;
+    }
+    if ((float) rotateSign == 0.0f) {
+        return 0;
+    }
+    RgGeomRobotAddRotForce(body->geometry, (float) rotateSign * body->spec->rotateForce);
+    body->flags |= 2;
+    XrgSoundRingMoving(body->landingSoundID, 0, 0.2f);
+    return 2;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _IsBackWeaponReady);
 
@@ -588,7 +940,20 @@ static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecDashCmd);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecDashContinueCmd);
+static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgCmd *command,
+                             int param1, int param2);
+
+static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int result;
+
+    result = 0;
+    if (body->spec->type == 1) {
+        _InitDashVRStatus(status, body, command, 1, 0);
+        result = 4;
+    }
+    return result;
+}
 
 /* The format string "unknown equip type (drop weapon) %d". */
 extern const char D_00A51B78[];
@@ -617,7 +982,7 @@ static int _GetDropMotion(int eSide)
     return motion;
 }
 
-int _InitDropStatus(RgStatus *status, RgBody *body, int motion,
+static int _InitDropStatus(RgStatus *status, RgBody *body, int motion,
                             int eSide);
 
 static int _ExecDropWeaponCmd(RgStatus *status, RgBody *body,
@@ -631,19 +996,67 @@ static int _ExecDropWeaponCmd(RgStatus *status, RgBody *body,
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecDamageCmd);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecHitByBody);
+extern void CreateRgHitEffectPosDir(RgVector position, RgVector direction,
+                                    char *name1, char *name2);
+extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
+extern float XrgNormalizeVector(RgVector destination, RgVector source);
+static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
+                              RgCmd *command, int flag, float p5, float p6);
+extern unsigned char D_00A51BA0[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecWeakDamageCmd);
+static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    RgVector force;
+
+    CreateRgHitEffectPosDir(&command->scratch0, (float *) command,
+                            D_00A51BA0, 0);
+    XrgNormalizeVector(force, (float *) command);
+    XrgScaleVector(force, force, command->scratch5);
+    RgGeomPointAddForce(body->geometry, force);
+    body->life -= command->scratch4;
+    if (body->life < 0.0f) {
+        body->life = 0.0f;
+    }
+    _InitDamageStatus(status, body, command, 1, 0.0f, 0.5f);
+    return 0x400;
+}
+
+static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    float windowSeed;
+    float accum;
+
+    body->life -= command->scratch0;
+    if (body->life < 0.0f) {
+        body->life = 0.0f;
+    }
+    if (body->weakHitWindow <= 0.0f) {
+        windowSeed = command->scratch2;
+        body->weakHitAccum = 0.0f;
+        body->weakHitWindow = windowSeed;
+    }
+    accum = body->weakHitAccum + command->scratch0;
+    body->weakHitAccum = accum;
+    if (*(float *) &command->scratch1 <= accum) {
+        _InitDamageStatus(status, body, command, 1, accum, 0.0f);
+        body->weakHitWindow = 0.0f;
+        body->weakHitAccum = 0.0f;
+    } else {
+        body->weakHitMotion = command->scratch3;
+        body->weakHitPower = command->scratch4;
+    }
+    return 0x80;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DullFlagsPassTime);
 
 extern int RgRobotIsDead(RgStatus *pRobot);
-int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
+static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
                          RgCmd *command);
-int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
+static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
                           float deltaTime);
-void _ClearCmdQueue(RgCmdQueue *cmdQueue);
-void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime);
+static void _ClearCmdQueue(RgCmdQueue *cmdQueue);
+static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime);
 
 static void _PassTimeRobot(RgStatus *pRobot, float deltaTime)
 {
@@ -670,13 +1083,35 @@ static void _PassTimeRobot(RgStatus *pRobot, float deltaTime)
     _DullFlagsPassTime(pRobot, deltaTime);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DispRobot);
+static void _BodyDisp(RgRobotStatus *robotStatus, RgBody *body);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DestructRobot);
+static void _DispRobot(RgStatus *pRobot)
+{
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 3976);
+    }
+    _BodyDisp(pRobot->robotStatus, pRobot->body);
+}
+
+/* ov12:0x00a51bc0 contains the format string "already disposed robot %p\n". */
+extern const char D_00A51BC0[];
+
+static void _DestructRobot(RgStatus *pRobot)
+{
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 3985);
+    }
+    if (RgHeapIsInvalidMemory(InstanceOfRgHeap(), pRobot) != 0) {
+        RgError(D_00A51BC0, D_00A51840, 3987, pRobot);
+    }
+    _DisposeBody(pRobot->body);
+    _DisposeStatus(pRobot->robotStatus);
+    _DisposeCmdQueue(pRobot->cmdQueue);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitRobot);
 
-void _InitRobot(RgStatus *pRobot);
+static void _InitRobot(RgStatus *pRobot);
 
 RgStatus *CreateRgRobot(void)
 {
@@ -688,7 +1123,7 @@ RgStatus *CreateRgRobot(void)
     return pRobot;
 }
 
-void _DestructRobot(RgStatus *pRobot);
+static void _DestructRobot(RgStatus *pRobot);
 
 void DisposeRgRobot(RgStatus *pRobot)
 {
@@ -701,7 +1136,7 @@ void DisposeRgRobot(RgStatus *pRobot)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotPassTime);
 
-void _DispRobot(RgStatus *pRobot);
+static void _DispRobot(RgStatus *pRobot);
 
 void RgRobotDisp(RgStatus *pRobot)
 {
@@ -711,7 +1146,7 @@ void RgRobotDisp(RgStatus *pRobot)
     _DispRobot(pRobot);
 }
 
-void _BodySetSpec(RgBody *body, RgRobotSpec *spec);
+static void _BodySetSpec(RgBody *body, RgRobotSpec *spec);
 
 void RgRobotSetSpec(RgStatus *pRobot, RgRobotSpec *spec)
 {
@@ -721,7 +1156,7 @@ void RgRobotSetSpec(RgStatus *pRobot, RgRobotSpec *spec)
     _BodySetSpec(pRobot->body, spec);
 }
 
-void _BodySetGeom(RgBody *body, RgGeomPoint *geometry);
+static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry);
 
 void RgRobotSetGeom(RgStatus *pRobot, RgGeomPoint *geometry)
 {
@@ -731,7 +1166,7 @@ void RgRobotSetGeom(RgStatus *pRobot, RgGeomPoint *geometry)
     _BodySetGeom(pRobot->body, geometry);
 }
 
-void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry);
+static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry);
 
 void RgRobotSetEyeGeom(RgStatus *pRobot, RgGeomPoint *eyeGeometry)
 {
@@ -741,7 +1176,7 @@ void RgRobotSetEyeGeom(RgStatus *pRobot, RgGeomPoint *eyeGeometry)
     _BodySetEyeGeom(pRobot->body, eyeGeometry);
 }
 
-void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry);
+static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry);
 
 void RgRobotSetAdvanceGeom(RgStatus *pRobot, RgGeomPoint *advanceGeometry)
 {
@@ -751,7 +1186,7 @@ void RgRobotSetAdvanceGeom(RgStatus *pRobot, RgGeomPoint *advanceGeometry)
     _BodySetAdvanceGeom(pRobot->body, advanceGeometry);
 }
 
-void _BodySetSound(RgBody *body, void *soundDriver);
+static void _BodySetSound(RgBody *body, void *soundDriver);
 
 void RgRobotSetSoundDriver(RgStatus *pRobot, void *soundDriver)
 {
@@ -761,7 +1196,7 @@ void RgRobotSetSoundDriver(RgStatus *pRobot, void *soundDriver)
     _BodySetSound(pRobot->body, soundDriver);
 }
 
-void _BodySetActor(RgBody *body, void *actor);
+static void _BodySetActor(RgBody *body, void *actor);
 
 void RgRobotSetActor(RgStatus *pRobot, void *actor)
 {
@@ -771,7 +1206,13 @@ void RgRobotSetActor(RgStatus *pRobot, void *actor)
     _BodySetActor(pRobot->body, actor);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotSetTarget);
+void RgRobotSetTarget(RgStatus *pRobot, void *target)
+{
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4177);
+    }
+    _BodySetTarget(pRobot->body, target);
+}
 
 void RgRobotSetRgDrawView(RgStatus *pRobot, RgDrawView *view)
 {
@@ -916,13 +1357,55 @@ unsigned int RgRobotGetStatusFlags(RgStatus *pRobot)
     return pRobot->statusFlags;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotAccelarate);
+void RgRobotAccelarate(RgStatus *pRobot, RgVector velocity)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4370);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 0);
+    if (command != 0) {
+        XrgCopyVector((float *) command, velocity);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotAccelarateRotate);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotShot);
+/*
+ * ov12:0x00a51a88 contains the range expression
+ * "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM".
+ */
+extern const char D_00A51A88[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotTargetting);
+void RgRobotShot(RgStatus *pRobot, unsigned int eType)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4394);
+    }
+    if (eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(D_00A51A88, D_00A51840, 4395);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 2);
+    if (command != 0) {
+        command->param = eType;
+    }
+}
+
+void RgRobotTargetting(RgStatus *pRobot)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4407);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 3);
+    if (command != 0) {
+        command->param = (int) pRobot->body->target;
+    }
+}
 
 void RgRobotBreak(RgStatus *pRobot)
 {
@@ -932,7 +1415,18 @@ void RgRobotBreak(RgStatus *pRobot)
     _EntryCmdQueue(pRobot->cmdQueue, 4); /* command type 4: break */
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotDash);
+void RgRobotDash(RgStatus *pRobot, RgVector direction)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4428);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 5);
+    if (command != 0) {
+        XrgCopyVector((float *) command, direction);
+    }
+}
 
 void RgRobotDashContinue(RgStatus *pRobot)
 {
@@ -942,18 +1436,130 @@ void RgRobotDashContinue(RgStatus *pRobot)
     _EntryCmdQueue(pRobot->cmdQueue, 6); /* command type 6: continue dash */
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotGiveDamage);
+void RgRobotGiveDamage(RgStatus *pRobot, RgVector direction, int damageType,
+                       float damage)
+{
+    RgCmd *command;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotGiveWeakDamage);
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4449);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 8);
+    if (command != 0) {
+        command->scratch0 = damage;
+        command->scratch1 = damageType;
+        XrgCopyVector((float *) command, direction);
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotHitByBody);
+void RgRobotGiveWeakDamage(RgStatus *pRobot, RgVector direction, float damage,
+                           float threshold, float windowSeed,
+                           float weakHitMotion, float weakHitPower)
+{
+    RgCmd *command;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotDropWeapon);
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 0x117A);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 9);
+    if (command != 0) {
+        command->scratch0 = damage;
+        XrgCopyVector((float *) command, direction);
+        *(float *) &command->scratch1 = threshold;
+        command->scratch2 = windowSeed;
+        command->scratch3 = weakHitMotion;
+        command->scratch4 = weakHitPower;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotHitWeaponAttack);
+void RgRobotHitByBody(RgStatus *pRobot, RgVector direction, RgVector position,
+                      float damage, float scale)
+{
+    RgCmd *command;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotInvalidAttack);
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 0x118C);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 0xE);
+    if (command != 0) {
+        XrgCopyVector(&command->scratch0, direction);
+        XrgCopyVector((float *) command, position);
+        command->scratch4 = damage;
+        command->scratch5 = scale;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotHitBG);
+void RgRobotDropWeapon(RgStatus *pRobot, unsigned int eType)
+{
+    RgCmd *command;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotNearBG);
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4508);
+    }
+    if (eType >= RG_EQUIP_TYPE_NUM) {
+        assert_prog(D_00A51A88, D_00A51840, 4509);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 7);
+    if (command != 0) {
+        command->param = eType;
+    }
+}
+
+void RgRobotHitWeaponAttack(RgStatus *pRobot, int param)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4522);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 0xA);
+    if (command != 0) {
+        command->param = param;
+    }
+}
+
+extern float XrgNormalizeVector(RgVector destination, RgVector source);
+
+void RgRobotInvalidAttack(RgStatus *pRobot, RgVector direction, float scale)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4536);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 0xB);
+    if (command != 0) {
+        XrgNormalizeVector((float *) command, direction);
+        command->scratch0 = scale;
+    }
+}
+
+void RgRobotHitBG(RgStatus *pRobot, RgVector direction)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4550);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 0xC);
+    if (command != 0) {
+        XrgCopyVector((float *) command, direction);
+    }
+    if (!(direction[1] > 0.9f)) {
+        return;
+    }
+    _BodyOnGround(pRobot->body);
+}
+
+void RgRobotNearBG(RgStatus *pRobot, RgVector direction)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4568);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 0xD);
+    if (command != 0) {
+        XrgCopyVector((float *) command, direction);
+    }
+}

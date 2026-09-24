@@ -102,6 +102,80 @@ RgRobotSpec *RgRobotDBGetDefault(void)
     return &D_00A599E0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_db", RgRobotDBRead);
+/* ov12/tu067 (src/ov12/rg_actor_charid.c), already accepted there. */
+extern int RgActorNameToCharID(const char *pszName);
+
+/*
+ * ov12/tu036 (src/ov12/rg_read_text.h). RgReadTextRewind and
+ * RgReadTextGetString are already accepted there; RgReadTextFindParagraph
+ * is still INCLUDE_ASM.
+ */
+typedef struct RgReadText RgReadText;
+
+extern void RgReadTextRewind(RgReadText *pReader);
+extern void RgReadTextGetString(RgReadText *pReader, char *pszOut);
+extern int RgReadTextFindParagraph(RgReadText *pReader, const char *pszTag,
+                                   const char *pszSubTag);
+/* ov12/tu019 (src/ov12/rg_heap.h), still INCLUDE_ASM there. */
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
+                         int line);
+/* ov12/tu008 (src/ov12/rg_robot_spec.c), still INCLUDE_ASM there. */
+extern void RgRobotSpecReadFromText(RgRobotSpec *pSpec, RgReadText *pReader);
+/* ov12/tu022 (src/ov12/rg_simple_db.c), already accepted there. */
+extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat, const char *pszName);
+
+/*
+ * External file-backed witnesses, not candidate-emitted data: this window is
+ * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
+ *
+ * ov12:0x00a522c8 contains the assertion expression "pReader != NIL".
+ * ov12:0x00a522d8 contains the paragraph tag "character".
+ * ov12:0x00a522e8 contains the format string
+ *   "character '%s' is defined more than twice".
+ * ov12:0x00a52318 contains the format string
+ *   "character name '%s' cannot be used".
+ */
+extern const char D_00A522C8[];
+extern const char D_00A522D8[];
+extern const char D_00A522E8[];
+extern const char D_00A52318[];
+
+void RgRobotDBRead(RgSimpleDB *database, RgReadText *pReader)
+{
+    char szToken[0x80];
+    RgRobotSpec *pSpec;
+    int charID;
+
+    if (database == 0) {
+        assert_prog(D_00A52280, D_00A52290, 104);
+    }
+    if (pReader == 0) {
+        assert_prog(D_00A522C8, D_00A52290, 105);
+    }
+    RgReadTextRewind(pReader);
+    while (RgReadTextFindParagraph(pReader, D_00A522D8, 0) != 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (RgRobotDBGet(database, szToken) != 0) {
+            RgError(D_00A522E8, D_00A52290, 119, szToken);
+        }
+        charID = RgActorNameToCharID(szToken);
+        if (charID == -1) {
+            RgError(D_00A52318, D_00A52290, 124, szToken);
+        }
+        pSpec = RgHeapAlloc(InstanceOfRgHeap(), 0xB8, D_00A52290, 127);
+        InitRgRobotSpec(pSpec);
+        RgRobotSpecReadFromText(pSpec, pReader);
+        /*
+         * RgRobotSpec's own character id (RgActorNameToCharID's result):
+         * sw s1,0(s0) at ov12:0x00a0de5c, right after RgRobotSpecReadFromText
+         * and before RgSimpleDBEntry. RgRobotSpec is owned by ov12/tu004
+         * (src/ov12/rg_robot.h), which has not named this field yet
+         * (proposed: charID at +0x00, tools/header_types.py propose).
+         */
+        *(int *) pSpec = charID;
+        RgSimpleDBEntry(database, pSpec, szToken);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_db", RgRobotDBDump);

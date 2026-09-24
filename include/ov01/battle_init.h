@@ -3,6 +3,8 @@
 
 #include "shared.h"
 
+typedef struct Actor Actor;
+
 /*
  * The unit record scenarioMtd, transWepIn/transWepOut and spWepDispOn
  * (0x00a0e550, still INCLUDE_ASM here) all share: spWepDispOn receives the
@@ -12,6 +14,14 @@
  * *unitHandle. Bytes between the evidenced members are untouched here.
  */
 typedef struct BattleUnit BattleUnit;
+
+struct BattleUnit {
+    unsigned char unmodeled_00[0x10];
+    Actor *work;       /* +0x10 */
+    Actor *actor;      /* +0x14 */
+    unsigned char unmodeled_18[0x1C - 0x18];
+    Actor *weapon[4];  /* +0x1C */
+};
 
 /*
  * Show (transWepIn) or hide (transWepOut) the weapon actor in the unit's

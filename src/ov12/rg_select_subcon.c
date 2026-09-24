@@ -2,6 +2,7 @@
  * OV12 original TU 70: 0x00a3c6a0..0x00a3cd10 (7 functions)
  */
 #include "common.h"
+#include "rg_select_subcon.h"
 
 extern int s_bIgnoreEventFlag;
 
@@ -47,7 +48,22 @@ int RgSelectGetEnemyChars(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_subcon", _get_all_weapons);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_subcon", RgSelectWeapons);
+static unsigned int _get_all_weapons(int *list, int characterID,
+                                     int weaponType, int mode);
+
+/*
+ * Fills `list` with the weapons matching characterID/weaponType and returns
+ * their count; the filter mode forwarded to _get_all_weapons switches with
+ * s_bIgnoreEventFlag (0 while events are ignored, 2 otherwise).
+ */
+unsigned int RgSelectWeapons(int *list, int characterID, int weaponType)
+{
+    if (s_bIgnoreEventFlag != 0)
+    {
+        return _get_all_weapons(list, characterID, weaponType, 0);
+    }
+    return _get_all_weapons(list, characterID, weaponType, 2);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_subcon", RgSelectGetEnemyChar);
 

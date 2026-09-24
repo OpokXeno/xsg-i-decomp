@@ -42,11 +42,44 @@ void MenuTecSpeedUp(int chrNo, int point)
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecNextWaitPointGet);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecWaitLimitCheck);
+int MenuTecWaitLimitCheck(int chrNo, int point)
+{
+    void *record = (void *)(point + MenuTecSaveDataGet(chrNo));
+    int limitReached = 0;
+
+    if (point >= 0) {
+        limitReached = ((unsigned char *)record)[0x10] != 0;
+    }
+    return limitReached;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecWaitUp);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecCharTLevUpCheck);
+typedef struct MenuWorkState {
+    unsigned char unmodeled_00[0x40];
+    signed char characterNo;
+    unsigned char unmodeled_41[3];
+    signed char point;
+    unsigned char unmodeled_45[0x3b];
+} MenuWorkState;
+extern MenuWorkState MenuWork;
+int MenuTecTLevLimitCheck(int chrNo, int point);
+int MenuTecNextTLevPointGet(int chrNo, int point);
+
+int MenuTecCharTLevUpCheck(void)
+{
+    int *characterData;
+    int nextPoint;
+
+    if (MenuTecTLevLimitCheck(MenuWork.characterNo, MenuWork.point) != 0) {
+        characterData = func_A19210(MenuWork.characterNo);
+        nextPoint = MenuTecNextTLevPointGet(MenuWork.characterNo, MenuWork.point);
+        if (characterData[3] >= nextPoint)
+            return 1;
+    }
+
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecCharSpeedUpCheck);
 
@@ -76,7 +109,32 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecSetWinMain);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecSortSet00);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecEquipCheck);
+/* dataUnitOrgGet (ov01/data_unit_org_get.c VA 0x00a191c0, still INCLUDE_ASM
+ * there and not yet linkable by that name): returns the running character's
+ * parameter record (the full record is src/main/menu_para_pt_rate_get.c's
+ * CharParaData); MenuTecEquipCheck only reads the six equipped technique ids
+ * at +0x82. Kept under the scaffold's undefined_funcs_auto.txt placeholder
+ * name until that TU recovers it. */
+typedef struct MenuTecEquipRecord {
+    unsigned char unmodeled_00[0x82];
+    short techniqueId[6]; /* +0x82 */
+} MenuTecEquipRecord;
+MenuTecEquipRecord *func_A191C0(int chrNo);
+
+int MenuTecEquipCheck(int chrNo, int tecNo)
+{
+    int maskedTecNo = tecNo & 0xFFFF;
+    MenuTecEquipRecord *equip = func_A191C0(chrNo & 0xFFFF);
+    int count = 0;
+    int i;
+
+    for (i = 0; i < 6; i++) {
+        if (equip->techniqueId[i] == maskedTecNo)
+            count++;
+    }
+
+    return count;
+}
 
 /* dataTecGet (ov01/data_unit_org_get.c VA 0x00a1a378, still INCLUDE_ASM there
  * and not yet linkable by that name): returns a pointer to the technique's

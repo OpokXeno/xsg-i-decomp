@@ -27,7 +27,7 @@ INCLUDE_ASM("asm/nonmatchings/ov02/logo", LogoFirst);
 
 INCLUDE_ASM("asm/nonmatchings/ov02/logo", ipuplay);
 
-extern int ipuplay(char *path);
+static int ipuplay(char *path);
 extern void xglRenderClearColor(u32 color);
 extern void xglRenderClearDepth(void);
 extern void xglRenderClearFrame(void);

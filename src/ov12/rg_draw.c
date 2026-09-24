@@ -14,10 +14,10 @@ extern void RgHeapFree(void *heap, void *pointer, const char *source_file,
                        int line);
 extern void sceVif1PkCloseGifTag(XglPacket *packet);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-extern void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio);
-extern void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
+static void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio);
+static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
                               RgFog *pFog);
-extern void _DestructDraw(RgDraw *pDraw);
+static void _DestructDraw(RgDraw *pDraw);
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
 static void _CopyFog(RgFog *pDst, RgFog *pSrc);
@@ -137,7 +137,16 @@ static void _DefaultFog(RgFog *pFog)
     pFog->color[2] = 0.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _CopyFog);
+static void _CopyFog(RgFog *pDst, RgFog *pSrc)
+{
+    pDst->dist[0] = pSrc->dist[0];
+    pDst->dist[1] = pSrc->dist[1];
+    pDst->dist[2] = pSrc->dist[2];
+    pDst->dist[3] = pSrc->dist[3];
+    pDst->color[0] = pSrc->color[0];
+    pDst->color[1] = pSrc->color[1];
+    pDst->color[2] = pSrc->color[2];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _InitRgDrawView);
 
@@ -169,7 +178,20 @@ static void _DisposeRgDrawView(RgDrawView *pView)
     RgHeapFree(InstanceOfRgHeap(), pView, D_00A54AF0, 207);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _InitRgDrawStudio);
+static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
+                              RgFog *pFog)
+{
+    if (pStudio == 0) {
+        assert_prog(D_00A54B30, D_00A54AF0, 215);
+    }
+    pStudio->m_pFog = pFog;
+    pStudio->m_ScreenIndex = screenIndex;
+    if (screenIndex != -1) {
+        pStudio->m_pView = _CreateRgDrawView(pStudio);
+        return;
+    }
+    pStudio->m_pView = 0;
+}
 
 static void _DestructRgDrawStudio(RgDrawStudio *pStudio)
 {
@@ -190,7 +212,14 @@ static RgDrawStudio *_CreateRgDrawStudio(int screenIndex, RgFog *pFog)
     return pStudio;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _DisposeRgDrawStudio);
+static void _DisposeRgDrawStudio(RgDrawStudio *pStudio)
+{
+    if (pStudio == 0) {
+        assert_prog(D_00A54B30, D_00A54AF0, 247);
+    }
+    _DestructRgDrawStudio(pStudio);
+    RgHeapFree(InstanceOfRgHeap(), pStudio, D_00A54AF0, 249);
+}
 
 static RgDrawView *_GetViewRgDrawStudio(RgDrawStudio *pStudio)
 {
@@ -203,21 +232,155 @@ static RgDrawView *_GetViewRgDrawStudio(RgDrawStudio *pStudio)
     return pStudio->m_pView;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _InitStudioList);
+static void _InitStudioList(RgDraw *pDraw)
+{
+    unsigned int slotIndex;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _ClearStudioList);
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 266);
+    }
+    slotIndex = 0;
+    do {
+        pDraw->m_pStudios[slotIndex] = 0;
+        slotIndex += 1;
+    } while (slotIndex < 2U);
+    pDraw->m_ActiveStudioMask = 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _FullScreenStudio);
+static void _ClearStudioList(RgDraw *pDraw)
+{
+    RgDrawStudio **pSlot;
+    RgDrawStudio *pStudio;
+    unsigned int slotIndex;
+
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 276);
+    }
+    slotIndex = 0;
+    pSlot = pDraw->m_pStudios;
+    do {
+        pStudio = *pSlot;
+        slotIndex += 1;
+        if (pStudio != 0) {
+            _DisposeRgDrawStudio(pStudio);
+            *pSlot = 0;
+        }
+        pSlot += 1;
+    } while (slotIndex < 2U);
+    pDraw->m_ActiveStudioMask = 0;
+}
+
+extern StudioCamera *xglStudioSelectGetActiveCamera(int studio_index);
+extern void xglCameraSetWindow(StudioCamera *camera, int x0, int y0, int x1,
+                               int y1);
+extern void nmlModelUseSubWindow(int window_index, int mode);
+
+/*
+ * ov12:0x00a50080 is a fixed camera window rectangle (config/symbols/ov12.txt
+ * s_aView_0, size 0x10), the constant _FullScreenStudio passes to
+ * xglCameraSetWindow for the single full-screen studio.
+ */
+extern const RgRect s_aView_0;
+
+static void _FullScreenStudio(RgDraw *pDraw)
+{
+    RgDrawStudio *pStudio;
+
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 291);
+    }
+    _ClearStudioList(pDraw);
+    pDraw->m_FullScreenMode = 1;
+    pDraw->m_FullScreenParam = 2;
+    pStudio = _CreateRgDrawStudio(0, &pDraw->m_Fog);
+    pDraw->m_pStudios[1] = 0;
+    pDraw->m_ActiveStudioMask = 1;
+    pDraw->m_pStudios[0] = pStudio;
+    xglCameraSetWindow(xglStudioSelectGetActiveCamera(0), s_aView_0.x0,
+                       s_aView_0.y0, s_aView_0.x1, s_aView_0.y1);
+    nmlModelUseSubWindow(0, 2);
+    nmlModelUseSubWindow(1, 0);
+    nmlModelUseSubWindow(2, 0);
+    nmlModelUseSubWindow(3, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _GetSplitRect);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _SetScreenSplitMode);
+static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _DoubleScreenStudio);
+static void _SetScreenSplitMode(RgDraw *pDraw, int splitMode)
+{
+    RgRect rect;
+    RgRect *pScreenRect0;
+    RgRect *pScreenRect1;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _InitDraw);
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 342);
+    }
+    if (pDraw->m_FullScreenMode == 0) {
+        if (_GetSplitRect(splitMode, 0, &rect) != 0) {
+            pScreenRect0 = &pDraw->m_pStudios[0]->m_pView->screenRect;
+            __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(&rect) : "memory");
+            __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(pScreenRect0) : "memory");
+            xglCameraSetWindow(xglStudioSelectGetActiveCamera(0), rect.x0,
+                               rect.y0, rect.x1, rect.y1);
+        }
+        if (_GetSplitRect(splitMode, 1, &rect) != 0) {
+            pScreenRect1 = &pDraw->m_pStudios[1]->m_pView->screenRect;
+            __asm__ __volatile__("lqc2 vf31, 0(%0)" : : "r"(&rect) : "memory");
+            __asm__ __volatile__("sqc2 vf31, 0(%0)" : : "r"(pScreenRect1) : "memory");
+            xglCameraSetWindow(xglStudioSelectGetActiveCamera(1), rect.x0,
+                               rect.y0, rect.x1, rect.y1);
+        }
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _DestructDraw);
+static void _DoubleScreenStudio(RgDraw *pDraw)
+{
+    RgFog *pFog;
+
+    pFog = &pDraw->m_Fog;
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 375);
+    }
+    _ClearStudioList(pDraw);
+    pDraw->m_FullScreenMode = 0;
+    pDraw->m_FullScreenParam = 0;
+    pDraw->m_pStudios[0] = _CreateRgDrawStudio(0, pFog);
+    pDraw->m_pStudios[1] = _CreateRgDrawStudio(1, pFog);
+    pDraw->m_ActiveStudioMask = 3;
+    _SetScreenSplitMode(pDraw, 0);
+    nmlModelUseSubWindow(0, 2);
+    nmlModelUseSubWindow(1, 2);
+    nmlModelUseSubWindow(2, 0);
+    nmlModelUseSubWindow(3, 0);
+}
+
+static void _InitDraw(RgDraw *pDraw)
+{
+    RgFog *pFog;
+
+    pFog = &pDraw->m_Fog;
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 403);
+    }
+    pDraw->m_FadeCounter = 0;
+    pDraw->m_Enabled = 1;
+    pDraw->m_FadeParam = 0;
+    pDraw->m_RequestCount = 0;
+    _DefaultFog(pFog);
+    pDraw->m_pDefaultStudio = _CreateRgDrawStudio(-1, pFog);
+    _InitStudioList(pDraw);
+}
+
+static void _DestructDraw(RgDraw *pDraw)
+{
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 0x1A1);
+    }
+    _DisposeRgDrawStudio(pDraw->m_pDefaultStudio);
+    _ClearStudioList(pDraw);
+}
 
 static void _WrapperDestruct(RgDraw *pDraw)
 {
@@ -225,7 +388,25 @@ static void _WrapperDestruct(RgDraw *pDraw)
     RgHeapFree(InstanceOfRgHeap(), pDraw, D_00A54AF0, 421);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", InstanceOfRgDraw);
+void RgDrawCreateDrawStudioFullScreen(RgDraw *pDraw);
+
+RgDraw *InstanceOfRgDraw(void)
+{
+    RgDraw *pDraw;
+
+    pDraw = RgSingletonIDGet(9);
+    if (pDraw == 0) {
+        pDraw = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgDraw), D_00A54AF0, 431);
+        if (pDraw == 0) {
+            assert_prog(D_00A54B58, D_00A54AF0, 432);
+        }
+        _InitDraw(pDraw);
+        RgSingletonIDEntry(9, (RgSimpleDB *)pDraw,
+                           (void (*)(RgSimpleDB *))_WrapperDestruct);
+        RgDrawCreateDrawStudioFullScreen(pDraw);
+    }
+    return pDraw;
+}
 
 RgDrawStudio *RgDrawGetStudio(RgDraw *pDraw, int screenIndex)
 {
@@ -286,13 +467,135 @@ void RgDrawSetGlobalFog(RgDraw *pDraw, RgFog *pFog)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewSetPosition);
+/*
+ * External file-backed witness of this allocation's own functions, not
+ * candidate-emitted data (same window as the blocks above).
+ *
+ * ov12:0x00a54ad0 contains the error message "not exist xeno studio ID (%d)".
+ */
+extern const char D_00A54AD0[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewSetRotateX);
+void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
+{
+    int screenIndex;
+    int cameraIndex;
+    StudioCamera *pCamera;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewSetRotateY);
+    screenIndex = pView->m_pParentStudio->m_ScreenIndex;
+    pCamera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (pCamera != 0) {
+        pCamera->position.x = pPosition->x;
+        pCamera->position.y = pPosition->y;
+        pCamera->position.z = pPosition->z;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewSetRotateZ);
+void RgDrawViewSetRotateX(RgDrawView *pView, float angle)
+{
+    int screenIndex;
+    int cameraIndex;
+    StudioCamera *pCamera;
+
+    screenIndex = pView->m_pParentStudio->m_ScreenIndex;
+    pCamera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (pCamera != 0) {
+        pCamera->rotation.x = angle;
+    }
+}
+
+void RgDrawViewSetRotateY(RgDrawView *pView, float angle)
+{
+    int screenIndex;
+    int cameraIndex;
+    StudioCamera *pCamera;
+
+    screenIndex = pView->m_pParentStudio->m_ScreenIndex;
+    pCamera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (pCamera != 0) {
+        pCamera->rotation.y = angle;
+    }
+}
+
+void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
+{
+    int screenIndex;
+    int cameraIndex;
+    StudioCamera *pCamera;
+
+    screenIndex = pView->m_pParentStudio->m_ScreenIndex;
+    pCamera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            pCamera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (pCamera != 0) {
+        pCamera->rotation.z = angle;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewIsPointInView);
 
@@ -313,7 +616,24 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawReq);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _FadeShadow);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _DrawReqTerminate);
+void _DrawReqTerminate(RgDraw *pDraw)
+{
+    RgDrawRequest *pRequest;
+    unsigned int requestIndex;
+
+    requestIndex = 0;
+    if (pDraw->m_RequestCount != 0) {
+        pRequest = pDraw->m_Requests;
+        do {
+            if (pRequest->clearFunc != 0) {
+                pRequest->clearFunc(pRequest->pObject);
+            }
+            requestIndex += 1;
+            pRequest += 1;
+        } while (requestIndex < pDraw->m_RequestCount);
+    }
+    pDraw->m_RequestCount = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _DrawMain);
 

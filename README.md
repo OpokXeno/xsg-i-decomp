@@ -13,16 +13,16 @@ The Sony SDK and public libraries do not need to be recovered.
 
 ## Progress
 
-Recovered 2,335 of 7,645 in-scope game function(s) (30.543%).
+Recovered 3,669 of 7,645 in-scope game function(s) (47.992%).
 
 | Version | Target | Functions | Progress |
 | --- | --- | ---: | ---: |
-| NTSC-U | `SLUS_204.69` | 1,047 / 3,671 | 28.521% |
-| NTSC-U | `OV01.OVL` | 291 / 1,081 | 26.920% |
-| NTSC-U | `OV02.OVL` | 20 / 110 | 18.182% |
-| NTSC-U | `OV10.OVL` | 24 / 361 | 6.648% |
-| NTSC-U | `OV11.OVL` | 36 / 139 | 25.899% |
-| NTSC-U | `OV12.OVL` | 917 / 1,788 | 51.286% |
+| NTSC-U | `SLUS_204.69` | 1,699 / 3,671 | 46.282% |
+| NTSC-U | `OV01.OVL` | 504 / 1,081 | 46.623% |
+| NTSC-U | `OV02.OVL` | 24 / 110 | 21.818% |
+| NTSC-U | `OV10.OVL` | 95 / 361 | 26.316% |
+| NTSC-U | `OV11.OVL` | 47 / 139 | 33.813% |
+| NTSC-U | `OV12.OVL` | 1,300 / 1,788 | 72.707% |
 | NTSC-U | `SSD.IRX` | 0 / 442 | 0.000% |
 | NTSC-U | `RSSD.IRX` | 0 / 53 | 0.000% |
 
@@ -50,9 +50,9 @@ are recorded there in full:
 
 | Tool | Where it comes from |
 | --- | --- |
-| `ee-gcc2.96-realconv-lp7` | the published `ee-gcc2.96` archive, with eight documented single-byte patches to `cc1` (six that restore the original decimal-literal rounding, two that restore the R5900 short-loop padding) |
+| `ee-gcc2.96-realconv-lp7` | the published `ee-gcc2.96` archive, with twelve documented patches to `cc1` (six single bytes that restore the original decimal-literal rounding, two that restore the R5900 short-loop padding, and four multi-byte alias-analysis patches, fsv1 and fsv3: `%lo`-addressed global scalars and struct-field accesses may be reordered in either direction, and a non-small-data global's memory reference gets its type's alias set) |
 | `ee-gcc2.9-991111` | the published `ee-gcc2.9-991111` archive, unmodified |
-| `ee-as-la29-vsqrt` | GNU as 2.9-ee-991111 built from the pinned `ps2-ee-toolchain` commit with the recorded two-hunk diff (an overlap-safe `memmove`, and the `vsqrt` opcode's bits 21-22) |
+| `ee-as-la29-vsqrt` | GNU as 2.9-ee-991111 built from the pinned `ps2-ee-toolchain` commit with the recorded three-hunk diff (an overlap-safe `memmove`, the `vsqrt` opcode's bits 21-22, and labels left before the hazard nops `append_insn` inserts) |
 | `ee-as-2.9-plain` | the same commit, unpatched |
 | `ps2dev-binutils` | ps2dev binutils 2.45.1, the linker, objcopy and modern GAS |
 

@@ -30,7 +30,56 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", PutBits);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", EncodeDc);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", EncodeAc);
+/*
+ * A Huffman code table entry: the variable-length bit pattern PutBits emits
+ * and its bit count. EncodeAc indexes such a table by (run << 4) + size, the
+ * scaled run of preceding zero coefficients plus the bit length of the
+ * nonzero coefficient that ends the run; a run alone (size 0) is the table's
+ * zero-run control code (end-of-block or ZRL).
+ */
+typedef struct JpegHuffCode {
+    u16 code;
+    s16 length;
+} JpegHuffCode;
+
+static void PutBits(u16 code, int length);
+
+static void EncodeAc(int value, int runIndex, JpegHuffCode *table)
+{
+    int magnitude;
+    int negative;
+    int remaining;
+    int length;
+    u16 bits;
+
+    magnitude = value;
+    if (magnitude == 0) {
+        PutBits(table[runIndex].code, table[runIndex].length);
+        return;
+    }
+
+    negative = 0;
+    if (magnitude < 0) {
+        negative = 1;
+        magnitude = -magnitude;
+    }
+
+    remaining = magnitude;
+    length = 0;
+    while (remaining != 0) {
+        remaining >>= 1;
+        length++;
+    }
+
+    PutBits(table[length + runIndex].code, table[length + runIndex].length);
+
+    if (negative) {
+        bits = (u16) (~magnitude & 0xFFFF);
+    } else {
+        bits = (u16) (magnitude & 0xFFFF);
+    }
+    PutBits(bits, length);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", HuffmanEncode);
 
@@ -63,7 +112,44 @@ static void *DefineRestartInterval(void *marker)
     return segment + 4;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", DefineQuantizeTable);
+extern float I2F(int value);
+
+/*
+ * The luminance and chrominance quantization tables the segment's byte
+ * coefficients are converted into lie inside the JpegWork work area at
+ * fixed offsets from `sw`: table id 0 (luminance) at +0xD0, any other id
+ * (chrominance) at +0x1D0. Both offsets fall inside the reserved0 span
+ * documented above; naming them as JpegWork members would edit that
+ * already-published struct, which is a shared-header change outside a
+ * single function's additive edit and is reported rather than made here
+ * (the same constraint DefineRestartInterval's own note records for its
+ * fields).
+ */
+static u8 *DefineQuantizeTable(u8 *marker)
+{
+    u8 *segment;
+    u16 count;
+    float *dest;
+    u8 value;
+
+    segment = marker;
+    count = (segment[0] << 8) + segment[1] - 3;
+    if (segment[2] == 0) {
+        dest = (float *)((u8 *)sw + 0xD0);
+    } else {
+        dest = (float *)((u8 *)sw + 0x1D0);
+    }
+    segment += 3;
+
+    while (count != 0) {
+        value = segment[0];
+        segment += 1;
+        *dest = I2F(value);
+        dest += 1;
+        count--;
+    }
+    return segment;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", StartOfFrame);
 

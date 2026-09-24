@@ -334,7 +334,20 @@ static void xglCdDummyCallback(int event, int value)
     (void)value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdReset);
+extern CdCompletionCallback *callback;
+
+void xglCdReset(void)
+{
+    CdReadControl *control = CD_READ_CONTROL;
+
+    callback = xglCdDefaultCallback;
+    control->queue_cursor = 0;
+    control->queue_tail = 0;
+    control->dispatch_state = 0;
+    StrList = 0;
+    sceCdPause();
+    sceCdSync(0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdSetCallback);
 
@@ -369,7 +382,34 @@ int xglCdSync(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdStreamOpen);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdStreamRead);
+int xglCdStreamRead(CdStreamParam *stream, unsigned char *buffer, int bytes)
+{
+    int bytes_read;
+    int remaining;
+    int pad;
+
+    /* bytes is a byte count; StreamReadRingCoreSub takes a sector count
+     * (sll ...,0xb at the call site), matching CD_SECTOR_BYTE_SHIFT below. */
+    bytes_read = StreamReadRingCoreSub(stream, buffer, bytes >> 11);
+    remaining = stream->remaining - bytes_read;
+    if (remaining <= 0) {
+        remaining = 0;
+        stream->state = 1;
+    }
+    /* ring_size is a power of two; pad is the read's own tail within the
+     * ring, zero-filled below and folded into the returned byte count. */
+    pad = bytes_read & (stream->ring_size - 1);
+    stream->remaining = remaining;
+    if (pad > 0) {
+        buffer += bytes_read;
+        bytes_read += pad;
+        do {
+            pad--;
+            *buffer++ = 0;
+        } while (pad > 0);
+    }
+    return bytes_read;
+}
 
 static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sectors)
 {

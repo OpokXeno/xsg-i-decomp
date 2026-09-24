@@ -51,7 +51,8 @@ extern SndMuData sndMuDat;
 extern int SsdSpuDmaCompleted(int wait);
 
 extern void xglSoundSendSmd(void *smd);
-extern void xglSoundSendSwd(void *swd, int bank);
+/* Returns the bank id it also stores into the swd header (0xffff when none). */
+extern int xglSoundSendSwd(void *swd, int bank);
 extern void xglSoundSequenceNormal(int volume);
 extern void xglSoundSequenceFadeOut(int time);
 extern void xglSoundSequenceNormal3(int channel, int volume, int time);

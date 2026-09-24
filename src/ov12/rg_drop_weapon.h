@@ -29,13 +29,19 @@ typedef struct XrgActor XrgActor;
  * 0x20 and a float at 0x24 (not evidenced by this allocation's own
  * functions, so it stays unmodeled).
  */
+/*
+ * _InitDrop sets the float at 0x24 to 1.0; _PassTime_00A1E618 (this TU's
+ * own unrecovered function) fades it toward 0 each tick and passes it to
+ * XrgActorSetTransparent, so it is a transparency fade factor.
+ */
 typedef struct RgDropWeapon RgDropWeapon;
 
 struct RgDropWeapon {
     RgChar rgChar;                     /* 0x00 */
     int hidden;                        /* 0x1C: _Disp only draws the actor while this is zero */
     XrgActor *actor;                   /* 0x20 */
-    unsigned char unmodeled_24[0x30 - 0x24];
+    float transparency;                /* 0x24: fade factor passed to XrgActorSetTransparent */
+    unsigned char unmodeled_28[0x30 - 0x28];
 };
 
 #endif /* SRC_OV12_RG_DROP_WEAPON_H */

@@ -17,12 +17,23 @@ extern const char D_00A523F0[];
 extern const char D_00A52400[];
 
 extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
+                         const char *source_file, int line);
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
                        int line);
+
+typedef struct XrgActor XrgActor;
+
+extern XrgActor *RgWeaponGetActor(RgWeapon *weapon);
+extern int RgWeaponGetControlFlag(RgWeapon *weapon);
 
 extern int RgWeaponIsAttachedShot(RgWeapon *weapon);
 extern void RgWeaponSetdown(RgWeapon *weapon);
 extern void RgWeaponShotStop(RgWeapon *weapon);
+
+extern RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor,
+                                          XrgActor *attachActor,
+                                          unsigned int eArmType);
 
 extern void RgShotMotContStop(RgShotMotCont *motCont);
 extern void DisposeRgShotMotCont(RgShotMotCont *motCont);
@@ -34,10 +45,62 @@ extern void DisposeRgShotMotCont(RgShotMotCont *motCont);
  * (ov12:0x00a0ef6c, forwarding whatever its own caller passed) are this
  * allocation's only evidence for its parameter types.
  */
-extern void _SetShotThread(RgShotThread *thread, RgWeapon *weapon,
+static void _SetShotThread(RgShotThread *thread, RgWeapon *weapon,
                            int motionId, int shotIndex);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_thread", _SetShotThread);
+/*
+ * Supersedes the comment above: _SetShotThread is part of this allocation
+ * and is fully defined below, not INCLUDE_ASM. Its 4th parameter is passed
+ * unchanged into CreateRgShotMotCont's pParentActor slot
+ * (ov12:0x00a0ed8c/0x00a0ed94, src/ov12/rg_shotmot_control.c
+ * CreateRgShotMotCont), so it is genuinely an XrgActor pointer.
+ * RgShotThreadInit (ov12:0x00a0ef60, outside this allocation) already
+ * declares its own matching parameter `int shotIndex` and just forwards
+ * it, so this parameter keeps that name and type here too and is
+ * reinterpreted as a pointer where it is used as one.
+ */
+void _SetShotThread(RgShotThread *thread, RgWeapon *weapon, int motionId,
+                    int shotIndex)
+{
+    RgShotMotCont *motCont;
+    XrgActor *parentActor;
+
+    if (thread == 0) {
+        assert_prog(D_00A523F0, D_00A52400, 0x32);
+    }
+    motCont = thread->motCont;
+    if (motCont != 0) {
+        DisposeRgShotMotCont(motCont);
+        thread->motCont = 0;
+    }
+    /*
+     * RgShotThreadInit (ov12:0x00a0ef60, already published, outside this
+     * allocation) forwards this word as the int shotIndex it already
+     * declares; CreateRgShotMotCont's own published prototype
+     * (src/ov12/rg_shotmot_control.c) reads the same word as its
+     * XrgActor *pParentActor argument, so it is reinterpreted here.
+     */
+    parentActor = (XrgActor *) shotIndex;
+    if (weapon != 0 && parentActor != 0 && RgWeaponGetActor(weapon) != 0) {
+        thread->weapon = weapon;
+        thread->status = 0;
+        if (motionId != 2 && !(RgWeaponGetControlFlag(weapon) & 0x20)) {
+            thread->motCont = CreateRgShotMotCont(parentActor,
+                                                  RgWeaponGetActor(weapon),
+                                                  motionId);
+        }
+    } else {
+        motCont = thread->motCont;
+        thread->status = 5;
+        thread->weapon = 0;
+        if (motCont != 0) {
+            DisposeRgShotMotCont(motCont);
+            thread->motCont = 0;
+        }
+    }
+    thread->elapsedTime = 0.0f;
+    thread->motionId = -1;
+}
 
 static void _InitShotThread(RgShotThread *thread)
 {
@@ -52,7 +115,14 @@ static void _InitShotThread(RgShotThread *thread)
     thread->active = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_thread", CreateRgShotThread);
+RgShotThread *CreateRgShotThread(void)
+{
+    RgShotThread *thread;
+
+    thread = RgHeapAlloc(InstanceOfRgHeap(), 0x24, D_00A52400, 0x69);
+    _InitShotThread(thread);
+    return thread;
+}
 
 void DisposeRgShotThread(RgShotThread *thread)
 {

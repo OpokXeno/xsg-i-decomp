@@ -5,7 +5,7 @@
 #ifndef SRC_MAIN_GAME_OVER_H
 #define SRC_MAIN_GAME_OVER_H
 
-extern int copyframe(void);
+static int copyframe(void);
 
 #include "shared.h"
 
@@ -71,11 +71,11 @@ extern int xglJpegDecode(JpegDecodeRequest *request);
 
 extern void xglRenderDrawFlipPk(XglPacket *packet);
 
-extern void DrawImage(void *framebuffer);
+static void DrawImage(void *framebuffer);
 
-extern void DrawBack(int alpha);
+static void DrawBack(int alpha);
 
-extern void redraw_frame(void *framebuffer);
+static void redraw_frame(void *framebuffer);
 
 extern void xglStudioMainCameraInit(void);
 

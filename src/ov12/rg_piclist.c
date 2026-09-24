@@ -58,6 +58,7 @@ extern void DisposeRgPicList(RgPicList *pList);
  */
 extern const char D_00A57338[]; /* "pBxx != NIL" */
 extern const char D_00A57358[]; /* "pszName != NIL" */
+extern const char D_00A57380[]; /* "pPaint != NIL" */
 extern const char D_00A57390[]; /* "pList != NIL" */
 extern const char D_00A573A0[]; /* "pList->m_uNum < PIC_MAX" */
 extern const char D_00A573B8[]; /* "pDebug != NIL" */
@@ -210,7 +211,50 @@ void RgPicMove(RgPic *pic, int dx, int dy)
     pic->y += dy;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicDraw);
+extern void XrgPaint2DColor(int paint, const RgPicColor *color);
+
+/*
+ * The picture's alpha field selects a blend mode with the same values
+ * XrgPaint2DAlpha documents above (1 -> add, 3 -> alpha, 2 -> linear); any
+ * other alpha value leaves the paint object's current blend mode untouched.
+ * A "dark" picture halves every color component before handing it to
+ * XrgPaint2DColor instead of drawing with its stored color unchanged.
+ */
+void RgPicDraw(RgPic *pic, int paint)
+{
+    RgPicColor darkColor;
+
+    if (pic == 0)
+        assert_prog(D_00A57310, D_00A57320, 280);
+    if (paint == 0)
+        assert_prog(D_00A57380, D_00A57320, 281);
+
+    if (pic->notDraw == 0) {
+        switch ((unsigned int) pic->alpha) {
+        case 1:
+            XrgPaint2DAlpha(paint, 1);
+            break;
+        case 3:
+            XrgPaint2DAlpha(paint, 3);
+            break;
+        case 2:
+            XrgPaint2DAlpha(paint, 0);
+            break;
+        }
+        XrgPaint2DUseTexture(paint, (int) pic->tex);
+        if (pic->dark != 0) {
+            darkColor.r = pic->color.r / 2;
+            darkColor.g = pic->color.g / 2;
+            darkColor.b = pic->color.b / 2;
+            darkColor.a = pic->color.a / 2;
+            XrgPaint2DColor(paint, &darkColor);
+        } else {
+            XrgPaint2DColor(paint, &pic->color);
+        }
+        XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE,
+                            pic->x + pic->ofsX, pic->y + pic->ofsY, 0, 0);
+    }
+}
 
 void RgPicSetDark(RgPic *pic, int dark)
 {
@@ -241,9 +285,18 @@ RgPicList *CreateRgPicList(RgBxx *pBxx)
     return pList;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", DisposeRgPicList);
+void DisposeRgPicList(RgPicList *pList)
+{
+    unsigned int i;
 
-void RgPicListAddPic(RgPicList *pList, const char *pszName)
+    if (pList == 0)
+        assert_prog(D_00A57390, D_00A57320, 362);
+    for (i = 0; i < pList->m_uNum; i++)
+        DisposeRgPic(pList->pics[i]);
+    RgHeapFree(InstanceOfRgHeap(), pList, D_00A57320, 365);
+}
+
+RgPic *RgPicListAddPic(RgPicList *pList, const char *pszName)
 {
     RgPic *pic;
 
@@ -256,6 +309,7 @@ void RgPicListAddPic(RgPicList *pList, const char *pszName)
 
     pic = CreateRgPic(pList->bxx, pszName);
     pList->pics[pList->m_uNum++] = pic;
+    return pic;
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListDelPic);
@@ -320,9 +374,30 @@ void RgPicListSetOffset(RgPicList *pList, int ofsX, int ofsY)
     pList->ofsY = ofsY;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListMoveAllPic);
+void RgPicListMoveAllPic(RgPicList *pList, int dx, int dy)
+{
+    unsigned int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPicDebug);
+    if (pList == 0)
+        assert_prog(D_00A57390, D_00A57320, 550);
+    for (i = 0; i < pList->m_uNum; i++)
+        RgPicMove(pList->pics[i], dx, dy);
+}
+
+RgPicDebug *CreateRgPicDebug(RgBxx *pBxx)
+{
+    RgPicDebug *pDebug;
+
+    if (pBxx == 0)
+        assert_prog(D_00A57338, D_00A57320, 582);
+    pDebug = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgPicDebug), D_00A57320, 583);
+    pDebug->bxx = pBxx;
+    pDebug->list = CreateRgPicList(pBxx);
+    pDebug->mode = 1;
+    pDebug->index = -1;
+    pDebug->picId = 0;
+    return pDebug;
+}
 
 void DisposeRgPicDebug(RgPicDebug *pDebug)
 {

@@ -6,6 +6,7 @@
 #define SRC_OV12_XRG_ACTOR_H
 
 #include "shared.h"
+#include "main/xgl_studio.h"
 
 /*
  * The runtime actor instance every XrgActor wraps through its pXenoAct
@@ -16,12 +17,19 @@
  */
 typedef struct XenoAct {
     unsigned int flags;             /* 0x000: |= 0x408 drops the weapon, |= 0x800 marks it transparent */
-    unsigned char unmodeled_004[0x8C];
+    unsigned char unmodeled_004[0x008 - 0x004];
+    void (*drawFunc)(struct XenoAct *pXenoAct); /* 0x008: _InitAfterLoadXenoActor installs
+                                        _ActorDrawFunction here; the ACT_* module calls it
+                                        back with this same XenoAct as its argument */
+    unsigned char unmodeled_00c[0x090 - 0x00C];
     signed char lightCost[2];        /* 0x090: byte pair enabled by renderFlags 0x40;
                                         _InitAfterLoadXenoActor stores {7, 0x30},
                                         XrgActorSetLightCost {9, 0x70}; the engine
                                         meaning of each byte is not evidenced */
-    unsigned char unmodeled_092[0x6F4 - 0x092];
+    unsigned char unmodeled_092[0x510 - 0x092];
+    StudioLight light;                 /* 0x510: _InitAfterLoadXenoActor's
+                                           xglLightSetDefault target */
+    unsigned char unmodeled_600[0x6F4 - 0x600];
     float motionFrame;                /* 0x6F4 */
     unsigned char unmodeled_6f8[0x8D0 - 0x6F8];
     void *dupFileData;                 /* 0x8D0: resourceFiles[2]->data, cached by
@@ -32,7 +40,11 @@ typedef struct XenoAct {
                                            _DupLoadXenoActor after RgFileSysRead;
                                            _InitSkeMani reads a joint/element count
                                            from byte offset 6 of this data */
-    unsigned char unmodeled_8dc[0x9A0 - 0x8DC];
+    unsigned char unmodeled_8dc[0x8FC - 0x8DC];
+    int renderLevelFlag;               /* 0x8FC: _ActorDrawFunction raises the render level
+                                           to 0x10 when this is nonzero; no writer in this
+                                           allocation evidences its meaning further */
+    unsigned char unmodeled_900[0x9A0 - 0x900];
     unsigned int renderFlags;          /* 0x9A0: |= 0x40 light cost, |= 0x3 transparent */
     unsigned int lightCostLevel;        /* 0x9A4: 0x12 from XrgActorSetLightCost; engine
                                            meaning not evidenced */

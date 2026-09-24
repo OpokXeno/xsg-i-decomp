@@ -1253,9 +1253,31 @@ unsigned int xglLRand(void)
     return (unsigned int)(first << 16) + (unsigned int)(next >> 16);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglFRand);
+float xglFRand(void)
+{
+    float value;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglFSrand);
+    __asm__ __volatile__(
+        "vrnext.x vf1, R\n\t"
+        "qmfc2.ni %0, vf1"
+        : "=r"(value)
+        :
+        : "memory"
+    );
+    return value;
+}
+
+void xglFSrand(float seed)
+{
+    __asm__ __volatile__(
+        "qmtc2.ni %0, vf1\n\t"
+        "vrinit R, vf1x\n\t"
+        "nop"
+        :
+        : "r"(seed)
+        : "memory"
+    );
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", F2I);
 

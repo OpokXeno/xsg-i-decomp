@@ -42,7 +42,8 @@ typedef struct Actor {
     Vector4 acceleration;
     Vector4 rotation;
     Vector4 scale;
-    unsigned char unmodeled_70[0x74 - 0x70];
+    int runFrameCounter;   /* +0x70: unitCmdRun tests it modulo 3 to space
+                             * out its footstep decoEffCall. */
     int moveState;         /* +0x74: unitCmdMove's own move-command step;
                              * 0 issues the move (unitCmdDstSet/unitCmdVASet
                              * and, for a jump, unitCmdDirSet) and advances to
@@ -53,7 +54,13 @@ typedef struct Actor {
                              * starts; unitCmdJump/unitCmdWarp (still asm)
                              * advance it through their own per-move-kind
                              * phases. */
-    unsigned char unmodeled_7c[0x90 - 0x7c];
+    int movePhaseTimer;     /* +0x7C: unitCmdWarp zeroes it every time it
+                             * advances movePhase; no claimed function here
+                             * reads it. */
+    ObjectTask *targetUnit; /* +0x80: unitCmdDstSet's mode-0 path reads the
+                             * command target's own CalcUnitParam/table
+                             * position through it. */
+    unsigned char unmodeled_84[0x90 - 0x84];
     Vector4 cmdTarget;    /* +0x90: unitCmdDirSet reads x/z against
                             * motionActor->position to face the pending move
                             * command; unitCmdDivSet blends x/z toward that
@@ -61,13 +68,38 @@ typedef struct Actor {
                             * untouched by any function this TU claims. */
     unsigned char unmodeled_a0[0xC0 - 0xA0];
     float transparency;   /* +0xC0: unitActdraw draws translucent below 1.0 */
-    unsigned char unmodeled_c4[0xE0 - 0xC4];
+    unsigned char unmodeled_c4[0xD0 - 0xC4];
+    float posSnapX;        /* +0xD0: unitCmdJump's arrival check rounds it
+                             * and compares against posSnapZ*0.5 rounded. */
+    unsigned char unmodeled_d4[0xD8 - 0xD4];
+    float posSnapZ;        /* +0xD8 */
+    unsigned char unmodeled_dc[0xE0 - 0xDC];
     int motionFrame;      /* +0xE0: unitActupdate advances it before
                              ACT_updateMotion */
     unsigned char unmodeled_e4[0xF0 - 0xE4];
     int motion;            /* +0xF0: unitMotGet returns it plus one */
-    unsigned char unmodeled_f4[0x714 - 0xF4];
+    float moveOriginY;     /* +0xF4: unitCmdRun/unitCmdJump save cmdTarget's
+                             * y/z here before a stand/attack phase and
+                             * restore them afterward; the paired x value at
+                             * this same phase reuses the four bytes of
+                             * `motion` above through a cast (see the .c
+                             * file), never through a new field here. */
+    float moveOriginZ;     /* +0xF8 */
+    unsigned char unmodeled_fc[0x6F0 - 0xFC];
+    int moveFlags;          /* +0x6F0: unitCmdRun/unitCmdHover/unitCmdFloat/
+                              * unitCmdJump test bit 0x1000 of it to detect
+                              * that a move command has reached its target. */
+    float moveElapsed;      /* +0x6F4: unitCmdJump reads it as a frame count
+                              * source for its arrival check. */
+    float moveStepRate;      /* +0x6F8: unitCmdFloat/unitCmdJump write a
+                              * per-frame interpolation rate here. */
+    unsigned char unmodeled_6fc[0x714 - 0x6FC];
     float interpTime;      /* +0x714: unitSetInterpTime's write target */
+    unsigned char unmodeled_718[0x760 - 0x718];
+    float floatStepX;      /* +0x760: unitCmdFloat adds it to its motion
+                             * actor's position.x each step while floating. */
+    unsigned char unmodeled_764[0x768 - 0x764];
+    float floatStepZ;      /* +0x768 */
 } Actor;
 
 /*
@@ -156,8 +188,34 @@ extern float unitCmdDirSet(UnitRecord *unit);
 extern void unitCmdDstSet(ObjectTask *unit, int, int);
 extern void unitCmdVASet(ObjectTask *unit, int, int);
 extern int unitCmdJump(ObjectTask *unit, int, int, int);
+extern int unitCmdHover(ObjectTask *unit, int, int);
+extern int unitCmdFloat(ObjectTask *unit, int, int);
 extern int unitCmdWarp(ObjectTask *unit, int, int);
 extern int unitCmdMoveNext(ObjectTask *unit, int);
+
+/*
+ * unitCmdMoveChaRun/unitCmdMovePosRun's own sibling, still asm in this TU;
+ * forward-declared for the calls they make to it before its definition
+ * appears later in the file.
+ */
+extern int unitCmdRun(ObjectTask *unit, int, int);
+
+/*
+ * unitCmdWarp's own siblings, still asm in this TU; forward-declared for the
+ * calls it makes before their definitions appear later in the file.
+ */
+extern int unitTelIn(ObjectTask *unit);
+extern int unitTelOut(ObjectTask *unit);
+extern void unitMotStandSet(ObjectTask *unit);
+
+/* Defined in a different translation unit (src/ov01/data_unit_org_get.c),
+ * still asm there; unitCmdDstSet is the only claimed caller, reading the x/z
+ * of the position it returns. */
+extern Vector4 *dataPosTblGet(int index);
+
+/* unitCmdDstSet's own sibling, still asm in this TU; forward-declared for the
+ * call it makes before its own definition appears later in the file. */
+extern float unitColiGet(ObjectTask *unit, ObjectTask *targetUnit);
 
 /*
  * dataMtdRead/dataDefWpnGet/transWepIn/transWepOut are defined in

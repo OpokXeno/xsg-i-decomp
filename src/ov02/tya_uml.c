@@ -2,6 +2,7 @@
  * OV02 original TU 12: 0x00a0c488..0x00a0de20 (19 functions)
  */
 #include "common.h"
+#include "shared.h"
 
 typedef unsigned char u8;
 typedef signed short s16;
@@ -59,7 +60,52 @@ static void tail(TyaUmlParser *parser, TyaUmlDispLine *line)
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", texture_trans);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
+                                    int count);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+
+/*
+ * texture_trans's VIF direct-data scratch packet (GCC names it TestEnv.1);
+ * only element 8 (the width/height quadword texture_trans writes before
+ * each transfer) is touched here, so the remaining template bytes are
+ * supplied by the reference image, not generated here.
+ */
+extern u64 TestEnv_1_00A108B0[12];
+
+/*
+ * One 0x10-byte entry of the eight-slot texture table tyaUmlDispInit2
+ * clears and texture_trans transfers through sceVif1PkRef: only the two
+ * dimension fields, the environment pointer and the transfer count are
+ * evidenced, so the rest of the record stays unmodeled.
+ */
+typedef struct TyaUmlImage {
+    u8 unmodeled_00[4];
+    u16 width;          /* 0x04: masked to an even value before use */
+    s16 height;         /* 0x06 */
+    void *environment;  /* 0x08: cleared by tyaUmlDispInit2 */
+    int count;           /* 0x0C: sceVif1PkRef's transfer count */
+} TyaUmlImage;
+
+static void texture_trans(XglPacket **packet, TyaUmlImage *texture)
+{
+    long long dimensions;
+
+    /*
+     * Packs the masked width (low half, sign-extended) and height (high
+     * half) into the scratch packet's second quadword.
+     */
+    dimensions = (long long)(s16)(texture->width & 0xFFFE) |
+                 ((long long)texture->height << 32);
+    TestEnv_1_00A108B0[8] = dimensions;
+    sceVif1PkAddDirectDataN(*packet, TestEnv_1_00A108B0, 6);
+    sceVif1PkCloseDirectHLCode(*packet);
+    sceVif1PkRef(*packet, texture->environment, texture->count, 0,
+                 texture->count | 0x51000000, 0);
+    sceVif1PkCnt(*packet, 0);
+    sceVif1PkOpenDirectHLCode(*packet, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispType3Sub0);
 
@@ -142,7 +188,16 @@ INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDatabaseMain);
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispParamReset);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispInit2);
+extern TyaUmlImage image[8];
+
+void tyaUmlDispInit2(u8 *work_buffer)
+{
+    int i;
+
+    buffer = work_buffer;
+    for (i = 7; i >= 0; i--)
+        image[i].environment = 0;
+}
 
 void tyaUmlDispInit(void)
 {
