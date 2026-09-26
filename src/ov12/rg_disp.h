@@ -8,19 +8,15 @@
 #include "shared.h"
 
 /*
+ * RgWeaponEssence, the per-weapon essence RgWeaponGetEss returns, is
+ * defined by the weapon database (ov12/tu027, rg_weapon_db.c).
+ * RgDispWpnDat_CreateRestNumStr reads its capacity (+0x14).
+ */
+#include "ov12/rg_weapon_db.h"
+
+/*
  * The weapon handle owned by rg_weapon.c, opaque here.
  */
 typedef struct RgWeapon RgWeapon;
-
-/*
- * The per-weapon essence handle RgWeaponGetEss returns, owned by
- * rg_weapon.c and opaque there. RgDispWpnDat_CreateRestNumStr reads a
- * float at +0x14 to get the weapon's shot capacity; the span before it is
- * unattested here.
- */
-typedef struct RgWeaponEssence {
-    unsigned char unmodeled_00[0x14]; /* +0x00 */
-    float capacity;                   /* +0x14 */
-} RgWeaponEssence;
 
 #endif /* SRC_OV12_RG_DISP_H */

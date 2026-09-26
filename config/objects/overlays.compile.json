@@ -15,9 +15,9 @@
  },
  "assemblers": {
   "c_tu": {
-   "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+   "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
    "path": "tool:ee-as-la29-vsqrt",
-   "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+   "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
    "argv": "-EL -m5900 -mabi=eabi <G> -I .",
    "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
   },
@@ -69,9 +69,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -153,9 +153,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -310,9 +310,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -502,9 +502,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -721,9 +721,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -907,9 +907,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1075,9 +1075,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1293,9 +1293,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1418,9 +1418,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1538,9 +1538,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1701,9 +1701,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1779,9 +1779,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1858,9 +1858,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -1928,9 +1928,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2028,9 +2028,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2158,9 +2158,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2225,9 +2225,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2301,9 +2301,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2416,9 +2416,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2484,9 +2484,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2558,9 +2558,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2630,9 +2630,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2704,9 +2704,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2784,9 +2784,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2855,9 +2855,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2926,9 +2926,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -2999,9 +2999,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3066,9 +3066,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3143,9 +3143,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3233,9 +3233,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3325,9 +3325,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3412,9 +3412,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3500,9 +3500,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3580,9 +3580,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3650,9 +3650,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3721,9 +3721,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3801,9 +3801,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3876,9 +3876,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -3948,9 +3948,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4019,9 +4019,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4093,9 +4093,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4159,9 +4159,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4230,9 +4230,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4303,9 +4303,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4374,9 +4374,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4446,9 +4446,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4526,9 +4526,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4604,9 +4604,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4680,9 +4680,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4756,9 +4756,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4853,9 +4853,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -4924,9 +4924,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5014,9 +5014,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5084,9 +5084,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5165,9 +5165,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5332,9 +5332,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5427,9 +5427,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5498,9 +5498,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5569,9 +5569,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5662,9 +5662,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5731,9 +5731,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5865,9 +5865,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -5946,9 +5946,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6105,9 +6105,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6186,9 +6186,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6399,9 +6399,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6471,9 +6471,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6538,9 +6538,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6646,9 +6646,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6730,9 +6730,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -6801,9 +6801,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7023,9 +7023,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7098,9 +7098,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7173,9 +7173,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7247,9 +7247,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7323,9 +7323,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7402,9 +7402,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7500,9 +7500,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7576,9 +7576,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7648,9 +7648,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7737,9 +7737,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7806,9 +7806,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7889,9 +7889,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -7998,9 +7998,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8083,9 +8083,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8150,9 +8150,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8251,9 +8251,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8366,9 +8366,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8452,9 +8452,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8541,9 +8541,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8673,9 +8673,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8766,9 +8766,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -8851,9 +8851,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9012,9 +9012,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9104,9 +9104,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9179,9 +9179,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9256,9 +9256,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9333,9 +9333,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9405,9 +9405,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9474,9 +9474,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9553,9 +9553,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9641,9 +9641,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9737,9 +9737,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9826,9 +9826,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9894,9 +9894,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -9977,9 +9977,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10054,9 +10054,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10139,9 +10139,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10221,9 +10221,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10307,9 +10307,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10388,9 +10388,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10457,9 +10457,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10573,9 +10573,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10643,9 +10643,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10762,9 +10762,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10836,9 +10836,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10912,9 +10912,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -10997,9 +10997,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11081,9 +11081,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11168,9 +11168,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11241,9 +11241,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11329,9 +11329,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11433,9 +11433,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11525,9 +11525,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11623,9 +11623,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11704,9 +11704,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11798,9 +11798,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11876,9 +11876,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -11944,9 +11944,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12024,9 +12024,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12101,9 +12101,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12182,9 +12182,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12269,9 +12269,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12336,9 +12336,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12411,9 +12411,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12527,9 +12527,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12712,9 +12712,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12789,9 +12789,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12886,9 +12886,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -12958,9 +12958,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13039,9 +13039,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13117,9 +13117,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13229,9 +13229,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13321,9 +13321,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13431,9 +13431,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13510,9 +13510,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13583,9 +13583,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13712,9 +13712,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13787,9 +13787,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13871,9 +13871,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -13979,9 +13979,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14071,9 +14071,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14143,9 +14143,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14265,9 +14265,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14347,9 +14347,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14473,9 +14473,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14540,9 +14540,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14624,9 +14624,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14699,9 +14699,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14780,9 +14780,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14847,9 +14847,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },
@@ -14940,9 +14940,9 @@
       "-G0"
      ],
      "assembler": {
-      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel (ee-legacy-binutils-la29-vsqrt-nolabel-v1)",
+      "id": "gnu-as-2.9-ee-991111 LA29+vsqrt+nolabel+laimm (ee-legacy-binutils-la29-vsqrt-nolabel-laimm-v1)",
       "path": "tool:ee-as-la29-vsqrt",
-      "sha256": "7bef8f445d35d2d0147ffe201879516cf3b21d213eb61e94d58dba447950da56",
+      "sha256": "8c55ab9beeb4834c6cc0e841379b81930e329496f85893e8607d5b772c2b51ff",
       "argv": "-EL -m5900 -mabi=eabi <G> -I .",
       "basis": "user decision 2026-09-11 (relayed by the coordinator): single assembler for game and runtime objects"
      },

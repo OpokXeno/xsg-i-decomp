@@ -32,6 +32,48 @@ typedef struct RgShotEffect RgShotEffect;
  */
 typedef struct RgShotEssence RgShotEssence;
 
+struct RgShotEssence {
+    void *(*createFunc)(void *essence, void *info);  /* +0x00 */
+    float damage;                        /* +0x04: copied onto the shot by
+                                           * _InitShotCommon */
+    float life;                          /* +0x08: copied onto the shot by
+                                           * _InitShotCommon */
+    char modelVariant[0x40];             /* +0x0c: RgShotEffectSetModel's
+                                           * variant name */
+    char particleFile[0x40];             /* +0x4c: RgShotEffectSetParticle's
+                                           * file name */
+    char texLineFile[0x20];              /* +0x8c: RgShotEffectSetTexLine's
+                                           * file name */
+    float texLineWidth;                  /* +0xac */
+    float texLineHeight;                 /* +0xb0 */
+    unsigned char unmodeled_0b4[0x0C];   /* +0xb4..+0xbf */
+    unsigned char texLineColor[0x10];    /* +0xc0: quadword copied by
+                                           * RgShotEffectSetTexLineModelColor */
+    char hitEffectFile[0x20];            /* +0xd0: a string slot;
+                                           * _InitRgShotEssence empties it
+                                           * and the next one at +0xF0 */
+};
+
+/*
+ * Partial view of a normal-shot essence, modelled only at the byte offset
+ * _CreateRgNormalShot reads beyond the common RgShotEssence prefix: the
+ * float at +0x120 that it forwards to _InitShotCommon, which uses it (as
+ * $f12/$f20) to scale the aim direction returned by _GetShotPosDir into the
+ * shot's initial velocity before RgGeomPointSetVel.
+ *
+ * InitRgNormalShotEssence (ov12:0x00a15d28) also writes the create-method
+ * slot at +0x00, the same slot the common RgShotEssence prefix names
+ * createFunc; the gap at +0x04..+0x11f beyond it is not evidenced by this
+ * allocation.
+ */
+typedef struct RgNormalShotEssence RgNormalShotEssence;
+
+struct RgNormalShotEssence {
+    RgShotEssence common;                /* +0x00..+0xef */
+    unsigned char unmodeled_0f0[0x30];   /* +0xf0..+0x11f */
+    float speed;                        /* +0x120 */
+};
+
 struct RgHomingShotEssence {
     RgShotEssence common;                /* +0x00..+0xef */
     unsigned char unmodeled_0f0[0x30];   /* +0xf0..+0x11f */

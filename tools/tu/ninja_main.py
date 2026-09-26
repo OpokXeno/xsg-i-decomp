@@ -200,7 +200,8 @@ def tu_sym(name):
 
 
 def piece_sym(name, sec):
-    return "__c_" + re.sub(r"\W", "_", name) + "_" + sec[1:]
+    # `sec` may be the input section of a split run (`.rodata.carve.1`, tools/tu/data_carve.py)
+    return "__c_" + re.sub(r"\W", "_", name) + "_" + re.sub(r"\W", "_", sec[1:])
 
 
 WORD_REASON = ("scaffolding .word: the 16-byte _maxval literal inside SDK _copyRefImage is reached by fall-through "
@@ -282,6 +283,13 @@ def main(argv=None):
 
     # ------------------------------------------------ objects per TU
     obj = {}          # (name, "exp"|"hasm"|"c") -> object path
+    link_obj = {}     # name -> the object the link takes instead of obj[(name, "c")] (split data runs)
+    base_tus = {t["name"]: t for t in json.loads((unit_dir / "tu-manifest.json").read_bytes())["tus"]}
+
+    def base_manifest_pieces(name, sec):
+        """The splat pieces of a section before the carve (what `data_carve.py split` reads)."""
+        ts = base_tus[name]["sections"][sec]
+        return ts.get("pieces") or [dict(name=name, start=ts["start"], end=ts["end"])]
     edges = []
     word_sites = []   # `.word` inside the text scaffold (reported)
     common_deps = ["include/include_asm.h", "include/common.h", "include/labels.inc"]
@@ -370,6 +378,17 @@ def main(argv=None):
             obj[(n, "c")] = f"build/c/{n}.o"
             edges += cc_edge(obj[(n, "c")], cfile, con, flags, inc_flags, deps + [str(HERE / "cinc.py")],
                              overlay=f"build/cinc/{n}")
+            if t.get("c_link_object"):
+                # several C runs in one data section (tools/tu/data_carve.py): the link takes
+                # the compiled object with that section cut into one input section per run
+                split_deps = sorted({str(ROOT / data_carve.REGISTRY), str(HERE / "data_carve.py"),
+                                     str(HERE / "elfinfo.py"), "tu-manifest.json", "orig/SLUS_204.69"}
+                                    | {pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s"
+                                       for sec in t["c_split_sections"]
+                                       for pc in base_manifest_pieces(n, sec)})
+                edges += [f"build {t['c_link_object']}: carvesplit {obj[(n, 'c')]} | {' '.join(split_deps)}",
+                          f"  tu = {t['id']}"]
+                link_obj[n] = t["c_link_object"]
 
     # data pieces, blobs (modern GAS, splat modern dialect: include/macro.inc)
     def dobj(name, sec):
@@ -395,9 +414,12 @@ def main(argv=None):
         edges.append(f"build build/assets/{b}.o: bin assets/main/blobs/{b}.bin")
 
     # ------------------------------------------------ section contents
+    def c_link(name):
+        return link_obj.get(name, obj[(name, "c")])
+
     def text_obj(t, carve):
         if t["mode"] == "c" and not carve:
-            return obj[(t["name"], "c")], True
+            return c_link(t["name"]), True
         return obj[(t["name"], "hasm" if t["text"]["splat"] == "hasm" else "exp")], False
 
     # TUs whose original object pads its .text to an 8-byte boundary after the
@@ -434,8 +456,12 @@ def main(argv=None):
             own = "c" if (t["mode"] == "c" and not carve
                           and (owner == "c" or (owner == "split" and p["c_split"]))) else "asm"
             if own == "c":
-                out.append(f"{piece_sym(n, sec)} = .;")
-                out.append(f"{obj[(n, 'c')]}({sec});")
+                csec = p.get("c_section")
+                if csec:
+                    # one run of a split section: pinned at its original address
+                    out.append(f". = 0x{int(p['start'], 16) - S[sec].addr:X}; /* pin: C run {p['piece']} */")
+                out.append(f"{piece_sym(n, csec or sec)} = .;")
+                out.append(f"{c_link(n)}({csec or sec});")
                 prev_c = True
                 continue
             if prev_c:
@@ -553,7 +579,7 @@ def main(argv=None):
         for sec, p in t["sections"].items():
             for pc in p.get("pieces", [dict(name=n, start=p["start"], c_split=False)]):
                 if t["owners"].get(sec) == "c" or (t["owners"].get(sec) == "split" and pc["c_split"]):
-                    owned.append((sec, int(pc["start"], 16),
+                    owned.append((pc.get("c_section") or sec, int(pc["start"], 16),
                                   [unit_dir / (pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s")]))
         for sec, base, files in owned:
             for f in files:
@@ -653,6 +679,9 @@ def main(argv=None):
          "  depfile = $out.d", "  deps = gcc",
          "  description = CC(c) $in",
          "rule eeas_s", "  command = " + strict.format(T=T, src="$in"), "  description = EE-AS $in",
+         "# several C runs in one data section: one input section per run (tools/tu/data_carve.py split)",
+         "rule carvesplit", f"  command = {T} $py {HERE}/data_carve.py split --root {ROOT} --unit main "
+         f"--unit-dir {unit_dir} --tu $tu --obj $in --out $out", "  description = CARVE-SPLIT $out",
          "# splat's undefined_*_auto.txt minus every name a linked object defines (review finding F8)",
          "rule undeffilter", f"  command = {T} $py {HERE}/undef_filter.py --objects @$out.rsp --out $out --report $out.json",
          "  rspfile = $out.rsp", "  rspfile_content = $objs", "  description = UNDEF-FILTER $out",
@@ -699,7 +728,7 @@ def main(argv=None):
           "build build/main.bin: flat build/main.rom.elf",
           "build build/main.compare.json: compare build/main.bin", "  mode =",
           f"build build/accepted_asm.json: provenance | tu-manifest.json {HERE}/accepted_asm_gate.py " + " ".join(prov_deps),
-          f"build build/main.mapcheck.json: mapcheck build/main.rom.elf | {manifest_name} {HERE}/mapcheck.py " + " ".join(o for (n, k), o in obj.items() if k == "c"), "  carve =",
+          f"build build/main.mapcheck.json: mapcheck build/main.rom.elf | {manifest_name} {HERE}/mapcheck.py " + " ".join([o for (n, k), o in obj.items() if k == "c"] + sorted(link_obj.values())), "  carve =",
           f"build build/carve/main.rom.elf: ld | {' '.join(carve_objs)} main.carve.rom.ld {common} build/carve/main.undefined.ld",
           "  script = main.carve.rom.ld", "  extra =", "  undef = build/carve/main.undefined.ld",
           "build build/carve/main.bin: flat build/carve/main.rom.elf",

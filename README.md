@@ -13,16 +13,16 @@ The Sony SDK and public libraries do not need to be recovered.
 
 ## Progress
 
-Recovered 3,669 of 7,645 in-scope game function(s) (47.992%).
+Recovered 3,688 of 7,645 in-scope game function(s) (48.241%).
 
 | Version | Target | Functions | Progress |
 | --- | --- | ---: | ---: |
-| NTSC-U | `SLUS_204.69` | 1,699 / 3,671 | 46.282% |
+| NTSC-U | `SLUS_204.69` | 1,717 / 3,671 | 46.772% |
 | NTSC-U | `OV01.OVL` | 504 / 1,081 | 46.623% |
 | NTSC-U | `OV02.OVL` | 24 / 110 | 21.818% |
 | NTSC-U | `OV10.OVL` | 95 / 361 | 26.316% |
 | NTSC-U | `OV11.OVL` | 47 / 139 | 33.813% |
-| NTSC-U | `OV12.OVL` | 1,300 / 1,788 | 72.707% |
+| NTSC-U | `OV12.OVL` | 1,301 / 1,788 | 72.763% |
 | NTSC-U | `SSD.IRX` | 0 / 442 | 0.000% |
 | NTSC-U | `RSSD.IRX` | 0 / 53 | 0.000% |
 
@@ -48,13 +48,13 @@ assembler it gives the version, the SHA-256 of each payload, and the provenance
 needed to obtain or rebuild it. Two of the tools are patched, and both patches
 are recorded there in full:
 
-| Tool | Where it comes from |
-| --- | --- |
-| `ee-gcc2.96-realconv-lp7` | the published `ee-gcc2.96` archive, with twelve documented patches to `cc1` (six single bytes that restore the original decimal-literal rounding, two that restore the R5900 short-loop padding, and four multi-byte alias-analysis patches, fsv1 and fsv3: `%lo`-addressed global scalars and struct-field accesses may be reordered in either direction, and a non-small-data global's memory reference gets its type's alias set) |
-| `ee-gcc2.9-991111` | the published `ee-gcc2.9-991111` archive, unmodified |
-| `ee-as-la29-vsqrt` | GNU as 2.9-ee-991111 built from the pinned `ps2-ee-toolchain` commit with the recorded three-hunk diff (an overlap-safe `memmove`, the `vsqrt` opcode's bits 21-22, and labels left before the hazard nops `append_insn` inserts) |
-| `ee-as-2.9-plain` | the same commit, unpatched |
-| `ps2dev-binutils` | ps2dev binutils 2.45.1, the linker, objcopy and modern GAS |
+| Tool | What the build uses it for | Where it comes from |
+| --- | --- | --- |
+| `ee-gcc2.96-realconv-lp7` | `cc1` for the game code (Monolith) and the C runtime (newlib/libgcc) | the published `ee-gcc2.96` archive, with twelve documented patches to `cc1` (six single bytes that restore the original decimal-literal rounding, two that restore the R5900 short-loop padding, and four multi-byte alias-analysis patches, fsv1 and fsv3: `%lo`-addressed global scalars and struct-field accesses may be reordered in either direction, and a non-small-data global's memory reference gets its type's alias set) |
+| `ee-gcc2.9-991111` | `cc1` for the SCE SDK libraries (Sony's own compiler; out of recovery scope, built from original assembly) | the published `ee-gcc2.9-991111` archive, unmodified |
+| `ee-as-la29-vsqrt` | assembler for every game and runtime object | GNU as 2.9-ee-991111 built from the pinned `ps2-ee-toolchain` commit with the recorded four-change diff (an overlap-safe `memmove`, the `vsqrt` opcode's bits 21-22, labels left before the hazard nops `append_insn` inserts, and `la` of a base register plus a 16-bit constant as one `addiu`) |
+| `ee-as-2.9-plain` | assembler for the SCE SDK objects | the same commit, unpatched |
+| `ps2dev-binutils` | linker and objcopy of every image, and modern GAS for data objects and retail blobs | ps2dev binutils 2.45.1, the linker, objcopy and modern GAS |
 
 Lay them out under one directory as `config/toolchain-identity.json`'s
 `tools.<id>.dir` / `.path` say. Then:

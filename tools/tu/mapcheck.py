@@ -37,7 +37,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from elfinfo import Elf  # noqa: E402
 
-SEC_RE = re.compile(r"^ (\.\w+|COMMON)\s*(?:\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+))?\s*$")
+# input section names include the split runs `.rodata.carve.<k>` (tools/tu/data_carve.py)
+SEC_RE = re.compile(r"^ (\.\w+(?:\.carve\.\d+)?|COMMON)\s*(?:\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+))?\s*$")
 CONT_RE = re.compile(r"^\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+)\s*$")
 PROVIDE_RE = re.compile(r"^\s+(\[!provide\]|0x[0-9a-f]+)\s+PROVIDE \(([^ =]+) = ")
 SHN_COMMON, SHN_MIPS_SCOMMON, SHN_LORESERVE = 0xFFF2, 0xFF03, 0xFF00
@@ -127,7 +128,9 @@ def main():
             problems.append(dict(kind="TU built under a contract override", tu=t["name"], **t["contract_override"]))
     for t in tus:
         n = t["name"]
-        c_obj = f"build/c/{n}.o"
+        # a TU with several C runs in one data section links its split object, whose
+        # run k > 0 is the input section `<sec>.carve.<k>` (tools/tu/data_carve.py)
+        c_obj = t.get("c_link_object") or f"build/c/{n}.o"
         if t["text"]["splat"]:
             s, e = (int(x, 16) for x in t["text"]["splat_range"])
             if mode(t) == "c":
@@ -143,13 +146,15 @@ def main():
                 s, e = int(pc["start"], 16), int(pc["end"], 16)
                 own = "c" if mode(t) == "c" and (owner == "c" or (owner == "split" and pc["c_split"])) else "asm"
                 if own == "c":
-                    c_report.setdefault(n, {})[sec] = check(c_obj, sec, s, e, False, pc["name"])
+                    csec = pc.get("c_section") or sec
+                    c_report.setdefault(n, {})[csec] = check(c_obj, csec, s, e, False, pc["name"])
                 else:
                     check(f"build/data/{pc['name']}.{sec[1:]}.o", sec, s, e, True, pc["name"])
                 checked += 1
         if mode(t) == "c":
             for (o, sec), (addr, size) in placed.items():
-                if o == c_obj and size and t["owners"].get(sec) not in ("c", "split") and sec != "COMMON":
+                if o == c_obj and size and t["owners"].get(sec.split(".carve.", 1)[0]) not in ("c", "split") \
+                        and sec != "COMMON":
                     problems.append(dict(kind="unowned C contribution", object=o, section=sec, size=size,
                                          addr=f"0x{addr:08X}"))
     for (o, sec), (addr, size) in placed.items():
@@ -213,7 +218,7 @@ def main():
         if mode(t) != "c":
             continue
         n = t["name"]
-        c_obj = f"build/c/{n}.o"
+        c_obj = t.get("c_link_object") or f"build/c/{n}.o"
         elf = Elf((a.manifest.resolve().parent / c_obj).read_bytes())
         csec = {x.index: x.name for x in elf.sections}
         cdefs = {}
@@ -230,16 +235,16 @@ def main():
                     cdefs.setdefault(s.name, []).append(dict(addr=base[0] + s.value, size=s.size, bind=s.bind,
                                                              section=secname))
         tu_audit = dict(symbols_checked=0, commons=[], pieces={})
-        owned = {}
+        owned = {}        # input section of the C object -> (original section, lo, hi)
         for sec, p in t["sections"].items():
             owner = t["owners"].get(sec)
             for pc in p.get("pieces", [dict(start=p["start"], end=p["end"], c_split=False)]):
                 if owner == "c" or (owner == "split" and pc["c_split"]):
-                    owned[sec] = (int(pc["start"], 16), int(pc["end"], 16))
+                    owned[pc.get("c_section") or sec] = (sec, int(pc["start"], 16), int(pc["end"], 16))
         if t["text"]["splat"]:
-            owned[".text"] = tuple(int(x, 16) for x in t["text"]["splat_range"])
-        for sec, (lo, hi) in owned.items():
-            pl = placed.get((c_obj, sec))
+            owned[".text"] = (".text",) + tuple(int(x, 16) for x in t["text"]["splat_range"])
+        for csec_name, (sec, lo, hi) in owned.items():
+            pl = placed.get((c_obj, csec_name))
             c_end = pl[0] + pl[1] if pl else lo
             gap = hi - c_end
             own_hi, carried = hi, None
@@ -294,12 +299,12 @@ def main():
                 if used is not None and used != s.value:
                     problems.append(dict(kind="c_aliases PROVIDE used for an original symbol at a different address",
                                          tu=n, symbol=s.name, provide=f"0x{used:08X}"))
-            tu_audit["pieces"][sec] = piece
+            tu_audit["pieces"][csec_name] = piece
         # PROVIDEs used for original symbols of this TU's C-owned pieces that the C object does not define
         for name, used in provides.items():
             if used is None:
                 continue
-            for sec, (lo, hi) in owned.items():
+            for sec, lo, hi in owned.values():
                 if lo <= used < hi and any(s.name == name and s.value == used for s in osyms) and \
                         not any(d["addr"] == used for d in cdefs.get(name, [])):
                     problems.append(dict(kind="c_aliases PROVIDE stands in for a missing C definition", tu=n,
