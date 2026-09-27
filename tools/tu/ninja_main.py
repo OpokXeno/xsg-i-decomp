@@ -422,11 +422,10 @@ def main(argv=None):
             return c_link(t["name"]), True
         return obj[(t["name"], "hasm" if t["text"]["splat"] == "hasm" else "exp")], False
 
-    # TUs whose original object pads its .text to an 8-byte boundary after the
-    # last function (tools/tu/tail_align.py). A C TU's object loses that padding
-    # once its last function is C, so the script restores the declared property;
-    # while the object still ends at text.end the statement is a no-op.
-    tail_aligned = {(t["unit"], t["name"]) for t in tail_align.declaring_tus(ROOT)}
+    # Verified original TU tails are restored by their own 8- or 16-byte
+    # alignment; a scaffold object already ending at text.end is unchanged.
+    tail_aligned = {(t["unit"], t["name"]): tail_align.declared_tail_align(t["text"])
+                    for t in tail_align.declaring_tus(ROOT)}
 
     def text_contents(tlist, base, carve, unit="main"):
         out, prev_c = [], False
@@ -441,7 +440,8 @@ def main(argv=None):
                 out.append(f"{piece_sym(t['name'], '.text')} = .;")
             out.append(f"{o}(.text);")
             if is_c and (unit, t["name"]) in tail_aligned:
-                out.append(f"{tail_align.ld_statement()}; {tail_align.ld_comment(unit + '/' + t['name'])}")
+                out.append(f"{tail_align.ld_statement(tail_aligned[(unit, t['name'])])}; "
+                           f"{tail_align.ld_comment(unit + '/' + t['name'])}")
             prev_c = is_c
         return out
 

@@ -57,14 +57,15 @@ TAIL_ALIGN_MARK = "declared tail alignment of "
 
 
 def fix_tail_align(ld_text, unit):
-    """Place `. = ALIGN(8);` after the `.text` of every TU of this unit whose
-    original object pads its `.text` to an 8-byte boundary after the last
+    """Place the declared alignment after the `.text` of every TU whose
+    original object pads its `.text` after the last
     function (tools/tu/tail_align.py: config/tu-build.json text.code_end <
     text.end). While a TU's object still ends at text.end it is a no-op; once the
     last function is C (cc1 emits no trailing padding) it restores the declared
     padding, independently of the next object's own section alignment. Earlier
     insertions are dropped first, so the script always follows the manifest."""
-    names = {t["name"]: t["id"] for t in tail_align.declaring_tus(ROOT) if t["unit"] == unit}
+    names = {t["name"]: (t["id"], tail_align.declared_tail_align(t["text"]))
+             for t in tail_align.declaring_tus(ROOT) if t["unit"] == unit}
     obj = re.compile(r"^(\s*)build/(?:scaffold/)?src/" + re.escape(unit) + r"/([\w\-]+)\.o\(\.text\);\s*$")
     out = []
     for line in ld_text.splitlines(keepends=True):
@@ -73,7 +74,9 @@ def fix_tail_align(ld_text, unit):
         out.append(line)
         m = obj.match(line)
         if m and m.group(2) in names:
-            out.append(f"{m.group(1)}{tail_align.ld_statement()}; {tail_align.ld_comment(names[m.group(2)])}\n")
+            tu_id, alignment = names[m.group(2)]
+            out.append(f"{m.group(1)}{tail_align.ld_statement(alignment)}; "
+                       f"{tail_align.ld_comment(tu_id)}\n")
     return "".join(out)
 
 
