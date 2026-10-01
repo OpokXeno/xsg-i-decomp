@@ -572,7 +572,108 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackPcMdlNameGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackWpnMdlNameGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMdl);
+/*
+ * The engine's actor record ACT_create hands out (main/near_dir.h and
+ * main/set_motion.h model the same 0xa70-byte record as their own TU-local
+ * copy: +0x00 flags, +0x04 an update callback, +0x08 a draw callback).
+ * dataChildActorCreate is this TU's only writer of that head. The model
+ * loader copies file addresses into the three words at +0x8D0..+0x8D8.
+ */
+typedef struct ChildActor {
+    int flags;                               /* +0x00 */
+    void (*update)(struct ChildActor *self); /* +0x04 */
+    void (*draw)(struct ChildActor *self);   /* +0x08 */
+    unsigned char unmodeled_0c[0x8D0 - 0x0C];
+    void *modelAdr; /* +0x8D0 */
+    void *animationAdr; /* +0x8D4 */
+    void *textureAdr; /* +0x8D8 */
+} ChildActor;
+
+extern void ACT_initMotion(ChildActor *actor);
+
+extern char mdlFileName[];
+extern char mdlFileName2[];
+extern char *pcNameBase;
+extern const char D_00A44898[];
+extern const char D_00A45DD0[];
+extern const char D_00A45DF8[];
+extern const char D_00A45E00[];
+extern const char D_00A45E08[];
+extern const char D_00A45E10[];
+extern const char D_00A45E38[];
+extern char *dataPackPcMdlNameGet(ObjectTask *unit);
+extern void RES_GetMdlFileName(char *name, int charaId);
+extern void dataFileLoadNB(void *buffer, void *address);
+extern int xglCdGetFileSize(const char *name);
+extern int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *file);
+
+/*
+ * Reuse cached model data when the character id agrees. Otherwise use
+ * the leader's resident data, a packed player model, or separate model,
+ * animation and texture files, rounding each loaded file to a CD sector.
+ * Repeated calcUPGet calls and signed division preserve the original
+ * call sequence and sector-rounding behavior.
+ */
+int dataUnitFileLoadMdl(ObjectTask *unit, int charaId, UnitFileInfo *file)
+{
+    ChildActor *actor;
+    char *packedName;
+
+    actor = (ChildActor *)((UnitEquipInfo *)unit)->motionTable;
+    if (charaId != file->modelCharaId) {
+        file->modelCharaId = charaId;
+        if (((((ChildActor *)unit->work)->flags & 0x40) == 0
+             && (calcUPGet(unit)->flags & 0x40) == 0
+             && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3))
+            || (calcUPGet(unit)->charaId >= 0xBB && calcUPGet(unit)->charaId < 0xC3)) {
+            if (dataLeaderCidGet() == charaId) {
+                file->animationAdr = (void *)0x1070800;
+                file->textureAdr = (void *)0x10B1000;
+                printf(D_00A45DD0, charaId);
+            } else {
+                packedName = dataPackPcMdlNameGet(unit);
+                strcpy(mdlFileName2, pcNameBase);
+                strcat(mdlFileName2, packedName);
+                strcat(mdlFileName2, D_00A44898);
+                dataFileLoadNB(mdlFileName2, file->modelAdr);
+                file->modelSize = ((xglCdGetFileSize(mdlFileName2) + 0x7FF) / 0x800) * 0x800;
+                file->animationAdr = 0;
+                file->textureAdr = 0;
+            }
+        } else {
+            RES_GetMdlFileName(mdlFileName, charaId);
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, D_00A45DF8);
+            dataFileLoadNB(mdlFileName2, file->modelAdr);
+            file->modelSize = ((xglCdGetFileSize(mdlFileName2) + 0x7FF) / 0x800) * 0x800;
+            file->animationAdr = (unsigned char *)file->modelAdr + file->modelSize;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, D_00A45E00);
+            dataFileLoadNB(mdlFileName2, file->animationAdr);
+            file->animationSize = ((xglCdGetFileSize(mdlFileName2) + 0x7FF) / 0x800) * 0x800;
+            file->textureAdr = (unsigned char *)file->animationAdr + file->animationSize;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, D_00A45E08);
+            dataFileLoadNB(mdlFileName2, file->textureAdr);
+            file->textureSize = ((xglCdGetFileSize(mdlFileName2) + 0x7FF) / 0x800) * 0x800;
+        }
+    } else {
+        printf(D_00A45E10, charaId, file->modelAdr);
+    }
+    actor->modelAdr = file->modelAdr;
+    actor->animationAdr = file->animationAdr;
+    actor->textureAdr = file->textureAdr;
+    ACT_initMotion(actor);
+    printf(D_00A45E38, file->modelSize + file->animationSize + file->textureSize);
+    if ((((ChildActor *)unit->work)->flags & 0x40) == 0
+        && (calcUPGet(unit)->flags & 0x40) == 0
+        && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
+        dataUnitFileLoadFaceMdl(unit, charaId, file);
+    } else {
+        file->faceCharaId = 0;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadFaceMdl);
 
@@ -588,20 +689,7 @@ int dataWpnLRChk(int unused, int value, int flag, void *unit)
     return 1;
 }
 
-/*
- * The engine's actor record ACT_create hands out (main/near_dir.h and
- * main/set_motion.h model the same 0xa70-byte record as their own TU-local
- * copy: +0x00 flags, +0x04 an update callback, +0x08 a draw callback).
- * dataChildActorCreate is this TU's only writer of that head.
- */
-typedef struct ChildActor {
-    int flags;                               /* +0x00 */
-    void (*update)(struct ChildActor *self); /* +0x04 */
-    void (*draw)(struct ChildActor *self);   /* +0x08 */
-} ChildActor;
-
 extern ChildActor *ACT_create(int parent, int callerId);
-extern void ACT_initMotion(ChildActor *actor);
 extern const char D_00A45F38[];
 
 void *dataChildActorCreate(int callerId)
@@ -778,7 +866,21 @@ int dataThinkNameGet(char *name, int thinkNo)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkDataSet);
+extern void thinkNoSet(int mappedNo);
+
+/* Install the 16 KiB behavior-data block and select its remapped number. */
+int dataThinkDataSet(int thinkNo, const void *data)
+{
+    int mappedNo;
+
+    mappedNo = thinkMapGet(thinkNo);
+    if (mappedNo != -1 && data != 0) {
+        __builtin_memcpy(thinkBuf, data, sizeof(thinkBuf));
+        thinkNoSet(mappedNo);
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkFileLoad);
 

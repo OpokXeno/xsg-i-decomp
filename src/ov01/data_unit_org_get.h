@@ -75,10 +75,25 @@ extern int dataSpecBaseGet(int cid);
 extern int printf(const char *format, ...);
 extern const char D_00A457B0[];
 
-/* The six unit-file records are selected by dataUnitFileGet. */
+/*
+ * The six 0x130-byte unit-file records are selected by dataUnitFileGet.
+ * dataUnitFileLoadMdl reads the cached character id, model/animation/texture
+ * addresses and CD-sector-rounded sizes, and clears the face cache at +0x10C.
+ */
 typedef struct UnitFileInfo {
     int charaId;
-    unsigned char unmodeled_4[0x12c];
+    int modelCharaId; /* +0x04 */
+    void *modelAdr; /* +0x08 */
+    int modelSize; /* +0x0C */
+    unsigned char unmodeled_10[4];
+    void *animationAdr; /* +0x14 */
+    int animationSize; /* +0x18 */
+    unsigned char unmodeled_1c[4];
+    void *textureAdr; /* +0x20 */
+    int textureSize; /* +0x24 */
+    unsigned char unmodeled_28[0x10C - 0x28];
+    int faceCharaId; /* +0x10C */
+    unsigned char unmodeled_110[0x20];
 } UnitFileInfo;
 
 extern UnitFileInfo unitFileInfo[6];
