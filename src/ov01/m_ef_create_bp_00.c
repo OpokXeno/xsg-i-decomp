@@ -2,6 +2,7 @@
  * OV01 original TU 24: 0x00a346c8..0x00a34e90 (5 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 #include "m_ef_create_bp_00.h"
 
@@ -15,8 +16,10 @@ static void fnBP00_PR000(void *self, void *work);
 static void fnBP00_DP000(void *self, void *work);
 static void fnBP00_PO000(void *self, void *work);
 
-int MEfCreate_BP00(BP00Object *object)
+int MEfCreate_BP00(MEfObjRecord *self)
 {
+    /* This constructor interprets its own variant of the pooled work. */
+    BP00Object *object = (BP00Object *)self;
     BP00Work *work = &object->work;
     Vector4 direction;
     Matrix4 actorMatrix;
@@ -67,7 +70,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_bp_00", fnBP00_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* work's layout is unresolved beyond +0x70: the per-frame lifetime counter

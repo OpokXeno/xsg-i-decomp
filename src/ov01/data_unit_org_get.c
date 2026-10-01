@@ -25,59 +25,90 @@ void *dataUnitOrgGet(int unitOrgId)
     return &orgData[unitOrgId - 1];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlChaGet);
+extern const char D_00A456C8[];
+extern PlCharacter plChaData[];
 
-/*
- * D_426F48, D_426F50, D_426F54 and D_426F58 are byte offsets, from their own
- * loaded battle-data table's start (8, 0x10, 0x14 and 0x18 bytes before each
- * field respectively), the same idiom D_426F78 uses below for
- * dataExpTblGet; each points to a table of fixed-size records that
- * dataUnitInitGet, dataNormInitGet, dataSpecInitGet and dataEtherInitGet
- * index with a one-based id, as dataUnitOrgGet does orgData.
- */
+PlCharacter *dataPlChaGet(int cid)
+{
+    if (cid >= PL_CHARACTER_ID_END) {
+        printf(D_00A456C8, cid);
+        return 0;
+    }
+    return &plChaData[cid - 1];
+}
+
+/* Battle-data header offsets are byte offsets from the loaded block at
+ * 0x00426F40. Public symbols name the offset words, not the block itself.
+ * Other record contents remain opaque until a consumer evidences their fields. */
+#define BATTLE_DATA_FIELD_OFFSET(member) ((unsigned int)&((BattleDataHeader *)0)->member)
+
+typedef struct BattleDataHeader {
+    unsigned char unmodeled_00[8];
+    int unitInitOffset; /* +0x08 */
+    unsigned char unmodeled_0c[4];
+    int normalInitOffset; /* +0x10 */
+    int specialInitOffset; /* +0x14 */
+    int etherInitOffset; /* +0x18 */
+    unsigned char unmodeled_1c[0x38 - 0x1C];
+    int experienceOffset; /* +0x38 */
+    int parameterOffset; /* +0x3C */
+    int specialTableOffset; /* +0x40 */
+    int defaultEquipmentOffset; /* +0x44 */
+} BattleDataHeader;
+
+typedef struct NormalInitRecord { unsigned char opaque[0x0C]; } NormalInitRecord;
+typedef struct SpecialInitRecord { unsigned char opaque[0x0C]; } SpecialInitRecord;
+typedef struct EtherInitRecord { unsigned char opaque[0x18]; } EtherInitRecord;
+typedef struct ParameterRecord { unsigned char opaque[0x20]; } ParameterRecord;
+typedef struct DefaultEquipmentRecord { unsigned char opaque[0x20]; } DefaultEquipmentRecord;
+typedef struct SpecialTableRecord { unsigned char opaque[0x20]; } SpecialTableRecord;
+
 extern int D_426F48;
+
+UnitInitData *dataUnitInitGet(int entry)
+{
+    unsigned char *block = (unsigned char *)&D_426F48 - BATTLE_DATA_FIELD_OFFSET(unitInitOffset);
+    int byteOffset = D_426F48;
+    UnitInitData *records = (UnitInitData *)(block + byteOffset);
+
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
+}
+
 extern int D_426F50;
+
+NormalInitRecord *dataNormInitGet(int entry)
+{
+    unsigned char *block = (unsigned char *)&D_426F50 - BATTLE_DATA_FIELD_OFFSET(normalInitOffset);
+    int byteOffset = D_426F50;
+    NormalInitRecord *records = (NormalInitRecord *)(block + byteOffset);
+
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
+}
+
 extern int D_426F54;
+
+SpecialInitRecord *dataSpecInitGet(int entry)
+{
+    unsigned char *block = (unsigned char *)&D_426F54 - BATTLE_DATA_FIELD_OFFSET(specialInitOffset);
+    int byteOffset = D_426F54;
+    SpecialInitRecord *records = (SpecialInitRecord *)(block + byteOffset);
+
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
+}
+
 extern int D_426F58;
 
-void *dataUnitInitGet(int id)
+EtherInitRecord *dataEtherInitGet(int entry)
 {
-    unsigned char *base;
-    int value;
+    unsigned char *block = (unsigned char *)&D_426F58 - BATTLE_DATA_FIELD_OFFSET(etherInitOffset);
+    int byteOffset = D_426F58;
+    EtherInitRecord *records = (EtherInitRecord *)(block + byteOffset);
 
-    base = (unsigned char *)&D_426F48 - 8;
-    value = D_426F48;
-    return value + base + id * 0x34 - 0x34;
-}
-
-void *dataNormInitGet(int id)
-{
-    unsigned char *base;
-    int value;
-
-    base = (unsigned char *)&D_426F50 - 0x10;
-    value = D_426F50;
-    return value + base + id * 0xC - 0xC;
-}
-
-void *dataSpecInitGet(int id)
-{
-    unsigned char *base;
-    int value;
-
-    base = (unsigned char *)&D_426F54 - 0x14;
-    value = D_426F54;
-    return value + base + id * 0xC - 0xC;
-}
-
-void *dataEtherInitGet(int id)
-{
-    unsigned char *base;
-    int value;
-
-    base = (unsigned char *)&D_426F58 - 0x18;
-    value = D_426F58;
-    return value + base + id * 0x18 - 0x18;
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
 }
 
 /*
@@ -92,44 +123,40 @@ unsigned char *dataExpTblGet(void)
     return (unsigned char *)&D_426F78 - 0x38 + D_426F78;
 }
 
-/*
- * D_426F7C, D_426F80 and D_426F84 are the same kind of loaded-table byte
- * offset as D_426F48 above (0x3C, 0x40 and 0x44 bytes before their own table
- * start); dataParaTblGet, dataSpecTblGet and dataDefEquipGet each index a
- * table of 0x20-byte records with a one-based id.
- */
 extern int D_426F7C;
-extern int D_426F80;
+
+ParameterRecord *dataParaTblGet(int entry)
+{
+    unsigned char *block = (unsigned char *)&D_426F7C - BATTLE_DATA_FIELD_OFFSET(parameterOffset);
+    int byteOffset = D_426F7C;
+    ParameterRecord *records = (ParameterRecord *)(block + byteOffset);
+
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
+}
+
 extern int D_426F84;
 
-void *dataParaTblGet(int id)
+DefaultEquipmentRecord *dataDefEquipGet(int entry)
 {
-    unsigned char *base;
-    int value;
+    unsigned char *block = (unsigned char *)&D_426F84 - BATTLE_DATA_FIELD_OFFSET(defaultEquipmentOffset);
+    int byteOffset = D_426F84;
+    DefaultEquipmentRecord *records = (DefaultEquipmentRecord *)(block + byteOffset);
 
-    base = (unsigned char *)&D_426F7C - 0x3C;
-    value = D_426F7C;
-    return value + base + id * 0x20 - 0x20;
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
 }
 
-void *dataDefEquipGet(int id)
+extern int D_426F80;
+
+SpecialTableRecord *dataSpecTblGet(int entry)
 {
-    unsigned char *base;
-    int value;
+    unsigned char *block = (unsigned char *)&D_426F80 - BATTLE_DATA_FIELD_OFFSET(specialTableOffset);
+    int byteOffset = D_426F80;
+    SpecialTableRecord *records = (SpecialTableRecord *)(block + byteOffset);
 
-    base = (unsigned char *)&D_426F84 - 0x44;
-    value = D_426F84;
-    return value + base + id * 0x20 - 0x20;
-}
-
-void *dataSpecTblGet(int id)
-{
-    unsigned char *base;
-    int value;
-
-    base = (unsigned char *)&D_426F80 - 0x40;
-    value = D_426F80;
-    return value + base + id * 0x20 - 0x20;
+    /* Caller indices are one-based; retain the original lack of bounds checks. */
+    return &records[entry - 1];
 }
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
@@ -195,24 +222,92 @@ void dataEtherTecSet(int selector)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEtherLearnSet);
+extern const char D_00A45730[];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEtherLearnGet);
+/* The third argument is supplied by dataEtherTecSet but is not read here. */
+void dataEtherLearnSet(int cid, int techniqueId, int selector)
+{
+    PlCharacter *pl;
+    int index;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSkillLearnSet);
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
+        printf(D_00A45730, cid);
+        return;
+    }
+    if (techniqueId != 0) {
+        pl = dataPlChaGet(cid);
+        index = techniqueId - 1;
+        pl->learnedEther[index / 8] |= 1 << (index % 8);
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSkillLearnGet);
+extern const char D_00A45750[];
 
-typedef struct ThinkMapTable {
-    unsigned char unmodeled_000[0x18C];
-    int specBase[0x11]; /* +0x18C */
+int dataEtherLearnGet(int cid, int techniqueId)
+{
+    PlCharacter *pl;
+    int index;
+
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
+        printf(D_00A45750, cid);
+        return 0;
+    }
+    pl = dataPlChaGet(cid);
+    index = techniqueId - 1;
+    return pl->learnedEther[index / 8] & (1 << (index % 8));
+}
+
+extern const char D_00A45770[];
+
+void dataSkillLearnSet(int cid, int skillId)
+{
+    PlCharacter *pl;
+    int index;
+
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
+        printf(D_00A45770, cid);
+        return;
+    }
+    if (skillId != 0) {
+        pl = dataPlChaGet(cid);
+        index = skillId - 1;
+        pl->learnedSkill[index / 8] |= 1 << (index % 8);
+    }
+}
+
+extern const char D_00A45790[];
+
+int dataSkillLearnGet(int cid, int skillId)
+{
+    PlCharacter *pl;
+    int index;
+
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
+        printf(D_00A45790, cid);
+        return 0;
+    }
+    pl = dataPlChaGet(cid);
+    index = skillId - 1;
+    return pl->learnedSkill[index / 8] & (1 << (index % 8));
+}
+
+#define THINK_MAP_COUNT 100
+
+/* The last map number overlaps specBase[0] at +0x18C. These are two
+ * views of the same stored word, not adjacent independent arrays. */
+typedef union ThinkMapTable {
+    int mapNo[THINK_MAP_COUNT];
+    struct {
+        int mapPrefix[THINK_MAP_COUNT - 1];
+        int specBase[PL_LEARNING_CHARACTER_ID_END];
+    } special;
 } ThinkMapTable;
 
 extern ThinkMapTable thinkMapTbl;
 
 int dataSpecBaseGet(int cid)
 {
-    return thinkMapTbl.specBase[cid];
+    return thinkMapTbl.special.specBase[cid];
 }
 
 /*
@@ -235,7 +330,7 @@ void dataSpecLearnSet(int cid, int specialId)
 {
     PlCharacter *pl;
 
-    if (cid >= 0x11) {
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
         printf(D_00A457B0, cid);
         return;
     }
@@ -247,9 +342,9 @@ void dataSpecLearnSet(int cid, int specialId)
 
 /*
  * thinkMapTbl's tail is a per-character-id table of special-technique base
- * ids; dataSpecLearnGet subtracts the caller's entry from a learned special
- * id before indexing PlCharacter.special, the same subtraction
- * dataSpecLearnSet performs through dataSpecBaseGet (still asm).
+ * ids; dataSpecLearnGet subtracts the character's base from specialId
+ * before indexing PlCharacter.special, the same subtraction
+ * dataSpecLearnSet performs through dataSpecBaseGet.
  */
 extern const char D_00A457D0[];
 
@@ -257,20 +352,50 @@ short dataSpecLearnGet(int cid, int specialId)
 {
     short learned;
 
-    if (cid >= 0x11) {
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
         printf(D_00A457D0, cid);
         return 0;
     }
     learned = 0;
     if (specialId != 0) {
-        learned = dataPlChaGet(cid)->special[specialId - thinkMapTbl.specBase[cid]].id;
+        learned = dataPlChaGet(cid)->special[specialId - thinkMapTbl.special.specBase[cid]].id;
     }
     return learned;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecDataGet);
+PlSpecialSlot *dataSpecDataGet(int cid, int specialId)
+{
+    PlCharacter *pl;
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataNormIdxGet);
+    if (cid >= PL_LEARNING_CHARACTER_ID_END) {
+        return 0;
+    }
+    if (specialId == 0) {
+        return 0;
+    }
+    pl = dataPlChaGet(cid);
+    for (i = 0; i < PL_SPECIAL_SLOT_COUNT; i++) {
+        if (pl->special[i].id == specialId) {
+            return &pl->special[i];
+        }
+    }
+    return 0;
+}
+
+int dataNormIdxGet(ObjectTask *unit, int normalId)
+{
+    int i;
+    int result = -1;
+
+    for (i = 0; i < CALC_NORMAL_TECHNIQUE_COUNT; i++) {
+        if (calcUPGet(unit)->normalTechniqueId[i] == normalId) {
+            result = i;
+            break;
+        }
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlUnitInit);
 
@@ -498,7 +623,103 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackPcMdlNameGet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackWpnMdlNameGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMdl);
+extern void ACT_initMotion(BattleModelActor *actor);
+
+#define CD_SECTOR_SIZE 0x800
+/* Leader model data is already resident: these are the animation and
+ * texture buffers selected by the leader path, not file identifiers. */
+#define LEADER_ANIMATION_ADDRESS ((void *)0x01070800)
+#define LEADER_TEXTURE_ADDRESS ((void *)0x010B1000)
+
+extern char mdlFileName[];
+extern char mdlFileName2[];
+extern char *pcNameBase;
+extern const char D_00A44898[];
+extern const char D_00A45DD0[];
+extern const char D_00A45DF8[];
+extern const char D_00A45E00[];
+extern const char D_00A45E08[];
+extern const char D_00A45E10[];
+extern const char D_00A45E38[];
+extern char *dataPackPcMdlNameGet(ObjectTask *unit);
+extern void RES_GetMdlFileName(char *name, int charaId);
+extern int xglCdGetFileSize(const char *name);
+extern int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *file);
+
+/*
+ * Reuse cached model data when the character id agrees. Otherwise use
+ * the leader's resident data, a packed player model, or separate model,
+ * animation and texture files, rounding each loaded file to a CD sector.
+ * Repeated calcUPGet calls and signed division preserve the original
+ * call sequence and sector-rounding behavior.
+ */
+int dataUnitFileLoadMdl(UnitEquipInfo *unit, int charaId, UnitFileInfo *file)
+{
+    BattleModelActor *actor;
+    char *packedName;
+
+    actor = unit->motionActor;
+    if (charaId != file->modelCharaId) {
+        file->modelCharaId = charaId;
+        if (((unit->task.battle.work->flags & BATTLE_ACTOR_FLAG_ENEMY) == 0
+             && (calcUPGet(&unit->task.object)->flags & CALC_UNIT_FLAG_AGWS) == 0
+             && (calcUPGet(&unit->task.object)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
+                 || calcUPGet(&unit->task.object)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END))
+            || (calcUPGet(&unit->task.object)->charaId >= SPECIAL_MODEL_CHARACTER_ID_BEGIN
+                && calcUPGet(&unit->task.object)->charaId < SPECIAL_MODEL_CHARACTER_ID_END)) {
+            if (dataLeaderCidGet() == charaId) {
+                file->animationAdr = LEADER_ANIMATION_ADDRESS;
+                file->textureAdr = LEADER_TEXTURE_ADDRESS;
+                printf(D_00A45DD0, charaId);
+            } else {
+                packedName = dataPackPcMdlNameGet(&unit->task.object);
+                strcpy(mdlFileName2, pcNameBase);
+                strcat(mdlFileName2, packedName);
+                strcat(mdlFileName2, D_00A44898);
+                dataFileLoadNB(mdlFileName2, file->modelAdr);
+                file->modelSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
+                               / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
+                file->animationAdr = 0;
+                file->textureAdr = 0;
+            }
+        } else {
+            RES_GetMdlFileName(mdlFileName, charaId);
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, D_00A45DF8);
+            dataFileLoadNB(mdlFileName2, file->modelAdr);
+            file->modelSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
+                               / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
+            file->animationAdr = (unsigned char *)file->modelAdr + file->modelSize;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, D_00A45E00);
+            dataFileLoadNB(mdlFileName2, file->animationAdr);
+            file->animationSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
+                               / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
+            file->textureAdr = (unsigned char *)file->animationAdr + file->animationSize;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, D_00A45E08);
+            dataFileLoadNB(mdlFileName2, file->textureAdr);
+            file->textureSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
+                               / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
+        }
+    } else {
+        printf(D_00A45E10, charaId, file->modelAdr);
+    }
+    actor->modelAdr = file->modelAdr;
+    actor->animationAdr = file->animationAdr;
+    actor->textureAdr = file->textureAdr;
+    ACT_initMotion(actor);
+    printf(D_00A45E38, file->modelSize + file->animationSize + file->textureSize);
+    if ((unit->task.battle.work->flags & BATTLE_ACTOR_FLAG_ENEMY) == 0
+        && (calcUPGet(&unit->task.object)->flags & CALC_UNIT_FLAG_AGWS) == 0
+        && (calcUPGet(&unit->task.object)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
+                 || calcUPGet(&unit->task.object)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END)) {
+        dataUnitFileLoadFaceMdl(&unit->task.object, charaId, file);
+    } else {
+        file->faceCharaId = 0;
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadFaceMdl);
 
@@ -506,54 +727,21 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMot);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadWep);
 
-/*
- * dataWpnLRChk shares dataUnitFileLoadWep's own (ObjectTask *, weaponId,
- * slot, fileInfo) argument list, passed through unchanged; it never reads
- * the unit argument and only reaches the loaded file's weapon-id field 0xA0
- * bytes into fileInfo.
- */
-typedef struct WpnFileInfo {
-    unsigned char unmodeled_00[0xA0];
-    int weaponId; /* +0xA0 */
-} WpnFileInfo;
-
 int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo)
 {
-    /*
-     * The original guards both checks with a bnel to a shared fail exit
-     * (0x00a1c1b4, 0x00a1c1c0); a structured cascade of "if (...) return 0;"
-     * statements folds the second guard into a branchless compare instead.
-     */
-    if (slot != 1) {
-        goto fail;
-    }
-    if (weaponId != fileInfo->weaponId) {
-        goto fail;
+    (void)unit;
+    if (slot != 1 || weaponId != fileInfo->weaponId) {
+        return 0;
     }
     return 1;
-fail:
-    return 0;
 }
 
-/*
- * The engine's actor record ACT_create hands out (main/near_dir.h and
- * main/set_motion.h model the same 0xa70-byte record as their own TU-local
- * copy: +0x00 flags, +0x04 an update callback, +0x08 a draw callback).
- * dataChildActorCreate is this TU's only writer of that head.
- */
-typedef struct ChildActor {
-    int flags;                               /* +0x00 */
-    void (*update)(struct ChildActor *self); /* +0x04 */
-    void (*draw)(struct ChildActor *self);   /* +0x08 */
-} ChildActor;
-
-extern ChildActor *ACT_create(int parent, int callerId);
-extern void ACT_initMotion(ChildActor *actor);
+extern BattleModelActor *ACT_create(int parent, int callerId);
 extern const char D_00A45F38[];
 
 void *dataChildActorCreate(int callerId)
 {
-    ChildActor *actor;
+    BattleModelActor *actor;
 
     actor = ACT_create(-1, callerId);
     if (actor == 0) {
@@ -561,9 +749,9 @@ void *dataChildActorCreate(int callerId)
         return 0;
     }
     ACT_initMotion(actor);
-    actor->update = 0;
-    actor->draw = 0;
-    actor->flags = 0x208;
+    actor->state.update = 0;
+    actor->state.draw = 0;
+    actor->state.flags = 0x208;
     return actor;
 }
 
@@ -574,22 +762,22 @@ int dataUnitFileLoadMotSp(ObjectTask *unit, int motionId, int slot) {
 
 int dataUnitFileLoadMotSp2(UnitEquipInfo *unit, int motionId, int slot, int p3, int p4)
 {
-    EquipActor *actor;
+    BattleModelActor *actor;
 
-    dataMotAdrSet(unit->motionTable, slot);
+    dataMotAdrSet(unit->motionActor, slot);
     if (p4 == 5) {
         actor = unit->equipActor[0];
         if (actor != 0) {
-            actor->motionAdr = unit->motionTable->slot[slot];
+            actor->motion.weapon.motionAdr = unit->motionActor->motion.slot[slot];
         }
         actor = unit->equipActor[1];
         if (actor != 0) {
-            actor->motionAdr = unit->motionTable->slot[slot];
+            actor->motion.weapon.motionAdr = unit->motionActor->motion.slot[slot];
         }
     } else if (p3 >= 0) {
         actor = unit->equipActor[p3 & 3];
         if (actor != 0) {
-            actor->motionAdr = unit->motionTable->slot[slot];
+            actor->motion.weapon.motionAdr = unit->motionActor->motion.slot[slot];
         }
     }
     return 1;
@@ -609,18 +797,18 @@ typedef struct PackedFile {
     int entryOffset[3]; /* +0x08 */
 } PackedFile;
 
-void dataPackWpnMdl2(EquipActor *actor)
+void dataPackWpnMdl2(BattleModelActor *actor)
 {
     PackedFile *pack;
     int offset;
 
-    pack = (PackedFile *)actor->wpnMdl[0];
+    pack = (PackedFile *)actor->modelAdr;
     offset = pack->entryOffset[0];
-    actor->wpnMdl[0] = (unsigned char *)pack + offset;
+    actor->modelAdr = (unsigned char *)pack + offset;
     offset = pack->entryOffset[1];
-    actor->wpnMdl[1] = (unsigned char *)pack + offset;
+    actor->animationAdr = (unsigned char *)pack + offset;
     offset = pack->entryOffset[2];
-    actor->wpnMdl[2] = (unsigned char *)pack + offset;
+    actor->textureAdr = (unsigned char *)pack + offset;
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotAdrSet);
@@ -708,7 +896,17 @@ void *dataThinkAdrGet(void)
     return thinkBuf;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", thinkMapGet);
+int thinkMapGet(int mapNo)
+{
+    int i;
+    int *map = thinkMapTbl.mapNo;
+    for (i = 0; i < THINK_MAP_COUNT; i++) {
+        if (mapNo == map[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 extern int thinkMapGet(int mapNo);
 extern char *strcpy(char *destination, const char *source);
@@ -737,7 +935,21 @@ int dataThinkNameGet(char *name, int thinkNo)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkDataSet);
+extern void thinkNoSet(int mappedNo);
+
+/* Install the 16 KiB behavior-data block and select its remapped number. */
+int dataThinkDataSet(int thinkNo, const void *data)
+{
+    int mappedNo;
+
+    mappedNo = thinkMapGet(thinkNo);
+    if (mappedNo != -1 && data != 0) {
+        __builtin_memcpy(thinkBuf, data, sizeof(thinkBuf));
+        thinkNoSet(mappedNo);
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkFileLoad);
 
@@ -785,7 +997,6 @@ extern char *mapName;
 extern char *mapNameExt;
 extern const char D_00A46028[];
 extern const char D_00A46030[];
-extern void dataFileLoadNB(void *buffer, void *address);
 
 void dataMapLoad(int mapNo)
 {
@@ -810,6 +1021,25 @@ void dataVPadModeSet(int mode)
     padData = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataVPadSet);
+#define VIRTUAL_PAD_BIT_COUNT 14
+
+extern unsigned short padConvTbl[VIRTUAL_PAD_BIT_COUNT];
+void dataVPadSet(int virtualPad)
+{
+    unsigned short result = 0;
+    int shift = 0;
+    const unsigned short *entry = padConvTbl;
+    virtualPad &= 0xFFFF;
+    /* Original entry at 0x00A1D2A0 enters the body before testing the
+     * loop count; keep the table pointer advance and 16-bit mask. */
+    do {
+        if ((virtualPad >> shift) & 1) {
+            result |= *entry;
+        }
+        shift++;
+        entry++;
+    } while (shift < VIRTUAL_PAD_BIT_COUNT);
+    padData = result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPadRead);

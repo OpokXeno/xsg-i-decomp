@@ -2,6 +2,7 @@
  * OV01 original TU 23: 0x00a33f08..0x00a346c8 (5 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 extern Matrix4 *MMathRotateMatrixYXZ(Matrix4 *destination,
@@ -52,7 +53,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_00", fnMSP00_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* work's layout is unresolved beyond +0x70: the per-frame lifetime counter

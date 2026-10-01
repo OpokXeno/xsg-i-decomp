@@ -2,6 +2,7 @@
  * OV01 original TU 32: 0x00a387a8..0x00a39088 (7 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 #include "main/m_math.h"
 
@@ -67,7 +68,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_gamera", fnGAMERA_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* work's layout is unresolved beyond +0x70: the per-frame lifetime counter

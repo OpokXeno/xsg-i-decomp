@@ -219,7 +219,9 @@ def main():
         preamble, seen, split_dropped = [], set(), {}
         adaptations_used = []
         drop = {norm(x) for x in adapt.get(tu, {}).get("drop_preamble", [])}
-        if not records_available and reconstruct:
+        # A TU with no accepted functions is regenerated entirely as INCLUDE_ASM
+        # from the original; it needs no private acceptance records.
+        if not records_available and reconstruct and accepted_names:
             raise SystemExit(
                 f"gen_ovl_src: {a.unit}/{tu} has no published source at "
                 f"src/{a.unit}/{tu}.c, and the acceptance records it would be "

@@ -6,6 +6,7 @@
 #define SRC_OV01_M_EF_CREATE_SOLB_H
 
 #include "shared.h"
+#include "ov01/m_ef_create.h"
 
 /* (effect task, SolbState record) like the other MEf effects' callbacks. */
 typedef void (*SOLBCallback)(void *self, void *work);
@@ -106,7 +107,7 @@ typedef struct SolbState {
     HermiteVector tangent_at_segment_end;           /* +0x340 */
 } SolbState;
 
-int MEfCreate_SOLB(void *work);
+int MEfCreate_SOLB(MEfObjRecord *work);
 
 extern int timetbl[];
 

@@ -5,6 +5,8 @@
 #include "shared.h"
 #include "snd.h"
 
+extern int dataFileLoadNB(const char *filename, void *destination);
+
 #define SND_MU_VOLUME_MAX 0x7F
 #define SND_MU_FADE_TIME  2000
 
@@ -207,7 +209,6 @@ extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
 
 extern int dataSndSeNameGet(char *name, ObjectTask *unit, int seType);
-extern void dataFileLoadNB(void *buffer, void *address);
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int xglCdGetFileSize(const char *name);

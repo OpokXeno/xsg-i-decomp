@@ -2,6 +2,7 @@
  * OV01 original TU 30: 0x00a37ab8..0x00a38190 (4 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
@@ -74,8 +75,10 @@ static void fnECM01_PR000(void *self, void *work);
 static void fnECM01_DP000(void *self, void *work);
 static void fnECM01_PO000(void *self, void *work);
 
-int MEfCreate_ECM01(ECM01Object *object)
+int MEfCreate_ECM01(MEfObjRecord *self)
 {
+    /* This constructor interprets its own variant of the pooled work. */
+    ECM01Object *object = (ECM01Object *)self;
     ECM01Work *work = &object->work;
     Matrix4 actor_matrix;
     float angle_range;
@@ -151,7 +154,6 @@ ACCEPTED_ASM("src/ov01/m_ef_create_ecm_01", fnECM01_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* work's layout is unresolved beyond +0x70: the per-frame lifetime counter

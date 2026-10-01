@@ -381,7 +381,7 @@ def main(argv=None):
             if t.get("c_link_object"):
                 # several C runs in one data section (tools/tu/data_carve.py): the link takes
                 # the compiled object with that section cut into one input section per run
-                split_deps = sorted({str(ROOT / data_carve.REGISTRY), str(HERE / "data_carve.py"),
+                split_deps = sorted({str(data_carve.registry_input_path(ROOT)), str(HERE / "data_carve.py"),
                                      str(HERE / "elfinfo.py"), "tu-manifest.json", "orig/SLUS_204.69"}
                                     | {pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s"
                                        for sec in t["c_split_sections"]

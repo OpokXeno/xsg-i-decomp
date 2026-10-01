@@ -1,0 +1,6 @@
+#ifndef INCLUDE_OV01_M_EF_CREATE_KOSBW_02_H
+#define INCLUDE_OV01_M_EF_CREATE_KOSBW_02_H
+
+int MEfCreate_KOSBW02(MEfObjRecord *storage);
+
+#endif /* INCLUDE_OV01_M_EF_CREATE_KOSBW_02_H */

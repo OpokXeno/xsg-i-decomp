@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "ov01/data_unit_org_get.h"
 
 extern void MOutputDebugStringWarn(const char *format, ...);
 extern const char zero_duration_message[];
@@ -12,19 +13,6 @@ extern const char D_00A51000[];
 extern const char D_00A51028[];
 
 extern void bcopy(const void *source, void *destination, unsigned int count);
-/*
- * Partial view of the unit init record returned by dataUnitInitGet (its
- * definer, ov01/data_unit_org_get.c, is not recovered yet); only the two
- * ranges this TU reads are modeled. Ranges are stored in hundredths.
- */
-typedef struct UnitInitData {
-    unsigned char unmodeled_00[0x10];
-    short atkRange;
-    short defRange;
-} UnitInitData;
-
-extern UnitInitData *dataUnitInitGet(int id);
-
 /*
  * .bss for this TU is still scaffold-owned (config/tu-build.json
  * data_ownership); the scaffold defines it under the original ELF's own

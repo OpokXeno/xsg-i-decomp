@@ -3,6 +3,8 @@
 
 #include "shared.h"
 
+enum CalcTechniqueCount { CALC_NORMAL_TECHNIQUE_COUNT = 6 };
+
 typedef struct CalcUnitParam CalcUnitParam;
 
 struct CalcUnitParam {
@@ -40,7 +42,9 @@ struct CalcUnitParam {
     unsigned char unmodeled_54[0x5E - 0x54];
     short sefSetupParams[3]; /* +0x5E: sefSetupPlayer's extra arguments */
     short accessoryId[3];    /* +0x64: calcMagDefGet's per-slot item ids */
-    unsigned char unmodeled_6a[0xAC - 0x6A];
+    unsigned char unmodeled_6a[0x76 - 0x6A];
+    short normalTechniqueId[CALC_NORMAL_TECHNIQUE_COUNT]; /* +0x76 */
+    unsigned char unmodeled_82[0xAC - 0x82];
     u16 statActiveMask[8];   /* +0xAC: calcStatTurn's per-category bit set */
     unsigned char unmodeled_bc[0xCC - 0xBC];
     unsigned char statTurnCount[8][16]; /* +0xCC: calcStatTurn's countdown grid */
@@ -48,5 +52,17 @@ struct CalcUnitParam {
     unsigned char unmodeled_14e[0x15C - 0x14E];
     struct UnitWork *statEffUnits[8]; /* +0x15C: statEffOn/statEffOff */
 };
+
+/* ACT_create's actor pool supplies both ObjectTask.work and the unit's
+ * separate motion actor. calcUPGet reaches up through work at +0x84;
+ * dataUnitFileLoadMdl reaches the model pointers through motionActor.
+ * Only fields used by these consumers are named. */
+typedef struct BattleActor {
+    int flags;
+    void (*update)(struct BattleActor *self);
+    void (*draw)(struct BattleActor *self);
+    unsigned char unmodeled_0c[0x84 - 0x0C];
+    struct CalcUnitParam *up; /* +0x84 */
+} BattleActor;
 
 #endif /* INCLUDE_OV01_CALC_H */

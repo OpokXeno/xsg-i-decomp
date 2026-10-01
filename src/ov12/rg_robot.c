@@ -422,7 +422,6 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExit);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDashStatus);
 
-static void _BodyPlayMotion(RgBody *body, int motion);
 
 /*
  * Sets DashVR's own scratch0/scratchTimer (see RgRobotStatus): scratch0 is
@@ -974,13 +973,18 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _IsBackWeaponReady);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecShotOrAttackCmd);
 
-static void _InitTargettingStatus(RgStatus *status, RgBody *body, void *target);
+static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int targettingMode);
 
-static int _ExecTargettingCmd(RgStatus *status, RgBody *body, RgCmd *command, void *target)
+/* _AllowAllCmdInMoving supplies mode 1; _InitTargettingStatus tests this
+ * mode as zero/nonzero and reads the actual target from body separately.
+ * Its result is the 0x100 command-processing mask bit, not a command id. */
+#define RG_CMD_RESULT_TARGETTING 0x100
+
+static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *command, int targettingMode)
 {
     (void)command;
-    _InitTargettingStatus(status, body, target);
-    return 0x100;
+    _InitTargettingStatus(status, body, targettingMode);
+    return RG_CMD_RESULT_TARGETTING;
 }
 
 static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)

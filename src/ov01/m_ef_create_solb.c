@@ -2,6 +2,7 @@
  * OV01 original TU 29: 0x00a36be8..0x00a37ab8 (7 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 #include "main/m_math.h"
 #include "m_ef_create_solb.h"
@@ -15,7 +16,7 @@ static void fnSOLB_PR000(void *self, void *work);
 static void fnSOLB_DP000(void *self, void *work);
 static void fnSOLB_PO000(void *self, void *work);
 
-int MEfCreate_SOLB(void *work)
+int MEfCreate_SOLB(MEfObjRecord *work)
 {
     unsigned char *base = (unsigned char *)work;
     SolbState *state = (SolbState *)(base + 32);
@@ -175,7 +176,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_solb", fnSOLB_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 static void fnSOLB_PO000(void *self, void *work)

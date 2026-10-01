@@ -2,6 +2,7 @@
  * OV01 original TU 27: 0x00a358a8..0x00a360e0 (5 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 typedef unsigned int Amp02Quadword __attribute__((mode(TI)));
@@ -81,8 +82,10 @@ static void fnAMP02_DM000(void *self, Amp02DrawState *work);
 static void fnAMP02_PO000(void *self, Amp02Effect *work);
 
 /* Initialize actor geometry, the previous position and the drawing packet. */
-int MEfCreate_AMP02(Amp02Object *object)
+int MEfCreate_AMP02(MEfObjRecord *self)
 {
+    /* This constructor interprets its own variant of the pooled work. */
+    Amp02Object *object = (Amp02Object *)self;
     Amp02InitState *work = &object->work;
     Amp02GsParameter parameter;
     Vector4 actor_coordinate[1];
@@ -177,7 +180,6 @@ static void fnAMP02_DM000(void *self, Amp02DrawState *work) {
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_amp_02", fnAMP02_DP000);
 
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /*

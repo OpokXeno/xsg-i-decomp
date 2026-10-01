@@ -2,6 +2,7 @@
  * OV01 original TU 33: 0x00a39088..0x00a397c0 (4 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 typedef struct EAD00ProcessWork {
@@ -63,7 +64,7 @@ static void fnEAD00_PR000(void *self, void *work);
 static void fnEAD00_DP000(void *self, void *work);
 static void fnEAD00_PO000(void *self, void *work);
 
-int MEfCreate_EAD00(void *self)
+int MEfCreate_EAD00(MEfObjRecord *self)
 {
     EAD00Object *object = (EAD00Object *)self;
     EAD00Init *init = (EAD00Init *)((unsigned char *)self + 0x20);
@@ -141,7 +142,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_ead_00", fnEAD00_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* work's layout is unresolved beyond +0x70: the per-frame lifetime counter

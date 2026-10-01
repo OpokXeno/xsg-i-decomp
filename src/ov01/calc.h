@@ -7,6 +7,8 @@
 
 #include "shared.h"
 
+enum CalcTechniqueCount { CALC_NORMAL_TECHNIQUE_COUNT = 6 };
+
 /*
  * The per-unit parameter block calcUPGet (this TU, still asm) returns for a
  * battle unit's ObjectTask. Only the members other TUs' code reads are
@@ -119,7 +121,9 @@ struct CalcUnitParam {
     unsigned char unmodeled_54[0x5E - 0x54];
     short sefSetupParams[3]; /* +0x5E: sefSetupPlayer's extra arguments */
     short accessoryId[3];    /* +0x64: calcMagDefGet's per-slot item ids */
-    unsigned char unmodeled_6a[0xAC - 0x6A];
+    unsigned char unmodeled_6a[0x76 - 0x6A];
+    short normalTechniqueId[CALC_NORMAL_TECHNIQUE_COUNT]; /* +0x76 */
+    unsigned char unmodeled_82[0xAC - 0x82];
     u16 statActiveMask[8];   /* +0xAC: calcStatTurn's per-category bit set */
     unsigned char unmodeled_bc[0xCC - 0xBC];
     unsigned char statTurnCount[8][16]; /* +0xCC: calcStatTurn's countdown grid */
@@ -128,30 +132,23 @@ struct CalcUnitParam {
     struct UnitWork *statEffUnits[8]; /* +0x15C: statEffOn/statEffOff */
 };
 
-/*
- * The battle actor object behind ObjectTask.work, as far as calcUPGet reads
- * it (0x00a11010..0x00a1101c): `lw $3,16($4)` loads unit->work and
- * `lw $2,132($3)` returns the CalcUnitParam pointer at +0x84. Several TUs
- * (e.g. src/ov01/unit_cmd.h, src/main/chr.h) already model the same real
- * object under the tag `Actor` with more members evidenced up to +0x70 or
- * further, but none of them reaches +0x84 yet, and that tag is theirs to
- * complete; this TU cannot redefine it, so it names its own bounded view of
- * the same object instead. Shared-header need: once an owning TU's Actor
- * header reaches +0x84, this member belongs there and this local view can be
- * dropped.
- *
- * calcTurnStart/calcTurnEnd (this TU, 0x00a12b50..0x00a12c28) read and
- * write the flags word at +0x00 directly through unit->work, the same
- * quantity src/ov01/unit_cmd.h and src/main/chr.h evidence further members
- * of under the tag `Actor`; this TU names only the one word it touches.
- */
-typedef struct CalcActorRecord CalcActorRecord;
+/* calcUPGet follows ObjectTask.work at +0x10 to the battle actor's up
+ * member at +0x84 (0x00A11010..0x00A1101C). calcTurnStart/End use its
+ * flags at +0x00. The shared head is also the base of rendered actors,
+ * while calc's scratch actor retains only this bounded 0x88-byte prefix. */
+/* ACT_create's actor pool supplies both ObjectTask.work and the unit's
+ * separate motion actor. calcUPGet reaches up through work at +0x84;
+ * dataUnitFileLoadMdl reaches the model pointers through motionActor.
+ * Only fields used by these consumers are named. */
+typedef struct BattleActor {
+    int flags;
+    void (*update)(struct BattleActor *self);
+    void (*draw)(struct BattleActor *self);
+    unsigned char unmodeled_0c[0x84 - 0x0C];
+    struct CalcUnitParam *up; /* +0x84 */
+} BattleActor;
 
-struct CalcActorRecord {
-    int flags;                      /* +0x00: calcTurnStart/calcTurnEnd */
-    unsigned char unmodeled_04[0x84 - 0x04];
-    CalcUnitParam *up; /* +0x84: calcUPGet's return value. */
-};
+typedef BattleActor CalcActorRecord;
 
 /*
  * calcUPGet (this TU, still asm, 0x00a11010): `lw $3,16($4)` loads

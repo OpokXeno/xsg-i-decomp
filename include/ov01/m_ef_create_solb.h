@@ -1,0 +1,6 @@
+#ifndef INCLUDE_OV01_M_EF_CREATE_SOLB_H
+#define INCLUDE_OV01_M_EF_CREATE_SOLB_H
+
+int MEfCreate_SOLB(MEfObjRecord *work);
+
+#endif /* INCLUDE_OV01_M_EF_CREATE_SOLB_H */

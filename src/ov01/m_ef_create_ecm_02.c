@@ -2,6 +2,7 @@
  * OV01 original TU 31: 0x00a38190..0x00a387a8 (5 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 extern void MMathAddRotateVectorY(void *destination, float angle, const Vector4 *base, const Vector4 *offset);
@@ -47,7 +48,7 @@ static void fnECM02_PO000(void *self, void *work);
 extern void MGsGPInit(ECM02Packet *packet, void *address, int size);
 extern float MMathMakeRandom2PI(void);
 
-int MEfCreate_ECM02(void *self)
+int MEfCreate_ECM02(MEfObjRecord *self)
 {
     ECM02Effect *effect = (ECM02Effect *)self;
     ECM02InitState *state = &effect->state;
@@ -156,7 +157,6 @@ static void fnECM02_PR000(void *self, void *work)
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_ecm_02", fnECM02_DP000);
 
 extern void sefHitEffect(void);
-extern void MEfObjDestroy(void *self);
 
 /*
  * work's layout beyond +0x70 is unresolved: the same per-frame lifetime

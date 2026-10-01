@@ -1,0 +1,29 @@
+#ifndef INCLUDE_OV01_M_EF_CREATE_H
+#define INCLUDE_OV01_M_EF_CREATE_H
+
+#include "shared.h"
+
+/* MEfCreate copies a complete 0x70-byte request using aligned ld/sd.
+ * Only type is interpreted here; effect-specific payload fields are unknown.
+ * The union gives the opaque copy storage natural eight-byte alignment
+ * without claiming semantic 64-bit fields or using a GNU attribute. */
+typedef union MEfCreateParam {
+    struct {
+        int type;
+        u8 opaque[0x70 - 4];
+    } fields;
+    u64 opaqueStorage[0x70 / sizeof(u64)];
+} MEfCreateParam;
+
+/* MEfObjCreate supplies a pooled object with work at +0x20. Its original
+ * pool stride is 0x420 and base is 16-byte aligned (main/m_ef_obj.c).
+ * This bounded prefix includes the creation request, not the complete
+ * constructor-specific work allocation. */
+typedef struct MEfObjRecord MEfObjRecord;
+
+struct MEfObjRecord {
+    u8 unmodeled_00[0x20];
+    MEfCreateParam work;
+};
+
+#endif /* INCLUDE_OV01_M_EF_CREATE_H */
