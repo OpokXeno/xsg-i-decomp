@@ -2,7 +2,7 @@
  * OV01 original TU 31: 0x00a38190..0x00a387a8 (5 functions)
  */
 #include "common.h"
-#include "m_ef_create.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 extern void MMathAddRotateVectorY(void *destination, float angle, const Vector4 *base, const Vector4 *offset);

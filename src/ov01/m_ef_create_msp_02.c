@@ -2,7 +2,7 @@
  * OV01 original TU 28: 0x00a360e0..0x00a36be8 (6 functions)
  */
 #include "common.h"
-#include "m_ef_create.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 extern float MMathCalcRotNear(float first, float second);

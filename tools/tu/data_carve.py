@@ -117,8 +117,10 @@ SCHEMA = 'tu-data-carves/1'
 # and string/float/double literals (.rodata), gp-relative float literals (.lit4)
 # and double literals (.lit8), and under -G8 the small (<= 8 byte) string
 # literals and initialised-template copies GCC puts in .sdata (MAIN only: the
-# overlay links carve .rodata alone).
-SECTIONS = ('.rodata', '.lit4', '.lit8', '.sdata')
+# overlays carve .rodata and initialized .data).
+# .data includes function-local initialized arrays such as dispatch tables.
+SECTIONS = ('.rodata', '.lit4', '.lit8', '.sdata', '.data')
+OVERLAY_SECTIONS = ('.rodata', '.data')
 MAIN_ONLY_SECTIONS = ('.sdata',)
 CARVE_DIR = 'carve'
 # Input section of run k > 0 in a split object, and the object a split TU links.
@@ -553,19 +555,21 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True):
         name = names.get(tu_id)
         if name is None:
             raise CarveError(f'{REGISTRY}: {tu_id} is not a TU of {unit}')
+        text_line = re.search(r'^(\s*)(build/(?:scaffold/)?src/' + re.escape(unit) + '/'
+                              + re.escape(name) + r'\.o)\(\.text\);\s*$', text, re.M)
+        if not text_line:
+            raise CarveError(f'{tu_id}: {unit}.ld links no C object for {name} (is the TU C?)')
+        c_obj = text_line.group(2)
+        # Every section of this TU must use the same object. A preceding
+        # multi-run carve may already have replaced the .text object below.
+        linked_obj = c_obj[:-2] + SPLIT_OBJECT if split_sections(secs) else c_obj
         for sec, runs in sorted(secs.items()):
-            if sec != '.rodata':
-                raise CarveError(f'{tu_id}: an overlay carve covers .rodata only (declared {sec})')
+            if sec not in OVERLAY_SECTIONS:
+                raise CarveError(f'{tu_id}: an overlay carve covers {OVERLAY_SECTIONS} only (declared {sec})')
             spans = declared_runs(tu_id, sec, runs)
             piece = ovl_piece(unit_dir, unit, name, sec)
             if piece is None:
                 raise CarveError(f'{tu_id} has no {sec} piece in {unit}/layout.json')
-            text_line = re.search(r'^(\s*)(build/(?:scaffold/)?src/' + re.escape(unit) + '/'
-                                  + re.escape(name) + r'\.o)\(\.text\);\s*$', text, re.M)
-            if not text_line:
-                raise CarveError(f'{tu_id}: {unit}.ld links no C object for {name} (is the TU C?)')
-            c_obj = text_line.group(2)
-            linked_obj = c_obj[:-2] + SPLIT_OBJECT if len(spans) > 1 else c_obj
             if re.search(re.escape(c_obj) + r'\(' + re.escape(sec) + r'\)', text):
                 raise CarveError(f'{tu_id}: {unit}.ld already places {c_obj}({sec})')
             data_obj = f'build/asm/data/{unit}/{name}{sec}.o'
@@ -679,16 +683,18 @@ def tu_context(root, unit, unit_dir, tu_id):
         if name is None:
             raise CarveError(f'{tu_id} is not a TU of {unit}')
         pieces, placed, imported = {}, set(), {}
-        p = ovl_piece(unit_dir, unit, name, '.rodata')
-        if p:
-            pieces['.rodata'] = [p]
+        for sec in OVERLAY_SECTIONS:
+            p = ovl_piece(unit_dir, unit, name, sec)
+            if p:
+                pieces[sec] = [p]
         ld = Path(unit_dir) / f'{unit}.ld'
         if ld.is_file():
             text = ovl_restore(ld.read_text())
             obj = re.search(r'(build/(?:scaffold/)?src/' + re.escape(unit) + '/' + re.escape(name)
                             + r'\.o)\(\.text\);', text)
-            if obj and f'{obj.group(1)}(.rodata);' in text:
-                placed.add('.rodata')          # splat already links the C object's .rodata
+            for sec in OVERLAY_SECTIONS:
+                if obj and f'{obj.group(1)}({sec});' in text:
+                    placed.add(sec)            # splat already links this C section
         fdirs = [unit_dir / f'asm/{d}/{unit}/{name}' for d in ('nonmatchings', 'matchings')]
         layout = json.loads((unit_dir / 'layout.json').read_bytes())
         text_start = hx(layout['text'][f'{unit}/{name}'][0])

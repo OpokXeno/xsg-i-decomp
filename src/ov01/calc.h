@@ -7,7 +7,7 @@
 
 #include "shared.h"
 
-#define CALC_NORMAL_TECHNIQUE_COUNT 6
+enum CalcTechniqueCount { CALC_NORMAL_TECHNIQUE_COUNT = 6 };
 
 /*
  * The per-unit parameter block calcUPGet (this TU, still asm) returns for a
@@ -136,7 +136,18 @@ struct CalcUnitParam {
  * member at +0x84 (0x00A11010..0x00A1101C). calcTurnStart/End use its
  * flags at +0x00. The shared head is also the base of rendered actors,
  * while calc's scratch actor retains only this bounded 0x88-byte prefix. */
-#include "ov01/battle_actor.h"
+/* ACT_create's actor pool supplies both ObjectTask.work and the unit's
+ * separate motion actor. calcUPGet reaches up through work at +0x84;
+ * dataUnitFileLoadMdl reaches the model pointers through motionActor.
+ * Only fields used by these consumers are named. */
+typedef struct BattleActor {
+    int flags;
+    void (*update)(struct BattleActor *self);
+    void (*draw)(struct BattleActor *self);
+    unsigned char unmodeled_0c[0x84 - 0x0C];
+    struct CalcUnitParam *up; /* +0x84 */
+} BattleActor;
+
 typedef BattleActor CalcActorRecord;
 
 /*

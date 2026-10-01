@@ -2,7 +2,7 @@
  * OV01 original TU 23: 0x00a33f08..0x00a346c8 (5 functions)
  */
 #include "common.h"
-#include "m_ef_create.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 extern Matrix4 *MMathRotateMatrixYXZ(Matrix4 *destination,

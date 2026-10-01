@@ -1,0 +1,6 @@
+#ifndef INCLUDE_OV01_M_EF_CREATE_EAC_00_H
+#define INCLUDE_OV01_M_EF_CREATE_EAC_00_H
+
+int MEfCreate_EAC00(MEfObjRecord *self);
+
+#endif /* INCLUDE_OV01_M_EF_CREATE_EAC_00_H */

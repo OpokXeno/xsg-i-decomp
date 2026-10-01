@@ -3,7 +3,7 @@
 
 #include "shared.h"
 
-#define CALC_NORMAL_TECHNIQUE_COUNT 6
+enum CalcTechniqueCount { CALC_NORMAL_TECHNIQUE_COUNT = 6 };
 
 typedef struct CalcUnitParam CalcUnitParam;
 
@@ -52,5 +52,17 @@ struct CalcUnitParam {
     unsigned char unmodeled_14e[0x15C - 0x14E];
     struct UnitWork *statEffUnits[8]; /* +0x15C: statEffOn/statEffOff */
 };
+
+/* ACT_create's actor pool supplies both ObjectTask.work and the unit's
+ * separate motion actor. calcUPGet reaches up through work at +0x84;
+ * dataUnitFileLoadMdl reaches the model pointers through motionActor.
+ * Only fields used by these consumers are named. */
+typedef struct BattleActor {
+    int flags;
+    void (*update)(struct BattleActor *self);
+    void (*draw)(struct BattleActor *self);
+    unsigned char unmodeled_0c[0x84 - 0x0C];
+    struct CalcUnitParam *up; /* +0x84 */
+} BattleActor;
 
 #endif /* INCLUDE_OV01_CALC_H */

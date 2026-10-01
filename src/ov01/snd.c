@@ -2,9 +2,10 @@
  * OV01 original TU 13: 0x00a2c9f8..0x00a2e4b0 (34 functions)
  */
 #include "common.h"
-#include "ov01/data_file.h"
 #include "shared.h"
 #include "snd.h"
+
+extern int dataFileLoadNB(const char *filename, void *destination);
 
 #define SND_MU_VOLUME_MAX 0x7F
 #define SND_MU_FADE_TIME  2000

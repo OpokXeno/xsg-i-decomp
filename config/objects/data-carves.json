@@ -1396,6 +1396,26 @@
      ],
      "also_referenced_by_c": []
     }
+   ],
+   ".data": [
+    {
+     "range": [
+      "0x00a43728",
+      "0x00a4377c"
+     ],
+     "generated": [
+      "0x00a43728",
+      "0x00a4377c"
+     ],
+     "generated_by": [
+      "MEfCreate"
+     ],
+     "c_owned_symbols": [
+      "func_0",
+      "ntbl_1"
+     ],
+     "also_referenced_by_c": []
+    }
    ]
   },
   "ov02/tu005_00a023a8": {

@@ -39,7 +39,7 @@ PlCharacter *dataPlChaGet(int cid)
 
 /* Battle-data header offsets are byte offsets from the loaded block at
  * 0x00426F40. Public symbols name the offset words, not the block itself.
- * Record contents remain opaque until a consumer evidences their fields. */
+ * Other record contents remain opaque until a consumer evidences their fields. */
 #define BATTLE_DATA_FIELD_OFFSET(member) ((unsigned int)&((BattleDataHeader *)0)->member)
 
 typedef struct BattleDataHeader {
@@ -56,7 +56,6 @@ typedef struct BattleDataHeader {
     int defaultEquipmentOffset; /* +0x44 */
 } BattleDataHeader;
 
-typedef struct UnitInitRecord { unsigned char opaque[0x34]; } UnitInitRecord;
 typedef struct NormalInitRecord { unsigned char opaque[0x0C]; } NormalInitRecord;
 typedef struct SpecialInitRecord { unsigned char opaque[0x0C]; } SpecialInitRecord;
 typedef struct EtherInitRecord { unsigned char opaque[0x18]; } EtherInitRecord;
@@ -66,14 +65,14 @@ typedef struct SpecialTableRecord { unsigned char opaque[0x20]; } SpecialTableRe
 
 extern int D_426F48;
 
-UnitInitRecord *dataUnitInitGet(int entry)
+UnitInitData *dataUnitInitGet(int entry)
 {
     unsigned char *block = (unsigned char *)&D_426F48 - BATTLE_DATA_FIELD_OFFSET(unitInitOffset);
     int byteOffset = D_426F48;
-    UnitInitRecord *records = (UnitInitRecord *)(block + byteOffset);
+    UnitInitData *records = (UnitInitData *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 extern int D_426F50;
@@ -85,7 +84,7 @@ NormalInitRecord *dataNormInitGet(int entry)
     NormalInitRecord *records = (NormalInitRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 extern int D_426F54;
@@ -97,7 +96,7 @@ SpecialInitRecord *dataSpecInitGet(int entry)
     SpecialInitRecord *records = (SpecialInitRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 extern int D_426F58;
@@ -109,7 +108,7 @@ EtherInitRecord *dataEtherInitGet(int entry)
     EtherInitRecord *records = (EtherInitRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 /*
@@ -133,7 +132,7 @@ ParameterRecord *dataParaTblGet(int entry)
     ParameterRecord *records = (ParameterRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 extern int D_426F84;
@@ -145,7 +144,7 @@ DefaultEquipmentRecord *dataDefEquipGet(int entry)
     DefaultEquipmentRecord *records = (DefaultEquipmentRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 extern int D_426F80;
@@ -157,7 +156,7 @@ SpecialTableRecord *dataSpecTblGet(int entry)
     SpecialTableRecord *records = (SpecialTableRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
-    return &records[entry] - 1;
+    return &records[entry - 1];
 }
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
