@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_select_robot.h"
+#include "main/xgl_studio.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -74,7 +75,15 @@ static void _KillLoadIfMe(void *owner)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ReqLoad);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _IsEndOfLoad);
+static int _IsEndOfLoad(void)
+{
+    if (s_bLoading == 0) {
+        if (s_uReqNum != 0) {
+            if (s_uOkNum >= s_uReqNum) return 1;
+        }
+    }
+    return 0;
+}
 
 extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
 extern void *s_apBuf[4];
@@ -116,7 +125,50 @@ static void _InitLoad(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _InitAct);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _select_light);
+extern void xglLightIntensityAmbient(StudioLight *light,
+                                     const Vector4 *intensity);
+extern void xglLightIntensityParallel(StudioLight *light, unsigned int index,
+                                     const Vector4 *intensity);
+extern void xglLightAngle(StudioLight *light, unsigned int index,
+                         const Vector4 *direction);
+typedef union AlignedLightVector {
+    double alignment; /* Preserve 8-byte alignment for the original copy. */
+    Vector4 value;
+    float components[4];
+} AlignedLightVector;
+typedef struct AlignedLightBlock {
+    AlignedLightVector vectors[4];
+} AlignedLightBlock;
+extern const AlignedLightBlock D_00A56E10;
+extern AlignedLightBlock asDirection_0;
+
+void _select_light(StudioLight *light)
+{
+    AlignedLightBlock intensity;
+    int i;
+
+    intensity.vectors[0] = D_00A56E10.vectors[0];
+    intensity.vectors[1] = D_00A56E10.vectors[1];
+    intensity.vectors[2] = D_00A56E10.vectors[2];
+    intensity.vectors[3] = D_00A56E10.vectors[3];
+
+    for (i = 0; i < 4; i++) {
+        intensity.vectors[i].components[0] *= 0.8f;
+        intensity.vectors[i].components[1] *= 0.8f;
+        intensity.vectors[i].components[2] *= 0.8f;
+    }
+
+    for (i = 0; i < 4; i++) {
+        if (i == 0) {
+            xglLightIntensityAmbient(light, &intensity.vectors[0].value);
+        } else {
+            xglLightIntensityParallel(light, i - 1,
+                                      &intensity.vectors[i].value);
+            xglLightAngle(light, i - 1,
+                          &asDirection_0.vectors[i].value);
+        }
+    }
+}
 
 extern void XrgLinearIntpVector(RgVector destination, RgVector first,
                                  RgVector second, float weight);
@@ -136,7 +188,43 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ActivateAct);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ReqAct);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _DestructAct);
+extern const char D_00A56DD8[];
+extern void DisposeRgDispModel(RgDispModel *pDispModel);
+extern void DisposeRgFileSysData_sub(RgFileSysData *pFile,
+                                     const char *sourceFile, int line);
+
+static void _DestructAct(RgSelectRobot *pCont)
+{
+    unsigned int i;
+
+    if (pCont == 0) {
+        assert_prog(D_00A56DD8, D_00A56DA0, 540);
+    }
+
+    if (pCont->actorFlags != 0) {
+        *pCont->actorFlags = (*pCont->actorFlags | 0x8) & ~0x20;
+    }
+
+    if (pCont->hasActions != 0) {
+        for (i = 0; i < 3; i++) {
+            if (pCont->actions[i] == 0) {
+                continue;
+            }
+            if (pCont->actions[i]->actorFlags != 0) {
+                *pCont->actions[i]->actorFlags =
+                    (*pCont->actions[i]->actorFlags | 0x8) & ~0x20;
+            }
+            RgHeapFree(InstanceOfRgHeap(), pCont->actions[i], D_00A56DA0, 553);
+        }
+    }
+
+    if (pCont->displayModel != 0) {
+        DisposeRgDispModel(pCont->displayModel);
+    }
+    if (pCont->fileData != 0) {
+        DisposeRgFileSysData_sub(pCont->fileData, D_00A56DA0, 561);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _JobAct);
 
@@ -200,7 +288,28 @@ void RgSelectRobotScreenPos(RgSelectRobot *pCont, float screenPos)
     pCont->screenPos = screenPos;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", RgSelectRobotSetMode);
+void RgSelectRobotSetMode(RgSelectRobot *pCont, int mode)
+{
+    if (pCont == 0) {
+        assert_prog(D_00A56EF8, D_00A56DA0, 774);
+    }
+    switch (mode) {
+    case -1:
+        pCont->displayPosition = 0.0f;
+        break;
+    case 0:
+        pCont->displayPosition = -0.98172f;
+        break;
+    case 1:
+        pCont->displayPosition = 1.178125f;
+        break;
+    case 2:
+        pCont->displayPosition = -2.748864f;
+        break;
+    default:
+        break;
+    }
+}
 
 extern void InitXrgActorEssence(void *essence, int actorID);
 static void _ReqAct(RgSelectRobot *pCont, void *essence, int *accessoryIDs,

@@ -4,6 +4,8 @@
 #include "main/xgl_packet.h"
 #include "xgl_render.h"
 
+extern int sceGsSyncV(int mode);
+
 extern int s_nClearFrame;
 extern void xglRenderInit(void);
 static void xglRenderMove(void);
@@ -23,7 +25,8 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderVSyncCallback);
 
 extern void xglRenderVSyncCallback(void);
 extern void *sceGsSyncVCallback(void (*func)(void));
-extern int VSyncCount;
+extern signed char FLAG_FRAME_60;
+extern volatile int VSyncCount;
 
 static void xglRenderSyncInit(void)
 {
@@ -31,7 +34,23 @@ static void xglRenderSyncInit(void)
     VSyncCount = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderSyncMove);
+static void xglRenderSyncMove(void)
+{
+    if (FLAG_FRAME_60 == 1) {
+        sceGsSyncV(0);
+        return;
+    }
+
+    while (sceGsSyncV(0) != 0) {
+    }
+    while ((unsigned int)VSyncCount < 2U) {
+    }
+
+    if ((unsigned int)VSyncCount >= 3U) {
+        sRender.frame_delta = 1;
+    }
+    VSyncCount = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderDrawEnvInit);
 
@@ -69,7 +88,27 @@ void xglRenderClearEnvMove(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderSetReso);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderSwapBase);
+void xglRenderSwapBase(void)
+{
+    u32 accumulated_frames;
+    u16 next_display_base;
+    u16 next_draw_base;
+    u16 previous_width;
+
+    accumulated_frames = sRender.frame_count + sRender.frame_delta;
+    next_draw_base = sRender.draw_buffer_base;
+    next_display_base = sRender.display_buffer_base;
+    previous_width = sRender.width;
+
+    sRender.width = next_draw_base;
+    sRender.height = previous_width;
+    sRender.display_buffer_base = next_draw_base;
+    sRender.draw_buffer_base = next_display_base;
+    sRender.render_status = 0;
+    sRender.frame_delta = 0;
+    sRender.frame_count = accumulated_frames;
+    sRender.frame_status = 0;
+}
 
 void xglRenderDispOff(void)
 {
@@ -86,22 +125,6 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderInit);
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderFinalPacket);
 
 extern int s_nGblFadeInit;
-
-/*
- * sRender's callback pointer at +0x44 (see src/main/map_1.c's
- * MapRenderState and src/main/window_tex_load.c's UmnRenderSize for the
- * same object's other evidenced fields): xglRenderGlobalFade (still asm,
- * this TU, main 0x0022da90 `jalr $2`) calls it with the current packet
- * when it is non-null, and xglRenderGlobalFadeInit clears it.
- */
-typedef void (*XglRenderFadeCallback)(XglPacket *packet);
-
-typedef struct {
-    unsigned char unmodeled_00[0x44];
-    XglRenderFadeCallback fade_callback;  /* +0x44 */
-} XglRenderFadeView;
-
-extern XglRenderFadeView sRender;
 
 /* Forward: storage defined beside xglRenderGlobalFadeSet below. */
 extern int s_nGblFade;

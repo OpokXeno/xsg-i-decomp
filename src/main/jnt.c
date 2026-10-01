@@ -1,6 +1,54 @@
 #include "common.h"
 #include "jnt.h"
 
+typedef struct JntHairIdSource {
+    unsigned char unmodeled_00[0x8];
+    unsigned short primary_id;   /* 0x08 */
+    unsigned short secondary_id; /* 0x0A */
+} JntHairIdSource;
+typedef struct JntChannelTag {
+    int flag; /* 0x00 */
+    int tag;  /* 0x04 */
+} JntChannelTag;
+typedef struct JntChannelWork {
+    unsigned char unmodeled_000[0x28];
+    JntHairIdSource *hair_id_source; /* 0x28 */
+    unsigned char unmodeled_02c[0x7dc];
+    JntChannelTag *tag;              /* 0x808 */
+} JntChannelWork;
+typedef struct JntInterruptElement JntInterruptElement;
+struct JntInterruptElement {
+    unsigned char unmodeled_00[0x32];
+    unsigned short interrupt_channel; /* 0x32, the channel that interrupts this element */
+    unsigned char unmodeled_34[0xC];
+};
+typedef struct JntInterruptWork JntInterruptWork;
+struct JntInterruptWork {
+    unsigned char unmodeled_000[0x818];
+    JntInterruptElement *elements; /* 0x818 */
+};
+typedef struct JntChannelList JntChannelList;
+struct JntChannelList {
+    int count;                 /* 0x00 */
+    int channel_elements[8];   /* 0x04, indexed by channel */
+};
+typedef struct JntAccessoryRecord {
+    unsigned short size;
+    unsigned short type;
+} JntAccessoryRecord;
+
+typedef struct JntMoveResource {
+    unsigned char unmodeled_00[0x10];
+    int accessory_size;
+} JntMoveResource;
+
+typedef void (*JntFilterFn)(void *work, void *param, int flag);
+typedef struct JntFilterList {
+    int count;
+    int flags[8];
+    JntFilterFn filters[8];
+} JntFilterList;
+
 /*
  * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
  * Two of its slots are named here, because this file's two recovered
@@ -13,13 +61,11 @@
  * absolute stores as separate li/sw pairs, four instructions in place of the
  * original's single shared `lui $2,0x7000` and two displaced stores.
  */
-#define JNT_SCRATCH_BASE ((unsigned char *)0x70000000)
+#define JNT_SCRATCH_BASE ((void *)0x70000000)
 #define JNT_MATRIX_BUFFER_OFFSET 0x7A0
 #define JNT_MATRIX_SELECT_OFFSET 0x4BC
-#define JNT_MATRIX_BUFFER(scratch) \
-    (*(JntMatrixBuffer *)((scratch) + JNT_MATRIX_BUFFER_OFFSET))
-#define JNT_MATRIX_SELECT(scratch) \
-    (*(JntMatrixSelect *)((scratch) + JNT_MATRIX_SELECT_OFFSET))
+#define JNT_MATRIX_BUFFER(scratch) (*(JntMatrixBuffer *)((scratch) + JNT_MATRIX_BUFFER_OFFSET))
+#define JNT_MATRIX_SELECT(scratch) (*(JntMatrixSelect *)((scratch) + JNT_MATRIX_SELECT_OFFSET))
 
 /*
  * Three more scratchpad slots share a fixed layout with the pair above, so
@@ -108,6 +154,23 @@ typedef struct JntAnimWork {
     int anim_flags;
     float clip_radius;
 } JntAnimWork;
+
+typedef unsigned int JntRootStorage __attribute__((mode(TI)));
+typedef union JntRootSlot {
+    JntRootStorage storage;
+    struct {
+        float x;
+        float y;
+        float z;
+        unsigned int opaque_w;
+    } components;
+} JntRootSlot;
+typedef struct JntRootScratch {
+    unsigned char unmodeled_00[0x40];
+    JntRootSlot translation;
+    JntRootSlot rotation;
+    JntRootSlot scale;
+} JntRootScratch;
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", get_fcvpack);
 
@@ -233,7 +296,35 @@ int JNT_getFlags(void)
     return work->flags;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getAccessories);
+void *JNT_getAccessories(JntMoveResource *move)
+{
+    unsigned int accumulated = 4;
+    JntAccessoryRecord *record;
+    int *chunk_size;
+
+    if (move == 0) {
+        return 0;
+    }
+    chunk_size = &move->accessory_size;
+    record = (JntAccessoryRecord *)(move + 1);
+    for (;;) {
+        if (record->type == 4) {
+            return record + 1;
+        }
+        if (record->type == 0) {
+            break;
+        }
+        {
+        unsigned int size = record->size;
+        accumulated += size;
+        record = (JntAccessoryRecord *)((unsigned char *)record + size);
+        if (accumulated >= (unsigned int)*chunk_size) {
+            break;
+        }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_readAttribute);
 
@@ -301,11 +392,45 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setFCurve);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setFCurve2);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getRootTrans);
+/* The original commits the output quadword before JR/NOP; form03's
+ * unqualified member copy instead commits it in the return delay slot. */
+JntRootStorage JNT_getRootTrans(volatile JntRootSlot *destination)
+{
+    const JntRootScratch *work = JNT_SCRATCH_BASE;
+    unsigned int workAddress = (unsigned int)work;
+    const JntRootSlot *translation = (const JntRootSlot *)
+        (workAddress + sizeof(work->unmodeled_00));
+    JntRootStorage value = translation->storage;
+    destination->storage = value;
+    return value;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getRootRotate);
+/* The original commits the output quadword before JR/NOP; form03's
+ * unqualified member copy instead commits it in the return delay slot. */
+JntRootStorage JNT_getRootRotate(volatile JntRootSlot *destination)
+{
+    const JntRootScratch *work = JNT_SCRATCH_BASE;
+    unsigned int workAddress = (unsigned int)work;
+    const JntRootSlot *rotation = (const JntRootSlot *)
+        (workAddress + sizeof(work->unmodeled_00) + sizeof(work->translation));
+    JntRootStorage value = rotation->storage;
+    destination->storage = value;
+    return value;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getRootScale);
+/* The original commits the output quadword before JR/NOP; form03's
+ * unqualified member copy instead commits it in the return delay slot. */
+JntRootStorage JNT_getRootScale(volatile JntRootSlot *destination)
+{
+    const JntRootScratch *work = JNT_SCRATCH_BASE;
+    unsigned int workAddress = (unsigned int)work;
+    const JntRootSlot *scale = (const JntRootSlot *)
+        (workAddress + sizeof(work->unmodeled_00) + sizeof(work->translation) +
+         sizeof(work->rotation));
+    JntRootStorage value = scale->storage;
+    destination->storage = value;
+    return value;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_addConsumer);
 
@@ -353,13 +478,66 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_defaultConsumer);
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_resetHair);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_hairID_00314318);
+static int JNT_hairID(JntChannelWork *work)
+{
+    JntChannelTag *tag = work->tag;
+    JntHairIdSource *source = work->hair_id_source;
+    int id;
+
+    id = source->primary_id;
+    if (tag->flag == 0) {
+        id += source->secondary_id;
+    }
+    if ((tag->tag & 0xFFFF0000) == 0x008A0000) {
+        id += tag->tag & 0xFFFF;
+    }
+    return id;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_computeHair);
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_setInterrupt);
+int JNT_setInterrupt(JntInterruptWork *work, JntChannelList *list)
+{
+    int count = list->count;
+    int result = 0;
+    int channel;
 
-INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_getFilter);
+    work->elements[0].interrupt_channel = 0;
+    for (channel = 1; channel < count; channel++) {
+        int element = list->channel_elements[channel];
+        if (element != 0 && (element & 0x8000) == 0) {
+            work->elements[element].interrupt_channel = channel;
+            result++;
+        }
+    }
+
+    return result;
+}
+
+JntFilterFn JNT_getFilter(void *work, JntFilterList *list)
+{
+    int count = list->count;
+    int index = 1;
+
+    if (index < count) {
+        int remaining = count;
+        JntFilterFn *filter = &list->filters[1];
+        int *flag = &list->flags[1];
+        for (;;) {
+            if ((*flag & 0x8000) != 0) {
+                return *filter;
+            }
+            count = remaining;
+            flag++;
+            index++;
+            if (index >= count) {
+                break;
+            }
+            filter++;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_resetMatrix);
 

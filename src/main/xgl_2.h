@@ -7,8 +7,11 @@
 
 #include "shared.h"
 
-typedef struct Matrix {
+typedef unsigned int XglQuadword __attribute__((mode(TI)));
+
+typedef union Matrix {
     float elements[16];
+    XglQuadword quadwords[4];
 } Matrix;
 
 extern float xglAtan2(float x, float y);

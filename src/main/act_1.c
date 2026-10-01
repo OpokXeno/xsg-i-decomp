@@ -165,6 +165,24 @@ void ACT_update(void)
     LOOK_target_doit();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_pauseUpdate);
+extern void ACT_updateMotionPause(ActRecord *actor);
+
+void ACT_pauseUpdate(void)
+{
+    int index;
+
+    xglStudioFlushActiveCamera();
+    for (index = 0; index < ACTOR_COUNT; index++) {
+        actor[index].runtimeFlags |= 0x80000;
+    }
+    for (index = 0; index < ACTOR_COUNT; index++) {
+        if (actor[index].inUseId != 0 && (actor[index].flags & 8) == 0) {
+            ACT_updateMotionPause(&actor[index]);
+        }
+    }
+    for (index = 0; index < ACTOR_COUNT; index++) {
+        actor[index].runtimeFlags &= ~0x80000;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_info_00306090);

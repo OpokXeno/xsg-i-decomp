@@ -19,8 +19,16 @@
  */
 typedef struct RgEquipRecord RgEquipRecord;
 
+/* The accessor compares each mount's first word; the rest stays opaque. */
+typedef struct RgEquipMount {
+    int type;
+    unsigned char unmodeled_004[8];
+} RgEquipMount;
+
+#define RG_EQUIP_MOUNT_MAX 4
+
 struct RgEquipRecord {
-    unsigned char unmodeled_000[0x30]; /* +0x00..+0x2f */
+    RgEquipMount mounts[RG_EQUIP_MOUNT_MAX]; /* +0x00..+0x2f */
     int mountCount;                    /* +0x30: cleared by InitRgEquip;
                                          * RgEquipAddMount's counterpart in
                                          * this allocation's function group */

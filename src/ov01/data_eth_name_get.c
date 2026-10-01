@@ -155,7 +155,30 @@ const char **dataStatNameGet(int statType, int index)
     return name;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_eth_name_get", dataPlayerNameGet);
+extern int MenuScenarioNoGet(void);
+extern const char D_00A4E0C8[];
+extern const char *ziggyName;
+extern const char *playerNameTbl[32];
+
+const char **dataPlayerNameGet(int id)
+{
+    int no;
+
+    if (id >= 33)
+    {
+        printf(D_00A4E0C8, id);
+        return 0;
+    }
+    if (id == 5)
+    {
+        no = MenuScenarioNoGet();
+        if (no >= 108)
+        {
+            return &ziggyName;
+        }
+    }
+    return &playerNameTbl[id - 1];
+}
 
 extern const char D_00A4E0E8[];
 extern EthName engNameTbl[40];

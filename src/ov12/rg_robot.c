@@ -5,6 +5,10 @@
 #include "shared.h"
 #include "rg_robot.h"
 
+/* RgShotThread is defined in tu011 and stays opaque at this call site. */
+struct RgShotThread;
+extern void RgShotThreadSleep(struct RgShotThread *thread);
+
 /*
  * These are external file-backed witnesses in the TU's still asm-owned
  * .rodata (config/tu/ov12/tu004.json data_ownership), not candidate-emitted
@@ -135,7 +139,14 @@ static float _CalcMaxSpeed(RgBody *body, float baseSpeed)
     return (baseSpeed * speedRating) / weight;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _StopAllShotThread);
+static void _StopAllShotThread(RgBody *body)
+{
+    unsigned int eSide;
+
+    for (eSide = 0; eSide < RG_EQUIP_TYPE_NUM; eSide++) {
+        RgShotThreadSleep(body->shotThread[eSide]);
+    }
+}
 
 static void _BodyOnGround(RgBody *body)
 {
@@ -353,7 +364,21 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecCmdInShield);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ShieldPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ShieldExit);
+static void _ShieldExit(RgRobotStatus *status, RgBody *body)
+{
+    void *weapon;
+
+    (void)status;
+    body->shieldActive = 0;
+    weapon = body->weapon[0];
+    if (weapon != 0) {
+        RgWeaponRestartLockon(weapon);
+    }
+    weapon = body->weapon[1];
+    if (weapon != 0) {
+        RgWeaponRestartLockon(weapon);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitShieldStatus);
 
@@ -367,11 +392,23 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitTargettingStatus);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecCmdInBreaking);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BreakingPassTime);
+static int _BreakingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
+{
+    float remaining;
+
+    remaining = status->scratch0AsFloat - deltaTime;
+    status->scratch0AsFloat = remaining;
+    if (remaining < 0.0f) {
+        _InitMovingStatus(status, body);
+    }
+    return 0;
+}
 
 static void _BodyPlayMotion(RgBody *body, int motion);
+
 static void _BreakingExit(RgRobotStatus *status, RgBody *body)
 {
+    (void)status;
     _BodyPlayMotion(body, 0);
 }
 
@@ -440,7 +477,14 @@ static int _DamageExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DamagePassTime);
+static int _DamagePassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
+{
+    (void)deltaTime;
+    if (status->elapsedTime >= status->scratch0AsFloat) {
+        _InitMovingStatus(status, body);
+    }
+    return 0x10;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDamageStatus);
 
@@ -929,13 +973,18 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _IsBackWeaponReady);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecShotOrAttackCmd);
 
-static void _InitTargettingStatus(RgStatus *status, RgBody *body, int target);
-static int _ExecTargettingCmd(RgStatus *status, RgBody *body,
-                              void *unused, int target)
+static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int targettingMode);
+
+/* _AllowAllCmdInMoving supplies mode 1; _InitTargettingStatus tests this
+ * mode as zero/nonzero and reads the actual target from body separately.
+ * Its result is the 0x100 command-processing mask bit, not a command id. */
+#define RG_CMD_RESULT_TARGETTING 0x100
+
+static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *command, int targettingMode)
 {
-    (void)unused;
-    _InitTargettingStatus(status, body, target);
-    return 0x100;
+    (void)command;
+    _InitTargettingStatus(status, body, targettingMode);
+    return RG_CMD_RESULT_TARGETTING;
 }
 
 static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)

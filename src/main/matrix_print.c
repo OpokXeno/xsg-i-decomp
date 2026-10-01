@@ -77,7 +77,28 @@ void MATRIX_convert4(f32 (*dst)[4], f32 (*src)[4]) {
     dst[3][3] = src[3][3];
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", MATRIX_convert4s);
+void MATRIX_convert4s(Matrix4 destination, const Matrix4 source)
+{
+    destination[0][0] = source[0][0];
+    destination[0][1] = source[0][1];
+    destination[0][2] = source[0][2];
+    destination[0][3] = __builtin_sqrtf(source[0][0] * source[0][0] + source[0][1] * source[0][1] + source[0][2] * source[0][2]);
+
+    destination[1][0] = source[1][0];
+    destination[1][1] = source[1][1];
+    destination[1][2] = source[1][2];
+    destination[1][3] = __builtin_sqrtf(source[1][0] * source[1][0] + source[1][1] * source[1][1] + source[1][2] * source[1][2]);
+
+    destination[2][0] = source[2][0];
+    destination[2][1] = source[2][1];
+    destination[2][2] = source[2][2];
+    destination[2][3] = __builtin_sqrtf(source[2][0] * source[2][0] + source[2][1] * source[2][1] + source[2][2] * source[2][2]);
+
+    destination[3][0] = source[3][0];
+    destination[3][1] = source[3][1];
+    destination[3][2] = source[3][2];
+    destination[3][3] = source[3][3];
+}
 
 /*
  * MATRIX_convert4MulMatrix (ee-vu-cop2, docs/ps2-capabilities.md): rescales
@@ -383,7 +404,33 @@ INCLUDE_ASM("asm/main/nonmatchings/matrix_print", QUAT_toMatrix4);
 
 INCLUDE_ASM("asm/main/nonmatchings/matrix_print", QUAT_interpS);
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", QUAT_interpL);
+void QUAT_interpL(float destination[4], const float first[4], const float second[4],
+                  float first_weight, float second_weight)
+{
+    float dot = first[0] * second[0];
+    float adjusted[4];
+
+    dot += first[1] * second[1];
+    dot += first[2] * second[2];
+    dot += first[3] * second[3];
+
+    if (dot < 0.0f) {
+        adjusted[0] = -second[0];
+        adjusted[1] = -second[1];
+        adjusted[2] = -second[2];
+        adjusted[3] = -second[3];
+    } else {
+        adjusted[0] = second[0];
+        adjusted[1] = second[1];
+        adjusted[2] = second[2];
+        adjusted[3] = second[3];
+    }
+
+    destination[0] = first_weight * first[0] + second_weight * adjusted[0];
+    destination[1] = first_weight * first[1] + second_weight * adjusted[1];
+    destination[2] = first_weight * first[2] + second_weight * adjusted[2];
+    destination[3] = first_weight * first[3] + second_weight * adjusted[3];
+}
 
 /*
  * CUR_MATRIX_Unit (ee-vu-cop2, docs/ps2-capabilities.md): resets the

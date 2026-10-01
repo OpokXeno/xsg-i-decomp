@@ -1,5 +1,7 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_2.h"
+#include "outer_product.h"
 
 typedef union {
     Vector4 vector;
@@ -20,7 +22,32 @@ void OuterProduct(const OuterProductVector *left, const OuterProductVector *righ
     __builtin_memcpy(destination, &result, sizeof(result));
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/outer_product", CalcVerticalVector);
+void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
+                        const Vector4 *third, Vector4 *vertical)
+{
+    Vector4 first_edge;
+    Vector4 second_edge;
+    Vector4 normal;
+
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%1)\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)"
+        :
+        : "r"(&first_edge), "r"(first), "r"(second)
+        : "memory");
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%1)\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)"
+        :
+        : "r"(&second_edge), "r"(first), "r"(third)
+        : "memory");
+    xglVectorOuter(&normal, &first_edge, &second_edge);
+    xglVectorOuter(vertical, &first_edge, &normal);
+}
 
 extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                                const Vector4 *third, Vector4 *vertical);
@@ -47,7 +74,40 @@ float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *thi
     return length;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/outer_product", CalcCrossPoint);
+void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
+                    const Vector4 *third, const Vector4 *fourth,
+                    Vector4 *cross_point)
+{
+    Vector4 normal;
+    float intersection_values[2];
+
+    intersection_values[1] = CalcLength(first, second, third);
+    CalcVerticalVector(first, second, third, &normal);
+    xglVectorNormal(&normal, &normal);
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%1)\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)"
+        :
+        : "r"(cross_point), "r"(third), "r"(fourth)
+        : "memory");
+    xglVectorInner(&intersection_values[0], cross_point, &normal);
+    intersection_values[0] = intersection_values[1] / intersection_values[0];
+    xglVectorLength(&intersection_values[1], cross_point);
+    xglVectorNormal(cross_point, cross_point);
+    cross_point->x *= intersection_values[0] * intersection_values[1];
+    cross_point->y *= intersection_values[0] * intersection_values[1];
+    cross_point->z *= intersection_values[0] * intersection_values[1];
+    __asm__ __volatile__(
+        "lqc2 vf20, 0(%0)\n\t"
+        "lqc2 vf21, 0(%1)\n\t"
+        "vadd.xyzw vf20, vf20, vf21\n\t"
+        "sqc2 vf20, 0(%0)"
+        :
+        : "r"(cross_point), "r"(third)
+        : "memory");
+}
 
 int CheckPointLine(const Vector4 *first, const Vector4 *second,
                    const Vector4 *point)
@@ -101,4 +161,8 @@ float CheckDist3D(const Vector4 *first, const Vector4 *second)
                            + (first->z - second->z) * (first->z - second->z));
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/outer_product", CheckDist2D);
+float CheckDist2D(const Vector4 *first, const Vector4 *second)
+{
+    return __builtin_sqrtf((first->x - second->x) * (first->x - second->x)
+                           + (first->z - second->z) * (first->z - second->z));
+}

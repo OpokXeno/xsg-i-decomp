@@ -32,6 +32,9 @@ extern JavaField *lookupClassField(void *class_object, void *name, int flags);
  *                   0x0030481c) before tail-calling it.
  *   +0x30 scale_x/y/z
  *                   the three floats setScale__FFF writes (swc1).
+ *   +0x3c scale_w   the fourth float getScale__ reads (lwc1 60($peer)) along
+ *                   with scale_z/y/x, into the shared Vector4f object it
+ *                   returns; no recovered function writes it.
  *   +0xa0 serial    this unit's own slot number: getSerial__ returns it
  *                   verbatim, and getState__/getPivot__/setPivot__/
  *                   setAxis__ use it to index the 64-entry unitSequence
@@ -100,7 +103,8 @@ typedef struct UnitPeer {
     float scale_x;                                   /* +0x30 */
     float scale_y;                                   /* +0x34 */
     float scale_z;                                   /* +0x38 */
-    unsigned char unmodeled_3c[0xa0 - 0x3c];
+    float scale_w;                                   /* +0x3c */
+    unsigned char unmodeled_40[0xa0 - 0x40];
     u8 serial;                                        /* +0xa0 */
     u8 signal;                                        /* +0xa1 */
     unsigned char unmodeled_a2[0xa6 - 0xa2];
@@ -215,6 +219,18 @@ typedef struct UnitArgsSetCall {
     int size;               /* +0xc */
 } UnitArgsSetCall;
 
+/*
+ * setArgs__III's call block: object +0x0, offset +0x4, the raw value word to
+ * copy from +0x8 and the byte count +0xc (lw v1,8(v0) / lw s0,0xc(v0) / lw
+ * s1,0(v0) / lw s2,4(v0) at 0x00303f2c..0x00303f40).
+ */
+typedef struct UnitArgsWordCall {
+    u8 *object;
+    int offset;
+    int value;
+    int size;
+} UnitArgsWordCall;
+
 typedef struct UnitVector3Call {
     u8 *object;
     float x;
@@ -260,6 +276,43 @@ typedef struct UnitAxisOutCall {
     u8 *object;
     UnitAxisVector *vector;
 } UnitAxisOutCall;
+
+/*
+ * getScale__ hands back the peer's scale through one shared, preallocated
+ * xeno.util.Vector4f object (scale_0_007C0A58) instead of allocating a new
+ * one, so it has the same object-header/z/y/x/w layout as UnitAxisVector
+ * above. +0x00 is seeded from
+ * classJava_xeno_util_Vector4f->instance_class_ref (lw a0,24(a1) / sw
+ * a0,0(v1) at 0x003041b4/0x003041bc), the same class-ref slot
+ * SceneObjectHeader keeps at its own +0x00 (include/shared.h); z/y/x/w are
+ * then copied from the peer's scale_z/y/x/w floats
+ * (0x003041b8..0x003041dc). The object is 0x18 bytes
+ * (config/symbols/main.txt, build/data/unit.bss.o); its last 4 are never
+ * read or written here.
+ */
+typedef struct UnitScaleVector {
+    SceneObjectClassRef *class_ref; /* +0x00 */
+    float z;                        /* +0x04 */
+    float y;                        /* +0x08 */
+    float x;                        /* +0x0c */
+    float w;                        /* +0x10 */
+    unsigned char unmodeled_14[0x18 - 0x14];
+} UnitScaleVector;
+
+extern SceneClass *classJava_xeno_util_Vector4f;
+extern UnitScaleVector scale_0_007C0A58;
+
+/*
+ * The interpreter value slot a native's return value goes into, the third
+ * argument of every native here that returns something: getSerial__/
+ * getState__/getArgs__II above store a plain result word in it, getScale__
+ * the reference to the Vector4f object it hands back (sw v1,0(s1) at
+ * 0x003041e0), so the slot holds either.
+ */
+typedef union UnitResultValue {
+    u32 word;
+    UnitScaleVector *object;
+} UnitResultValue;
 
 /*
  * suspend__I/resume__I are static natives (no receiver): the call block is

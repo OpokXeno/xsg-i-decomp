@@ -73,50 +73,39 @@
     {
      "range": [
       "0x004c5510",
-      "0x004c5530"
+      "0x004c5550"
      ],
      "generated": [
       "0x004c5510",
-      "0x004c5530"
+      "0x004c5550"
      ],
      "generated_by": [
-      "MenuParaPtNowGet"
+      "MenuParaPtNowGet",
+      "MenuParaUp"
      ],
      "c_owned_symbols": [
-      "jtbl_004C5510"
+      "jtbl_004C5510",
+      "jtbl_004C5530"
      ],
      "also_referenced_by_c": []
     },
     {
      "range": [
       "0x004c55c0",
-      "0x004c58a0"
+      "0x004c6048"
      ],
      "generated": [
       "0x004c55c0",
-      "0x004c5898"
+      "0x004c6048"
      ],
      "generated_by": [
-      "CharPasMain"
+      "CharInfoMain",
+      "CharPasMain",
+      "MenuCharEquipCalcPointGet"
      ],
      "c_owned_symbols": [
-      "jtbl_004C55C0"
-     ],
-     "also_referenced_by_c": []
-    },
-    {
-     "range": [
-      "0x004c58c0",
-      "0x004c5d70"
-     ],
-     "generated": [
-      "0x004c58c0",
-      "0x004c5d70"
-     ],
-     "generated_by": [
-      "CharInfoMain"
-     ],
-     "c_owned_symbols": [
+      "jtbl_004C55C0",
+      "jtbl_004C58A0",
       "D_004C58C0",
       "D_004C58E0",
       "D_004C58F8",
@@ -151,9 +140,12 @@
       "D_004C5CC0",
       "D_004C5CF8",
       "D_004C5D28",
-      "D_004C5D58"
+      "D_004C5D58",
+      "jtbl_004C5D70"
      ],
-     "also_referenced_by_c": [],
+     "also_referenced_by_c": [
+      "D_004C6048"
+     ],
      "reached_through": {
       "D_004C58C0": "D_004C5920",
       "D_004C58E0": "D_004C5920",
@@ -184,25 +176,6 @@
       "D_004C5CF8": "D_004C5D58",
       "D_004C5D28": "D_004C5D58"
      }
-    },
-    {
-     "range": [
-      "0x004c5d70",
-      "0x004c6048"
-     ],
-     "generated": [
-      "0x004c5d70",
-      "0x004c6048"
-     ],
-     "generated_by": [
-      "CharInfoMain"
-     ],
-     "c_owned_symbols": [
-      "jtbl_004C5D70"
-     ],
-     "also_referenced_by_c": [
-      "D_004C6048"
-     ]
     },
     {
      "range": [
@@ -290,6 +263,23 @@
    ".sdata": [
     {
      "range": [
+      "0x004dad18",
+      "0x004dad20"
+     ],
+     "generated": [
+      "0x004dad18",
+      "0x004dad20"
+     ],
+     "generated_by": [
+      "MenuPasLengthGet"
+     ],
+     "c_owned_symbols": [
+      "D_004DAD18"
+     ],
+     "also_referenced_by_c": []
+    },
+    {
+     "range": [
       "0x004dad68",
       "0x004dadb0"
      ],
@@ -346,6 +336,7 @@
       "D_004DADF8",
       "D_004DAE40",
       "D_004DAE48",
+      "D_004DAE50",
       "D_004DAE58",
       "ParaDataBuf",
       "CharPas",
@@ -835,6 +826,1036 @@
       "D_00A59098",
       "D_00A590C8"
      ]
+    }
+   ]
+  },
+  "main/tu112": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004d4b50",
+      "0x004d4b70"
+     ],
+     "generated": [
+      "0x004d4b50",
+      "0x004d4b6a"
+     ],
+     "generated_by": [
+      "SsdAddEffectData"
+     ],
+     "c_owned_symbols": [
+      "D_004D4B50"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu124": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c0260",
+      "0x004c0290"
+     ],
+     "generated": [
+      "0x004c0260",
+      "0x004c028c"
+     ],
+     "generated_by": [
+      "GameDefocusQuickSet"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C0260"
+     ],
+     "also_referenced_by_c": [
+      "D_004C0200",
+      "D_004C0228"
+     ]
+    }
+   ]
+  },
+  "main/tu126": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c0300",
+      "0x004c0310"
+     ],
+     "generated": [
+      "0x004c0300",
+      "0x004c030b"
+     ],
+     "generated_by": [
+      "PauseMenuPage0"
+     ],
+     "c_owned_symbols": [
+      "D_004C0300"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu145": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c2430",
+      "0x004c2440"
+     ],
+     "generated": [
+      "0x004c2430",
+      "0x004c2439"
+     ],
+     "generated_by": [
+      "DB_pathGetShortPath"
+     ],
+     "c_owned_symbols": [
+      "D_004C2430"
+     ],
+     "also_referenced_by_c": []
+    }
+   ],
+   ".sdata": [
+    {
+     "range": [
+      "0x004da658",
+      "0x004da660"
+     ],
+     "generated": [
+      "0x004da658",
+      "0x004da65c"
+     ],
+     "generated_by": [
+      "DB_pathGetShortPath"
+     ],
+     "c_owned_symbols": [
+      "D_004DA658"
+     ],
+     "also_referenced_by_c": [
+      "dbCX",
+      "dbCY",
+      "dbCZ",
+      "dbCH",
+      "dbMODE"
+     ]
+    }
+   ]
+  },
+  "main/tu165": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c3930",
+      "0x004c3950"
+     ],
+     "generated": [
+      "0x004c3930",
+      "0x004c3944"
+     ],
+     "generated_by": [
+      "MenuModelDrawTypeSet"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C3930"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu171": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c7250",
+      "0x004c72d0"
+     ],
+     "generated": [
+      "0x004c7250",
+      "0x004c72d0"
+     ],
+     "generated_by": [
+      "MenuAgwsModelMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C7250"
+     ],
+     "also_referenced_by_c": [
+      "D_004C6F38",
+      "D_004C7190",
+      "D_004C71B0",
+      "D_004C71D0",
+      "D_004C7240"
+     ]
+    }
+   ],
+   ".lit4": [
+    {
+     "range": [
+      "0x004d7e58",
+      "0x004d7e60"
+     ],
+     "generated": [
+      "0x004d7e58",
+      "0x004d7e60"
+     ],
+     "generated_by": [
+      "MenuAgwsCameraMove",
+      "MenuAgwsModelMain"
+     ],
+     "c_owned_symbols": [
+      "D_004D7E58",
+      "D_004D7E5C"
+     ],
+     "also_referenced_by_c": []
+    }
+   ],
+   ".sdata": [
+    {
+     "range": [
+      "0x004dafd0",
+      "0x004dafd8"
+     ],
+     "generated": [
+      "0x004dafd0",
+      "0x004dafd7"
+     ],
+     "generated_by": [
+      "AgwsStatusMain"
+     ],
+     "c_owned_symbols": [
+      "D_004DAFD0"
+     ],
+     "also_referenced_by_c": [
+      "D_004DAFE8",
+      "AgwsPas",
+      "AgwsList",
+      "AgwsStatus",
+      "AgwsFace",
+      "AgwsSwitch"
+     ]
+    }
+   ]
+  },
+  "main/tu183": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004ca340",
+      "0x004ca3b8"
+     ],
+     "generated": [
+      "0x004ca340",
+      "0x004ca3b8"
+     ],
+     "generated_by": [
+      "AutoDoorFunc",
+      "EventDoorFunc",
+      "HalfAutoDoorFunc",
+      "MjDoorFunc"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CA340",
+      "jtbl_004CA360",
+      "jtbl_004CA380",
+      "jtbl_004CA3A0"
+     ],
+     "also_referenced_by_c": [
+      "D_004CA3B8",
+      "D_004CA3C8"
+     ]
+    },
+    {
+     "range": [
+      "0x004ca3e0",
+      "0x004ca3f8"
+     ],
+     "generated": [
+      "0x004ca3e0",
+      "0x004ca3f4"
+     ],
+     "generated_by": [
+      "DoorCommonFunc"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CA3E0"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu189": {
+   ".lit4": [
+    {
+     "range": [
+      "0x004d7fac",
+      "0x004d8004"
+     ],
+     "generated": [
+      "0x004d7fac",
+      "0x004d8004"
+     ],
+     "generated_by": [
+      "DrillCalcCameraPos",
+      "DrillCameraControlFunc",
+      "DrillCrashFunc",
+      "DrillResetCameraPos",
+      "DrillReturnFunc",
+      "DrillXMoveFunc",
+      "DrillZMoveFunc"
+     ],
+     "c_owned_symbols": [
+      "D_004D7FAC",
+      "D_004D7FB0",
+      "D_004D7FB4",
+      "D_004D7FB8",
+      "D_004D7FBC",
+      "D_004D7FC0",
+      "D_004D7FC4",
+      "D_004D7FC8",
+      "D_004D7FCC",
+      "D_004D7FD0",
+      "D_004D7FD4",
+      "D_004D7FD8",
+      "D_004D7FDC",
+      "D_004D7FE0",
+      "D_004D7FE4",
+      "D_004D7FE8",
+      "D_004D7FEC",
+      "D_004D7FF0",
+      "D_004D7FF4",
+      "D_004D7FF8",
+      "D_004D7FFC",
+      "D_004D8000"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu191": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004caac0",
+      "0x004cab00"
+     ],
+     "generated": [
+      "0x004caac0",
+      "0x004cab00"
+     ],
+     "generated_by": [
+      "Get_EffectCode"
+     ],
+     "c_owned_symbols": [
+      "D_004CAAC0"
+     ],
+     "also_referenced_by_c": []
+    },
+    {
+     "range": [
+      "0x004cab10",
+      "0x004cab48"
+     ],
+     "generated": [
+      "0x004cab10",
+      "0x004cab44"
+     ],
+     "generated_by": [
+      "Enemy_Pause"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CAB10"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu193": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004cad60",
+      "0x004cad90"
+     ],
+     "generated": [
+      "0x004cad60",
+      "0x004cad90"
+     ],
+     "generated_by": [
+      "Check_Discovery"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CAD60"
+     ],
+     "also_referenced_by_c": []
+    }
+   ],
+   ".lit4": [
+    {
+     "range": [
+      "0x004d8104",
+      "0x004d8108"
+     ],
+     "generated": [
+      "0x004d8104",
+      "0x004d8108"
+     ],
+     "generated_by": [
+      "Move_BeltConveyer"
+     ],
+     "c_owned_symbols": [
+      "D_004D8104"
+     ],
+     "also_referenced_by_c": [
+      "D_004D8134",
+      "D_004D8138"
+     ]
+    }
+   ]
+  },
+  "main/tu195": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004cadf0",
+      "0x004cae30"
+     ],
+     "generated": [
+      "0x004cadf0",
+      "0x004cae30"
+     ],
+     "generated_by": [
+      "Enemy_ActionReady"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CADF0"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu198": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004cbae0",
+      "0x004cbb18"
+     ],
+     "generated": [
+      "0x004cbae0",
+      "0x004cbb18"
+     ],
+     "generated_by": [
+      "Check_InsideID",
+      "Check_Locater"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CBAE0",
+      "jtbl_004CBB00"
+     ],
+     "also_referenced_by_c": [
+      "D_004CBAD0"
+     ]
+    }
+   ]
+  },
+  "main/tu212": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004cc6d0",
+      "0x004cc6f0"
+     ],
+     "generated": [
+      "0x004cc6d0",
+      "0x004cc6ec"
+     ],
+     "generated_by": [
+      "srsCdReadCallback"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CC6D0"
+     ],
+     "also_referenced_by_c": [
+      "D_004CC6A8",
+      "D_004CC6B8",
+      "D_004CC6F0",
+      "D_004CC700",
+      "D_004CC710"
+     ]
+    }
+   ]
+  },
+  "main/tu221": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004ccc20",
+      "0x004ccc50"
+     ],
+     "generated": [
+      "0x004ccc20",
+      "0x004ccc50"
+     ],
+     "generated_by": [
+      "skipConstantPool"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CCC20"
+     ],
+     "also_referenced_by_c": [
+      "D_004CCA70",
+      "D_004CCA80",
+      "D_004CCA98",
+      "D_004CCAA8",
+      "D_004CCAC0",
+      "D_004CCAD0",
+      "D_004CCAE8",
+      "D_004CCB00",
+      "D_004CCB18",
+      "D_004CCB30",
+      "D_004CCB48",
+      "D_004CCB60",
+      "D_004CCB70",
+      "D_004CCB80",
+      "D_004CCB90",
+      "D_004CCBA0",
+      "D_004CCBB0",
+      "D_004CCBC0",
+      "D_004CCBD0",
+      "D_004CCBE0",
+      "D_004CCBF0",
+      "D_004CCC08"
+     ]
+    }
+   ]
+  },
+  "main/tu253": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004d15b0",
+      "0x004d15d0"
+     ],
+     "generated": [
+      "0x004d15b0",
+      "0x004d15cc"
+     ],
+     "generated_by": [
+      "JTHREAD_waitFor"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004D15B0"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "ov01/tu020_00a332e0": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a51160",
+      "0x00a51220"
+     ],
+     "generated": [
+      "0x00a51160",
+      "0x00a5121e"
+     ],
+     "generated_by": [
+      "MMv2Exec",
+      "MMv2Play"
+     ],
+     "c_owned_symbols": [
+      "D_00A51160",
+      "D_00A51180",
+      "D_00A511A0",
+      "D_00A511C8",
+      "D_00A51200"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "ov01/tu021_00a33648": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a51220",
+      "0x00a51270"
+     ],
+     "generated": [
+      "0x00a51220",
+      "0x00a51265"
+     ],
+     "generated_by": [
+      "MEfCreate"
+     ],
+     "c_owned_symbols": [
+      "D_00A51220",
+      "D_00A51240"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "ov02/tu005_00a023a8": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a11dd0",
+      "0x00a11df0"
+     ],
+     "generated": [
+      "0x00a11dd0",
+      "0x00a11de4"
+     ],
+     "generated_by": [
+      "UmnMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A11DD0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A11D40",
+      "D_00A11D58",
+      "D_00A11D70",
+      "D_00A11D90",
+      "D_00A11DB0"
+     ]
+    }
+   ]
+  },
+  "ov02/tu009_00a05738": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a12270",
+      "0x00a123b8"
+     ],
+     "generated": [
+      "0x00a12270",
+      "0x00a123b8"
+     ],
+     "generated_by": [
+      "tskUmnMailPas"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A12270"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "ov02/tu010_00a097d8": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a12fb0",
+      "0x00a13008"
+     ],
+     "generated": [
+      "0x00a12fb0",
+      "0x00a13004"
+     ],
+     "generated_by": [
+      "tskUmnDataBaseAnalisis"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A12FB0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A13138",
+      "D_00A13140",
+      "D_00A13148"
+     ]
+    }
+   ]
+  },
+  "ov10/tu008_00a21768": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a4e540",
+      "0x00a4e560"
+     ],
+     "generated": [
+      "0x00a4e540",
+      "0x00a4e560"
+     ],
+     "generated_by": [
+      "CardPlayDispInfo"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A4E540"
+     ],
+     "also_referenced_by_c": [
+      "D_00A4E4F0",
+      "D_00A4E500",
+      "D_00A4E508",
+      "D_00A4E510",
+      "D_00A4E520",
+      "D_00A4E530",
+      "D_00A4E538"
+     ]
+    },
+    {
+     "range": [
+      "0x00a4e5a0",
+      "0x00a4e690"
+     ],
+     "generated": [
+      "0x00a4e5a0",
+      "0x00a4e690"
+     ],
+     "generated_by": [
+      "CardSetEffect"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A4E5A0",
+      "jtbl_00A4E600"
+     ],
+     "also_referenced_by_c": []
+    },
+    {
+     "range": [
+      "0x00a4edb0",
+      "0x00a4ee00"
+     ],
+     "generated": [
+      "0x00a4edb0",
+      "0x00a4ee00"
+     ],
+     "generated_by": [
+      "CGPCMSub",
+      "CGPCursor2Pos"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A4EDB0",
+      "jtbl_00A4EDE0"
+     ],
+     "also_referenced_by_c": []
+    },
+    {
+     "range": [
+      "0x00a4ee60",
+      "0x00a4ef80"
+     ],
+     "generated": [
+      "0x00a4ee60",
+      "0x00a4ef78"
+     ],
+     "generated_by": [
+      "CGPBAEsub",
+      "CGPSetCursor"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A4EE60",
+      "jtbl_00A4EE90"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "ov10/tu009_00a324b8": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a4f710",
+      "0x00a4f7b0"
+     ],
+     "generated": [
+      "0x00a4f710",
+      "0x00a4f7a4"
+     ],
+     "generated_by": [
+      "CardEnemyAnswerCardxx",
+      "InitCpuDeck"
+     ],
+     "c_owned_symbols": [
+      "D_00A4F710",
+      "jtbl_00A4F740"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "ov12/tu001_00a00088": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a517f0",
+      "0x00a51808"
+     ],
+     "generated": [
+      "0x00a517f0",
+      "0x00a51808"
+     ],
+     "generated_by": [
+      "RobotGameMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A517F0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A51450",
+      "D_00A514D8",
+      "D_00A51500",
+      "D_00A51530",
+      "D_00A51538",
+      "D_00A51540",
+      "D_00A51548",
+      "D_00A51558",
+      "D_00A51560",
+      "D_00A51568",
+      "D_00A51570",
+      "D_00A51578",
+      "D_00A51580",
+      "D_00A51588",
+      "D_00A51590",
+      "D_00A51598",
+      "D_00A515A0",
+      "D_00A515B0",
+      "D_00A515B8",
+      "D_00A515C0",
+      "D_00A515C8",
+      "D_00A515E0",
+      "D_00A515F0",
+      "D_00A51600",
+      "D_00A51610",
+      "D_00A51620",
+      "D_00A51630",
+      "D_00A51640",
+      "D_00A51650",
+      "D_00A51658",
+      "D_00A516A8",
+      "D_00A516C8",
+      "D_00A51700",
+      "D_00A51718",
+      "D_00A51728",
+      "D_00A51738",
+      "D_00A51740",
+      "D_00A51750",
+      "D_00A51760",
+      "D_00A51770",
+      "D_00A51788",
+      "D_00A517A0",
+      "D_00A517B8",
+      "D_00A517C8",
+      "D_00A517D8"
+     ]
+    }
+   ]
+  },
+  "ov12/tu014_00a10318": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a526e0",
+      "0x00a526f8"
+     ],
+     "generated": [
+      "0x00a526e0",
+      "0x00a526f8"
+     ],
+     "generated_by": [
+      "RgHissatuCheck"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A526E0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A52670",
+      "D_00A52688",
+      "D_00A52698",
+      "D_00A526A0",
+      "D_00A526A8",
+      "D_00A526B0",
+      "D_00A526B8",
+      "D_00A526C0",
+      "D_00A526C8",
+      "D_00A526D0",
+      "D_00A526D8"
+     ]
+    }
+   ]
+  },
+  "ov12/tu027_00a1c7d8": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a53c48",
+      "0x00a53c80"
+     ],
+     "generated": [
+      "0x00a53c48",
+      "0x00a53c7b"
+     ],
+     "generated_by": [
+      "_ReadEnergyType"
+     ],
+     "c_owned_symbols": [
+      "D_00A53C48",
+      "D_00A53C58",
+      "D_00A53C60",
+      "D_00A53C70"
+     ],
+     "also_referenced_by_c": [
+      "D_00A53818",
+      "D_00A53828",
+      "D_00A53840",
+      "D_00A53848",
+      "D_00A53850",
+      "D_00A53858",
+      "D_00A53870",
+      "D_00A53888",
+      "D_00A538A8",
+      "D_00A53C20",
+      "D_00A53C30",
+      "D_00A53C38",
+      "D_00A53C40",
+      "D_00A53C80",
+      "D_00A53C98",
+      "D_00A53CA8",
+      "D_00A53CB0",
+      "D_00A53CB8",
+      "D_00A53CC0",
+      "D_00A53CD0"
+     ]
+    }
+   ]
+  },
+  "ov12/tu037_00a22668": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a54530",
+      "0x00a54560"
+     ],
+     "generated": [
+      "0x00a54530",
+      "0x00a54560"
+     ],
+     "generated_by": [
+      "RgTextInfoRead"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A54530"
+     ],
+     "also_referenced_by_c": [
+      "D_00A54480",
+      "D_00A54498",
+      "D_00A544C0",
+      "D_00A544D8",
+      "D_00A544E8",
+      "D_00A54500",
+      "D_00A54508"
+     ]
+    }
+   ]
+  },
+  "ov12/tu076_00a420e0": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a57b70",
+      "0x00a57bb0"
+     ],
+     "generated": [
+      "0x00a57b70",
+      "0x00a57bb0"
+     ],
+     "generated_by": [
+      "_paint_mode_left"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A57B70"
+     ],
+     "also_referenced_by_c": [
+      "D_00A57AC8",
+      "D_00A57AD8",
+      "D_00A57AF0",
+      "D_00A57B00",
+      "D_00A57B20",
+      "D_00A57B40",
+      "D_00A57B50",
+      "D_00A57B60"
+     ]
+    }
+   ]
+  },
+  "ov12/tu079_00a45120": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a587a0",
+      "0x00a587b0"
+     ],
+     "generated": [
+      "0x00a587a0",
+      "0x00a587ad"
+     ],
+     "generated_by": [
+      "CreateXrgDispModelImpl"
+     ],
+     "c_owned_symbols": [
+      "D_00A587A0",
+      "D_00A587A8"
+     ],
+     "also_referenced_by_c": [
+      "D_00A58750",
+      "D_00A58760",
+      "D_00A58780",
+      "D_00A58790"
+     ]
+    }
+   ]
+  },
+  "ov12/tu094_00a4e8f0": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a592d0",
+      "0x00a592f0"
+     ],
+     "generated": [
+      "0x00a592d0",
+      "0x00a592e8"
+     ],
+     "generated_by": [
+      "XrgSoundRingMoving"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A592D0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A59250",
+      "D_00A59268",
+      "D_00A59270",
+      "D_00A59280",
+      "D_00A59288",
+      "D_00A592A0"
+     ]
+    }
+   ]
+  },
+  "ov12/tu095_00a4f280": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a59310",
+      "0x00a59328"
+     ],
+     "generated": [
+      "0x00a59310",
+      "0x00a59328"
+     ],
+     "generated_by": [
+      "XrgEventIsUsablePlayer"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A59310"
+     ],
+     "also_referenced_by_c": []
     }
    ]
   }

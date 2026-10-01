@@ -8,27 +8,36 @@
 #include "shared.h"
 
 /*
- * The model-draw handle MDL_draw and MDL_partsSetVisible take: a sub-block
- * of an actor record (ACT_modelDrawSub passes actor + 0x840, addiu
- * $4,$17,0x840 at main 0x00307984/0x003079b0).
- *
- *   +0x00 entry    the nmlModelEntry index MDL_draw tail-calls with
- *                  (lw $18,0($16) at main 0x00318108, j nmlModelEntry at
- *                  0x0031814c).
- *   +0x54 texture  the nmlModelSetTexture pointer MDL_draw passes first
- *                  (lw $4,84($16) at main 0x0031810c).
+ * Accessed prefix of the model draw record passed by ACT_modelDrawSub
+ * (actor + 0x840, main:0x00307984/0x003079b0). The fields below are the
+ * widths and offsets read or written by MDL_create, MDL_partsSetVisible and
+ * MDL_draw. Gaps retain their original unknown bytes. This type describes
+ * the evidenced prefix through +0x9f; it does not claim the complete record
+ * size or describe bytes after that prefix.
  */
 typedef struct MdlHandle {
-    int entry;
-    unsigned char unmodeled_04[0x50];
-    const char *texture;
+    int entry;                         /* +0x00: MDL_draw loads and passes to nmlModelEntry */
+    u32 visibleParts[4];               /* +0x04..+0x13: MDL_create writes four words */
+    unsigned char unmodeled_14[0x2c];  /* +0x14..+0x3f */
+    int partCount;                     /* +0x40: MDL_partsSetVisible reads one word */
+    unsigned char unmodeled_44[0x10];  /* +0x44..+0x53 */
+    const char *texture;               /* +0x54: MDL_draw passes to nmlModelSetTexture */
+    void *parts;                       /* +0x58: MDL_create clears this word */
+    unsigned char unmodeled_5c[4];     /* +0x5c..+0x5f */
+    Vector4 copiedData[4];             /* +0x60..+0x9f: four slots; MDL_create writes three */
 } MdlHandle;
+
+/* MDL_create and MDL_partsSetVisible access these same evidenced offsets
+ * through the resource pointer stored in MdlHandle::entry. */
+typedef MdlHandle MdlResource;
 
 /*
  * MDL_partsSetVisible: sibling of this TU, still INCLUDE_ASM scaffolding
  * and untouched by this allocation; declared only to call it.
  */
 extern void MDL_partsSetVisible(MdlHandle *model);
+
+extern void nmlModelSetPartsVisible(MdlResource *resource, int partIndex, int visible);
 
 /*
  * nmlModelSetTexture, nmlModelSetPlace, nmlModelEntry (main:0x0022fe60,

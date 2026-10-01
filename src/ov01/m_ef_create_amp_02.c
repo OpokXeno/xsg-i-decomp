@@ -2,9 +2,130 @@
  * OV01 original TU 27: 0x00a358a8..0x00a360e0 (5 functions)
  */
 #include "common.h"
+#include "m_ef_create.h"
 #include "shared.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_amp_02", MEfCreate_AMP02);
+typedef unsigned int Amp02Quadword __attribute__((mode(TI)));
+
+typedef struct Amp02TargetPacket {
+    float target_x;
+    unsigned char packet[0x14];
+    unsigned long long parameter_first;
+    unsigned long long parameter_second;
+    unsigned short active[10];
+    unsigned char unmodeled_3c[4];
+    Vector4 points[10];
+    float twist[10];
+} Amp02TargetPacket;
+
+typedef struct Amp02GsParameter {
+    u64 primitive_tag;
+    float scale_u;
+    float scale_v;
+} Amp02GsParameter;
+
+typedef struct Amp02DrawState Amp02DrawState;
+typedef struct Amp02Effect Amp02Effect;
+typedef struct Amp02Object Amp02Object;
+
+typedef void (*Amp02ProcessCallback)(void *self, void *work);
+typedef void (*Amp02DrawCallback)(void *self, Amp02DrawState *work);
+typedef void (*Amp02PacketCallback)(void *self, void *work);
+typedef void (*Amp02LifetimeCallback)(void *self, Amp02Effect *work);
+
+typedef struct Amp02InitState {
+    unsigned char unmodeled_00[8];
+    int source_actor;
+    int source_part;
+    Vector4 source_offset;
+    unsigned char unmodeled_20[4];
+    int coordinate_actor;
+    int coordinate_part;
+    unsigned char unmodeled_2c[0x70 - 0x2C];
+    int frame;
+    unsigned char unmodeled_74[0x80 - 0x74];
+    Amp02Quadword spawn_position;
+    Amp02Quadword circumference_position;
+    Amp02Quadword position;
+    Amp02Quadword velocity;
+    Amp02Quadword previous_position;
+    Vector4 facing;
+    Amp02TargetPacket target_packet;
+} Amp02InitState;
+
+struct Amp02Object {
+    unsigned char unmodeled_00[4];
+    Amp02ProcessCallback process;
+    Amp02DrawCallback draw;
+    Amp02PacketCallback draw_packet;
+    Amp02LifetimeCallback lifetime;
+    unsigned char unmodeled_14[0x0C];
+    Amp02InitState work;
+};
+
+extern void MEfGetActorMatrix(void *destination, u32 actor, u32 part);
+extern void MEfGetActorCoord(void *destination, u32 actor, u32 part);
+extern Vector4 *MEfCalcCircumXZ(void *destination, const void *center, float radius);
+extern void *MMathApplyMatrix(void *destination, const void *matrix, const void *point);
+extern Vector4 *MMathSubVectorDivS(void *destination, const void *first, const void *second, float divisor);
+extern Vector4 *MEfCalcAngleMatrix(Vector4 *destination, const Vector4 *matrix);
+extern float MMathCalcDir(const void *first, const void *second);
+extern void MGsGPInit(void *packet, void *address, int size);
+extern Amp02GsParameter *svGetPrmFromName(const char *name, Amp02GsParameter *output);
+extern void *memset(void *destination, int value, unsigned int size);
+extern const char D_00A51580[];
+extern const char D_00A51590[];
+
+static void fnAMP02_PR000(void *self, void *work);
+static void fnAMP02_DP000(void *self, void *work);
+static void fnAMP02_DM000(void *self, Amp02DrawState *work);
+static void fnAMP02_PO000(void *self, Amp02Effect *work);
+
+/* Initialize actor geometry, the previous position and the drawing packet. */
+int MEfCreate_AMP02(MEfObjRecord *self)
+{
+    /* This constructor interprets its own variant of the pooled work. */
+    Amp02Object *object = (Amp02Object *)self;
+    Amp02InitState *work = &object->work;
+    Amp02GsParameter parameter;
+    Vector4 actor_coordinate[1];
+    Vector4 actor_matrix[4];
+
+    work->frame = 0;
+    MEfGetActorMatrix(actor_matrix, work->source_actor, work->source_part);
+    MMathApplyMatrix(&work->spawn_position, actor_matrix, &work->source_offset);
+    MEfGetActorCoord(actor_coordinate, work->coordinate_actor, work->coordinate_part);
+    MEfCalcCircumXZ(&work->circumference_position, actor_coordinate, 1.0f);
+    __asm__ __volatile__("lq $8,0(%1)\n\tsq $8,0(%0)"
+                         : : "r"(&work->position), "r"(&work->spawn_position)
+                         : "$8", "memory");
+    __asm__ __volatile__("lq $8,0(%1)\n\tsq $8,0(%0)"
+                         : : "r"(&work->previous_position), "r"(&work->spawn_position)
+                         : "$8", "memory");
+    MMathSubVectorDivS(&work->velocity, &work->circumference_position,
+                       &work->spawn_position, 30.0f);
+
+    MEfGetActorMatrix(actor_matrix, work->source_actor, work->source_part);
+    MEfCalcAngleMatrix(&work->facing, actor_matrix);
+    work->facing.x = 0.7853982f;
+    work->facing.y = MMathCalcDir(&work->spawn_position, &work->circumference_position);
+    work->target_packet.target_x = -work->facing.x * 0.06666667f;
+
+    MGsGPInit(work->target_packet.packet, 0, 0);
+    svGetPrmFromName(D_00A51580, &parameter);
+    work->target_packet.parameter_first = parameter.primitive_tag;
+    svGetPrmFromName(D_00A51590, &parameter);
+    work->target_packet.parameter_second = parameter.primitive_tag;
+    memset(work->target_packet.active, 0, sizeof(work->target_packet.active));
+    memset(work->target_packet.points, 0, sizeof(work->target_packet.points));
+    memset(work->target_packet.twist, 0, sizeof(work->target_packet.twist));
+
+    object->process = fnAMP02_PR000;
+    object->draw = fnAMP02_DM000;
+    object->draw_packet = fnAMP02_DP000;
+    object->lifetime = fnAMP02_PO000;
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_amp_02", fnAMP02_PR000);
 
@@ -59,7 +180,6 @@ static void fnAMP02_DM000(void *self, Amp02DrawState *work) {
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_amp_02", fnAMP02_DP000);
 
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /*

@@ -54,6 +54,7 @@ typedef struct RgShotThread {
     int active;
     float frame;
     float duration;
+    unsigned int shotCount;
 } RgShotThread;
 
 #endif /* SRC_OV12_RG_SHOT_THREAD_H */

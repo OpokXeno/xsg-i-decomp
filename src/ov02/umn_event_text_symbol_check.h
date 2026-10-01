@@ -35,6 +35,30 @@ typedef struct UmnMailHeader {
 
 extern UmnMailHeader *UmnMailHeaderBuf;
 
+/* Mail-list file records consumed while UmnMailHeaderCreate builds the
+ * runtime header table. */
+typedef struct UmnMailListBody {
+    unsigned char unmodeled_00[8];
+    unsigned char attach[3];
+    unsigned char kind;
+    unsigned short flags;
+    unsigned char plugin;
+    unsigned char unmodeled_0f;
+    int data;
+    unsigned char unmodeled_14[0x4c];
+    unsigned char text[1];
+} UmnMailListBody;
+
+typedef struct UmnMailList {
+    int size;
+    int mail_id;
+    UmnMailListBody body;
+} UmnMailList;
+
+extern const char D_00A13640[];
+extern int xglFontGetSPcodeSize(int code, unsigned char *text);
+extern void eMessageCpy(char *destination, char *source);
+
 extern char *umn_text;
 
 extern char *uet_text_buf;
@@ -52,5 +76,28 @@ extern int MenuLoadFile(const char *name, void *buffer);
 
 /* Attachment table, 3 bytes per entry (ov02 .data, 0x45 bytes). */
 extern unsigned char umn_attach_tbl[];
+
+/* Four reward records and their four resolved box ids. */
+extern unsigned char kosmos_special_tbl[4][4];
+extern short UmnKosmosSpecialBox[4];
+
+/* Mail ids used by the event/mail availability checks. */
+typedef struct UmnEventTextRecordBuf {
+    short count;
+    unsigned short cur;
+} UmnEventTextRecordBuf;
+
+extern unsigned char event_tbl[18];
+extern signed char compulsion_down_load_tbl[13];
+
+typedef struct UmnAttachmentState {
+    unsigned char unmodeled_00[0x86];
+    unsigned short plugin_unlock_flags;
+} UmnAttachmentState;
+
+extern UmnAttachmentState D_4A1A0C;
+extern int dataItmBoxInc(int id);
+extern int dataWpnBoxInc(int id);
+extern int dataMoneyBoxInc(int amount);
 
 #endif /* SRC_OV02_UMN_EVENT_TEXT_SYMBOL_CHECK_H */

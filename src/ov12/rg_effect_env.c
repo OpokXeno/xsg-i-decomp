@@ -47,6 +47,29 @@ extern const char D_00A54100[];
 extern const char D_00A54110[];
 extern const char D_00A54128[];
 
+/* Two more witnesses in the same window: 0x00a54138 "pszName != NIL",
+ * 0x00a54148 "aResult != NIL". */
+extern const char D_00A54138[];
+extern const char D_00A54148[];
+
+/*
+ * RgLinkData is defined by ov12/tu063 (src/ov12/rg_linkdata.c); this
+ * function only creates the record on the stack and forwards its address to
+ * InitRgLinkData/RgLinkDataGet without ever reading a member itself, so an
+ * opaque view (void *) is enough here.
+ */
+extern void InitRgLinkData(void *pAna, void *pBuf);
+extern void *RgLinkDataGet(void *pAna, const char *name);
+
+/*
+ * RgParticleEffectEssenceResume is defined by ov12/tu035
+ * (src/ov12/rg_particle_effect.c, still scaffold asm there). This function
+ * only forwards the current output slot and link-data entry addresses,
+ * stepping each on its own by a byte stride (0xB0 for aResult's records,
+ * 0x100 for the link-data entries), so opaque views are enough here too.
+ */
+extern void RgParticleEffectEssenceResume(void *essence, void *linkEntry);
+
 static void _InitEnv(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
@@ -145,4 +168,44 @@ struct RgFileSysData *RgEffectEnvGetShotMdl(RgEffectEnv *pEnv)
     return pEnv->shotMdl;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_effect_env", RgEffectEnvGetParticleData);
+int RgEffectEnvGetParticleData(RgEffectEnv *pEnv, char *pszName, void *aResult)
+{
+    struct RgFileSysData *particleData;
+    void *linkData;
+    char *linkEntry;
+    signed char *slot;
+    int count;
+    unsigned int index;
+
+    if (pEnv == 0) {
+        assert_prog(D_00A540C8, D_00A540D8, 124);
+    }
+    if (pszName == 0) {
+        assert_prog(D_00A54138, D_00A540D8, 125);
+    }
+    if (aResult == 0) {
+        assert_prog(D_00A54148, D_00A540D8, 126);
+    }
+    particleData = pEnv->particleData;
+    if (particleData == 0) {
+        return 0;
+    }
+    InitRgLinkData(&linkData, particleData->data);
+    linkEntry = RgLinkDataGet(&linkData, pszName);
+    if (linkEntry == 0) {
+        return 0;
+    }
+    slot = aResult;
+    count = 0;
+    index = 0;
+    do {
+        RgParticleEffectEssenceResume(slot, linkEntry);
+        index++;
+        if (*slot != 0) {
+            count++;
+        }
+        linkEntry += 256;
+        slot += 176;
+    } while (index < 4);
+    return count;
+}

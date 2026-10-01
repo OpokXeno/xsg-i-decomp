@@ -78,7 +78,18 @@ void RgCharFree(RgChar *pChar)
     RgHeapFree(InstanceOfRgHeap(), pChar, D_00A51808, 76);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_char", InitRgChar);
+void InitRgChar(RgChar *pChar, int type)
+{
+    if (pChar == 0) {
+        assert_prog(D_00A51820, D_00A51808, 86);
+    }
+    pChar->type = type;
+    pChar->destructMethod = 0;
+    pChar->controlMethod = _nonControlMethod;
+    pChar->dispMethod = _nonDispMethod;
+    pChar->passTimeMethod = 0;
+    pChar->mgr = 0;
+}
 
 int RgCharGetType(RgChar *pChar)
 {

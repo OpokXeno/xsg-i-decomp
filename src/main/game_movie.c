@@ -23,7 +23,17 @@ void GameMovieStop(void)
     mi.state = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_movie", GameMoviePlay);
+/* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
+extern int xglMovieOpen(void *movie, char *name);
+
+int GameMoviePlay(char *name)
+{
+    if (mi.state != 0) {
+        xglMovieClose(&mi);
+    }
+
+    return xglMovieOpen(&mi, name);
+}
 
 extern int SCRIPT_getEventActiveFlag(void);
 extern int SCRIPT_getFadeTime(void);

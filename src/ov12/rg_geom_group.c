@@ -14,7 +14,27 @@ static void _InitGroup(RgGeomGroup *pGroup)
     pGroup->m_pList = CreateRgVector(128, D_00A55348, 37);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_group", _DisposeGroup);
+static void _DisposeGroup(RgGeomGroup *group)
+{
+    unsigned int index;
+    unsigned int size;
+    RgGeom *geom;
+
+    if (group == 0) {
+        assert_prog(D_00A55338, D_00A55348, 43);
+    }
+    index = 0;
+    size = RgVectorSize(group->m_pList);
+    if (size != 0) {
+        do {
+            geom = RgVectorIndex(group->m_pList, index, D_00A55348, 50);
+            index += 1;
+            RgGeomSetDestructMethod(geom, 0);
+        } while (index < size);
+    }
+    DisposeRgVector(group->m_pList, D_00A55348, 52);
+    group->m_pList = 0;
+}
 
 RgGeomGroup *CreateRgGeomGroup(void)
 {

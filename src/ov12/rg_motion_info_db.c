@@ -15,13 +15,25 @@
  */
 extern const char D_00A52460[];
 extern const char D_00A52470[];
+extern const char D_00A524C0[];
 extern const char D_00A524E0[];
+extern const char D_00A525A8[];
+extern const char D_00A525D8[];
+extern const char D_00A525F0[];
+extern const char D_00A52608[];
+extern const char D_00A52618[];
+extern const char D_00A52630[];
+extern const char D_00A52598[];
+
+#define RG_MOTION_ANY_TIME 100000000.0f
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
+extern void XrgLog(const char *format, const char *source_file, int line, ...);
+extern double fptodp(float value);
 
 static void _InitRgMotionShotInfo(RgMotionShotInfo *info, int motionNo)
 {
@@ -41,13 +53,84 @@ static void _TableInit(RgMotionInfoDB *db)
     db->entryCount = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableSort);
+static void _TableSort(RgMotionInfoDB *db)
+{
+    unsigned int count;
+    unsigned int first;
+    unsigned int second;
+    RgMotionShotInfo *entry;
+    RgMotionShotInfo **table;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableGet);
+    count = db->entryCount;
+    table = db->table;
+    for (first = 0; first < count; first++) {
+        for (second = first + 1; second < count; second++) {
+            if (table[second]->motionNo < table[first]->motionNo) {
+                entry = table[second];
+                table[second] = table[first];
+                table[first] = entry;
+            }
+        }
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableGetMatchChar);
+RgMotionShotInfo *_TableGet(RgMotionInfoDB *db, int motionNo)
+{
+    unsigned int count;
+    int low;
+    int high;
+    int middle;
+    RgMotionShotInfo *entry;
+    RgMotionShotInfo **table;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _TableEntry);
+    count = db->entryCount;
+    if (count == 0) {
+        return 0;
+    }
+    low = 0;
+    high = count - 1;
+    table = db->table;
+    do {
+        middle = (low + high) / 2;
+        entry = table[middle];
+        if (entry->motionNo == motionNo) {
+            return entry;
+        }
+        if (motionNo < entry->motionNo) {
+            high = middle - 1;
+        } else {
+            low = middle + 1;
+        }
+    } while (high >= low && (unsigned int)low < count && high >= 0);
+    return 0;
+}
+
+RgMotionShotInfo *_TableGetMatchChar(RgMotionInfoDB *db, int motionNo,
+                                     int charId)
+{
+    RgMotionShotInfo *info;
+    RgMotionShotInfo *defaultInfo;
+
+    info = _TableGet(db, motionNo);
+    defaultInfo = info;
+    if (info != 0 && info->charId != charId) {
+        do {
+            if (info->charId == -1) {
+                defaultInfo = info;
+            }
+            info = info->next;
+        } while (info != 0 && info->charId != charId);
+    }
+    return info != 0 ? info : defaultInfo;
+}
+
+static void _TableEntry(RgMotionInfoDB *db, RgMotionShotInfo *entry)
+{
+    if ((unsigned int)db->entryCount >= 0x80) {
+        assert_prog(D_00A524C0, D_00A52470, 176);
+    }
+    db->table[db->entryCount++] = entry;
+}
 
 extern void RgHeapFree(RgHeap *heap, void *pointer, const char *source_file,
                        int line);
@@ -159,10 +242,101 @@ int RgMotionInfoDBIsDefaultData(RgMotionInfoDB *db, int motionNo, int charId)
     return _TableGetMatchChar(db, motionNo, charId) == 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", RgMotionInfoGetActionInTime);
+RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
+                                             int actionNo, float time)
+{
+    RgMotionAction *action;
+    unsigned int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", RgMotionInfoIsBefore);
+    if (info == 0) {
+        assert_prog(D_00A52598, D_00A52470, 405);
+    }
+    for (i = 0; i < (unsigned int)info->actionCount; i++) {
+        action = &info->actions[i];
+        if (action->actionNo == actionNo) {
+            if (time == RG_MOTION_ANY_TIME) {
+                return action;
+            }
+            if (action->startTime <= time && time <= action->endTime) {
+                return action;
+            }
+        }
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", RgMotionInfoIsAfter);
+int RgMotionInfoIsBefore(RgMotionShotInfo *info, int actionNo, float time)
+{
+    RgMotionAction *action;
+    unsigned int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", RgMotionInfoDBDump);
+    if (info == 0) {
+        assert_prog(D_00A52598, D_00A52470, 425);
+    }
+    for (i = 0; i < (unsigned int)info->actionCount; i++) {
+        action = &info->actions[i];
+        if (action->actionNo == actionNo && action->startTime < time) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int RgMotionInfoIsAfter(RgMotionShotInfo *info, int actionNo, float time)
+{
+    RgMotionAction *action;
+    unsigned int i;
+
+    if (info == 0) {
+        assert_prog(D_00A52598, D_00A52470, 442);
+    }
+    for (i = 0; i < (unsigned int)info->actionCount; i++) {
+        action = &info->actions[i];
+        if (action->actionNo == actionNo && time < action->endTime) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void RgMotionInfoDBDump(RgMotionInfoDB *db)
+{
+    unsigned int tableIndex;
+    unsigned int actionIndex;
+    int actionNo;
+    int shiftedMotionNo;
+    int weaponMotionNo;
+    double startSeconds;
+    double endSeconds;
+    RgMotionShotInfo *info;
+    RgMotionShotInfo *current;
+
+    if (db == 0) {
+        assert_prog(D_00A524E0, D_00A52470, 459);
+    }
+    XrgLog(D_00A525A8, D_00A52470, 461, db->entryCount);
+    for (tableIndex = 0; tableIndex < (unsigned int) db->entryCount;
+         tableIndex++) {
+        current = db->table[tableIndex];
+        actionNo = current->motionNo;
+        XrgLog(D_00A525D8, D_00A52470, 465, actionNo);
+        info = current;
+        for (; info != 0; info = info->next) {
+            XrgLog(D_00A525F0, D_00A52470, 469, info->charId);
+            XrgLog(D_00A52608, D_00A52470, 470, info->motionNo);
+            XrgLog(D_00A52618, D_00A52470, 471, info->shotFlags);
+            for (actionIndex = 0;
+                 actionIndex < (unsigned int) info->actionCount;
+                 actionIndex++) {
+                actionNo = info->actions[actionIndex].actionNo;
+                startSeconds = fptodp(info->actions[actionIndex].startTime);
+                endSeconds = fptodp(info->actions[actionIndex].endTime);
+                shiftedMotionNo = info->actions[actionIndex].shiftMotionNo;
+                weaponMotionNo = info->actions[actionIndex].weaponMotionNo;
+                XrgLog(D_00A52630, D_00A52470, 473, actionNo,
+                       startSeconds, endSeconds, shiftedMotionNo,
+                       weaponMotionNo);
+            }
+        }
+    }
+}

@@ -46,6 +46,12 @@ typedef struct EffectCall {
     unsigned char *object; /* +0x0 */
 } EffectCall;
 
+/* Boolean setter call block: the Java object and its one-byte value. */
+typedef struct EffectBooleanCall {
+    unsigned char *object; /* +0x0 */
+    unsigned char value;   /* +0x4 */
+} EffectBooleanCall;
+
 /*
  * setCaster__Lxeno_Chr_/setTarget__Lxeno_Chr_'s two-word call block: the
  * Effect instance and the xeno.Chr instance whose native peer becomes this
@@ -117,6 +123,8 @@ typedef struct NativeEffectPeer {
     EffectUnitPeer *target_unit; /* +0x6C8 */
     unsigned char unmodeled_6cc[0xa8c - 0x6cc];
     unsigned char flags;
+    unsigned char unmodeled_a8d[0xa9a - 0xa8d];
+    unsigned char display; /* +0xA9A: Java_xeno_Effect_disp__Z */
 } NativeEffectPeer;
 
 /*
@@ -151,6 +159,10 @@ extern const char D_004DC170[];
 /* Radian-to-degree conversion constant (value 3.14159274f, i.e. pi); no
    config/symbols/main.txt name yet. */
 extern float D_004D83BC;
+
+/* sefRewindEffectCf accepts the SchedulerState record defined by main/tu211. */
+typedef struct SchedulerState SchedulerState;
+extern void sefRewindEffectCf(SchedulerState *scheduler);
 
 /* canon: config/header-canon.json, as src/math/main/002ff538-chr-scl/
    private.h spells them. */

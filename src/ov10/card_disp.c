@@ -27,6 +27,7 @@ extern const CardHelpPackedVector D_00A4E180;
 extern const CardHelpPackedVector D_00A4E190;
 extern const CardHelpPackedVector D_00A4E1A0;
 extern const CardHelpPackedVector D_00A4E1C0;
+extern const CardHelpPackedVector D_00A4E1D0;
 extern const char *cardxtx_tbl[];
 extern const u32 cardlex_tbl[];
 
@@ -303,7 +304,23 @@ void CardDispComm(Matrix4 matrix, int kind)
     nmlModelEntry(cardlex_tbl[kind]);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_disp", CardDispPhase);
+void CardDispPhase(Matrix4 matrix, int kind)
+{
+    Matrix4 transformed;
+    Matrix4 color;
+    CardHelpPackedVector translation;
+    float light;
+
+    translation = D_00A4E1D0;
+    light = (xglSin((((float)ChangeCnt * 11.25f) / 180.0f) * 3.1415927f) * 0.5f) + 1.0f;
+    color[3][0] = color[3][1] = color[3][2] = light;
+    xglMatrixTrans(transformed, (const float (*)[4])matrix,
+                   (const float *)translation.words);
+    nmlModelSetLight(color, asDir);
+    nmlModelSetPlace((const Vector4 *)transformed);
+    nmlModelSetTexture(cardxtx_tbl[kind]);
+    nmlModelEntry(cardlex_tbl[kind]);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_disp", CardDispHelpCard);
 

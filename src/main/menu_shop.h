@@ -18,6 +18,8 @@ struct MenuShopWorkData {
     unsigned char noCategories;
     unsigned char unmodeled_18[8];
     int listIndex;
+    unsigned char unmodeled_24[0x24];
+    signed char sort_mode_selector;
 };
 
 extern MenuShopWorkData *MenuShopWork;

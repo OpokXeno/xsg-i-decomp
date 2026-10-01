@@ -84,6 +84,17 @@ struct RgHomingShotEssence {
 };
 
 /*
+ * Partial view of a grenade essence, modelled at the byte offsets
+ * InitRgGrenadeEssence (ov12:0x00a16b48) writes: a create-method slot at
+ * +0x00 that it points at _CreateGrenade, and four floats at +0x130..+0x13c
+ * that _InitGrenade (ov12:0x00a169c8) later copies into the live grenade
+ * shot object (+0x130 and +0x134 verbatim to +0x90 and +0x94, +0x138
+ * verbatim to +0x9c, +0x13c through a float-to-int conversion to +0xc8).
+ * No other byte beyond the common RgHomingShotEssence prefix is claimed.
+ */
+typedef struct RgGrenadeEssence RgGrenadeEssence;
+
+/*
  * Partial view of a shot object, modelled only at the byte offsets the
  * functions in this allocation read or write.  Bytes 0x08-0x1f, 0x34-0x3b
  * belong to fields other functions of this translation unit use (geometry/
@@ -95,8 +106,9 @@ struct RgShot {
     void *posOwner;                    /* +0x00: first argument to getPos */
     int (*getPos)(void *posOwner, RgVector position, RgVector aimPoint);
                                         /* +0x04 */
-    unsigned char unmodeled_008[0x18];        /* +0x08..+0x1f */
-    int hitHistory;                           /* +0x20 */
+    unsigned char unmodeled_008[0x14];        /* +0x08..+0x1b */
+    int (*isReleased)(RgShot *shot);          /* +0x1c */
+    void (*hitHistory)(void);                 /* +0x20: expiry callback */
     void (*release)(RgShot *shot);            /* +0x24 */
     void (*hitRobot)(RgShot *shot, int robot, RgVector position);  /* +0x28 */
     void (*hitBg)(RgShot *shot, int bgObject, RgVector position);  /* +0x2c */

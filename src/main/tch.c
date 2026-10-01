@@ -2,7 +2,43 @@
 #include "shared.h"
 #include "tch.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/tch", getInfoAddr);
+static void getInfoAddr(TimeChart *chart)
+{
+    TchEntry *entry;
+    u32 *pointerOffset;
+    u32 chartAddress;
+    int recordCount;
+    int remainingRecords;
+    int pointerCount;
+    int remainingPointers;
+
+    recordCount = chart->recordCount;
+    entry = chart->records;
+    chart->relocated = 1;
+    chartAddress = (u32)chart;
+    if (recordCount != 0) {
+        remainingRecords = recordCount;
+        do {
+            if (entry->name != 0) {
+                entry->name = (char *)chartAddress + (u32)entry->name;
+            }
+
+            pointerCount = entry->wordCount;
+            if (pointerCount != 0) {
+                pointerOffset = entry->pointerOffsets;
+                remainingPointers = pointerCount;
+                do {
+                    *pointerOffset = chartAddress + *pointerOffset;
+                    pointerOffset++;
+                    remainingPointers--;
+                } while (remainingPointers != 0);
+            }
+
+            remainingRecords--;
+            entry = (TchEntry *)&entry->pointerOffsets[pointerCount];
+        } while (remainingRecords != 0);
+    }
+}
 
 static void getInfoAddr(TimeChart *chart);
 

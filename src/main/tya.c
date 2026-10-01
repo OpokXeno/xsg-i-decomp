@@ -1,7 +1,29 @@
 #include "common.h"
 #include "shared.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/tya", getfbp);
+typedef struct {
+    u8 unmodeled_00[0x38];
+    u64 buffer_select;
+} TyaDisplayEnvironment;
+extern TyaDisplayEnvironment DispEnv;
+typedef struct {
+    u8 unmodeled_00[0x12];
+    u16 framebuffer_base_page[2];
+} TyaFramebufferState;
+extern TyaFramebufferState sRender;
+
+static int getfbp(void)
+{
+    long long shifted_mode;
+    int selector;
+
+    shifted_mode = (long long)(DispEnv.buffer_select << 7);
+    selector = shifted_mode >> 32;
+    if ((selector & 3) == 1) {
+        return sRender.framebuffer_base_page[1] << 5;
+    }
+    return sRender.framebuffer_base_page[0] << 5;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tya", tyaBmpOutput);
 

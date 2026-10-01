@@ -1,8 +1,26 @@
 #include "common.h"
 
+typedef struct MenuTecData {
+    unsigned char unmodeled_00[0x20];
+    unsigned short speedPointCost[8];
+    unsigned short waitPointCost[8];
+} MenuTecData;
+
+extern MenuTecData *MenuTecDataBuf;
+void *MenuTecDataGet(int chrNo);
+
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecSaveDataGet);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecDataGet);
+void *MenuTecDataGet(int characterNo)
+{
+    unsigned int characterIndex = characterNo & 0xFFFF;
+    MenuTecData *records = MenuTecDataBuf;
+
+    if (characterIndex - 1 >= 8U)
+        return 0;
+
+    return &records[characterIndex - 1];
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", BitToTecNo);
 
@@ -12,9 +30,27 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecTLevLimitCheck);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecTLevUp);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecNextSpeedPointGet);
+int MenuTecNextSpeedPointGet(int chrNo, int point)
+{
+    MenuTecData *data = MenuTecDataGet(chrNo);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecSpeedLimitCheck);
+    if (point < 0)
+        return 0;
+
+    return data->speedPointCost[point];
+}
+
+int MenuTecSaveDataGet(int chrNo);
+
+int MenuTecSpeedLimitCheck(int chrNo, int point)
+{
+    unsigned char *saveData = (unsigned char *)MenuTecSaveDataGet(chrNo);
+
+    if (point < 0)
+        return 0;
+
+    return saveData[point + 8] != 1;
+}
 
 int MenuTecSaveDataGet(int chrNo);
 int MenuTecNextSpeedPointGet(int chrNo, int point);
@@ -40,7 +76,15 @@ void MenuTecSpeedUp(int chrNo, int point)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecNextWaitPointGet);
+int MenuTecNextWaitPointGet(int chrNo, int point)
+{
+    MenuTecData *data = MenuTecDataGet(chrNo);
+
+    if (point < 0)
+        return 0;
+
+    return data->waitPointCost[point];
+}
 
 int MenuTecWaitLimitCheck(int chrNo, int point)
 {

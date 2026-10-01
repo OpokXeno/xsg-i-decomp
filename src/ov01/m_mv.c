@@ -35,8 +35,38 @@ extern MvParams D_00A5B630;
 /* Movie playback handle MMvPlay opens and MMvStop closes; still opaque. */
 extern unsigned char D_00A5B6D0[];
 
+typedef struct MvGifEnvironment {
+    unsigned char unmodeled_00[0x30];
+    u64 transfer_tag;
+} MvGifEnvironment;
+
+extern MvGifEnvironment mvEnv;
+
+typedef struct MvRenderControl {
+    unsigned char unmodeled_00[0x14];
+    u16 movie_gif_control;
+} MvRenderControl;
+
+#define MV_RENDER_STATE ((MvRenderControl *) 0x004a90e0)
+extern PadPrefix PadData;
+extern void FlushCache(int mode);
+extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
+extern int xglMoviePlay(void *movie);
+void MMvStop(void);
+
 /* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
 extern int xglMovieClose(void *movie);
+
+typedef struct MvPlayOptions {
+    int flags;
+    const char *filename;
+    int frame_x;
+    int frame_y;
+    int frame_width;
+    int frame_height;
+} MvPlayOptions;
+
+int MMvPlay2(MvPlayOptions options);
 
 int MMvInit(void)
 {
@@ -46,7 +76,14 @@ int MMvInit(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_mv", MMvExec);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_mv", MMvPlay);
+int MMvPlay(const char *filename)
+{
+    MvPlayOptions options;
+
+    options.flags = 2;
+    options.filename = filename;
+    return MMvPlay2(options);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_mv", MMvPlay2);
 

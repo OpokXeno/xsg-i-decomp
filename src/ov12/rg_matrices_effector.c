@@ -90,6 +90,9 @@ struct ManipulatorPair {
 #define MANIPULATOR_SET(manipulator) \
     (*(void (**)(void *, RgMatrix))((unsigned char *)(manipulator) + 4))
 
+#define MANIPULATOR_GET(manipulator) \
+    (*(void (**)(void *, RgMatrix))(manipulator))
+
 static void _ManiSet(void *manipulator, RgMatrix matrix)
 {
     void (*setter)(void *manipulator, RgMatrix matrix);
@@ -103,7 +106,23 @@ static void _ManiSet(void *manipulator, RgMatrix matrix)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_matrices_effector", _ManiGet);
+extern void XrgUnitMatrix(RgMatrix destination);
+
+static void _ManiGet(void *manipulator, RgMatrix matrix)
+{
+    void (*getter)(void *, RgMatrix);
+    
+    if (manipulator != 0) {
+        getter = MANIPULATOR_GET(manipulator);
+        if (getter != 0) {
+            getter(manipulator, matrix);
+            return;
+        }
+        return XrgUnitMatrix(matrix);
+    }
+
+    return XrgUnitMatrix(matrix);
+}
 
 extern void *CreateRgVector(int capacity, const char *source_file, int line);
 
@@ -188,9 +207,69 @@ static void _DestructEffector(MatrixEffector *effector)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_matrices_effector", _SingleEffectorJob);
+static void _SingleEffectorJob(MatrixEffector *effector)
+{
+    extern const char D_00A56620[];
+    extern int s_inSingleIdentifier;
+    unsigned int unit_count;
+    unsigned int index;
+    void *manipulator;
+    void (*apply)();
+    RgMatrix matrix;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_matrices_effector", _DoubleEffectorJob);
+    if (effector == 0) {
+        assert_prog(D_00A56610, D_00A565D8, 140);
+    }
+    if (effector->start != 0) {
+        effector->start(effector);
+    }
+
+    if (effector->apply != 0) {
+        apply = effector->apply;
+        unit_count = RgVectorSize(effector->units);
+        if (effector->identifier != &s_inSingleIdentifier) {
+            assert_prog(D_00A56620, D_00A565D8, 149);
+        }
+        for (index = 0; index < unit_count; index++) {
+            manipulator = RgVectorIndex(effector->units, index, D_00A565D8,
+                                       152);
+            _ManiGet(manipulator, matrix);
+            apply(effector, matrix);
+            _ManiSet(manipulator, matrix);
+        }
+    }
+}
+
+static void _DoubleEffectorJob(MatrixEffector *effector)
+{
+    extern int s_inDoubleIdentifier;
+    unsigned int unit_count;
+    unsigned int index;
+    ManipulatorPair *pair;
+    void (*apply)();
+    RgMatrix first_matrix;
+    RgMatrix second_matrix;
+
+    if (effector == 0) {
+        assert_prog(D_00A56610, D_00A565D8, 162);
+    }
+    if (effector->start != 0) {
+        effector->start(effector);
+    }
+
+    if (effector->apply != 0) {
+        apply = effector->apply;
+        unit_count = RgVectorSize(effector->units);
+        for (index = 0; index < unit_count; index++) {
+            pair = RgVectorIndex(effector->units, index, D_00A565D8, 173);
+            _ManiGet(pair->first, first_matrix);
+            _ManiGet(pair->second, second_matrix);
+            apply(effector, first_matrix, second_matrix);
+            _ManiSet(pair->first, first_matrix);
+            _ManiSet(pair->second, second_matrix);
+        }
+    }
+}
 
 static void _EffectorSetActivity(MatrixEffector *effector, int activity)
 {
@@ -276,7 +355,63 @@ static void _InitDoubleEffector(MatrixEffector *effector)
     effector->job = _DoubleEffectorJob;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_matrices_effector", _ConstraintStartFunc);
+static void _ConstraintStartFunc(MatrixConstraint *constraint)
+{
+    extern void XrgSubVector(RgVector destination, RgVector first,
+                             RgVector second);
+    extern void XrgCalcMatrixXtoZ(RgMatrix destination, RgVector x_axis,
+                                  RgVector z_axis);
+    RgMatrix root_frame;
+    RgMatrix top_frame;
+    RgMatrix root_matrix;
+    RgMatrix joint_matrix;
+    RgMatrix top_matrix;
+    RgVector direction;
+    RgVector blended_axis;
+    float bound;
+
+    if (constraint->joint_manipulator == 0 ||
+        constraint->root_manipulator == 0 ||
+        constraint->top_manipulator == 0) {
+        XrgUnitMatrix(constraint->root_inverse);
+        XrgUnitMatrix(constraint->constrained_frame);
+        return;
+    }
+
+    if (constraint->effector.activity != 0) {
+        constraint->weight += 0.3f;
+    } else {
+        constraint->weight -= 0.3f;
+    }
+    bound = 0.0f;
+    if (bound > constraint->weight) {
+        constraint->weight = 0.0f;
+    } else {
+        constraint->weight =
+            constraint->weight > 1.0f
+                ? 1.0f
+                : constraint->weight;
+    }
+
+    _ManiGet(constraint->root_manipulator, root_matrix);
+    _ManiGet(constraint->joint_manipulator, joint_matrix);
+    _ManiGet(constraint->top_manipulator, top_matrix);
+
+    XrgSubVector(direction, &top_matrix[12], &root_matrix[12]);
+    XrgCalcMatrixXtoZ(root_frame, direction, &root_matrix[8]);
+    XrgCopyVector(&root_frame[12], &joint_matrix[12]);
+    root_frame[15] = 1.0f;
+    XrgInvMatrix(constraint->root_inverse, root_frame);
+
+    XrgSubVector(direction, constraint->point_to,
+                 &root_matrix[12]);
+    XrgCalcMatrixXtoZ(top_frame, direction, &root_matrix[8]);
+    XrgLinearIntpVector(direction, top_frame, root_frame, constraint->weight);
+    XrgCopyVector(blended_axis, &root_frame[4]);
+    XrgCalcMatrixXtoY(constraint->constrained_frame, direction,
+                      blended_axis);
+    XrgCopyVector(&constraint->constrained_frame[12], &joint_matrix[12]);
+}
 
 /*
  * The constraint's two stored 4x4 matrices _ConstraintFunc multiplies the

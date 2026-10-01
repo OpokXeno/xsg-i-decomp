@@ -18,6 +18,7 @@ typedef struct TchEntry {
     u16 wordCount; /* +0x00: size of this record's trailing data, in 4-byte words */
     unsigned char unmodeled_02[2];
     const char *name; /* +0x04: identifier TCH_getInfoID's caller looks up */
+    u32 pointerOffsets[1]; /* +0x08: relocatable addresses in the trailing data */
 } TchEntry;
 
 /*

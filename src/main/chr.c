@@ -962,7 +962,25 @@ void Java_xeno_Chr_setElevatorMode__I(JThread *thread, ChrIntCall *arguments)
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setParent__Lxeno_Chr_III);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setMotionFlags__IZ);
+void Java_xeno_Chr_setMotionFlags__IZ(JThread *thread,
+                                      ChrMotionFlagsCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+    int mask;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    mask = arguments->mask;
+    peer = *(Actor **)(object + peer_field->offset);
+    if (arguments->enabled != 0) {
+        peer->motion_flags |= mask;
+    } else {
+        peer->motion_flags &= ~mask;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_setFilter__I);
 
@@ -1139,7 +1157,27 @@ void Java_xeno_Chr_look_unit__Ljava_lang_Object_(JThread *thread,
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_default__);
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_point__FFF);
+void Java_xeno_Chr_look_point__FFF(JThread *thread, SceneObject *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+    float x;
+    float y;
+    float z;
+
+    object = arguments[0];
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    peer->look_mode = 3;
+    __builtin_memcpy(&x, &arguments[1], sizeof(x));
+    peer->look_point[0] = x;
+    __builtin_memcpy(&y, &arguments[2], sizeof(y));
+    peer->look_point[1] = y;
+    __builtin_memcpy(&z, &arguments[3], sizeof(z));
+    peer->look_point[2] = z;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_look_eye_set__FF);
 
@@ -1208,7 +1246,26 @@ void Java_xeno_Chr_shadow_clip_scale__F(JThread *thread, ChrScaleCall *arguments
     peer->shadow_clip_scale = arguments->first.floating;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/chr", Java_xeno_Chr_shadow_map_id__I);
+void Java_xeno_Chr_shadow_map_id__I(JThread *thread,
+                                    ChrShadowMapIdCall *arguments)
+{
+    JavaField *peer_field;
+    Actor *peer;
+    u8 *object;
+    int *count;
+    int index;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Chr,
+                                  loadConstString(chr_peer_string, -1), 0);
+    peer = *(Actor **)(object + peer_field->offset);
+    if (peer->shadow_map < 8) {
+        count = &peer->shadow_map;
+        index = *count;
+        *count = index + 1;
+        peer->shadow_map_ids[index] = arguments->id;
+    }
+}
 
 void Java_xeno_Chr_shadow_map_reset__(JThread *thread, ChrScaleCall *arguments)
 {

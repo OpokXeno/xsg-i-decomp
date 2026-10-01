@@ -79,15 +79,16 @@ typedef struct PlayerList {
  * Only the geometry-group pointer this allocation's _DestructBattleField/
  * _GetGeomGroupBattleField read or dispose of is modeled here.
  *
- * _InitBattleField also clears the slot count and studio[2]/studio[3] and
- * both camera slots; _GetStudioBattleField/_GetCameraBattleField (both
- * still INCLUDE_ASM) bound-check their index against count before indexing
- * studio[index] (base +0x08) or camera[index] (base +0x18).
+ * _InitBattleField allocates a 0x20-byte object, clears count at +0x00 and
+ * the two studio, screen-ball and camera slots. _GetStudioBattleField and
+ * _GetCameraBattleField return indexed pointers from +0x08 and +0x18;
+ * _DoubleScreenBattleField stores the two screen balls at +0x10.
  */
 typedef struct BattleField {
     int count;                /* +0x00, bound for the studio/camera indices */
     RgGeomGroup *geomGroup;   /* +0x04 */
-    RgDrawStudio *studio[4];  /* +0x08 */
+    RgDrawStudio *studio[2];  /* +0x08 */
+    RgGeom *screenBall[2];    /* +0x10 */
     RgCamera *camera[2];      /* +0x18 */
 } BattleField;
 
@@ -97,15 +98,20 @@ typedef struct BattleField {
  * _InitBattle calls with the battle mode value and the first two players
  * RgBattleInitCreatePlayers() stores (the sibling accessors
  * RgDispWpn1PSetRobot/RgDispWpn2PSetRobot name the same two player slots
- * "1P"/"2P"). Bytes 0x04..0x0b hold the two per-player RgDispGameInfo
- * handles that _InitDispInfo creates and _DestructDispInfo disposes (both
- * still INCLUDE_ASM); none of this allocation's functions touch them.
+ * "1P"/"2P"). Bytes 0x04..0x0b hold the two RgDispGameInfo handles that
+ * _InitDispInfo creates and _DestructDispInfo disposes. The player slots at
+ * +0x0c/+0x10 are read and written individually and as an indexed pair.
  */
 typedef struct DispInfo {
     int mode;                       /* +0x00 */
-    unsigned char unmodeled_04[8];  /* +0x04 */
-    RgPlayer *player1P;             /* +0x0c */
-    RgPlayer *player2P;             /* +0x10 */
+    RgDispGameInfo *gameInfo[2];     /* +0x04 */
+    union {
+        struct {
+            RgPlayer *player1P;     /* +0x0c */
+            RgPlayer *player2P;     /* +0x10 */
+        };
+        RgPlayer *players[2];       /* +0x0c */
+    };
 } DispInfo;
 
 /*

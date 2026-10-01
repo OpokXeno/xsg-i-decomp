@@ -1,9 +1,7 @@
 #ifndef RECOVERY_00309D50_PRIVATE_H
 #define RECOVERY_00309D50_PRIVATE_H
 
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
+#include "main/xgl_studio.h"
 
 typedef struct {
     void *spline;
@@ -44,13 +42,6 @@ typedef struct {
     u32 cleared_on_init_run[4];
     void *handler[4];
 } SequenceState;
-
-typedef struct Vector4 {
-    float x;
-    float y;
-    float z;
-    float w;
-} Vector4;
 
 /*
  * The engine's actor record, recovered head.

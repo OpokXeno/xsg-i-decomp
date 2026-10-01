@@ -95,7 +95,31 @@ void objRemove(ObjectTask *task)
     xglTaskRemove(&task->task);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntryPure);
+ObjectTask *objEntryPure(ObjectTaskCallback callback)
+{
+    XglTaskScheduler *scheduler;
+    XglTaskPrefix *entry;
+    XglTaskPrefix *allocated;
+    ObjectTask *task;
+
+    /* TaskManager and XglTaskScheduler expose the same four pointer slots;
+     * this boundary uses the canonical scheduler-prefix API. The object
+     * callback is stored, then later called by objExec2 with its local type. */
+    scheduler = (XglTaskScheduler *)&taskMan;
+    entry = 0;
+    if (scheduler != 0) {
+        entry = scheduler->active_tail;
+    }
+    allocated = xglTaskEntryNext(scheduler,
+                                 (int (*)(XglTaskPrefix *))callback,
+                                 entry);
+    task = (ObjectTask *)allocated;
+    if (task != 0) {
+        return task;
+    }
+    printf(D_00A43810);
+    return 0;
+}
 
 void objRemovePure(ObjectTask *task)
 {
@@ -115,7 +139,24 @@ void objWorkInit(void)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objWorkGet);
+ObjectWork *objWorkGet(void)
+{
+    ObjectWork *slot;
+    int count;
+
+    count = 0;
+    slot = objWork;
+    do {
+        if (!(slot->used & 1)) {
+            slot->used = 1;
+            return slot;
+        }
+        count++;
+        slot++;
+    } while (count < 60);
+    printf(D_00A43848);
+    return 0;
+}
 
 void objWorkFree(void *work) {
     ObjectWork *slot;
@@ -144,7 +185,60 @@ void objStdInit(ObjectTask *task)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/obj", objStdMove);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objHatoVec);
+/*
+ * Aim an object at its target: give each axis the velocity that closes the
+ * distance still to go in `steps` updates, then put an axis already within half
+ * a unit of its target straight onto it, so the next objStdMove steps report it
+ * as arrived.  Each axis compares the magnitude of its own remaining distance,
+ * which the two sides of the sign test reach by different values: the negative
+ * side negates the distance, the positive side compares it as it stands.
+ */
+void objHatoVec(ObjectTask *task, int steps)
+{
+    typedef struct {
+        Vector4 homogeneousVector;
+        unsigned char unmodeled_10[0x20];
+        Vector4 scale;
+        Vector4 velocity;
+        unsigned char unmodeled_50[0x10];
+        Vector4 target;
+        unsigned char unmodeled_70[0x10];
+    } MotionTransform;
+    typedef struct {
+        int used;
+        unsigned char unmodeled_04[0x8C];
+        MotionTransform transform;
+    } MotionWork;
+    MotionWork *work;
+    MotionTransform *transform;
+    float deltaX;
+    float deltaY;
+    float deltaZ;
+    float magnitudeX;
+    float magnitudeY;
+    float magnitudeZ;
+
+    work = task->work;
+    transform = &work->transform;
+    deltaX = transform->target.x - transform->homogeneousVector.x;
+    transform->velocity.x = deltaX / steps;
+    transform->velocity.y = (transform->target.y - transform->homogeneousVector.y) / steps;
+    transform->velocity.z = (transform->target.z - transform->homogeneousVector.z) / steps;
+
+    if ((deltaX < 0.0f ? (magnitudeX = -deltaX) : deltaX) < 0.5f) {
+        transform->homogeneousVector.x = transform->target.x;
+    }
+
+    if (((deltaY = transform->target.y - transform->homogeneousVector.y) < 0.0f
+             ? (magnitudeY = -deltaY) : deltaY) < 0.5f) {
+        transform->homogeneousVector.y = transform->target.y;
+    }
+
+    if (((deltaZ = transform->target.z - transform->homogeneousVector.z) < 0.0f
+             ? (magnitudeZ = -deltaZ) : deltaZ) < 0.5f) {
+        transform->homogeneousVector.z = transform->target.z;
+    }
+}
 
 void objCmdClear(ObjectTask *task) {
     ObjectCommandQueue *queue;
@@ -172,7 +266,20 @@ void *objCmdTailGet(ObjectTask *task) {
     return &queue->entries[queue->readIndex];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objCmdPush);
+void *objCmdPush(ObjectTask *task) {
+    ObjectCommandQueue *queue;
+    int index;
+
+    queue = task->work;
+    index = queue->readIndex;
+    queue->readIndex = index + 1;
+    if (queue->readIndex >= 5) {
+        queue->readIndex = 4;
+        printf(D_00A43880);
+        return 0;
+    }
+    return &queue->entries[index];
+}
 
 #define OBJ_DEBUG_PRINT(args) do { printf args; } while (0)
 
@@ -216,7 +323,25 @@ void fifoInit(Fifo *fifo, int capacity) {
     fifo->count = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", fifoPush);
+int fifoPush(Fifo *fifo) {
+    int count;
+    int capacity;
+    int writeIndex;
+
+    count = fifo->count;
+    capacity = (fifo->maxIndex - fifo->base) + 1;
+    if (count >= capacity) {
+        printf(D_00A438C0);
+        return -1;
+    }
+    writeIndex = fifo->writeIndex + 1;
+    fifo->count = count + 1;
+    fifo->writeIndex = writeIndex;
+    if (fifo->maxIndex < writeIndex) {
+        fifo->writeIndex = fifo->base;
+    }
+    return fifo->writeIndex;
+}
 
 int fifoPop(Fifo *fifo) {
     int count;

@@ -6,13 +6,98 @@
 
 typedef signed int s32;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", BattleAreaCheckEnemy);
+/* Occupied battle slots on the side opposite `side` (four slots, 0xDE
+ * shorts/slot, `side->battle[0].battle.layers[0].cardId` and on). */
+s32 BattleAreaCheckEnemy(s32 side, CardGameWork *work)
+{
+    CardPlaySide *otherSide = &work->enemy;
+    s16 *cardId;
+    s32 count = 0;
+    s32 remaining = 3;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", DisposeAreaCheckEnemy);
+    if (side) {
+        otherSide = &work->player;
+    }
+    cardId = &otherSide->battle[0].battle.layers[0].cardId;
+    do {
+        s16 id = *cardId;
+        cardId += 0xDE;
+        remaining -= 1;
+        if (id >= 0) {
+            count = count + 1;
+        }
+    } while (remaining >= 0);
+    return count;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", BattleAreaCheckFriend);
+/* Occupied disposal slots on the side opposite `side`. */
+s32 DisposeAreaCheckEnemy(s32 side, CardGameWork *work)
+{
+    CardPlaySide *otherSide = &work->enemy;
+    s16 *cardId;
+    s32 count = 0;
+    s32 remaining = 3;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", DisposeAreaCheckFriend);
+    if (side) {
+        otherSide = &work->player;
+    }
+    cardId = &otherSide->disposal[0].battle.layers[0].cardId;
+    do {
+        s16 id = *cardId;
+        cardId += 0xDE;
+        remaining -= 1;
+        if (id >= 0) {
+            count = count + 1;
+        }
+    } while (remaining >= 0);
+    return count;
+}
+
+/* Occupied battle slots on the `side` side itself. */
+s32 BattleAreaCheckFriend(s32 side, CardGameWork *work)
+{
+    CardPlaySide *ownSide = &work->player;
+    s16 *cardId;
+    s32 count = 0;
+    s32 remaining = 3;
+
+    if (side) {
+        ownSide = &work->enemy;
+    }
+    cardId = &ownSide->battle[0].battle.layers[0].cardId;
+    do {
+        s16 id = *cardId;
+        cardId += 0xDE;
+        remaining -= 1;
+        if (id >= 0) {
+            count = count + 1;
+        }
+    } while (remaining >= 0);
+    return count;
+}
+
+/* Occupied disposal slots on the `side` side itself. */
+s32 DisposeAreaCheckFriend(s32 side, CardGameWork *work)
+{
+    CardPlaySide *ownSide = &work->player;
+    s16 *cardId;
+    s32 count = 0;
+    s32 remaining = 3;
+
+    if (side) {
+        ownSide = &work->enemy;
+    }
+    cardId = &ownSide->disposal[0].battle.layers[0].cardId;
+    do {
+        s16 id = *cardId;
+        cardId += 0xDE;
+        remaining -= 1;
+        if (id >= 0) {
+            count = count + 1;
+        }
+    } while (remaining >= 0);
+    return count;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", CheckFriendType4);
 
@@ -365,9 +450,47 @@ INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", CC_Kara_CommPlay);
 
 INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", CC_Kara_SetFase);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", GetShoukin);
+extern u8 CardDat[0x100];
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", GetPrice);
+/* Reward of the base card in the stack plus, if present, the card stacked on
+ * it (CardDat[cardId], indexed directly by card id). Zero if the base layer
+ * is empty. */
+s32 GetShoukin(CardLayerStack *stack)
+{
+    s16 cardId0 = stack->layers[0].cardId;
+    s32 reward;
+    s16 cardId1;
+
+    if (cardId0 < 0) {
+        return 0;
+    }
+    reward = CardDat[cardId0];
+    cardId1 = stack->layers[1].cardId;
+    if (cardId1 >= 0) {
+        reward += CardDat[cardId1];
+    }
+    return reward;
+}
+
+/* Price of the base card in the stack plus, if present, the card stacked on
+ * it (CardDat[cardId], indexed directly by card id). Zero if the base layer
+ * is empty. */
+s32 GetPrice(CardLayerStack *stack)
+{
+    s16 cardId0 = stack->layers[0].cardId;
+    s32 price;
+    s16 cardId1;
+
+    if (cardId0 < 0) {
+        return 0;
+    }
+    price = CardDat[cardId0];
+    cardId1 = stack->layers[1].cardId;
+    if (cardId1 >= 0) {
+        price += CardDat[cardId1];
+    }
+    return price;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", TodomeHyouka);
 
@@ -383,9 +506,64 @@ INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", CC_Kara_FrontTodome
 
 INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", CC_Kara_BackAttackMove);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", VX10000Check);
+/* Card id 0x27 (VX10000) on either side's battle board, checking both sides'
+ * slot i together for i in 0..3. */
+s32 VX10000Check(s32 side, CardGameWork *work)
+{
+    CardPlaySide *sideA;
+    CardPlaySide *sideB;
+    s32 slotIndex;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", YoakimuMoMoCheck);
+    if (!side) {
+        sideA = &work->player;
+        sideB = &work->enemy;
+    } else {
+        sideA = &work->enemy;
+        sideB = &work->player;
+    }
+    for (slotIndex = 0; slotIndex < 4; slotIndex++) {
+        if (sideA->battle[slotIndex].battle.layers[0].cardId == 0x27) {
+            return 1;
+        }
+        if (sideB->battle[slotIndex].battle.layers[0].cardId == 0x27) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Whether `side`'s battle board has card id 0x51 (Yoakimu) in some slot and
+ * card id 3, 8 or 10 (MoMo) in some slot. */
+s32 YoakimuMoMoCheck(s32 side, CardGameWork *work)
+{
+    CardPlaySide *sideData = &work->player;
+    s16 *cardIdPtr;
+    s32 yoakimuSlot = -1;
+    s32 moMoSlot = -1;
+    s32 slotIndex;
+
+    if (side) {
+        sideData = &work->enemy;
+    }
+    cardIdPtr = &sideData->battle[0].battle.layers[0].cardId;
+    for (slotIndex = 0; slotIndex < 4; slotIndex++) {
+        s16 cardId = *cardIdPtr;
+
+        cardIdPtr += 0xDE;
+        if (cardId == 0x51) {
+            yoakimuSlot = slotIndex;
+        }
+        if (cardId == 3 || cardId == 8 || cardId == 10) {
+            moMoSlot = slotIndex;
+        }
+    }
+    if (yoakimuSlot != -1) {
+        if (moMoSlot != -1) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", MoMoCheck);
 

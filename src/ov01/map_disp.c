@@ -45,7 +45,36 @@ void mapDispOffAll(void)
     mapDispWork[0] = 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/map_disp", mapDisp);
+void mapDisp(int mapNo)
+{
+    MapDispData *mapData;
+    NmlModel *model;
+    float matrix[4][4];
+    int i;
+
+    if (mapDispWork[0] == 1 && mapDispWork[1] == 1) {
+        return;
+    }
+
+    mapData = dataMapLoadAdrGet(mapNo);
+    nmlModelSetTexture((char *)mapData + mapData->textureOffset);
+    xglMatrixStackUnit();
+    xglMatrixStackSave(matrix);
+    nmlModelSetPlace(matrix);
+    nmlModelSetMulColor(mapMul.components);
+    model = (NmlModel *)((char *)mapData + mapData->entryOffset);
+
+    for (i = 0; i < 2; i++) {
+        if (mapDispWork[i] == 1) {
+            nmlModelSetNameVisible(model, mapPartsName[i], 0, 3);
+        } else {
+            nmlModelSetNameVisible(model, mapPartsName[i], 1, 3);
+        }
+    }
+
+    nmlModelSetMapEntry();
+    nmlModelEntry(model);
+}
 
 void mapDispTest(void) {
 }

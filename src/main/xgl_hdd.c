@@ -8,7 +8,38 @@ static int xglHddDummyCB(int event, int value)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddCheckCore);
+static int xglHddCheckCore(void)
+{
+    long status;
+    int expectedStatus;
+    int result;
+
+    if (HddActive >= 2)
+        return -5;
+
+    status = sceDevctl(xgl_hdd_device, 0x4807, 0, 0, 0, 0);
+    if (status != 0) {
+        if (status == 2)
+            return -2;
+        if (status < 3) {
+            expectedStatus = 1;
+            result = -3;
+        } else {
+            expectedStatus = 3;
+            result = -1;
+        }
+        if (status != expectedStatus)
+            return -99;
+    } else {
+        if (sceDevctl(xgl_hdd_device, 0x4804, 0, 0, 0, 0) >= 0)
+            return 0;
+        if (HddActive == 1)
+            return -6;
+        xglHddActivate(0x102);
+        return -5;
+    }
+    return result;
+}
 
 int xglHddCheck2(void)
 {
@@ -41,9 +72,37 @@ int xglHddCheck(void)
     return -5;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddErrorScreen);
+void xglHddErrorScreen(void)
+{
+    int waitFrames = 30;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcLoadMount);
+    sRender.errorScreenActive = 1;
+    for (;;) {
+        xglDmaDirectNormal(2, TestEnv_0_004A8A80, 6);
+        xglFontPrint(48, 64, 0xffffff, D_004D2628);
+        if (waitFrames > 0) {
+            waitFrames--;
+        } else if (PadData.half_2a & 0x20) {
+            break;
+        }
+        xglSleep();
+    }
+    xglSoundEffectNormalDirect(1);
+    sRender.errorScreenActive = 0;
+}
+
+int xglHddMcLoadMount(void)
+{
+    int result;
+
+    if (xglHddCheck2() != 0)
+        return -1;
+
+    result = sceMount((char *)hdd_mc_path, (char *)commonname, 5, 0, 0);
+    if (result < 0 && result != -16)
+        return -1;
+    return 0;
+}
 
 int xglHddMcUmount(void)
 {
@@ -51,11 +110,133 @@ int xglHddMcUmount(void)
     return result < 0 ? -2 : 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", make_fullpath);
+static char *make_fullpath(char *destination, int card, int slot)
+{
+    const char *source = yoursaves;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcExist);
+    while ((*destination = *source) != 0) {
+        source++;
+        destination++;
+    }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcLoadCore);
+    source = xglMcSetFullPath(card, slot);
+    while ((*destination = *source) != 0) {
+        source++;
+        destination++;
+    }
+    return destination;
+}
+
+int xglHddMcExist(struct HddExistRequest *request)
+{
+    char filePath[256];
+    char name[256];
+    struct HddDirectoryEntry entry;
+    char savePath[256];
+    XglClock timestamp;
+    int result;
+    int descriptor;
+    int save;
+    int count;
+    int newestSave;
+    unsigned int newestTime;
+    unsigned int time;
+    unsigned char *found;
+    unsigned char *source;
+    char *destination;
+    unsigned char *clearPosition;
+
+    result = xglHddMcLoadMount();
+    if (result < 0)
+        return result;
+
+    if (request->card >= 0) {
+        make_fullpath(filePath, request->card, 0);
+        descriptor = sceOpen(filePath, 1, 438);
+        if (descriptor >= 0) {
+            result = sceClose(descriptor) < 0 ? -3 : 1;
+        } else {
+            result = 0;
+        }
+    } else {
+        found = request->found;
+        source = xglMcSetFullPath(-1, -1);
+        source++;
+        newestTime = 0;
+        newestSave = 0;
+        destination = name;
+        *destination = *source;
+        if (((unsigned int)*destination << 24) != 0) {
+            do {
+                source++;
+                destination++;
+                *destination = *source;
+            } while (((unsigned int)*destination << 24) != 0);
+        }
+        /* The -1 card path ends in a wildcard; compare its directory stem. */
+        destination[-1] = 0;
+
+        count = 100;
+        clearPosition = &found[100];
+        do {
+            count--;
+            *clearPosition = 0;
+            clearPosition--;
+        } while (count >= 0);
+
+        count = 0;
+        descriptor = sceDopen(yoursaves);
+        while (descriptor >= 0 && sceDread(descriptor, &entry) > 0) {
+            if (strncmp(name, entry.name, 16) != 0)
+                continue;
+            save = entry.name[16] * 10 + entry.name[17] - (10 * '0' + '0');
+            make_fullpath(savePath, save, 0);
+            if (sceGetstat(savePath, &entry.stat) < 0)
+                continue;
+            found[save] = 1;
+            timestamp.status = 0;
+            timestamp.year = entry.stat.year;
+            timestamp.month = entry.stat.month;
+            timestamp.day = entry.stat.day;
+            timestamp.hour = entry.stat.hour;
+            timestamp.minute = entry.stat.minute;
+            timestamp.second = entry.stat.second;
+            time = xglClockDayTime2UInt(&timestamp);
+            if (newestTime < time) {
+                newestTime = time;
+                newestSave = save;
+            }
+            count++;
+        }
+        found[100] = newestSave;
+        result = count;
+        if (descriptor >= 0 && sceDclose(descriptor) < 0)
+            result = -5;
+    }
+    xglHddMcUmount();
+    return result;
+}
+
+int xglHddMcLoadCore(void *save)
+{
+    struct HddLoadRequest *request = save;
+    char path[256];
+    int descriptor;
+    int result;
+
+    make_fullpath(path, request->card, 0);
+    descriptor = sceOpen(path, 1, 438);
+    if (descriptor < 0) {
+        result = descriptor == -2 ? 1 : -6;
+    } else {
+        result = 0;
+        if (sceRead(descriptor, request->data, request->size) < 0)
+            result = -7;
+        if (sceClose(descriptor) < 0)
+            result = -8;
+    }
+    return result;
+}
 
 int xglHddMcLoad(void *save)
 {
@@ -74,11 +255,61 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", Judge_MakeNewFolder);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", Judge_MakeNewSavedata);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCheckYourSaves);
+static int xglHddMcCheckYourSaves(int card)
+{
+    int descriptor = sceDopen(yoursaves);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCheckCore);
+    if (descriptor < 0)
+        return Judge_MakeNewFolder() == 1 ? 1 : -2;
+    return Judge_MakeNewSavedata(descriptor, card) == 1 ? 0 : -3;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCheck);
+static int xglHddMcCheckCore(struct HddCheckState *state)
+{
+    int result = xglHddMcCheckYourSaves(state->status);
+
+    if (result < 0)
+        return result;
+    {
+        int clusterSize = sceDevctl(hdd_mc_path, 0x5001, 0, 0, 0, 0);
+        int freeClusters = sceDevctl(hdd_mc_path, 0x5002, 0, 0, 0, 0);
+        int dataClusters = (state->dataSize + clusterSize - 1) / clusterSize;
+        int reserveClusters = ((unsigned int)clusterSize + 963) / (unsigned int)clusterSize;
+        int transferClusters =
+            ((unsigned int)(state->transfer->end - state->transfer->begin) + clusterSize - 1)
+            / (unsigned int)clusterSize;
+
+        dataClusters += reserveClusters;
+        if (freeClusters < dataClusters + transferClusters + 7) {
+            int capacity;
+
+            if (sceDevctl((char *)xgl_hdd_device, 0x480a, 0, 0, &capacity, 4) < 0)
+                return -1;
+            return capacity <= 0x1fffff ? -4 : 1;
+        }
+    }
+    return 0;
+}
+
+int xglHddMcCheck(struct HddCheckState *state)
+{
+    int previous;
+    int result;
+
+    if (xglHddCheck2() != 0)
+        return -1;
+
+    xglHddMcUmount();
+    if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+        return -1;
+
+    previous = state->status;
+    state->status = -1;
+    result = xglHddMcCheckCore(state);
+    state->status = previous;
+    xglHddMcUmount();
+    return result;
+}
 
 int xglHddMcGetFree(void)
 {
@@ -107,11 +338,44 @@ int xglHddMcGetFree(void)
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", create_file);
+static int create_file(int card, int slot, const void *data, int size)
+{
+    char path[256];
+    struct HddIoStat stat;
+    int descriptor;
+    int result;
+
+    make_fullpath(path, card, slot);
+    descriptor = sceOpen(path, 0x602, 438);
+    if (descriptor < 0)
+        return -1;
+
+    result = 0;
+    if (sceWrite(descriptor, data, size) < 0)
+        result = -1;
+    if (sceClose(descriptor) < 0)
+        result = -1;
+    stat.attributes = 0x8497;
+    if (sceChstat(path, &stat, 2) < 0)
+        result = -1;
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCreate);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcSave);
+int xglHddMcSave(const struct HddSaveRequest *save)
+{
+    int result;
+
+    if (xglHddCheck2() != 0)
+        return -1;
+    if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+        return -1;
+
+    result = create_file(save->card, 0, save->data, save->size) < 0 ? -24 : 0;
+    xglHddMcUmount();
+    return result;
+}
 
 int xglHddUninstall(void)
 {

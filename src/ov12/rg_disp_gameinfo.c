@@ -136,7 +136,45 @@ void _paint_set_tex_alpha(RgDispGameInfo *pInfo, const char *pictureName,
     XrgPaint2DAlpha(pInfo->paint, blendMode);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", _paint_xy_color);
+/*
+ * This caller's rectangle has the layout of the descriptor in the paint
+ * renderer's TU. The descriptor is not yet exported by its public header;
+ * retain a distinct TU-local type until that owner publishes the interface.
+ * DrawRect consumes the whole descriptor, including its alignment gap.
+ */
+typedef struct RgDispGameInfoColorRect {
+    int mode;
+    unsigned char quadword_alignment_gap[12];
+    int x;
+    int y;
+    int width;
+    int height;
+    float scale;
+    float angle;
+} RgDispGameInfoColorRect;
+
+extern void InitXrgPaint2DRect(RgDispGameInfoColorRect *rectangle, int mode);
+extern void XrgPaint2DColor(XrgPaint2D *paint, const unsigned int *color);
+extern void XrgPaint2DDrawRect(XrgPaint2D *paint,
+                               RgDispGameInfoColorRect *rectangle);
+
+/* Anchored, rotated, scaled rectangle with per-frame jitter. */
+#define RG_DISP_GAME_INFO_COLOR_RECT_MODE 0x1E5
+
+void _paint_xy_color(RgDispGameInfo *pInfo, int x, int y, int intensity,
+                     float angle, float scale)
+{
+    unsigned int color[4] = {intensity, intensity, intensity, 127};
+    RgDispGameInfoColorRect rectangle;
+
+    InitXrgPaint2DRect(&rectangle, RG_DISP_GAME_INFO_COLOR_RECT_MODE);
+    rectangle.x = x;
+    rectangle.y = y;
+    rectangle.scale = scale;
+    rectangle.angle = angle;
+    XrgPaint2DColor(pInfo->paint, color);
+    XrgPaint2DDrawRect(pInfo->paint, &rectangle);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_gameinfo", _DispInfo);
 

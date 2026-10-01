@@ -6,6 +6,7 @@
  * libkernel syscall stub (main:0x00200550).
  */
 extern int iSignalSema(int sema_id);
+extern void SleepThread(void);
 
 /*
  * RssdInitIop is this TU's own IOP sound RPC client setup (its body is still
@@ -101,7 +102,36 @@ void RssdBackgroundNextWave(const int *request)
         WakeupThread(RssdWork.next_wave_thread_id);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdBackNextWaveThread);
+void RssdBackNextWaveThread(void)
+{
+    RssdRequest request;
+    RssdWorkFlags *work;
+    unsigned char *write_ptr;
+    int remaining_size;
+    int remaining_after_transfer;
+    int maximum_transfer_size;
+    int transfer_size;
+
+    work = &RssdWork;
+    maximum_transfer_size = 0x10000;
+    for (;;) {
+        SleepThread();
+        remaining_size = work->spu_bytes_remaining;
+        if (remaining_size == 0)
+            continue;
+
+        transfer_size = remaining_size <= maximum_transfer_size ? remaining_size : maximum_transfer_size;
+        write_ptr = work->spu_write_ptr;
+        remaining_after_transfer = remaining_size - transfer_size;
+        work->spu_write_ptr = write_ptr + transfer_size;
+        request.arg[2].value = remaining_after_transfer == 0;
+        work->flags |= 0x24;
+        work->spu_bytes_remaining = remaining_after_transfer;
+        request.arg[0].pointer = write_ptr;
+        request.arg[1].value = transfer_size;
+        RssdCallFunc(33, &request, write_ptr, transfer_size);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdCallFunc);
 

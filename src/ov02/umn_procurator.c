@@ -8,7 +8,36 @@
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_procurator", UmnManzaiControl);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_procurator", UmnManzaiInit);
+int UmnManzaiInit(void)
+{
+    UmnManzaiWinTask *window;
+    int index;
+
+    if (UmnEventTextMake() < 0) {
+        return -1;
+    }
+    UmnManzaiText = UmnEventTextNextGet(0);
+    if (UmnModelSon == 0) {
+        MenuModelCreate(&UmnModelSon, 3);
+    }
+    MenuModelExtFuncSet(UmnModelUkn, UmnProcuratorManzai, 0);
+    MenuModelExtFuncSet(UmnModelSon, UmnProcuratorManzai2, 0);
+    index = 0;
+    window = UmnManzaiWin;
+    do {
+        UmnObjectTaskCreate(tskUmnManzaiWin, window);
+
+        {
+            int next_index = index + 1;
+            window->task_index = next_index;
+            index = next_index;
+        }
+        /* Advance this loop to the next task record. */
+        window++;
+    } while (index < 2);
+    UmnManzaiFlag = 6;
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_procurator", tskUmnManzaiWin);
 

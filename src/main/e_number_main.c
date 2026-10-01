@@ -32,7 +32,39 @@ void eNumberSet(ENumber *number)
     number->flag[0] = number->flag[1] = number->flag[2] = number->flag[3] = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/e_number_main", eSpriteMain);
+/* The first 16 bytes are the fields initialized by eSpriteSet. The following
+ * coordinates, work word, and color quad form the descriptor submitted by
+ * eSpriteMain. */
+typedef struct ESpriteMainData {
+    signed char state;
+    u8 unmodeled_001[3];
+    short x;
+    short y;
+    int work;
+    signed char color[4];
+    u8 unmodeled_010[4];
+    short renderX;
+    short renderY;
+    int renderWork;
+    u8 unmodeled_01c[4];
+    signed char renderColor[4];
+} ESpriteMainData;
+
+extern void endSpriteSet(void *sprite, int mode);
+extern void endPrintExtFunc(int work, int mode, void *descriptor);
+
+void eSpriteMain(ESpriteMainData *sprite)
+{
+    endSpriteSet(&sprite->renderX, 5);
+    sprite->renderX = sprite->x;
+    sprite->renderWork = sprite->work;
+    sprite->renderY = sprite->y;
+    sprite->renderColor[0] = sprite->color[0];
+    sprite->renderColor[1] = sprite->color[1];
+    sprite->renderColor[2] = sprite->color[2];
+    sprite->renderColor[3] = sprite->color[3];
+    endPrintExtFunc(sprite->work, 2, &sprite->renderX);
+}
 
 /*
  * Partial view of the object eSpriteSet initialises. eSpriteMain copies x,
@@ -88,7 +120,36 @@ INCLUDE_ASM("asm/main/nonmatchings/e_number_main", eLineMain);
 
 INCLUDE_ASM("asm/main/nonmatchings/e_number_main", eLineSet);
 
-INCLUDE_ASM("asm/main/nonmatchings/e_number_main", eTagFontMain);
+/* The source color quad is copied into the descriptor with its two middle
+ * channels exchanged; the value word controls whether the descriptor is sent. */
+typedef struct ETagFontMainData {
+    u8 unmodeled_000[4];
+    short x;
+    short y;
+    int work;
+    signed char color[4];
+    struct {
+        short x;
+        short y;
+        int work;
+        signed char color[4];
+    } render;
+    int value;
+} ETagFontMainData;
+
+void eTagFontMain(ETagFontMainData *tag)
+{
+    if (tag->value != 0) {
+        tag->render.x = tag->x;
+        tag->render.y = tag->y;
+        tag->render.color[0] = tag->color[0];
+        tag->render.color[1] = tag->color[2];
+        tag->render.color[2] = tag->color[1];
+        tag->render.color[3] = tag->color[3];
+        tag->render.work = tag->work;
+        endPrintExtFunc(tag->work, 7, &tag->render);
+    }
+}
 
 /*
  * Partial view of the object eTagFontSet initialises. eTagFontMain copies

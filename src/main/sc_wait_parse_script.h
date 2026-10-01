@@ -15,6 +15,31 @@ extern EventTask *scGetTaskAdr(int script_index, int task_index);
 
 typedef struct ScriptObject ScriptObject;
 
+typedef struct MissileImagePair {
+    short primary_index;
+    short secondary_index;
+} MissileImagePair;
+
+typedef struct MissileCommandEntry {
+    short frame;
+    u16 flags;
+    short position_x;
+    short position_y;
+    short position_z;
+    u16 spawn_parameter;
+} MissileCommandEntry;
+
+/* The serialized command block stores its variable-sized entries after this header. */
+typedef struct MissileCommandData {
+    short command_value;               /* +0x00 */
+    short primary_image_index;         /* +0x02 */
+    short secondary_image_index;       /* +0x04 */
+    short command_kind;                /* +0x06 */
+    MissileImagePair image_pairs[3];    /* +0x08 */
+    unsigned char unmodeled_14[4];
+    MissileCommandEntry entries[1];     /* +0x18, followed by remaining entries */
+} MissileCommandData;
+
 /*
  * The script command record the wait handlers of this unit are dispatched on.
  *
@@ -55,13 +80,21 @@ typedef struct ScriptObject ScriptObject;
  */
 struct ScriptObject {
     unsigned short flags;               /* +0x00 */
-    unsigned char unmodeled_02[0x42];   /* +0x02 */
+    unsigned char unmodeled_02[0x2e];   /* +0x02 */
+    int missile_spawn_context[3];       /* +0x30, copied into missile parameters */
+    short missile_subtype;              /* +0x3c, selects the 527/528 command kind */
+    unsigned char unmodeled_3e[6];      /* +0x3e */
     short amb_effect_no;                /* +0x44 */
     unsigned char unmodeled_46[0x14];   /* +0x46 */
     unsigned short wait_kind;           /* +0x5a */
-    unsigned char unmodeled_5c[2];      /* +0x5c */
+    unsigned short move_kind;           /* +0x5c, scMoveParseScript's handler selector */
     short wait_frames;                  /* +0x5e */
     short wait_operand;                 /* +0x60 */
+    unsigned char unmodeled_62[4];
+    short missile_wait_frames;           /* +0x66 */
+    short missile_record_index;          /* +0x68 */
+    unsigned char unmodeled_6a[6];
+    MissileCommandData *missile_data;    /* +0x70 */
 };
 
 extern int _nowScript;

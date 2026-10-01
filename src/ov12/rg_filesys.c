@@ -29,7 +29,33 @@ static RgFileSysData *_AllocFile(void)
     return pFile;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", _FindFile);
+extern unsigned int RgVectorSize(void *vector);
+extern void *RgVectorIndex(void *vector, unsigned int index,
+                           const char *source_file, int line);
+extern int strcmp(const char *string1, const char *string2);
+extern const char D_00A559B0[]; /* "pszName != NIL" */
+
+static int _FindFile(RgFileSys *pSys, const char *pszName)
+{
+    RgFileSysData *found;
+    unsigned int index;
+    unsigned int count;
+
+    if (pSys == 0) {
+        assert_prog(pSys_not_nil, rg_filesys_source_file, 74);
+    }
+    if (pszName == 0) {
+        assert_prog(D_00A559B0, rg_filesys_source_file, 75);
+    }
+    count = RgVectorSize(pSys->files);
+    for (index = 0; index < count; index++) {
+        found = RgVectorIndex(pSys->files, index, rg_filesys_source_file, 78);
+        if (strcmp(found->name, pszName) == 0) {
+            return (int)found;
+        }
+    }
+    return 0;
+}
 
 extern unsigned int RgVectorSize(void *vector);
 extern void *RgVectorIndex(void *vector, unsigned int index,
@@ -103,9 +129,141 @@ RgFileSys *InstanceOfRgFileSys(void)
     return pSys;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysClear);
+extern void XrgFileSysFree(void *pBuf, const char *pszFile, int iLine);
+extern void RgVectorClear(void *vector);
+extern void XrgLog(const char *format, const char *source_file, int line, ...);
+extern const char D_00A559F0[]; /* "free -> %s (mode=%d ref=%d)\n" */
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysRead);
+void RgFileSysClear(RgFileSys *pSys)
+{
+    void *files;
+    unsigned int index;
+    unsigned int count;
+    RgFileSysData *found;
+
+    if (pSys == 0) {
+        assert_prog(pSys_not_nil, rg_filesys_source_file, 222);
+    }
+    files = pSys->files;
+    count = RgVectorSize(files);
+    for (index = 0; index < count; index++) {
+        found = RgVectorIndex(files, index, rg_filesys_source_file, 226);
+        XrgLog(D_00A559F0, rg_filesys_source_file, 227, found->name,
+               found->mode, found->ref_count);
+        XrgFileSysFree(found->data, rg_filesys_source_file, 228);
+        RgHeapFree(InstanceOfRgHeap(), found, rg_filesys_source_file, 229);
+    }
+    RgVectorClear(files);
+}
+
+/*
+ * The out parameter _FindInPrepare (still INCLUDE_ASM) fills when it locates
+ * pszName inside the first prepared link archive: the archive's own record
+ * (to bump its reference count), the payload pointer RgLinkDataGet returned,
+ * and a size RgFileSysRead stores as-is into the new record.
+ */
+typedef struct RgFileSysLinkFound {
+    RgFileSysData *dupOf;
+    void *data;
+    unsigned int size;
+} RgFileSysLinkFound;
+
+extern int _FindInPrepare(RgFileSys *pSys, const char *pszFile,
+                          RgFileSysLinkFound *pFound);
+extern int _FindFile(RgFileSys *pSys, const char *pszName);
+extern unsigned int strlen(const char *string);
+extern char *strcat(char *destination, const char *source);
+extern char *strncpy(char *destination, const char *source, unsigned int count);
+extern void *memset(void *destination, int value, unsigned int count);
+extern void RgVectorPush(void *vector, void *element);
+extern unsigned int XrgCdFileSize(const char *pszFile);
+extern unsigned int XrgCdFileAlignmentSize(unsigned int size);
+extern void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile,
+                             int iLine);
+extern int XrgCdFileRead(const char *pszFile, void *pBuf);
+extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
+                       int line);
+extern void RgError(const char *message, const char *source_file, int line,
+                    ...);
+extern char *strcpy(char *destination, const char *source);
+extern const char D_00A55A10[]; /* "strlen(pszName) <= NAME_LEN" */
+extern const char D_00A55A30[]; /* "pFile != NIL" */
+extern const char D_00A55A40[]; /* "read prepare data by normal read %s" */
+
+RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
+                             const char *pszRoot)
+{
+    RgFileSysLinkFound found;
+    RgFileSysData *pFile;
+    RgFileSysData *pDup;
+
+    if (pSys == 0) {
+        assert_prog(pSys_not_nil, rg_filesys_source_file, 274);
+    }
+    if (!(strlen(pszName) < 64)) {
+        assert_prog(D_00A55A10, rg_filesys_source_file, 275);
+    }
+    if (_FindInPrepare(pSys, pszName, &found) != 0) {
+        pDup = _AllocFile();
+        pDup->dupOf = found.dupOf;
+        pDup->size = found.size;
+        pDup->ref_count = 1;
+        pDup->data = found.data;
+        pDup->owner = pSys;
+        found.dupOf->ref_count++;
+        pDup->mode = 1;
+        pDup->allocated = 0;
+        strcpy(pDup->name, pszName);
+        return pDup;
+    }
+    pFile = (RgFileSysData *)_FindFile(pSys, pszName);
+    if (pFile == 0) {
+        char szPath[128];
+        unsigned int size;
+        unsigned int alignSize;
+        void *pBuf;
+
+        if (pszRoot != 0) {
+            strcat(strcpy(szPath, pszRoot), pszName);
+        } else {
+            strcpy(szPath, pszName);
+        }
+        pFile = _AllocFile();
+        if (pFile == 0) {
+            assert_prog(D_00A55A30, rg_filesys_source_file, 317);
+        }
+        size = XrgCdFileSize(szPath);
+        pFile->size = size;
+        if (size == 0) {
+            return 0;
+        }
+        alignSize = XrgCdFileAlignmentSize(size);
+        pBuf = XrgFileSysAlloc(alignSize, rg_filesys_source_file, 326);
+        pFile->data = pBuf;
+        memset(pBuf, 0, alignSize);
+        if (XrgCdFileRead(szPath, pFile->data) == 0) {
+            RgHeapFree(InstanceOfRgHeap(), pFile, rg_filesys_source_file, 333);
+            return 0;
+        }
+        strncpy(pFile->name, pszName, 63);
+        pFile->owner = pSys;
+        pFile->mode = 0;
+        pFile->ref_count = 1;
+        pFile->dupOf = 0;
+        RgVectorPush(pSys->files, pFile);
+        return pFile;
+    }
+    switch (pFile->mode) {
+    case 0:
+    case 1:
+        pFile->ref_count++;
+        break;
+    case 2:
+        RgError(D_00A55A40, rg_filesys_source_file, 356, pFile->name);
+        break;
+    }
+    return pFile;
+}
 
 extern void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile,
                              int iLine);
@@ -169,7 +327,37 @@ void RgFileSysPrepareFile(RgFileSys *pSys, const char *pszName,
     pFile->ref_count = PREPARED_REF_COUNT;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysDisposePrepares);
+extern void RgWarn(const char *format, const char *source_file, int line, ...);
+extern const char D_00A55AC0[]; /* "pPrepare != NIL" */
+extern const char D_00A55AD0[]; /* "prepare '%s' is referenced (%d)" */
+extern const char D_00A55AF0[]; /* "prepare '%s' collect dispose" */
+extern void DisposeRgFileSysData_sub(RgFileSysData *pFile,
+                                     const char *source_file, int line);
+
+void RgFileSysDisposePrepares(RgFileSys *pSys)
+{
+    unsigned int index;
+    RgFileSysData *pPrepare;
+
+    if (pSys == 0) {
+        assert_prog(pSys_not_nil, rg_filesys_source_file, 434);
+    }
+    for (index = 0; index < pSys->prepared_count; index++) {
+        pPrepare = pSys->prepared_files[index];
+        if (pPrepare == 0) {
+            assert_prog(D_00A55AC0, rg_filesys_source_file, 438);
+        }
+        if (pPrepare->ref_count != PREPARED_REF_COUNT) {
+            RgWarn(D_00A55AD0, rg_filesys_source_file, 440, pPrepare->name,
+                   pPrepare->ref_count);
+        } else {
+            RgWarn(D_00A55AF0, rg_filesys_source_file, 442, pPrepare->name);
+        }
+        pPrepare->ref_count = 0;
+        DisposeRgFileSysData_sub(pPrepare, rg_filesys_source_file, 445);
+    }
+    pSys->prepared_count = 0;
+}
 
 extern void RgVectorPush(void *vector, void *element);
 extern void XrgLog(const char *format, const char *source_file, int line, ...);
@@ -211,7 +399,67 @@ RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
     return pFile;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", DisposeRgFileSysData_sub);
+extern const char D_00A55A30[]; /* "pFile != NIL" */
+extern const char D_00A55B78[]; /* "pFile->m_pSys != NIL" */
+extern const char D_00A55B90[]; /* "pFile->m_pOrg != NIL" */
+extern const char D_00A55BA8[]; /* "unknown filesys error (%s) call NIS!" */
+extern int RgVectorRemove(void *vector, void *element, const char *source_file,
+                          int line);
+extern void RgError(const char *message, const char *source_file, int line,
+                    ...);
+
+void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *source_file,
+                              int line)
+{
+    if (pFile == 0) {
+        assert_prog(D_00A55A30, source_file, line);
+    }
+    if (pFile->owner == 0) {
+        assert_prog(D_00A55B78, rg_filesys_source_file, 494);
+    }
+    if (pFile->mode == 1) {
+        if (pFile->dupOf == 0) {
+            assert_prog(D_00A55B90, rg_filesys_source_file, 502);
+        }
+        DisposeRgFileSysData_sub(pFile->dupOf, source_file, line);
+        pFile->ref_count--;
+        if (pFile->ref_count == 0) {
+            if (pFile->data != 0 && pFile->allocated != 0) {
+                XrgFileSysFree(pFile->data, source_file, line);
+            }
+            RgHeapFree(InstanceOfRgHeap(), pFile, source_file, line);
+        }
+        return;
+    }
+    if (pFile->mode == 2) {
+        if (_FindFileObj(pFile->owner, pFile) == 0) {
+            RgError(D_00A55BA8, rg_filesys_source_file, 522, pFile->name);
+        }
+        if (pFile->ref_count != 0) {
+            pFile->ref_count--;
+        } else {
+            if (pFile->data != 0 && pFile->allocated != 0) {
+                XrgFileSysFree(pFile->data, source_file, line);
+            }
+            RgVectorRemove(pFile->owner->files, pFile, rg_filesys_source_file,
+                          539);
+            RgHeapFree(InstanceOfRgHeap(), pFile, source_file, line);
+        }
+        return;
+    }
+    if (_FindFileObj(pFile->owner, pFile) == 0) {
+        RgError(D_00A55BA8, rg_filesys_source_file, 551, pFile->name);
+    }
+    pFile->ref_count--;
+    if (pFile->ref_count == 0) {
+        if (pFile->data != 0 && pFile->allocated != 0) {
+            XrgFileSysFree(pFile->data, source_file, line);
+        }
+        RgVectorRemove(pFile->owner->files, pFile, rg_filesys_source_file,
+                      565);
+        RgHeapFree(InstanceOfRgHeap(), pFile, source_file, line);
+    }
+}
 
 /*
  * This accessor's own additive view of RgFileSysData (completed in
@@ -237,4 +485,37 @@ char *RgFileSysDataGetName(RgFileSysData *pFile)
     return &((RgFileSysDataName *)pFile)->name;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_filesys", RgFileSysDump);
+extern const char D_00A55BD0[]; /* "************* file sys (file=%d) *************\n" */
+extern const char D_00A55C00[]; /* "[%s]:ptr=%p alloc=%d\n" */
+extern const char D_00A55C18[]; /* "  normal\n" */
+extern const char D_00A55C28[]; /* "  dup org=%p\n" */
+extern const char D_00A55C38[]; /* "  prepare\n" */
+
+void RgFileSysDump(RgFileSys *pSys)
+{
+    unsigned int index;
+    unsigned int count;
+    RgFileSysData *found;
+
+    if (pSys == 0) {
+        assert_prog(pSys_not_nil, rg_filesys_source_file, 596);
+    }
+    count = RgVectorSize(pSys->files);
+    XrgLog(D_00A55BD0, rg_filesys_source_file, 599, count);
+    for (index = 0; index < count; index++) {
+        found = RgVectorIndex(pSys->files, index, rg_filesys_source_file, 601);
+        XrgLog(D_00A55C00, rg_filesys_source_file, 602, found->name, found,
+               found->allocated);
+        switch (found->mode) {
+        case 0:
+            XrgLog(D_00A55C18, rg_filesys_source_file, 605);
+            break;
+        case 1:
+            XrgLog(D_00A55C28, rg_filesys_source_file, 608, found->dupOf);
+            break;
+        case 2:
+            XrgLog(D_00A55C38, rg_filesys_source_file, 611);
+            break;
+        }
+    }
+}

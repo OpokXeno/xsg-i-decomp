@@ -1012,12 +1012,36 @@ void _GetShotInfo(RgWeapon *weapon, RgWeaponShotRequest *info)
     info->targetConfused = RgRobotIsConfused(robotId);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", RgWeaponEssCastToShot);
+RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssenceCommon *ess)
+{
+    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponShotType) {
+        return (RgWeaponShotEssence *) ess;
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", RgWeaponEssCastToEnergy);
+RgWeaponEnergyEssence *RgWeaponEssCastToEnergy(RgWeaponEssenceCommon *ess)
+{
+    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponEnergyType) {
+        return (RgWeaponEnergyEssence *) ess;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", RgWeaponEssCastToAttack);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", RgWeaponEssCastToShield);
+RgWeaponShieldEssence *RgWeaponEssCastToShield(RgWeaponEssenceCommon *ess)
+{
+    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponShieldType) {
+        return (RgWeaponShieldEssence *) ess;
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", RgWeaponEssCastToUnArmed);
+RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(RgWeaponEssenceCommon *ess)
+{
+    if (ess != 0 && (int) ess->m_pCreateMethod == (int) _CreateWeaponUnArmedType) {
+        return (RgWeaponUnArmedEssence *) ess;
+    }
+    return 0;
+}

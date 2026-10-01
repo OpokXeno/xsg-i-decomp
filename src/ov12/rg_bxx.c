@@ -10,6 +10,9 @@ extern void RgError(const char *message, const char *source_file, int line,
                     ...);
 
 extern char *strcpy(char *destination, const char *source);
+extern unsigned int strlen(const char *string);
+extern int strncmp(const char *string1, const char *string2,
+                   unsigned int count);
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
@@ -50,6 +53,8 @@ extern const char D_00A56FB0[];
 extern const char D_00A56FE0[];
 /* ov12:0x00a57010 "pszName" */
 extern const char D_00A57010[];
+/* ov12:0x00a570f0 "pszName != NIL" */
+extern const char D_00A570F0[];
 /* ov12:0x00a57018 "data\\nisimori\\" */
 extern const char D_00A57018[];
 /* ov12:0x00a57028 "pData != NIL" */
@@ -253,7 +258,36 @@ RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id)
     return (RgBxxPic *)((char *)picTop + id * 0x60);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bxx", _FindPicByName);
+static int _FindPicByName(RgBxx *pBxx, const char *pszName)
+{
+    RgBxxHeader *header;
+    RgBxxPic *picTop;
+    const char *pictureTable;
+    unsigned int nameLength;
+    unsigned int picIndex;
+    enum { BXX_PIC_RECORD_SIZE = 0x60 };
+
+    header = _GetHeader(pBxx);
+    picTop = _GetPicTop(pBxx);
+    if (pszName == 0) {
+        assert_prog(D_00A570F0, D_00A56FA0, 175);
+    }
+    nameLength = strlen(pszName);
+    /* Names begin at byte zero of each 0x60-byte picture record. */
+    pictureTable = (const char *)picTop;
+    picIndex = 0;
+    if (header->numTex != 0) {
+        do {
+            if (strncmp(pszName,
+                        &pictureTable[picIndex * BXX_PIC_RECORD_SIZE],
+                        nameLength) == 0) {
+                return picIndex;
+            }
+            picIndex++;
+        } while (picIndex < (unsigned int)header->numTex);
+    }
+    return -1;
+}
 
 int RgBxxGetFindPic(RgBxx *pBxx, const char *pszName)
 {

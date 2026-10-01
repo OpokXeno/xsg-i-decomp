@@ -2,6 +2,7 @@
  * OV01 original TU 28: 0x00a360e0..0x00a36be8 (6 functions)
  */
 #include "common.h"
+#include "m_ef_create.h"
 #include "shared.h"
 
 extern float MMathCalcRotNear(float first, float second);
@@ -15,7 +16,11 @@ extern void MMathCalcAngle(Vector4 *angles, Vector4 *from, Vector4 *to);
 extern void MMathVectorInterpolation(Vector4 *destination, Vector4 *first,
                                      Vector4 *second, float parameter);
 extern void MMathRotateMatrixYX(Matrix4 matrix, int flags, Vector4 *angles);
+extern void MMathScaleMatrix(Vector4 *destination, const Vector4 *matrix,
+                             const Vector4 *scale);
 extern void MMathApplyMatrix(Vector4 *destination, Matrix4 matrix, Vector4 *source);
+extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
+extern Vector4 scale_0_00A516A0;
 extern float tanf(float value);
 
 /*
@@ -83,6 +88,13 @@ extern float tanf(float value);
 #define MSP02_POINT_BYTES 0x10
 #define MSP02_SLOT_BYTES (MSP02_TRAIL_POINTS * MSP02_POINT_BYTES)
 #define MSP02_POINTS_OFFSET 0x160
+
+struct MspCreationParameters {
+    unsigned char unmodeled_000[0x40];
+    int model_entry;
+    const char *texture_name;
+    unsigned char unmodeled_048[0x28];
+};
 
 typedef struct MspEffect {
     unsigned char creationParameters[0x70];                        /* 0x000 */
@@ -315,13 +327,53 @@ static void fnMSP02_PR000(void *task, MspEffect *effect)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DM000);
+static void fnMSP02_DM000(void *task, MspEffect *effect)
+{
+    Vector4 angles;
+    Matrix4 matrix;
+    Matrix4 *matrix_destination;
+    struct MspCreationParameters *parameters;
+
+    if (effect->frame < 20) {
+        parameters = (struct MspCreationParameters *)effect->creationParameters;
+        /* The draw orientation is the trail turn with a half-turn on Y. */
+        __asm__ __volatile__(
+            "lq $8, 0(%1)\n"
+            "sq $8, 0(%0)\n"
+            :
+            : "r"(&angles), "r"(&effect->turn)
+            : "$8", "memory");
+        angles.y += 3.14159274f;
+
+        MMathRotateMatrixYX(matrix, 0, &angles);
+        matrix_destination = &matrix;
+        MMathScaleMatrix((Vector4 *)matrix_destination,
+                         (const Vector4 *)matrix_destination,
+                         &scale_0_00A516A0);
+
+        {
+            /* Keep the target translation's address in v1, as the original does. */
+            register Vector4 *target asm("$3") = &effect->target;
+
+            __asm__ __volatile__(
+                "lqc2 $vf1, 0(%1)\n"
+                "vmove.w $vf1w, $vf0w\n"
+                "sqc2 $vf1, 48(%0)\n"
+                :
+                : "r"(matrix), "r"(target)
+                : "memory");
+        }
+
+        MEfDrawModel((const Vector4 *)matrix,
+                     parameters->model_entry,
+                     parameters->texture_name);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* Same frame gating as MSP00's fnMSP00_PO000 (see m_ef_create_msp_00.c),

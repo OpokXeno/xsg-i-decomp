@@ -8,6 +8,11 @@
  * actor's +0x60/+0x64 fields. Only pointers to it are used here.
  */
 typedef struct MenuModelActor MenuModelActor;
+typedef struct MenuModelDrawTypeState {
+    unsigned char unmodeled_00[0x60];
+    float progress; /* actor +0x120; MenuModelAlphaDraw reads this as transparency */
+    void (*drawTypeFunction)(MenuModelActor *actor); /* actor +0x124 */
+} MenuModelDrawTypeState;
 
 /*
  * Partial layout of the menu model "unit" object (main/tu165), recovered from
@@ -110,6 +115,43 @@ struct MenuModelActor {
     float transparency; /* +0x120 */
 };
 
+/* A partial actor view used only to form the recovered draw-state address. */
+typedef struct MenuModelActorDrawTypeView {
+    unsigned char unmodeled_00[0xC0];
+    MenuModelDrawTypeState drawTypeState;
+} MenuModelActorDrawTypeView;
+
+typedef struct MenuModelSubWindowAccess {
+    unsigned char unmodeled_00[1];
+    signed char closeFlag;
+    unsigned char studioId;    /* +0x2 */
+    unsigned char mode;        /* +0x3 */
+    short x;                   /* +0x4 */
+    short y;                   /* +0x6 */
+    short width;               /* +0x8 */
+    short height;              /* +0xA */
+    StudioCamera *camera;      /* +0xC */
+} MenuModelSubWindowAccess;
+typedef struct MenuModelActorSubWindowAccess {
+    unsigned char unmodeled_00[0x676];
+    short subWindowId;
+} MenuModelActorSubWindowAccess;
+typedef struct MenuModelMotionActor {
+    unsigned char unmodeled_000[0x6F0];
+    unsigned int motionFlags;
+} MenuModelMotionActor;
+typedef struct MenuModelMotionTarget {
+    unsigned char unmodeled_00[0x20];
+    MenuModelMotionActor *actor;
+} MenuModelMotionTarget;
+void MenuModelResourceRequest(int *result, unsigned short resourceId, void *loadParam);
+void nmlModelUseSubWindow(unsigned int studioId, int enabled);
+void nmlModelSetWindow(unsigned int studioId);
+void xglCameraInit(StudioCamera *camera);
+void xglCameraSetWindow(StudioCamera *camera, int x, int y, int width, int height);
+void xglStudioChange(int studioId);
+void ACT_setMotion(MenuModelMotionActor *actor, unsigned int dataId);
+
 extern XglTaskScheduler *MenuModelTask;
 extern int MenuModelFlag;
 
@@ -120,6 +162,8 @@ void MenuModelResourceInit(void);
 void MenuModelSubWindowinit(void);
 void MenuModelResourceCancel(void);
 void MenuModelResourceCancel3(MenuModelUnit *unit);
+int MenuLoadSync(void);
+void MenuLoadCancel(void);
 static void MenuModelSubWindowMainSub(MenuModelUnit *unit);
 static void ActorAndResourceDispose(MenuModelActor **actorSlot, void **resourceSlot, int mode);
 /* Builds a task list of `capacity` 0x80-byte tasks at `pool` and returns the
@@ -173,13 +217,30 @@ int MenuModelMenuMotionCheck(void) {
 }
 
 /*
- * Partial layout of the menu-model "resource" state buffer (main/tu165),
- * recovered from MenuModelMenuMotionGet's own access: only the cached
- * motion handle at +0xC8 (the last word of the 0xCC-byte buffer,
- * config/symbols) is evidenced.
+ * Partial layout of the menu-model resource state buffer (main/tu165).
+ * MenuModelResourceCancel accesses the active resource at +0x4, state at
+ * +0x8, result handle at +0xC and pending count at +0x10. The request table
+ * begins with the request pointer at +0x18 and has fifteen 0xC-byte records;
+ * MenuModelMenuMotionGet reads the cached motion handle at +0xC8.
  */
+typedef struct MenuModelResourceAccess {
+    unsigned char status; /* +0x0 */
+    unsigned char unmodeled_01[1];
+    unsigned char unmodeled_02[2];
+} MenuModelResourceAccess;
+
 typedef struct MenuModelResourceStateBuffer {
-    unsigned char unmodeled_00[0xC8];
+    unsigned char unmodeled_00[4];
+    MenuModelResourceAccess *resource; /* +0x4 */
+    short state; /* +0x8 */
+    unsigned char unmodeled_0A[2];
+    int *handle; /* +0xC */
+    int pendingCount; /* +0x10 */
+    struct MenuModelResourceSlot {
+        unsigned short resourceId; /* +0x0; stored at state +0x14 */
+        int *result; /* +0x4; stored at state +0x18 */
+        void *loadParam; /* +0x8; stored at state +0x1C */
+    } slots[15]; /* +0x14 */
     int motionHandle; /* +0xC8 */
 } MenuModelResourceStateBuffer;
 
@@ -195,7 +256,27 @@ int MenuModelMenuMotionGet(void) {
     return handle;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelResourceCancel);
+void MenuModelResourceCancel(void)
+{
+    MenuModelResourceAccess *resource;
+    int *handle;
+
+    if (MenuLoadSync()) {
+        MenuLoadCancel();
+        resource = MenuModelResourceState.resource;
+        if (resource != 0) {
+            resource->status = 0;
+        }
+        handle = MenuModelResourceState.handle;
+        MenuModelResourceState.resource = 0;
+        if (handle != 0) {
+            *handle = -1;
+        }
+        MenuModelResourceState.handle = 0;
+        MenuModelResourceState.state = 0;
+        MenuModelResourceState.pendingCount = 0;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelResourceCancel3);
 
@@ -209,11 +290,89 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelResourceLoad);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelResourceMain);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelResourceRequest);
+void MenuModelResourceRequest(int *result, unsigned short resourceId, void *loadParam)
+{
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelMenuMotionLoad);
+    for (i = 1; i < 16; i++) {
+        if (MenuModelResourceState.slots[i - 1].result == 0) {
+            MenuModelResourceState.slots[i - 1].result = result;
+            MenuModelResourceState.slots[i - 1].resourceId = resourceId;
+            MenuModelResourceState.slots[i - 1].loadParam = loadParam;
+            return;
+        }
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelSubWindowMainSub);
+/*
+ * Asks for the menu motion that goes with the current memory state, unless
+ * one is already loaded (MenuModelFlag bit 1, which MenuModelResourceMain
+ * sets once the motion arrives). States 10 and 12 use motion 0x8001, states
+ * 11 and 20 motion 0xA100, and every other state asks for nothing.
+ */
+void MenuModelMenuMotionLoad(void)
+{
+    int *motionHandle;
+    unsigned short motionId;
+
+    motionHandle = &MenuModelResourceState.motionHandle;
+    motionId = 0;
+    if (MenuModelFlag & 2) {
+        return;
+    }
+    switch (MenuModelMemoryState.state) {
+    case 10:
+        motionId = 0x8001;
+        break;
+    case 11:
+        motionId = 0xA100;
+        break;
+    case 12:
+        motionId = 0x8001;
+        break;
+    case 20:
+        motionId = 0xA100;
+        break;
+    }
+    if (motionId == 0) {
+        return;
+    }
+    MenuModelResourceRequest(motionHandle, motionId, 0);
+}
+
+/*
+ * Drives the unit's open sub-window once a frame: MenuModelFlag bit 0 asks
+ * for it to close, an entry already marked 0xFF is handed back to the layout
+ * and dropped, and any other entry resizes its camera to the entry's
+ * rectangle and re-applies the sub-window mode, pointing the model at the
+ * studio while the mode is 1.
+ */
+static void MenuModelSubWindowMainSub(MenuModelUnit *unit)
+{
+    MenuModelSubWindowAccess *subWindow;
+    MenuModelActorSubWindowAccess *actor;
+
+    subWindow = (MenuModelSubWindowAccess *) unit->subWindow;
+    actor = (MenuModelActorSubWindowAccess *) unit->actor;
+    if (MenuModelFlag & 1) {
+        subWindow->closeFlag = -1;
+    }
+    if ((unsigned char) subWindow->closeFlag != 0) {
+        if ((unsigned char) subWindow->closeFlag == 0xFFU) {
+            nmlModelUseSubWindow(subWindow->studioId, 0);
+            unit->subWindow = 0;
+            return;
+        }
+    }
+    xglCameraSetWindow(subWindow->camera, subWindow->x, subWindow->y, subWindow->width,
+                       subWindow->height);
+    nmlModelUseSubWindow(subWindow->studioId, subWindow->mode);
+    if (subWindow->mode == 1) {
+        actor->subWindowId = subWindow->studioId;
+    } else {
+        actor->subWindowId = 0;
+    }
+}
 
 void MenuModelSubWindowMain(MenuModelUnit *unit)
 {
@@ -233,7 +392,44 @@ void MenuModelSubWindowBreak(MenuModelUnit *unit)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelSubWindowSet);
+/*
+ * Opens the menu model's sub-window on a studio: the entry for that studio
+ * becomes the unit's sub-window, gets the requested mode, and takes the
+ * studio's first camera, initialised and windowed to nothing until
+ * MenuModelSubWindowMainSub sizes it. Mode 1 also makes the studio the
+ * layout's window. A unit without a model, or studio 0, has no sub-window.
+ */
+void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
+{
+    extern unsigned char MenuModelSubWindow[];
+    MenuModelSubWindowAccess *subWindow;
+    StudioCamera *camera;
+    MenuModelActor *actor;
+
+    actor = unit->actor;
+    if (studioId == 0) {
+        return;
+    }
+    if (actor == 0) {
+        return;
+    }
+    subWindow = &((MenuModelSubWindowAccess *) MenuModelSubWindow)[studioId - 1];
+    unit->subWindow = (MenuModelSubWindowState *) subWindow;
+    subWindow->closeFlag = 0;
+    subWindow->studioId = studioId;
+    subWindow->mode = mode;
+    xglStudioChange(studioId);
+    camera = xglStudioGetCamera2(0);
+    subWindow->camera = camera;
+    xglCameraInit(camera);
+    xglCameraSetWindow(camera, 0, 0, 0, 0);
+    camera->state = camera->active = 1;
+    nmlModelUseSubWindow(studioId, mode);
+    if (mode == 1) {
+        nmlModelSetWindow(studioId);
+    }
+    xglStudioChange(0);
+}
 
 extern unsigned char MenuModelSubWindow[];
 
@@ -335,7 +531,14 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelControl2);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelNavelMove);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelMotionSet);
+void MenuModelMotionSet(MenuModelMotionTarget *target, unsigned int dataId)
+{
+    MenuModelMotionActor *actor;
+
+    actor = target->actor;
+    ACT_setMotion(actor, dataId);
+    actor->motionFlags |= 8;
+}
 
 /*
  * MenuModelDrawTypeSet's own draw-type animation state, MenuModelActor+0xc0:
@@ -422,7 +625,41 @@ void ModelDrawTypeClose02(MenuModelActor *actor)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_model", MenuModelDrawTypeSet);
+/*
+ * Installs one of the five draw types on an actor's draw state (+0xc0):
+ * draw type 0 and 1 set the fade progress (+0x60) straight to its end values
+ * 1.0 and 0.0, draw types 2..4 install the fade functions above in +0x64.
+ * The draw type indexes a five-entry jump table at 0x004c3930 in table order,
+ * and anything outside 0..4 leaves the actor alone, as does a null actor.
+ */
+static void MenuModelDrawTypeSet(MenuModelActor *actor, int drawType)
+{
+    MenuModelActorDrawTypeView *actorView;
+    MenuModelDrawTypeState *state;
+
+    if (actor == 0) {
+        return;
+    }
+    actorView = (MenuModelActorDrawTypeView *) actor;
+    state = &actorView->drawTypeState;
+    switch (drawType) {
+    case 0:
+        state->progress = 1.0f;
+        break;
+    case 1:
+        state->progress = 0.0f;
+        break;
+    case 2:
+        state->drawTypeFunction = ModelDrawTypeOpen01;
+        break;
+    case 3:
+        state->drawTypeFunction = ModelDrawTypeClose01;
+        break;
+    case 4:
+        state->drawTypeFunction = ModelDrawTypeClose02;
+        break;
+    }
+}
 
 void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex) {
     MenuModelActor *actor;

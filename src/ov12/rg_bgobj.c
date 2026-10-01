@@ -209,9 +209,31 @@ void RgBgObjSetHide(RgBgObj *pObj, float duration)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", RgBgObjIgnoreHide);
+void RgBgObjIgnoreHide(RgBgObj *pObj, int ignoreHide)
+{
+    if (pObj == 0) {
+        assert_prog(D_00A529B0, D_00A529C0, 254);
+    }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_bgobj", RgBgObjEnableBodyAttack);
+    if (ignoreHide != 0) {
+        pObj->flags |= RGBGOBJ_FLAG_IGNORE_HIDE;
+    } else {
+        pObj->flags &= ~RGBGOBJ_FLAG_IGNORE_HIDE;
+    }
+}
+
+void RgBgObjEnableBodyAttack(RgBgObj *pObj, int enableBodyAttack)
+{
+    if (pObj == 0) {
+        assert_prog(D_00A529B0, D_00A529C0, 263);
+    }
+
+    if (enableBodyAttack != 0) {
+        pObj->flags |= RGBGOBJ_FLAG_BODY_ATTACK_ENABLED;
+    } else {
+        pObj->flags &= ~RGBGOBJ_FLAG_BODY_ATTACK_ENABLED;
+    }
+}
 
 void RgBgObjNotUseGeomLocal(RgBgObj *pObj)
 {

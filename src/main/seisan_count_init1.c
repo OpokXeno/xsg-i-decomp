@@ -3,7 +3,16 @@
 #include "main/xgl_task.h"
 #include "seisan_count_init1.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanCountInit1);
+void SeisanCountInit1(void)
+{
+    int chrNo;
+
+    memset(&SeisanCN, 0, sizeof(SeisanCN));
+    for (chrNo = 1; chrNo < 13; chrNo++)
+    {
+        SeisanCN.nextExp[chrNo - 1] = func_A19210(chrNo)->nextExp;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanCountInit2);
 
@@ -75,9 +84,33 @@ INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", tskSeisanStatus);
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanFadeMain);
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanHissatuCheck00);
+int subSeisanHissatuCheck00(unsigned char *seisan_work)
+{
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", subSeisanHissatuCheck01);
+    for (i = 0; i < SeisanWork[6]; i++)
+    {
+        if (SeisanResult->entries[i].count != 0)
+        {
+            return 0x50;
+        }
+    }
+    return 0;
+}
+
+int subSeisanHissatuCheck01(void)
+{
+    int i;
+
+    for (i = 0; i < SeisanWork[6]; i++)
+    {
+        if (SeisanResult->entries[i].count >= 5)
+        {
+            return 0x58;
+        }
+    }
+    return 0;
+}
 
 int subSeisanEtherCheck(void)
 {
@@ -128,6 +161,24 @@ int SeisanMain(void)
     return SeisanWork[SEISAN_WORK_STATE] != SEISAN_STATE_FINISHED;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanDisp);
+void SeisanDisp(void)
+{
+    SeisanRibbonData ribbon;
+
+    ribbon = D_004C7350;
+    endPrintDirectRibbon(&ribbon);
+    endPrintExtFunc(0, 100, 0);
+    if (MenuLoadSync())
+    {
+        xglTaskExecute(SeisanBgTask);
+    }
+    else
+    {
+        MenuBgTaskMain();
+        xglTaskExecute(SeisanBgTask);
+        xglTaskExecute(SeisanTask);
+        SeisanFadeMain();
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanInit);

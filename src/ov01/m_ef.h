@@ -63,6 +63,20 @@ extern float MMathCalcLengthXZ(const Vector4 *vector);
 extern float srsAtan2(float deltaX, float deltaZ);
 
 /*
+ * The weapon-coordinate record fields read by MEfCalcWeaponCoord: its actor
+ * pointer and coordinate selector at +0x08/+0x0c, followed by a local point
+ * at +0x10. The preceding eight bytes remain unmodeled.
+ */
+typedef struct MEfWeaponCoord {
+    unsigned char unmodeled_00[8];
+    void *actor;
+    u32 coordinate;
+    Vector4 local_position;
+} MEfWeaponCoord;
+
+extern void *MEfGetActorMatrix(void *destination, void *actor, u32 coordinate);
+
+/*
  * MEfCalcAngle: sibling function of this same TU, still INCLUDE_ASM
  * scaffolding and untouched by this allocation; declared only to call it.
  */

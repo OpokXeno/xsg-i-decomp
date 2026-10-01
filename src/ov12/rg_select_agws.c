@@ -406,7 +406,26 @@ static int _GetTypeSelType(SelType *pSelType)
     return _EquipCurIDToEquipType(pSelType->cursor);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetCurSelType);
+/*
+ * ov12:0x00a56768 "eType != RG_EQUIP_TYPE_INVALID" names the -1 "unknown
+ * type" result of _EquipCurIDToEquipType (RG_EQUIP_TYPE_INVALID, defined
+ * below where its own assert bound first needs it); this function's own
+ * evidence for the same -1 sentinel is the empty-pointer result it returns
+ * for it.
+ */
+static SelWep *_GetCurSelType(SelType *pSelType)
+{
+    int eType;
+
+    if (pSelType == 0) {
+        assert_prog(D_00A56758, D_00A56660, 533);
+    }
+    eType = _EquipCurIDToEquipType(pSelType->cursor);
+    if (eType == -1) {
+        return 0;
+    }
+    return &pSelType->wepList[eType];
+}
 
 static SelWep *_GetSelWepSelType(SelType *pSelType, int equipType)
 {
@@ -487,7 +506,18 @@ static void _GetAllSelType(SelType *pSelType, int *out)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _GetAllNameOnCursorSelType);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _CheckConfrictSelType);
+static void _CheckConfrictSelType(SelType *pSelType)
+{
+    int essences[RG_EQUIP_TYPE_NUM];
+    unsigned int i;
+
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+        essences[i] = _GetEssSelWep(&pSelType->wepList[i]);
+    }
+    for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+        pSelType->confrict[i] = _CheckEquipWeps(essences, i);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetAllCursorByNameSelType);
 
@@ -638,7 +668,58 @@ static void _SaveCharSelectData(SelDat *pSelDat, int *pData)
     pData[1] = _GetSelectableSelectChar(&pSelDat->selChar);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SaveWepSelectData);
+/*
+ * _GetAllNameOnCursorSelType (ov12, still INCLUDE_ASM) walks the weapon list
+ * of every equip type and copies the name on each cursor into successive
+ * WEP_NAME_SIZE-byte slots; declare it so this caller does not see an
+ * implicit declaration.
+ */
+static void _GetAllNameOnCursorSelType(SelType *pSelType, char *names);
+
+/*
+ * Number of character slots the weapon-name save area holds, one per
+ * character-select cursor position (_InitSelectChar's own initial cursor 6 is
+ * the first value outside the range this bound tests).
+ */
+#define RG_ACTOR_CHAR_NUM 6
+
+/*
+ * Layout of one character's slot inside the save area _SaveToBaseData passes:
+ * RG_EQUIP_TYPE_NUM weapon names of WEP_NAME_SIZE bytes each
+ * (_GetAllNameOnCursorSelType's own 0x20 stride), the first slot starting two
+ * words after the character data _SaveCharSelectData stores.
+ */
+#define WEP_NAME_SIZE 0x20
+#define WEP_NAME_LIST_OFFSET 8
+
+/*
+ * The result is declared int although no caller (_TransitToCharSelect and
+ * _SaveToBaseData below) reads it: the original enters
+ * _GetAllNameOnCursorSelType with jal and returns through this function's
+ * own epilogue, instead of releasing the frame and jumping to it as a void
+ * result would allow.
+ */
+static int _SaveWepSelectData(SelDat *pSelDat, int *pData)
+{
+    SelType *pSelType;
+    int charID;
+    int nameIndex;
+
+    if (pSelDat == 0) {
+        assert_prog(D_00A56838, D_00A56660, 1012);
+    }
+    if (pData == 0) {
+        assert_prog(D_00A568C0, D_00A56660, 1013);
+    }
+    charID = _GetSelectChar(&pSelDat->selChar);
+    pSelType = &pSelDat->selType;
+    nameIndex = charID * RG_EQUIP_TYPE_NUM;
+    if ((unsigned int) charID < RG_ACTOR_CHAR_NUM) {
+        _GetAllNameOnCursorSelType(pSelType,
+                                   (char *) pData + WEP_NAME_LIST_OFFSET +
+                                       nameIndex * WEP_NAME_SIZE);
+    }
+}
 
 extern const char D_00A56838[]; /* "pSelDat != NIL" */
 extern const char D_00A568C0[]; /* "pData != NIL" */
@@ -722,13 +803,6 @@ static void _TransitToWeaponSelect(SelDat *pSel)
     _SaveCharSelectData(pSel, pData);
     _LoadWepSelectData(pSel, pData);
 }
-
-/*
- * _SaveWepSelectData (ov12, still INCLUDE_ASM) mirrors the accepted
- * _LoadCharSelectData(SelDat *, int *) shape; declare it so this caller does
- * not see an implicit declaration.
- */
-static void _SaveWepSelectData(SelDat *pSel, int *pData);
 
 static void _TransitToCharSelect(SelDat *pSel)
 {
@@ -1181,7 +1255,37 @@ void _InitSelect(RgSelectAGWS *pSel) {
     _SinInit();
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", InitRgSelectAGWSData);
+extern const char D_00A568C0[]; /* "pData != NIL" */
+
+/*
+ * The per-character weapon-name record within pData's caller-owned buffer:
+ * one WEP_NAME_LEN-byte slot per equip type (RG_EQUIP_TYPE_NUM), preceded by
+ * WEP_NAME_LIST_OFFSET bytes this function does not touch. This function's
+ * own byte-store pattern (charID*CHAR_WEP_RECORD_SIZE + i*WEP_NAME_LEN) is
+ * this allocation's evidence for both strides.
+ */
+#define WEP_NAME_LEN 0x20
+#define WEP_NAME_LIST_OFFSET 8
+#define CHAR_WEP_RECORD_SIZE (RG_EQUIP_TYPE_NUM * WEP_NAME_LEN)
+
+void InitRgSelectAGWSData(int *pData)
+{
+    unsigned char *pNames;
+    unsigned int charID;
+    unsigned int i;
+
+    if (pData == 0) {
+        assert_prog(D_00A568C0, D_00A56660, 2129);
+    }
+    pData[0] = 0;
+    pData[1] = 1;
+    pNames = (unsigned char *) pData + WEP_NAME_LIST_OFFSET;
+    for (charID = 0; charID < 6; charID++) {
+        for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
+            pNames[charID * CHAR_WEP_RECORD_SIZE + i * WEP_NAME_LEN] = 0;
+        }
+    }
+}
 
 extern const char D_00A568E0[]; /* "pSel != NIL" */
 extern const char D_00A568C0[]; /* "pData != NIL" */
@@ -1197,7 +1301,28 @@ void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel, void *pData)
     _SetBaseSelectData(pSel->pSelDat, pData);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", RgSelectAGWSGetSelectData);
+/*
+ * _GetBaseSelectData (ov12, still INCLUDE_ASM) mirrors the accepted
+ * _SetBaseSelectData(SelDat *, void *) shape above (RgSelectAGWSSetSelectData's
+ * own counterpart call); declare it so this caller does not see an implicit
+ * declaration.
+ */
+static void _GetBaseSelectData(SelDat *pSelDat, void *pData);
+
+extern const char D_00A568E0[]; /* "pSel != NIL" */
+extern const char D_00A568C0[]; /* "pData != NIL" */
+
+void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel, void *pData)
+{
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 2152);
+    }
+    if (pData == 0) {
+        assert_prog(D_00A568C0, D_00A56660, 2153);
+    }
+    _SaveToBaseData(pSel->pSelDat);
+    _GetBaseSelectData(pSel->pSelDat, pData);
+}
 
 extern const char D_00A56D20[]; /* "apCollects != NIL" */
 
@@ -1221,7 +1346,28 @@ void RgSelectAGWSSetMode(RgSelectAGWS *pSel, int mode)
     _SetPlayerModeSelectData(pSel->pSelDat, mode);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", RgSelectAGWSIsEnd);
+extern const char D_00A568E0[]; /* "pSel != NIL" */
+
+int RgSelectAGWSIsEnd(RgSelectAGWS *pSel)
+{
+    int result;
+
+    if (pSel == 0) {
+        assert_prog(D_00A568E0, D_00A56660, 2194);
+    }
+    switch (pSel->state) {
+    case 6:
+        result = 1;
+        break;
+    case 7:
+        result = 2;
+        break;
+    default:
+        result = 0;
+        break;
+    }
+    return result;
+}
 
 int RgSelectAGWSGetCharacter(RgSelectAGWS *pSel)
 {

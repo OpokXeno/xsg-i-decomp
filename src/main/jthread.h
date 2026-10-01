@@ -63,6 +63,18 @@ typedef struct JThreadChrPeer {
 } JThreadChrPeer;
 
 /*
+ * The Stage instance's own fixed layout, read directly by offset (unlike
+ * Unit/Chr's peer, which goes through lookupClassField): +0x2c holds the
+ * "stage" SceneObject this function debug-prints and forwards to
+ * JNI_callMethod as its own object argument (lw at 0x003056b4; sw at
+ * 0x00305708). Nothing else of it is read here.
+ */
+typedef struct JThreadStageObject {
+    unsigned char unmodeled_00[0x2c];
+    SceneObject stage; /* +0x2c */
+} JThreadStageObject;
+
+/*
  * classJava_xeno_Unit is already declared in shared.h; classJava_xeno_Chr
  * is not, since its layout-sensitive uses live in other TUs' own headers
  * (src/main/chr.h, src/main/scene_1.h, src/main/layout.h,
@@ -84,8 +96,28 @@ extern SceneString *loadConstString(const char *bytes, int length);
 extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
                            SceneObject *arguments, int *output);
 
+/*
+ * The screen-space debug text primitive, already recovered with this exact
+ * signature in several other TUs (e.g. src/main/script.c) and restated
+ * verbatim here for the same reason as the primitives above.
+ */
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
 /* The "peer" field-name string both functions below look up, byte-identical
    in the original binary. */
 extern const char D_004DC080[]; /* "peer" */
+
+/* The "Class.method" debug format JTHREAD_defaultStage prints, byte-identical
+   in the original binary. */
+extern const char D_004DC088[]; /* "%s.%s" */
+
+/*
+ * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared
+ * type is TU-local by canon (config/header-canon.json): this TU evidences
+ * only the word at +0x10, which JTHREAD_waitFor tests bit 0x800 of (lw
+ * v0,-31088(v1) with v1=0x340000 at 0x00305824, 0x340000-31088 = 0x338690).
+ */
+typedef unsigned int GameLoopStateWords[];
+extern GameLoopStateWords GameLoopState;
 
 #endif /* SRC_MAIN_JTHREAD_H */

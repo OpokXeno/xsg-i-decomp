@@ -24,6 +24,8 @@ extern void assert_prog(const char *expression, const char *source_file,
 extern const char rg_singleton_manager_nonnull_expression[];
 extern const char rg_singleton_id_source_file[];
 extern const char rg_singleton_id_range_expression[];
+extern const char D_00A53038[];
+extern const char D_00A53058[];
 extern RgSingletonManager s_inIDmgr;
 
 static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
@@ -77,7 +79,35 @@ static void _Destruct(RgSingletonManager *manager)
     _Clear(manager);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_singleton_id", _Entry);
+static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
+                   void *instance, void (*destructor)(void *instance))
+{
+    int *count;
+    int order_index;
+
+    if (manager == 0) {
+        assert_prog(rg_singleton_manager_nonnull_expression,
+                    rg_singleton_id_source_file, 58);
+    }
+    if (manager->instances[singleton_id] != 0) {
+        assert_prog(D_00A53038, rg_singleton_id_source_file, 59);
+    }
+    if (instance == 0) {
+        assert_prog(D_00A53058, rg_singleton_id_source_file, 60);
+    }
+    if (singleton_id >= 15) {
+        assert_prog(rg_singleton_id_range_expression,
+                    rg_singleton_id_source_file, 61);
+    }
+
+    count = &manager->count;
+    /* Load the insertion count after the ID validation checks. */
+    order_index = *count;
+    manager->instances[singleton_id] = instance;
+    manager->order[order_index] = singleton_id;
+    manager->destructors[singleton_id] = destructor;
+    *count = order_index + 1;
+}
 
 /* Reviewer-directed correction for the OV12 singleton-manager lookup. */
 

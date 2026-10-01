@@ -53,6 +53,9 @@ extern unsigned int strlen(const char *string);
  */
 extern const char D_00A53818[];
 extern const char D_00A53828[];
+extern const char D_00A53870[];
+extern const char D_00A53888[];
+extern const char D_00A538A8[];
 
 extern void RgSimpleDBClear(RgSimpleDB *pDB);
 extern int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
@@ -151,9 +154,63 @@ static int _ReadEquipType(RgReadText *pReader)
     return result;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon_db", _IsOnChar);
+static int _IsOnChar(char marker)
+{
+    if (marker == 'o') {
+        return 1;
+    }
+    if (marker == 'm') {
+        return 2;
+    }
+    if (marker == 'x') {
+        return 0;
+    }
+    RgError(D_00A53870, D_00A53828, 157, marker);
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon_db", _ReadEquipBitMask);
+static int _ReadEquipBitMask(RgReadText *pReader, unsigned int *pMask)
+{
+    char szToken[0x80];
+    unsigned int mask;
+    int equipmentType = -1;
+
+    RgReadTextGetString(pReader, szToken);
+    if (strlen(szToken) != 10) {
+        RgError(D_00A53888, D_00A53828, 169, szToken);
+    }
+    if (szToken[3] != '-') {
+        RgError(D_00A538A8, D_00A53828, 170, szToken);
+    }
+    if (szToken[6] != '-') {
+        RgError(D_00A538A8, D_00A53828, 171, szToken);
+    }
+
+    mask = 0;
+    if (_IsOnChar(szToken[0]) != 0) mask |= 0x01;
+    if (_IsOnChar(szToken[1]) != 0) mask |= 0x02;
+    if (_IsOnChar(szToken[2]) != 0) mask |= 0x04;
+    if (_IsOnChar(szToken[9]) != 0) mask |= 0x08;
+    if (_IsOnChar(szToken[8]) != 0) mask |= 0x10;
+    if (_IsOnChar(szToken[7]) != 0) mask |= 0x20;
+    if (_IsOnChar(szToken[4]) != 0) mask |= 0x40;
+    if (_IsOnChar(szToken[5]) != 0) mask |= 0x80;
+
+    if (_IsOnChar(szToken[0]) == 2) equipmentType = 0;
+    if (_IsOnChar(szToken[1]) == 2) equipmentType = 1;
+    if (_IsOnChar(szToken[2]) == 2) equipmentType = 2;
+    if (_IsOnChar(szToken[9]) == 2) equipmentType = 3;
+    if (_IsOnChar(szToken[8]) == 2) equipmentType = 4;
+    if (_IsOnChar(szToken[7]) == 2) equipmentType = 5;
+    if (_IsOnChar(szToken[4]) == 2) equipmentType = 6;
+    if (_IsOnChar(szToken[5]) == 2) equipmentType = 7;
+
+    if (equipmentType != -1) {
+        mask |= 1u << equipmentType;
+    }
+    *pMask = mask;
+    return equipmentType;
+}
 
 /*
  * RG_ACTOR_CHAR_ROBNUM (6): the same evidenced constant as ov12/tu026's
@@ -411,9 +468,134 @@ static RgWeaponShieldEssence *_ReadShieldType(RgReadText *pReader)
     return pEss;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon_db", _ReadEnergyType);
+typedef struct RgWeaponEnergyEssence RgWeaponEnergyEssence;
+struct RgWeaponEnergyEssence {
+    unsigned char unmodeled_000[0x3b0];
+    float shotEnergy;
+    float upTemp;
+    float limitTemp;
+    float downTemp;
+};
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon_db", RgWeaponDBRead);
+extern void InitRgWeaponEnergyEssence(RgWeaponEnergyEssence *pEss);
+
+static RgWeaponEnergyEssence *_ReadEnergyType(RgReadText *pReader)
+{
+    char szToken[0x80];
+    RgWeaponEnergyEssence *pEss;
+
+    if (pReader == 0) {
+        assert_prog(D_00A53C20, D_00A53828, 676);
+    }
+    pEss = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgWeaponEnergyEssence),
+                       D_00A53828, 678);
+    InitRgWeaponEnergyEssence(pEss);
+    while (RgReadTextIsEOF(pReader) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (_ReadCommon(pEss, pReader, szToken) == 0) {
+            if (strcasecmp(szToken, "shot-energy") == 0) {
+                pEss->shotEnergy = RgReadTextGetFloat(pReader);
+                continue;
+            } else {
+                if (strcasecmp(szToken, "up-temp") == 0) {
+                    pEss->upTemp = RgReadTextGetFloat(pReader);
+                    continue;
+                } else {
+                    if (strcasecmp(szToken, "down-temp") == 0) {
+                        pEss->downTemp = RgReadTextGetFloat(pReader);
+                        continue;
+                    } else {
+                        if (strcasecmp(szToken, "limit-temp") == 0) {
+                            pEss->limitTemp = RgReadTextGetFloat(pReader);
+                            continue;
+                        }
+                        RgReadTextUnget(pReader, szToken);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return pEss;
+}
+
+/*
+ * Database names occupy two fields shared by every type-specific essence.
+ * The parser stores the record key at +0x330 and uses +0x350 as its optional
+ * display name, defaulting it to the key when _ReadCommon left it empty.
+ */
+typedef struct RgWeaponDBRecord RgWeaponDBRecord;
+struct RgWeaponDBRecord {
+    RgWeaponEssence common;
+    unsigned char unmodeled_18[0x318];
+    char databaseName[0x20];
+    char displayName[0x30];
+};
+
+extern const char D_00A53C80[];
+extern const char D_00A53C98[];
+extern const char D_00A53CA8[];
+extern const char D_00A53CB0[];
+extern const char D_00A53CB8[];
+extern const char D_00A53CC0[];
+extern const char D_00A53CD0[];
+
+extern char *strcpy(char *destination, const char *source);
+extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat,
+                            const char *pszName);
+extern RgReadText *CreateRgReadText(const char *pszDataBase);
+extern void DisposeRgReadText(RgReadText *pReader);
+
+void RgWeaponDBRead(RgSimpleDB *pDB, const char *pszDataBase)
+{
+    char szToken[0x100];
+    RgReadText *pReader;
+    RgWeaponDBRecord *pEntry;
+
+    if (pDB == 0) {
+        assert_prog(D_00A53818, D_00A53828, 709);
+    }
+    if (pszDataBase == 0) {
+        assert_prog(D_00A53C80, D_00A53828, 710);
+    }
+
+    pReader = CreateRgReadText(pszDataBase);
+    if (pReader != 0) {
+        while (RgReadTextIsEOF(pReader) == 0) {
+            pEntry = 0;
+            RgReadTextGetString(pReader, szToken);
+
+            if (strcasecmp(szToken, D_00A53C98) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = (RgWeaponDBRecord *)_ReadShotType(pReader);
+            } else if (strcasecmp(szToken, D_00A53CA8) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = (RgWeaponDBRecord *)_ReadAttackType(pReader);
+            } else if (strcasecmp(szToken, D_00A53CB0) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = (RgWeaponDBRecord *)_ReadShieldType(pReader);
+            } else if (strcasecmp(szToken, D_00A53CB8) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = (RgWeaponDBRecord *)_ReadEnergyType(pReader);
+            } else if (strcasecmp(szToken, D_00A53CC0) == 0) {
+                RgReadTextGetString(pReader, szToken);
+                pEntry = (RgWeaponDBRecord *)_ReadUnArmedType(pReader);
+            } else {
+                RgError(D_00A53CD0, D_00A53828, 746, pszDataBase, szToken);
+            }
+
+            if (pEntry != 0) {
+                RgSimpleDBEntry(pDB, pEntry, szToken);
+                strcpy(pEntry->databaseName, szToken);
+                if (strlen(pEntry->displayName) == 0) {
+                    _copy_str_n(pEntry->displayName, szToken, 48);
+                }
+            }
+        }
+        DisposeRgReadText(pReader);
+    }
+}
 
 void RgWeaponDBDump(RgSimpleDB *pDB)
 {

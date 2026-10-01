@@ -2,11 +2,133 @@
 #include "shared.h"
 #include "tslider_create.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/tslider_create", TSLIDER_create);
+TwinWindow2 *TSLIDER_create(int requestedSlot)
+{
+    TwinWindow2 *window;
 
-INCLUDE_ASM("asm/main/nonmatchings/tslider_create", TSLIDER_init);
+    window = TWSYS_createComponent(requestedSlot, 2);
+    if (window != 0) {
+        window->valueOffset = 0x58;
+        window->max_digits = 4;
+        window->max_value = 100;
+        window->flags = 0x15;
+        window->state = 1;
+        window->width = 0x60;
+        window->height = 0x28;
+        window->x = 48.0f;
+        window->y = 64.0f;
+        window->min_value = 0;
+        window->value = 0;
+        window->brightness = 0.0f;
+        window->options = 0;
+    }
+    return window;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tslider_create", TSLIDER_updateDefault);
+void TSLIDER_init(TwinWindow2 *slider)
+{
+    int value = slider->value;
+    int digitWidth;
+
+    if (value < slider->min_value) {
+        slider->value = slider->min_value;
+        value = slider->min_value;
+    }
+    if (slider->max_value < value) {
+        slider->value = slider->max_value;
+    }
+    digitWidth = (slider->options & 2) ? 20 : 10;
+    slider->width = slider->max_digits * digitWidth + 0x10;
+}
+
+/*
+ * One frame of the slider component. flags bit 0x2 records that the phase of
+ * the current state has been armed: while it is clear this arms the phase of
+ * `state` (the frame counter it runs on) and returns, and while it is set it
+ * advances that phase. State 1 opens the slider over 11 frames and then hands
+ * over to the idle state 14; 14 reads the pad, where circle confirms and cross
+ * confirms with value -1 (both go to 15) and the directions step the value;
+ * 15 starts the closing state 2, which counts the 10 frames back down and then
+ * clears the component-alive and update bits TSLIDER_create set.
+ */
+void TSLIDER_updateDefault(TwinWindow2 *slider)
+{
+    if ((slider->flags & 2) == 0) {
+        switch (slider->state) {
+        case 1:
+        case 14:
+        case 15:
+            slider->timer = 0;
+            slider->flags |= 2;
+            break;
+        case 2:
+            slider->timer = 10;
+            slider->flags |= 2;
+            break;
+        }
+        return;
+    }
+    if ((slider->flags & 4) == 0) {
+        return;
+    }
+    switch (slider->state) {
+    case 15:
+        slider->state = 2;
+        slider->flags &= ~2;
+        break;
+    case 14:
+        if (PadData.pressed & PAD_CIRCLE) {
+            slider->state = 15;
+            slider->flags &= ~2;
+        }
+        if (PadData.pressed & PAD_CROSS) {
+            slider->state = 15;
+            slider->flags &= ~2;
+            slider->value = -1;
+        }
+        slider->timer = (slider->timer + 1) & 0xFF;
+        if (PadData.repeat & PAD_LEFT) {
+            slider->timer = 0;
+            slider->value -= 10;
+            if (slider->value < slider->min_value) {
+                slider->value = slider->min_value;
+            }
+        } else if (PadData.repeat & PAD_DOWN) {
+            slider->timer = 0;
+            slider->value -= 1;
+            if (slider->value < slider->min_value) {
+                slider->value = slider->min_value;
+            }
+        }
+        if (PadData.repeat & PAD_RIGHT) {
+            slider->timer = 0;
+            slider->value += 10;
+            if (slider->max_value < slider->value) {
+                slider->value = slider->max_value;
+            }
+        } else if (PadData.repeat & PAD_UP) {
+            slider->timer = 0;
+            slider->value += 1;
+            if (slider->max_value < slider->value) {
+                slider->value = slider->max_value;
+            }
+        }
+        break;
+    case 2:
+        slider->timer--;
+        if (slider->timer < 0) {
+            slider->flags &= ~0x11;
+        }
+        break;
+    case 1:
+        slider->timer++;
+        if (slider->timer >= 11) {
+            slider->state = 14;
+            slider->flags &= ~2;
+        }
+        break;
+    }
+}
 
 void TSLIDER_drawDefault(TwinWindow2 *window)
 {

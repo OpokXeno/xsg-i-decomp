@@ -72,7 +72,9 @@ typedef struct ActRecord {
     void (*draw)(struct ActRecord *self);    /* +0x08 */
     unsigned char unmodeled_0c[0x86 - 0x0c];
     short inUseId;                           /* +0x86 */
-    unsigned char unmodeled_88[0x8fc - 0x88];
+    unsigned char unmodeled_88[0x6f0 - 0x88];
+    unsigned int runtimeFlags;               /* +0x6f0 */
+    unsigned char unmodeled_6f4[0x8fc - 0x6f4];
     struct ActRecord *parent;                /* +0x8fc */
     unsigned char unmodeled_900[0xa70 - 0x900];
 } ActRecord;

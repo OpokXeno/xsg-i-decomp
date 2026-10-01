@@ -1,6 +1,5 @@
 #include "common.h"
-
-INCLUDE_ASM("asm/main/nonmatchings/playcontrol", Java_xeno_PlayControl_create__);
+#include "shared.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -23,17 +22,74 @@ typedef struct JThread JThread;
  * own tag for the object.
  */
 typedef struct PlayControlHandle {
-    unsigned char unmodeled_00[4];
+    int class_ref;                  /* +0x00, copied as a VM object-header word */
     int signal;                    /* +0x04, lw/sw at 0x002fa3ec/0x002fa404 */
-    unsigned char unmodeled_08[4]; /* +0x08: play.h's `timeChart`, only
-                                       reached here through
-                                       PLAY_setTimeChart below */
+    void *timeChart;               /* +0x08, read by setObserver at 0x002fa5d0 */
     void *source;                  /* +0x0c, sw at 0x002fa4bc */
     unsigned char unmodeled_10[0x2c - 0x10];
     unsigned int flags;            /* +0x2c, lw/sw at 0x002fa4e4/0x002fa4f0
-                                       (start__), 0x002fa500/0x002fa50c
-                                       (stop__) */
+                                       (start__/stop__) and written by init at
+                                       0x002fa420/0x002fa450 */
+    short cameraIndex;             /* +0x30, written by init at 0x002fa41c/0x002fa44c; src/main/play.h */
+    unsigned char unmodeled_32[2];
+    float startTime;               /* +0x34, written at 0x002fa468 */
+    float endTime;                 /* +0x38, written at 0x002fa474 */
+    float frameStep;               /* +0x3c, written at 0x002fa47c */
+    unsigned char unmodeled_40[4];
+    float currentTime;             /* +0x44, written at 0x002fa484 */
+    unsigned char unmodeled_48[4];
 } PlayControlHandle;
+
+typedef struct PlayControlStringStorage {
+    unsigned char unmodeled_00[4];
+    int length;
+    const char *bytes;
+} PlayControlStringStorage;
+
+typedef struct PlayControlString {
+    SceneObjectHeader header;
+    PlayControlStringStorage *storage;
+} PlayControlString;
+
+typedef struct PlayControlSetObserverArguments {
+    PlayControlHandle *control;
+    int event_id;
+    int event_key;
+    SceneObject observer;
+    PlayControlString *method_name;
+} PlayControlSetObserverArguments;
+
+typedef struct PlayControlSetChartObserverArguments {
+    PlayControlHandle *control;
+    int event_id;
+    PlayControlString *chart_name;
+    SceneObject observer;
+    PlayControlString *method_name;
+} PlayControlSetChartObserverArguments;
+
+extern SceneClass *classJava_xeno_util_Window;
+extern PlayControlHandle *PLAY_getCurrent(void);
+extern void PLAY_setObserver(PlayControlHandle *play, int event_id, int event_key,
+                             SceneObject observer, SceneMethod *method);
+extern SceneString *loadConstString(const char *bytes, int length);
+extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+                               void *signature_or_type);
+extern SceneType *TYPE_Void;
+extern int TCH_getInfoID(void *chart, const char *name, int length);
+
+/* Create the native playback object and attach the class reference expected by
+   the script VM's SceneObject header. */
+void Java_xeno_PlayControl_create__(JThread *thread, void *arguments,
+                                    int *result)
+{
+    SceneClass *window_class;
+    PlayControlHandle *play;
+
+    window_class = classJava_xeno_util_Window;
+    play = PLAY_getCurrent();
+    play->class_ref = (int)window_class->instance_class_ref;
+    *result = (int)play;
+}
 
 /*
  * Java_xeno_PlayControl_getSignal__ (main VA 0x002fa3e8, 16 bytes, GLOBAL
@@ -131,9 +187,59 @@ void Java_xeno_PlayControl_stop__(JThread *thread,
     (*arguments)->flags &= ~1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/playcontrol", Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_);
+void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_(
+    JThread *thread, PlayControlSetObserverArguments *arguments)
+{
+    SceneObject observer;
+    SceneObjectHeader *observer_header;
+    SceneClass *observer_class;
+    PlayControlStringStorage *name_storage;
+    SceneString *method_name;
+    SceneMethod *method;
 
-INCLUDE_ASM("asm/main/nonmatchings/playcontrol", Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Ljava_lang_String_);
+    observer = arguments->observer;
+    observer_header = (SceneObjectHeader *)observer;
+    observer_class = observer_header->class_ref->scene_class;
+    name_storage = arguments->method_name->storage;
+    method_name = loadConstString(name_storage->bytes, name_storage->length);
+    method = findMethod(observer_class, method_name, TYPE_Void);
+    PLAY_setObserver(arguments->control, arguments->event_id,
+                     arguments->event_key, observer, method);
+}
+
+void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Ljava_lang_String_(
+    JThread *thread, PlayControlSetChartObserverArguments *arguments)
+{
+    PlayControlHandle *control;
+    SceneObject observer;
+    SceneObjectHeader *observer_header;
+    SceneClass *observer_class;
+    PlayControlStringStorage *chart_name_storage;
+    PlayControlStringStorage *method_name_storage;
+    SceneString *method_name;
+    SceneMethod *method;
+    int event_key;
+
+    observer = arguments->observer;
+    observer_header = (SceneObjectHeader *)observer;
+    observer_class = observer_header->class_ref->scene_class;
+    method_name_storage = arguments->method_name->storage;
+    method_name = loadConstString(method_name_storage->bytes,
+                                  method_name_storage->length);
+    method = findMethod(observer_class, method_name, TYPE_Void);
+
+    control = arguments->control;
+    chart_name_storage = arguments->chart_name->storage;
+    event_key = TCH_getInfoID(control->timeChart,
+                              chart_name_storage->bytes,
+                              chart_name_storage->length);
+    if (event_key < 0) {
+        return;
+    }
+
+    PLAY_setObserver(control, arguments->event_id, event_key,
+                     observer, method);
+}
 
 /*
  * The callback-parameter object PLAY_getCallBackParams returns (`TCHParams`

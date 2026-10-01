@@ -26,6 +26,8 @@ typedef struct MapUnitRecord {
     Vector4 rotation; /* +0x20 */
     Vector4 scale;    /* +0x30 */
     Matrix4 matrix;   /* +0x40 */
+    unsigned char unmodeled_80[0x20];
+    unsigned char serial; /* +0xa0: selects this unit's sequence entry */
 } MapUnitRecord;
 
 /* flags bit: snap position.y to the ground undulation under x/z each update */
@@ -75,5 +77,27 @@ typedef struct MapUnitMotionRecord {
  * with divergent spellings (reports/header-harvest-conflicts.md).
  */
 extern void xglMatrixStackTrans(const float translation[4]);
+
+/*
+ * MAP_callUnitGroup compares the group halfword in each 0x260-byte sequence
+ * entry and calls its callback with the corresponding unit's flags word.
+ */
+typedef struct MapUnitGroupSequenceEntry {
+    unsigned int flags; /* +0x00 */
+    int state;          /* +0x04 */
+    unsigned char unmodeled_08[0x08];
+    short group; /* +0x10 */
+    unsigned char unmodeled_12[0x24 - 0x12];
+    void (*update_callbacks[4])(MapUnitRecord *unit); /* +0x24 */
+    unsigned char unmodeled_34[0x260 - 0x34];
+} MapUnitGroupSequenceEntry;
+
+typedef struct MapUnitGroupEntry {
+    int flags; /* +0x00; callback argument used by Unit suspend/resume */
+    unsigned char unmodeled_04[0x300 - 0x04];
+} MapUnitGroupEntry;
+
+extern MapUnitGroupSequenceEntry unitSequence[64];
+extern MapUnitGroupEntry MapUnit[64];
 
 #endif /* SRC_MAIN_MAP_CREATE_UNIT_PEER_H */

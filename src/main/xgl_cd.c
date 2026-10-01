@@ -349,7 +349,25 @@ void xglCdReset(void)
     sceCdSync(0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdSetCallback);
+CdCompletionCallback *xglCdSetCallback(int callback_address)
+{
+    CdCompletionCallback *old_callback = callback;
+
+    switch (callback_address) {
+    case 0:
+        callback = xglCdDefaultCallback;
+        break;
+    case 1:
+        callback = xglCdDummyCallback;
+        break;
+    case -1:
+        break;
+    default:
+        callback = (CdCompletionCallback *)callback_address;
+        break;
+    }
+    return old_callback;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFilePosSub);
 

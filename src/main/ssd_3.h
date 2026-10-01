@@ -7,18 +7,7 @@
 
 #include "main/ssd_init.h"
 
-/*
- * RssdWork is the RSSD RPC/background-wave work area, main:0x004aa080
- * (owned by main/tu110, src/main/ssd_init.c, whose RssdCallFunc is still
- * INCLUDE_ASM). Its full RssdWorkFlags layout is not yet in the harvested
- * main/ssd_init.h, so this TU models only the leading `flags` word it reads
- * and writes.
- */
-typedef struct RssdWorkArea {
-    int flags; /* +0x000: bit 5 is the per-call success status (RSSD_FLAG_SUCCESS) */
-} RssdWorkArea;
-
-extern RssdWorkArea RssdWork;
+/* RssdWork and its complete owner type are declared by main/ssd_init.h. */
 
 /* RssdWorkArea.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
 #define RSSD_FLAG_SUCCESS 0x20

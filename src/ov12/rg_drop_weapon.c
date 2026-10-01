@@ -3,7 +3,8 @@
  */
 #include "common.h"
 #include "shared.h"
-#include "rg_char.h"
+typedef struct RgChar RgChar;
+#include "ov12/rg_char.h"
 #include "rg_drop_weapon.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
@@ -13,15 +14,60 @@ extern const char D_00A53CF0[]; /* "pDrop != NIL" */
 extern const char D_00A53D00[]; /* "../rg_drop_weapon.euc.c" */
 
 extern void XrgActorDraw(XrgActor *actor);
+extern void XrgActorSetDraw(XrgActor *actor, int flags);
+extern void XrgActorSetTransparent(XrgActor *actor, float transparency);
 extern void DisposeXrgActor(XrgActor *actor);
 
 /* Defined later in this TU (still INCLUDE_ASM); called by CreateRgDropWeapon. */
 static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor);
 
 /* Defined later in this TU (still INCLUDE_ASM); passed to RgCharPassTimeMethod by _InitDrop. */
-void _PassTime(RgChar *pChar, float deltaTime);
+static void _PassTime(RgChar *pChar, float deltaTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_drop_weapon", _PassTime_00A1E618);
+static void _PassTime(RgChar *pChar, float deltaTime)
+{
+    RgDropWeapon *pDrop;
+    XrgActor *actor;
+    int hidden;
+    float transparency;
+    float clampedTransparency;
+
+    pDrop = (RgDropWeapon *)pChar;
+    if (pDrop == 0) {
+        assert_prog(D_00A53CF0, D_00A53D00, 34);
+    }
+
+    hidden = pDrop->hidden;
+    actor = pDrop->actor;
+    if (hidden == 0) {
+        if (actor == 0) {
+            pDrop->hidden = 1;
+            return;
+        }
+        {
+            transparency = pDrop->transparency - 0.15f;
+            pDrop->transparency = transparency;
+            clampedTransparency = 0.0f;
+            if (!(transparency < 0.0f)) {
+                if (!(transparency < 0.0f)) {
+                    clampedTransparency = 1.0f;
+                    if (!(transparency > 1.0f)) {
+                        clampedTransparency = transparency;
+                    }
+                }
+                XrgActorSetTransparent(actor, clampedTransparency);
+                return;
+            }
+            XrgActorSetDraw(actor, 0);
+            return;
+        }
+    } else {
+        do {
+            RgCharFree(pChar);
+        } while (0);
+    }
+    return;
+}
 
 static void _Disp(RgDropWeapon *pDrop)
 {

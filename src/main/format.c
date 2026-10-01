@@ -1,4 +1,6 @@
 #include "common.h"
+#include "shared.h"
+#include "format.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -27,6 +29,24 @@ INCLUDE_ASM("asm/main/nonmatchings/format", Java_xeno_util_Format_toString__C);
 
 INCLUDE_ASM("asm/main/nonmatchings/format", Java_xeno_util_Format_toString__F);
 
-INCLUDE_ASM("asm/main/nonmatchings/format", Java_xeno_util_Format_toString__I);
+void Java_xeno_util_Format_toString__I(JThread *thread, int *arguments,
+                                       int *result)
+{
+    unsigned char *end;
+    FormatByteArray *source_array;
+    FormatByteArray *stored_array;
+
+    if (JAVA_tmpString == 0) {
+        JAVA_tmpString = newObject(classString);
+        JAVA_tmpString->value = newArray(classByte, 255);
+    }
+
+    source_array = JAVA_tmpString->value;
+    end = STRING_int(source_array->data, arguments[0]);
+    *end = 0;
+    stored_array = JAVA_tmpString->value;
+    stored_array->length = end - stored_array->data;
+    *result = (int)JAVA_tmpString;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/format", Java_xeno_util_Format_toString__Z);

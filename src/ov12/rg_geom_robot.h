@@ -58,5 +58,6 @@ void RgGeomRobotSetMaxRotVel(RgGeom *geom, float maxRotVel);
 float RgGeomRobotGetRotate(const RgGeom *geom);
 float RgGeomRobotGetRotVel(const RgGeom *geom);
 float RgGeomRobotGetRotForce(const RgGeom *geom);
+void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
 
 #endif /* SRC_OV12_RG_GEOM_ROBOT_H */

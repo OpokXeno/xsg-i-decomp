@@ -103,6 +103,42 @@ void RgGeomPolyGetInvLocal(const RgGeom *geom, RgMatrix destination)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", RgGeomPolyCheckBall);
+/*
+ * pOrgArg is transformed into the poly's local space with inverseLocal, its
+ * homogeneous component forced to 1.0 (a point, not a direction), then
+ * bundled with the ball's own radius (the float just past pOrgArg's four
+ * components) into a local Ball-shaped buffer RgColiDataVsBall reads through
+ * its own void *pArg. On a hit, pResult's hit-point vector (its homogeneous
+ * component forced to 0.0, a direction rather than a point) is transformed
+ * back out of local space with the poly's local matrix.
+ */
+int RgGeomPolyCheckBall(RgGeom *pPoly, float *pOrgArg, float *pResult)
+{
+    RgGeomPoly *poly = (RgGeomPoly *)pPoly;
+    struct {
+        RgVector center;
+        float radius;
+    } ball;
+
+    if (pPoly == 0 || pOrgArg == 0 || pResult == 0) {
+        assert_prog(D_00A551E0, D_00A551B8, 108);
+    }
+
+    if (poly->coliData == 0) {
+        return 0;
+    }
+
+    pOrgArg[3] = 1.0f;
+    XrgApplyVector(ball.center, poly->inverseLocal, pOrgArg);
+    ball.radius = pOrgArg[4];
+
+    if (RgColiDataVsBall(poly->coliData, &ball, pResult) == 0) {
+        return 0;
+    }
+
+    pResult[7] = 0.0f;
+    XrgApplyVector(pResult + 4, poly->local, pResult + 4);
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_poly", RgGeomPolyCheckRay);

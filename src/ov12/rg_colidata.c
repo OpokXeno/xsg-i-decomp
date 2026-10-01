@@ -5,7 +5,70 @@
 #include "shared.h"
 #include "rg_colidata.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_colidata", _InitTriColi);
+struct RgColiTriangle {
+    RgVector m_vertices[3];
+    RgVector m_plane;
+    RgMatrix m_planeMatrix;
+};
+
+extern void XrgUnitMatrix(RgMatrix destination);
+extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
+extern void XrgCalcPlane(RgVector plane, RgVector p0, RgVector p1,
+                         RgVector p2);
+extern void XrgSubVector(RgVector destination, RgVector first,
+                         RgVector second);
+extern void XrgOuterVector(RgVector destination, RgVector first,
+                           RgVector second);
+extern float XrgNormalizeVector(RgVector destination, RgVector source);
+extern float XrgInnerVector(RgVector first, RgVector second);
+extern const char D_00A55548[];
+
+static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2)
+{
+    RgVector edge;
+    RgVector cross;
+    RgVector facePlane;
+    RgVector sidePlanes[3];
+    int component;
+    int plane;
+    RgColiTriangle *triangle;
+
+    triangle = pTri;
+    XrgUnitMatrix(triangle->m_planeMatrix);
+    XrgClearVector(triangle->m_vertices[0]);
+    XrgClearVector(triangle->m_vertices[1]);
+    XrgClearVector(triangle->m_vertices[2]);
+    XrgCopyVectorXYZ(triangle->m_vertices[0], pV0);
+    XrgCopyVectorXYZ(triangle->m_vertices[1], pV1);
+    XrgCopyVectorXYZ(triangle->m_vertices[2], pV2);
+    XrgCalcPlane(facePlane, pV0, pV1, pV2);
+    XrgCopyVector(triangle->m_plane, facePlane);
+
+    XrgSubVector(edge, pV1, pV0);
+    XrgOuterVector(cross, facePlane, edge);
+    XrgNormalizeVector(sidePlanes[0], cross);
+    sidePlanes[0][3] = -XrgInnerVector(sidePlanes[0], pV0);
+
+    XrgSubVector(edge, pV2, pV1);
+    XrgOuterVector(cross, facePlane, edge);
+    XrgNormalizeVector(sidePlanes[1], cross);
+    sidePlanes[1][3] = -XrgInnerVector(sidePlanes[1], pV1);
+
+    XrgSubVector(edge, pV0, pV2);
+    XrgOuterVector(cross, facePlane, edge);
+    XrgNormalizeVector(sidePlanes[2], cross);
+    sidePlanes[2][3] = -XrgInnerVector(sidePlanes[2], pV2);
+
+    for (plane = 0; plane < 3; plane++) {
+        for (component = 0; component < 4; component++) {
+            triangle->m_planeMatrix[component * 4 + plane] =
+                sidePlanes[plane][component];
+        }
+    }
+    for (plane = 0; plane < 4; plane++) {
+        triangle->m_planeMatrix[plane * 4 + 3] = facePlane[plane];
+    }
+}
 
 static void _AllocDataMemory(RgColiData *pData, int nCapa)
 {
@@ -47,7 +110,18 @@ static void _DisposeColiData(RgColiData *pData)
     _InitColiData(pData);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_colidata", _InitTriangles);
+static void _InitTriangles(RgColiData *pData, int nCapa)
+{
+    if (pData == 0) {
+        assert_prog(D_00A554F0, D_00A55500, 252);
+    }
+    if (nCapa <= 0) {
+        assert_prog(D_00A55548, D_00A55500, 253);
+    }
+
+    _DisposeColiData(pData);
+    _AllocDataMemory(pData, nCapa);
+}
 
 static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2);
 

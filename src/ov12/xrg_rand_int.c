@@ -151,9 +151,32 @@ void XrgCopyVector(RgVector destination, RgVector source)
     destination[3] = source[3];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgLengthVector);
+float XrgLengthVector(const Vector4 *source)
+{
+    float z_squared = source->z * source->z;
+    float y_squared = source->y * source->y;
+    float x_squared = source->x * source->x;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgNormalizeVector);
+    return __builtin_sqrtf(x_squared + y_squared + z_squared);
+}
+
+float XrgNormalizeVector(RgVector destination, RgVector source)
+{
+    float length = __builtin_sqrtf(source[0] * source[0]
+                                   + source[1] * source[1]
+                                   + source[2] * source[2]);
+
+    if (length <= 0.0f) {
+        destination[0] = 0.0f;
+        destination[1] = 0.0f;
+        destination[2] = 0.0f;
+    } else {
+        destination[0] = source[0] / length;
+        destination[1] = source[1] / length;
+        destination[2] = source[2] / length;
+    }
+    return length;
+}
 
 void XrgOuterVector(RgVector destination, RgVector first, RgVector second)
 {
@@ -181,7 +204,15 @@ void clearRgMatrix(RgMatrix matrix)
     XrgClearVector(matrix + 12);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgCopyMatrix);
+void XrgCopyMatrix(RgMatrix destination, const RgMatrix source)
+{
+    int row = 0;
+
+    do {
+        XrgCopyVector(&destination[row * 4], (float *)&source[row * 4]);
+        row++;
+    } while (row < 4);
+}
 
 void XrgUnitMatrix(RgMatrix destination)
 {
@@ -355,7 +386,12 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixZ);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgInvMatrix);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgCalcRotY);
+extern double atan2(double y, double x);
+
+float XrgCalcRotY(const Vector4 *vector)
+{
+    return (float) atan2((double) vector->x, (double) vector->z);
+}
 
 extern unsigned char s_aStack[];
 extern float *s_paTop;

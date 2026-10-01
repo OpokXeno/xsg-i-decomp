@@ -178,4 +178,30 @@ void RgRobotDBRead(RgSimpleDB *database, RgReadText *pReader)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_db", RgRobotDBDump);
+extern int RgSimpleDBSize(RgSimpleDB *pDB);
+extern char *RgSimpleDBGetName(RgSimpleDB *pDB, int nDataID);
+extern void XrgLog(const char *format, const char *source_file, int line,
+                   ...);
+extern void RgRobotSpecDump(RgRobotSpec *pSpec);
+
+/*
+ * ov12:0x00a52340 contains the format string "NAME [%s] -------\n".
+ */
+extern const char D_00A52340[];
+
+void RgRobotDBDump(RgSimpleDB *database)
+{
+    unsigned int count;
+    unsigned int dataID;
+    char *name;
+
+    if (database == 0) {
+        assert_prog(D_00A52280, D_00A52290, 144);
+    }
+    count = RgSimpleDBSize(database);
+    for (dataID = 0; dataID < count; dataID++) {
+        name = RgSimpleDBGetName(database, dataID);
+        XrgLog(D_00A52340, D_00A52290, 147, name);
+        RgRobotSpecDump(RgSimpleDBGet(database, dataID));
+    }
+}

@@ -241,6 +241,8 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlConfusion);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlJunk);
 
+extern int actStock;
+
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockInit);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockMaxGet);
@@ -413,7 +415,22 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyBuffSet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyBuffChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", busyUnitChk);
+int busyUnitChk(int side)
+{
+    BattleUnit **units;
+    int count = unitTblGet(side, &units);
+    int busyCount = 0;
+    int i;
+
+    for (i = 0; i < count; i++) {
+        BattleUnit *unit = units[i];
+
+        if (unit != 0 && (unit->work->flags & 2) != 0) {
+            busyCount++;
+        }
+    }
+    return busyCount;
+}
 
 /*
  * Collects the units of one side that are still taking part in the battle
@@ -682,7 +699,14 @@ void scenarioBatInit(void)
     scenarioPtrFuncSet(scenarioBatExecPhase10);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioSrcSet);
+int scenarioSrcSet(const ScenarioStep *source)
+{
+    extern int D_00A57B64;
+    ScenarioStep *destination = (ScenarioStep *)D_00A57B64;
+
+    *destination = *source;
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioDstSet);
 
@@ -716,7 +740,21 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioCam);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExec);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatDataSync);
+int sefCheckLoad(void);
+int dataCdSync(void);
+void dataSndSeLoad2(int unit);
+
+int scenarioBatDataSync(int *sourceIndex)
+{
+    if (sefCheckLoad() != 0) {
+        return 0;
+    }
+    if (dataCdSync() > 0) {
+        return 0;
+    }
+    dataSndSeLoad2(*sourceIndex);
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", etehrCVGet);
 

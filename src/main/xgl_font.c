@@ -128,9 +128,61 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontFlushCore);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontCheckProportional);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontGetProportionalSize);
+struct FontImage {
+    unsigned char unmodeled_00000[0x78040];
+    unsigned short proportional_widths[256];
+};
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_font", hex2val);
+struct FontState {
+    struct FontImage *font_image;
+    unsigned char unmodeled_04[0x0c];
+    unsigned char default_width;
+    unsigned char unmodeled_11;
+    unsigned char proportional_mode;
+};
+
+extern unsigned char FS[];
+
+unsigned int xglFontGetProportionalSize(int code)
+{
+    struct FontState *state = (struct FontState *)FS;
+    struct FontImage *font_image = state->font_image;
+    unsigned int width;
+    signed char average_width;
+
+    width = (unsigned short)(font_image->proportional_widths[code] + 0xff);
+    if ((width & 0xff) == 0xff) {
+        width = state->default_width << 8;
+    }
+    if (state->proportional_mode != 0) {
+        average_width = ((int)((width & 0xff) + (width >> 8)) >> 1) - 5;
+        if (average_width < 0) {
+            average_width = 0;
+        }
+        if (average_width >= 0x0b) {
+            average_width = 0x0a;
+        }
+        width = (((average_width + 9) << 8) + average_width) & 0xffff;
+    }
+    return width;
+}
+
+static unsigned int hex2val(signed char digit)
+{
+    unsigned int digit_value;
+
+    digit_value = (digit - '0') & 0xff;
+    if (digit_value >= 10U) {
+        if ((unsigned int)(digit - 'a') < 6U) {
+            return (digit - 'W') & 0xff;
+        }
+        if ((unsigned int)(digit - 'A') < 6U) {
+            return (digit - '7') & 0xff;
+        }
+        return 0U;
+    }
+    return digit_value;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontAscii2Euc);
 

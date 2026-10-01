@@ -1,12 +1,45 @@
 #include "common.h"
 
+/* The controller's first 16 bytes are the rectangle passed to the drawing
+ * routines; the phase/subtype/frame bytes follow at +0x10..+0x12. */
+typedef struct OpenCloseController {
+    unsigned char unmodeled_00[16];
+    signed char phase;
+    unsigned char subtype;
+    unsigned char frame;
+} OpenCloseController;
+
+typedef struct OpenCloseCallbacks {
+    void (*entry[4])(OpenCloseController *);
+} OpenCloseCallbacks;
+
+/* Four original function pointers: open subtype 00/01, close 00/00. */
+extern OpenCloseCallbacks D_004C2FD0;
+
 INCLUDE_ASM("asm/main/nonmatchings/open_close_main", OpenSubType00);
 
 INCLUDE_ASM("asm/main/nonmatchings/open_close_main", CloseSubType00);
 
 INCLUDE_ASM("asm/main/nonmatchings/open_close_main", OpenSubType01);
 
-INCLUDE_ASM("asm/main/nonmatchings/open_close_main", OpenCloseMain);
+void OpenCloseMain(OpenCloseController *controller)
+{
+    OpenCloseCallbacks callbacks;
+
+    if (controller->phase != 0) {
+        if (controller->phase <= 0)
+            return;
+        if (controller->phase != 1)
+            return;
+    } else {
+        controller->frame = 0;
+        controller->phase = 1;
+    }
+
+    callbacks = D_004C2FD0;
+    callbacks.entry[(controller->subtype >> 4) * 2 +
+                    (controller->subtype & 15)](controller);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/open_close_main", eWindowMain);
 

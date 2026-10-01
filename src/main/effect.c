@@ -18,7 +18,26 @@ void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_disp__Z);
+void Java_xeno_Effect_disp__Z(JThread *thread, EffectBooleanCall *arguments)
+{
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
+
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        peer = *(NativeEffectPeer **)(object + field->offset);
+        if (peer != 0) {
+            if (arguments->value != 0) {
+                sefRewindEffectCf((SchedulerState *)peer);
+                peer->display = 1;
+            } else {
+                peer->display = 0;
+            }
+        }
+    }
+}
 
 void Java_xeno_Effect_setScale__FFF(JThread *thread, EffectVectorCall *arguments)
 {

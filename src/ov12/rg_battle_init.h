@@ -22,4 +22,20 @@ struct RgBattleInitInfo {
                            * allocation */
 };
 
+/* One 0x120-byte player entry in the complete battle-init record. */
+typedef struct RgBattleInitPlayerInfo {
+    char actorName[64];
+    float position[4];
+    float direction[4];
+    char weaponName[3][64];
+} RgBattleInitPlayerInfo;
+
+/* Complete fields initialized by InitRgBattleInit. */
+typedef struct RgBattleInitState {
+    RgBattleInitPlayerInfo players[2];
+    char bg[64];
+    int battleMode;
+    int enemyType;
+} RgBattleInitState;
+
 #endif /* SRC_OV12_RG_BATTLE_INIT_H */

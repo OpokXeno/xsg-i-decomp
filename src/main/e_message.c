@@ -12,7 +12,17 @@ void eMessageDrawType00(void)
 {
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageHalfSpaseCheck);
+int eMessageHalfSpaseCheck(unsigned char *text)
+{
+    unsigned char character = *text++;
+    int half_spaces = 0;
+
+    while ((signed char)character == ' ') {
+        character = *text++;
+        half_spaces++;
+    }
+    return half_spaces;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageNextGyou);
 
@@ -47,7 +57,43 @@ INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageSet);
 
 INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageTextChange);
 
-INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageNextPage);
+typedef struct EMessagePageState {
+    unsigned char flags;
+    unsigned char mode;
+    unsigned char unmodeled_02[26];
+    unsigned char page_available;
+    unsigned char page_index;
+    unsigned char page_count;
+} EMessagePageState;
+
+int eMessageNextPage(EMessagePageState *message, int reset_page)
+{
+    int next_page;
+    unsigned char wrapped_page;
+    unsigned char next_mode;
+
+    if (message->page_available != 0) {
+        if (reset_page == 0) {
+            if ((message->flags & 0x80) != 0) {
+                next_page = message->page_index + 1;
+                wrapped_page = next_page;
+                message->page_index = next_page;
+                if (message->page_count < wrapped_page) {
+                    message->page_index = message->page_count;
+                    return 0;
+                }
+                next_mode = 34;
+            } else {
+                next_mode = 32;
+            }
+            message->mode = next_mode;
+            return 1;
+        } else {
+            message->page_index = 0;
+        }
+    }
+    return 0;
+}
 
 void eMessageDraw(EMessageParam *message)
 {

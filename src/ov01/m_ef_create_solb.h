@@ -6,6 +6,7 @@
 #define SRC_OV01_M_EF_CREATE_SOLB_H
 
 #include "shared.h"
+#include "m_ef_create.h"
 
 /* (effect task, SolbState record) like the other MEf effects' callbacks. */
 typedef void (*SOLBCallback)(void *self, void *work);
@@ -58,16 +59,20 @@ typedef struct SOLBPostProcessSlot {
 #define SOLB_TRAIL_LENGTH 31
 #define SOLB_CONTROL_POINTS 4
 
+/* The +4 actor record exposes its yaw angle at +0x54. */
+typedef struct SolbActorAngle {
+    unsigned char unmodeled_00[0x54];
+    float yaw;
+} SolbActorAngle;
+
 typedef struct SolbState {
     unsigned int : 32;                  /* +0x000 */
-    unsigned int : 32;                  /* +0x004 */
+    SolbActorAngle *actorAngle;         /* +0x004 */
     u32 actor;                          /* +0x008 */
     u32 coord;                          /* +0x00c */
-    unsigned int : 32;                  /* +0x010 */
-    unsigned int : 32;                  /* +0x014 */
-    unsigned int : 32;                  /* +0x018 */
-    unsigned int : 32;                  /* +0x01c */
-    unsigned int : 32;                  /* +0x020 */
+    Vector4 localOffset;                /* +0x010 */
+    short sweepDegrees;                 /* +0x020 */
+    unsigned short : 16;                /* +0x022 */
     unsigned int : 32;                  /* +0x024 */
     unsigned int : 32;                  /* +0x028 */
     unsigned int : 32;                  /* +0x02c */
@@ -102,7 +107,7 @@ typedef struct SolbState {
     HermiteVector tangent_at_segment_end;           /* +0x340 */
 } SolbState;
 
-int MEfCreate_SOLB(void *work);
+int MEfCreate_SOLB(MEfObjRecord *work);
 
 extern int timetbl[];
 

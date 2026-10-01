@@ -360,7 +360,31 @@ int entryPhase60(void) {
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", entryPhase70);
+int entryPhase70(void) {
+    extern int battleRetCodeGet(void);
+    extern int cfEventGet(void);
+    extern void calcPara2Org(void);
+    extern void resultProcInit(void);
+    extern int entryPhase80(void);
+    extern int entryPhase100(void);
+    extern void battleProcEnd(void);
+
+    if (fadeEndChk() != 0) {
+        int retCode = battleRetCodeGet();
+
+        if ((retCode == 1 || retCode == 3) && (cfEventGet() & 0x10) == 0) {
+            calcPara2Org();
+            battleDispMode = 2;
+            resultProcInit();
+            battleSeq = entryPhase80;
+        } else {
+            battleDispMode = 0;
+            battleSeq = entryPhase100;
+        }
+        battleProcEnd();
+    }
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", entryPhase80);
 
@@ -461,7 +485,19 @@ void vramCopyObj(ObjectTask *task) {
     objRemove(task);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", fadeIn);
+void fadeInObj(ObjectTask *task);
+extern void fadeObjDraw(FadeObjTask *self);
+
+int fadeIn(int speed, int delay) {
+    FadeObjTask *self;
+
+    self = (FadeObjTask *)objEntry2(fadeInObj, (void (*)(ObjectTask *))fadeObjDraw);
+    self->delay = delay;
+    self->speed = speed;
+    self->life = 0;
+    fadeFlag = 0;
+    return (int)self;
+}
 
 void fadeOutObj(FadeObjTask *self);
 extern void fadeObjDraw(FadeObjTask *self);

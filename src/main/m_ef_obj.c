@@ -6,6 +6,11 @@
 /* The object-pool storage remains scaffold-owned; its record layout is unresolved. */
 extern u8 mefObjBuff[];
 extern u32 mefObjSysFlags;
+extern void MOutputDebugStringWarn(const char *format, ...);
+extern const char D_004CC990[];
+extern const char D_004CC9C0[];
+extern const char D_004CC9F0[];
+extern const char D_004CCA20[];
 
 void MEfObjInit(void)
 {
@@ -95,6 +100,51 @@ void MEfObjExec2nd(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_ef_obj", MEfObjCreate);
+void *MEfObjCreate(void)
+{
+    MEfObj *object;
+    int index;
 
-INCLUDE_ASM("asm/main/nonmatchings/m_ef_obj", MEfObjDestroy);
+    object = (MEfObj *)mefObjBuff;
+    if ((mefObjSysFlags & MEFOBJ_SYS_READY) == 0) {
+        MOutputDebugStringWarn(D_004CC990);
+        return 0;
+    }
+
+    for (index = 0; index < MEFOBJ_COUNT; index++) {
+        if ((object->flags & MEFOBJ_ACTIVE) == 0) {
+            object->exec1st[0] = 0;
+            object->flags = MEFOBJ_ACTIVE;
+            object->exec1st[1] = 0;
+            object->exec2nd[0] = 0;
+            object->exec2nd[1] = 0;
+            return object;
+        }
+        object = &object[1];
+    }
+
+    MOutputDebugStringWarn(D_004CC9C0);
+    return 0;
+}
+
+int MEfObjDestroy(void *object)
+{
+    MEfObj *effect = object;
+
+    if ((mefObjSysFlags & MEFOBJ_SYS_READY) == 0) {
+        MOutputDebugStringWarn(D_004CC9F0);
+        return 0;
+    }
+
+    if ((effect->flags & MEFOBJ_ACTIVE) == 0) {
+        MOutputDebugStringWarn(D_004CCA20);
+        return 0;
+    }
+
+    effect->exec1st[0] = 0;
+    effect->exec1st[1] = 0;
+    effect->exec2nd[0] = 0;
+    effect->flags &= ~MEFOBJ_ACTIVE;
+    effect->exec2nd[1] = 0;
+    return 1;
+}

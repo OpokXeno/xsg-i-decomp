@@ -9,6 +9,15 @@
 
 typedef struct RgMotionShotInfo RgMotionShotInfo;
 
+typedef struct RgMotionAction
+{
+    int actionNo;
+    float startTime;
+    float endTime;
+    int shiftMotionNo;
+    int weaponMotionNo;
+} RgMotionAction;
+
 /*
  * A per-motion table entry of the "rg_motion.info" text RgMotionInfoDBLoad
  * parses.  _TableSort and _TableGet keep the table sorted by motionNo;
@@ -26,7 +35,7 @@ struct RgMotionShotInfo
     int charId;                        /* +0x04: character this entry is for; -1 = any */
     unsigned int shotFlags;            /* +0x08: bit 0 "shot-body", bit 1 "shot-notfix" */
     int actionCount;                   /* +0x0C: actions stored so far (m_uActTblSiz, limit 4) */
-    unsigned char unmodeled_010[0x50]; /* +0x10..+0x5F: the action array, filled outside this allocation */
+    RgMotionAction actions[4];         /* +0x10..+0x5F: four 0x14-byte actions */
     RgMotionShotInfo *next;            /* +0x60: same-motionNo chain walked by _TableGetMatchChar; NULL-terminated */
 };
 

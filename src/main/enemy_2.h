@@ -167,6 +167,19 @@ typedef struct Actor {
     int command_code;
 } Actor;
 
+/* A deliberately narrow TU-local view of the actor slot byte. The immutable
+ * owner proposal src/main/act_2.h (SHA-256
+ * 69fe4a04ae82262c18014e337bf4c1616123bc82e98fb6562e3ea9fff2e295d8) adds
+ * separately evidenced motion/model members while leaving +0x80 outside its
+ * recovered span. This view records only this TU's +0x80 lbu/sb identity
+ * evidence; it is kept separate from the Actor owner view above. */
+typedef struct EnemyActorView {
+    unsigned char unmodeled_00_7f[0x80];
+    unsigned char number;
+} EnemyActorView;
+
+#define ENEMY_ACTOR_NUMBER(actor) (((EnemyActorView *)(actor))->number)
+
 /* The actor's target facing angle, in radians like Actor.rotation.
  *
  * Enemy_Init seeds it from the actor's own yaw, Actor.rotation.y at +0x54
@@ -222,6 +235,44 @@ typedef struct EnemyWork {
 
 /* canon: config/header-canon.json chose src/math/main/002d33f8-sac-turn/private.h over 0 other accepted spellings */
 extern EnemyWork enepc[16];
+
+/* The identity stored at +0x37b8 of each enemy-work entry; the same field is
+ * read by Get_ActorNumber at 0x002d2d60/0x002d2d88 and compared with target. */
+#define ENEMY_ID_OFFSET 0x37b8
+
+/* Enemy_Command_Scale's per-entry blend: current/start/target values and
+ * frame/duration halfwords are written at +0x37d0..+0x37e3. */
+#define ENEMY_SCALE_OFFSET 0x37d0
+typedef struct EnemyScale {
+    float current;
+    float start;
+    float target;
+    short frame;
+    short duration;
+} EnemyScale;
+#define ENEMY_SCALE(work) \
+    ((EnemyScale *)((unsigned char *)(work) + ENEMY_SCALE_OFFSET))
+
+#define ACTOR_MOTION_NUMBER_OFFSET 0x704
+typedef struct EnemyActorMotionView {
+    unsigned char unmodeled_00_703[ACTOR_MOTION_NUMBER_OFFSET];
+    unsigned short motion_number;
+} EnemyActorMotionView;
+#define ACTOR_MOTION_NUMBER(actor) \
+    (((EnemyActorMotionView *)(actor))->motion_number)
+extern void ACT_setMotion(Actor *actor, unsigned int dataId);
+
+#define ACTOR_EXT_OFFSET 0xc0
+typedef struct ActorAction {
+    unsigned char unmodeled_00[0x1a];
+    short frame;
+    unsigned char unmodeled_1c[2];
+    short duration;
+} ActorAction;
+#define ENEMY_ACTION_VALUE_OFFSET 0x2090
+#define ENEMY_ACTION_ARGUMENT_DELTA 0x800
+#define ENEMY_ACTION_SLOT_COUNT 4
+#define ENEMY_ACTION_STRIDE 8
 
 /* The turn state inside one `enepc` entry.
  *
@@ -381,5 +432,6 @@ extern GameLoopStateWords GameLoopState;
  * below stores, the same numbering ACT_create hands out into Actor.number
  * (+0x80). */
 extern int Get_ActorNumber(int target);
+extern void Check_Encount(Actor *actor, int enable, signed char command);
 
 #endif /* SRC_MAIN_ENEMY_2_H */

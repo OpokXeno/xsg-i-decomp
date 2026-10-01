@@ -28,8 +28,13 @@ extern const char D_004DC208[];
  * thread's flags word.
  */
 typedef struct StageThread {
-    u8 unmodeled_00[0x24];
+    u8 unmodeled_00[0x0d];
+    u8 wait_kind;            /* +0x0d */
+    u8 unmodeled_0e[0x24 - 0x0e];
     unsigned int flags;      /* +0x24 */
+    u8 unmodeled_28[0x3c - 0x28];
+    u16 resume_frames;       /* +0x3c */
+    u16 frame_depth;         /* +0x3e */
 } StageThread;
 
 /*
@@ -62,6 +67,71 @@ typedef struct StageFrameRenderCall {
     int count;
 } StageFrameRenderCall;
 
+typedef struct StageJavaString StageJavaString;
+typedef struct StageStringStorage StageStringStorage;
+typedef struct StagePlayCall {
+    SceneObject receiver;
+    StageJavaString *string;
+} StagePlayCall;
+
+struct StageJavaString {
+    u32 unmodeled_00;
+    StageStringStorage *storage; /* +0x04 */
+};
+
+struct StageStringStorage {
+    u32 unmodeled_00[2];
+    const char *text;            /* +0x08 */
+};
+
+typedef struct StageVisibleCall {
+    int part_index;
+    unsigned char visible;
+} StageVisibleCall;
+
+typedef struct StagePartList {
+    u8 unmodeled_00[0x40];
+    int part_count;              /* +0x40 */
+} StagePartList;
+
+typedef struct StageBackground {
+    u8 unmodeled_00[8];
+    int draw_parameter;          /* +0x08 */
+} StageBackground;
+
+typedef struct StageCFBGCall {
+    int draw_type;
+    int unmodeled_04;
+    StageBackground *background; /* +0x08 */
+} StageCFBGCall;
+
+typedef struct StageBgColorCall {
+    float red;
+    float green;
+    float blue;
+} StageBgColorCall;
+
+typedef struct StageFadeCall {
+    int mode;
+    int duration_frames;
+    float red;
+    float green;
+    float blue;
+} StageFadeCall;
+
+typedef union StageFadeValues {
+    struct {
+        float color[3];
+        float duration;
+    } components;
+    unsigned long long aligned_words[2];
+} StageFadeValues;
+
+typedef union StageNativeSlot {
+    int integer;
+    float floating;
+} StageNativeSlot;
+
 /*
  * The stage's current model record (main 0x00338680+0x54, unrecovered
  * beyond this one field). setPartsLast__I forwards `id` unchanged as
@@ -86,13 +156,20 @@ typedef struct StageModel {
  * does not repeat or contradict those spans.
  */
 typedef struct StageGameLoopState {
-    u8 unmodeled_00[0x54];
+    u8 unmodeled_00[0x2c];
+    int background_mode;     /* +0x2c */
+    int background_parameter;/* +0x30 */
+    u8 unmodeled_34[0x54 - 0x34];
     StageModel *model;       /* +0x54 */
-    u8 unmodeled_58[0x80 - 0x58];
+    int fade_mode;           /* +0x58 */
+    int previous_fade_mode;  /* +0x5c */
+    u8 unmodeled_60[0x80 - 0x60];
     float color_r;           /* +0x80 */
     float color_g;           /* +0x84 */
     float color_b;           /* +0x88 */
-    u8 unmodeled_8c[0xb0 - 0x8c];
+    u8 unmodeled_8c[0x90 - 0x8c];
+    StageFadeValues fade;          /* +0x90 */
+    StageFadeValues previous_fade; /* +0xa0 */
     int render_command;      /* +0xb0 */
     int bg_clip;              /* +0xb4 */
 } StageGameLoopState;
@@ -109,5 +186,15 @@ extern void nmlModelSetBackBuffer(int model_id, int count, int priority, int mod
 extern void nmlModelSetFadeInCancel(int frames);
 extern void nmlModelSetFadeOutCancel(int frames);
 extern void nmlModelSetEffectWrite(int enabled);
+extern void EnemySound_StopAll(int clear);
+extern void nmlModelSetFadeInInterrupt(int frames, float red, float green, float blue);
+extern void SCRIPT_fade(int frames);
+extern void SCRIPT_load_DBG(const char *text);
+extern void SCRIPT_exec(void);
+extern void xglRenderClearColor(u32 color);
+extern void GameBgDrawType1Entry(int parameter, StageBackground *background);
+extern void GameBgDrawType2Entry(int parameter, StageBackground *background);
+extern void nmlModelSetPartsVisible(StagePartList *parts, int part_index, int visible);
+extern void nmlModelInitPartsVisible(StagePartList *parts, int visible);
 
 #endif /* SRC_MAIN_STAGE_2_H */

@@ -58,23 +58,49 @@ void *createItemGetWin(const char *text);
  */
 typedef struct TwinWindow2 TwinWindow2;
 struct TwinWindow2 {
-    unsigned char unmodeled_00[0x14];
+    unsigned char unmodeled_00[0x0c];
+    unsigned short width;      /* +0x0c */
+    unsigned short height;     /* +0x0e */
+    unsigned int flags;        /* +0x10 */
     unsigned short state;      /* +0x14 */
     unsigned short mode;       /* +0x16 */
     unsigned char unmodeled_18[8];
     float x;                   /* +0x20 */
     float y;                   /* +0x24 */
     float brightness;          /* +0x28 */
-    unsigned char unmodeled_2c[0x54 - 0x2c];
+    unsigned char unmodeled_2c[4];
+    short timer;               /* +0x30 */
+    unsigned char unmodeled_32[0x40 - 0x32];
+    int valueOffset;           /* +0x40 */
+    unsigned char unmodeled_44[0x50 - 0x44];
+    unsigned int options;      /* +0x50 */
     unsigned char max_digits;  /* +0x54 */
     unsigned char unmodeled_55[3];
     int value;                 /* +0x58 */
-    unsigned char unmodeled_5c[0x186 - 0x5c];
+    int min_value;             /* +0x5c */
+    int max_value;             /* +0x60 */
+    unsigned char unmodeled_64[0x186 - 0x64];
     signed char param;         /* +0x186 */
     signed char kind;          /* +0x187 */
 };
 
 extern void TWIN_init2(void *window);
+extern TwinWindow2 *TWSYS_createComponent(int slot, int type);
+
+/* This TU reads two consecutive PadData halfwords at +0x2a and +0x2c. */
+typedef struct TSliderPadData {
+    unsigned char unmodeled_00[0x2a];
+    unsigned short pressed; /* +0x2a */
+    unsigned short repeat;  /* +0x2c */
+} TSliderPadData;
+extern TSliderPadData PadData;
+
+#define PAD_CIRCLE 0x0020
+#define PAD_CROSS  0x0040
+#define PAD_UP     0x1000
+#define PAD_RIGHT  0x2000
+#define PAD_DOWN   0x4000
+#define PAD_LEFT   0x8000
 
 extern unsigned char *STRING_int(unsigned char *buffer, int value);
 

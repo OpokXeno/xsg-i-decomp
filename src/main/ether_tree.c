@@ -18,7 +18,13 @@ void EtherTreeObjectGetClear(void)
     EtherTreeObjectP = EtherTreeObject;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ether_tree", EtherTreeObjectWorkGet);
+EtherTreeObjectData *EtherTreeObjectWorkGet(void)
+{
+    EtherTreeObjectData *object = EtherTreeObjectP;
+
+    EtherTreeObjectP++;
+    return object;
+}
 
 /*
  * EtherTreeCenterSet, EtherTreeToCenterSet and EtherTreeCenterMove (this
@@ -73,9 +79,31 @@ void *EtherTreeFirstDataGet(void)
     return &EtherTreeFirstData[EtherTreeSystem->firstDataIndex - 1];
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ether_tree", EtherTreeObjectGet);
+EtherTreeObjectData *EtherTreeObjectGet(int id)
+{
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/ether_tree", EtherTreeLineColorGet);
+    for (i = 0; i < 80; i++) {
+        if (EtherTreeObject[i].id == id)
+            return &EtherTreeObject[i];
+    }
+    return 0;
+}
+
+struct EtherTreeColorTable {
+    unsigned char colors[4][4];
+};
+
+extern const struct EtherTreeColorTable D_004C9AB0;
+
+void EtherTreeLineColorGet(unsigned char *color, int colorIndex)
+{
+    struct EtherTreeColorTable colors = D_004C9AB0;
+    int i;
+
+    for (i = 0; i < 4; i++)
+        color[i] = colors.colors[colorIndex][i];
+}
 
 extern EtherTreeObjectData *EtherTreeObjectWorkGet(void);
 extern unsigned char *MenuEtherDataGet(unsigned short skillId);

@@ -7,6 +7,12 @@
 
 #include "shared.h"
 #include "ov01/calc.h"
+#include "ov01/battle_actor.h"
+#include "ov01/data_file.h"
+
+#define PL_CHARACTER_ID_END 0x21
+#define PL_LEARNING_CHARACTER_ID_END 0x11
+#define PL_SPECIAL_SLOT_COUNT 8
 
 void dataCdSyncClear(void);
 
@@ -63,7 +69,7 @@ typedef struct PlCharacter {
     unsigned char unmodeled_0[0x28];
     signed char learnedEther[0x10]; /* +0x28 */
     signed char learnedSkill[0x10]; /* +0x38 */
-    PlSpecialSlot special[8]; /* +0x48 */
+    PlSpecialSlot special[PL_SPECIAL_SLOT_COUNT]; /* +0x48 */
 } PlCharacter;
 
 extern PlCharacter *dataPlChaGet(int cid);
@@ -100,24 +106,30 @@ extern UnitFileInfo unitFileInfo[6];
 
 extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
-/* Partial motion and actor records used by the allocated load helpers. */
-typedef struct MotionAdrTable {
-    unsigned char unmodeled_0[0x8dc];
-    int slot[1];
-} MotionAdrTable;
-
-typedef struct EquipActor {
-    unsigned char unmodeled_0[0x8e0];
-    int motionAdr;
-} EquipActor;
-
+/* UnitRecord in unit_cmd.h evidences the same task prefix, separate
+ * motion actor (+0x14) and four equipment actors (+0x1C). */
 typedef struct UnitEquipInfo {
-    unsigned char unmodeled_00[0x14];
-    MotionAdrTable *motionTable;
+    /* Generic scheduler helpers use ObjectTask; battle code knows the
+     * work allocation is a BattleActor. Both views have the same prefix. */
+    union {
+        ObjectTask object;
+        struct {
+            XglTaskPrefix scheduler;
+            BattleActor *work;
+        } battle;
+    } task;
+    BattleModelActor *motionActor;
     unsigned char unmodeled_18[4];
-    EquipActor *equipActor[4];
+    BattleModelActor *equipActor[4];
 } UnitEquipInfo;
 
-extern void dataMotAdrSet(MotionAdrTable *table, int motionId);
+extern void dataMotAdrSet(BattleModelActor *actor, int motionId);
+
+typedef struct WpnFileInfo {
+    unsigned char unmodeled_00[0xA0];
+    int weaponId; /* +0xA0: dataWpnLRChk */
+} WpnFileInfo;
+
+int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo);
 
 #endif /* SRC_OV01_DATA_UNIT_ORG_GET_H */

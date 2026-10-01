@@ -153,7 +153,7 @@ def main():
     if not common.exists():
         common.write_text("#ifndef COMMON_H\n#define COMMON_H\n\n#include \"include_asm.h\"\n\n#endif\n")
     ld = unit_dir / f"{unit}.ld"
-    text = ld.read_text()
+    text = data_carve.ovl_restore(ld.read_text())
     if "ovl-tu: bss bytes of the file image" not in text:
         text = fix_bss(text, unit)
         ld.write_text(text)
@@ -165,7 +165,9 @@ def main():
     # a C TU's jump tables and literals cut out of its scaffold .rodata piece and
     # placed from its object. An earlier carve is undone first; nothing declared
     # leaves splat's script unchanged.
-    carved, _ = data_carve.apply_overlay(ROOT, unit_dir, unit, text)
+    carved, carve_report = data_carve.apply_overlay(ROOT, unit_dir, unit, text)
+    split_objects = {r['link_object']: r for r in carve_report
+                     if r['link_object'] != r['c_object']}
     if carved != text:
         text = carved
         ld.write_text(text)
@@ -201,6 +203,10 @@ def main():
         "  depfile = $out.d",
         "  deps = gcc",
         "  description = CC $in",
+        "rule carvesplit",
+        f"  command = {TIMEOUT} $py {HERE}/data_carve.py split --root {ROOT} --unit {unit} "
+        f"--unit-dir {unit_dir} --tu $tu --obj $in --out $out",
+        "  description = CARVE-SPLIT $out",
         "rule ld",
         "  command = $ld -EL -m elf32lr5900 --no-undefined -T undefined_syms_auto.txt -T undefined_funcs_auto.txt "
         "-T main_symbols.ld -T scaffold_aliases.ld -T $script -Map $out.map -o $out",
@@ -218,7 +224,9 @@ def main():
         "",
     ]
     for obj in objs:
-        rel = obj[len("build/"):-2]
+        split = split_objects.get(obj)
+        compiled_obj = split['c_object'] if split else obj
+        rel = compiled_obj[len("build/"):-2]
         if rel.startswith("assets/"):
             lines.append(f"build {obj}: bin {rel}.bin")
         elif Path(rel).stem in ctus and (rel.startswith("src/") or rel.startswith("scaffold/src/")):
@@ -239,10 +247,19 @@ def main():
             # TU without a published file builds from scaffold/src/.
             published = f"src/{unit}/{Path(rel).stem}.c"
             source = published if (unit_dir / published).is_file() else f"{rel}.c"
-            lines += [f"build {obj}: cc {source} | {deps}",
+            lines += [f"build {compiled_obj}: cc {source} | {deps}",
                       f"  ccdir = {ROOT / t['compiler']['dir']}",
                       f"  cas = {ROOT / t['assembler']['path']}",
                       f"  gflag = {t['flags'][1]}"]
+            if split:
+                compile_input = ROOT / 'config/tu-build.json'
+                if not compile_input.is_file():
+                    compile_input = ROOT / 'config/objects/overlays.compile.json'
+                split_deps = [str(data_carve.registry_input_path(ROOT)), str(HERE / 'data_carve.py'),
+                              str(HERE / 'elfinfo.py'), str(compile_input),
+                              'layout.json', target, f'asm/data/{unit}/{t["name"]}.rodata.s']
+                lines += [f"build {obj}: carvesplit {compiled_obj} | {' '.join(split_deps)}",
+                          f"  tu = {split['tu']}"]
         else:
             lines.append(f"build {obj}: as {rel}.s")
     elf_objs = [o for o in objs if not o.startswith("build/assets/")]

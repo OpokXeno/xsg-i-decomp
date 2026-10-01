@@ -3,6 +3,10 @@
 
 #include "shared.h"
 
+XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
+                                int (*callback)(XglTaskPrefix *task),
+                                XglTaskPrefix *entry);
+
 /*
  * Only replace the callback.  xglTaskExecute has already saved the successor
  * before invoking a callback, so self-marking normally takes effect when the

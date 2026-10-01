@@ -20,7 +20,7 @@ typedef struct RsrcItem {
     u8 unmodeled_00[5];
     u8 item_id;
     u16 flags;
-    u32 size;
+    void *data;
     u32 key;
 } RsrcItem;
 
@@ -156,7 +156,22 @@ RsrcItem *RSRC_getItem2(RsrcManager *manager, u32 key)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/rsrc", RSRC_getItem);
+RsrcItem *RSRC_getItem(RsrcManager *manager, void *data)
+{
+    int index;
+    u16 count = manager->item_count;
+    RsrcItem *item = manager->items;
+
+    if (data == 0)
+        return 0;
+
+    for (index = 0; index < count; index++) {
+        if (item->data == data)
+            return item;
+        item++;
+    }
+    return 0;
+}
 
 extern void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name);
 

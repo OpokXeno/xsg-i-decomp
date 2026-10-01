@@ -3,6 +3,8 @@
 
 #include "shared.h"
 
+#define CALC_NORMAL_TECHNIQUE_COUNT 6
+
 typedef struct CalcUnitParam CalcUnitParam;
 
 struct CalcUnitParam {
@@ -40,7 +42,9 @@ struct CalcUnitParam {
     unsigned char unmodeled_54[0x5E - 0x54];
     short sefSetupParams[3]; /* +0x5E: sefSetupPlayer's extra arguments */
     short accessoryId[3];    /* +0x64: calcMagDefGet's per-slot item ids */
-    unsigned char unmodeled_6a[0xAC - 0x6A];
+    unsigned char unmodeled_6a[0x76 - 0x6A];
+    short normalTechniqueId[CALC_NORMAL_TECHNIQUE_COUNT]; /* +0x76 */
+    unsigned char unmodeled_82[0xAC - 0x82];
     u16 statActiveMask[8];   /* +0xAC: calcStatTurn's per-category bit set */
     unsigned char unmodeled_bc[0xCC - 0xBC];
     unsigned char statTurnCount[8][16]; /* +0xCC: calcStatTurn's countdown grid */

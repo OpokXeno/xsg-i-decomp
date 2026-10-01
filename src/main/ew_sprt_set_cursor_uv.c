@@ -70,6 +70,14 @@ typedef struct EwContainerState {
     int unusedByContainer[2];
 } EwContainerState;
 
+typedef struct EwContainerWidget {
+    unsigned short flags;
+    unsigned short type;
+    unsigned char unmodeled_04[0x0C];
+    EwContainerState container;
+    unsigned char unmodeled_20[0x08];
+} EwContainerWidget;
+
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_sprtSetCursorUV);
 
 static void frame_init(EwFrameState *frame)
@@ -94,7 +102,39 @@ INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_setDrawEnv);
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_create);
 
-INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_dispose);
+void EW_dispose(EwContainerWidget *widget)
+{
+    void **firstChild;
+    void **children;
+    unsigned short *childFlags;
+    int capacity;
+    int remaining;
+
+    if (widget->type == 4)
+    {
+        firstChild = widget->container.children;
+        if (firstChild != 0)
+        {
+            capacity = widget->container.childCapacity;
+            if (capacity > 0)
+            {
+                children = firstChild;
+                remaining = capacity;
+                do
+                {
+                    childFlags = *children;
+                    children++;
+                    if (childFlags != 0)
+                    {
+                        *childFlags = 0;
+                    }
+                    remaining--;
+                } while (remaining != 0);
+            }
+        }
+    }
+    widget->flags = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_addComponent);
 
@@ -210,7 +250,24 @@ INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", sprt_put);
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", set_clip);
 
-INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", checkN2);
+static int checkN2(int value)
+{
+    int bitIndex;
+    unsigned int bitMask;
+
+    bitIndex = 0;
+    do
+    {
+        bitMask = 1U << bitIndex;
+        if ((unsigned int) value == bitMask)
+        {
+            return bitIndex;
+        }
+        bitIndex++;
+    } while (bitIndex < 32);
+
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", frame_put);
 

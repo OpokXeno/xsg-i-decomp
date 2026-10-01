@@ -9,15 +9,73 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _BallVsBall);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _BallVsPoly);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _PolyVsBall);
+static void _BallVsPoly(unsigned int *pArg);
+
+static void _PolyVsBall(unsigned int *pArg)
+{
+    unsigned int reordered[4];
+    unsigned int first;
+    unsigned int second;
+    unsigned int third;
+    unsigned int fourth;
+
+    third = pArg[2];
+    first = pArg[0];
+    fourth = pArg[3];
+    second = pArg[1];
+    reordered[0] = third;
+    reordered[2] = first;
+    reordered[1] = fourth;
+    reordered[3] = second;
+    _BallVsPoly(reordered);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _RobotVsPoly);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _PolyVsRobot);
+static void _RobotVsPoly(unsigned int *pArg);
+
+static void _PolyVsRobot(unsigned int *pArg)
+{
+    unsigned int reordered[4];
+    unsigned int first;
+    unsigned int second;
+    unsigned int third;
+    unsigned int fourth;
+
+    third = pArg[2];
+    first = pArg[0];
+    fourth = pArg[3];
+    second = pArg[1];
+    reordered[0] = third;
+    reordered[2] = first;
+    reordered[1] = fourth;
+    reordered[3] = second;
+    _RobotVsPoly(reordered);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _BallVsTray);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _TrayVsBall);
+static void _BallVsTray(unsigned int *pArg);
+
+static void _TrayVsBall(void *pArg)
+{
+    unsigned int *argWords = pArg;
+    unsigned int reordered[4];
+    unsigned int first;
+    unsigned int second;
+    unsigned int third;
+    unsigned int fourth;
+
+    third = argWords[2];
+    first = argWords[0];
+    fourth = argWords[3];
+    second = argWords[1];
+    reordered[0] = third;
+    reordered[2] = first;
+    reordered[1] = fourth;
+    reordered[3] = second;
+    _BallVsTray(reordered);
+}
 
 /*
  * The pairwise collision-check argument this TU's _XxxVsYyy functions use
@@ -86,7 +144,24 @@ static int _BallVsPillar(RgGeomColiArg *pArg)
     return result;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _PillarVsBall);
+static void _PillarVsBall(RgGeomColiArg *pArg)
+{
+    RgGeomColiArg reordered;
+    unsigned int first;
+    unsigned int second;
+    unsigned int third;
+    unsigned int fourth;
+
+    third = pArg->data[2];
+    first = pArg->data[0];
+    fourth = pArg->data[3];
+    second = pArg->data[1];
+    reordered.data[0] = third;
+    reordered.data[2] = first;
+    reordered.data[1] = fourth;
+    reordered.data[3] = second;
+    _BallVsPillar(&reordered);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _RobVsTray);
 
@@ -103,7 +178,26 @@ static void _TrayVsRob(void *hit)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _RobVsPillar);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _PillarVsRob);
+static void _RobVsPillar(RgGeomColiArg *pArg);
+
+static void _PillarVsRob(RgGeomColiArg *pArg)
+{
+    RgGeomColiArg reordered;
+    unsigned int first;
+    unsigned int second;
+    unsigned int third;
+    unsigned int fourth;
+
+    third = pArg->data[2];
+    first = pArg->data[0];
+    fourth = pArg->data[3];
+    second = pArg->data[1];
+    reordered.data[0] = third;
+    reordered.data[2] = first;
+    reordered.data[1] = fourth;
+    reordered.data[3] = second;
+    _RobVsPillar(&reordered);
+}
 
 extern void assert_prog(const char *expression, const char *source_file, int line);
 

@@ -8,6 +8,11 @@
  * XrgApplyVector and XrgSetVectorXYZ of a neighbouring xrg_* one; all three
  * are still assembly, so this TU declares them. */
 static int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int flag);
+static int _CheckPillarBall(const RgVector localPosition,
+                            RgVector localNormal,
+                            RgVector localContact,
+                            RgVector localCorrection,
+                            float halfWidth, float halfDepth, float radius);
 extern void XrgApplyVector(RgVector destination, const RgMatrix matrix, const RgVector source);
 extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 
@@ -59,10 +64,10 @@ struct RgGeom {
 };
 
 struct RgGeomPoint {
-    unsigned char unknown_0x00[0x20];
+    unsigned char unmodeled_00[0x20];
     RgVector position;
     RgVector oldPosition;
-    unsigned char unknown_0x40[0x30];
+    unsigned char unmodeled_40[0x30];
     float radius;
 };
 
@@ -175,7 +180,17 @@ static void swapf(float *left, float *right)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CheckIntersect_00A2E8A8);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", GetIntersectionPointLineX_00A2E9B0);
+static int GetIntersectionPointLineX(float *intersection, const float *line_start,
+                                     const float *line_end, float x)
+{
+    if (line_start[0] == line_end[0]) {
+        *intersection = 0;
+        return 0;
+    }
+
+    *intersection = (x - line_start[0]) / (line_end[0] - line_start[0]);
+    return 1;
+}
 
 static int GetIntersectionPointLineZ(float *intersection, const RgVector lineStart,
                                      const RgVector lineEnd, float z)
@@ -216,6 +231,77 @@ static int CheckInBox(const RgVector point, const RgVector lower,
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", CheckBallBoxCollision_00A2EB18);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", RgGeomPillarCheckBall);
+int RgGeomPillarCheckBall(RgGeom *pillar, RgGeomPoint *point,
+                          RgVector worldResults[3])
+{
+    RgVector localPosition;
+    RgVector localNormal;
+    RgVector localContact;
+    RgVector localCorrection;
+    int hit;
+
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%2)\n\t"
+        "lqc2 $vf3, 0(%1)\n\t"
+        "lqc2 $vf4, 16(%1)\n\t"
+        "lqc2 $vf5, 32(%1)\n\t"
+        "lqc2 $vf6, 48(%1)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(localPosition), "r"(pillar->inverseLocal),
+            "r"(point->position) : "memory");
+
+    hit = _CheckPillarBall(localPosition, localNormal, localContact,
+                           localCorrection, pillar->halfWidth,
+                           pillar->halfDepth, point->radius);
+    if (hit == 0) {
+        return hit;
+    }
+
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(worldResults[0]), "r"(localContact),
+            "r"(pillar->local) : "memory");
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(worldResults[1]), "r"(localNormal),
+            "r"(pillar->local) : "memory");
+    localCorrection[3] = 0.0f;
+    __asm__ __volatile__(
+        "lqc2 $vf2, 0(%1)\n\t"
+        "lqc2 $vf3, 0(%2)\n\t"
+        "lqc2 $vf4, 16(%2)\n\t"
+        "lqc2 $vf5, 32(%2)\n\t"
+        "lqc2 $vf6, 48(%2)\n\t"
+        "vmulax.xyzw ACCxyzw, vf3xyzw, vf2x\n\t"
+        "vmadday.xyzw ACCxyzw, vf4xyzw, vf2y\n\t"
+        "vmaddaz.xyzw ACCxyzw, vf5xyzw, vf2z\n\t"
+        "vmaddw.xyzw vf2xyzw, vf6xyzw, vf2w\n\t"
+        "sqc2 $vf2, 0(%0)\n\t"
+        : : "r"(worldResults[2]), "r"(localCorrection),
+            "r"(pillar->local) : "memory");
+    return hit;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_pillar", _CheckPillarBall);

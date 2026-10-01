@@ -26,6 +26,11 @@ extern int RgVectorFind_sub(void *vector, void *element,
 
 extern void RgVectorPush(void *vector, void *element);
 
+extern void *RgVectorIndex(void *vector, unsigned int index,
+                           const char *source_file, int line);
+extern unsigned int RgVectorSize(void *vector);
+extern void DisposeRgVector(void *vector, const char *source_file, int line);
+
 static void _DisposeGroup(RgGeomGroup *group);
 
 extern void RgGeomFree(RgGeom *geom);

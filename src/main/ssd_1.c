@@ -7,6 +7,14 @@
  * header is included directly.
  */
 #include "ssd_init.h"
+extern void *sceSifGetNextRequest(void *queue);
+extern void sceSifExecRequest(void *request);
+
+typedef struct RssdEffectData {
+    unsigned int tag;
+    unsigned char unmodeled_04[4];
+    unsigned int size;
+} RssdEffectData;
 
 enum {
     RSSD_CMD_STOP_EFFECT_FILE_ID       = 0x7a,
@@ -131,7 +139,22 @@ int SsdCheckWaveData(int wave)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdSpuDmaCompleted);
+int SsdSpuDmaCompleted(int wait)
+{
+    int busy = (RssdWork.flags >> 2) & 1;
+
+    if (wait) {
+        while (busy) {
+            void *request;
+
+            while ((request = sceSifGetNextRequest(RssdWork.rpc_queue)) != 0) {
+                sceSifExecRequest(request);
+            }
+            busy = (RssdWork.flags >> 2) & 1;
+        }
+    }
+    return busy;
+}
 
 /* Forwards value (an SPU memory size or address) unchanged; no further evidenced use in this function. */
 void SsdCheckSpuMemory(int value)
@@ -143,7 +166,22 @@ void SsdCheckSpuMemory(int value)
     RssdCallFunc(RSSD_CMD_CHECK_SPU_MEMORY, &request, 0, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdAddEffectData);
+int SsdAddEffectData(RssdEffectData *effectData, int unused)
+{
+    RssdRequest request;
+    int size;
+
+    if (effectData->tag != 0x73646573) {
+        printf("Rssd effect data error !\n", unused, effectData);
+        return -1;
+    }
+
+    size = effectData->size;
+    request.arg[0].pointer = effectData;
+    RssdWork.flags |= RSSD_FLAG_SUCCESS;
+    RssdCallFunc(0x60, &request, effectData, size);
+    return RssdWork.response.value;
+}
 
 void SsdDisposeEffectData(int effect_bank)
 {

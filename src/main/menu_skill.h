@@ -66,6 +66,17 @@ extern void *dataPlChaGet(unsigned int character_id);
 /* Populated with the loaded skill table by MenuSkill (INCLUDE_ASM below). */
 extern unsigned char *SkillDataBuf;
 
+/*
+ * The skill-data block starts with one byte per skill ID (the level getter
+ * indexes ID - 1). The point-cost getter addresses halfwords from byte offset
+ * 0x7e using the ID itself; SkillNextLvGet reads the following halfword table
+ * at 0x17e, bounding this cost table at 0x80 entries.
+ */
+typedef struct MenuSkillData {
+    unsigned char level_cap_by_skill_id[0x7e];
+    unsigned short point_cost_by_skill_id[0x80];
+} MenuSkillData;
+
 extern unsigned short SkillNextLvGet(int level);
 
 extern void xglSoundEffectNormalID(int sound_id, int variant);

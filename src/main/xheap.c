@@ -76,7 +76,26 @@ void infoMemory(void) {
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xheap", xmalloc);
+void *xmalloc(unsigned int size, int category) {
+    xheap_block *block;
+    unsigned char *payload;
+    xheap_block *next;
+
+    if (size == 0) {
+        return 0;
+    }
+
+    size = ((size + 3) >> 2) << 2;
+    block = freeBlock->next;
+    payload = (unsigned char *)block;
+    next = (xheap_block *)(payload + size + 12);
+    block->size_words = size >> 2;
+    block->category = category;
+    block->next = next;
+    freeBlock = block;
+    xmemchk(block);
+    return payload + 12;
+}
 
 void xfree(void *payload) {
     if (payload != 0) {

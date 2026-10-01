@@ -84,10 +84,16 @@ typedef struct Actor {
     void *animUserData;
     unsigned char unmodeled_724[0x7fc - 0x724];
     int moveElementId;
-    unsigned char unmodeled_800[0x8d8 - 0x800];
+    unsigned char unmodeled_800[0x840 - 0x800];
+    unsigned char model[0x58]; /* +0x840: passed to MDL visibility functions */
+    unsigned char unmodeled_898[0x8d8 - 0x898];
     void *move;
     void *animPackTables[8];
+    unsigned char unmodeled_8fc[0xa70 - 0x8fc];
 } Actor;
+
+/* ACT_setVisible's third argument is forwarded to both MDL tail calls. */
+extern void ACT_setVisible(Actor *actor, int part, int visible);
 
 int ACT_jointGetMoveElementID(Actor *actor);
 

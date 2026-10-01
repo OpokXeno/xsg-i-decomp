@@ -15,6 +15,7 @@ extern void assert_prog(const char *expression, const char *source_file,
  */
 extern const char D_00A523F0[];
 extern const char D_00A52400[];
+extern const char D_00A52418[];
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
@@ -30,6 +31,9 @@ extern int RgWeaponGetControlFlag(RgWeapon *weapon);
 extern int RgWeaponIsAttachedShot(RgWeapon *weapon);
 extern void RgWeaponSetdown(RgWeapon *weapon);
 extern void RgWeaponShotStop(RgWeapon *weapon);
+extern float RgWeaponGetShotNum(RgWeapon *weapon);
+extern int RgWeaponShot(RgWeapon *weapon);
+extern void RgWeaponSetup(RgWeapon *weapon);
 
 extern RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor,
                                           XrgActor *attachActor,
@@ -37,6 +41,9 @@ extern RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor,
 
 extern void RgShotMotContStop(RgShotMotCont *motCont);
 extern void DisposeRgShotMotCont(RgShotMotCont *motCont);
+extern void RgShotMotContSetFrame(RgShotMotCont *motCont, float frame);
+extern void RgShotMotContPassTime(RgShotMotCont *motCont, float deltaTime);
+extern void RgError(const char *message, const char *source_file, int line, ...);
 
 /*
  * _SetShotThread (ov12:0x00a0ece8) is not part of this allocation and stays
@@ -213,4 +220,67 @@ void RgShotThreadStart(RgShotThread *thread, RgShotMotStartInfo *info)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_thread", RgShotThreadPassTime);
+void RgShotThreadPassTime(RgShotThread *thread, float deltaTime)
+{
+    int status;
+    int hasAttachedShot;
+
+    if (thread == 0) {
+        assert_prog(D_00A523F0, D_00A52400, 218);
+    }
+    if (thread->status == 5) {
+        return;
+    }
+
+    thread->elapsedTime += deltaTime;
+    if (RgWeaponGetShotNum(thread->weapon) <= 0.0f) {
+        thread->active = 0;
+    }
+
+    status = thread->status;
+    do {
+        thread->status = status;
+        switch ((unsigned int) status) {
+        case 0:
+            break;
+        case 1:
+            RgWeaponSetup(thread->weapon);
+            if (thread->elapsedTime >= thread->frame) {
+                thread->shotCount = 0;
+                status = 2;
+            }
+            break;
+        case 2:
+            RgWeaponShot(thread->weapon);
+            thread->shotCount++;
+            hasAttachedShot = RgWeaponIsAttachedShot(thread->weapon);
+            if (thread->active == 0 &&
+                hasAttachedShot == 0 &&
+                thread->shotCount >= 2U) {
+                status = 4;
+                if (thread->motCont != 0) {
+                    RgShotMotContStop(thread->motCont);
+                }
+            } else if (thread->elapsedTime >= thread->duration) {
+                thread->elapsedTime = thread->frame;
+                if (thread->motionId != -1 && thread->motCont != 0) {
+                    RgShotMotContSetFrame(thread->motCont, thread->frame);
+                }
+            }
+            break;
+        case 4:
+            RgWeaponShotStop(thread->weapon);
+            status = 0;
+            RgWeaponSetdown(thread->weapon);
+            break;
+        default:
+            RgError(D_00A52418, D_00A52400, 296, status);
+            break;
+        }
+    } while (status != thread->status);
+
+    if (thread->motionId != -1 && thread->motCont != 0) {
+        RgShotMotContPassTime(thread->motCont, deltaTime);
+    }
+    thread->active = 0;
+}

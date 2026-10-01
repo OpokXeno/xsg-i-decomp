@@ -1,5 +1,13 @@
 #include "common.h"
 
+typedef struct Mif2Argument {
+    int type;
+    union {
+        int number;
+        const char *text;
+    } value;
+} Mif2Argument;
+
 extern int ctrlCodeFlags;
 
 void MSG_init(void)
@@ -65,9 +73,26 @@ INCLUDE_ASM("asm/main/nonmatchings/msg_init", MIF2_waitkey);
 
 INCLUDE_ASM("asm/main/nonmatchings/msg_init", MIF2_wait);
 
-INCLUDE_ASM("asm/main/nonmatchings/msg_init", MIF2_gaiji);
+char *MIF2_gaiji(char *out, int argc, const Mif2Argument *args)
+{
+    int glyph = args[0].value.number + 160;
+    char *end = &out[2];
 
-INCLUDE_ASM("asm/main/nonmatchings/msg_init", MIF2_code);
+    out[0] = -83;
+    out[1] = glyph;
+    *end = '\0';
+    return end;
+}
+
+char *MIF2_code(char *out, int argc, const Mif2Argument *args)
+{
+    char *end = &out[1];
+    unsigned char code = args[0].value.number;
+
+    out[0] = code;
+    end[0] = '\0';
+    return end;
+}
 
 int strcmp(const char *, const char *);
 

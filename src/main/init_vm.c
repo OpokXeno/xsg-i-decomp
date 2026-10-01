@@ -1362,7 +1362,46 @@ static void initBaseClasses(void) {
     loadStaticClass(&classString, D_004CD658);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/init_vm", initPrimitiveTypes);
+extern VMClass *classBoolean;
+extern VMClass *classByte;
+extern VMClass *classChar;
+extern VMClass *classShort;
+extern VMClass *classInt;
+extern VMClass *classLong;
+extern VMClass *classFloat;
+extern VMClass *classDouble;
+
+static void initWrapperClass(VMClass **class_slot, const char *name,
+                              signed char type_code, int element_size);
+
+extern const char D_004DC000[]; /* "boolean" */
+extern const char D_004DC008[]; /* "byte" */
+extern const char D_004DC010[]; /* "char" */
+extern const char D_004DC018[]; /* "short" */
+extern const char D_004DC020[]; /* "int" */
+extern const char D_004DC028[]; /* "long" */
+extern const char D_004DC030[]; /* "float" */
+extern const char D_004DC038[]; /* "double" */
+
+static void initPrimitiveTypes(void) {
+    initWrapperClass(&classBoolean, D_004DC000, 'Z', 1);
+    initWrapperClass(&classByte, D_004DC008, 'B', 1);
+    initWrapperClass(&classChar, D_004DC010, 'C', 2);
+    initWrapperClass(&classShort, D_004DC018, 'S', 2);
+    initWrapperClass(&classInt, D_004DC020, 'I', 4);
+    initWrapperClass(&classLong, D_004DC028, 'J', 8);
+    initWrapperClass(&classFloat, D_004DC030, 'F', 4);
+    initWrapperClass(&classDouble, D_004DC038, 'D', 8);
+
+    primitiveClassTable[4] = classBoolean;
+    primitiveClassTable[8] = classByte;
+    primitiveClassTable[5] = classChar;
+    primitiveClassTable[9] = classShort;
+    primitiveClassTable[10] = classInt;
+    primitiveClassTable[11] = classLong;
+    primitiveClassTable[6] = classFloat;
+    primitiveClassTable[7] = classDouble;
+}
 
 static void initWrapperClass(VMClass **class_slot, const char *name,
                               signed char type_code, int element_size)

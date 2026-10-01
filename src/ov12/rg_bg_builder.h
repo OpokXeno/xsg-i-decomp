@@ -36,7 +36,7 @@ typedef struct RgBgBuilder {
     void *group;                     /* +0x00 */
     void *loadData;                  /* +0x04 */
     unsigned char unmodeled_08[8];   /* +0x08 */
-    unsigned char light[0x70];       /* +0x10 */
+    RgVector light[7];               /* +0x10 */
     RgSimpleDB *database;            /* +0x80 */
     unsigned char unmodeled_84[0xc]; /* +0x84 */
 } RgBgBuilder;

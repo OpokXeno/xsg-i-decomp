@@ -106,7 +106,19 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuCharHpCheck);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuCharEpCheck);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuMaryIdChange);
+int MenuMaryIdChange(int characterId)
+{
+    if (characterId == 20) {
+        return 11;
+    }
+    if (characterId == 19) {
+        return 12;
+    }
+    if (characterId < 17) {
+        return characterId;
+    }
+    return 3;
+}
 
 int MenuMainCharCheck(int charId)
 {

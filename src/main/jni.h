@@ -6,6 +6,7 @@
 #define SRC_MAIN_JNI_H
 
 #include "shared.h"
+#include "main/data_buffer.h"
 
 /*
  * The allocation header of src/main/xheap.c's free-block heap
@@ -154,16 +155,6 @@ typedef struct PdbClassEntry {
  * Defined at main 0x002f5d10.
  */
 extern void PDB_getEntry(int class_id, void **groups, int *group_count);
-
-/*
- * The scratch reader over a byte range that checkClass scans. Restated as an
- * incomplete tag because a TU-local header cannot be included from another
- * TU: the complete record is main/tu230's src/main/data_buffer.h struct
- * DataBuffer, which this TU never reads or writes directly.
- */
-typedef struct DataBuffer DataBuffer;
-
-typedef unsigned char DataBufferByte;
 
 /*
  * Initializes buffer to read length bytes starting at base, little-endian

@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_studio.h"
 #include "rg_draw.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
@@ -20,6 +21,11 @@ static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
 static void _DestructDraw(RgDraw *pDraw);
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
+typedef struct RgLight RgLight;
+extern RgLight *InstanceOfGlobalLight(void);
+extern void xglStudioChange(int studio_index);
+extern void XrgSleep(void);
+extern StudioCamera *xglStudioSelectGetActiveCamera(int studioIndex);
 static void _CopyFog(RgFog *pDst, RgFog *pSrc);
 static void _SetGlobalLight(void);
 static void _ClearStudioList(RgDraw *pDraw);
@@ -55,6 +61,11 @@ extern const char D_00A54B40[];
 extern const char D_00A54B58[];
 extern const char D_00A54B68[];
 extern const char D_00A54B80[];
+extern const char D_00A54BC8[];
+extern const char D_00A54BE8[];
+extern const char D_00A54B90[];
+extern const char D_00A54BB0[];
+extern const char D_00A54C50[];
 
 /*
  * GNU EE native TI storage/copy type (docs/native-ti.md), used only to pass
@@ -124,7 +135,25 @@ static void _closeVifGif(XglPacket *pPacket)
     sceVif1PkCloseDirectHLCode(pPacket);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _SetGlobalLight);
+static void _SetGlobalLight(void)
+{
+    RgLight *globalLight;
+    StudioLight *studioLight;
+    Vector4 *ambientColor;
+
+    globalLight = InstanceOfGlobalLight();
+    xglStudioChange(0);
+    xglStudioGetLight(&studioLight);
+    if (globalLight != 0) {
+        if (studioLight != 0) {
+            ambientColor = &studioLight->ambient_color;
+            ambientColor->x = 1.0f;
+            ambientColor->y = 1.0f;
+            ambientColor->z = 1.0f;
+            ambientColor->w = 1.0f;
+        }
+    }
+}
 
 static void _DefaultFog(RgFog *pFog)
 {
@@ -304,7 +333,30 @@ static void _FullScreenStudio(RgDraw *pDraw)
     nmlModelUseSubWindow(3, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _GetSplitRect);
+extern void XrgSetIVector(int destination[4], int x, int y, int z, int w);
+
+static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect)
+{
+    switch (splitMode) {
+    case 0:
+        if (screenIndex == 0) {
+            XrgSetIVector(&pRect->x0, 0, 0, 256, 448);
+        } else {
+            XrgSetIVector(&pRect->x0, 256, 0, 512, 448);
+        }
+        break;
+    case 1:
+        if (screenIndex == 0) {
+            XrgSetIVector(&pRect->x0, 0, 0, 512, 224);
+        } else {
+            XrgSetIVector(&pRect->x0, 0, 224, 512, 448);
+        }
+        break;
+    default:
+        return 0;
+    }
+    return 1;
+}
 
 static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect);
 
@@ -610,9 +662,84 @@ void RgDrawViewGetScreenRect(RgDrawView *pView, RgRect *pRect)
     pRect->y1 = pView->screenRect.y1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawStudioGetView);
+RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio)
+{
+    RgDrawView *pView;
+    StudioCamera *camera;
+    int screenIndex;
+    int cameraIndex;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawReq);
+    if (pStudio == 0) {
+        assert_prog(D_00A54B30, D_00A54AF0, 649);
+    }
+    screenIndex = pStudio->m_ScreenIndex;
+    pView = _GetViewRgDrawStudio(pStudio);
+    if (pView == 0) {
+        assert_prog(D_00A54B08, D_00A54AF0, 653);
+    }
+    camera = 0;
+    if (screenIndex < 2) {
+        if (screenIndex >= 0) {
+            cameraIndex = 0;
+            switch (screenIndex) {
+            case 0:
+                cameraIndex = 0;
+                break;
+            case 1:
+                cameraIndex = 1;
+                break;
+            default:
+                RgError(D_00A54AD0, D_00A54AF0, 69, screenIndex);
+                break;
+            }
+            camera = xglStudioSelectGetActiveCamera(cameraIndex);
+        }
+    }
+    if (camera != 0) {
+        XrgCopyMatrix(pView->viewMatrix, camera->viewMatrix[0]);
+        XrgCopyVector(pView->axisX, &camera->screenScale.x);
+        XrgCopyVector(pView->axisY, &camera->screenOffset.x);
+        switch (screenIndex) {
+        case 0:
+            pView->projectionMode = 5;
+            pView->clippingMode = 6;
+            break;
+        case 1:
+            pView->projectionMode = 7;
+            pView->clippingMode = 8;
+            break;
+        case -1:
+            RgError(D_00A54B90, D_00A54AF0, 669);
+            break;
+        default:
+            RgError(D_00A54BB0, D_00A54AF0, 672, screenIndex);
+        }
+    }
+    return pView;
+}
+
+void RgDrawReq(RgDraw *pDraw, void *pObject,
+               void (*drawFunc)(void *pObject, RgDrawStudio *pStudio),
+               void (*clearFunc)(void *pObject), int priority, int drawID)
+{
+    RgDrawRequest *request;
+
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 695);
+    }
+    if (pDraw->m_RequestCount >= 128) {
+        assert_prog(D_00A54BC8, D_00A54AF0, 696);
+    }
+    if (pObject == 0 || drawFunc == 0) {
+        assert_prog(D_00A54BE8, D_00A54AF0, 697);
+    }
+    request = &pDraw->m_Requests[pDraw->m_RequestCount++];
+    request->pObject = pObject;
+    request->drawFunc = drawFunc;
+    request->clearFunc = clearFunc;
+    request->priority = priority;
+    request->drawID = drawID;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _FadeShadow);
 
@@ -635,7 +762,66 @@ void _DrawReqTerminate(RgDraw *pDraw)
     pDraw->m_RequestCount = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", _DrawMain);
+static void _DrawMain(RgDraw *pDraw)
+{
+    unsigned int priority;
+    unsigned int requestIndex;
+    RgDrawRequest *request;
+    RgDrawStudio *studio;
+    unsigned int activeStudioMask;
+
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 796);
+    }
+    if (pDraw->m_Enabled == 0) {
+        return;
+    }
+    for (priority = 0; priority < 7; priority++) {
+        for (requestIndex = 0; requestIndex < pDraw->m_RequestCount;
+             requestIndex++) {
+            request = &pDraw->m_Requests[requestIndex];
+            if (request->priority != priority) {
+                continue;
+            }
+            activeStudioMask = pDraw->m_ActiveStudioMask;
+            if (request->drawFunc == 0) {
+                continue;
+            }
+            switch (request->drawID) {
+            case -2: {
+                unsigned int screenIndex;
+                for (screenIndex = 0; screenIndex < 2; screenIndex++) {
+                    studio = pDraw->m_pStudios[screenIndex];
+                    if (studio != 0) {
+                        request->drawFunc(request->pObject, studio);
+                    }
+                }
+                break;
+            }
+            case -1:
+                if (activeStudioMask != 0) {
+                    request->drawFunc(request->pObject,
+                                      pDraw->m_pDefaultStudio);
+                }
+                break;
+            case 0:
+                if (pDraw->m_pStudios[0] != 0) {
+                    request->drawFunc(request->pObject,
+                                      pDraw->m_pStudios[0]);
+                }
+                break;
+            case 1:
+                if (pDraw->m_pStudios[1] != 0) {
+                    request->drawFunc(request->pObject,
+                                      pDraw->m_pStudios[1]);
+                }
+                break;
+            default:
+                RgError(D_00A54C50, D_00A54AF0, 776, request->drawID);
+            }
+        }
+    }
+}
 
 void RgDrawJob(RgDraw *pDraw)
 {
@@ -647,7 +833,25 @@ void RgDrawJob(RgDraw *pDraw)
     _DrawReqTerminate(pDraw);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawFadeIn);
+void RgDrawFadeIn(RgDraw *pDraw)
+{
+    int nextFadeCounter;
+
+    if (pDraw == 0) {
+        assert_prog(D_00A54B58, D_00A54AF0, 856);
+    }
+    if (pDraw->m_Enabled != 0) {
+        while (pDraw->m_FadeCounter < 50) {
+            nextFadeCounter = pDraw->m_FadeCounter - 20;
+            pDraw->m_FadeCounter = nextFadeCounter;
+            if (nextFadeCounter >= 0) {
+                _DrawMain(pDraw);
+            }
+            XrgSleep();
+        }
+        pDraw->m_Enabled = 0;
+    }
+}
 
 void RgDrawFadeOut(RgDraw *pDraw)
 {

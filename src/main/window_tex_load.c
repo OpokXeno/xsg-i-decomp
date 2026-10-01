@@ -17,7 +17,31 @@ void MenuWorkEndCheck(void)
 {
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", ChangeTopLevel);
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
+typedef struct {
+    unsigned char menu_state[4];
+    unsigned char unmodeled_04[12];
+    Quadword reset_work[7];
+} MenuWorkState;
+
+extern MenuWorkState MenuWork;
+
+void ChangeTopLevel(int top_level)
+{
+    int remaining = 6;
+    int slot = 0;
+
+    MenuWork.menu_state[1] = top_level;
+    MenuWork.menu_state[3] = 0;
+    MenuWork.menu_state[0] = 0;
+    MenuWork.menu_state[2] = 0;
+    do {
+        remaining--;
+        MenuWork.reset_work[slot] = 0;
+        slot++;
+    } while (remaining >= 0);
+}
 
 /* Twelve consecutive five-byte saved menu-selection records. */
 extern unsigned char MenuKeepSelect[12 * 5];

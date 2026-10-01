@@ -21,6 +21,13 @@ typedef struct EndPrintContext {
     u64 scratch[4];                   /* +0x30..+0x4f */
 } EndPrintContext;
 
+/* These two routines fill the full eight-qword drawing command buffer. */
+typedef struct DrawBackContext {
+    XglPacket *packet;                /* +0x00 */
+    unsigned char unmodeled_04[0x2c]; /* +0x04..+0x2f */
+    u64 scratch[8];                   /* +0x30..+0x6f */
+} DrawBackContext;
+
 /*
  * PrintFunc: a fixed-capacity queue of deferred print commands appended by
  * endPrintExtFuncPack and the other still-asm producers of this TU and

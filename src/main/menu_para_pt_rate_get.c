@@ -339,20 +339,67 @@ unsigned short MenuParaUpMaxGet(int statIndex)
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", MenuParaNextPointGet);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", MenuParaUp);
-
-/* The character's running record: the unspent parameter points at +0x0C. */
+/* The shared character point pools used by parameter spending. */
 typedef struct CharPointData {
     unsigned char unmodeled_00[0x0C];
-    int points;                     /* +0x0C */
-    /* The two other pools the same record carries, each displayed by the "Ex"
-     * bar of the screen that spends it: MenuEtherExMain shows the word at
-     * +0x10 (lw at 0x002ab340) and MenuSkillExMain the word at +0x14 (lw at
-     * 0x002b8018), while MenuTecExMain shows points itself (lw at
-     * 0x002b08bc). CharExMain shows all three. */
-    int etherPoints;                /* +0x10 */
-    int skillPoints;                /* +0x14 */
+    int points;
+    int etherPoints;
+    int skillPoints;
 } CharPointData;
+extern CharPointData *func_A19210(int chrNo);
+extern int MenuParaNextPointGet(int chrNo, int statIndex, int count);
+extern int PartyAttackerCheck(int chrNo);
+extern int PartyLeaderCheck(int chrNo);
+extern int MenuAccessoryEquipCheck(int chrNo, int accessory, int slot);
+extern void eMessageCpy(char *destination, char *source);
+extern void eMessageCat(char *source);
+extern unsigned char D_004DADB0[];
+
+/*
+ * Spends one point raising statIndex by one step: the plain fields just
+ * increment, while maxHp (+10) and maxEp (+2) are clamped back to the
+ * party's current MenuParaUpMaxGet ceiling.
+ */
+void MenuParaUp(int chrNo, int statIndex)
+{
+    CharParaData *org = func_A191C0(chrNo);
+    CharPointData *unit = func_A19210(chrNo);
+    int next = MenuParaNextPointGet(chrNo, statIndex, 0);
+
+    switch (statIndex) {
+    case 2:
+        org->attack++;
+        break;
+    case 3:
+        org->phyDefense++;
+        break;
+    case 4:
+        org->stat4++;
+        break;
+    case 5:
+        org->magDefense++;
+        break;
+    case 6:
+        org->stat6++;
+        break;
+    case 7:
+        org->stat7++;
+        break;
+    case 0:
+        org->maxHp += 10;
+        if (org->maxHp > MenuParaUpMaxGet(statIndex)) {
+            org->maxHp = MenuParaUpMaxGet(statIndex);
+        }
+        break;
+    case 1:
+        org->maxEp += 2;
+        if (org->maxEp > MenuParaUpMaxGet(statIndex)) {
+            org->maxEp = MenuParaUpMaxGet(statIndex);
+        }
+        break;
+    }
+    unit->points -= next;
+}
 
 /* dataPlChaGet (ov01 VA 0x00a19210; see src/main/menu_skill.h and
  * src/main/menu_tec.c, which model this same per-character record under the
@@ -384,9 +431,53 @@ int MenuCharWeaponAttCheck(void) {
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", MenuCharLeaderMask);
+extern int MenuScenarioNo;
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", MenuPasLengthGet);
+/*
+ * Whether chrNo may hold the party leader slot in the current scenario:
+ * every scenario locks the leader to character 3 except 159-160, which
+ * additionally allows 1 or 5; any other character is denied (1). A scenario
+ * outside every named range skips the character check entirely. The
+ * eligible character then still needs to be an active attacker (1..7),
+ * an attacker in the current party (2), and the actual leader (0 or 3).
+ */
+int MenuCharLeaderMask(unsigned short chrNo)
+{
+    int scenario = MenuScenarioNo;
+
+    if ((unsigned int)(scenario - 1) < 34 ||
+        (unsigned int)(scenario - 46) < 3 ||
+        scenario == 126 ||
+        (unsigned int)(scenario - 142) < 3) {
+        if (chrNo != 3) {
+            return 1;
+        }
+    } else if ((unsigned int)(scenario - 159) < 2) {
+        if (chrNo != 3 && chrNo != 1 && chrNo != 5) {
+            return 1;
+        }
+    }
+
+    if ((unsigned short)(chrNo - 1) >= 7) {
+        return 1;
+    }
+    if (PartyAttackerCheck(chrNo) == 0) {
+        return 2;
+    }
+    return (PartyLeaderCheck(chrNo) == 0) ? 0 : 3;
+}
+
+extern int xglFontGetStringWidth(const char *text);
+
+int MenuPasLengthGet(const char *text)
+{
+    char message[64];
+    char label[3] = "\x19\x03";
+
+    eMessageCpy(message, label);
+    eMessageCat((char *)text);
+    return xglFontGetStringWidth(message);
+}
 
 /*
  * CharPasWindow is the sub-window control block WindowDXSet/WindowDXMain
@@ -630,7 +721,67 @@ void CharPasMain(void)
     endPrintExtFunc(pas->kind, 0x66, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", MenuCharEquipCalcPointGet);
+/*
+ * What the equipment the character wears adds to the parameter
+ * MenuWork.paraIndex selects: the recalculated record minus the stored one,
+ * plus the weapon attack word of the character's weapon slot or the defense
+ * word calcTotalParaMenu reports separately. 0 for no character and for any
+ * parameter outside the eight the window lists. The halfwords of the record
+ * are read signed here (lh at 0x00291ee8 onwards), so the difference of the
+ * three that CharParaData holds unsigned is taken on their signed value.
+ */
+int MenuCharEquipCalcPointGet(int chrNo)
+{
+    CharParaData *org;
+    CharParaData *total;
+    int attack[3];
+    int defense[2];
+    int points = 0;
+
+    if (chrNo == 0) {
+        return 0;
+    }
+    org = func_A191C0(chrNo);
+    total = func_00A11108(chrNo, attack, defense);
+    switch (MenuWork.paraIndex) {
+        case 0:
+            points = total->maxHp;
+            points -= org->maxHp;
+            break;
+        case 1:
+            points = total->maxEp;
+            points -= org->maxEp;
+            break;
+        case 2:
+            points = (short)total->attack;
+            points -= (short)org->attack;
+            points += attack[setSlotTbl[MenuWork.view.chrNo - 1]];
+            break;
+        case 3:
+            points = (short)total->phyDefense;
+            points -= (short)org->phyDefense;
+            points += defense[0];
+            break;
+        case 4:
+            points = (short)total->stat4;
+            points -= (short)org->stat4;
+            break;
+        case 5:
+            points = (short)total->magDefense;
+            points -= (short)org->magDefense;
+            points += defense[1];
+            break;
+        case 6:
+            points = total->stat6;
+            points -= org->stat6;
+            break;
+        case 7:
+            points = total->stat7;
+            points -= org->stat7;
+            break;
+    }
+    return points;
+}
 
 /*
  * PARTIAL ACCESSED PREFIX of PadData (the 0xD0-byte pad block at 0x00490d90):
@@ -2974,9 +3125,80 @@ void CharListMake_Gun(void)
     WindowSPItemChange(window);
     WindowSPSetSelect(window, &MenuKeepSelect[20]);
 }
-INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", CharListMake_Acc);
+/* The accessory list: the same window as the weapon list, five shorter rows,
+ * with each row flagged when that accessory is not already equipped in the
+ * slot under the cursor. The sort order and the saved selection both follow
+ * MenuWork.accessoryList, the accessory sub-tab. */
+void CharListMake_Acc(void)
+{
+    int *sortRow = MenuSortAddrGet(0);
+    CharListRow *entries = MenuListGet(0);
+    CharListSPWindow *window = &CharList->weapon;
+    int count;
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_para_pt_rate_get", CharListMake_Para);
+    MenuSortSet(0, 16, MenuWork.accessoryList);
+    MenuListMake(0, 0);
+    count = MenuSortCheck(0);
+    for (i = 0; i < count; i++) {
+        if (MenuAccessoryEquipCheck(MenuWork.view.chrNo, (short)sortRow[i],
+                                    MenuWork.equipSlot) != 0) {
+            entries[i].flag = 0;
+        } else {
+            entries[i].flag = 1;
+        }
+    }
+    window->width = 228;
+    window->height = 126;
+    window->columns = 1;
+    window->rows = 5;
+    window->rowCount = 7;
+    window->flags = 0;
+    window->items = MenuListGet(0);
+    WindowSPItemChange(window);
+    WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.accessoryList * 5]);
+}
+
+typedef struct CharParaRow {
+    char *name;                     /* +0x00 */
+    unsigned char unmodeled_04[0x08 - 0x04];
+    unsigned char flag;             /* +0x08 */
+    unsigned char unmodeled_09[0x0C - 0x09];
+} CharParaRow;
+char *MenuParaNameGet2(int statIndex);
+extern unsigned char D_004DAE50[];
+
+/* The parameter-up list: one row per improvable parameter, flagged while the
+ * shown character can still raise it, then the cost row and a terminating
+ * empty row. Its rows live in CharList itself, so the window takes them
+ * directly instead of through MenuListMake. */
+void CharListMake_Para(void)
+{
+    CharParaRow *row = (CharParaRow *)CharList->paraItems;
+    CharListSPWindow *window = &CharList->weapon;
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        row->name = MenuParaNameGet2(i);
+        if (MenuParaUpCheck(MenuWork.view.chrNo, i) == 0) {
+            row->flag = 0;
+        } else {
+            row->flag = 1;
+        }
+        row++;
+    }
+    row->name = (char *)D_004DADB0;
+    row[1].name = 0;
+    window->columns = 1;
+    window->rows = 8;
+    window->rowCount = 3;
+    window->flags = (int)D_004DAE50;
+    window->width = 105;
+    window->height = 198;
+    window->items = (CharListRow *)CharList->paraItems;
+    WindowSPItemChange(window);
+    WindowSPSetSelect(window, &MenuKeepSelect[25]);
+}
 
 /* D_004DADB0: scaffold data CharListMain and CharListMake_Para store as the
  * list window's flags; no further evidence of its own layout. */

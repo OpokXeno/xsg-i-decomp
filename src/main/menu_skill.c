@@ -3,9 +3,25 @@
 #include "main/party.h"
 #include "menu_skill.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_skill", SkillSetLvGet);
+int SkillSetLvGet(int skill_id)
+{
+    int skill_index = (unsigned short)skill_id;
+    MenuSkillData *skill_data = (MenuSkillData *)SkillDataBuf;
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_skill", SkillGetPtGet);
+    if (skill_index <= 0)
+        return 0;
+    return skill_data->level_cap_by_skill_id[skill_index - 1];
+}
+
+int SkillGetPtGet(int skill_id)
+{
+    int skill_index = (unsigned short)skill_id;
+    MenuSkillData *skill_data = (MenuSkillData *)SkillDataBuf;
+
+    if (skill_index <= 0)
+        return 0;
+    return skill_data->point_cost_by_skill_id[skill_index];
+}
 
 /*
  * Offset of the per-level "points required for next skill level" table inside

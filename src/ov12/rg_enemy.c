@@ -4,8 +4,11 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_enemy.h"
+#include "ov12/rg_robot_control.h"
 #include "ov12/rg_weapon_db.h"
 #include "ov12/rg_shot.h"
+
+extern void InitRgRobotControlCommon(RgRobotControl *pControl, RgRobot *pRobot);
 
 static int _GetPadEdge(void)
 {
@@ -17,11 +20,73 @@ static int _GetPadRelease(void)
     return 0;
 }
 
+typedef struct RgWeapon RgWeapon;
+extern RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon);
+extern struct RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssence *essence);
+extern void *RgWeaponEssCastToAttack(RgWeaponEssence *essence);
+extern void *RgWeaponEssCastToShield(RgWeaponEssence *essence);
+extern int RgWeaponIsLockedOn(RgWeapon *weapon);
+extern int RgWeaponIsTargetting(RgWeapon *weapon);
+
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_enemy", _dbgThinkTool);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_enemy", _GetWeaponTypeFlag);
+static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait)
+{
+    RgWeaponEssence *essence;
+    struct RgWeaponShotEssence *shotEssence;
+    unsigned int essenceFlags;
+    unsigned int typeFlags;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_enemy", _CheckShootWeapon);
+    if (weapon == 0) {
+        return side == 2 ? 0x8000 : 0x20;
+    }
+
+    essence = RgWeaponGetEss(weapon);
+    if (essence == 0) {
+        return 0x8000;
+    }
+
+    /* The shared partial essence type leaves this tested word at +4 unnamed. */
+    essenceFlags = *(unsigned int *)((unsigned char *)essence + 4);
+    typeFlags = 4;
+    if (essenceFlags & 0x20) {
+        typeFlags = 0;
+    }
+
+    if (RgWeaponEssCastToAttack(essence) != 0) {
+        return typeFlags | 0x20;
+    }
+    if (RgWeaponEssCastToShield(essence) != 0) {
+        return typeFlags | 0x40;
+    }
+
+    if ((shotEssence = RgWeaponEssCastToShot(essence)) != 0) {
+        if (!(shotEssence->busyTime + shotEssence->busyTime <
+              wait * 0.033333335f)) {
+            return typeFlags;
+        }
+        return typeFlags | 1;
+    }
+    return typeFlags | 2;
+}
+
+static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle)
+{
+    if (weapon != 0 && RgWeaponIsTargetting(weapon) != 0 &&
+        RgWeaponIsLockedOn(weapon) != 0) {
+        return 1;
+    }
+
+    if (param & 4) {
+        if ((param & 8) && angle < 0.049087387f) {
+            return 1;
+        }
+        if (weapon != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 extern const char D_00A51D90[]; /* "../rg_enemy.euc.c" */
 
@@ -848,7 +913,42 @@ static void _DestructEnemy(RgEnemyControl *pBaka)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_enemy", _InitEnemy);
+static void _InitEnemy(RgEnemyControl *pControl, RgRobot *pRobot,
+                       RgRobot *pEnemyRobot, int enemyType)
+{
+    RgRobotControl *pBaseControl = (RgRobotControl *)pControl;
+    float zeroVelocity;
+
+    if (pControl == 0) {
+        assert_prog(D_00A51DD0, D_00A51D90, 1570);
+    }
+
+    InitRgRobotControlCommon(pBaseControl, pRobot);
+    pBaseControl->jobMethod = (RgRobotControlJobFunc)_JobEnemy;
+    pBaseControl->destructMethod = (RgRobotControlDestructFunc)_DestructEnemy;
+    pControl->pEnemyRobot = pEnemyRobot;
+    pControl->enemyType = enemyType;
+    pControl->turn.work = 0;
+    pControl->move.work = 0;
+    pControl->shot.work = 0;
+
+    zeroVelocity = 0.0f;
+    pControl->turn.state = 0;
+    pControl->turn.wait = 0;
+    pControl->move.state = 0;
+    pControl->move.wait = 0;
+    pControl->shot.state = 0;
+    pControl->shot.wait = 0;
+    pControl->boostTime = 0;
+    pControl->restTime = 0;
+    pControl->escapeTime = 0;
+    pControl->idleTime = 0;
+    pControl->lastVelocity[3] = 0.0f;
+    pControl->lastVelocity[2] = 0.0f;
+    pControl->lastVelocity[1] = zeroVelocity;
+    pControl->lastVelocity[0] = 0.0f;
+    pControl->enemyState = 1;
+}
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,

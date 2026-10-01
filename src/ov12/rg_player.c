@@ -4,6 +4,17 @@
 #include "common.h"
 #include "rg_player.h"
 
+typedef struct RgPlayerEssenceFields {
+    RgVector position;
+    RgVector direction;
+    void *spec;
+    struct RgWeaponEssenceCommon *weaponEssence[3];
+    struct RgWeaponEssenceCommon *spareWeaponEssence[3];
+    int actorID;
+} RgPlayerEssenceFields;
+
+extern void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
+
 /*
  * These are external file-backed witnesses, not candidate-emitted data.
  *
@@ -14,6 +25,8 @@ extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern const char D_00A52740[];
 extern const char D_00A52708[];
+extern const char D_00A526F8[];
+extern const char D_00A52720[];
 
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
@@ -22,9 +35,88 @@ extern RgHeap *InstanceOfRgHeap(void);
 
 static void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_player", InitRgPlayerEssence);
+void InitRgPlayerEssence(RgPlayerEssence *pDat)
+{
+    RgPlayerEssenceFields *essence = (RgPlayerEssenceFields *)pDat;
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_player", _PlayerSetFromEssence);
+    if (pDat == 0) {
+        assert_prog(D_00A526F8, D_00A52708, 41);
+    }
+    XrgClearVector(essence->position);
+    XrgClearVector(essence->direction);
+    essence->direction[2] = -1.0f;
+    essence->spec = 0;
+    essence->actorID = -1;
+    for (i = 2; i >= 0; i--) {
+        essence->weaponEssence[2 - i] = 0;
+        essence->spareWeaponEssence[2 - i] = 0;
+    }
+}
+
+static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat)
+{
+    RgPlayerEssenceFields *essence = (RgPlayerEssenceFields *)pDat;
+    struct RgWeaponCreateInfo {
+        RgRobot *robot;
+        int side;
+        RgGeomGroup *shotGeoms;
+        RgGeomGroup *atkGeoms;
+    } weaponInfo;
+    void *geometry;
+    struct RgWeaponEssenceCommon *weaponEssence;
+    int side;
+
+    typedef struct RgWeapon RgWeapon;
+    typedef struct RgWeaponUnArmedEssence RgWeaponUnArmedEssence;
+
+    extern RgGeomPoint *RgRobotGetGeom(RgRobot *robot);
+    extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
+    extern RgRobotControl *CreateRgRobotControlNul(RgRobot *robot);
+    extern void DisposeRgRobotControl(RgRobotControl *pControl);
+    extern void RgRobotSetWeapon(RgStatus *robot, int side, int weaponID);
+    extern void RgRobotSetSpareWeapon(RgStatus *robot, int side, int weaponID);
+    extern RgWeaponUnArmedEssence *RgWeaponEssCastToUnArmed(
+        struct RgWeaponEssenceCommon *essence);
+    extern RgWeapon *CreateRgWeaponFromEssence(
+        struct RgWeaponEssenceCommon *essence,
+        struct RgWeaponCreateInfo *info);
+
+    if (pPlayer == 0 || pDat == 0) {
+        assert_prog(D_00A52720, D_00A52708, 64);
+    }
+    geometry = RgRobotGetGeom(pPlayer->robot);
+    RgGeomPointSetPos(geometry, essence->position);
+    RgGeomRobotSetDir(geometry, essence->direction);
+    if (pPlayer->control != 0) {
+        DisposeRgRobotControl(pPlayer->control);
+        pPlayer->control = 0;
+    }
+    pPlayer->traceCamera = 0;
+    side = 0;
+    pPlayer->control = CreateRgRobotControlNul(pPlayer->robot);
+    do {
+        weaponInfo.robot = pPlayer->robot;
+        weaponInfo.shotGeoms = pPlayer->shotGeoms;
+        weaponInfo.atkGeoms = pPlayer->atkGeoms;
+        weaponEssence = essence->weaponEssence[side];
+        weaponInfo.side = side;
+        if (weaponEssence != 0 &&
+            (side != 2 || RgWeaponEssCastToUnArmed(weaponEssence) == 0)) {
+            RgRobotSetWeapon((RgStatus *)pPlayer->robot, side,
+                            (int)CreateRgWeaponFromEssence(weaponEssence,
+                                                          &weaponInfo));
+        }
+        weaponEssence = essence->spareWeaponEssence[side];
+        if (weaponEssence != 0 &&
+            (side != 2 || RgWeaponEssCastToUnArmed(weaponEssence) == 0)) {
+            RgRobotSetSpareWeapon((RgStatus *)pPlayer->robot, side,
+                                  (int)CreateRgWeaponFromEssence(
+                                      weaponEssence, &weaponInfo));
+        }
+        side++;
+    } while (side < 3);
+}
 
 static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat);
 

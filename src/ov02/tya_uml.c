@@ -15,6 +15,43 @@ extern char db_fileno_path[];
 extern s16 *tbl;
 extern void tyaUmlDispInit2(u8 *work_buffer);
 
+typedef struct TyaUmlDispParam {
+    int resource_id;
+    u8 unmodeled_04[4];
+    s16 render_x;
+    s16 render_y;
+    s16 render_width;
+    s16 render_height;
+    u64 color;
+    s16 clip_x;
+    s16 clip_y;
+    s16 clip_width;
+    s16 clip_height;
+    int loaded_resource_id;
+    u8 unmodeled_24[4];
+    u8 render_pending;
+} TyaUmlDispParam;
+
+typedef struct TyaUmlRenderSize {
+    u8 unmodeled_00[4];
+    s16 width;
+    s16 height;
+} TyaUmlRenderSize;
+
+typedef struct TyaUmlGsPacket {
+    XglPacket *packet;
+    u8 unmodeled_04[0x28];
+    u64 commands[4];
+} TyaUmlGsPacket;
+
+extern TyaUmlRenderSize sRender;
+static void tyaUmlDispType3(TyaUmlDispParam *parameter);
+extern void tyaUmlDispType3Sub0(void *context, void *argument);
+extern void xglFontPrintExtFunc(unsigned int flags,
+                                void (*draw)(void *context, void *argument),
+                                void *argument);
+extern const char D_00A13380[];
+
 /*
  * The parser cursor mark() and tail() read from: only the two columns they
  * use are evidenced, so the rest of the struct stays unmodeled.
@@ -109,9 +146,42 @@ static void texture_trans(XglPacket **packet, TyaUmlImage *texture)
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispType3Sub0);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispType3Sub1);
+static void tyaUmlDispType3Sub1(void *context, void *argument)
+{
+    TyaUmlGsPacket *command = context;
+    u64 packed_dimensions;
+    u64 *command_words;
+    s16 width = sRender.width;
+    s16 height = sRender.height;
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispType3);
+    packed_dimensions = ((u64)(width - 1) << 16) |
+                        ((u64)(height - 1) << 48);
+    command_words = command->commands;
+    command_words[0] = 0x1000000000008001ULL;
+    command_words[1] = 14;
+    command_words[2] = packed_dimensions;
+    command_words[3] = 64;
+    sceVif1PkAddDirectDataN(command->packet, command_words, 2);
+}
+
+static void tyaUmlDispType3(TyaUmlDispParam *parameter)
+{
+    int render_x = parameter->render_x - 1792;
+    int render_y = parameter->render_y - 1824;
+    int x;
+    int y;
+
+    parameter->render_pending = 0;
+    xglFontPrintExtFunc((unsigned int)(parameter->color + 1),
+                        tyaUmlDispType3Sub0, parameter);
+    xglFontPrint(0, 0, (int)(parameter->color + 15), D_00A13380);
+
+    x = render_x - parameter->clip_x;
+    y = render_y - parameter->clip_y;
+    xglFontPrint(x, y, (int)(parameter->color + 15), buffer + 96);
+    xglFontPrintExtFunc((unsigned int)(parameter->color + 1),
+                        tyaUmlDispType3Sub1, parameter);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispMain);
 
@@ -186,7 +256,21 @@ INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", disp_index);
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDatabaseMain);
 
-INCLUDE_ASM("asm/nonmatchings/ov02/tya_uml", tyaUmlDispParamReset);
+int tyaUmlDispParamReset(TyaUmlDispParam *parameter)
+{
+    parameter->resource_id = -1;
+    parameter->render_x = 0;
+    parameter->render_y = 0;
+    parameter->render_width = 512;
+    parameter->render_height = 448;
+    parameter->color = 0x00FFFF00ULL;
+    parameter->clip_x = 0;
+    parameter->clip_y = 0;
+    parameter->clip_width = 512;
+    parameter->clip_height = 448;
+    parameter->loaded_resource_id = -1;
+    return 0;
+}
 
 extern TyaUmlImage image[8];
 

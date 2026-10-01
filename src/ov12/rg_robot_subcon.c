@@ -15,6 +15,28 @@ extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
 extern void XrgNormalizeVector(RgVector destination, RgVector source);
 extern void XrgScaleVectorXYZ(RgVector destination, RgVector source,
                               float scale);
+extern float atan2f(float y, float x);
+extern void RgGeomRobotSetRotate(RgGeom *geom, float rotate);
+extern float RgGeomRobotGetRotate(const RgGeom *geom);
+extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
+/* The owning geometry-point TU defines this type; this TU only passes it. */
+typedef struct RgPointVector RgPointVector;
+extern void __RgGeomPointGetPos(RgGeomPoint *point,
+                                RgPointVector *destination,
+                                const char *source_file, int source_line);
+extern int XrgQuantAngle(float angle);
+extern const int s_aeAdvMotID_0[8];
+extern const int s_aeDashMotID_1[8];
+extern int XrgQuantAngle4(float angle);
+extern void XrgSubVector(RgVector destination, RgVector first,
+                         RgVector second);
+extern void RgGeomRobotSetRotVel(RgGeom *geom, float rotVel);
+extern void RgError(const char *message, const char *source_file, int line,
+                    ...);
+/* ov12:0x00a51e38 contains "0 <= nDir8 && nDir8 < 8". */
+extern const char D_00A51E38[];
+/* ov12:0x00a51e50 contains "unknown damage dir %d". */
+extern const char D_00A51E50[];
 
 void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction, float scale)
 {
@@ -50,16 +72,43 @@ void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
                          RgGeomRobotGetRotVel((RgGeom *)geometry) * rotational_scale);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_subcon", RgRobSubTargetting);
+float RgRobSubTargetting(RgGeomPoint *geometry,
+                         RgPointVector *targetPosition, float speed,
+                         float turnRate)
+{
+    RgVector position;
+    RgVector direction;
+    float angle;
 
-/* Opaque here: rg_geom_point.c (ov12/tu052) owns the RgPointVector definition. */
-typedef struct RgPointVector RgPointVector;
-extern float RgRobSubTargetting(RgGeomPoint *geometry,
-                                RgPointVector *targetPosition, float speed,
-                                float turnRate);
-extern void __RgGeomPointGetPos(RgGeomPoint *point,
-                                RgPointVector *destination,
-                                const char *source_file, int source_line);
+    __RgGeomPointGetPos(geometry, (RgPointVector *)position, D_00A51E18, 51);
+    XrgSubVector(direction, (float *)targetPosition, position);
+    angle = atan2f(direction[0], direction[2]);
+    angle -= RgGeomRobotGetRotate((RgGeom *)geometry);
+
+    if (angle > 3.1415927f) {
+        angle -= 6.2831855f;
+        while (angle > 3.1415927f) {
+            angle -= 6.2831855f;
+        }
+    }
+    if (angle < -3.1415927f) {
+        do {
+            angle += 6.2831855f;
+        } while (angle < -3.1415927f);
+    }
+
+    RgGeomRobotSetRotVel((RgGeom *)geometry, 0.0f);
+    if (angle < 0.0f) {
+        RgGeomRobotSetRotVel((RgGeom *)geometry,
+            (-speed < angle / turnRate)
+                ? angle / turnRate : -speed);
+    } else if (angle > 0.0f) {
+        RgGeomRobotSetRotVel((RgGeom *)geometry,
+            speed < angle / turnRate
+                ? speed : angle / turnRate);
+    }
+    return angle;
+}
 
 float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
                      float speed, float turnRate)
@@ -75,9 +124,34 @@ float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
     return 0.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_subcon", RgRobSubDirTo);
+void RgRobSubDirTo(RgGeomPoint *geometry, RgVector direction)
+{
+    if (geometry == 0) {
+        assert_prog(D_00A51E08, D_00A51E18, 81);
+    }
+    if (direction[0] == 0.0f && direction[2] == 0.0f) {
+        return;
+    }
+    RgGeomRobotSetRotate((RgGeom *)geometry, atan2f(direction[0], direction[2]));
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_subcon", RgRobSubGetAdvanceMot);
+int RgRobSubGetAdvanceMot(RgGeomPoint *geometry, int dash)
+{
+    RgVector velocity;
+    float rotate;
+    int direction;
+
+    rotate = RgGeomRobotGetRotate((RgGeom *)geometry);
+    RgGeomPointGetVel(geometry, velocity);
+    direction = XrgQuantAngle(atan2f(velocity[0], velocity[2]) - rotate);
+    if ((unsigned int)direction >= 8) {
+        assert_prog(D_00A51E38, D_00A51E18, 122);
+    }
+    if (dash != 0) {
+        return s_aeDashMotID_1[direction];
+    }
+    return s_aeAdvMotID_0[direction];
+}
 
 extern float RgGeomRobotGetRotForce(const RgGeom *geom);
 
@@ -99,4 +173,26 @@ int RgRobSubGetRollMotion(const RgGeom *geom)
     return -1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_subcon", RgRobSubGetDamageMotion);
+int RgRobSubGetDamageMotion(RgGeomPoint *geometry, RgVector direction)
+{
+    float angle;
+    int damageDirection;
+
+    angle = atan2f(direction[0], direction[2]);
+    angle -= RgGeomRobotGetRotate((RgGeom *)geometry);
+    angle -= 0.7853982f;
+    damageDirection = XrgQuantAngle4(angle);
+    switch (damageDirection) {
+    case 0:
+        return 23;
+    case 1:
+        return 24;
+    case 2:
+        return 25;
+    case 3:
+        return 26;
+    default:
+        RgError(D_00A51E50, D_00A51E18, 155, XrgQuantAngle4(angle));
+        return -1;
+    }
+}

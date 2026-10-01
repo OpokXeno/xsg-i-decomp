@@ -42,7 +42,18 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SetTest);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SetRegAD);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", ResetRGBA);
+extern short BoxRGBA[4];
+
+static void ResetRGBA(void)
+{
+    int index;
+    short reset_color;
+
+    reset_color = 0x80;
+    for (index = 3; index >= 0; index--) {
+        BoxRGBA[index] = reset_color;
+    }
+}
 
 /* ov11:0x00a007e0. Stores the four caller-supplied components in the
  * shared untextured box color state (original LOCAL data symbol
@@ -155,21 +166,71 @@ static void RES_Load(void)
     ResData = (CasinoResourcePrefix *)CASINO_RES_BUFFER;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", AddCoin);
+/* The coin balance is the word at offset 0x50 in the persistent save block. */
+struct CasinoSaveWork {
+    unsigned char unmodeled_00[0x50];
+    int coin_balance;
+};
+extern int dataMoneyBoxInc(int amount);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlGetPic);
+static int AddCoin(int amount)
+{
+    struct CasinoSaveWork *save;
+    int total;
+    int excess;
+
+    save = (struct CasinoSaveWork *)SaveWork;
+    total = save->coin_balance + amount;
+    if (total > 9999999) {
+        excess = total - 9999999;
+        dataMoneyBoxInc(excess * 8);
+        amount -= excess;
+    }
+    save = (struct CasinoSaveWork *)SaveWork;
+    save->coin_balance += amount;
+    return 1;
+}
+
+extern short *realpt[18];
+extern int D_00A0DD34[];
+
+static short SlGetPic(int reel, int positionOffset, int row)
+{
+    int position;
+    int pictureIndex;
+    short *pictures;
+
+    position = D_00A0DD34[reel] / 64;
+    pictures = realpt[reel + row * 3];
+    position -= positionOffset;
+    pictureIndex = position + 2;
+    if (pictureIndex < 0) {
+        pictureIndex = position + 23;
+    }
+    if (pictureIndex >= 21) {
+        pictureIndex -= 21;
+    }
+    return pictures[pictureIndex];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlRealDraw);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", decprint);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlCashPrint);
+static void decprint(int value, int digits, int x, int y);
+extern int D_00A0DDC8;
+
+static void SlCashPrint(void)
+{
+    decprint(((struct CasinoSaveWork *)SaveWork)->coin_balance, -1, 440, 309);
+    decprint(D_00A0DDC8, -1, 448, 373);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", pay_print);
 
 /* ov11:0x00a01060. Draws the three-digit slot total stake at its fixed
  * screen position through decprint (ov11:0x00a00de0, LOCAL asm sibling). */
-static int decprint(int value, int digits, int x, int y);
+static void decprint(int value, int digits, int x, int y);
 extern short D_00A0DD74;
 
 static void total_pay_print(void)
@@ -177,11 +238,53 @@ static void total_pay_print(void)
     decprint(D_00A0DD74, 3, 0x1DC, 0x1B);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", check_mode);
+static int check_mode(void)
+{
+    int index;
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlPayWindowPrint);
+    for (index = 0; index < 3; index++) {
+        if (Gwork[index + 8] == 1) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", check_spin);
+extern unsigned char pay_window[2][28];
+extern unsigned char pay_window_rect_4[5][16];
+static void MakeSprite(void *sprite, void *rect);
+static void SetDrawStatus(int mode, int enable);
+
+static void SlPayWindowPrint(void)
+{
+    int rectIndex;
+    int windowIndex;
+
+    SetDrawStatus(0, 0);
+    windowIndex = check_mode() != 1;
+    for (rectIndex = 0; rectIndex < 5; rectIndex++) {
+        MakeSprite(pay_window[windowIndex], pay_window_rect_4[rectIndex]);
+    }
+}
+
+extern int status_keep_5;
+
+static int check_spin(void)
+{
+    int active;
+
+    active = check_mode();
+    if (active == 0) {
+        status_keep_5 = 0;
+        return active;
+    }
+    if (active != status_keep_5) {
+        status_keep_5 = active;
+        return 1;
+    }
+    status_keep_5 = active;
+    return 2;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SpinBtnPrint);
 
@@ -335,7 +438,25 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgFwdGuidPt);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgStopBtnPrint);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgAllStop);
+extern short D_00A0DDE2[];
+
+static void NgAllStop(void)
+{
+    int forced_stop;
+    short *reel_status;
+    int remaining;
+
+    forced_stop = 3;
+    reel_status = D_00A0DDE2;
+    remaining = 8;
+    do {
+        if (reel_status[2] == 0) {
+            reel_status[2] = forced_stop;
+        }
+        reel_status += 4;
+    } while (--remaining >= 0);
+    RES_SoundEffectStop(47);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgCheckReal);
 
@@ -485,13 +606,56 @@ static int PoGetMark(int cardValue)
     return mark;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoGetBase);
+static short PoGetBase(int cardValue);
+
+static short PoGetBase(int cardValue)
+{
+    short base;
+
+    base = 0;
+    if (cardValue != 1) {
+        if (cardValue >= 2) {
+            switch (cardValue) {
+            case 2:
+                base = 26;
+                break;
+            case 3:
+                base = 39;
+                break;
+            }
+        }
+    } else {
+        base = 13;
+    }
+    return base;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoSortCard);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoMultiChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoFlushChk);
+struct PokerHandWork {
+    unsigned char unmodeled_00[0x1A2];
+    short cards[5];
+};
+
+static int PoFlushChk(void)
+{
+    struct PokerHandWork *hand;
+    short *card;
+    int suit;
+    int index;
+
+    hand = (struct PokerHandWork *)Gwork;
+    card = &hand->cards[1];
+    suit = PoGetMark(hand->cards[0]);
+    for (index = 1; index < 5; index++) {
+        if (suit != PoGetMark(*card++)) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 /* PoMultiChk classifies the sorted hand's rank multiplicities and
  * PoFlushChk classifies same-suit runs. dprintf is the overlay's debug
@@ -583,7 +747,29 @@ static int PoChk7(void)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk8);
+extern const char D_00A0C0E8[];
+
+static int PoChk8(void)
+{
+    struct PokerHandWork *hand;
+    int first;
+
+    if (PoFlushChk() == 0) {
+        return 0;
+    }
+    hand = (struct PokerHandWork *)Gwork;
+    first = hand->cards[0];
+    if (hand->cards[1] != first + 1 ||
+        hand->cards[2] != first + 2 ||
+        hand->cards[3] != first + 3) {
+        return 0;
+    }
+    if (hand->cards[4] == first + 4) {
+        dprintf(D_00A0C0E8);
+        return 8;
+    }
+    return 0;
+}
 
 /* ov11:0x00a060e8. Reports category 9 when PoFlushChk finds a flush and
  * the sorted hand's ranks, read from the Gwork work block, form a
@@ -594,7 +780,6 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk8);
  * this run, reports 0. */
 #define POKER_HAND_RANK_INDEX 0xD1 /* short index; 0x1A2 / sizeof(short) */
 
-static short PoGetBase(short cardValue);
 extern const char D_00A0C100[];
 
 static int PoChk9(void)

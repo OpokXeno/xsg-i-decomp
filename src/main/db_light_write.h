@@ -9,6 +9,9 @@
 
 void VW_getCursor(HomogeneousVector *destination);
 
+/* The studio-camera table accessor is defined in main/tu104. */
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+
 /*
  * updateCursorMode2 supplies the cursor and an actor position here.  A
  * candidate is eligible only when its xyz distance is below radius; the

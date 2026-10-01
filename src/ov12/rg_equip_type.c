@@ -10,8 +10,26 @@ extern void assert_prog(const char *expression, const char *source_file,
 
 extern const char D_00A53E98[]; /* "pEquip != NIL" */
 extern const char D_00A53E80[]; /* "../rg_equip_type.euc.c" */
+extern const char D_00A53E10[];
+extern const char D_00A53EC8[];
+extern const char D_00A53F90[]; /* "left" */
+extern const char D_00A53F98[]; /* "right" */
+extern const char D_00A53FA0[]; /* "back" */
+extern const char D_00A53FA8[];
+extern const int s_aePosToJntID[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipPosToJntID);
+#define RG_EQUIP_TYPE_COUNT 3
+
+int RgEquipPosToJntID(int ePos)
+{
+    if ((unsigned int)ePos + 1u >= 9u) {
+        assert_prog(D_00A53E10, D_00A53E80, 50);
+    }
+    if (ePos == -1) {
+        return -1;
+    }
+    return s_aePosToJntID[ePos];
+}
 
 void InitRgEquip(RgEquipRecord *pEquip)
 {
@@ -28,11 +46,39 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipAddMount);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipSetDefault);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipIsEquipable);
+int RgEquipIsEquipable(RgEquipRecord *pEquip, int eType)
+{
+    int mountIndex;
+
+    if (pEquip == 0) {
+        assert_prog(D_00A53E98, D_00A53E80, 131);
+    }
+    for (mountIndex = 0; mountIndex < pEquip->mountCount; mountIndex++) {
+        if (pEquip->mounts[mountIndex].type == eType) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipCheckConfrict);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipTypeString);
+const char *RgEquipTypeString(int eType)
+{
+    if ((unsigned int)eType >= RG_EQUIP_TYPE_COUNT) {
+        assert_prog(D_00A53EC8, D_00A53E80, 276);
+    }
+    switch (eType) {
+    case 0:
+        return D_00A53F90;
+    case 1:
+        return D_00A53F98;
+    case 2:
+        return D_00A53FA0;
+    default:
+        return D_00A53FA8;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", _GetMountData);
 

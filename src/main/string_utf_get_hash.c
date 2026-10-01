@@ -120,4 +120,54 @@ SceneString *loadConstString(const char *bytes, int length)
     return (SceneString *)entry;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/string_utf_get_hash", loadConstString2);
+SceneString *loadConstString2(const char *bytes, int length)
+{
+    unsigned int bucket_index;
+    ConstString *entry;
+
+    if (constStringTable == 0) {
+        ConstString **bucket;
+        int remaining = 511;
+
+        constStringTable = xmalloc(2048, 2);
+        bucket = &constStringTable[511];
+        do {
+            *bucket = 0;
+            bucket--;
+            remaining--;
+        } while (remaining >= 0);
+    }
+
+    if (length == 0)
+        return 0;
+    if (length < 0)
+        length = strlen(bytes);
+
+    bucket_index = StringUtf_getHash(bytes, length) & 0x1ff;
+    entry = constStringTable[bucket_index];
+    while (entry != 0) {
+        if (entry->length == length &&
+            memcmp(entry->bytes, bytes, length) == 0)
+            break;
+        entry = entry->next;
+    }
+    if (entry != 0)
+        return (SceneString *)entry;
+
+    entry = xmalloc(length + 13, 20);
+    entry->bytes = entry->data;
+    memcpy(entry->bytes, bytes, length);
+    entry->bytes[length] = '\0';
+    entry->length = length;
+
+    {
+        ConstString *previous_head = constStringTable[bucket_index];
+
+        entry->hash = bucket_index;
+        constStringCount++;
+        entry->next = previous_head;
+        constStringTable[bucket_index] = entry;
+    }
+
+    return (SceneString *)entry;
+}

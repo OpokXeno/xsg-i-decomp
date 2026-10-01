@@ -22,12 +22,29 @@ extern void *RgHeapAlloc(void *heap, unsigned int size,
 static void _InitRgGeomPoly(RgGeom *geom);
 
 /*
+ * XrgApplyVector is an original function of a neighbouring xrg_* OV12
+ * translation unit (xrg_rand_int.c), already recovered as C.
+ */
+extern void XrgApplyVector(RgVector destination, RgMatrix matrix, RgVector vector);
+
+/*
  * The collision data a poly-type RgGeom points at (RgGeomPolySetColiData,
  * RgGeomPolyGetData): a distinct object this TU never dereferences, so its
  * layout is left incomplete here rather than restated from the TU that owns
  * it (src/ov12/rg_colidata.c).
  */
 typedef struct RgColiData RgColiData;
+
+/*
+ * RgColiDataVsBall is an original function of the collision-data OV12
+ * translation unit (rg_colidata.c), already recovered as C there. It takes
+ * its second and third arguments as opaque buffers there (void *pArg,
+ * void *pResult), the same shape RgGeomPolyCheckBall builds and forwards.
+ * RgGeomPolyCheckBall reads a hit flag out of the call (tested right after
+ * the jal in the original object), so this TU declares the return as int
+ * rather than the void rg_colidata.c itself never uses.
+ */
+extern int RgColiDataVsBall(RgColiData *pPoly, void *pArg, void *pResult);
 
 /*
  * The per-poly window of a Poly-type RgGeom: not RgGeom's own layout (that
@@ -58,10 +75,13 @@ typedef struct RgGeomPoly {
  * ov12:0x00a551a8 contains the assertion expression "pData != NIL".
  * ov12:0x00a551b8 contains the source filename "../rg_geom_poly.euc.c".
  * ov12:0x00a551d0 contains the assertion expression "pPoly != NIL".
+ * ov12:0x00a551e0 contains the assertion expression
+ * "pPoly != NIL && pOrgArg != NIL && pResult != NIL".
  */
 extern const char D_00A551A8[];
 extern const char D_00A551B8[];
 extern const char D_00A551D0[];
+extern const char D_00A551E0[];
 
 RgGeom *CreateRgGeomPoly(void);
 
@@ -82,5 +102,7 @@ void RgGeomPolySetLocal(RgGeom *geom, const RgMatrix local);
 void RgGeomPolyGetLocal(const RgGeom *geom, RgMatrix destination);
 
 void RgGeomPolyGetInvLocal(const RgGeom *geom, RgMatrix destination);
+
+int RgGeomPolyCheckBall(RgGeom *pPoly, float *pOrgArg, float *pResult);
 
 #endif /* SRC_OV12_RG_GEOM_POLY_H */

@@ -121,4 +121,18 @@ int XrgPadIsSelectLevelLR(void)
     return (PadData[s_nPadID].prefix.half_28 & (PAD_L1 | PAD_R1)) == (PAD_L1 | PAD_R1);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_pad", XrgPadIsLR);
+int XrgPadIsLR(void)
+{
+    u16 pressed;
+    u16 held;
+
+    pressed = PadData[s_nPadID].prefix.half_2a;
+    held = PadData[s_nPadID].prefix.half_28;
+    if ((pressed & PAD_L1) != 0 && (held & PAD_R1) != 0) {
+        return 1;
+    }
+    if ((held & PAD_L1) != 0 && (pressed & PAD_R1) != 0) {
+        return 1;
+    }
+    return 0;
+}

@@ -149,9 +149,24 @@ static void CAMERA_rotateSPL(int selection, JavaEnvironment *environment,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_rotateSPL__aFI);
+void Java_xeno_Camera_rotateSPL__aFI(JavaEnvironment *environment,
+                                     CameraSplineRequest *arguments,
+                                     void *result)
+{
+    /* The VM supplies a result slot as the helper's fourth ABI argument, even
+     * though CAMERA_rotateSPL does not read it. */
+    ((void (*)(int, JavaEnvironment *, CameraSplineRequest *, void *))CAMERA_rotateSPL)(
+        0, environment, arguments, result);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_rotateSPL__aFIII);
+void Java_xeno_Camera_rotateSPL__aFIII(JavaEnvironment *environment,
+                                       CameraSplineRequest *arguments,
+                                       void *result)
+{
+    /* Keep forwarding the VM's unused result slot in the original ABI slot. */
+    ((void (*)(int, JavaEnvironment *, CameraSplineRequest *, void *))CAMERA_rotateSPL)(
+        1, environment, arguments, result);
+}
 
 void Java_xeno_Camera_setActive__Z(JavaEnvironment *environment,
                                    CameraSetActiveArgs *arguments, void *result)

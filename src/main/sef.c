@@ -2,6 +2,56 @@
 #include "shared.h"
 #include "sef.h"
 
+typedef struct SefActor {
+    unsigned int flags;
+    unsigned char unmodeled_004[0x824 - 4];
+    Matrix4 *accessoryMatrix;
+} SefActor;
+
+#define SEF_ACTOR_LIGHT_FLAG 0x00008000u
+#define SEF_BATTLE_ACTOR_MAX 24
+typedef struct SefBattleActor {
+    unsigned char unmodeled_000[0x80];
+    SefActor *actor;
+    unsigned char unmodeled_084[2];
+    short lightCount;
+    short hitSignal;
+    unsigned char unmodeled_08a[2];
+    short seSignal;
+    unsigned char unmodeled_08e[2];
+} SefBattleActor;
+
+typedef struct SefBattleActorTbl {
+    SefBattleActor actors[SEF_BATTLE_ACTOR_MAX];
+    unsigned char unmodeled_d80[0x10];
+    int count;
+    unsigned char unmodeled_d94[0x0c];
+} SefBattleActorTbl;
+extern SefBattleActorTbl _battleActor[];
+
+#define SEF_LINE_DATA_RECORD_SIZE 0x820
+#define SEF_LINE_DATA_COUNT 0x80
+typedef struct SefLineDataEntry {
+    unsigned char unmodeled_000[2];
+    unsigned short inUse;
+    unsigned char unmodeled_004[SEF_LINE_DATA_RECORD_SIZE - 4];
+} SefLineDataEntry;
+typedef struct SefLineDataTable {
+    unsigned char unmodeled_000[0x810];
+    SefLineDataEntry entries[SEF_LINE_DATA_COUNT];
+} SefLineDataTable;
+extern unsigned char _lineData[];
+
+typedef struct GameLoopFlagsView {
+    unsigned char unmodeled_00[0x10];
+    int flags;
+} GameLoopFlagsView;
+extern GameLoopFlagsView GameLoopState;
+#define SEF_DRAW_FLAG_PENDING 0x04000000
+
+/* The freed-scheduler helper is declared after an assembly placeholder below. */
+extern void sefFreeScheduler(unsigned int scheduler_index);
+
 typedef struct SefKey3 {
     short frame;
     short value;
@@ -922,7 +972,26 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyLocalData);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitLineData);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefAllocLineData);
+/*
+ * sefAllocLineData (main:0x002e3bc8): scans the pool for the first unused
+ * line-data record, marks its in-use halfword and returns its index, or -1
+ * when every record is taken.
+ */
+static int sefAllocLineData(void)
+{
+    SefLineDataTable *lineData = (SefLineDataTable *)_lineData;
+    SefLineDataEntry *entry = lineData->entries;
+    int line_index;
+
+    for (line_index = 0; line_index < SEF_LINE_DATA_COUNT; line_index++) {
+        if (entry->inUse == 0) {
+            entry->inUse = 1;
+            return line_index;
+        }
+        entry++;
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeLineData);
 
@@ -969,11 +1038,50 @@ static void sefInitEffectData(EffectData *effect, int owner, int effect_no, int 
     effect->flags = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyEffectData);
+static void sefFreeLineData(int line_index);
+static void sefFreeEffectData(unsigned char *effect, unsigned int index);
+
+/*
+ * sefDestroyEffectData (main:0x002e4a50): when `effect`'s own owner (+0x20,
+ * EffectData) is set, releases all 32 of its line-data handles (the
+ * EffectData's own leading 0x20 bytes, one signed line index per byte,
+ * sefFreeEffectData below) via sefFreeEffectData, then always clears owner
+ * to 0. sefExecEffectData, sefFreeSchedulerCf, sefFreeScheduler and
+ * sefExecScheduler (all still assembly except sefFreeSchedulerCf) are its
+ * callers.
+ */
+static void sefDestroyEffectData(unsigned char *effect)
+{
+    EffectData *effectData = (EffectData *)effect;
+    int index;
+
+    if (effectData->owner != 0) {
+        for (index = 0; index < 0x20; index++) {
+            sefFreeEffectData(effect, index);
+        }
+    }
+    effectData->owner = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefAllocEffectData);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeEffectData);
+/*
+ * sefFreeEffectData (main:0x002e4b38): for a valid `index` (< 32) whose
+ * line-data handle byte is not already -1, releases that line via
+ * sefFreeLineData and resets the handle to -1. sefDestroyEffectData above
+ * and sefExecEffectData (still assembly) are its callers.
+ */
+static void sefFreeEffectData(unsigned char *effect, unsigned int index)
+{
+    if (index < 0x20) {
+        signed char *handle = (signed char *)effect + index;
+
+        if (*handle >= 0) {
+            sefFreeLineData(*handle);
+            *handle = -1;
+        }
+    }
+}
 
 /*
  * sefCheckFinish (main:0x002e4b80): when `condition` carries the 0x4000
@@ -1030,7 +1138,29 @@ void sefFreeSchedulerCf(SchedulerState *scheduler)
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefFreeScheduler);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDestroyScriptScheduler);
+/*
+ * sefDestroyScriptScheduler (main:0x002e52b8): like sefDestroyScriptScheduler2
+ * below, but matches only script_index (not also a task_index) against every
+ * scheduler table record's own script_id. scDestroyScript (still assembly in
+ * a different TU) is its only caller.
+ */
+void sefDestroyScriptScheduler(int script_index)
+{
+    SchedulerState *scheduler;
+    ScriptBinding *record;
+    int index;
+
+    index = 0;
+    scheduler = (SchedulerState *)_scheduler;
+    record = &scheduler->scriptBinding;
+    do {
+        if (record->script_id == script_index) {
+            sefFreeScheduler(index);
+        }
+        index++;
+        record = (ScriptBinding *)((unsigned char *)record + 0xab0);
+    } while (index < 0x80);
+}
 
 extern void sefFreeScheduler(unsigned int scheduler_index);
 
@@ -1114,7 +1244,39 @@ int sefIsDeadSchduler(unsigned int scheduler_index)
     return *(int *)(_scheduler + 0x6b0 + scheduler_index * 0xab0) == 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetReverseDir);
+extern short _revDirZ;
+extern int revEft_3[10];
+
+/*
+ * sefSetReverseDir (main:0x002e6380): when `category` falls in [0x18,0x20)
+ * (categories 0x18..0x1F), normalizes `effect_id` (subtracting 0x64 for the
+ * [0xB54,0xBB7) sub-range) and looks it up in the 10-entry revEft_3 table
+ * (config/symbols/main.txt); a match sets _revDirZ and returns 1, otherwise
+ * _revDirZ is cleared and the function returns 0. sefExecScheduler (still
+ * assembly in this TU) is its only caller.
+ */
+static int sefSetReverseDir(int effect_id, int category)
+{
+    int normalized_id;
+    unsigned int index;
+
+    if ((unsigned int)(category - 0x18) < 8) {
+        normalized_id = effect_id;
+        if ((unsigned int)(effect_id - 0xB54) < 0x63) {
+            normalized_id = effect_id - 0x64;
+        }
+
+        for (index = 0; index < 10; index++) {
+            if (normalized_id == revEft_3[index]) {
+                _revDirZ = 1;
+                return 1;
+            }
+        }
+    }
+
+    _revDirZ = 0;
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefCreateBattleActorTbl);
 
@@ -1122,15 +1284,113 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitBattlePrm);
 
 ACCEPTED_ASM("src/main/sef", sefCaclAllTarget);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetLightFlag);
+/*
+ * sefSetLightFlag (main:0x002e6738): walks every listed battle effect actor
+ * and mirrors its record's light count into the actor's own flag word, so an
+ * actor that no longer carries a light loses the bit again. LOCAL in the
+ * original; sefAddLightActor, which keeps the counts, is its only caller.
+ */
+static void sefSetLightFlag(void)
+{
+    SefBattleActor *record;
+    SefActor *actor;
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetHitSignal);
+    for (i = 0; i < _battleActor->count; i++) {
+        record = &_battleActor->actors[i];
+        actor = record->actor;
+        if (actor != 0 && record->lightCount > 0) {
+            actor->flags |= SEF_ACTOR_LIGHT_FLAG;
+        } else {
+            actor->flags &= ~SEF_ACTOR_LIGHT_FLAG;
+        }
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsHitActor);
+/*
+ * sefSetHitSignal (main:0x002e67a0): raises the hit signal counter of the listed
+ * battle effect actor whose handle is `actor`, and does nothing for a handle
+ * the table does not list or for a null one. LOCAL in the original.
+ */
+static void sefSetHitSignal(SefActor *actor)
+{
+    SefBattleActor *record;
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetSeSignal);
+    if (actor != 0) {
+        for (i = 0; i < _battleActor->count; i++) {
+            record = &_battleActor->actors[i];
+            if (record->actor == actor) {
+                record->hitSignal++;
+                break;
+            }
+        }
+    }
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefIsSeSignal);
+/*
+ * sefIsHitActor (main:0x002e6808): reports whether the battle effect actor
+ * table holds a hit signal for `actor`. sefSetHitSignal (main:0x002e67a0) is
+ * the counter's only writer, and it finds its record the same way. A handle
+ * the table does not list, and a null handle, report no signal.
+ */
+int sefIsHitActor(SefActor *actor)
+{
+    SefBattleActor *record;
+    int i;
+
+    if (actor != 0) {
+        for (i = 0; i < _battleActor->count; i++) {
+            record = &_battleActor->actors[i];
+            if (record->actor == actor) {
+                return record->hitSignal != 0;
+            }
+        }
+    }
+    return 0;
+}
+
+/*
+ * sefSetSeSignal (main:0x002e6860): raises the sound-effect signal counter of the listed
+ * battle effect actor whose handle is `actor`, and does nothing for a handle
+ * the table does not list or for a null one. LOCAL in the original.
+ */
+static void sefSetSeSignal(SefActor *actor)
+{
+    SefBattleActor *record;
+    int i;
+
+    if (actor != 0) {
+        for (i = 0; i < _battleActor->count; i++) {
+            record = &_battleActor->actors[i];
+            if (record->actor == actor) {
+                record->seSignal++;
+                break;
+            }
+        }
+    }
+}
+
+/*
+ * sefIsSeSignal (main:0x002e68c8): the sound-effect counterpart of
+ * sefIsHitActor above, reading the second counter of the same record, the one
+ * sefSetSeSignal (main:0x002e6860) increments.
+ */
+int sefIsSeSignal(SefActor *actor)
+{
+    SefBattleActor *record;
+    int i;
+
+    if (actor != 0) {
+        for (i = 0; i < _battleActor->count; i++) {
+            record = &_battleActor->actors[i];
+            if (record->actor == actor) {
+                return record->seSignal != 0;
+            }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefAddLightActor);
 
@@ -1174,9 +1434,63 @@ void sefInitEffect(void)
     _initialize = 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffectBattle);
+typedef struct {
+    unsigned char unmodeled_00[0x2c];
+    void (*battleDrawCallback)(void);              /* +0x2c */
+    unsigned char unmodeled_30[0x38 - 0x30];
+    void (*cfDrawCallback)(void);                    /* +0x38 */
+} SefRenderState;
+extern SefRenderState sRender;
+typedef struct {
+    unsigned char unmodeled_00[0x38];
+    int allocSize;                          /* +0x38 */
+    unsigned char unmodeled_3c[0x10c - 0x3c];
+    short pendingHandle;                      /* +0x10c */
+} SefMemRes;
+extern SefMemRes _srsMemRes;
+extern short _sefBattleMode;
+extern void sdvInitAlters(void);
+extern void sefDestroyEffect(void);
+extern void sefDestroyEffectCf(void);
+extern void sresLoadCfMemory(void);
+extern void sefDrawEffect2D(void);
+extern void *smAlloc(unsigned int size);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefInitEffectCf);
+/*
+ * sefInitEffectBattle (main:0x002e6c08): enters battle mode (_sefBattleMode
+ * = 1), resets the alter and effect subsystems, installs sefDrawEffect2D as
+ * the battle draw callback and clears the cf one, then allocates the
+ * 0x40000-byte effect memory block if it is not already held.
+ */
+void sefInitEffectBattle(void)
+{
+    _sefBattleMode = 1;
+    sdvInitAlters();
+    sefDestroyEffect();
+
+    sRender.battleDrawCallback = sefDrawEffect2D;
+    sRender.cfDrawCallback = 0;
+    if (_srsMemRes.allocSize == 0) {
+        _srsMemRes.pendingHandle = -1;
+        _srsMemRes.allocSize = (int)smAlloc(0x40000);
+    }
+}
+
+/*
+ * sefInitEffectCf (main:0x002e6c78): the character-file counterpart of
+ * sefInitEffectBattle above -- leaves battle mode (_sefBattleMode = 0),
+ * resets the cf-side effect and memory subsystems, then installs
+ * sefDrawEffect2D as the cf draw callback and clears the battle one.
+ */
+void sefInitEffectCf(void)
+{
+    _sefBattleMode = 0;
+    sefDestroyEffectCf();
+    sresLoadCfMemory();
+
+    sRender.battleDrawCallback = 0;
+    sRender.cfDrawCallback = sefDrawEffect2D;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetupPlayer);
 
@@ -1214,7 +1528,7 @@ extern void scDestroyScriptAll(void);
 extern void sdvDestroyAlters(void);
 extern void sdvInitAmbient(void);
 extern void sresFreeReloaderMemory(int reload_bgm);
-extern unsigned char _battleActor[];
+extern SefBattleActorTbl _battleActor[];
 extern int _sefLoadEftQue;
 void sefKillEffect(int effect_no);
 
@@ -1336,24 +1650,28 @@ void sefProgressEffect(int frame_count)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefDrawEffect);
+extern Matrix4 _invView;
+extern void svDrawScheduler(void);
+
+/*
+ * sefDrawEffect (main:0x002e71d0): while `_initialize` is set and
+ * GameLoopState's flags word does not already carry SEF_DRAW_FLAG_PENDING,
+ * recomputes the cached inverse-view matrix (_invView, sefCalcInvView) and
+ * tail-calls svDrawScheduler. nmlModelFlush/nmlModelFlushSub (a different
+ * TU) are its callers.
+ */
+void sefDrawEffect(void)
+{
+    if (_initialize != 0) {
+        if (!(GameLoopState.flags & SEF_DRAW_FLAG_PENDING)) {
+            sefCalcInvView(&_invView);
+            svDrawScheduler();
+        }
+    }
+}
 
 extern void svDrawScheduler3D(int flags);
 extern short _initialize;
-
-/*
- * GameLoopState (main VA 0x00338680, src/main/game_camera.c) is a
- * 0x2a030-byte global; only its +0x10 flags word is evidenced here (the
- * same field main/tu148 models as GameLoopFlagsPrefix, src/main/script.h).
- */
-typedef struct {
-    unsigned char unmodeled_00[0x10];
-    int flags;
-} GameLoopFlagsView;
-
-extern GameLoopFlagsView GameLoopState;
-
-#define SEF_DRAW_FLAG_PENDING 0x04000000
 
 /*
  * sefDrawEffect3D (main:0x002e7220): while `_initialize` is set and
@@ -1744,7 +2062,50 @@ void sefDeg2RadVector(Vector4 *dst, Vector4 *src)
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefMergeMatrixPos);
 
-INCLUDE_ASM("asm/main/nonmatchings/sef", sefLerpVectorB);
+/*
+ * sefLerpVectorB (main:0x002e7f88), identical in shape to sefLerpIVectorB
+ * below, but leaves the interpolated result as float lanes (no vftoi0)
+ * before storing it with sqc2. Reads two packed signed-halfword key records
+ * -- `first` and, 10 bytes later, `second` -- each with the R5900 unaligned
+ * doubleword ldl/ldr pair and widens the packed lanes to words with
+ * pcgth/pextlh (the one evidenced MMI packed-halfword widening idiom,
+ * user-authorized 2026-09-13: config/compiler-patterns.json CP-0169). Both
+ * widened records are converted to float (vitof0.xyzw) and linearly
+ * interpolated by `factor` (VF2 = VF1 + (VF2 - VF1) * factor, XYZ lanes
+ * only), then stored as the complete four-slot result at `dest`. No caller
+ * in this allocation.
+ */
+void sefLerpVectorB(void *first, Vector4 *dest, float factor)
+{
+    void *second = (char *)first + 10;
+
+    __asm__ __volatile__(
+        "mfc1 $9, %3\n\t"
+        "qmtc2.ni $9, $vf3\n\t"
+        "ldl $8, 7(%0)\n\t"
+        "ldr $8, 0(%0)\n\t"
+        "ldl $9, 7(%1)\n\t"
+        "ldr $9, 0(%1)\n\t"
+        "dsrl $8, $8, 16\n\t"
+        "dsrl $9, $9, 16\n\t"
+        "pcgth $10, $0, $8\n\t"
+        "pcgth $11, $0, $9\n\t"
+        "pextlh $10, $10, $8\n\t"
+        "pextlh $11, $11, $9\n\t"
+        "qmtc2.ni $10, $vf1\n\t"
+        "qmtc2.ni $11, $vf2\n\t"
+        "vitof0.xyzw $vf1, $vf1\n\t"
+        "vitof0.xyzw $vf2, $vf2\n\t"
+        "vsub.xyz $vf2, $vf2, $vf1\n\t"
+        "vmulx.xyz $vf2, $vf2, $vf3x\n\t"
+        "vadd.xyz $vf2, $vf2, $vf1\n\t"
+        "sqc2 $vf2, 0(%2)\n\t"
+        "nop"
+        :
+        : "r"(first), "r"(second), "r"(dest), "f"(factor)
+        : "$8", "$9", "$10", "$11", "memory"
+    );
+}
 
 /*
  * sefLerpIVectorB (main:0x002e7fe8), re-treated from the accepted assembly

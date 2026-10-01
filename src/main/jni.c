@@ -1,6 +1,10 @@
 #include "common.h"
 #include "shared.h"
 #include "jni.h"
+extern DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
+extern unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
+extern DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer);
+extern void DataBuffer_seek(DataBuffer *buffer, int offset);
 
 void JNI_initSystem(xheap_block *heap, int size)
 {
@@ -138,11 +142,63 @@ void JNI_initThread(SceneVm *vm)
     thread->stack_offset = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", skipConstantPool);
+static int skipConstantPool(DataBuffer *buffer, int bound)
+{
+    unsigned int pool_count;
+    unsigned short index;
+    int tag;
+
+    pool_count = DataBuffer_getUShortAt(buffer);
+    if (bound > 0)
+        pool_count = (bound < (int)pool_count) ? (unsigned short)bound : pool_count;
+
+    index = 1;
+    tag = 0;
+    while (index < pool_count) {
+        tag = DataBuffer_getUByteAt(buffer);
+        switch (tag) {
+        case 1:
+            DataBuffer_seek(buffer, DataBuffer_getUShortAt(buffer));
+            break;
+        case 7:
+        case 8:
+            DataBuffer_getUShortAt(buffer);
+            break;
+        case 9:
+        case 10:
+        case 11:
+        case 12:
+            DataBuffer_getUShortAt(buffer);
+            DataBuffer_getUShortAt(buffer);
+            break;
+        case 3:
+        case 4:
+            DataBuffer_getUIntAt(buffer);
+            break;
+        case 5:
+        case 6:
+            DataBuffer_getUIntAt(buffer);
+            DataBuffer_getUIntAt(buffer);
+            index++;
+            break;
+        }
+        index++;
+    }
+    return tag;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/jni", checkClass);
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", getStrIndex_002F0A58);
+static const char *getStrIndex(const char *name, int delimiter)
+{
+    char value;
+
+    while ((value = *name++) != '\0') {
+        if (value == delimiter)
+            return name;
+    }
+    return 0;
+}
 
 static int checkClass(void *buffer, const char *name, int target);
 
@@ -202,7 +258,38 @@ int JNI_searchClasses(int class_id, const char *names, int target, int *skip_cou
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/jni", JNI_loadClassLibrary);
+void JNI_loadClassLibrary(int class_id)
+{
+    DataBuffer buffer;
+    void *groups;
+    int group_count;
+    int group_index;
+    PdbClassGroup *group;
+    PdbClassEntry *entry;
+    int entry_count;
+    int class_name;
+    void *class_slot;
+
+    PDB_getEntry(class_id, &groups, &group_count);
+    group_index = 0;
+    if (group_count > 0) {
+        do {
+            group = groups;
+            entry_count = group->entry_count;
+            entry = (PdbClassEntry *)((u8 *)group + 8);
+            if (entry_count > 0) {
+                do {
+                    DataBuffer_init(&buffer, entry->data, entry->length, 1);
+                    class_name = checkClass(&buffer, 0, 0);
+                    if (class_name != 0)
+                        loadStaticClass(&class_slot, (u8 *)class_name);
+                    entry_count--;
+                } while (entry_count > 0);
+            }
+            group_index++;
+        } while (group_index < group_count);
+    }
+}
 
 int JNI_getRegister(int register_index)
 {

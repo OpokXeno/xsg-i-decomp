@@ -4,6 +4,17 @@
 #include "common.h"
 #include "shared.h"
 #include "ov01/battle_init.h"
+#include "ov01/calc.h"
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
+
+typedef struct MenuEtherStatusEntry {
+    unsigned char unmodeled_00[0xE];
+    short etherStatus;
+} MenuEtherStatusEntry;
+
+extern const signed char *font_0;
+extern const signed char *font_1;
+extern void menuStatSprite();
 
 extern ObjectTask *pMenuBat;
 
@@ -55,7 +66,24 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBatObjDraw);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuCmdExecChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuEtherNumChk);
+int menuEtherNumChk(ObjectTask *unit)
+{
+    int count;
+    int slot;
+    int offset;
+    int countIfPresent;
+    MenuEtherStatusEntry *etherEntry;
+
+    count = 0;
+    offset = 0x80;
+    for (slot = 0xB; slot >= 0; slot--) {
+        etherEntry = (MenuEtherStatusEntry *)((char *)calcUPGet(unit) + offset);
+        countIfPresent = count + 1;
+        offset += 2;
+        count = (etherEntry->etherStatus != 0) ? countIfPresent : count;
+    }
+    return count;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuOpenEth);
 
@@ -470,7 +498,24 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuPlStatPut);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuNumPut);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuApBarPut);
+void menuApBarPut(int packet, int x, int y, int amount)
+{
+    int i;
+    int xPosition;
+
+    xPosition = x;
+    for (i = 0; i < 6; i++) {
+        int sourceX;
+
+        sourceX = 24;
+        if (amount > 0) {
+            sourceX = 0;
+        }
+        menuStatSprite(packet, xPosition, y, 24, 16, sourceX, 240);
+        amount--;
+        xPosition += 16;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBpBarPut);
 
@@ -582,9 +627,29 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", dmgMsgPut);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", dmgNumPut);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontIdxGet);
+int menuFontIdxGet(const signed char *text)
+{
+    int index;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuDFontIdxGet);
+    for (index = 0; index < 230; index++) {
+        if (text[0] == font_0[index]) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+int menuDFontIdxGet(const signed char *text)
+{
+    int index;
+
+    for (index = 0; index < 230; index++) {
+        if (text[0] == font_1[index * 2] && text[1] == font_1[index * 2 + 1]) {
+            return index + 175;
+        }
+    }
+    return -1;
+}
 
 void menuStatSprite(int packet, int x, int y, int width, int height, int srcX, int srcY, int srcRow);
 

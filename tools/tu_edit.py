@@ -35,6 +35,7 @@ Edits write to stdout, to -o OUT or back with --in-place (never on conflict).
 Exit status: 0 ok, 1 conflicts/refusal, 2 usage or parse error.
 """
 import argparse
+import ast
 import difflib
 import hashlib
 import json
@@ -1616,6 +1617,675 @@ def _same_line_comment_gap(text, gap):
     return _is_comment(text) and gap.strip() == '' and '\n' not in gap
 
 
+def _single_item_kind(text):
+    items = scan(text)
+    if len(items) != 1 or items[0].start != 0 or items[0].end != len(text):
+        return None, True
+    return items[0].kind, items[0].conditional
+
+
+def _pure_integer_macro(text):
+    """Return the name only for an object-like integer-constant macro."""
+    match = re.fullmatch(r'\s*#\s*define\s+([A-Za-z_]\w*)[ \t]+([^\\\n]+)\s*', text)
+    if not match:
+        return None
+    name, expression = match.groups()
+    expression = re.sub(r'(?i)(0[xX][0-9a-f]+|0[bB][01]+|[0-9]+)[uUlL]+\b', r'\1', expression)
+    try:
+        tree = ast.parse(expression, mode='eval')
+    except SyntaxError:
+        return None
+    allowed = (ast.Expression, ast.Constant, ast.UnaryOp, ast.UAdd, ast.USub, ast.Invert,
+               ast.BinOp, ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod, ast.LShift,
+               ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor)
+    if any(not isinstance(node, allowed) for node in ast.walk(tree)):
+        return None
+    if any(isinstance(node, ast.Constant) and
+           (not isinstance(node.value, int) or isinstance(node.value, bool))
+           for node in ast.walk(tree)):
+        return None
+    return name
+
+
+def select_dependency_prelude_additions(base_text, provider_text, allowlist, *,
+                                        base_sha256=None, provider_sha256=None):
+    """Apply only exact allowlisted declarations added by a pinned provider.
+
+    The caller validates the provider's queue submission, TU identity and
+    requested function list. Existing prelude items must remain byte-identical
+    and in order. Every imported item must be an unconditional declaration
+    whose exact text, SHA-256 and declared keys occur in ``allowlist``. Extra
+    provider additions are ignored. An existing same-key declaration may be
+    deduplicated only when its normalized text is identical; every other
+    same-key collision is an error. This opt-in helper does not relax the
+    default merge guards.
+
+    Each allowlist row has exactly ``text``, ``sha256`` and ``declared_keys``.
+    It returns ``{"text": ..., "manifest": ...}``.
+    """
+    if base_sha256 is not None and sha256_text(base_text) != base_sha256:
+        raise EditError('dependency prelude base SHA-256 does not match its pin')
+    if provider_sha256 is not None and sha256_text(provider_text) != provider_sha256:
+        raise EditError('dependency provider source SHA-256 does not match its pin')
+    try:
+        base, provider = TU(base_text, None), TU(provider_text, None)
+    except Exception as exc:
+        raise EditError(f'cannot parse dependency prelude source: {exc}') from exc
+    base_items, base_tail = prelude_items(base.prelude())
+    provider_items, _ = prelude_items(provider.prelude())
+
+    # A provider may add items but may not rewrite, remove or reorder existing
+    # prelude items under this declaration/constant-macro path.
+    cursor = 0
+    for _, old_item in base_items:
+        match = next((i for i in range(cursor, len(provider_items))
+                      if provider_items[i][1] == old_item), None)
+        if match is None:
+            raise EditError('dependency provider changed, removed or reordered an existing prelude item')
+        cursor = match + 1
+
+    base_counts, provider_counts, additions = {}, {}, []
+    for _, item in base_items:
+        base_counts[item] = base_counts.get(item, 0) + 1
+    for gap, item in provider_items:
+        provider_counts[item] = provider_counts.get(item, 0) + 1
+        if provider_counts[item] > base_counts.get(item, 0):
+            kind, conditional = _single_item_kind(item)
+            keys = sorted(decl_keys(item))
+            if kind == 'decl' and not conditional and keys:
+                additions.append((gap, item, keys, 'declaration'))
+            elif kind == 'pp' and not conditional and _pure_integer_macro(item):
+                additions.append((gap, item, [('macro', _pure_integer_macro(item))], 'constant_macro'))
+            else:
+                raise EditError('dependency provider additions must be unconditional declarations or pure integer macros')
+
+    if not isinstance(allowlist, list):
+        raise EditError('dependency prelude allowlist must be a list')
+    allowed = {}
+    for row in allowlist:
+        if (not isinstance(row, dict) or
+                set(row) not in ({'text', 'sha256', 'declared_keys'},
+                                 {'text', 'sha256', 'declared_keys', 'kind'})):
+            raise EditError('dependency prelude allowlist row has an invalid schema')
+        item = row['text']
+        keys = sorted(tuple(key) for key in row['declared_keys']
+                      if isinstance(key, (list, tuple)) and len(key) == 2)
+        if not isinstance(item, str) or sha256_text(item) != row['sha256']:
+            raise EditError('dependency prelude allowlist SHA-256 does not match its exact text')
+        kind, conditional = _single_item_kind(item)
+        row_kind = row.get('kind', 'declaration')
+        if row_kind == 'declaration':
+            if kind != 'decl' or conditional or not keys or keys != sorted(decl_keys(item)):
+                raise EditError('dependency prelude allowlist keys do not match one unconditional declaration')
+        elif row_kind == 'constant_macro':
+            macro_name = _pure_integer_macro(item)
+            if kind != 'pp' or conditional or not macro_name or keys != [('macro', macro_name)]:
+                raise EditError('dependency macro allowlist does not name one pure integer object-like macro')
+        else:
+            raise EditError('dependency prelude allowlist has an unknown item kind')
+        if item in allowed:
+            raise EditError('dependency prelude allowlist repeats an exact declaration')
+        allowed[item] = dict(sha256=row['sha256'], declared_keys=keys)
+
+    addition_counts = {}
+    for _, item, _, _ in additions:
+        addition_counts[item] = addition_counts.get(item, 0) + 1
+    if any(count != 1 for count in addition_counts.values()):
+        raise EditError('dependency provider repeats an added prelude declaration')
+    if set(allowed) - set(addition_counts):
+        raise EditError('an allowlisted declaration is absent from the provider prelude')
+
+    existing = {}
+    existing_macros = {}
+    for _, item in base_items:
+        if _single_item_kind(item)[0] == 'decl':
+            for key in decl_keys(item):
+                existing.setdefault(key, set()).add(_norm(item))
+        macro_name = _pure_integer_macro(item)
+        if macro_name:
+            existing_macros.setdefault(macro_name, set()).add(_norm(item))
+    selected = []
+    added_keys = {}
+    added_macros = {}
+    for gap, item, keys, item_kind in additions:
+        if item not in allowed:
+            continue
+        norm_item = _norm(item)
+        if allowed[item]['declared_keys'] != keys:
+            raise EditError('provider declaration keys differ from the allowlist')
+        if item_kind == 'constant_macro':
+            macro_name = keys[0][1]
+            prior = existing_macros.get(macro_name, set()) | added_macros.get(macro_name, set())
+            if prior and norm_item not in prior:
+                raise EditError(f'dependency macro {macro_name} conflicts with an existing same-name macro')
+            added_macros.setdefault(macro_name, set()).add(norm_item)
+            present = norm_item in existing_macros.get(macro_name, set())
+            selected.append(dict(text=item, sha256=allowed[item]['sha256'], declared_keys=keys,
+                                 kind=item_kind,
+                                 status='already_present' if present else 'added', gap=gap))
+            continue
+        for key in keys:
+            prior = existing.get(tuple(key), set()) | added_keys.get(tuple(key), set())
+            if prior and norm_item not in prior:
+                raise EditError(f'dependency declaration for {key[1]} conflicts with an existing same-key item')
+            added_keys.setdefault(tuple(key), set()).add(norm_item)
+        present = all(norm_item in existing.get(tuple(key), set()) for key in keys)
+        selected.append(dict(text=item, sha256=allowed[item]['sha256'], declared_keys=keys,
+                             kind=item_kind,
+                             status='already_present' if present else 'added', gap=gap))
+
+    output_items = list(base_items)
+    for row in selected:
+        if row['status'] == 'added':
+            output_items.append(('\n', row['text']))
+            for key in row['declared_keys']:
+                existing.setdefault(tuple(key), set()).add(_norm(row['text']))
+    prelude = _emit_prelude(output_items, base_tail)
+    text = prelude + base_text[base.prelude_end():]
+    return dict(text=text,
+                manifest=dict(schema='tu-dependency-prelude-selection/1',
+                              base_sha256=sha256_text(base_text),
+                              provider_sha256=sha256_text(provider_text),
+                              additions=[{k: v for k, v in row.items() if k != 'gap'}
+                                          for row in selected],
+                              result_sha256=sha256_text(text)))
+
+
+def _pinned_review_artifact(root, relative_path, expected_sha256, label):
+    """Read one repository-relative proposal/review/evidence file by its pin."""
+    if (not isinstance(relative_path, str) or not relative_path or
+            Path(relative_path).is_absolute() or not isinstance(expected_sha256, str) or
+            not re.fullmatch(r'[0-9a-f]{64}', expected_sha256)):
+        raise EditError(f'reviewed prelude correction has an invalid {label} artifact pin')
+    root = Path(root).resolve()
+    path = (root / relative_path).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise EditError(f'reviewed prelude correction {label} artifact escapes the repository') from exc
+    if not path.is_file():
+        raise EditError(f'reviewed prelude correction {label} artifact is missing: {relative_path}')
+    if hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha256:
+        raise EditError(f'reviewed prelude correction {label} artifact differs from its SHA-256 pin')
+    return path
+
+
+def apply_reviewed_prelude_corrections(base_text, proposal, *, expected_tu_id, expected_path,
+                                       expected_original_tu_sha256, artifact_root):
+    """Apply exact, independently reviewed, same-layout owner prelude corrections.
+
+    This is a pure opt-in transformer. It requires exact owner identity, a
+    pinned whole-base source, exact before/after declaration text and hashes,
+    distinct proposer/reviewer identities, and existing proposal/review/layout
+    artifacts whose bytes match their pins. It changes only the listed unique
+    prelude items. Callers must
+    still run the normal linked whole-file gate and TU audit; default merge
+    behavior remains fail-closed.
+    """
+    required = {'schema', 'owner_tu', 'owner_path', 'original_tu_sha256', 'base_sha256', 'proposal_path',
+                'proposal_sha256', 'proposed_by', 'reviewed_by', 'review_artifact_path',
+                'review_artifact_sha256', 'corrections'}
+    if not isinstance(proposal, dict) or set(proposal) != required or \
+            proposal.get('schema') != 'tu-reviewed-prelude-corrections/1':
+        raise EditError('reviewed prelude correction proposal has an invalid schema')
+    if proposal['owner_tu'] != expected_tu_id or proposal['owner_path'] != expected_path:
+        raise EditError('reviewed prelude correction owner identity does not match the target TU')
+    if proposal['original_tu_sha256'] != expected_original_tu_sha256 or \
+            not re.fullmatch(r'[0-9a-f]{64}', str(proposal['original_tu_sha256'])):
+        raise EditError('reviewed prelude correction original TU byte identity does not match the target')
+    if sha256_text(base_text) != proposal['base_sha256']:
+        raise EditError('reviewed prelude correction base SHA-256 is stale')
+    for field in ('proposal_path', 'review_artifact_path'):
+        if not isinstance(proposal[field], str) or not proposal[field] or Path(proposal[field]).is_absolute():
+            raise EditError(f'reviewed prelude correction has no repository-relative {field}')
+    for field in ('proposal_sha256', 'review_artifact_sha256'):
+        if not isinstance(proposal[field], str) or not re.fullmatch(r'[0-9a-f]{64}', proposal[field]):
+            raise EditError(f'reviewed prelude correction has no valid {field} pin')
+    if not proposal['proposed_by'] or not proposal['reviewed_by'] or \
+            proposal['proposed_by'] == proposal['reviewed_by']:
+        raise EditError('owner declaration correction requires an independent reviewer')
+    proposal_file = _pinned_review_artifact(artifact_root, proposal['proposal_path'],
+                                            proposal['proposal_sha256'], 'proposal')
+    _pinned_review_artifact(artifact_root, proposal['review_artifact_path'],
+                            proposal['review_artifact_sha256'], 'review')
+    proposal_text = proposal_file.read_text(encoding='utf-8', errors='surrogateescape')
+    if not isinstance(proposal['corrections'], list) or not proposal['corrections']:
+        raise EditError('reviewed prelude correction has no declaration substitutions')
+    try:
+        base = TU(base_text, None)
+    except Exception as exc:
+        raise EditError(f'cannot parse reviewed prelude correction base: {exc}') from exc
+    items, tail = prelude_items(base.prelude())
+    replacements, seen_before, seen_keys = [], set(), set()
+    for row in proposal['corrections']:
+        fields = {'before_text', 'before_sha256', 'after_text', 'after_sha256',
+                  'declared_keys', 'before_size', 'after_size', 'layout_evidence_path',
+                  'layout_evidence_sha256'}
+        if not isinstance(row, dict) or set(row) != fields:
+            raise EditError('reviewed prelude correction row has an invalid schema')
+        before, after = row['before_text'], row['after_text']
+        if not isinstance(before, str) or not isinstance(after, str) or before == after:
+            raise EditError('reviewed prelude correction needs distinct exact declaration texts')
+        if sha256_text(before) != row['before_sha256'] or sha256_text(after) != row['after_sha256']:
+            raise EditError('reviewed prelude correction declaration hash does not match its exact text')
+        if not isinstance(row['before_size'], int) or not isinstance(row['after_size'], int) or \
+                row['before_size'] <= 0 or row['before_size'] != row['after_size']:
+            raise EditError('owner declaration correction is not proven same-size by its review record')
+        evidence = row['layout_evidence_sha256']
+        if not isinstance(row['layout_evidence_path'], str) or not row['layout_evidence_path'] or \
+                Path(row['layout_evidence_path']).is_absolute() or not isinstance(evidence, str) or \
+                not re.fullmatch(r'[0-9a-f]{64}', evidence):
+            raise EditError('owner declaration correction lacks a pinned layout-evidence artifact')
+        _pinned_review_artifact(artifact_root, row['layout_evidence_path'], evidence, 'layout-evidence')
+        if proposal_text.count(after) != 1:
+            raise EditError('proposed declaration is not present exactly once in its pinned proposal artifact')
+        keys_before, keys_after = sorted(decl_keys(before)), sorted(decl_keys(after))
+        keys = sorted(tuple(key) for key in row['declared_keys']
+                      if isinstance(key, (list, tuple)) and len(key) == 2)
+        if not keys_before or keys_before != keys_after or keys_before != keys:
+            raise EditError('owner declaration correction must preserve its exact declaration keys')
+        if seen_keys.intersection(keys):
+            raise EditError('reviewed prelude correction rows overlap declaration keys')
+        if before in seen_before:
+            raise EditError('reviewed prelude correction repeats a before declaration')
+        seen_keys.update(keys)
+        seen_before.add(before)
+        kind_before, conditional_before = _single_item_kind(before)
+        kind_after, conditional_after = _single_item_kind(after)
+        if kind_before != 'decl' or kind_after != 'decl' or conditional_before or conditional_after:
+            raise EditError('reviewed owner correction must replace unconditional declaration items')
+        matches = [i for i, (_, item) in enumerate(items) if item == before]
+        if len(matches) != 1:
+            raise EditError('reviewed owner correction before text must occur once in the current prelude')
+        replacements.append((matches[0], after))
+    for index, item in replacements:
+        items[index] = (items[index][0], item)
+    prelude = _emit_prelude(items, tail)
+    text = prelude + base_text[base.prelude_end():]
+    try:
+        corrected = TU(text, None)
+    except Exception as exc:
+        raise EditError(f'reviewed owner prelude correction broke TU structure: {exc}') from exc
+    corrected_items, _ = prelude_items(corrected.prelude())
+    for row in proposal['corrections']:
+        for key in row['declared_keys']:
+            key = tuple(key)
+            matches = [_norm(item) for _, item in corrected_items
+                       if _single_item_kind(item)[0] == 'decl' and key in decl_keys(item)]
+            if len(matches) != 1 or matches[0] != _norm(row['after_text']):
+                raise EditError(f'reviewed owner correction leaves a duplicate or conflicting declaration for {key[1]}')
+    return dict(text=text,
+                manifest=dict(schema='tu-reviewed-prelude-corrections-applied/1',
+                              owner_tu=expected_tu_id, owner_path=expected_path,
+                              original_tu_sha256=proposal['original_tu_sha256'],
+                              base_sha256=sha256_text(base_text),
+                              proposal_path=proposal['proposal_path'],
+                              proposal_sha256=proposal['proposal_sha256'],
+                              review_artifact_path=proposal['review_artifact_path'],
+                              review_artifact_sha256=proposal['review_artifact_sha256'],
+                              artifacts_verified=True,
+                              corrections=[dict(before_sha256=row['before_sha256'],
+                                                after_sha256=row['after_sha256'],
+                                                declared_keys=row['declared_keys'],
+                                                layout_size=row['before_size'],
+                                                layout_evidence_path=row['layout_evidence_path'],
+                                                layout_evidence_sha256=row['layout_evidence_sha256'])
+                                           for row in proposal['corrections']],
+                              result_sha256=sha256_text(text)))
+
+
+def apply_reviewed_owner_proposals(repo_root, manifest_path, project_root, target_tu):
+    """Stage only independently reviewed owner-type proposals into a private root.
+
+    The manifest is an explicit opt-in launch artifact.  It pins every proposal,
+    reviewer report, evidence manifest, and any structured original-byte
+    witnesses.  A proposal may change only its named complete typedef; the old
+    and proposed files must be byte-identical everywhere else.  The ordinary
+    worker baseline gate and TU audit remain responsible for code/data exactness.
+    """
+    repo_root = Path(repo_root).resolve()
+    project_root = Path(project_root).resolve()
+    manifest_path = Path(manifest_path)
+    if manifest_path.is_absolute():
+        manifest_path = manifest_path.resolve()
+        try:
+            manifest_rel = manifest_path.relative_to(repo_root).as_posix()
+        except ValueError as exc:
+            raise EditError('owner proposal manifest escapes the repository') from exc
+    else:
+        manifest_rel = manifest_path.as_posix()
+        if '..' in manifest_path.parts or not manifest_rel:
+            raise EditError('owner proposal manifest is not repository-relative')
+        manifest_path = (repo_root / manifest_path).resolve()
+        try:
+            manifest_path.relative_to(repo_root)
+        except ValueError as exc:
+            raise EditError('owner proposal manifest escapes the repository') from exc
+        if not manifest_path.is_file():
+            raise EditError('owner proposal manifest is missing')
+    manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        raise EditError(f'cannot read owner proposal manifest: {exc}') from exc
+    if (not isinstance(manifest, dict) or set(manifest) - {'schema', 'proposals', 'header_exports'} or
+            not {'schema', 'proposals'} <= set(manifest) or
+            manifest.get('schema') != 'tu-reviewed-owner-proposals/1' or
+            not isinstance(manifest.get('proposals'), list) or not manifest['proposals']):
+        raise EditError('owner proposal manifest has an invalid schema')
+
+    applied, seen, reviewed_rows = [], set(), {}
+    row_keys = {'id', 'owner_tu', 'applies_to', 'owner_path', 'owner_type', 'field', 'offset',
+                'before_member', 'after_member', 'layout_bytes', 'base_sha256',
+                'proposal_path', 'proposal_sha256', 'review_path', 'review_sha256',
+                'review_owner', 'evidence_manifest_path', 'evidence_manifest_sha256',
+                'evidence'}
+    for row in manifest['proposals']:
+        if not isinstance(row, dict) or set(row) != row_keys:
+            raise EditError('owner proposal manifest row has an invalid schema')
+        # Entries for other TUs are allowed in a grouped manifest and are still
+        # artifact-checked below; duplicate ids are always refused.
+        if (not isinstance(row['id'], str) or not row['id'] or row['id'] in seen or
+                not isinstance(row['applies_to'], list) or
+                not row['applies_to'] or any(not isinstance(x, str) for x in row['applies_to'])):
+            raise EditError('owner proposal manifest has a duplicate or invalid identity')
+        seen.add(row['id'])
+        review_file = _pinned_review_artifact(repo_root, row['review_path'],
+                                              row['review_sha256'], 'owner-layout-review')
+        proposal_file = _pinned_review_artifact(repo_root, row['proposal_path'],
+                                                row['proposal_sha256'], 'owner-proposal')
+        evidence_manifest = _pinned_review_artifact(
+            repo_root, row['evidence_manifest_path'], row['evidence_manifest_sha256'],
+            'owner-layout-evidence-manifest')
+        evidence_rows = row['evidence']
+        if not isinstance(evidence_rows, list):
+            raise EditError('owner proposal evidence list is malformed')
+        for evidence in evidence_rows:
+            if not isinstance(evidence, dict) or set(evidence) != {'path', 'sha256'}:
+                raise EditError('owner proposal evidence row has an invalid schema')
+            _pinned_review_artifact(repo_root, evidence['path'], evidence['sha256'],
+                                    'owner-layout-evidence')
+
+        try:
+            review = json.loads(review_file.read_text(encoding='utf-8'))
+        except (OSError, ValueError) as exc:
+            raise EditError(f'cannot parse owner-layout review artifact: {exc}') from exc
+        reviewed_rows[row['id']] = dict(review=review, path=row['review_path'],
+                                        sha256=row['review_sha256'])
+        review_schema = review.get('schema')
+        if review_schema not in ('owner-proposal-review/1', 'private-tu-owner-proposal-review/1'):
+            raise EditError('owner-layout review artifact has an unexpected schema')
+        if review.get('reviewer') == row['review_owner']:
+            raise EditError('owner proposal reviewer must be independent of its author')
+        if review_schema == 'owner-proposal-review/1':
+            decisions = [d for d in review.get('decisions') or []
+                         if d.get('owner') == row['owner_tu'] + ' ' + row['owner_type'] and
+                         d.get('field') == row['field'] and d.get('offset') == row['offset'] and
+                         d.get('verdict') == 'evidence_supported']
+            if len(decisions) != 1:
+                raise EditError(f'{row["id"]}: independent review does not approve this exact owner field')
+            artifact_pins = review.get('proposal_artifacts') or {}
+            pinned_pairs = {(item.get('path'), item.get('sha256'))
+                            for item in artifact_pins.values() if isinstance(item, dict)}
+            if (row['proposal_path'], row['proposal_sha256']) not in pinned_pairs or \
+                    (row['evidence_manifest_path'], row['evidence_manifest_sha256']) not in pinned_pairs:
+                raise EditError(f'{row["id"]}: reviewer report does not pin the proposal and evidence manifest')
+        else:
+            # Current owner-proposal review packets predate the generic review
+            # schema. Accept them only when the immutable report names the
+            # exact owner base, proposed file, evidence manifest, proposal id,
+            # and field/offset under review. This is still layout evidence;
+            # it does not replace the normal TU gate or audit.
+            identities = review.get('identities') or {}
+            expected_identities = {
+                'owner_base': (row['owner_path'], row['base_sha256']),
+                'proposal': (row['proposal_path'], row['proposal_sha256']),
+                'evidence': (row['evidence_manifest_path'], row['evidence_manifest_sha256']),
+            }
+            for label, (path, digest) in expected_identities.items():
+                actual = identities.get(label) or {}
+                if (actual.get('path'), actual.get('sha256')) != (path, digest):
+                    raise EditError(f'{row["id"]}: review does not pin the exact {label} artifact')
+            offset_review = review.get('base_and_offset_review') or {}
+            assembly_review = review.get('assembly_evidence') or {}
+            review_text = json.dumps(review, sort_keys=True)
+            if (review.get('proposal_id') != row['id'] or
+                    offset_review.get('current_base_sha256') != row['base_sha256'] or
+                    offset_review.get('proposal_sha256') != row['proposal_sha256'] or
+                    row['field'] not in review_text or row['offset'] not in review_text or
+                    not assembly_review or not review.get('neighbor_assertions')):
+                raise EditError(f'{row["id"]}: review packet does not approve the exact field and offset')
+        for witness in review.get('additional_pinned_evidence') or []:
+            if not isinstance(witness, dict) or set(witness) < {'path', 'sha256'}:
+                raise EditError(f'{row["id"]}: malformed reviewer-pinned layout witness')
+            _pinned_review_artifact(repo_root, witness['path'], witness['sha256'],
+                                    'reviewer-layout-witness')
+
+        owner_rel = Path(row['owner_path'])
+        if owner_rel.is_absolute() or '..' in owner_rel.parts or not owner_rel.parts:
+            raise EditError('owner proposal path is not a safe repository-relative path')
+        base_file = _pinned_review_artifact(repo_root, owner_rel.as_posix(),
+                                            row['base_sha256'], 'owner-base-source')
+        base_text = base_file.read_text(encoding='utf-8', errors='surrogateescape')
+        proposed_text = proposal_file.read_text(encoding='utf-8', errors='surrogateescape')
+        name = re.escape(row['owner_type'])
+        block_re = re.compile(r'(?ms)^typedef\s+struct\s+' + name +
+                              r'\s*\{.*?^\}\s*' + name + r'\s*;')
+        before_blocks, after_blocks = list(block_re.finditer(base_text)), list(block_re.finditer(proposed_text))
+        if len(before_blocks) != 1 or len(after_blocks) != 1:
+            raise EditError(f'{row["id"]}: owner typedef is not unique in both pinned files')
+        before_block, after_block = before_blocks[0], after_blocks[0]
+        outside_type_changed = (
+            base_text[:before_block.start()] != proposed_text[:after_block.start()] or
+            base_text[before_block.end():] != proposed_text[after_block.end():])
+        if outside_type_changed:
+            raise EditError(f'{row["id"]}: proposal changes bytes outside its one reviewed owner typedef')
+        before_type, after_type = before_block.group(0), after_block.group(0)
+        if not isinstance(row['layout_bytes'], int) or row['layout_bytes'] <= 0:
+            raise EditError(f'{row["id"]}: owner layout byte width is invalid')
+        before_lines = [line.strip() for line in before_type.splitlines()
+                        if row['before_member'] in line]
+        after_lines = [line.strip() for line in after_type.splitlines()
+                       if row['after_member'] in line]
+        if len(before_lines) != 1 or len(after_lines) != 1:
+            raise EditError(f'{row["id"]}: exact before/after owner members are not unique')
+        if (row['before_member'] not in before_type or row['after_member'] not in after_type):
+            raise EditError(f'{row["id"]}: proposed member text does not match reviewed offset evidence')
+        if target_tu not in row['applies_to']:
+            continue
+        target = (project_root / owner_rel).resolve()
+        try:
+            target.relative_to(project_root)
+        except ValueError as exc:
+            raise EditError('owner proposal destination escapes the private project') from exc
+        if not target.is_file():
+            raise EditError(f'{row["id"]}: private owner file is missing: {owner_rel.as_posix()}')
+        current_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+        proposal_sha = hashlib.sha256(proposal_file.read_bytes()).hexdigest()
+        current_text = target.read_text(encoding='utf-8', errors='surrogateescape')
+        if current_sha == row['base_sha256']:
+            # A consumer TU's private mirror carries the defining TU source as
+            # a read-only copy. The reviewed owner edit is still confined to
+            # this attempt's src tree, so unlock only that copy before writing.
+            target.chmod(0o644)
+            target.write_text(proposed_text, encoding='utf-8', errors='surrogateescape')
+            current_text = proposed_text
+        elif current_sha != proposal_sha:
+            # An owner TU may already contain worker function edits after init.
+            # Keep those edits only when its complete owner typedef still equals
+            # the independently reviewed proposal byte-for-byte.
+            current_blocks = list(block_re.finditer(current_text))
+            if len(current_blocks) != 1 or current_blocks[0].group(0) != after_type:
+                raise EditError(f'{row["id"]}: private owner file is neither the pinned base/proposal nor '
+                                'a candidate retaining the exact reviewed owner typedef')
+        staged_hash = hashlib.sha256(current_text.encode('utf-8', errors='surrogateescape')).hexdigest()
+        applied.append(dict(id=row['id'], owner_tu=row['owner_tu'], owner_path=owner_rel.as_posix(),
+                            proposal_path=row['proposal_path'], proposal_sha256=proposal_sha,
+                            review_path=row['review_path'], review_sha256=row['review_sha256'],
+                            evidence_manifest_path=row['evidence_manifest_path'],
+                            evidence_manifest_sha256=row['evidence_manifest_sha256'],
+                            owner_type=row['owner_type'], field=row['field'], offset=row['offset'],
+                            source_sha256=staged_hash))
+    exported = []
+    private_reconciliations = []
+    for export in manifest.get('header_exports', []):
+        if (not isinstance(export, dict) or set(export) !=
+                {'owner_proposal_id', 'applies_to', 'header_path', 'types', 'declarations'} or
+                not isinstance(export['applies_to'], list) or
+                not isinstance(export['types'], list) or not export['types'] or
+                not isinstance(export['declarations'], list)):
+            raise EditError('owner header-export entry has an invalid schema')
+        if target_tu not in export['applies_to']:
+            continue
+        row = next((item for item in applied if item['id'] == export['owner_proposal_id']), None)
+        if row is None:
+            raise EditError('owner header export does not name an applied reviewed proposal')
+        header_rel = Path(export['header_path'])
+        if (header_rel.is_absolute() or '..' in header_rel.parts or
+                not header_rel.parts or not str(header_rel).startswith('include/')):
+            raise EditError('owner header-export destination is not a private include path')
+        owner_source = project_root / row['owner_path']
+        header = project_root / header_rel
+        if not owner_source.is_file() or not header.is_file():
+            raise EditError('owner header-export source or generated destination is missing')
+        owner_text = owner_source.read_text(encoding='utf-8', errors='surrogateescape')
+        header_text = header.read_text(encoding='utf-8', errors='surrogateescape')
+        snippets = []
+        for name in export['types']:
+            if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_]\w*', name):
+                raise EditError('owner header-export type name is invalid')
+            pattern = re.compile(r'(?ms)^typedef\s+(?:struct|union)\s+' + re.escape(name) +
+                                r'\s*\{.*?^\}\s*' + re.escape(name) + r'\s*;')
+            matches = list(pattern.finditer(owner_text))
+            if len(matches) != 1:
+                raise EditError(f'{name}: owner source does not contain one complete tagged typedef')
+            snippet = matches[0].group(0)
+            if name in header_text:
+                if snippet not in header_text:
+                    raise EditError(f'{name}: generated header already has a different declaration')
+                continue
+            snippets.append(snippet)
+        declarations = []
+        for declaration in export['declarations']:
+            if (not isinstance(declaration, str) or not declaration.endswith(';') or
+                    '\n' in declaration or owner_text.count(declaration) != 1):
+                raise EditError('owner header-export declaration is not one exact source-owned declaration')
+            if declaration in header_text:
+                continue
+            declarations.append(declaration)
+        if snippets:
+            endif = re.search(r'(?m)^#endif\b[^\n]*$', header_text)
+            if not endif:
+                raise EditError('generated owner header has no closing include guard')
+        if snippets or declarations:
+            endif = re.search(r'(?m)^#endif\b[^\n]*$', header_text)
+            if not endif:
+                raise EditError('generated owner header has no closing include guard')
+            exported_text = snippets + declarations
+            block = ('\n/* Reviewed private owner declarations staged by worker init. */\n' +
+                     '\n\n'.join(exported_text) + '\n\n')
+            header_text = header_text[:endif.start()] + block + header_text[endif.start():]
+            # `worker.py init` deliberately stages published headers read-only.
+            # This is a private generated-header overlay, so make only this
+            # sandbox copy writable before applying the reviewed export.
+            header.chmod(0o644)
+            header.write_text(header_text, encoding='utf-8', errors='surrogateescape')
+        # MAIN's compile edges include the copied build/main/include tree.
+        # Staging only project/include is insufficient: init generates the
+        # build graph immediately afterwards and compilers include from that
+        # private build tree. Keep this exact reviewed overlay in sync there.
+        build_header = project_root / 'build' / 'main' / 'include' / Path(*header_rel.parts[1:])
+        build_header_sha = None
+        if build_header.is_file():
+            build_header.chmod(0o644)
+            build_header.write_bytes(header.read_bytes())
+            build_header_sha = hashlib.sha256(build_header.read_bytes()).hexdigest()
+        exported.append(dict(owner_proposal_id=row['id'], header_path=header_rel.as_posix(),
+                             types=list(export['types']), declarations=list(export['declarations']),
+                             header_sha256=hashlib.sha256(header.read_bytes()).hexdigest(),
+                             build_header_sha256=build_header_sha))
+        # TU114's private compatibility header still carries a one-word
+        # RssdWorkArea declaration from before tu110's reviewed full owner
+        # view was harvested. Once that exact owner type and symbol are
+        # exported, remove only this conflicting private duplicate so the
+        # complete MAIN baseline compiles against one declaration of RssdWork.
+        if ('RssdWorkFlags' in export['types'] and
+                'extern RssdWorkFlags RssdWork;' in export['declarations']):
+            legacy_header = project_root / 'src/main/ssd_3.h'
+            owner_header = project_root / header_rel
+            reviewed_owner = reviewed_rows.get(row['id']) or {}
+            review = reviewed_owner.get('review') or {}
+            partial_identity = (review.get('identities') or {}).get('current_tu114_partial_header') or {}
+            if (review.get('schema') != 'private-tu-owner-proposal-review/1' or
+                    partial_identity.get('path') != 'src/main/ssd_3.h' or
+                    not legacy_header.is_file()):
+                raise EditError('TU114 private RssdWork reconciliation lacks an exact reviewed source-header pin')
+            # The owner-layout proposal is staged at init and revalidated again
+            # at result/review time. Accept exactly the pinned preimage or the
+            # deterministic postimage of this one reviewed declaration change;
+            # a third byte state is never treated as an already-applied edit.
+            # Derive the postimage from the pinned canonical preimage so the
+            # receipt remains verifiable after the private init side effect.
+            original_header = repo_root / partial_identity['path']
+            if (not original_header.is_file() or
+                    hashlib.sha256(original_header.read_bytes()).hexdigest() !=
+                    partial_identity.get('sha256')):
+                raise EditError('TU114 reviewed source-header preimage is stale')
+            original_text = original_header.read_text(encoding='utf-8', errors='surrogateescape')
+            legacy_block = re.compile(
+                r'(?ms)^/\*\n \* RssdWork is the RSSD RPC/background-wave work area, main:0x004aa080\n'
+                r'.*?^extern RssdWorkArea RssdWork;\s*')
+            original_matches = list(legacy_block.finditer(original_text))
+            if len(original_matches) != 1:
+                raise EditError('TU114 pinned source header has no unique reviewed partial-view declaration')
+            original_match = original_matches[0]
+            replacement = '/* RssdWork uses the reviewed shared owner layout from main/tu110. */\n'
+            expected_after_text = (original_text[:original_match.start()] + replacement +
+                                   original_text[original_match.end():])
+            before_sha256 = hashlib.sha256(original_text.encode(
+                'utf-8', errors='surrogateescape')).hexdigest()
+            after_sha256 = hashlib.sha256(expected_after_text.encode(
+                'utf-8', errors='surrogateescape')).hexdigest()
+            tu114_basis = (review.get('neighbor_assertions') or {}).get('tu114')
+            if (not isinstance(tu114_basis, str) or 'RssdWorkArea' not in tu114_basis or
+                    'flags' not in tu114_basis or '+0' not in tu114_basis):
+                raise EditError('TU114 private reconciliation lacks reviewed flags-at-zero neighbor evidence')
+            owner_text = owner_header.read_text(encoding='utf-8', errors='surrogateescape')
+            owner_type = re.search(r'(?ms)^typedef\s+struct\s+RssdWorkFlags\s*\{.*?^\}\s*RssdWorkFlags\s*;',
+                                   owner_text)
+            if not owner_type or 'extern RssdWorkFlags RssdWork;' not in owner_text:
+                raise EditError('RssdWork owner export is missing its exact reviewed type or symbol declaration')
+            legacy_bytes = legacy_header.read_bytes()
+            current_sha256 = hashlib.sha256(legacy_bytes).hexdigest()
+            if current_sha256 == before_sha256:
+                legacy_header.chmod(0o644)
+                legacy_header.write_text(expected_after_text, encoding='utf-8', errors='surrogateescape')
+                current_sha256 = after_sha256
+            elif current_sha256 != after_sha256 or legacy_bytes != expected_after_text.encode(
+                    'utf-8', errors='surrogateescape'):
+                raise EditError('private main/ssd_3.h matches neither the pinned before nor reviewed after bytes')
+            private_reconciliations.append(dict(
+                schema='tu-reviewed-private-header-reconciliation/1',
+                id='main-tu114-rssdwork-partial-view-v1',
+                path='src/main/ssd_3.h',
+                operation='replace-one-reviewed-RssdWorkArea-partial-view-with-owner-reference-v1',
+                status='applied-or-verified',
+                review_path=reviewed_owner.get('path'),
+                review_sha256=reviewed_owner.get('sha256'),
+                evidence_before_sha256=partial_identity.get('sha256'),
+                before_sha256=before_sha256,
+                after_sha256=after_sha256,
+                operation_match_count=1,
+                owner_type='RssdWorkFlags',
+                owner_symbol='extern RssdWorkFlags RssdWork;',
+                preserved_neighbor='RssdWorkArea.flags remains at +0',
+                current_sha256=current_sha256))
+    return dict(schema='tu-owner-proposal-stage/1', manifest_path=manifest_rel,
+                manifest_sha256=manifest_sha, target_tu=target_tu,
+                applied=applied, header_exports=exported,
+                private_reconciliations=private_reconciliations)
+
+
 # The banner tools/tu/gen_ovl_src.py writes at the top of an overlay skeleton
 # (build/<unit>/scaffold/src/<unit>/<tu>.c) for a TU with no published source.
 # It is generated text, not authored source, and its presence is not
@@ -2323,18 +2993,30 @@ def make_patch(base, theirs, names=None, tu_path=None):
     rb, rt = Regions(base, names, 'base'), Regions(theirs, names, 'theirs')
     b_items, _ = prelude_items(rb.prelude)
     t_items, _ = prelude_items(rt.prelude)
-    b_set = {_norm(t) for _, t in b_items}
-    t_set = {_norm(t) for _, t in t_items}
+    # Prelude declarations are patch data too.  Normalizing whitespace here
+    # loses deliberate layout edits (and can make replay differ from the
+    # staged candidate).  Track exact text with multiplicity so duplicate
+    # declarations are neither silently collapsed nor removed together.
+    b_remaining = [t for _, t in b_items]
+    additions = {}
+    for _, text in t_items:
+        if text in b_remaining:
+            b_remaining.remove(text)
+        else:
+            additions[text] = additions.get(text, 0) + 1
     add = []
     for k, (gap, t) in enumerate(t_items):
-        if _norm(t) in b_set:
+        if additions.get(t, 0) == 0:
             continue
+        # Consume one occurrence: identical prelude items can appear more
+        # than once in real TUs and patch replay preserves their count.
+        additions[t] -= 1
         after = None
         for j in range(k - 1, -1, -1):
             after = _norm(t_items[j][1])
             break
         add.append(dict(text=t, after=after, gap=gap))
-    remove = [t for _, t in b_items if _norm(t) not in t_set]
+    remove = b_remaining
     patch = dict(schema=SCHEMA_PATCH, tu=tu_path, base_sha256=sha256_text(base.text),
                  prelude=dict(add=add, remove=remove), functions={}, interstitial={})
     for n in names:
@@ -2357,8 +3039,16 @@ def patch_to_theirs(base, patch, names=None):
     rb = Regions(base, names, 'base')
     items, tail = prelude_items(rb.prelude)
     prelude_patch = patch.get('prelude', {})
-    removes = {_norm(t) for t in prelude_patch.get('remove', [])}
-    items = [(g, t) for g, t in items if _norm(t) not in removes]
+    removes = list(prelude_patch.get('remove', []))
+    kept = []
+    for gap, text in items:
+        try:
+            removes.remove(text)
+        except ValueError:
+            kept.append((gap, text))
+    if removes:
+        raise EditError('prelude removal item not found in base')
+    items = kept
     for entry in prelude_patch.get('add', []):
         text, after = entry['text'], entry.get('after')
         norms = [_norm(t) for _, t in items]
@@ -2722,3 +3412,1222 @@ def main(argv=None):
 
 if __name__ == '__main__':
     sys.exit(main())
+
+# Hash-bound, zero-credit reviewed source corrections.
+import sqlite3
+import time
+
+class CorrectionError(ValueError):
+    pass
+
+
+def digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _artifact(repo: Path, ref: dict, label: str) -> tuple[Path, bytes]:
+    if not isinstance(ref, dict) or set(ref) != {'path', 'sha256'}:
+        raise CorrectionError(f'{label}: expected path and sha256')
+    raw = Path(ref['path'])
+    if raw.is_absolute() or '..' in raw.parts or not raw.parts:
+        raise CorrectionError(f'{label}: path must be repository-relative')
+    path = (repo / raw).resolve()
+    try:
+        path.relative_to(repo.resolve())
+    except ValueError as exc:
+        raise CorrectionError(f'{label}: path escapes repository') from exc
+    data = path.read_bytes()
+    if digest(data) != ref['sha256']:
+        raise CorrectionError(f'{label}: pinned artifact digest changed')
+    return path, data
+
+
+def _copy_bytes(repo: Path, value: str, expected_sha: str, label: str) -> bytes:
+    raw = Path(value)
+    path = raw.resolve() if raw.is_absolute() else (repo / raw).resolve()
+    try:
+        path.relative_to(repo.resolve())
+    except ValueError as exc:
+        raise CorrectionError(f'{label}: copy escapes repository') from exc
+    data = path.read_bytes()
+    if digest(data) != expected_sha:
+        raise CorrectionError(f'{label}: copy digest changed')
+    return data
+
+
+def _safe_destination(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] not in ('src', 'include'):
+        raise CorrectionError('correction destination must be a safe src/ or include/ path')
+    return path
+
+
+def _verify_reviewer_task(db_path: Path, reviewer: str, report_path: Path) -> None:
+    uri = f'file:{db_path.resolve()}?mode=ro'
+    with sqlite3.connect(uri, uri=True) as db:
+        row = db.execute('SELECT owner, status, lease_until FROM tasks WHERE id=?', (reviewer,)).fetchone()
+        events = db.execute('SELECT at, action, actor, detail FROM audit WHERE task_id=? ORDER BY id',
+                            (reviewer,)).fetchall()
+    if not row:
+        raise CorrectionError('review identity is not the owner of a live/completed queue task')
+    report_mtime = report_path.stat().st_mtime
+    claim_at = None
+    claim_identity_ok = False
+    for at, action, actor, detail in events:
+        if action == 'claim' and actor == reviewer:
+            claim_at = at
+        elif action in ('release', 'expire') and claim_at is not None:
+            if claim_at <= report_mtime <= at:
+                claim_identity_ok = True
+            claim_at = None
+    if (row[0] == reviewer and row[1] in ('claimed', 'submitted', 'done') and
+            (row[1] != 'claimed' or (row[2] is not None and row[2] >= time.time()))):
+        claim_identity_ok = True
+    if not claim_identity_ok:
+        raise CorrectionError('review report was not produced while its independent reviewer task was claimed')
+
+
+def _verify_submission(db_path: Path, task: str, submission_id: str, artifact: str, author: str) -> None:
+    uri = f'file:{db_path.resolve()}?mode=ro'
+    with sqlite3.connect(uri, uri=True) as db:
+        task_row = db.execute('SELECT owner, status FROM tasks WHERE id=?', (task,)).fetchone()
+        audit = db.execute("SELECT detail FROM audit WHERE task_id=? AND action='submit' ORDER BY id DESC LIMIT 1",
+                           (task,)).fetchone()
+    if not task_row or task_row[0] != author or task_row[1] not in ('submitted', 'done') or not audit:
+        raise CorrectionError('proposal submission is absent from the production queue')
+    try:
+        detail = json.loads(audit[0])
+    except ValueError as exc:
+        raise CorrectionError('proposal submit event has invalid JSON') from exc
+    if detail.get('submission_id') != submission_id or detail.get('artifact') != artifact:
+        raise CorrectionError('proposal task does not have the exact cited latest submission')
+
+
+def _correction_row(row: dict) -> tuple[dict, dict]:
+    """Return the file row and its pinned operation metadata."""
+    correction = row.get('correction') if isinstance(row, dict) else None
+    if correction is None and isinstance(row, dict) and 'id' in row:
+        return row, {}
+    if not isinstance(correction, dict) or correction.get('schema') != 'reviewed-source-correction/1':
+        raise CorrectionError('file row lacks reviewed-source-correction/1 metadata')
+    flattened = dict(correction)
+    flattened.pop('schema', None)
+    flattened.update({key: row[key] for key in ('role', 'path', 'action', 'base', 'result', 'patch')
+                      if key in row})
+    flattened['id'] = correction.get('id')
+    return flattened, correction
+
+
+def validate_correction(repo: Path, row: dict) -> dict:
+    """Validate row provenance and exact patch before any destination write."""
+    row, metadata = _correction_row(row)
+    required = {
+        'role', 'id', 'path', 'action', 'base', 'result', 'patch', 'proposal',
+        'review', 'evidence', 'proposal_author', 'proposal_task', 'proposal_submission_id',
+        'reviewer', 'review_task', 'review_submission_id', 'affected_tus',
+        'zero_credit', 'operation',
+    }
+    if set(row) != required or row.get('role') != 'owner_source_correction' or \
+            row.get('action') != 'patch' or row.get('zero_credit') is not True:
+        raise CorrectionError('correction row has unexpected fields or is not zero-credit')
+    _safe_destination(row['path'])
+    if row['proposal_author'] == row['reviewer']:
+        raise CorrectionError('proposal author and reviewer must be distinct')
+    if not isinstance(row['affected_tus'], list) or not row['affected_tus'] or \
+            len(set(row['affected_tus'])) != len(row['affected_tus']):
+        raise CorrectionError('affected_tus must be a nonempty unique list')
+    for label in ('base', 'result'):
+        spec = row[label]
+        if not isinstance(spec, dict) or set(spec) != {'sha256', 'copy'}:
+            raise CorrectionError(f'{label}: expected sha256 and copy')
+        data = _copy_bytes(repo, spec['copy'], spec['sha256'], f'{label} copy')
+        if label == 'base':
+            base = data
+        else:
+            result = data
+    patch_path, patch_bytes = _artifact(repo, row['patch'], 'correction patch')
+    proposal_path, proposal_bytes = _artifact(repo, row['proposal'], 'proposal')
+    review_path, review_bytes = _artifact(repo, row['review'], 'review')
+    _, evidence_bytes = _artifact(repo, row['evidence'], 'evidence')
+    try:
+        proposal = json.loads(proposal_bytes)
+        review = json.loads(review_bytes)
+    except (UnicodeError, ValueError) as exc:
+        raise CorrectionError(f'proposal/review JSON is invalid: {exc}') from exc
+    if proposal.get('schema') != 'private-owner-source-patch/1' or \
+            proposal.get('id') != row['id'] or proposal.get('owner_path') != row['path']:
+        raise CorrectionError('proposal identity/path differs from correction row')
+    if row['operation'] != proposal.get('field'):
+        raise CorrectionError('correction operation differs from the pinned proposal field')
+    identity = proposal.get('source_identity') or {}
+    _, proposal_source = _artifact(repo, {'path': proposal.get('proposal_artifact'),
+                                         'sha256': proposal.get('proposal_sha256')},
+                                  'proposed owner source')
+    if identity.get('before_sha256') != digest(base) or \
+            identity.get('after_sha256') != digest(result) or proposal_source != result:
+        raise CorrectionError('proposal does not bind exact before/after bytes')
+    if proposal.get('patch_artifact') != row['patch']['path'] or \
+            proposal.get('patch_sha256') != digest(patch_bytes):
+        raise CorrectionError('proposal does not bind exact patch')
+    if review.get('schema') != 'owner-source-patch-review/1' or \
+            review.get('decision') != 'evidence_supported' or \
+            review.get('reviewer') != row['reviewer']:
+        raise CorrectionError('review identity or verdict is not supported')
+    submission = review.get('submission') or {}
+    pins = review.get('pins') or {}
+    if (submission.get('author') != row['proposal_author'] or
+            submission.get('task') != row['proposal_task'] or
+            submission.get('submission_id') != row['proposal_submission_id'] or
+            submission.get('artifact') != row['proposal']['path'] or
+            submission.get('artifact_sha256') != digest(proposal_bytes) or
+            pins.get('patch') != row['patch'] or
+            pins.get('evidence') != row['evidence'] or
+            (pins.get('current_owner_source') != {'path': row['path'], 'sha256': digest(base)} and
+             pins.get('base_source') != {'path': row['path'], 'sha256': digest(base)}) or
+            (pins.get('proposed_owner_source_sha256') != digest(result) and
+             (pins.get('proposed_source') or {}).get('sha256') != digest(result))):
+        raise CorrectionError('independent review does not pin this exact author/proposal/patch/source')
+    _verify_submission(repo / '.work/queue.sqlite3', row['proposal_task'], row['proposal_submission_id'],
+                       row['proposal']['path'], row['proposal_author'])
+    _verify_reviewer_task(repo / '.work/queue.sqlite3', row['reviewer'], review_path)
+    _verify_submission(repo / '.work/queue.sqlite3', row['review_task'], row['review_submission_id'],
+                       row['review']['path'], row['reviewer'])
+    scope = proposal.get('scope') or {}
+    if scope.get('function_bodies_changed') != [] or \
+            scope.get('accepted_neighbor_bodies_changed') != []:
+        raise CorrectionError('owner correction changes or fails to preserve function bodies')
+    # The exact patch must transform the exact before-image into the exact
+    # postimage. Use git's patch parser rather than trusting a claimed diff.
+    with tempfile.TemporaryDirectory(prefix='owner-correction-') as tmp:
+        work = Path(tmp)
+        target = work / row['path']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(base)
+        check = subprocess.run(['git', 'apply', '--check', str(patch_path)],
+                               cwd=work, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if check.returncode:
+            raise CorrectionError(f'git apply --check failed: {check.stderr.decode(errors="replace")}')
+        apply = subprocess.run(['git', 'apply', str(patch_path)], cwd=work,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if apply.returncode or target.read_bytes() != result:
+            raise CorrectionError('exact patch does not produce the pinned postimage')
+    return dict(path=row['path'], before_sha256=digest(base), after_sha256=digest(result),
+                proposal_author=row['proposal_author'], reviewer=row['reviewer'],
+                proposal_sha256=digest(proposal_bytes), review_sha256=digest(review_bytes),
+                evidence_sha256=digest(evidence_bytes), patch_sha256=digest(patch_bytes),
+                affected_tus=list(row['affected_tus']), zero_credit=True,
+                operation=row['operation'])
+
+
+def apply_correction(repo: Path, root: Path, row: dict) -> dict:
+    """Apply exact before->after correction; exact after is idempotent; else fail."""
+    kind = ((row.get('correction') or {}).get('kind')) if isinstance(row, dict) else None
+    validator = (validate_pair_correction if kind == 'owner_pair' or 'pair_manifest' in row else
+                 validate_layout_correction if 'owner_manifest' in row else validate_correction)
+    receipt = validator(repo, row)
+    target = (root / _safe_destination(row['path'])).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError as exc:
+        raise CorrectionError('destination escapes publication root') from exc
+    current = target.read_bytes()
+    current_sha = digest(current)
+    if current_sha == receipt['before_sha256']:
+        out = _copy_bytes(repo, row['result']['copy'], receipt['after_sha256'], 'postimage')
+        if digest(out) != receipt['after_sha256']:
+            raise CorrectionError('postimage changed after validation')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix=f'.{target.name}.', dir=target.parent, delete=False) as temp:
+            temp.write(out)
+            temp.flush()
+            os.fsync(temp.fileno())
+            temp_path = Path(temp.name)
+        os.chmod(temp_path, target.stat().st_mode & 0o777)
+        os.replace(temp_path, target)
+        outcome = 'applied'
+    elif current_sha == receipt['after_sha256']:
+        outcome = 'already_applied'
+    else:
+        raise CorrectionError(f'{row["path"]}: third hash {current_sha} is neither pinned before nor after')
+    receipt.update(current_before_sha256=current_sha, outcome=outcome,
+                   result_sha256=digest(target.read_bytes()))
+    return receipt
+
+
+def validate_layout_correction(repo: Path, row: dict) -> dict:
+    """Validate a publication row against a reviewed owner-layout manifest.
+
+    This is separate from the TU156 source-patch receipt. The layout reviewer
+    approves one exact tagged typedef edit; the generated diff is only a
+    transport for those already-pinned source bytes.
+    """
+    row, metadata = _correction_row(row)
+    required = {
+        'role', 'id', 'path', 'action', 'base', 'result', 'patch', 'owner_manifest',
+        'owner_manifest_row', 'owner_manifest_task', 'owner_manifest_submission_id',
+        'review', 'proposal', 'evidence', 'proposal_author', 'reviewer', 'affected_tus',
+        'zero_credit', 'operation',
+    }
+    if set(row) != required or row.get('role') != 'owner_source_correction' or \
+            row.get('action') != 'patch' or row.get('zero_credit') is not True:
+        raise CorrectionError('owner-layout correction row has unexpected fields')
+    _safe_destination(row['path'])
+    if row['proposal_author'] == row['reviewer']:
+        raise CorrectionError('owner-layout author and reviewer must be distinct')
+    _, manifest_bytes = _artifact(repo, row['owner_manifest'], 'owner manifest')
+    review_path, review_bytes = _artifact(repo, row['review'], 'owner-layout review')
+    review = json.loads(review_bytes)
+    manifest = json.loads(manifest_bytes)
+    if manifest.get('schema') != 'tu-reviewed-owner-proposals/1' or \
+            not isinstance(manifest.get('proposals'), list):
+        raise CorrectionError('owner manifest schema is unsupported')
+    matches = [p for p in manifest['proposals'] if p.get('id') == row['owner_manifest_row']]
+    if len(matches) != 1:
+        raise CorrectionError('owner manifest row id is absent or duplicated')
+    owner = matches[0]
+    if owner.get('owner_path') != row['path'] or owner.get('review_owner') != row['proposal_author']:
+        raise CorrectionError('owner manifest destination or author differs from correction row')
+    if row['operation'] != {
+            'owner_tu': owner.get('owner_tu'), 'owner_type': owner.get('owner_type'),
+            'field': owner.get('field'), 'offset': owner.get('offset'),
+            'before_member': owner.get('before_member'), 'after_member': owner.get('after_member'),
+            'layout_bytes': owner.get('layout_bytes')}:
+        raise CorrectionError('operation differs from exact reviewed owner-layout row')
+    if row['review']['path'] != owner.get('review_path') or \
+            row['review']['sha256'] != owner.get('review_sha256'):
+        raise CorrectionError('correction review reference differs from the owner manifest')
+    if row['proposal'] != {'path': owner.get('proposal_path'), 'sha256': owner.get('proposal_sha256')} or \
+            row['evidence'] != {'path': owner.get('evidence_manifest_path'),
+                                'sha256': owner.get('evidence_manifest_sha256')}:
+        raise CorrectionError('proposal/evidence refs differ from the exact owner manifest row')
+    _verify_submission(repo / '.work/queue.sqlite3', row['owner_manifest_task'],
+                       row['owner_manifest_submission_id'], row['owner_manifest']['path'],
+                       row['proposal_author'])
+    if review.get('schema') != 'private-tu-owner-proposal-review/1' or \
+            review.get('reviewer') != row['reviewer']:
+        raise CorrectionError('owner-layout reviewer identity or schema differs')
+    if review.get('status') != 'supported-as-narrow-layout-evidence-not-a-published-header-or-function-acceptance':
+        raise CorrectionError('owner-layout review does not support this narrow proposal')
+    _verify_reviewer_task(repo / '.work/queue.sqlite3', row['reviewer'], review_path)
+    identities = review.get('identities') or {}
+    expected = {
+        'owner_base': (row['path'], row['base']['sha256']),
+        'proposal': (owner.get('proposal_path'), owner.get('proposal_sha256')),
+        'evidence': (owner.get('evidence_manifest_path'), owner.get('evidence_manifest_sha256')),
+    }
+    for label, (path, digest_value) in expected.items():
+        actual = identities.get(label) or {}
+        if (actual.get('path'), actual.get('sha256')) != (path, digest_value):
+            raise CorrectionError(f'owner-layout review does not pin exact {label}')
+    if owner.get('base_sha256') != row['base']['sha256'] or \
+            owner.get('proposal_sha256') != row['result']['sha256']:
+        raise CorrectionError('owner manifest before/after hashes differ from correction row')
+    if owner.get('owner_type') not in json.dumps(review) or owner.get('field') not in json.dumps(review) or \
+            owner.get('offset') not in json.dumps(review):
+        raise CorrectionError('review does not discuss the exact field and offset')
+    if not review.get('neighbor_assertions') or not review.get('assembly_evidence'):
+        raise CorrectionError('owner-layout review lacks neighbor or assembly evidence')
+    base = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'owner correction base')
+    result = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'owner correction result')
+    _, proposal = _artifact(repo, {'path': owner['proposal_path'],
+                                   'sha256': owner['proposal_sha256']}, 'owner proposal')
+    if result != proposal:
+        raise CorrectionError('published correction result is not the exact reviewed proposal bytes')
+    # Only the reviewed complete tagged type may differ. This prevents owner
+    # layout rows from smuggling unrelated source or neighboring function edits.
+    import re
+    tag = re.escape(owner['owner_type'])
+    block = re.compile(r'(?ms)^typedef\s+struct\s+' + tag + r'\s*\{.*?^\}\s*' + tag + r'\s*;')
+    before_text = base.decode('utf-8', 'surrogateescape')
+    after_text = result.decode('utf-8', 'surrogateescape')
+    before_blocks, after_blocks = list(block.finditer(before_text)), list(block.finditer(after_text))
+    if len(before_blocks) != 1 or len(after_blocks) != 1:
+        raise CorrectionError('reviewed owner typedef is not unique in exact before/after files')
+    b, a = before_blocks[0], after_blocks[0]
+    if before_text[:b.start()] != after_text[:a.start()] or \
+            before_text[b.end():] != after_text[a.end():]:
+        raise CorrectionError('owner correction changes bytes outside the reviewed typedef')
+    _, patch = _artifact(repo, row['patch'], 'owner correction patch')
+    # Verify generated transport diff against the exact before/postimage.
+    with tempfile.TemporaryDirectory(prefix='owner-layout-correction-') as tmp:
+        work = Path(tmp)
+        target = work / row['path']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(base)
+        patch_path, _ = _artifact(repo, row['patch'], 'patch')
+        check = subprocess.run(['git', 'apply', '--check', str(patch_path)],
+                               cwd=work, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        apply = subprocess.run(['git', 'apply', str(patch_path)],
+                               cwd=work, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if check.returncode or apply.returncode or target.read_bytes() != result:
+            raise CorrectionError('owner patch transport does not reproduce exact reviewed source bytes')
+    return dict(path=row['path'], before_sha256=digest(base), after_sha256=digest(result),
+                proposal_author=row['proposal_author'], reviewer=row['reviewer'],
+                owner_manifest_sha256=digest(manifest_bytes), review_sha256=digest(review_bytes),
+                patch_sha256=digest(patch), affected_tus=list(row['affected_tus']),
+                zero_credit=True, operation=row['operation'])
+
+
+def validate_pair_correction(repo: Path, row: dict) -> dict:
+    """Validate one member of an independently reviewed owner-source pair."""
+    row, _ = _correction_row(row)
+    required = {
+        'role', 'id', 'path', 'action', 'base', 'result', 'patch', 'proposal', 'evidence',
+        'proposal_task', 'proposal_submission_id',
+        'pair_manifest', 'pair_row_owner_tu', 'pair_task', 'pair_submission_id',
+        'proposal_author', 'reviewer', 'review', 'review_task', 'review_submission_id',
+        'affected_tus', 'verification_tus',
+        'zero_credit', 'operation',
+    }
+    if set(row) != required or row.get('role') != 'owner_source_correction' or \
+            row.get('action') != 'patch' or row.get('zero_credit') is not True:
+        raise CorrectionError('owner-pair correction has unexpected fields or is not zero-credit')
+    _safe_destination(row['path'])
+    if row['proposal_author'] == row['reviewer']:
+        raise CorrectionError('owner-pair author and reviewer must be distinct')
+    for key in ('affected_tus', 'verification_tus'):
+        values = row[key]
+        if not isinstance(values, list) or not values or len(set(values)) != len(values):
+            raise CorrectionError(f'{key} must be a nonempty unique list')
+    if not set(row['affected_tus']).issubset(row['verification_tus']):
+        raise CorrectionError('every candidate consumer must also be rebuilt and verified')
+
+    _, manifest_bytes = _artifact(repo, row['pair_manifest'], 'owner-pair manifest')
+    manifest = json.loads(manifest_bytes)
+    if manifest.get('schema') != 'private-owner-composability-patch-pair/1' or \
+            manifest.get('credit') != 'zero; owner and header corrections only':
+        raise CorrectionError('owner-pair manifest schema or credit declaration is unsupported')
+    if manifest.get('author') != row['proposal_author']:
+        raise CorrectionError('owner-pair manifest author differs from the correction row')
+    members = [p for p in manifest.get('patches') or []
+               if p.get('owner_tu') == row['pair_row_owner_tu'] and p.get('path') == row['path']]
+    if len(members) != 1:
+        raise CorrectionError('owner-pair entry is absent or duplicated')
+    member = members[0]
+    base = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'pair base')
+    result = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'pair postimage')
+    patch_path, patch_bytes = _artifact(repo, row['patch'], 'pair patch')
+    if (row['base']['sha256'] != member.get('before_sha256') or
+            row['result']['sha256'] != member.get('after_sha256') or
+            row['patch']['path'] != member.get('patch_artifact') or
+            row['patch']['sha256'] != member.get('patch_sha256') or
+            digest(patch_bytes) != member.get('patch_sha256')):
+        raise CorrectionError('correction row does not match its exact manifest member')
+    if (row['proposal'] != row['pair_manifest'] or row['proposal_task'] != row['pair_task'] or
+            row['proposal_submission_id'] != row['pair_submission_id']):
+        raise CorrectionError('generic proposal identity does not alias the exact pair submission')
+    old_paths = [line[4:] for line in patch_bytes.decode('utf-8', 'replace').splitlines()
+                 if line.startswith('--- ')]
+    new_paths = [line[4:] for line in patch_bytes.decode('utf-8', 'replace').splitlines()
+                 if line.startswith('+++ ')]
+    if old_paths != ['a/' + row['path']] or new_paths != ['b/' + row['path']]:
+        raise CorrectionError('pair patch must contain exactly one exact-path file delta')
+    with tempfile.TemporaryDirectory(prefix='owner-pair-correction-') as tmp:
+        work = Path(tmp)
+        target = work / row['path']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(base)
+        check = subprocess.run(['git', 'apply', '--check', str(patch_path)], cwd=work,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        apply = subprocess.run(['git', 'apply', str(patch_path)], cwd=work,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if check.returncode or apply.returncode or target.read_bytes() != result:
+            raise CorrectionError('pair patch does not reproduce its exact reviewed postimage')
+
+    review_path, review_bytes = _artifact(repo, row['review'], 'independent pair review')
+    review = json.loads(review_bytes)
+    if (review.get('schema') != 'owner-source-pair-review/1' or
+            review.get('decision') != 'evidence_supported' or
+            review.get('reviewer') != row['reviewer']):
+        raise CorrectionError('independent pair review identity or decision is unsupported')
+    submission = review.get('submission') or {}
+    if (submission.get('task') != row['pair_task'] or
+            submission.get('submission_id') != row['pair_submission_id'] or
+            submission.get('author') != row['proposal_author'] or
+            submission.get('artifact') != row['pair_manifest']['path'] or
+            submission.get('artifact_sha256') != digest(manifest_bytes)):
+        raise CorrectionError('independent review does not pin the exact pair submission')
+    if row['evidence'] != {'path': submission.get('evidence'),
+                           'sha256': submission.get('evidence_sha256')}:
+        raise CorrectionError('generic evidence reference differs from pair review receipt')
+    _verify_submission(repo / '.work/queue.sqlite3', row['pair_task'], row['pair_submission_id'],
+                       row['pair_manifest']['path'], row['proposal_author'])
+    if row['review_task'] != review.get('review_task'):
+        raise CorrectionError('review task identity differs from the pinned review report')
+    _verify_submission(repo / '.work/queue.sqlite3', review.get('review_task'),
+                       row['review_submission_id'], row['review']['path'], row['reviewer'])
+    reviewed_rows = review.get('corrections') or []
+    reviewed = [r for r in reviewed_rows if r.get('owner_tu') == member.get('owner_tu')
+                and r.get('path') == member.get('path')]
+    if len(reviewed) != 1:
+        raise CorrectionError('independent review omits or duplicates this pair member')
+    accepted = reviewed[0]
+    if (accepted.get('patch') != member.get('patch_artifact') or
+            accepted.get('patch_sha256') != member.get('patch_sha256') or
+            accepted.get('before_sha256') != member.get('before_sha256') or
+            accepted.get('after_sha256') != member.get('after_sha256')):
+        raise CorrectionError('independent review does not bind the exact patch transformation')
+    if row['pair_row_owner_tu'] == 'main/tu110':
+        semantic = member.get('independent_owner_review') or {}
+        if semantic.get('path') not in json.dumps(review) or semantic.get('sha256') not in json.dumps(review):
+            raise CorrectionError('pair review omits the exact semantic owner review')
+        _, semantic_bytes = _artifact(repo, semantic, 'semantic owner review')
+        semantic_report = json.loads(semantic_bytes)
+        if (semantic_report.get('schema') != 'private-tu-owner-proposal-review/1' or
+                semantic_report.get('status') !=
+                'supported-as-narrow-layout-evidence-not-a-published-header-or-function-acceptance'):
+            raise CorrectionError('semantic owner review does not support the layout proposal')
+    elif row['pair_row_owner_tu'] == 'main/tu114':
+        materialization = member.get('independent_materialization_receipt') or {}
+        if (materialization.get('path') not in json.dumps(review) or
+                materialization.get('sha256') not in json.dumps(review) or
+                materialization.get('before_sha256') != member.get('before_sha256') or
+                materialization.get('after_sha256') != member.get('after_sha256')):
+            raise CorrectionError('pair review omits the exact TU114 materialization receipt')
+        _, material_bytes = _artifact(repo, {'path': materialization.get('path'),
+                                             'sha256': materialization.get('sha256')},
+                                      'TU114 materialization receipt')
+        material_report = json.loads(material_bytes)
+        if (material_report.get('schema') != 'private-tu-owner-route-check/1' or
+                not (material_report.get('result') or {}).get('passed')):
+            raise CorrectionError('TU114 materialization receipt is not supported')
+    else:
+        raise CorrectionError('owner-pair route is closed to unreviewed owner TU identities')
+    verification = list((manifest.get('required_rebuild_and_audit_set') or {}).get('direct_header_consumers') or [])
+    if (sorted(row['verification_tus']) != sorted(verification) or
+            (manifest.get('required_rebuild_and_audit_set') or {}).get('whole_linked_target_gate') != ['main']):
+        raise CorrectionError('verification set differs from the independently reviewed pair')
+    expected_operation = ({'owner_tu': 'main/tu110', 'field': member.get('field'),
+                           'offset': member.get('offset')}
+                          if row['pair_row_owner_tu'] == 'main/tu110' else
+                          {'owner_tu': 'main/tu114', 'change': member.get('change')})
+    if row['operation'] != expected_operation:
+        raise CorrectionError('operation differs from the exact pair member')
+    safety = manifest.get('safety_and_scope') or {}
+    if safety.get('function_bodies_changed') != [] or safety.get('new_c_credit') != 0:
+        raise CorrectionError('owner-pair manifest does not preserve zero-credit function scope')
+    return dict(path=row['path'], before_sha256=digest(base), after_sha256=digest(result),
+                pair_manifest_sha256=digest(manifest_bytes), review_sha256=digest(review_bytes),
+                patch_sha256=digest(patch_bytes), proposal_author=row['proposal_author'],
+                reviewer=row['reviewer'], affected_tus=list(row['affected_tus']),
+                verification_tus=list(row['verification_tus']), zero_credit=True,
+                operation=row['operation'])
+
+
+def apply_reviewed_source_correction(repo_root, project_root, report_row):
+    row = dict(report_row)
+    correction = row.pop('correction', None)
+    if isinstance(correction, dict) and correction.get('schema') == 'user-authorized-source-correction/1':
+        return apply_user_authorized_source_correction(Path(repo_root).resolve(),
+                                                       Path(project_root).resolve(), row, correction)
+    if not isinstance(correction, dict) or correction.get('schema') != 'reviewed-source-correction/1':
+        raise CorrectionError('report row has no reviewed-source-correction/1 metadata')
+    kind = correction.get('kind')
+    if kind not in ('owner_source', 'owner_layout', 'owner_pair'):
+        raise CorrectionError('correction kind is not yet supported by this bounded route')
+    row.update({key: value for key, value in correction.items() if key not in ('schema', 'kind')})
+    return apply_correction(Path(repo_root).resolve(), Path(project_root).resolve(), row)
+
+
+def validate_reviewed_source_correction(repo_root, report_row):
+    row = dict(report_row)
+    correction = row.pop('correction', None)
+    if isinstance(correction, dict) and correction.get('schema') == 'user-authorized-source-correction/1':
+        return validate_user_authorized_source_correction(Path(repo_root).resolve(), row, correction)
+    if not isinstance(correction, dict) or correction.get('schema') != 'reviewed-source-correction/1':
+        raise CorrectionError('report row has no reviewed-source-correction/1 metadata')
+    kind = correction.get('kind')
+    if kind not in ('owner_source', 'owner_layout', 'owner_pair'):
+        raise CorrectionError('correction kind is not yet supported by this bounded route')
+    row.update({key: value for key, value in correction.items() if key not in ('schema', 'kind')})
+    validator = (validate_pair_correction if kind == 'owner_pair' else
+                 validate_layout_correction if kind == 'owner_layout' else validate_correction)
+    return validator(Path(repo_root).resolve(), row)
+
+
+def _user_correction_inputs(repo: Path, row: dict, correction: dict):
+    if correction.get('kind') == 'block_scope_declaration_only':
+        return _validate_user_block_scope_declaration_correction(repo, row, correction)
+    if correction.get('kind') == 'declaration_only':
+        return _validate_user_declaration_correction(repo, row, correction)
+    if correction.get('kind') == 'qualifier_cast_only':
+        return _validate_user_qualifier_cast_correction(repo, row, correction)
+    required = {'role', 'id', 'path', 'action', 'base', 'result', 'patch'}
+    if set(row) != required or row.get('role') != 'owner_source_correction' or row.get('action') != 'patch' or \
+            row.get('path') != 'src/ov10/cgp.c' or correction.get('kind') != 'ov10_cgpcursorposition_owner_prelude':
+        raise CorrectionError('user-authorized source correction row has unexpected scope or fields')
+    if correction.get('zero_credit') is not True or correction.get('owner_tu') != 'ov10/tu008':
+        raise CorrectionError('user-authorized correction is not the bounded zero-credit OV10/tu008 operation')
+    for name in ('authority', 'proposal', 'evidence', 'application_manifest', 'composer_result'):
+        _artifact(repo, correction.get(name), f'user correction {name}')
+    for label in ('base', 'result'):
+        spec = row.get(label) or {}
+        if set(spec) != {'sha256', 'copy'}:
+            raise CorrectionError(f'user correction {label} copy pin has unexpected fields')
+        _copy_bytes(repo, spec['copy'], spec['sha256'], f'user correction {label}')
+    patch_path, patch_bytes = _artifact(repo, row['patch'], 'user correction patch')
+    patch = json.loads(patch_bytes)
+    result_ref = correction['composer_result']
+    _, result_bytes = _artifact(repo, result_ref, 'compose11 result')
+    result = json.loads(result_bytes)
+    proposal = json.loads(_artifact(repo, correction['proposal'], 'owner proposal')[1])
+    evidence = json.loads(_artifact(repo, correction['evidence'], 'owner evidence')[1])
+    app = json.loads(_artifact(repo, correction['application_manifest'], 'application manifest')[1])
+    authority = json.loads(_artifact(repo, correction['authority'], 'user authority')[1])
+    if (result.get('schema') != 'ov10-tu008-compose11-private-result/1' or
+            result.get('status') != 'composed_pending_user_authority_stamp_and_live_gate' or
+            result.get('artifact_hashes', {}).get('source.c') != correction.get('composed_source_sha256')):
+        raise CorrectionError('compose11 result or source hash does not match the user correction row')
+    if (proposal.get('schema') != 'ov10-owner-declaration-move-proposal/1' or
+            proposal.get('owner_tu') != correction['owner_tu'] or
+            proposal.get('owner_path') != row['path'] or
+            proposal.get('published_base_sha256') != row['base']['sha256'] or
+            proposal.get('authority', {}).get('status') != 'user_directed_zero_credit_refinement' or
+            proposal.get('review', {}).get('status') != 'not_requested_by_user' or
+            proposal.get('scope', {}).get('function_bodies_changed') != [] or
+            proposal.get('scope', {}).get('new_c_credit') != 0):
+        raise CorrectionError('owner proposal is not the bounded user-directed zero-credit declaration operation')
+    if (evidence.get('schema') != 'ov10-cgpcursorposition-layout-evidence/1' or
+            evidence.get('owner_tu') != correction['owner_tu'] or
+            evidence.get('owner_path') != row['path'] or
+            evidence.get('published_source_sha256') != row['base']['sha256']):
+        raise CorrectionError('layout evidence identity differs from the pinned owner source')
+    expected = app.get('expected_replay') or {}
+    if (app.get('schema') != 'ov10-user-directed-source-correction-application/1' or
+            app.get('owner_tu') != correction['owner_tu'] or app.get('owner_path') != row['path'] or
+            app.get('status') != 'composed_replay_verified_waiting_for_user_authority_metadata_and_live_gate' or
+            expected.get('source_sha256') != correction['composed_source_sha256'] or
+            sorted(expected.get('function_patch_sids') or []) != sorted(correction.get('function_patch_sids') or []) or
+            app.get('authority_artifact') is not None):
+        raise CorrectionError('application manifest does not pin this exact no-review composition')
+    frozen = authority.get('scope') or {}
+    policy = authority.get('integration_policy') or {}
+    if (authority.get('schema') != 'user-direct-acceptance-authority/1' or
+            authority.get('authority') != 'explicit human instruction in the current root conversation' or
+            not authority.get('user_instruction_verbatim') or
+            frozen.get('frozen_index_sha256') != 'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c' or
+            frozen.get('function_count') != 938 or frozen.get('new_recovery_outside_frozen_scope') is not False or
+            authority.get('independent_review') != 'waived by the user; no review has been performed by this record' or
+            policy.get('private_integrator_preflight') is not False or
+            policy.get('post_integration_review') is not False or
+            policy.get('live_publisher_byte_comparison_and_tu_audit') != 'required' or
+            correction['authority'].get('sha256') != '7b4e8d276062c4c93cddb1ed259de2115df5b1c8e42c33e03a52c1161792e83c' or
+            correction.get('owner_tu') != 'ov10/tu008' or
+            correction['composer_result'].get('sha256') != 'afcf23c40768530a003a50fe49802f5cae6a657d4f4df5f960c7bb2cb47d4e41'):
+        raise CorrectionError('pinned authority stamp does not authorize this exact correction under the user waiver')
+    if result.get('owner_correction', {}).get('patch') != patch:
+        raise CorrectionError('correction patch differs from immutable compose11 result')
+    base = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'user correction base')
+    post = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'user correction postimage')
+    if digest(base) != proposal['published_base_sha256'] or digest(post) != result['owner_correction']['corrected_sha256']:
+        raise CorrectionError('exact before/after source bytes differ from proposal or composer result pins')
+    if not patch.get('schema') == 'tu-patch/1' or patch.get('functions') or \
+            set(patch.get('interstitial') or {}) != {'CGPCMSub'}:
+        raise CorrectionError('owner correction must change only the prelude and CGPCMSub declarations')
+    base_text, post_text = base.decode('utf-8', 'surrogateescape'), post.decode('utf-8', 'surrogateescape')
+    base_tu, post_tu = TU(base_text, row['path']), TU(post_text, row['path'])
+    applied = apply_patch(base_tu, base_tu, patch).get('text')
+    if applied is None or applied.encode('utf-8', 'surrogateescape') != post:
+        raise CorrectionError('owner correction patch does not exactly reproduce its pinned postimage')
+    before = {b.name: base_tu.block_text(b) for b in base_tu.functions()}
+    after = {b.name: post_tu.block_text(b) for b in post_tu.functions()}
+    if before != after:
+        raise CorrectionError('user-directed zero-credit owner correction changes a function body')
+    protected = proposal['scope'].get('function_block_sha256') or {}
+    if protected.get('CGPCMSub') != digest(post_tu.block_text(post_tu.by_name['CGPCMSub']).encode('utf-8', 'surrogateescape')):
+        raise CorrectionError('the protected CGPCMSub function block changed during the declaration correction')
+    return dict(id=row['id'], kind=correction['kind'], owner_tu=correction['owner_tu'],
+                path=row['path'], before_sha256=digest(base), after_sha256=digest(post),
+                zero_credit=True, authority_sha256=correction['authority']['sha256'],
+                composer_result_sha256=correction['composer_result']['sha256'],
+                proposal_sha256=correction['proposal']['sha256'], evidence_sha256=correction['evidence']['sha256'],
+                application_manifest_sha256=correction['application_manifest']['sha256'],
+                function_patch_sids=list(correction['function_patch_sids']),
+                function_bodies_changed=[], protected_function='CGPCMSub', protected_function_unchanged=True,
+                operation='apply declared owner refinement before the exact composed function patch')
+
+
+def _validate_user_declaration_correction(repo: Path, row: dict, correction: dict):
+    required = {'role', 'id', 'path', 'action', 'base', 'result', 'patch'}
+    if (set(row) != required or row.get('role') != 'owner_source_correction' or
+            row.get('action') != 'patch' or correction.get('zero_credit') is not True or
+            correction.get('function_bodies_changed') != [] or
+            not isinstance(correction.get('changed_declarations'), list) or
+            not correction['changed_declarations'] or not correction.get('operation') or
+            not re.fullmatch(r'(main|ov01|ov02|ov10|ov11|ov12)/tu[0-9]{3}',
+                             str(correction.get('owner_tu') or ''))):
+        raise CorrectionError('user declaration correction has unexpected scope or is not zero-credit')
+    tu_build = json.loads((repo / 'config/tu-build.json').read_text(encoding='utf-8'))
+    tu_record = next((x for x in tu_build.get('tus', []) if x.get('id') == correction['owner_tu']), None)
+    unit, tu_name = correction['owner_tu'].split('/')
+    if not tu_record or not tu_record.get('in_scope') or tu_record.get('category') != 'game':
+        raise CorrectionError('declaration correction owner TU is outside scoped game TUs')
+    tu_stem = Path(tu_record['path']).stem
+    owner_headers = {f'include/{unit}/{tu_stem}.h', f'src/{unit}/{tu_stem}.h'}
+    if row.get('path') != tu_record['path'] and row.get('path') not in owner_headers:
+        raise CorrectionError('declaration correction path is not the TU source or its generated public header')
+    frozen_bytes = (repo / '.work/reworks/orq-rework940-20260929/luna-46/index.json').read_bytes()
+    if digest(frozen_bytes) != 'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c':
+        raise CorrectionError('frozen938 index hash changed')
+    frozen_index = json.loads(frozen_bytes)
+    if not any((item.get('identity') or {}).get('tu') == correction['owner_tu']
+               for item in frozen_index.get('identities', [])):
+        raise CorrectionError('declaration correction owner TU is absent from pinned frozen938 scope')
+    refs = {}
+    for name in ('authority', 'proposal', 'evidence', 'application_manifest'):
+        ref = correction.get(name)
+        _, data = _artifact(repo, ref, f'declaration correction {name}')
+        refs[name] = json.loads(data) if name != 'authority' else json.loads(data)
+    authority = refs['authority']
+    frozen, policy = authority.get('scope') or {}, authority.get('integration_policy') or {}
+    if (correction['authority'].get('sha256') !=
+            '7b4e8d276062c4c93cddb1ed259de2115df5b1c8e42c33e03a52c1161792e83c' or
+            authority.get('schema') != 'user-direct-acceptance-authority/1' or
+            authority.get('recorded_by') != 'orq-review940-20260929' or
+            frozen.get('frozen_index_sha256') !=
+            'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c' or
+            frozen.get('function_count') != 938 or frozen.get('new_recovery_outside_frozen_scope') is not False or
+            policy.get('private_integrator_preflight') is not False or
+            policy.get('post_integration_review') is not False or
+            policy.get('live_publisher_byte_comparison_and_tu_audit') != 'required'):
+        raise CorrectionError('declaration correction is not bound to the pinned user waiver authority')
+    for label in ('base', 'result'):
+        spec = row.get(label) or {}
+        if set(spec) != {'sha256', 'copy'}:
+            raise CorrectionError(f'declaration correction {label} source copy pin is malformed')
+    base = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'declaration correction base')
+    post = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'declaration correction postimage')
+    if (correction.get('base_sha256') != digest(base) or correction.get('result_sha256') != digest(post) or
+            correction.get('owner_tu') is None):
+        raise CorrectionError('declaration correction source bytes differ from their immutable pins')
+    patch_path, patch_bytes = _artifact(repo, row['patch'], 'declaration correction patch')
+    patch = json.loads(patch_bytes)
+    if (patch.get('schema') != 'tu-patch/1' or patch.get('tu') != row['path'] or
+            patch.get('base_sha256') != digest(base) or patch.get('functions') or
+            set(patch) - {'schema', 'tu', 'base_sha256', 'prelude', 'functions', 'interstitial'}):
+        raise CorrectionError('declaration correction patch is not prelude/interstitial-only')
+    before_tu = TU(base.decode('utf-8', 'surrogateescape'), row['path'])
+    after_tu = TU(post.decode('utf-8', 'surrogateescape'), row['path'])
+    # This exact user-authorized correction may remove old declarations;
+    # ordinary candidate merges keep their additive-prelude restrictions.
+    applied = patch_to_theirs(before_tu, patch).text
+    if applied is None or applied.encode('utf-8', 'surrogateescape') != post:
+        raise CorrectionError('declaration correction patch does not replay to its pinned postimage')
+    if row['path'] == tu_record['path']:
+        owner_source = base
+        if correction.get('owner_source_sha256') != digest(owner_source):
+            raise CorrectionError('owner source pin differs from the TU source correction base')
+        owner_source_after = post
+    else:
+        owner_source_ref = correction.get('owner_source') or {}
+        owner_source_path, owner_source = _artifact(repo, owner_source_ref, 'owner TU source')
+        if (owner_source_path.relative_to(repo.resolve()).as_posix() != tu_record['path'] or
+                owner_source_ref.get('sha256') != correction.get('owner_source_sha256')):
+            raise CorrectionError('owner-header correction does not pin the mapped TU source')
+        owner_source_after = owner_source
+    source_tu = TU(owner_source.decode('utf-8', 'surrogateescape'), tu_record['path'])
+    before_blocks = {fn.name: digest(source_tu.block_text(fn).encode('utf-8', 'surrogateescape'))
+                     for fn in source_tu.functions()}
+    source_tu_after = TU(owner_source_after.decode('utf-8', 'surrogateescape'), tu_record['path'])
+    after_blocks = {fn.name: digest(source_tu_after.block_text(fn).encode('utf-8', 'surrogateescape'))
+                    for fn in source_tu_after.functions()}
+    if before_blocks != after_blocks or correction.get('function_block_sha256') != before_blocks:
+        raise CorrectionError('declaration correction changed or failed to pin every mapped function block')
+    return dict(id=row['id'], kind='declaration_only', owner_tu=correction['owner_tu'], path=row['path'],
+                before_sha256=digest(base), after_sha256=digest(post), patch_sha256=digest(patch_bytes),
+                zero_credit=True, authority_sha256=correction['authority']['sha256'],
+                proposal_sha256=correction['proposal']['sha256'], evidence_sha256=correction['evidence']['sha256'],
+                application_manifest_sha256=correction['application_manifest']['sha256'],
+                function_bodies_changed=[], changed_declarations=list(correction['changed_declarations']),
+                function_block_sha256=before_blocks, operation=correction['operation'])
+
+
+def _qualifier_cast_edits():
+    return [
+        dict(function='CardPlayCommandPlay', callee='xglMatrixTrans', argument_index=2,
+             before='xglMatrixTrans(matrix, matrix, translation);',
+             after='xglMatrixTrans(matrix, (const float (*)[4])matrix, translation);'),
+        dict(function='CardPlayCommandPlay', callee='xglMatrixScale', argument_index=2,
+             before='xglMatrixScale(matrix, matrix, scale);',
+             after='xglMatrixScale(matrix, (const float (*)[4])matrix, scale);'),
+    ]
+
+
+def _replace_qualifier_casts(text: str, side: str, path: str) -> str:
+    """Apply or normalize the one pinned pair of old-GCC array-qualifier casts."""
+    if side not in ('before', 'after'):
+        raise CorrectionError('qualifier cast operation side must be before or after')
+    tu = TU(text, path)
+    block = tu.by_name.get('CardPlayCommandPlay')
+    if block is None or block.state != 'c' or block.role != 'function':
+        raise CorrectionError('qualifier-cast owner is not the mapped C CardPlayCommandPlay function')
+    old_block = tu.block_text(block)
+    replacements = []
+    for edit in _qualifier_cast_edits():
+        old, new = edit['before'], edit['after']
+        source, target = (old, new) if side == 'before' else (new, old)
+        if old_block.count(source) != 1:
+            raise CorrectionError(f"CardPlayCommandPlay must contain one exact {edit['callee']} {side} call")
+        replacements.append((source, target))
+    new_block = old_block
+    for source, target in replacements:
+        new_block = new_block.replace(source, target, 1)
+    return text[:block.start] + new_block + text[block.end:]
+
+
+def _validate_user_qualifier_cast_correction(repo: Path, row: dict, correction: dict):
+    """Validate the narrowly authorized OV10 matrix qualifier-only adjustment.
+
+    It deliberately reports CardPlayCommandPlay as a raw source-body change.
+    Zero credit is established only after removing these two exact casts and
+    proving the complete normalized function block unchanged.
+    """
+    required_row = {'role', 'id', 'path', 'action', 'base', 'result', 'patch'}
+    required_correction = {
+        'schema', 'kind', 'owner_tu', 'application_phase', 'authority', 'proposal',
+        'evidence', 'application_manifest', 'base_sha256', 'result_sha256',
+        'owner_source_sha256', 'function_block_sha256', 'result_function_block_sha256',
+        'normalized_function_body_sha256_before', 'normalized_function_body_sha256_after',
+        'function_bodies_changed', 'changed_declarations', 'operation', 'zero_credit',
+        'candidate_source', 'composed_candidate', 'preserved_candidate_functions',
+        'source_task',
+    }
+    if (set(row) != required_row or row.get('role') != 'owner_source_correction' or
+            row.get('action') != 'patch' or set(correction) != required_correction or
+            correction.get('schema') != 'user-authorized-source-correction/1' or
+            correction.get('kind') != 'qualifier_cast_only' or
+            correction.get('owner_tu') != 'ov10/tu003' or
+            correction.get('application_phase') != 'pre_source' or
+            correction.get('zero_credit') is not True or
+            correction.get('function_bodies_changed') != ['CardPlayCommandPlay'] or
+            correction.get('changed_declarations') != [] or
+            correction.get('operation') != _qualifier_cast_edits()):
+        raise CorrectionError('qualifier-cast correction has unexpected scope or operation')
+
+    tu_build = json.loads((repo / 'config/tu-build.json').read_text(encoding='utf-8'))
+    tu_record = next((entry for entry in tu_build.get('tus', []) if entry.get('id') == 'ov10/tu003'), None)
+    if (not tu_record or not tu_record.get('in_scope') or tu_record.get('category') != 'game' or
+            row.get('path') != tu_record.get('path') or
+            row.get('path') != 'src/ov10/ccu_038_exec_sub.c'):
+        raise CorrectionError('qualifier-cast correction is not the mapped in-scope OV10/tu003 owner')
+
+    frozen_bytes = (repo / '.work/reworks/orq-rework940-20260929/luna-46/index.json').read_bytes()
+    if digest(frozen_bytes) != 'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c':
+        raise CorrectionError('frozen938 index hash changed')
+    frozen_index = json.loads(frozen_bytes)
+    if not any((entry.get('identity') or {}).get('tu') == 'ov10/tu003'
+               for entry in frozen_index.get('identities', [])):
+        raise CorrectionError('qualifier-cast owner TU is absent from frozen938 scope')
+
+    authority_ref = correction.get('authority')
+    authority_path, authority_bytes = _artifact(repo, authority_ref, 'qualifier-cast user authority')
+    authority = json.loads(authority_bytes)
+    frozen_scope, policy = authority.get('scope') or {}, authority.get('integration_policy') or {}
+    if (authority_ref.get('sha256') != '7b4e8d276062c4c93cddb1ed259de2115df5b1c8e42c33e03a52c1161792e83c' or
+            authority.get('schema') != 'user-direct-acceptance-authority/1' or
+            authority.get('recorded_by') != 'orq-review940-20260929' or
+            frozen_scope.get('frozen_index_sha256') != 'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c' or
+            frozen_scope.get('function_count') != 938 or
+            frozen_scope.get('new_recovery_outside_frozen_scope') is not False or
+            policy.get('private_integrator_preflight') is not False or
+            policy.get('post_integration_review') is not False or
+            policy.get('live_publisher_byte_comparison_and_tu_audit') != 'required'):
+        raise CorrectionError('qualifier-cast correction is not bound to the pinned user authority')
+
+    refs = {}
+    for name in ('proposal', 'evidence', 'application_manifest'):
+        _path, data = _artifact(repo, correction[name], f'qualifier-cast {name}')
+        refs[name] = json.loads(data)
+    proposal, evidence, application = refs['proposal'], refs['evidence'], refs['application_manifest']
+    if (proposal.get('schema') != 'user-authorized-qualifier-cast-proposal/1' or
+            proposal.get('owner_tu') != 'ov10/tu003' or proposal.get('owner_path') != row['path'] or
+            proposal.get('base_sha256') != row['base'].get('sha256') or
+            proposal.get('result_sha256') != row['result'].get('sha256') or
+            proposal.get('operation') != correction['operation'] or
+            proposal.get('scope', {}).get('new_c_credit') != 0 or
+            proposal.get('scope', {}).get('normalized_function_bodies_changed') != []):
+        raise CorrectionError('qualifier-cast proposal does not pin the exact zero-credit scope')
+    if (evidence.get('schema') != 'ov10-cardplay-matrix-qualifier-cast-evidence/1' or
+            evidence.get('owner_tu') != 'ov10/tu003' or evidence.get('owner_path') != row['path']):
+        raise CorrectionError('qualifier-cast evidence has the wrong owner identity')
+    expected = application.get('expected_replay') or {}
+    if (application.get('schema') != 'ov10-user-authorized-qualifier-cast-application/1' or
+            application.get('owner_tu') != 'ov10/tu003' or application.get('owner_path') != row['path'] or
+            application.get('application_phase') != 'pre_source' or
+            expected.get('owner_postimage_sha256') != correction.get('result_sha256') or
+            expected.get('composed_candidate_sha256') != correction.get('composed_candidate', {}).get('sha256') or
+            expected.get('normalized_candidate_sha256') != correction.get('candidate_source', {}).get('sha256') or
+            expected.get('body_hashes_unchanged') is not True or
+            expected.get('whole_file_gate_and_tu_audit') != 'required on actual live publisher build'):
+        raise CorrectionError('qualifier-cast application manifest does not pin the exact replay')
+    if (evidence.get('audit_report') is None or evidence.get('candidate_source') != correction.get('candidate_source') or
+            evidence.get('composed_candidate') != correction.get('composed_candidate')):
+        raise CorrectionError('qualifier-cast evidence does not pin the cited audit and candidate sources')
+
+    for label in ('base', 'result'):
+        spec = row.get(label) or {}
+        if set(spec) != {'sha256', 'copy'}:
+            raise CorrectionError(f'qualifier-cast {label} copy pin is malformed')
+        _copy_bytes(repo, spec['copy'], spec['sha256'], f'qualifier-cast {label}')
+    base = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'qualifier-cast base')
+    post = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'qualifier-cast postimage')
+    if (correction.get('base_sha256') != digest(base) or correction.get('result_sha256') != digest(post) or
+            correction.get('owner_source_sha256') != digest(base)):
+        raise CorrectionError('qualifier-cast correction bytes do not match their owner source pins')
+    base_text = base.decode('utf-8', 'surrogateescape')
+    post_text = post.decode('utf-8', 'surrogateescape')
+    expected_post = _replace_qualifier_casts(base_text, 'before', row['path'])
+    if expected_post.encode('utf-8', 'surrogateescape') != post:
+        raise CorrectionError('qualifier-cast postimage contains bytes beyond the exact two call casts')
+    if _replace_qualifier_casts(post_text, 'after', row['path']).encode('utf-8', 'surrogateescape') != base:
+        raise CorrectionError('qualifier-cast normalization does not reproduce the complete base source')
+
+    patch_path, patch_bytes = _artifact(repo, row['patch'], 'qualifier-cast patch')
+    patch = json.loads(patch_bytes)
+    if (patch.get('schema') != 'tu-patch/1' or patch.get('tu') != row['path'] or
+            patch.get('base_sha256') != digest(base) or
+            set(patch.get('functions') or {}) != {'CardPlayCommandPlay'} or
+            patch.get('prelude') != {'add': [], 'remove': []} or patch.get('interstitial') != {} or
+            set(patch) - {'schema', 'tu', 'base_sha256', 'prelude', 'functions', 'interstitial'}):
+        raise CorrectionError('qualifier-cast patch is not the exact single-function patch')
+    before_tu = TU(base_text, row['path'])
+    after_tu = TU(post_text, row['path'])
+    replay = patch_to_theirs(before_tu, patch).text
+    if replay is None or replay.encode('utf-8', 'surrogateescape') != post:
+        raise CorrectionError('qualifier-cast function patch does not replay to the pinned postimage')
+    before_blocks = {block.name: digest(before_tu.block_text(block).encode('utf-8', 'surrogateescape'))
+                     for block in before_tu.functions()}
+    after_blocks = {block.name: digest(after_tu.block_text(block).encode('utf-8', 'surrogateescape'))
+                    for block in after_tu.functions()}
+    if (correction.get('function_block_sha256') != before_blocks or
+            correction.get('result_function_block_sha256') != after_blocks or
+            set(before_blocks) != set(after_blocks) or
+            [name for name in before_blocks if before_blocks[name] != after_blocks[name]] != ['CardPlayCommandPlay']):
+        raise CorrectionError('qualifier-cast source changed function blocks outside the named caller')
+    normalized_before = before_tu.block_text(before_tu.by_name['CardPlayCommandPlay'])
+    normalized_after = after_tu.block_text(after_tu.by_name['CardPlayCommandPlay'])
+    normalized_after_tu_text = _replace_qualifier_casts(post_text, 'after', row['path'])
+    normalized_after_tu = TU(normalized_after_tu_text, row['path'])
+    normalized_after = normalized_after_tu.block_text(normalized_after_tu.by_name['CardPlayCommandPlay'])
+    normalized_before_hash = digest(normalized_before.encode('utf-8', 'surrogateescape'))
+    normalized_after_hash = digest(normalized_after.encode('utf-8', 'surrogateescape'))
+    normalized = {'CardPlayCommandPlay': normalized_before_hash}
+    normalized_result = {'CardPlayCommandPlay': normalized_after_hash}
+    if (normalized_before_hash != normalized_after_hash or
+            correction.get('normalized_function_body_sha256_before') != normalized or
+            correction.get('normalized_function_body_sha256_after') != normalized_result):
+        raise CorrectionError('qualifier-cast normalization changed the complete caller function block')
+
+    candidate_path, candidate_bytes = _artifact(repo, correction['candidate_source'], 'submitted candidate source')
+    composed_path, composed_bytes = _artifact(repo, correction['composed_candidate'], 'cast-corrected candidate source')
+    candidate_text = candidate_bytes.decode('utf-8', 'surrogateescape')
+    composed_text = composed_bytes.decode('utf-8', 'surrogateescape')
+    expected_composed = _replace_qualifier_casts(candidate_text, 'before', row['path'])
+    if expected_composed.encode('utf-8', 'surrogateescape') != composed_bytes:
+        raise CorrectionError('composed candidate differs beyond the two explicit casts')
+    if _replace_qualifier_casts(composed_text, 'after', row['path']).encode('utf-8', 'surrogateescape') != candidate_bytes:
+        raise CorrectionError('composed candidate normalization does not reproduce its submitted source')
+    candidate_tu = TU(candidate_text, row['path'])
+    composed_tu = TU(composed_text, row['path'])
+    candidate_blocks = {block.name: digest(candidate_tu.block_text(block).encode('utf-8', 'surrogateescape'))
+                        for block in candidate_tu.functions()}
+    composed_blocks = {block.name: digest(composed_tu.block_text(block).encode('utf-8', 'surrogateescape'))
+                       for block in composed_tu.functions()}
+    if [name for name in candidate_blocks if candidate_blocks[name] != composed_blocks.get(name)] != ['CardPlayCommandPlay']:
+        raise CorrectionError('composed candidate changes bodies beyond CardPlayCommandPlay')
+    preserved = correction.get('preserved_candidate_functions')
+    if (not isinstance(preserved, dict) or set(preserved) != {
+            'CCC06ExecSub', 'CCC07ExecSub', 'CCC10ExecSub', 'CCC30ExecSub', 'CCC31ExecSub',
+            'CCU062ExecSub', 'CardPlayCommandBattleExecute', 'CardPlayCommandCheck'} or
+            any(candidate_blocks.get(name) != digest_value or composed_blocks.get(name) != digest_value
+                for name, digest_value in preserved.items())):
+        raise CorrectionError('the eight original author function blocks are not byte-identical in the composition')
+
+    source_task = correction.get('source_task') or {}
+    task_id, owner, submission_id = (source_task.get('task_id'), source_task.get('owner'),
+                                    source_task.get('submission_id'))
+    source_result_ref = source_task.get('result') or {}
+    if (set(source_task) != {'task_id', 'owner', 'submission_id', 'result', 'allocated_functions',
+                             'direct_candidate_id', 'author_source_sha256'} or
+            source_task.get('allocated_functions') != list(preserved) or
+            not task_id or not owner or not submission_id or set(source_result_ref) != {'path', 'sha256'}):
+        raise CorrectionError('original source task provenance is malformed')
+    result_path, result_bytes = _artifact(repo, source_result_ref, 'original source result')
+    result = json.loads(result_bytes)
+    if result.get('task_id') != task_id:
+        raise CorrectionError('original source result identity differs from the pinned queue task')
+    _verify_submission(repo / '.work/queue.sqlite3', task_id, submission_id,
+                       str(result_path), owner)
+    result_function_names = {name for item in result.get('functions', [])
+                             for name in (item.get('original_names') or [])}
+    if not set(preserved).issubset(result_function_names):
+        raise CorrectionError('original source result does not contain all eight allocated functions')
+    author_source_maps = []
+    for item in result.get('functions', []):
+        names = item.get('original_names') or []
+        if set(names) & set(preserved):
+            artifacts = item.get('candidate_artifacts') or []
+            if not artifacts:
+                raise CorrectionError('original source result omits an allocated function candidate artifact')
+            found = False
+            for artifact in artifacts:
+                source_path = Path(artifact.get('path') or '').resolve()
+                try:
+                    source_path.relative_to(repo.resolve())
+                except ValueError as exc:
+                    raise CorrectionError('original source candidate path escapes the repository') from exc
+                source_bytes = source_path.read_bytes()
+                if digest(source_bytes) != artifact.get('sha256'):
+                    raise CorrectionError('original source candidate artifact digest changed')
+                if artifact.get('sha256') == source_task.get('author_source_sha256'):
+                    author_tu = TU(source_bytes.decode('utf-8', 'surrogateescape'), row['path'])
+                    author_source_maps.append({
+                        name: digest(author_tu.block_text(author_tu.by_name[name]).encode('utf-8', 'surrogateescape'))
+                        for name in names if name in preserved
+                    })
+                    found = True
+            if not found:
+                raise CorrectionError('original source result candidate artifact does not match its pinned author source')
+    author_blocks = {}
+    for block_map in author_source_maps:
+        author_blocks.update(block_map)
+    if any(author_blocks.get(name) != preserved[name] for name in preserved):
+        raise CorrectionError('allocated candidate function bodies differ from the immutable author candidate')
+    audit_ref = evidence.get('audit_report') or {}
+    _audit_path, audit_bytes = _artifact(repo, audit_ref, 'live OV10 TU audit report')
+    audit = json.loads(audit_bytes)
+    messages = audit.get('toolchain_messages') or []
+    if not isinstance(messages, list) or not all(
+            any(callee in str(message) and 'arg 2' in str(message) for message in messages)
+            for callee in ('xglMatrixTrans', 'xglMatrixScale')):
+        raise CorrectionError('live audit does not contain both exact matrix qualifier warnings')
+    direct_ref = evidence.get('direct_acceptance_report') or {}
+    _direct_path, direct_bytes = _artifact(repo, direct_ref, 'direct acceptance provenance')
+    direct = json.loads(direct_bytes)
+    direct_candidate = next((item for item in direct.get('candidates', [])
+                             if item.get('id') == source_task['direct_candidate_id']), None)
+    direct_source = (direct_candidate.get('sources') or [{}])[0] if direct_candidate else {}
+    if (not direct_candidate or direct_candidate.get('tu') != 'ov10/tu003' or
+            direct_candidate.get('allocated') != list(preserved) or
+            direct_source.get('task') != task_id or direct_source.get('submission_id') != submission_id or
+            not any((file_row.get('result') or {}).get('sha256') == correction['candidate_source']['sha256']
+                    for file_row in direct_candidate.get('files', []))):
+        raise CorrectionError('direct acceptance report does not pin this exact owner submission and eight-function candidate')
+
+    return dict(id=row['id'], kind='qualifier_cast_only', owner_tu='ov10/tu003', path=row['path'],
+                application_phase='pre_source', before_sha256=digest(base), after_sha256=digest(post),
+                patch_sha256=digest(patch_bytes), zero_credit=True,
+                authority_sha256=authority_ref['sha256'], proposal_sha256=correction['proposal']['sha256'],
+                evidence_sha256=correction['evidence']['sha256'],
+                application_manifest_sha256=correction['application_manifest']['sha256'],
+                function_bodies_changed=['CardPlayCommandPlay'],
+                normalized_function_body_sha256_before=normalized,
+                normalized_function_body_sha256_after=normalized_result,
+                function_block_sha256=before_blocks, result_function_block_sha256=after_blocks,
+                allocated_functions_preserved=preserved,
+                submission_id=submission_id, operation=correction['operation'])
+
+
+def _is_plain_extern_prototype(statement: str, symbol: str) -> bool:
+    """Accept only a simple standalone extern function declaration."""
+    if not isinstance(statement, str) or not statement or not isinstance(symbol, str) or not symbol:
+        return False
+    if any(token in statement for token in ('__attribute__', '__declspec', '__asm__', ' asm ', '=')):
+        return False
+    if lexical(statement) != statement:
+        return False
+    pattern = r'\s*extern\s+[^{};=]*\b' + re.escape(symbol) + r'\s*\([^{};=]*\)\s*;\s*'
+    return re.fullmatch(pattern, statement, re.S) is not None
+
+
+def _block_declaration_rows(correction: dict):
+    rows = correction.get('changed_declarations')
+    if not isinstance(rows, list) or not rows:
+        raise CorrectionError('block-scope correction must pin at least one exact declaration')
+    seen = set()
+    for item in rows:
+        if not isinstance(item, dict) or set(item) != {'function', 'symbol', 'before', 'after'}:
+            raise CorrectionError('block-scope declaration row has unexpected fields')
+        fn, symbol = item.get('function'), item.get('symbol')
+        before, after = item.get('before'), item.get('after')
+        if (not isinstance(fn, str) or not fn or not isinstance(symbol, str) or not symbol or
+                not _is_plain_extern_prototype(before, symbol) or
+                (after != '' and not _is_plain_extern_prototype(after, symbol))):
+            raise CorrectionError('block-scope correction is not an exact plain extern prototype removal/replacement')
+        key = (fn, symbol)
+        if key in seen:
+            raise CorrectionError('block-scope correction repeats a function/symbol pair')
+        seen.add(key)
+    return rows
+
+
+def apply_block_scope_declaration_corrections(source_text: str, path: str, correction: dict) -> str:
+    """Apply only exact, pinned extern prototype edits inside named C functions."""
+    tu = TU(source_text, path)
+    rows = _block_declaration_rows(correction)
+    seen_functions = set()
+    result = source_text
+    for item in rows:
+        function = item['function']
+        if function in seen_functions:
+            raise CorrectionError(f'block-scope correction has multiple edits in {function}; use one exact row')
+        seen_functions.add(function)
+        block = tu.by_name.get(function)
+        if block is None:
+            raise CorrectionError(f'block-scope correction target {function} is not a mapped C function')
+        old_block = tu.block_text(block)
+        before = item['before']
+        if old_block.count(before) != 1:
+            raise CorrectionError(f'{function}: exact old extern prototype must occur once in the mapped block')
+        new_block = old_block.replace(before, item['after'], 1)
+        if item['after'] and new_block.count(item['after']) != 1:
+            raise CorrectionError(f'{function}: replacement extern prototype is not unique')
+        result = result[:block.start] + new_block + result[block.end:]
+        tu = TU(result, path)
+    return result
+
+
+def _normalized_block_body(text: str, rows: list, function: str, side: str) -> str:
+    normalized = text
+    for item in rows:
+        if item['function'] != function:
+            continue
+        statement = item['before' if side == 'before' else 'after']
+        if statement:
+            if normalized.count(statement) != 1:
+                raise CorrectionError(f'{function}: declaration normalization expected one {side} occurrence')
+            normalized = normalized.replace(statement, '', 1)
+    return normalized
+
+
+def _validate_user_block_scope_declaration_correction(repo: Path, row: dict, correction: dict):
+    required = {'role', 'id', 'path', 'action', 'base', 'result', 'patch'}
+    owner_tu = correction.get('owner_tu')
+    if (set(row) != required or row.get('role') != 'owner_source_correction' or row.get('action') != 'patch' or
+            correction.get('zero_credit') is not True or correction.get('function_bodies_changed') != [] or
+            correction.get('application_phase') != 'post_source' or correction.get('affected_tus') != [owner_tu] or
+            not owner_tu or not correction.get('operation') or
+            not re.fullmatch(r'(main|ov01|ov02|ov10|ov11|ov12)/tu[0-9]{3}', str(owner_tu))):
+        raise CorrectionError('block-scope declaration correction has unexpected scope or is not zero-credit')
+    tu_build = json.loads((repo / 'config/tu-build.json').read_text(encoding='utf-8'))
+    tu_record = next((entry for entry in tu_build.get('tus', []) if entry.get('id') == owner_tu), None)
+    if not tu_record or not tu_record.get('in_scope') or tu_record.get('category') != 'game' or row.get('path') != tu_record.get('path'):
+        raise CorrectionError('block-scope declaration correction path is not its in-scope owner TU source')
+    frozen_bytes = (repo / '.work/reworks/orq-rework940-20260929/luna-46/index.json').read_bytes()
+    if digest(frozen_bytes) != 'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c':
+        raise CorrectionError('frozen938 index hash changed')
+    frozen_index = json.loads(frozen_bytes)
+    if not any((entry.get('identity') or {}).get('tu') == owner_tu for entry in frozen_index.get('identities', [])):
+        raise CorrectionError('block-scope correction owner TU is absent from frozen938 scope')
+    for label in ('base', 'result'):
+        spec = row.get(label) or {}
+        if set(spec) != {'sha256', 'copy'}:
+            raise CorrectionError(f'block-scope correction {label} source copy pin is malformed')
+    base = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'block-scope correction base')
+    post = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'block-scope correction postimage')
+    if correction.get('base_sha256') != digest(base) or correction.get('result_sha256') != digest(post):
+        raise CorrectionError('block-scope correction bytes differ from their immutable pins')
+    refs = {}
+    for name in ('authority', 'proposal', 'evidence', 'application_manifest'):
+        ref = correction.get(name)
+        _path, data = _artifact(repo, ref, f'block-scope correction {name}')
+        refs[name] = json.loads(data)
+    authority = refs['authority']
+    frozen, policy = authority.get('scope') or {}, authority.get('integration_policy') or {}
+    if (correction['authority'].get('sha256') != '7b4e8d276062c4c93cddb1ed259de2115df5b1c8e42c33e03a52c1161792e83c' or
+            authority.get('schema') != 'user-direct-acceptance-authority/1' or
+            authority.get('recorded_by') != 'orq-review940-20260929' or
+            frozen.get('frozen_index_sha256') != 'ec6c5675d4cdf7821a2daa94c672177c3799155e122a8aff51d9f0730320817c' or
+            frozen.get('function_count') != 938 or frozen.get('new_recovery_outside_frozen_scope') is not False or
+            policy.get('private_integrator_preflight') is not False or policy.get('post_integration_review') is not False or
+            policy.get('live_publisher_byte_comparison_and_tu_audit') != 'required'):
+        raise CorrectionError('block-scope declaration correction is not bound to the pinned user waiver')
+    changed = _block_declaration_rows(correction)
+    proposal, evidence, application = refs['proposal'], refs['evidence'], refs['application_manifest']
+    provider = evidence.get('provider_prototype') or {}
+    provider_ref = evidence.get('provider_source') or {}
+    provider_path, provider_bytes = _artifact(repo, provider_ref, 'provider definition source')
+    provider_owner = provider.get('owner_tu')
+    provider_record = next((entry for entry in tu_build.get('tus', []) if entry.get('id') == provider_owner), None)
+    provider_source = provider_bytes.decode('utf-8', 'surrogateescape')
+    expected_provider = ('void RgGeomRobotSetDir(RgGeom *geom, RgVector direction)')
+    if (not provider_record or provider_record.get('path') != provider_path.relative_to(repo.resolve()).as_posix() or
+            provider_ref.get('sha256') != digest(provider_bytes) or provider.get('declaration') != expected_provider or
+            re.search(r'(?m)^\s*void\s+RgGeomRobotSetDir\s*\(\s*RgGeom\s*\*\s*geom\s*,\s*'
+                      r'RgVector\s+direction\s*\)\s*\{', provider_source) is None):
+        raise CorrectionError('provider prototype evidence does not match the mapped defining TU source')
+    if (proposal.get('schema') != 'user-authorized-block-scope-declaration-proposal/1' or
+            proposal.get('owner_tu') != owner_tu or proposal.get('owner_path') != row['path'] or
+            proposal.get('base_sha256') != digest(base) or proposal.get('result_sha256') != digest(post) or
+            proposal.get('changed_declarations') != changed or proposal.get('function_bodies_changed') != [] or
+            proposal.get('new_c_credit') != 0 or
+            evidence.get('schema') != 'block-scope-declaration-evidence/1' or
+            evidence.get('owner_tu') != owner_tu or evidence.get('base_sha256') != digest(base) or
+            provider.get('symbol') != 'RgGeomRobotSetDir' or provider_owner != 'ov12/tu054' or
+            application.get('schema') != 'user-authorized-block-scope-application/1' or
+            application.get('owner_tu') != owner_tu or application.get('base_sha256') != digest(base) or
+            application.get('result_sha256') != digest(post) or application.get('patch_sha256') != row['patch'].get('sha256')):
+        raise CorrectionError('proposal/evidence/application artifacts do not pin this exact correction')
+    patch_path, patch_bytes = _artifact(repo, row['patch'], 'block-scope declaration patch')
+    patch = json.loads(patch_bytes)
+    if (patch.get('schema') != 'tu-patch/1' or patch.get('tu') != row['path'] or
+            patch.get('base_sha256') != digest(base) or patch.get('functions') or
+            set(patch) - {'schema', 'tu', 'base_sha256', 'prelude', 'functions', 'interstitial',
+                          'block_scope_declaration_corrections'} or
+            patch.get('prelude') not in (None, {}) or patch.get('interstitial') not in (None, {}) or
+            patch.get('block_scope_declaration_corrections') != changed):
+        raise CorrectionError('block-scope patch has changes outside exact declaration correction rows')
+    before_tu = TU(base.decode('utf-8', 'surrogateescape'), row['path'])
+    after_tu = TU(post.decode('utf-8', 'surrogateescape'), row['path'])
+    replay = apply_block_scope_declaration_corrections(before_tu.text, row['path'], correction)
+    if replay.encode('utf-8', 'surrogateescape') != post:
+        raise CorrectionError('block-scope declaration patch does not exactly reproduce its pinned postimage')
+    before_blocks = {fn.name: before_tu.block_text(fn) for fn in before_tu.functions()}
+    after_blocks = {fn.name: after_tu.block_text(fn) for fn in after_tu.functions()}
+    if set(before_blocks) != set(after_blocks):
+        raise CorrectionError('block-scope correction changed the mapped function set')
+    normalized_before = {name: _normalized_block_body(text, changed, name, 'before')
+                         for name, text in before_blocks.items()}
+    normalized_after = {name: _normalized_block_body(text, changed, name, 'after')
+                        for name, text in after_blocks.items()}
+    if normalized_before != normalized_after:
+        raise CorrectionError('block-scope correction changed executable function-body text beyond pinned prototype rows')
+    raw_before = {name: digest(text.encode('utf-8', 'surrogateescape')) for name, text in before_blocks.items()}
+    raw_after = {name: digest(text.encode('utf-8', 'surrogateescape')) for name, text in after_blocks.items()}
+    if correction.get('function_block_sha256') != raw_before or correction.get('result_function_block_sha256') != raw_after:
+        raise CorrectionError('block-scope correction does not retain exact raw before/after function-block hashes')
+    return dict(id=row['id'], kind='block_scope_declaration_only', owner_tu=owner_tu, path=row['path'],
+                before_sha256=digest(base), after_sha256=digest(post), patch_sha256=digest(patch_bytes),
+                zero_credit=True, authority_sha256=correction['authority']['sha256'],
+                proposal_sha256=correction['proposal']['sha256'], evidence_sha256=correction['evidence']['sha256'],
+                application_manifest_sha256=correction['application_manifest']['sha256'],
+                function_bodies_changed=[], changed_declarations=changed,
+                raw_function_block_sha256_before=raw_before, raw_function_block_sha256_after=raw_after,
+                normalized_function_body_sha256_before={name: digest(text.encode('utf-8', 'surrogateescape'))
+                                                       for name, text in normalized_before.items()},
+                normalized_function_body_sha256_after={name: digest(text.encode('utf-8', 'surrogateescape'))
+                                                      for name, text in normalized_after.items()},
+                operation=correction['operation'])
+
+
+def validate_user_authorized_source_correction(repo: Path, row: dict, correction: dict):
+    return _user_correction_inputs(repo, row, correction)
+
+
+def apply_user_authorized_source_correction(repo: Path, project: Path, row: dict, correction: dict):
+    receipt = validate_user_authorized_source_correction(repo, row, correction)
+    target = (project / row['path']).resolve()
+    target.relative_to(project.resolve())
+    current = target.read_bytes() if target.is_file() else b''
+    current_sha = digest(current)
+    if current_sha == row['result']['sha256']:
+        receipt.update(outcome='already_applied', current_before_sha256=current_sha)
+        return receipt
+    if current_sha != row['base']['sha256']:
+        raise CorrectionError('current owner source is neither the pinned original nor corrected declaration')
+    post = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'user correction postimage')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(post)
+    receipt.update(outcome='applied', current_before_sha256=current_sha,
+                   result_sha256=digest(target.read_bytes()))
+    return receipt
