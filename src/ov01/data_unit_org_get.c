@@ -210,9 +210,45 @@ short dataSpecLearnGet(int cid, int specialId)
     return learned;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecDataGet);
+PlSpecialSlot *dataSpecDataGet(int cid, int specialId)
+{
+    PlCharacter *pl;
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataNormIdxGet);
+    if (cid >= 0x11) {
+        return 0;
+    }
+    if (specialId == 0) {
+        return 0;
+    }
+    pl = dataPlChaGet(cid);
+    for (i = 0; i < 8; i++) {
+        if (pl->special[i].id == specialId) {
+            return &pl->special[i];
+        }
+    }
+    return 0;
+}
+
+int dataNormIdxGet(ObjectTask *unit, int normalId)
+{
+    int i;
+    int offset;
+    int result;
+
+    i = 0;
+    offset = 0x70;
+    result = -1;
+    while (i < 6) {
+        if (*(short *)((unsigned char *)calcUPGet(unit) + offset + 6) == normalId) {
+            result = i;
+            break;
+        }
+        i++;
+        offset += 2;
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlUnitInit);
 
