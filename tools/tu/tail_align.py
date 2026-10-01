@@ -102,9 +102,66 @@ def verified_tail_padding(root, tu, manifest=None):
 
 
 def declaring_tus(root):
-    """The `config/tu-build.json` records of every TU that declares tail padding."""
-    manifest = json.loads((Path(root) / 'config/tu-build.json').read_text())
+    """Declared tails from the private manifest or verified public build inputs."""
+    path = Path(root) / 'config/tu-build.json'
+    manifest = (json.loads(path.read_bytes()) if path.is_file()
+                else public_manifest(root))
     return [t for t in manifest['tus'] if verified_tail_padding(root, t, manifest)]
+
+
+def public_manifest(root):
+    """Recover terminal padding from tracked TU ranges and original ELF symbols.
+
+    Public clones do not carry config/tu-build.json. The published object
+    ranges and the original function extents describe the same tails. Verify
+    the original hash and every candidate's zero bytes before using them; the
+    existing extended-tail check still requires a contiguous empty next TU.
+    This supplies linker alignment only, never function recovery credit.
+    """
+    from elfinfo import Elf
+    from toolchain import Toolchain
+
+    root = Path(root)
+    game = Toolchain(root).game_dir()
+    originals = json.loads((root / 'config/originals.json').read_bytes())
+    main = json.loads((root / 'config/objects/main.objects.json').read_bytes())
+    overlays = json.loads((root / 'config/objects/overlays.compile.json').read_bytes())
+    manifest = dict(units={}, tus=[])
+    for unit, record in originals['units'].items():
+        original = (game / record['file']).resolve()
+        data = original.read_bytes()
+        if len(data) != record['size'] or hashlib.sha256(data).hexdigest() != record['sha256']:
+            raise ValueError(f'tail alignment: {original} differs from config/originals.json')
+        elf = Elf(data)
+        manifest['units'][unit] = dict(record, file=str(original))
+        tus = ([t for t in main['tus'] if t['unit'] == unit] if unit == 'main'
+               else overlays['units'][unit]['tus'])
+        for tu in tus:
+            span = tu['text']
+            section = elf.section(span.get('section', '.text') if unit == 'main' else unit)
+            functions = [s for s in elf.symbols if s.type == 2 and s.shndx == section.index]
+            start, end = ([int(span[k], 16) for k in ('start', 'end')]
+                          if isinstance(span, dict) else [int(v, 16) for v in span])
+            if not section.addr <= start <= end <= section.addr + section.size:
+                raise ValueError(f'tail alignment: {tu["id"]} is outside {section.name}')
+            owned_functions = [s for s in functions if start <= s.value < end]
+            code_end = max((s.value + s.size for s in owned_functions), default=end)
+            offset_start = section.offset + start - section.addr
+            offset_end = section.offset + end - section.addr
+            owned = data[offset_start:offset_end]
+            text = dict(start=hex(start), end=hex(end), code_end=hex(code_end),
+                        size=end - start, empty=start == end,
+                        sha256=hashlib.sha256(owned).hexdigest())
+            # A symbol crossing the TU boundary or nonzero tail is not padding.
+            if code_end > end or owned[code_end - start:] != bytes(max(0, end - code_end)):
+                text['code_end'] = text['end']
+            manifest['tus'].append(dict(
+                id=tu['id'], unit=unit, name=tu['name'], ordinal=tu['ordinal'],
+                text=text,
+                functions=[dict(va=hex(s.value), size=s.size) for s in owned_functions],
+                files=[dict(target=unit, file=str(original),
+                            offset_start=offset_start, offset_end=offset_end)]))
+    return manifest
 
 
 def ld_statement(alignment=TAIL_ALIGN):

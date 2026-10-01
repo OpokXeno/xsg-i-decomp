@@ -1,33 +1,84 @@
-# Publishes the decomp.dev progress report: an objdiff report (schema v2) in an
-# artifact named `<version>_report`. The report is derived from the tracked
-# object tables and the source by tools/objdiff_report.py, so this job needs
-# neither the originals nor the toolchain.
-name: Progress report
+# Originals/toolchains stay on the private runner. Public artifacts contain
+# hashes/counts only. Every report follows a fresh checkout, build and comparison.
+name: Verified progress report
 
 on:
   push:
     branches: [master]
-  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verified-progress
+  cancel-in-progress: false
 
 jobs:
   report:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        version: [SLUS_204.69]
+    # Never run untrusted fork PR code on the machine holding private inputs.
+    if: github.repository == 'OpokXeno/xsg-i-decomp' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, linux, xenosaga-ee]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          persist-credentials: false
 
-      - name: Generate progress report
+      - name: Check private inputs and clean public checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${XENO_GAME_DIR:?Set this in the runner service environment}"
+          : "${XENO_TOOLCHAIN_DIR:?Set this in the runner service environment}"
+          : "${XENO_SPLAT_PYTHON:?Set this in the runner service environment}"
+          test -z "${XENO_TOOLCHAIN_ALLOW:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --exit-code
+          test ! -e config/tu-build.json
+          test ! -d config/units
+          python3 -B tools/tu/toolchain.py --check
+
+      - name: Compile, link and compare all six EE files
+        run: |
+          python3 -B tools/tu/verify_report.py --begin
+          python3 -B configure.py
+          ninja -j4 gate
+
+      - name: Verify compiler emission and linked function bytes
+        run: timeout -k 5 30 python3 -B tools/tu/verify_report.py --finish
+
+      - name: Download pinned objdiff-cli
+        run: |
+          python3 -B - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          pin = json.loads(pathlib.Path('config/report-tools.json').read_text())['objdiff-cli']
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'objdiff-cli'
+          with urllib.request.urlopen(pin['url'], timeout=30) as response:
+              data = response.read()
+          assert hashlib.sha256(data).hexdigest() == pin['sha256'], 'objdiff-cli hash mismatch'
+          path.write_bytes(data)
+          path.chmod(0o755)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f'OBJDIFF_CLI={path}\n')
+          PY
+
+      - name: Generate native objdiff report from verified object pairs
         run: python3 -B tools/objdiff_report.py -o build/report.json
 
       - name: Upload progress report
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.version }}_report
+          name: SLUS_204.69_report
           path: build/report.json
+          if-no-files-found: error
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: SLUS_204.69_verification
+          path: |
+            build/gate.json
+            build/verification.json
+            build/*/status.json
+          if-no-files-found: error

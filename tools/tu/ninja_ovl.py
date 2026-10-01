@@ -162,7 +162,7 @@ def main():
         text = aligned
         ld.write_text(text)
     # Declared C-owned data runs (config/tu/data-carves.json, tools/tu/data_carve.py):
-    # a C TU's jump tables and literals cut out of its scaffold .rodata piece and
+    # a C TU's constants or initialized arrays cut out of its scaffold data piece and
     # placed from its object. An earlier carve is undone first; nothing declared
     # leaves splat's script unchanged.
     carved, carve_report = data_carve.apply_overlay(ROOT, unit_dir, unit, text)
@@ -252,9 +252,14 @@ def main():
                       f"  cas = {ROOT / t['assembler']['path']}",
                       f"  gflag = {t['flags'][1]}"]
             if split:
-                split_deps = [str(ROOT / data_carve.REGISTRY), str(HERE / 'data_carve.py'),
-                              str(HERE / 'elfinfo.py'), str(ROOT / 'config/tu-build.json'),
-                              'layout.json', target, f'asm/data/{unit}/{t["name"]}.rodata.s']
+                compile_input = ROOT / 'config/tu-build.json'
+                if not compile_input.is_file():
+                    compile_input = ROOT / 'config/objects/overlays.compile.json'
+                split_deps = [str(data_carve.registry_input_path(ROOT)), str(HERE / 'data_carve.py'),
+                              str(HERE / 'elfinfo.py'), str(compile_input),
+                              'layout.json', target]
+                split_deps += [f'asm/data/{unit}/{t["name"]}{r["section"]}.s'
+                               for r in carve_report if r['tu'] == split['tu']]
                 lines += [f"build {obj}: carvesplit {compiled_obj} | {' '.join(split_deps)}",
                           f"  tu = {split['tu']}"]
         else:

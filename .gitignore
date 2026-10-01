@@ -30,6 +30,7 @@
 /config/*
 !/config/originals.json
 !/config/toolchain-identity.json
+!/config/report-tools.json
 !/config/overlay-plan.json
 !/config/overlay-adaptations.json
 !/config/split/
