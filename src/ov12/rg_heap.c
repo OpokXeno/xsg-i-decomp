@@ -95,7 +95,11 @@ static void _InsertNext(struct RgHeapBlock *pBlock, struct RgHeapBlock *pNew)
     pBlock->next = pNew;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _Unlink);
+static void _Unlink(struct RgHeapBlock *pBlock)
+{
+    pBlock->next->pre = pBlock->pre;
+    pBlock->pre->next = pBlock->next;
+}
 
 static void _MarkAlloc(struct RgHeapBlock *pBlock)
 {

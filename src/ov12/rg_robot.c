@@ -369,7 +369,11 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecCmdInBreaking);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BreakingPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BreakingExit);
+static void _BodyPlayMotion(RgBody *body, int motion);
+static void _BreakingExit(RgRobotStatus *status, RgBody *body)
+{
+    _BodyPlayMotion(body, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitBreakingStatus);
 
@@ -381,7 +385,6 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExit);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDashStatus);
 
-static void _BodyPlayMotion(RgBody *body, int motion);
 
 /*
  * Sets DashVR's own scratch0/scratchTimer (see RgRobotStatus): scratch0 is

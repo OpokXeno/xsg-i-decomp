@@ -47,11 +47,32 @@ unsigned char *dataExpTblGet(void)
     return (unsigned char *)&D_426F78 - 0x38 + D_426F78;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataParaTblGet);
+extern int D_426F7C;
+unsigned char *dataParaTblGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F7C;
+    int selector = *(volatile int *)base;
+    base -= 0x3C;
+    return base + selector + (entry << 5) - 0x20;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataDefEquipGet);
+extern int D_426F84;
+unsigned char *dataDefEquipGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F84;
+    int selector = *(volatile int *)base;
+    base -= 0x44;
+    return base + selector + (entry << 5) - 0x20;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecTblGet);
+extern int D_426F80;
+unsigned char *dataSpecTblGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F80;
+    int selector = *(volatile int *)base;
+    base -= 0x40;
+    return base + selector + (entry << 5) - 0x20;
+}
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
 extern const char D_00A456E8[];
@@ -229,9 +250,22 @@ void dataBattleInit(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitInitSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPosTblGet);
+extern unsigned char posTbl[];
+unsigned char *dataPosTblGet(int entry)
+{
+    if (entry < 0) {
+        entry = -entry;
+    }
+    return posTbl + (entry << 5);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPosLineGet);
+short dataPosLineGet(int entry)
+{
+    if (entry < 0) {
+        entry = -entry;
+    }
+    return *(short *)(posTbl + (entry << 5) + 0x10);
+}
 
 extern unsigned char D_00A45890[]; /* "** dataCidGet: err %d\n" */
 extern short cidChgTbl[];
@@ -401,7 +435,13 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMot);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadWep);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataWpnLRChk);
+int dataWpnLRChk(int unused, int value, int flag, void *unit)
+{
+    if (flag != 1 || value != *(int *)((unsigned char *)unit + 0xA0)) {
+        return 0;
+    }
+    return 1;
+}
 
 /*
  * The engine's actor record ACT_create hands out (main/near_dir.h and
@@ -554,7 +594,17 @@ void *dataThinkAdrGet(void)
     return thinkBuf;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", thinkMapGet);
+int thinkMapGet(int mapNo)
+{
+    int i;
+    int *map = (int *)&thinkMapTbl;
+    for (i = 0; i < 100; i++) {
+        if (mapNo == map[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 extern int thinkMapGet(int mapNo);
 extern char *strcpy(char *destination, const char *source);
@@ -656,6 +706,21 @@ void dataVPadModeSet(int mode)
     padData = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataVPadSet);
+extern unsigned short padConvTbl[14];
+void dataVPadSet(int virtualPad)
+{
+    unsigned short result = 0;
+    int shift = 0;
+    const unsigned short *entry = padConvTbl;
+    virtualPad &= 0xFFFF;
+    do {
+        if ((virtualPad >> shift) & 1) {
+            result |= *entry;
+        }
+        shift++;
+        entry++;
+    } while (shift < 14);
+    padData = result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPadRead);
