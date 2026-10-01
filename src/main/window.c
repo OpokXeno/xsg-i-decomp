@@ -9,8 +9,6 @@
  */
 typedef struct JThread JThread;
 
-INCLUDE_ASM("asm/main/nonmatchings/window", Java_xeno_util_Window_getSignal__);
-
 /*
  * The toolkit text-window record TWIN_create2 returns, as far as this TU's
  * natives touch it. +0x32 is what signal__I stores its requested value
@@ -21,14 +19,52 @@ INCLUDE_ASM("asm/main/nonmatchings/window", Java_xeno_util_Window_getSignal__);
  * two offsets as layout_offset (TWIN_create2's own per-kind default) and
  * line_count (the bound TWIN_update2/TWIN_popCF/TWIN_popScene loop up to).
  */
+/*
+ * +0x10 flags and +0x20/+0x24 x/y, as getSignal__/setLocation__II and
+ * src/main/twsys_init.c's TW_setPos (still assembler) touch them:
+ * TW_setPos tests bit 0x40 of the same offset TComponent models as flags
+ * before it repositions the window, and writes its own computed position
+ * into the same two offsets; setLocation__II clears that bit and overwrites
+ * both floats with its own arguments instead.
+ */
 typedef struct UtilWindow {
     int class_ref;                         /* +0x00 */
-    unsigned char unmodeled_04[0x32 - 4];
+    unsigned char unmodeled_04[0x10 - 4];
+    unsigned int flags;                    /* +0x10 */
+    unsigned char unmodeled_14[0x20 - 0x14];
+    float x;                               /* +0x20 */
+    float y;                               /* +0x24 */
+    unsigned char unmodeled_28[0x32 - 0x28];
     unsigned short closeState;             /* +0x32 */
     unsigned char unmodeled_34[0x186 - 0x34];
     unsigned char layout_offset;           /* +0x186 */
     unsigned char line_count;              /* +0x187 */
 } UtilWindow;
+
+/* The call block of every Window native taking no Java arguments beyond the
+   window itself. */
+typedef struct WindowCall {
+    UtilWindow *window;
+} WindowCall;
+
+void Java_xeno_util_Window_getSignal__(JThread *thread, WindowCall *arguments,
+                                       int *result)
+{
+    UtilWindow *window;
+    short signal;
+
+    /* Window's load stays in its own do/while(0) block: inlined into the
+       statements below, cc1 schedules the closeState clear right after
+       the load and defers the *result store into the branch delay slot,
+       the reverse of the original order (result stored first, clear
+       delayed last). */
+    do {
+        window = arguments->window;
+    } while (0);
+    signal = (short)window->closeState;
+    window->closeState = 0;
+    *result = signal;
+}
 
 extern void MSG_print2(UtilWindow *window, const char *text, int length);
 
@@ -44,12 +80,6 @@ void Java_xeno_util_Window_signal__I(JThread *thread, WindowSignalCall *argument
 {
     arguments->window->closeState = arguments->value;
 }
-
-/* The call block of every Window native taking no Java arguments beyond the
-   window itself. */
-typedef struct WindowCall {
-    UtilWindow *window;
-} WindowCall;
 
 extern const char D_004D1658[]; /* "/[clear()]" */
 
@@ -175,7 +205,31 @@ void Java_xeno_util_Window_setSize__II(JThread *thread, WindowSizeCall *argument
     TWIN_init2(window);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/window", Java_xeno_util_Window_setLocation__II);
+/* The call block of Window.setLocation(int, int): the target window and the
+   integer x/y position converted to float. */
+typedef struct WindowLocationCall {
+    UtilWindow *window;
+    int x;
+    int y;
+} WindowLocationCall;
+
+void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *arguments,
+                                           void *result)
+{
+    UtilWindow *window;
+
+    window = arguments->window;
+    window->flags &= ~0x40;
+    /* x's store stays in its own do/while(0) block: inlined into the
+       statements around it, cc1 hoists the y load/convert ahead of it and
+       defers x's own store next to the branch delay slot instead of right
+       after its conversion, the reverse of the original order (x stored
+       first, y converted and delayed last). */
+    do {
+        window->x = (float)arguments->x;
+    } while (0);
+    window->y = (float)arguments->y;
+}
 
 /*
  * A java.lang.String argument, as the print natives below read it: +0x00

@@ -88,8 +88,10 @@ extern void CGPDispErrorMessPlus(int side, int message, s16 cardId);
 extern void CC_Kara_EndFase(int side, CardGameWork *work);
 extern int CardPlayDesertCard(CardHand *hand, int index);
 extern int CardPlayIdentityCheck(CardGameWork *work, CardHand *hand, u8 identity);
-extern void xglMatrixTrans(float result[4][4], float matrix[4][4], float translation[4]);
-extern void xglMatrixScale(float result[4][4], float matrix[4][4], float scale[4]);
+void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
+                    const float translation[4]);
+void xglMatrixScale(Matrix4 destination, const Matrix4 source,
+                    const float scale[4]);
 extern void nmlModelSetPlace(float matrix[4][4]);
 extern void nmlModelSetTexture(void *texture);
 extern void nmlModelEntryCard(void *model);
@@ -187,7 +189,23 @@ void CCU061ExecSub(CardPlaySide *side, CardCursorPosition *position)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCU062ExecSub);
+void CCU062ExecSub(CardHand *hand, CardCursorPosition *position)
+{
+    if (position != 0) {
+        CardPlaySide *owner = (CardPlaySide *) hand;
+        int cardCount = CardPlayHandCnt(hand);
+        int layerIndex;
+
+        for (layerIndex = 0; layerIndex < 40; layerIndex++) {
+            if (owner->disposal[position->index].battle.layers[layerIndex].cardId >= 0) {
+                hand->cards[cardCount] =
+                    owner->disposal[position->index].battle.layers[layerIndex].cardId;
+                cardCount++;
+                owner->disposal[position->index].battle.layers[layerIndex].cardId = -1;
+            }
+        }
+    }
+}
 
 void CCU063ExecSub(CardGameWork *work, int context) {
     CardPlaySide *owner = (CardPlaySide *) context;
@@ -287,11 +305,62 @@ void CCC03ExecSub(int side, CardGameWork *work, CardHand *hand, CardLayerStack *
 
 INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCC04ExecSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCC06ExecSub);
+void CCC06ExecSub(int side, CardGameWork *work, CardHand *hand)
+{
+    CardPlaySide *owner = (CardPlaySide *) hand;
+    int cardCount = 0;
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCC07ExecSub);
+    for (i = 0; i < 4; i++) {
+        if (owner->disposal[i].battle.layers[0].cardId >= 0)
+            cardCount++;
+    }
+    for (i = 0; i < 4; i++) {
+        if (owner->battle[i].battle.layers[0].cardId >= 0)
+            cardCount++;
+    }
+    if (cardCount > 0) {
+        i = cardCount;
+        do {
+            CardPlayRecavery(hand);
+        } while (--i != 0);
+    }
+    if (cardCount == 0)
+        return;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCC10ExecSub);
+    CardSetEffect(side, work, 10, 0, 0, 0, 0);
+    CardSetEffect(side, work, 12, cardCount, 0x2000D, 0, 0);
+}
+
+void CCC07ExecSub(CardGameWork *work, CardHand *hand, CardCursorPosition *position)
+{
+    CardPlaySide *side = (CardPlaySide *) hand;
+    int destinationIndex;
+
+    for (destinationIndex = 0; destinationIndex < 4; destinationIndex++) {
+        if (side->disposal[destinationIndex].battle.layers[0].cardId < 0)
+            break;
+    }
+
+    CGPMoveDSBATTLEwork(&side->disposal[destinationIndex].battle,
+                        &side->battle[position->index].battle);
+}
+
+void CCC10ExecSub(int side, CardGameWork *work, CardHand *hand,
+                  CardCursorPosition *position)
+{
+    CardPlaySide *owner = (CardPlaySide *) hand;
+
+    owner->battle[position->index].battle.layers[0].life -= 2;
+    if (owner->battle[position->index].battle.layers[0].life < 0)
+        owner->battle[position->index].battle.layers[0].life = 0;
+
+    CardSetEffect(side, work, 10, 0, 0,
+                  owner->battle[position->index].battle.position, 0);
+    CardSetEffect(side, work, 13, -2, 0x20008,
+                  owner->battle[position->index].battle.position,
+                  &owner->battle[position->index].battle);
+}
 
 void CCC26ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
                   CardCursorPosition *position) {
@@ -300,9 +369,23 @@ void CCC26ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
     CardCursorPassive(CardCursorFor(work));
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCC30ExecSub);
+void CCC30ExecSub(int side, CardGameWork *work, CardLayerStack *card)
+{
+    card->flags |= 2;
+    CardSetEffect(side, work, 10, 0, 0x2000D, card->position, 0);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CCC31ExecSub);
+void CCC31ExecSub(int side, CardGameWork *work, CardLayerStack *card)
+{
+    float *position = card->position;
+
+    card->layers[0].life--;
+    if (card->layers[0].life < 0)
+        card->layers[0].life = 0;
+
+    CardSetEffect(side, work, 10, 0, 0, position, 0);
+    CardSetEffect(side, work, 13, -1, 0x20008, position, card);
+}
 
 void CCC38ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
                   CardCursorPosition *position) {
@@ -2118,8 +2201,8 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             translation[2] = 0.91f;
             translation[3] = 1.0f;
             xglMatrixUnit(matrix);
-            xglMatrixTrans(matrix, matrix, translation);
-            xglMatrixScale(matrix, matrix, scale);
+            xglMatrixTrans(matrix, (const float (*)[4])matrix, translation);
+            xglMatrixScale(matrix, (const float (*)[4])matrix, scale);
             nmlModelSetPlace(matrix);
             nmlModelSetTexture((void *) 0x01DB5800);
             nmlModelEntryCard((void *) 0x01DAAC00);
@@ -2890,8 +2973,41 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
     return complete;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CardPlayCommandBattleExecute);
+void CardPlayCommandBattleExecute(s16 side, s16 commandId, CardGameWork *work) {
+    s16 *entry;
+    int checked;
+
+    entry = work->commandQueue[1][0];
+    if (side == 0)
+        entry = work->commandQueue[0][0];
+    checked = 0;
+    do {
+        if (entry[0] == commandId) {
+            work->command.commandIndex = 1;
+            if (CardPlayCommandPlay((u16)side, (u16)entry[1], work, entry[2], entry[3]) != 0) {
+                CGPSetPermanentMess(work, 0);
+                work->command.commandIndex = 0;
+                work->command.step = 0;
+                entry[0] = -1;
+                entry[2] = -1;
+                entry[3] = -1;
+            }
+            return;
+        }
+        entry += 4;
+        checked++;
+    } while (checked < 40);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CardPlayCommandExecute);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/ccu_038_exec_sub", CardPlayCommandCheck);
+int CardPlayCommandCheck(s16 command, s16 *queue) {
+    int i;
+    int count = 0;
+
+    for (i = 0; i < 40; i++) {
+        if (queue[i * 4] == command)
+            count++;
+    }
+    return count;
+}

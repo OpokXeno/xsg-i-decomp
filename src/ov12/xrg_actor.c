@@ -615,7 +615,16 @@ void XrgActorGetLocal(XrgActor *pActor, RgMatrix matrix)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorGetJointLocal);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorGetAttachedJoint);
+int XrgActorGetAttachedJoint(XrgActor *pActor)
+{
+    if (pActor == 0) {
+        assert_prog(D_00A589C8, D_00A587E0, 1208);
+    }
+    if (pActor->parent == 0) {
+        return -1;
+    }
+    return pActor->attachID;
+}
 
 extern void RgVectorPush(void *vector, void *element);
 extern void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild,
@@ -696,7 +705,21 @@ void InitXrgActorEssence(XrgActorEssence *pEss, int actorID)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorEssenceGetFileName);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _FindRawJntData);
+extern RawJntData s_aRawJntData[12];
+
+RawJntData *_FindRawJntData(int id, int jntID)
+{
+    unsigned int i;
+    RawJntData *entry;
+
+    entry = s_aRawJntData;
+    for (i = 0; i < 12; i++, entry++) {
+        if (entry->id == id && entry->jntID == jntID) {
+            return entry;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", _GetPakaPakaBaseJnt);
 

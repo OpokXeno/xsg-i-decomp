@@ -2,6 +2,28 @@
  * OV01 original TU 33: 0x00a39088..0x00a397c0 (4 functions)
  */
 #include "common.h"
+#include "shared.h"
+
+typedef struct EAD00ProcessWork {
+    unsigned char unmodeled_00[8];
+    int actor_id;
+    int part_id;
+    unsigned char unmodeled_10[0x60];
+    int frame;
+    unsigned char unmodeled_74[0x0c];
+    Vector4 start[3];
+    Vector4 end[3];
+    Vector4 displacement[3];
+    Vector4 angle[3];
+} EAD00ProcessWork;
+
+extern void MEfGetActorMatrix(Matrix4 *matrix, int actor_id, int part_id);
+extern Vector4 *MMathApplyMatrix(Vector4 *destination, const Matrix4 *matrix,
+                                 const Vector4 *point);
+extern Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first,
+                                    const Vector4 *second, float divisor);
+extern void *MEfCalcAngle(Vector4 *destination, const Vector4 *from,
+                           const Vector4 *to);
 
 /* MGsGPInit (src/ov01/m_gs.c, ov01 TU 18): still TU-local there, declared
  * here for this TU until its header is published. MEfCreate_EAD00 calls it
@@ -54,7 +76,66 @@ int MEfCreate_EAD00(void *self)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_ead_00", fnEAD00_PR000);
+static void fnEAD00_PR000(void *self, void *work)
+{
+    EAD00ProcessWork *state = (EAD00ProcessWork *)work;
+    Vector4 first_point;
+    Vector4 second_point;
+    Matrix4 actor_matrix;
+    Vector4 transformed_point;
+    float frame_scale;
+    Vector4 *matrix_input;
+    int remaining;
+    unsigned int point_index;
+    int actor_id;
+    int part_id;
+
+    /* VU0's constant vf0 supplies zero xyz and unit w for both local points. */
+    __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&first_point) : "memory");
+    first_point.x = -0.1f;
+    first_point.z = -0.2f;
+    __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&second_point) : "memory");
+    actor_id = state->actor_id;
+    second_point.x = -9.0f;
+    part_id = state->part_id;
+    second_point.z = 28.0f;
+
+    MEfGetActorMatrix(&actor_matrix, actor_id, part_id);
+    frame_scale = 1.0f;
+    if (state->frame < 8) {
+        frame_scale = (float)state->frame * 0.125f;
+    }
+    if (state->frame >= 62) {
+        frame_scale = (float)(69 - state->frame) * 0.125f;
+    }
+
+    matrix_input = &transformed_point;
+    for (point_index = 0, remaining = 2; remaining >= 0; ) {
+        /* Copy the complete aligned vector through the original scratch GPR. */
+        __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)"
+                             : : "r"(matrix_input), "r"(&first_point)
+                             : "$8", "memory");
+        transformed_point.x *= frame_scale;
+        MMathApplyMatrix(&state->start[point_index], (const Matrix4 *)&actor_matrix,
+                         matrix_input);
+        first_point.x += 0.1f;
+
+        __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)"
+                             : : "r"(matrix_input), "r"(&second_point)
+                             : "$8", "memory");
+        remaining--;
+        transformed_point.x *= frame_scale;
+        MMathApplyMatrix(&state->end[point_index], (const Matrix4 *)&actor_matrix,
+                         matrix_input);
+        second_point.x += 9.0f;
+
+        MMathSubVectorDivS(&state->displacement[point_index],
+                           &state->end[point_index], &state->start[point_index], 50.0f);
+        MEfCalcAngle(&state->angle[point_index], &state->start[point_index],
+                      &state->end[point_index]);
+        point_index++;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_ead_00", fnEAD00_DP000);
 

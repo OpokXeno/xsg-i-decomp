@@ -21,7 +21,10 @@ typedef struct TComponent {
     unsigned int flags;                /* +0x10 */
     unsigned char unmodeled_14[0x16 - 0x14];
     unsigned short kindAndGroup;       /* +0x16 */
-    unsigned char unmodeled_18[0x32 - 0x18];
+    unsigned char unmodeled_18[0x20 - 0x18];
+    float width;                       /* +0x20: TMENU_create/TMENU_init */
+    float height;                      /* +0x24: TMENU_create/TMENU_init */
+    unsigned char unmodeled_28[0x32 - 0x28];
     unsigned short closeState;         /* +0x32 */
     unsigned char unmodeled_34[0x54 - 0x34];
     int ewHandle;                      /* +0x54 */
@@ -258,7 +261,24 @@ void WIN_initScene(TWindow *window)
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWIN_init2);
 
-INCLUDE_ASM("asm/main/nonmatchings/twsys_init", WIN_checkActiveWindow);
+int WIN_checkActiveWindow(void)
+{
+    TComponent *component;
+    int slotIndex;
+    unsigned int group;
+
+    component = tcomponent;
+    for (slotIndex = 0; slotIndex < 4; slotIndex++, component++) {
+        group = (component->kindAndGroup >> 4) & 3;
+        if (groupStatus[group] & 1) {
+            continue;
+        }
+        if (component->flags & 0x10) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWIN_create2);
 
@@ -289,7 +309,23 @@ INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWIN_drawScene2);
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TMENU_init);
 
-INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TMENU_create);
+TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup);
+void TMENU_init(TComponent *component);
+
+TComponent *TMENU_create(int slotIndex)
+{
+    TComponent *component;
+
+    component = TWSYS_createComponent(slotIndex, 1);
+    if (component == 0) {
+        return 0;
+    }
+
+    TMENU_init(component);
+    component->width = 48.0f;
+    component->height = 64.0f;
+    return component;
+}
 
 /*
  * The menu-kind component TMENU_create hands back (still assembler in this

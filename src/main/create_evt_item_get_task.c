@@ -5,6 +5,76 @@
 
 #include "create_evt_item_get_task.h"
 
+extern int dataBoxInc(int category, int id);
+extern char *GetItemName(int category, int id);
+extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
+                                       int (*callback)(XglTaskPrefix *),
+                                       XglTaskPrefix *entry);
+
+/* One MapUnit record view shared by the initialization and item-update
+ * functions below.  Its stride and all named members are supported by their
+ * combined accesses; gaps remain unmodelled. */
+typedef struct ItemUnitInfo {
+    unsigned char unmodeled_00[2];
+    unsigned short itemNo;
+    signed char signal;
+    signed char unitNo;
+    unsigned char unmodeled_06[0x27];
+    signed char rsrcIndex;
+    unsigned char unmodeled_2e[6];
+    int seId;
+} ItemUnitInfo;
+
+typedef struct ItemMapUnit {
+    unsigned int flags;
+    void (*update)(struct ItemMapUnit *);
+    void (*draw)(struct ItemMapUnit *);
+    unsigned char unmodeled_0c[4];
+    Vector4 position;
+    Vector4 rotation;
+    unsigned char unmodeled_30[0x10];
+    Matrix4 matrix;
+    Matrix4 *matrixPtr;
+    unsigned char unmodeled_84[0x1c];
+    unsigned char seChannel;
+    unsigned char actionNo;
+    unsigned char actionSub;
+    unsigned char unmodeled_a3;
+    unsigned short serial;
+    unsigned char unmodeled_a6[2];
+    short sequenceNo;
+    unsigned char unmodeled_aa[0x3e];
+    int effectCf[3];
+    int ownerNo;
+    unsigned char unmodeled_f8[0xa8];
+    ItemUnitInfo info;
+} ItemMapUnit;
+
+typedef struct MapDisplayRecord {
+    unsigned char unmodeled_00[4];
+    void *model;
+} MapDisplayRecord;
+
+extern void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit);
+extern void MAP_updateUnitItemSymbol(ItemMapUnit *unit);
+extern void SetItemSymbolRsrc(ItemMapUnit *unit);
+extern int xglFlagsGet1(int bitOffset);
+extern int printf(const char *format, ...);
+extern void sefDeleteEffectCf(int effectId);
+extern const char D_004CA5D0[];
+
+typedef struct ItemOwnerUnit {
+    unsigned char unmodeled_00[0xa4];
+    short serial;
+    unsigned char unmodeled_a6[0x25a];
+} ItemOwnerUnit;
+extern ItemOwnerUnit MapUnit[64];
+extern void nmlModelSetPartsVisible(void *model, short partsNo, int visible);
+extern void DrawActiveCursol(ItemMapUnit *unit);
+extern const float D_004D7F7C;
+extern signed char printflg;
+extern const char D_004CA650[];
+
 INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", taskItemGet);
 
 static void taskEvtItemGet(EventItemTask *task)
@@ -27,7 +97,26 @@ static void taskEvtItemGet(EventItemTask *task)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", CreateEvtItemGetTask);
+int CreateEvtItemGetTask(int item, int count)
+{
+    XglTaskScheduler *scheduler;
+    EventItemTask *task;
+
+    if (dataBoxInc(item, count) == 0) {
+        return 0;
+    }
+    scheduler = (XglTaskScheduler *) GameLoopState[2];
+    task = (EventItemTask *) xglTaskEntryNext(
+        scheduler, (int (*)(XglTaskPrefix *)) taskEvtItemGet,
+        scheduler != 0 ? scheduler->active_tail : 0);
+    task->zero_word_10 = 0;
+    task->zero_word_14 = 0;
+    task->category = item;
+    task->window_created = 0;
+    task->item_name = GetItemName(item, count);
+    GameLoopState[4] |= 0x20000;
+    return 1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", GetItemName);
 
@@ -56,9 +145,67 @@ INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", HexToStr);
 
 INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", InitItemBox);
 
-INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", InitItemSymbol);
+void InitItemSymbol(ItemMapUnit *unit)
+{
+    ItemUnitInfo *info = &unit->info;
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", InitSpecialSymbol);
+    xglMatrixStackUnit();
+    xglMatrixStackTrans(&unit->position.x);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
+    xglMatrixStackSave(unit->matrix);
+    unit->matrixPtr = &unit->matrix;
+    if (info->rsrcIndex == -1) {
+        info->rsrcIndex = 0;
+    }
+    unit->update = MAP_updateUnitItemSymbol;
+    unit->flags |= 0x10000;
+    unit->flags |= 0x10000000;
+    if ((unsigned int) unit->serial - 0x7033 < 5) {
+        unit->update = MAP_updateUnitSpecialSymbol;
+        return;
+    }
+    if (info->itemNo >= 602) {
+        unit->draw = 0;
+        unit->update = 0;
+        unit->serial = (unsigned short) -1;
+        printf(D_004CA5D0, (short) info->itemNo);
+        return;
+    }
+    if (xglFlagsGet1(0x79EC7 + (short) info->itemNo) == 1) {
+        unit->serial = (unsigned short) -1;
+        unit->update = 0;
+        for (i = 0; i < 3; i++) {
+            if (unit->effectCf[i] != 0) {
+                sefDeleteEffectCf(unit->effectCf[i]);
+            }
+        }
+        return;
+    }
+    SetItemSymbolRsrc(unit);
+}
+
+void InitSpecialSymbol(ItemMapUnit *unit)
+{
+    ItemUnitInfo *info = &unit->info;
+
+    xglMatrixStackUnit();
+    xglMatrixStackTrans(&unit->position.x);
+    xglMatrixStackRotX(unit->rotation.x);
+    xglMatrixStackRotY(unit->rotation.y);
+    xglMatrixStackRotZ(unit->rotation.z);
+    xglMatrixStackSave(unit->matrix);
+    unit->matrixPtr = &unit->matrix;
+    if (info->rsrcIndex == -1) {
+        info->rsrcIndex = 0;
+    }
+    unit->update = MAP_updateUnitSpecialSymbol;
+    unit->flags |= 0x10004;
+    unit->flags |= 0x10000000;
+    SetItemSymbolRsrc(unit);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", SetItemSymbolRsrc);
 
@@ -112,4 +259,43 @@ INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", MAP_updateUnitItem
 
 INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", MAP_updateUnitSpecialSymbol);
 
-INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", MAP_updateUnitItem);
+void MAP_updateUnitItem(ItemMapUnit *unit)
+{
+    unsigned short nextSequenceNo;
+
+    if (MapUnit[unit->ownerNo].serial != -1) {
+        return;
+    }
+    unit->flags &= ~4;
+    DrawActiveCursol(unit);
+    unit->rotation.y = unit->rotation.y + D_004D7F7C;
+    switch (unit->actionSub) {
+    case 0:
+        if (unit->actionNo == 1) {
+            unit->actionSub = 1;
+        }
+        break;
+    case 1:
+        unit->sequenceNo++;
+        nextSequenceNo = unit->sequenceNo;
+        if ((nextSequenceNo & 1) == 0) {
+            nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 0);
+        } else {
+            nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 1);
+        }
+        if (unit->sequenceNo < 4) {
+            return;
+        }
+        if (unit->sequenceNo < 17) {
+            return;
+        }
+        nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 0);
+        if (printflg != 0) {
+            printf(D_004CA650, (short) unit->serial, unit->seChannel);
+        }
+        unit->update = 0;
+        unit->flags = 0;
+        unit->serial = (unsigned short) -1;
+        break;
+    }
+}

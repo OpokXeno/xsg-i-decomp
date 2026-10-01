@@ -225,6 +225,8 @@ typedef struct PartySkillLevelArray {
     unsigned char level_by_character[8];
 } PartySkillLevelArray;
 
+typedef struct SchedulerState SchedulerState;
+
 typedef void (*ObjectTaskCallback)(ObjectTask *task);
 
 struct ObjectTask {
@@ -242,6 +244,8 @@ typedef struct StreamXssBuffer StreamXssBuffer;
 typedef struct StreamRing StreamRing;
 
 typedef unsigned char byte;
+
+typedef unsigned char DataBufferByte;
 
 typedef unsigned int DataBufferWord;
 
@@ -305,7 +309,7 @@ extern void *classJava_xeno_Unit;
 
 extern int sprintf(char *destination, const char *format, ...);
 
-extern int sceClose(int descriptor);
+int open();
 
 extern u8 *WorkEnd;
 
@@ -335,8 +339,6 @@ extern void xglMatrixUnit(float matrix[4][4]);
 extern float sinf(float angle);
 
 extern void *memset(void *destination, int value, unsigned int count);
-
-extern void XrgCopyMatrix(RgMatrix destination, const RgMatrix source);
 
 extern void XrgInvMatrix(RgMatrix destination, const RgMatrix source);
 

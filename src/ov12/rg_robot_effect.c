@@ -27,6 +27,17 @@ extern void *RgHeapAlloc(void *heap, unsigned int size,
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
                        int line);
 extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
+extern void RgParticleEffectStopAlive(RgParticleEffect *particle, float time);
+extern void RgParticleEffectPassTime(RgParticleEffect *particle, float time);
+extern void RgParticleEffectDisp(RgParticleEffect *particle);
+extern void RgParticleEffectSetShootLocal(RgParticleEffect *particle,
+                                         RgMatrix local);
+extern void RgParticleEffectSetShootInertia(RgParticleEffect *particle,
+                                            RgVector inertia);
+typedef struct XrgActor XrgActor;
+extern int XrgActorGetJointLocal(XrgActor *actor, int joint, RgMatrix local);
+extern void XrgActorGetLocal(XrgActor *actor, RgMatrix local);
+extern void XrgNegateVector(RgVector destination, RgVector source);
 
 /* Same TU, not part of this allocation. */
 static void _InitRobEff(RgRobotEffect *effect);
@@ -103,16 +114,68 @@ static void _AddEffect(RgRobotEffectItem *item, RgParticleEffectEssence *essence
     item->particles[index] = particle;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_effect", _StopEffect);
+static void _StopEffect(RgRobotEffectItem *item)
+{
+    u32 i;
+
+    for (i = 0; i < (u32) item->particle_count; i++) {
+        RgParticleEffectStopAlive(item->particles[i], 0.5f);
+    }
+    item->clear_time = 0.5f;
+}
 
 static void _SetStopTimeEffect(RgRobotEffectItem *item, float stop_time)
 {
     item->stop_time = stop_time;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_effect", _PassTimeEffect);
+static void _PassTimeEffect(RgRobotEffectItem *item, float time)
+{
+    RgMatrix local;
+    RgVector inertia;
+    u32 i;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_effect", _DispEffect);
+    if (item->clear_time <= 0.0f) {
+        return;
+    }
+    if (item->shoot_generator != 0 && item->particle_count != 0) {
+        i = 0;
+        do {
+            if (item->shoot_func(item->shoot_generator, i, local, inertia)) {
+                RgParticleEffectSetShootLocal(item->particles[i], local);
+                if (item->inertia != 0) {
+                    RgParticleEffectSetShootInertia(item->particles[i], inertia);
+                }
+            }
+            i++;
+        } while (i < (u32) item->particle_count);
+    }
+    for (i = 0; i < (u32) item->particle_count; i++) {
+        RgParticleEffectPassTime(item->particles[i], time);
+    }
+    if (item->particle_count == 0) {
+        return;
+    }
+    item->clear_time -= time;
+    if (item->clear_time <= 0.0f) {
+        _ClearEffect(item);
+    }
+    item->stop_time -= time;
+    if (item->stop_time <= 0.0f) {
+        _StopEffect(item);
+    }
+}
+
+static void _DispEffect(RgRobotEffectItem *item)
+{
+    u32 i;
+
+    if (item->clear_time > 0.0f) {
+        for (i = 0; i < (u32) item->particle_count; i++) {
+            RgParticleEffectDisp(item->particles[i]);
+        }
+    }
+}
 
 static void _SetInertiaEffect(RgRobotEffectItem *item, int inertia)
 {
@@ -156,9 +219,37 @@ static void _GetGeomVel(RgRobotEffect *effect, RgVector velocity)
     XrgClearVector(velocity);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_effect", _GetJetShootLocal);
+static int _GetJetShootLocal(RgRobotEffect *generator, int index, void *local,
+                             RgVector inertia)
+{
+    float *matrix_values;
+    int result;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_effect", _GetDashShootLocal);
+    if (generator->actor == 0) {
+        return 0;
+    }
+    result = XrgActorGetJointLocal(generator->actor,
+                                   index == 0 ? 16 : 17, local);
+    matrix_values = local;
+    XrgNegateVector(&matrix_values[8], &matrix_values[8]);
+    _GetGeomVel(generator, inertia);
+    return result;
+}
+
+static int _GetDashShootLocal(RgRobotEffect *generator, int index, void *local,
+                              RgVector inertia)
+{
+    float *matrix_values;
+
+    if (generator->actor == 0) {
+        return 0;
+    }
+    XrgActorGetLocal(generator->actor, local);
+    matrix_values = local;
+    matrix_values[13] = 0.2f;
+    _GetGeomVel(generator, inertia);
+    return 1;
+}
 
 RgRobotEffect *CreateRgRobotEffect(void)
 {
@@ -229,7 +320,8 @@ void RgRobotEffectTermAll(RgRobotEffect *effect)
 typedef struct RgEffectEnv RgEffectEnv;
 RgEffectEnv *InstanceOfRgEffectEnv(void);
 int RgEffectEnvGetParticleData(RgEffectEnv *env, char *name, void *buffer);
-int _GetJetShootLocal(RgRobotEffect *generator, int index, void *local, RgVector inertia);
+static int _GetJetShootLocal(RgRobotEffect *generator, int index,
+                             void *local, RgVector inertia);
 int _InitJetDefault(void *buffer);
 
 void RgRobotEffectStartJet(RgRobotEffect *effect, float stopTime) {
@@ -284,7 +376,8 @@ void RgRobotEffectTermJet(RgRobotEffect *effect)
     }
 }
 
-int _GetDashShootLocal(RgRobotEffect *generator, int index, void *local, RgVector inertia);
+static int _GetDashShootLocal(RgRobotEffect *generator, int index,
+                              void *local, RgVector inertia);
 int _InitDashDefault(void *buffer);
 
 void RgRobotEffectStartDash(RgRobotEffect *effect, float stopTime) {

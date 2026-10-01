@@ -284,7 +284,15 @@ void XrgPaint2DOffsetResult(XrgPaint2D *paint, int value)
     req->offsetMode |= 0x10;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_paint2d", XrgPaint2DOffsetLinear);
+void XrgPaint2DOffsetLinear(XrgPaint2D *paint, int x, int y)
+{
+    XrgPaint2DDrawReq *request;
+
+    request = paint->request;
+    request->offsetResult.i.z = x;
+    request->offsetMode |= 8;
+    paint->request->offsetResult.i.w = y;
+}
 
 void XrgPaint2DColor(XrgPaint2D *paint, const unsigned int *color)
 {

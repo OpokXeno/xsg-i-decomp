@@ -347,4 +347,12 @@ Vector4 *MEfScatterXY(Vector4 *out, const Vector4 *source, const Vector4 *actor,
     return out;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef", MEfCalcWeaponCoord);
+Vector4 *MEfCalcWeaponCoord(Vector4 *destination, const MEfWeaponCoord *weapon)
+{
+    Vector4 actor_matrix[4];
+
+    MEfGetActorMatrix(actor_matrix, weapon->actor, weapon->coordinate);
+    MMathApplyMatrix(destination, actor_matrix, &weapon->local_position);
+    destination->w = 1.0f;
+    return destination;
+}

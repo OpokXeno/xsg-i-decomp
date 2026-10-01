@@ -247,7 +247,8 @@ typedef struct RgBody {
     float weakHitPower;               /* +0x24 */
     float weakHitAccum;               /* +0x28 */
     float weakHitWindow;              /* +0x2c */
-    unsigned char unmodeled_30[0x20]; /* +0x30 */
+    int shieldActive;                 /* +0x30 */
+    unsigned char unmodeled_34[0x1c]; /* +0x34 */
     float dashTime;                   /* +0x50 */
     RgRobotSpec *spec;                /* +0x54 */
     void *target;                     /* +0x58 */
@@ -258,7 +259,7 @@ typedef struct RgBody {
     float rotate;                     /* +0x6c */
     void *weapon[RG_EQUIP_TYPE_NUM];  /* +0x70 */
     int spareWeapon[RG_EQUIP_TYPE_NUM]; /* +0x7c */
-    unsigned char unmodeled_88[0xc];  /* +0x88 */
+    void *shotThread[RG_EQUIP_TYPE_NUM]; /* +0x88 */
     RgHomingThread *homingThread;     /* +0x94 */
     RgRobotEffect *effect;            /* +0x98 */
     int motSmooth;                    /* +0x9c */
@@ -374,7 +375,10 @@ typedef void (*RgStatusExitFunc)(RgRobotStatus *status, RgBody *body);
  *                 0x18($17), ov12:0x00a0334c)
  */
 struct RgRobotStatus {
-    int scratch0;                         /* +0x00 */
+    union {
+        int scratch0;                     /* +0x00: integer view for Drop/DashVR statuses */
+        float scratch0AsFloat;            /* +0x00: float view for Breaking/Damage statuses */
+    };
     int scratch1;                         /* +0x04 */
     int scratch2;                         /* +0x08 */
     float scratchTimer;                   /* +0x0c */

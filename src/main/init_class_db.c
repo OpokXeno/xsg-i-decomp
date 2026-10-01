@@ -2,6 +2,40 @@
 #include "shared.h"
 #include "init_class_db.h"
 
+extern void *xmalloc(int size, int type);
+typedef struct ClassFileMemberHeader {
+    u16 access_flags;
+    u16 name_index;
+    u16 descriptor_index;
+} ClassFileMemberHeader;
+
+SceneField *addField(ClassDescriptor *class_info, ClassFileMemberHeader *field_info);
+SceneMethod *addMethod(ClassDescriptor *class_info, u16 method_info[3]);
+
+typedef struct ClassFilePath {
+    unsigned char unmodeled_00[6];
+    unsigned short length;
+    const char *name;
+} ClassFilePath;
+
+typedef struct ClassFileEntry {
+    ClassFilePath *path;
+} ClassFileEntry;
+
+typedef struct ClassFile {
+    unsigned char unmodeled_00[8];
+    unsigned char *bytes;
+    int length;
+} ClassFile;
+
+extern const char D_004DBFD0[];
+extern char *strncpy(char *dest, const char *src, unsigned int count);
+extern char *strcat(char *dest, const char *src);
+extern ClassFile *PDB_findFile(int volume, const char *name);
+extern ClassDescriptor *newClass(void);
+extern void DataBuffer_init(DataBuffer *buffer, unsigned char *bytes,
+                            int length, int big_endian);
+
 void initClassDB(void)
 {
     int i;
@@ -11,7 +45,31 @@ void initClassDB(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", findClass);
+ClassDescriptor *findClass(ClassFileEntry *entry)
+{
+    char filename[256];
+    DataBuffer buffer;
+    int volume;
+    int index;
+
+    strncpy(filename, entry->path->name, entry->path->length);
+    filename[entry->path->length] = '\0';
+    strcat(filename, D_004DBFD0);
+
+    for (index = 0; index < 8; index++) {
+        volume = classDB[index];
+        if (volume != 0) {
+            ClassFile *file = PDB_findFile(volume, filename);
+            if (file != 0) {
+                ClassDescriptor *class_info = newClass();
+                DataBuffer_init(&buffer, file->bytes, file->length, 1);
+                readClass(&buffer, class_info, 0);
+                return class_info;
+            }
+        }
+    }
+    return 0;
+}
 
 /*
  * Reads a Java class file header from `buffer` into `class_info`: the
@@ -72,11 +130,82 @@ INCLUDE_ASM("asm/main/nonmatchings/init_class_db", addField);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", addMethod);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readFields);
+static void readFields(DataBuffer *buffer, ClassDescriptor *class_info)
+{
+    u16 field_count;
+    u16 field_index;
+    ClassFileMemberHeader field_info;
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readMethods);
+    field_count = DataBuffer_getUShortAt(buffer);
+    class_info->static_field_count = 0;
+    class_info->field_count = field_count;
+    if (field_count != 0) {
+        class_info->fields = xmalloc(field_count * 20, 10);
+        field_index = 0;
+    } else {
+        class_info->fields = 0;
+        return;
+    }
+    while (field_index < field_count) {
+        SceneField *field;
 
-INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readInterfaces);
+        field_info.access_flags = DataBuffer_getUShortAt(buffer);
+        field_info.name_index = DataBuffer_getUShortAt(buffer);
+        field_info.descriptor_index = DataBuffer_getUShortAt(buffer);
+        field = addField(class_info, &field_info);
+        readAttributes(buffer, class_info, (int)field);
+        field_index++;
+    }
+    class_info->field_count = field_count;
+}
+
+static void readMethods(DataBuffer *buffer, ClassDescriptor *class_info)
+{
+    u16 method_count;
+    u16 method_index;
+    u16 method_info[3];
+
+    method_count = DataBuffer_getUShortAt(buffer);
+    class_info->method_count = 0;
+    if (method_count != 0) {
+        class_info->methods = xmalloc(method_count * 32, 11);
+        method_index = 0;
+    } else {
+        class_info->methods = 0;
+        return;
+    }
+    while (method_index < method_count) {
+        SceneMethod *method;
+
+        method_info[0] = DataBuffer_getUShortAt(buffer);
+        method_info[1] = DataBuffer_getUShortAt(buffer);
+        method_info[2] = DataBuffer_getUShortAt(buffer);
+        method = addMethod(class_info, method_info);
+        readAttributes(buffer, class_info, (int)method);
+        method_index++;
+    }
+}
+
+static void readInterfaces(DataBuffer *buffer, ClassDescriptor *class_info)
+{
+    u16 interface_count;
+    u16 interface_index;
+
+    interface_count = DataBuffer_getUShortAt(buffer);
+    class_info->interface_count = interface_count;
+    if (interface_count != 0) {
+        class_info->interfaces = xmalloc(interface_count * 4, 12);
+        interface_index = 0;
+    } else {
+        class_info->interfaces = 0;
+        return;
+    }
+    while (interface_index < interface_count) {
+        ((u32 *)class_info->interfaces)[interface_index] =
+            DataBuffer_getUShortAt(buffer);
+        interface_index++;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_class_db", readAttributes);
 

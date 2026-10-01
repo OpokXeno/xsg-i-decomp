@@ -31,6 +31,7 @@ typedef struct TCamera TCamera;
  * reads $f12 (c.le.s at 0x0030c0d8). */
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 extern float SPL_getValue(void *spline, int index, float frame);
+extern const float D_004D849C;
 
 /*
  * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
@@ -44,7 +45,52 @@ TCamera *TCAMERA_get(int camera_id)
     return (TCamera *)(tcamera + camera_id * 0x12c0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_info);
+extern StudioCamera *xglStudioGetActiveCamera(void);
+extern const float D_004D8480;
+extern const float D_004D8484;
+extern const char D_004D1838[];
+extern const char D_004D1848[];
+extern const char D_004D1858[];
+extern const char D_004D1868[];
+extern const char D_004D1878[];
+extern const char D_004D1888[];
+extern const char D_004D1898[];
+extern const char D_004D18A8[];
+extern const char D_004D18B8[];
+extern const char D_004D18C8[];
+extern void DB_incPos(int x, int y);
+extern void DB_println(const char *format, ...);
+typedef unsigned int CameraVectorStorage __attribute__((mode(TI)));
+typedef union {
+    Vector4 vector;
+    CameraVectorStorage storage;
+} MpackInterest;
+extern MpackInterest mpack_interest;
+
+void TCAMERA_info(void)
+{
+    TCamera *camera = (TCamera *)xglStudioGetActiveCamera();
+    Vector4 *translation = TCAMERA_TRANSLATION(camera);
+    Vector4 *rotation = TCAMERA_ROTATION(camera);
+    Vector4 *interest = &mpack_interest.vector;
+
+    DB_println(D_004D1838, (double)translation->x);
+    DB_println(D_004D1848, (double)translation->y);
+    DB_println(D_004D1858, (double)translation->z);
+    DB_incPos(0, 6);
+    if (interest->w > 0.0f) {
+        DB_println(D_004D1868, (double)interest->x);
+        DB_println(D_004D1878, (double)interest->y);
+        DB_println(D_004D1888, (double)interest->z);
+        interest->w = 0.0f;
+    } else {
+        DB_println(D_004D1898, (double)(rotation->x / D_004D8480 * 180.0f));
+        DB_println(D_004D18A8, (double)(rotation->y / D_004D8480 * 180.0f));
+        DB_println(D_004D18B8, (double)(rotation->z / D_004D8480 * 180.0f));
+    }
+    DB_incPos(0, 6);
+    DB_println(D_004D18C8, (double)(TCAMERA_FOV(camera) / D_004D8484 * 180.0f));
+}
 
 /*
  * TCAMERA_transMPack samples eight consecutive values off the packed curve
@@ -106,7 +152,13 @@ void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
     TCAMERA_FOV(camera) = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) / 180.0f * radiansPerDegree;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_mpackGetInterest);
+/* Commit the output quadword before returning its copied representation. */
+CameraVectorStorage TCAMERA_mpackGetInterest(volatile MpackInterest *interest)
+{
+    CameraVectorStorage value = mpack_interest.storage;
+    interest->storage = value;
+    return value;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_transMPack2);
 
@@ -220,13 +272,120 @@ void TCAMERA_transSPL(TCamera *camera, void *spline, float frame)
     SPL_getValueXYZ(&TCAMERA_TRANSLATION(camera)->x, spline, frame);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_rotateSPL);
+void TCAMERA_rotateSPL(TCamera *camera, void *spline, float frame)
+{
+    Vector4 *rotation = TCAMERA_ROTATION(camera);
+    float angles[3];
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_viewSPL);
+    SPL_getValueXYZ(angles, spline, frame);
+    rotation->x = (angles[0] / 180.0f) * D_004D849C;
+    rotation->y = (angles[1] / 180.0f) * D_004D849C;
+    rotation->z = (angles[2] / 180.0f) * D_004D849C;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_transCNS);
+void TCAMERA_viewSPL(TCamera *camera, void *spline, float frame)
+{
+    Vector4 *translation = TCAMERA_TRANSLATION(camera);
+    Vector4 *rotation = TCAMERA_ROTATION(camera);
+    float point[4];
+    Vector4 direction;
+    float yaw;
+    float sine;
+    float cosine;
+    float pitchDenominator;
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_viewCNS);
+    SPL_getValueXYZ(point, spline, frame);
+    __asm__ __volatile__(
+        "lqc2 $vf3, 0(%0)\n\t"
+        "lqc2 $vf2, 0(%1)\n\t"
+        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
+        "sqc2 $vf2, 0(%2)"
+        :
+        : "r"(point), "r"(translation), "r"(&direction)
+        : "memory");
+    yaw = xglAtan2(direction.x, direction.z);
+    rotation->y = yaw;
+    sine = xglSin(yaw);
+    cosine = xglCos(rotation->y);
+    pitchDenominator = direction.x * sine + direction.z * cosine;
+    rotation->x = -xglAtan2(direction.y, pitchDenominator);
+}
+
+void TCAMERA_transCNS(TCamera *camera, float **constraint, Vector4 *offset, int mode)
+{
+    Vector4 *translation = TCAMERA_TRANSLATION(camera);
+    float point[4];
+
+    if (mode == 0) {
+        point[0] = (*constraint)[4];
+        point[1] = (*constraint)[5];
+        point[2] = (*constraint)[6];
+    } else if (mode == 1) {
+        point[0] = (*constraint)[0];
+        point[1] = (*constraint)[1];
+        point[2] = (*constraint)[2];
+    } else {
+        point[0] = (*constraint)[4];
+        point[1] = (*constraint)[5];
+        point[2] = (*constraint)[6];
+    }
+    __asm__ __volatile__(
+        "lqc2 $vf3, 0(%0)\n\t"
+        "lqc2 $vf2, 0(%1)\n\t"
+        "vadd.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
+        "sqc2 $vf2, 0(%2)"
+        :
+        : "r"(offset), "r"(point), "r"(translation)
+        : "memory");
+}
+
+void TCAMERA_viewCNS(TCamera *camera, float **constraint, Vector4 *offset, int mode)
+{
+    Vector4 *rotation = TCAMERA_ROTATION(camera);
+    float point[4];
+    Vector4 direction;
+    float yaw;
+    float sine;
+    float cosine;
+    float pitchDenominator;
+
+    if (mode == 0) {
+        point[0] = (*constraint)[4];
+        point[1] = (*constraint)[5];
+        point[2] = (*constraint)[6];
+    } else if (mode == 1) {
+        point[0] = (*constraint)[0];
+        point[1] = (*constraint)[1];
+        point[2] = (*constraint)[2];
+    } else {
+        point[0] = (*constraint)[4];
+        point[1] = (*constraint)[5];
+        point[2] = (*constraint)[6];
+    }
+    camera = (TCamera *)((u8 *)camera + 0xd0);
+    __asm__ __volatile__(
+        "lqc2 $vf3, 0(%0)\n\t"
+        "lqc2 $vf2, 0(%1)\n\t"
+        "vadd.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
+        "sqc2 $vf2, 0(%1)"
+        :
+        : "r"(offset), "r"(point)
+        : "memory");
+    __asm__ __volatile__(
+        "lqc2 $vf3, 0(%0)\n\t"
+        "lqc2 $vf2, 0(%1)\n\t"
+        "vsub.xyz $vf2xyz, $vf2xyz, $vf3xyz\n\t"
+        "sqc2 $vf2, 0(%2)"
+        :
+        : "r"(point), "r"(camera), "r"(&direction)
+        : "memory");
+    yaw = xglAtan2(direction.x, direction.z);
+    rotation->y = yaw;
+    sine = xglSin(yaw);
+    cosine = xglCos(rotation->y);
+    pitchDenominator = direction.x * sine + direction.z * cosine;
+    rotation->x = -xglAtan2(direction.y, pitchDenominator);
+}
 
 /*
  * TCAMERA_rollSPL/TCAMERA_fovSPL: called by TCAMERA_update with `spline`
@@ -251,7 +410,25 @@ void TCAMERA_fovSPL(TCamera *camera, void *spline, float frame)
 
 INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_update);
 
-INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_init);
+typedef struct {
+    unsigned char unmodeled_00[12];
+    int mode[4];
+    unsigned char unmodeled_1c[0x12c0 - 28];
+} CameraInitRecord;
+
+void TCAMERA_init(void)
+{
+    CameraInitRecord *cameras = (CameraInitRecord *)tcamera;
+    int cameraIndex;
+    int modeIndex;
+
+    for (cameraIndex = 0; cameraIndex < 8; cameraIndex++) {
+        int *modes = cameras[cameraIndex].mode;
+        for (modeIndex = 3; modeIndex >= 0; modeIndex--) {
+            modes[modeIndex] = 16;
+        }
+    }
+}
 
 /*
  * TCAMERA_setFCurve: no call site references it in this build (original

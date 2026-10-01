@@ -23,7 +23,8 @@ extern void *xmalloc(int size, int type);
 typedef struct ClassEntry {
     u8 unmodeled_00[0x8];
     void *resolvedClass;      /* +0x8: cached findClass(this) result */
-    u8 unmodeled_0c[0xc];
+    void *next;                /* +0xC: next entry in the class-cache chain */
+    u8 unmodeled_10[0x8];
     void *classPointer;  /* +0x18: copied into a new instance's header word */
     u8 unmodeled_1c[0x16];
     u16 staticFieldCount; /* +0x32: zeroed for a class newClass has just made */

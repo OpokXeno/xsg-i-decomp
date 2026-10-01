@@ -61,4 +61,12 @@ struct RgWeaponUnArmedEssence {
     char hitEffectName[0x24];    /* +0x3bc, the "hiteff" key above */
 };
 
+struct RgWeaponEnergyEssence {
+    unsigned char unmodeled_000[0x3b0];
+    float shotEnergy;
+    float upTemp;
+    float limitTemp;
+    float downTemp;
+};
+
 #endif /* INCLUDE_OV12_RG_WEAPON_DB_H */

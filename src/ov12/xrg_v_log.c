@@ -6,6 +6,8 @@
 /* The EE GCC argument pointer is a plain byte pointer: XrgLog and XrgOut hand
  * the address of their spilled register arguments down as it. */
 typedef char *va_list;
+#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
+#define va_end(ap) ((void)0)
 
 /*
  * The release build's output sinks: XrgVLog/XrgVOut pass them the format and
@@ -35,8 +37,29 @@ void XrgVOut(const char *format, va_list args)
     _vout(format, args);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_v_log", XrgLog);
+void XrgLog(const char *format, const char *source_file, int line, ...)
+{
+    va_list args;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_v_log", XrgLogSys);
+    va_start(args, line);
+    XrgVLog(format, source_file, line, args);
+    va_end(args);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_v_log", XrgOut);
+void XrgLogSys(const char *format, const char *source_file, int line, ...)
+{
+    va_list args;
+
+    va_start(args, line);
+    XrgVLogSys(format, source_file, line, args);
+    va_end(args);
+}
+
+void XrgOut(const char *format, ...)
+{
+    va_list args;
+
+    va_start(args, format);
+    XrgVOut(format, args);
+    va_end(args);
+}

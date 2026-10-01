@@ -54,7 +54,15 @@ void scDestroyScript2(int script_index, int task_index)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scDestroyScriptAll);
+extern void scDestroyScript(int script_index);
+
+void scDestroyScriptAll(void)
+{
+    int script_index;
+
+    for (script_index = 0; script_index < 16; script_index++)
+        scDestroyScript(script_index);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scExecScript);
 
@@ -194,7 +202,20 @@ int scGetNumScript(ScriptTask *task)
     return value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetRegScript);
+int scGetRegScript(ScriptTask *task)
+{
+    int operand;
+    int resolved_operand;
+
+    operand = scGetCmdScript(task);
+    if (operand & 0x8000) {
+        resolved_operand = (short)scGetReg(operand & 0xFFFF7FFF);
+    } else {
+        resolved_operand = operand;
+    }
+
+    return resolved_operand;
+}
 
 /*
  * scGetAdrScript forwards the running task it was given straight through to
@@ -345,7 +366,20 @@ short scGetImmNumIdx(short *table, int index)
     return table[index];
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetAdrImmScript);
+int scGetAdrImmScript(ScriptTask *task)
+{
+    int table_index;
+    ScriptRecord *script_record;
+    unsigned short *table;
+
+    table_index = scGetAdrScript(task);
+    if (table_index == 0)
+        return 0;
+
+    script_record = (ScriptRecord *)(_scriptWork + _nowScript * 1104);
+    table = (unsigned short *)script_record->dataTable;
+    return (int)&table[table_index];
+}
 
 static int scERRORScript(void)
 {
@@ -721,7 +755,20 @@ static int scREVEScript(ScriptTask *task)
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scWAITCNTScript);
+static int scWAITCNTScript(ScriptTask *task)
+{
+    int wait_count;
+
+    wait_count = scGetNumScript(task);
+    if (wait_count <= 0)
+        return 1;
+
+    task->wait_count = wait_count;
+    /* Reuse the local after the count is stored to hold the yielded mode. */
+    wait_count = 1;
+    task->wait_mode = wait_count;
+    return 2;
+}
 
 /*
  * scWAITEVEScript is the WAIT-for-event opcode handler: it reads the event
@@ -907,7 +954,13 @@ INCLUDE_ASM("asm/main/nonmatchings/sc_get", scParseScript);
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scAnalyzeScriptCf);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetTaskAdr);
+struct EventTask *scGetTaskAdr(int script_index, int task_index)
+{
+    if (task_index < 0)
+        return 0;
+
+    return (struct EventTask *)&_scriptWork[script_index * 1104 + task_index * 128];
+}
 
 extern unsigned char D_004CC818[];
 

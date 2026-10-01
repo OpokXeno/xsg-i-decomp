@@ -1,16 +1,6 @@
 #ifndef INCLUDE_OV12_RG_ROBOT_CONTROL_H
 #define INCLUDE_OV12_RG_ROBOT_CONTROL_H
 
-/*
- * Opaque handles owned by other TUs: RgBattleMgrGetPlayerDamage only ever
- * forwards a robot pointer to RgPlayerGetRobot/RgRobotGetLife/
- * RgRobotGetLifeMax, it never reads or writes a member of it. Declared here
- * as RgRobot, this TU's own name for the pointer (src/ov12/rg_player.c
- * passes the very same pointer, uncast, to RgRobotGetActor's own local
- * extern of it as RgRobot too); rg_robot.c's own TU names it RgStatus.
- */
-typedef struct RgRobot RgRobot;
-
 typedef struct RgRobotControl RgRobotControl;
 
 typedef void (*RgRobotControlDestructFunc)(RgRobotControl *pControl);
@@ -32,5 +22,7 @@ struct RgRobotControl {
     RgRobotControlDestructFunc destructMethod; /* +0x04 */
     RgRobotControlJobFunc jobMethod;           /* +0x08 */
 };
+
+RgRobotControl *CreateRgRobotControlNul(RgRobot *pRobot);
 
 #endif /* INCLUDE_OV12_RG_ROBOT_CONTROL_H */

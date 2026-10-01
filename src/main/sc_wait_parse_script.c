@@ -70,8 +70,41 @@ static int scWaitParseMovScript(ScriptObject *script)
     return ((script->flags >> 5) ^ 1) & 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_wait_parse_script", scWaitParseScript);
+extern int (*waitHandlerTbl_0[])(ScriptObject *);
+extern int (*moveHandlerTbl_1[])(ScriptObject *);
+
+int scWaitParseScript(ScriptObject *script)
+{
+    unsigned short wait_kind = script->wait_kind;
+    int result;
+
+    if (wait_kind >= 6) {
+        script->wait_kind = 0;
+        return 1;
+    }
+
+    result = waitHandlerTbl_0[(short)wait_kind](script);
+    if (result != 0)
+        script->flags &= ~0x10;
+
+    return (short)result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_wait_parse_script", scWaitMissileScript);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_wait_parse_script", scMoveParseScript);
+int scMoveParseScript(ScriptObject *script)
+{
+    unsigned short move_kind = script->move_kind;
+    int result;
+
+    if (move_kind >= 2) {
+        script->move_kind = 0;
+        return 1;
+    }
+
+    result = moveHandlerTbl_1[(short)move_kind](script);
+    if (result != 0)
+        script->flags &= ~0x20;
+
+    return (short)result;
+}

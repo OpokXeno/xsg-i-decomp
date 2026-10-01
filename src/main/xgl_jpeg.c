@@ -22,7 +22,30 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", ConvertYUV2MCU);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", FFDCT);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", Quantize);
+extern int F2I(float value);
+
+static void Quantize(int *quantized, const float *coefficients, const float *reciprocals)
+{
+    float coefficient;
+    float reciprocal;
+    float scaled;
+    int index;
+
+    for (index = 63; index >= 0; index--) {
+        coefficient = *coefficients;
+        coefficients++;
+        reciprocal = *reciprocals;
+        reciprocals++;
+        scaled = coefficient * reciprocal;
+        if (coefficient < 0.0f) {
+            scaled -= 0.5f;
+        } else {
+            scaled += 0.5f;
+        }
+        *quantized = F2I(scaled);
+        quantized++;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", RebuildQuantizeTable);
 

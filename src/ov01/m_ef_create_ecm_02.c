@@ -6,7 +6,91 @@
 
 extern void MMathAddRotateVectorY(void *destination, float angle, const Vector4 *base, const Vector4 *offset);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_ecm_02", MEfCreate_ECM02);
+typedef void (*ECM02Callback)(void *self, void *work);
+
+typedef struct ECM02Packet {
+    void *data;
+    int capacity;
+    void *current;
+    int count;
+    int aux_count;
+} ECM02Packet;
+
+typedef struct ECM02InitState {
+    unsigned char unmodeled_00[0x30];
+    Vector4 source_vector;
+    unsigned char unmodeled_40[0x30];
+    short frame;
+    unsigned char unmodeled_72[0x0E];
+    Vector4 copied_vector;
+    u32 color[4];
+    short visible[21];
+    unsigned char unmodeled_ca[2];
+    float radius[21];
+    float angle[21];
+    ECM02Packet packet;
+} ECM02InitState;
+
+typedef struct ECM02Effect {
+    u32 unmodeled_00;
+    ECM02Callback process_callback;
+    u32 unmodeled_08;
+    ECM02Callback draw_packet_callback;
+    ECM02Callback post_process_callback;
+    unsigned char unmodeled_14[0x0C];
+    ECM02InitState state;
+} ECM02Effect;
+
+static void fnECM02_PR000(void *self, void *work);
+static void fnECM02_DP000(void *self, void *work);
+static void fnECM02_PO000(void *self, void *work);
+extern void MGsGPInit(ECM02Packet *packet, void *address, int size);
+extern float MMathMakeRandom2PI(void);
+
+int MEfCreate_ECM02(void *self)
+{
+    ECM02Effect *effect = (ECM02Effect *)self;
+    ECM02InitState *state = &effect->state;
+    u32 *color_cursor;
+    u32 remaining_color;
+    int color_index;
+
+    state->frame = 0;
+    /* Preserve the original four-word vector before replacing its second float. */
+    __asm__ __volatile__(
+        "lq $8, 0(%1)\n\t"
+        "sq $8, 0(%0)"
+        :
+        : "r"(&state->copied_vector), "r"(&state->source_vector)
+        : "$8", "memory"
+    );
+    state->copied_vector.y = 11.0f;
+    memset(state->visible, 0, sizeof(state->visible));
+    memset(state->radius, 0, sizeof(state->radius));
+    memset(state->angle, 0, sizeof(state->angle));
+
+    remaining_color = 128;
+    color_cursor = state->color;
+    for (color_index = 2; color_index >= 0; color_index--) {
+        *color_cursor = xglSRand() & 0x3F;
+        if (*color_cursor > remaining_color) {
+            *color_cursor = remaining_color;
+        }
+        remaining_color -= *color_cursor;
+        color_cursor++;
+    }
+
+    state->color[3] = 255;
+    state->visible[0] = 1;
+    state->radius[0] = 0.0f;
+    state->angle[0] = MMathMakeRandom2PI();
+    MGsGPInit(&state->packet, 0, 0);
+
+    effect->process_callback = fnECM02_PR000;
+    effect->draw_packet_callback = fnECM02_DP000;
+    effect->post_process_callback = fnECM02_PO000;
+    return 1;
+}
 
 static void makeCoord(void *destination, float radius, float angle, void *effect)
 {

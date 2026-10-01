@@ -14,7 +14,8 @@ typedef signed char s8;
  * Only the card array is evidenced; the record may extend past it.
  */
 typedef struct CardHand {
-    u8 unmodeled_00[3];
+    s8 playPoints[2];              /* +0x00: per-kind points available for playing cards */
+    u8 unmodeled_02;
     u8 commandFlags;               /* +0x03: CardPlayCommandPlay command 37 sets bit 0 */
     u8 unmodeled_04[4];
     s16 cards[40];                 /* +0x08 */
@@ -30,7 +31,7 @@ typedef struct CardDefinition {
     u16 flags;
     u8 unmodeled_04[12];
     u8 reserveCost;               /* +0x10: cards this command reserves from the draw pile */
-    u8 unmodeled_11;
+    u8 playCost;                   /* +0x11: points required to play this card */
     u8 operationDuration;          /* +0x12 */
     u8 unmodeled_13;
     u8 attackPower;                /* +0x14 */
@@ -65,6 +66,18 @@ typedef struct CardLayerStack {
     CardBattleLayer layers[40];    /* +0x008 */
     float position[4];             /* +0x198: effect position (CardSetEffect) */
 } CardLayerStack;
+
+/* TU-local view with the movement fields evidenced by CGPRecalcPosSub. */
+typedef struct CardLayerStackView {
+    u8 flags;
+    u8 moveFrames;                 /* +0x01: frames remaining in the current movement */
+    u8 power;
+    u8 powerLimit;
+    u8 unmodeled_04[4];
+    CardBattleLayer layers[40];    /* +0x008 */
+    float position[3];             /* +0x198: current effect position */
+    float step[3];                 /* +0x1A4: per-frame movement toward the next slot */
+} CardLayerStackView;
 
 /* One battle or disposal slot of a side's board (0x1BC bytes). */
 typedef struct CardBoardSlot {
@@ -111,9 +124,9 @@ typedef struct CardCommandInput {
 
 /* State of the command card being played (CardPlayCommandPlay, 0x30 bytes). */
 typedef struct CardCommandControl {
-    u8 unmodeled_00[2];
+    s16 turn;                      /* +0x00: current turn number */
     u16 phase;                     /* +0x02 */
-    u8 unmodeled_04[2];
+    u16 phaseTimer;                /* +0x04: frames spent in the current phase */
     s16 step;                      /* +0x06: CardPlayCommandPlay's step within the command */
     s16 flowRequest;               /* +0x08: pending game-flow request, 0 = none. CardGameProc reads it
                                     * with lh (0x00a31900) and dispatches 1..6 through a jump table
@@ -178,6 +191,21 @@ typedef struct CardModelEntry {
     float matrix[4][4];            /* +0x10: placement passed to nmlModelSetPlace (0x00a0839c `addiu $18,$30,0x6C00`) */
 } CardModelEntry;
 
+/* One visual effect in the card game's 64-entry effect table (0x40 bytes). */
+typedef struct CardEffect {
+    u8 side;
+    u8 code;
+    u8 phase;
+    u8 timer;
+    s8 value;
+    u8 unmodeled_05[3];
+    int soundId;
+    CardLayerStackView *stack;
+    float position[4];
+    float velocity[4];
+    float scale[4];
+} CardEffect;
+
 /*
  * Card game overlay work area. Only the members touched by the recovered
  * functions of this TU are named; everything else stays an unmodeled span
@@ -185,7 +213,8 @@ typedef struct CardModelEntry {
  */
 typedef struct CardGameWork {
     u16 flags;                     /* +0x0000: bit set, see CGP_FLAG_ERROR_PLUS */
-    u8 unmodeled_0002[0x0008 - 0x0002];
+    u8 unmodeled_0002[2];
+    u16 *commandIds;               /* +0x0004: command id per card id */
     CardDefinition *definitions;   /* +0x0008: card master table */
     CardSaveData *save;            /* +0x000C: card game save data (lw, then byte accesses through it);
                                     * CGPRotStageSub requires CARD_SAVE_ROTATE_STAGE */
@@ -222,18 +251,34 @@ typedef struct CardGameWork {
     s8 errorMessCode;              /* +0x5AF0: CGPSetErrorMess/CGPSetErrorMessPlus first argument */
     u8 errorMessKind;              /* +0x5AF1: 1 = CGPSetErrorMess, 3 = CGPSetErrorMessPlus;
                                     * CardPlayDispInfo tests bit 0x02 to pick the Plus display */
-    u8 unmodeled_5AF2[2];
+    u16 infoPanelPhase;            /* +0x5AF2: information-panel animation phase */
     s8 resultWait;                 /* +0x5AF4: frames to wait after a game before input is read (lb/sb);
                                     * CardMainProc sets 90 and waits while it is positive */
     u8 errorMessReason;            /* +0x5AF5: CGPSetErrorMess/CGPSetErrorMessPlus third argument (read with lbu) */
     s16 errorMessValue;            /* +0x5AF6: -1 for CGPSetErrorMess, caller value for the Plus form */
-    u8 unmodeled_5AF8[0x5B40 - 0x5AF8];
+    u8 unmodeled_5AF8[0x5B00 - 0x5AF8];
+    float infoPanelPos[4];         /* +0x5B00: information-panel position */
+    float infoPanelPosStep[4];     /* +0x5B10: per-frame position change */
+    float infoPanelScale[4];       /* +0x5B20: information-panel scale */
+    float infoPanelScaleStep[4];   /* +0x5B30: per-frame scale change */
     char *mess;                    /* +0x5B40: CGPSetMessage, indexed from OLMessTbl */
     char *interruptMess;           /* +0x5B44: CGPSetInterruptMess, indexed from CardPlayTMessList */
     char *permanentMess;           /* +0x5B48: CGPSetPermanentMess, indexed from PermMessTbl or NULL */
     u8 unmodeled_5B4C[0x5B50 - 0x5B4C];
     CardCursorControl cursor;      /* +0x5B50 */
-    u8 unmodeled_5B58[0x6BF0 - 0x5B58];
+    u8 cursorMoveStep[2];          /* +0x5B58: one movement counter per side */
+    u8 unmodeled_5B5A[2];
+    s16 cursorIndex;               /* +0x5B5C: position inside the selected zone */
+    s16 cursorZone;                /* +0x5B5E: selected board zone */
+    float highlightX;              /* +0x5B60 */
+    float highlightY;              /* +0x5B64 */
+    float highlightScaleX;         /* +0x5B68 */
+    float highlightScaleY;         /* +0x5B6C */
+    float cursorPos[3];            /* +0x5B70: cursor world position */
+    u8 unmodeled_5B7C[0x5BE2 - 0x5B7C];
+    u16 effectsSet;                /* +0x5BE2: number of effect entries registered */
+    u8 unmodeled_5BE4[0x5BF0 - 0x5BE4];
+    CardEffect effects[64];        /* +0x5BF0: card-game effect table */
     CardModelEntry models[16];     /* +0x6BF0: models drawn after every fase (0x00a083a0 `addiu $16,$30,0x6BF0`) */
     u8 unmodeled_70F0;
     u8 rotStageCooldown;           /* +0x70F1: nonzero while a pending CGPRotStageSub request is in effect;
@@ -277,5 +322,35 @@ typedef struct CardPowerCard {
     u8 unmodeled_0B[3];
     s16 cardId;                     /* +0x0E: negative while the slot is empty */
 } CardPowerCard;
+
+/* Movement record fields used by the slot swap at 0x00a25b70. */
+typedef struct CardMoveLayer {
+    u8 state;
+    u8 preservedByte01;
+    u8 boostCount;
+    u8 life;
+    u8 preservedByte04;
+    u8 damageTimer;
+    s16 cardId;
+    u8 unmodeled_08[2];
+} CardMoveLayer;
+
+typedef struct CardMoveWork {
+    u8 flags;
+    u8 moveStep;
+    u8 power;
+    u8 powerLimit;
+    u8 unmodeled_04[4];
+    CardMoveLayer layers[40];
+    float position[3];
+    float velocity[3];
+    float shuntPosition[3];
+} CardMoveWork;
+
+/*
+ * Swap a disposal slot's stack with a battle slot's and start the ten-frame
+ * slide that carries each of them to the other's position.
+ */
+void CGPMoveDSBATTLEwork(CardMoveWork *disposal, CardMoveWork *battle);
 
 #endif /* INCLUDE_OV10_CGP_H */

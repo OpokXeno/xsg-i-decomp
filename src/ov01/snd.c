@@ -8,11 +8,60 @@
 #define SND_MU_VOLUME_MAX 0x7F
 #define SND_MU_FADE_TIME  2000
 
+extern int sndBankGet();
+
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndInit2);
+extern int dmgBankOffs[3];
+extern int dmgBankStat[3];
+extern int ctrlId;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndStEdNum);
+void sndInit2(void)
+{
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        dmgBankOffs[i] = 0;
+        dmgBankStat[i] = 0;
+    }
+    ctrlId = 0;
+}
+
+typedef struct SndStEdData {
+    int unitId;
+    const char *name;
+    int condition[8];
+} SndStEdData;
+
+extern int dataSndStEdNumSub(ObjectTask *unit, int condition);
+extern int rnd(int maximum);
+
+/* The caller selects btst/bted records; every live record starts with the
+ * unconditional condition 1, so at least one candidate is always written. */
+int dataSndStEdNum(SndStEdData *data, ObjectTask *unit)
+{
+    int candidate[8];
+    int index;
+    int count;
+    int *conditions;
+    int *condition;
+
+    conditions = data->condition;
+    count = 0;
+    for (index = 0; index < 8; index++) {
+        condition = &conditions[index];
+        if (dataSndStEdNumSub(unit, *condition)) {
+            if (*condition >= 7) {
+                candidate[0] = index + 1;
+                count = 1;
+                break;
+            }
+            candidate[count] = index + 1;
+            count++;
+        }
+    }
+    return candidate[rnd(count - 1)];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndStEdNumSub);
 
@@ -30,13 +79,117 @@ void *sndSeAdrGet(void)
     return sndSeDat;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeRegAdrChk);
+typedef struct {
+    SndSeLoadWork work;             /* +0x00 */
+    unsigned char unmodeled_0c[8]; /* +0x0c */
+} SndSeRegBank;
+typedef struct {
+    int id;               /* +0x00 */
+    SndSeRegBank bank[5]; /* +0x04 */
+} SndSeRegDat;
+extern SndSeRegDat sndSeRegDat[6];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeRegAdrGet);
+SndSeRegDat *sndSeRegAdrChk(int id)
+{
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeRegRemove);
+    for (i = 0; i < 6; i++) {
+        if (sndSeRegDat[i].id == id) {
+            return &sndSeRegDat[i];
+        }
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeRegChk);
+SndSeRegDat *sndSeRegAdrChk(int id);
+
+/*
+ * ov01:0x00a2d248. Reuses an existing sound registration if one already
+ * matches id; otherwise, for a character id below 0xBB, claims the first
+ * free slot in the id's half of sndSeRegDat (0..2 below 0x21, 3..5
+ * otherwise) and returns its address, or 0 if none is free or id is 0xBB or
+ * above.
+ */
+SndSeRegDat *sndSeRegAdrGet(int id)
+{
+    SndSeRegDat *found;
+    int i;
+    int start;
+    int end;
+
+    found = sndSeRegAdrChk(id);
+    if (found != 0) {
+        return found;
+    }
+    if (id >= 0xBB) {
+        return 0;
+    }
+    if (id < 0x21) {
+        start = 0;
+        end = 3;
+    } else {
+        start = 3;
+        end = 6;
+    }
+    for (i = start; i < end; i++) {
+        if (sndSeRegDat[i].id == 0) {
+            sndSeRegDat[i].id = id;
+            return &sndSeRegDat[i];
+        }
+    }
+    return 0;
+}
+
+int sndSeRegRemove(int id)
+{
+    int i;
+    int j;
+
+    for (i = 0; i < 6; i++) {
+        if (sndSeRegDat[i].id == id) {
+            sndSeRegDat[i].id = 0;
+            for (j = 4; j >= 0; j--) {
+                sndSeRegDat[i].bank[j].work.seType = 0;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+typedef struct SndSeActorFlags {
+    unsigned int flags;
+} SndSeActorFlags;
+#define SND_SE_ACTOR_FLAG_ENEMY 0x40u
+
+/*
+ * ov01:0x00a2d388. Reports whether the sound-effect index seType has a
+ * registered bank for this unit: a player-side unit outside the boss charaId
+ * range (0xBB..0xC2) registers 1..4 and 23, a boss or enemy unit in the
+ * 0x97..0xBA charaId range registers 1 and 2, and every other enemy
+ * registers 1..5.
+ */
+int sndSeRegChk(ObjectTask *unit, int seType)
+{
+    int registered = 0;
+
+    if (!(((SndSeActorFlags *)unit->work)->flags & SND_SE_ACTOR_FLAG_ENEMY)
+        && !(calcUPGet(unit)->flags & SND_SE_ACTOR_FLAG_ENEMY)
+        && (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
+        if (seType > 0 && (seType < 5 || seType == 23)) {
+            registered = 1;
+        }
+    } else if (calcUPGet(unit)->charaId >= 0x97 && calcUPGet(unit)->charaId < 0xBB) {
+        if (seType < 3) {
+            if (seType > 0) {
+                registered = 1;
+            }
+        }
+    } else if (seType < 6) {
+        registered = seType > 0;
+    }
+    return registered;
+}
 
 #include "ov01/calc.h"
 
@@ -51,11 +204,7 @@ extern CalcUnitParam *calcUPGet(ObjectTask *unit);
  * s3,0(s2) ov01:0x00a2d574), dest (lw a1,4(s2) ov01:0x00a2d540, read only)
  * and size (sw a1,8(s2) ov01:0x00a2d570).
  */
-typedef struct {
-    int seType; /* +0x00: echoes the resolved sound-effect index; 0 on lookup failure */
-    void *dest; /* +0x04: destination address dataFileLoadNB loads into */
-    int size;   /* +0x08: file size rounded up to a 2048-byte CD sector */
-} SndSeLoadWork;
+
 
 extern int dataSndSeNameGet(char *name, ObjectTask *unit, int seType);
 extern void dataFileLoadNB(void *buffer, void *address);
@@ -103,15 +252,102 @@ INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeLoad);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeLoad2);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeRegLoad);
+extern const char D_00A4E708[];
+
+/*
+ * ov01:0x00a2d6a0. Claims a unit sound registration, loads its base bank,
+ * then loads three AGWS-specific banks when applicable.
+ */
+int dataSndSeRegLoad(ObjectTask *unit)
+{
+    short charaId;
+    SndSeRegDat *record;
+    SndSeRegBank *bank;
+    void *end;
+    int seType;
+
+    charaId = calcUPGet(unit)->charaId;
+    if (sndSeRegAdrChk(charaId) != 0) {
+        printf(D_00A4E708, charaId);
+        return 1;
+    }
+    record = sndSeRegAdrGet(charaId);
+    if (record == 0) {
+        return 0;
+    }
+    bank = &record->bank[0];
+    if (dataSndSeLoadSub(unit, 0, &bank->work) == 0) {
+        return 0;
+    }
+    if (calcUPGet(unit)->flags & 0x40) {
+        end = (unsigned char *)bank->work.dest + bank->work.size;
+        for (seType = 3; seType < 6; seType++) {
+            bank = &record->bank[seType - 1];
+            bank->work.dest = end;
+            if (dataSndSeLoadSub(unit, seType, &bank->work) == 0) {
+                bank->work.size = 0;
+                bank->work.seType = 0;
+            }
+            end = (unsigned char *)bank->work.dest + bank->work.size;
+        }
+    }
+    record->id = charaId;
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeRegLoad2);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSeTrans);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSysSePlay);
+extern void xglSoundEffectNormalID(int sound_id, int variant);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndSePlay);
+/* ov01:0x00a2da80. Plays system sound identifiers below 0x26 on variant 0
+ * and reports whether the identifier was valid. */
+int sndSysSePlay(int soundId)
+{
+    if (soundId >= 0x26) {
+        return 0;
+    }
+    xglSoundEffectNormalID(soundId, 0);
+    return 1;
+}
+
+extern int ctrlId;
+extern int dmgBankOffs[3];
+extern void xglSoundEffectNormalID(int soundId, int ctrlId);
+extern const char D_00A4E7E8[];
+
+/*
+ * ov01:0x00a2dab0. Starts sound-effect id on the unit's bank. sndBankGet
+ * resolves that bank from the unit the sound belongs to, which reaches
+ * sndSePlay as the word sndSeTransPlay stores in the deferred task
+ * (lw a0,28(s0) ov01:0x00a2e128) and is handed straight on (no argument setup
+ * at the jal, ov01:0x00a2dac8). A damage sound
+ * (id 2) plays once per bank: the first one marks the bank in dmgBankOffs and
+ * every later one is dropped, and it does not advance the control id the other
+ * sounds count with.
+ */
+int sndSePlay(int unit, int id, int no)
+{
+    int bank;
+
+    if (id == 0) {
+        return 0;
+    }
+    bank = sndBankGet(unit, id);
+    if (id == 2) {
+        if (dmgBankOffs[bank] != 0) {
+            return 0;
+        }
+        dmgBankOffs[bank] = 1;
+    }
+    xglSoundEffectNormalID((bank << 16) | no, ctrlId);
+    printf(D_00A4E7E8, bank, id, no, ctrlId);
+    if (id != 2) {
+        ctrlId++;
+    }
+    return 1;
+}
 
 extern int sndBankGet(void);
 extern void xglSoundEffectStopID(int sound_id, int flags);
@@ -129,11 +365,98 @@ int sndSeStop(int unused, int pack)
     return stopped;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndConvRegNo);
+typedef struct {
+    int key;   /* +0x00 */
+    int value; /* +0x04 */
+} SndConvRegPair;
+typedef struct {
+    SndConvRegPair pair[7];
+} SndConvRegTable;
+extern const SndConvRegTable D_00A4E828;
+
+/*
+ * ov01:0x00a2dbc8. Searches a sentinel-terminated sound conversion pair
+ * table and returns its mapped register number, or minus one.
+ */
+int sndConvRegNo(int id)
+{
+    SndConvRegTable table;
+    int i;
+
+    table = D_00A4E828;
+    for (i = 0; table.pair[i].key != 0; i++) {
+        if (table.pair[i].key == id) {
+            return table.pair[i].value;
+        }
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndBankGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndConvSpid);
+typedef struct {
+    unsigned char unmodeled_00[0x11]; /* +0x00 */
+    signed char category;             /* +0x11 */
+    unsigned char unmodeled_12[4];    /* +0x12 */
+    short spid;                       /* +0x16 */
+} TecData;
+typedef struct {
+    unsigned char unmodeled_00[0x10]; /* +0x00 */
+    short spid;                       /* +0x10 */
+} ItmData;
+extern TecData *dataTecGet(int tecId);
+extern ItmData *dataItmGet(int itmId);
+extern int dataSpecBaseGet(int charaId);
+extern int dataBakpBaseGet(int charaId);
+#define SND_SPID_NORMAL  3
+#define SND_SPID_SPECIAL 9
+#define SND_SPID_BREAK   17
+#define SND_SPID_EVENT   26
+
+/*
+ * ov01:0x00a2de30. Resolves the sound-effect index a battle command plays:
+ * a technique (mode 1) by its category, the technique's or the item's own
+ * recorded index (modes 2 and 3) and a fixed one for mode 9; every other mode
+ * has none.
+ */
+int sndConvSpid(ObjectTask *unit, int mode, int tecId, int itmId)
+{
+    short charaId;
+    int spid = 0;
+    int category;
+
+    charaId = calcUPGet(unit)->charaId;
+    switch (mode) {
+    case 1:
+        category = dataTecGet(tecId)->category;
+        switch (category) {
+        case 6:
+            spid = (tecId - dataBakpBaseGet(charaId)) + SND_SPID_BREAK;
+            break;
+        case 2:
+            spid = (tecId - dataSpecBaseGet(charaId)) + SND_SPID_SPECIAL;
+            break;
+        case 4:
+        case 5:
+            spid = itmId + SND_SPID_NORMAL;
+            break;
+        default:
+            spid = dataNormIdxGet(unit, tecId) + SND_SPID_NORMAL;
+            break;
+        }
+        break;
+    case 9:
+        spid = 2;
+        break;
+    case 2:
+        spid = dataTecGet(tecId)->spid + SND_SPID_EVENT;
+        break;
+    case 3:
+        spid = dataItmGet(itmId)->spid + SND_SPID_EVENT;
+        break;
+    }
+    return spid;
+}
 
 extern int dataNormIdxGet(ObjectTask *unit, int seType);
 
@@ -175,7 +498,23 @@ int sndConvSe(ObjectTask *unit, int mode, int seType)
     return result;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", sndConvHitSe);
+/* ov01:0x00a2e050. Returns hit sound 0x22 for normal indices three or five
+ * under mode one; otherwise returns two. */
+int sndConvHitSe(ObjectTask *unit, int mode, int seType)
+{
+    int idx;
+    int result = 2;
+
+    if (mode == 1) {
+        idx = dataNormIdxGet(unit, seType);
+        if (idx != -1) {
+            if (idx == 3 || idx == 5) {
+                result = 0x22;
+            }
+        }
+    }
+    return result;
+}
 
 extern void *objEntryPure();
 extern int sndSeTrans(int seId, int volume);
@@ -202,7 +541,80 @@ void sndSeTransPlayObj(SndSePlayTask *task)
     objRemovePure(&task->base);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndMuLoad);
+extern char *sndMuNameBase;
+extern char *sndMuNameExt1;
+extern char *sndMuNameExt2;
+extern char *muName[3];
+extern char *mu2Name[3];
+
+/*
+ * ov01:0x00a2e160. Loads the three sound files of music set mode into
+ * sndMuDat: the normal sequence, the alternate one the set may not have, and
+ * the wave table, each laid out right behind the previous one and its size
+ * rounded up to a 2048-byte CD sector. Returns whether the set exists.
+ */
+int dataSndMuLoad(int mode)
+{
+    SndMuData *mu;
+    int smdFileSize;
+    int altFileSize;
+    int swdFileSize;
+    int smdSectorSize;
+    int altSectorSize;
+    int swdSectorSize;
+
+    if (mode >= 3) {
+        return 0;
+    }
+    mu = &sndMuDat;
+
+    strcpy(fileName, sndMuNameBase);
+    strcat(fileName, muName[mode]);
+    strcat(fileName, sndMuNameExt1);
+    dataFileLoadNB(fileName, mu->smdNormal);
+    smdFileSize = xglCdGetFileSize(fileName);
+    smdSectorSize = smdFileSize + 0x7FF;
+    if (smdSectorSize < 0) {
+        smdSectorSize = smdFileSize + 0xFFE;
+    }
+    smdSectorSize >>= 0xB;
+    smdSectorSize <<= 0xB;
+    mu->smdSize = smdSectorSize;
+    mu->smdAlt = (unsigned char *)mu->smdNormal + smdSectorSize;
+
+    if (mu2Name[mode] != 0) {
+        strcpy(fileName, sndMuNameBase);
+        strcat(fileName, mu2Name[mode]);
+        strcat(fileName, sndMuNameExt1);
+        dataFileLoadNB(fileName, mu->smdAlt);
+        altFileSize = xglCdGetFileSize(fileName);
+        altSectorSize = altFileSize + 0x7FF;
+        if (altSectorSize < 0) {
+            altSectorSize = altFileSize + 0xFFE;
+        }
+        altSectorSize >>= 0xB;
+        altSectorSize <<= 0xB;
+        mu->smdAltSize = altSectorSize;
+    } else {
+        mu->smdAltSize = 0;
+    }
+    mu->swd = (unsigned char *)mu->smdAlt + mu->smdAltSize;
+
+    strcpy(fileName, sndMuNameBase);
+    strcat(fileName, muName[mode]);
+    strcat(fileName, sndMuNameExt2);
+    dataFileLoadNB(fileName, mu->swd);
+    swdFileSize = xglCdGetFileSize(fileName);
+    mu->mode = mode;
+    swdSectorSize = swdFileSize + 0x7FF;
+    if (swdSectorSize < 0) {
+        swdSectorSize = swdFileSize + 0xFFE;
+    }
+    swdSectorSize >>= 0xB;
+    swdSectorSize <<= 0xB;
+    mu->swdSize = swdSectorSize;
+    return 1;
+}
 
 int sndMuTrans(int mode)
 {

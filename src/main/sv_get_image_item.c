@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "main/xgl_packet.h"
 
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
 /*
  * One 0x24-byte entry of the working image list svImageListCreate clears
  * and svGetImageItem indexes; only its address is ever taken in this
@@ -60,6 +62,41 @@ typedef struct SvImageMapperItem {
  */
 typedef struct SvTypeList SvTypeList;
 
+/*
+ * The image-mapper table has a 0x1C-byte header followed by 0x100 entries
+ * of 0x24 bytes. These entry fields are evidenced by the lookup routines:
+ * the active word is at +0x08, the type byte at +0x0E, and the resource
+ * name pointer at +0x20.
+ */
+typedef struct SvTypeListEntry {
+    unsigned char unmodeled_00[8];
+    int used;
+    unsigned char unmodeled_0C[2];
+    unsigned char type;
+    unsigned char unmodeled_0F[0x11];
+    const char *name;
+} SvTypeListEntry;
+
+typedef struct SvTypeListStorage {
+    unsigned char unmodeled_00[0x10];
+    short width;
+    short height;
+    short entryCount;
+    unsigned char unmodeled_16[6];
+    SvTypeListEntry entries[0x100];
+} SvTypeListStorage;
+
+typedef struct SvReferenceImageSlot {
+    unsigned int words[2];
+} SvReferenceImageSlot;
+
+/* _imageMapper's symbol-table size is 40 mapper records followed by these
+ * forty two-word reference-image slots. */
+typedef struct SvImageMapperStorage {
+    SvTypeListStorage typeLists[40];
+    SvReferenceImageSlot referenceImages[40];
+} SvImageMapperStorage;
+
 typedef struct SvTypeListFields {
     int total;         /* 0x00 */
     int size;           /* 0x04 */
@@ -94,7 +131,19 @@ void svImageListDestroy(SvTypeList *typeList)
   header->entryCount = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svImageListAlloc);
+static int svImageListAlloc(int typeListAddr)
+{
+    SvTypeListStorage *typeList;
+    int index;
+
+    typeList = (SvTypeListStorage *)typeListAddr;
+    for (index = 0; index < 0x100; index++) {
+        if (typeList->entries[index].used == 0) {
+            return index;
+        }
+    }
+    return -1;
+}
 
 extern unsigned char _imageMapper[];
 
@@ -102,11 +151,51 @@ static SvTypeList * svGetTypeList(int type) {
     return (SvTypeList *) (_imageMapper + (type * 0x241C));
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetImageListItemSub);
+static void *svGetImageListItemSub(int type, unsigned int flags)
+{
+    SvTypeList *typeList;
+    SvTypeListStorage *storage;
+    SvTypeListEntry *entry;
+    int index;
+
+    typeList = svGetTypeList(type);
+    storage = (SvTypeListStorage *)typeList;
+    entry = storage->entries;
+    index = 0;
+    while (index < 0x100) {
+        if (entry->used != 0 && entry->type == (unsigned char)flags) {
+            return entry;
+        }
+        entry++;
+        index++;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetImageListItem);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetResFromName);
+int strcmp(const char *, const char *);
+
+static SvTypeListEntry *svGetResFromName(const char *name)
+{
+    SvTypeList *typeList;
+    SvTypeListStorage *storage;
+    SvTypeListEntry *entry;
+    int index;
+
+    typeList = svGetTypeList(0);
+    storage = (SvTypeListStorage *)typeList;
+    entry = storage->entries;
+    index = 0;
+    while (index < 0x100) {
+        if (entry->used != 0 && strcmp(entry->name, name) == 0) {
+            return entry;
+        }
+        entry++;
+        index++;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetPrmFromName);
 
@@ -179,7 +268,22 @@ s16 svLoadMapperList(void)
   return ret;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetSizeBit);
+static int svGetSizeBit(unsigned int value)
+{
+    unsigned int mask;
+    int bitIndex;
+
+    mask = 2;
+    bitIndex = 1;
+    while (bitIndex < 32) {
+        if ((value & mask) != 0) {
+            return bitIndex;
+        }
+        mask <<= 1;
+        bitIndex++;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddImage);
 
@@ -247,7 +351,17 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAnalyzeChunk);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svInitImageMapper);
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svInitRefImage);
+static void svInitRefImage(void)
+{
+    SvImageMapperStorage *storage;
+    int index;
+
+    storage = (SvImageMapperStorage *)_imageMapper;
+    for (index = 0; index < 40; index++) {
+        storage->referenceImages[index].words[0] = 0;
+        storage->referenceImages[index].words[1] = 0;
+    }
+}
 
 int svAnalyzeChunk(SvTypeList *typeList, void *chunk);
 
@@ -576,8 +690,11 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDrawScheduler3D);
  * its A+D address) or as four words (sw, SGsAddGifXYZ2).
  */
 typedef union SGsGifRecord {
+    Quadword quad;
     unsigned long long dword[2];
     int word[4];
+    unsigned short halfword[8];
+    float floatValue[4];
 } SGsGifRecord;
 
 typedef struct SGsPacket {
@@ -595,15 +712,37 @@ void SGsInitGifPacket(SGsPacket *packet)
     packet->count = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsOpenGifPacket);
+void SGsOpenGifPacket(SGsPacket *packet, int prim, unsigned long long registers,
+                      unsigned int nreg)
+{
+    unsigned long long tag;
+
+    packet->loopCount = 1;
+    packet->tagIndex = packet->count;
+    packet->base[packet->count].dword[1] = registers;
+    tag = ((unsigned long long)prim << 47) |
+          ((unsigned long long)nreg << 60) | 0x0000400000008000ULL;
+    packet->base[packet->count].dword[0] = tag;
+    packet->count++;
+}
 
 void SGsCloseGifPacket(SGsPacket *packet) {
     packet->base[packet->tagIndex].dword[0] |= packet->loopCount;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsAddReg);
+void SGsAddReg(SGsPacket *packet, unsigned long long address,
+               unsigned long long value)
+{
+    packet->base[packet->count].dword[0] = value;
+    packet->base[packet->count].dword[1] = address;
+    packet->count++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsAddGifRGBA);
+void SGsAddGifRGBA(SGsPacket *packet, Quadword rgba)
+{
+    packet->base[packet->count].quad = rgba;
+    packet->count++;
+}
 
 /*
  * GS XYZF2 vertex: X/Y are (value*16 + screen offset), Z and F are the
@@ -618,8 +757,27 @@ void SGsAddGifXYZ2(SGsPacket *packet, int x, int y, int z, int fog)
     packet->count++;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsAddGifData);
+void SGsAddGifData(SGsPacket *packet, Quadword data)
+{
+    packet->base[packet->count].quad = data;
+    packet->count++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsAddGifSTQ);
+void SGsAddGifSTQ(SGsPacket *packet, float texture_s, float texture_t,
+                  float texture_q)
+{
+    packet->base[packet->count].floatValue[0] = texture_s;
+    packet->base[packet->count].floatValue[1] = texture_t;
+    packet->base[packet->count].floatValue[2] = texture_q;
+    packet->base[packet->count].word[3] = 0;
+    packet->count++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", SGsAddGifUV);
+void SGsAddGifUV(SGsPacket *packet, int u_coordinate, int v_coordinate)
+{
+    packet->base[packet->count].halfword[0] =
+        (unsigned short)((unsigned int)u_coordinate << 4);
+    packet->base[packet->count].halfword[1] =
+        (unsigned short)((unsigned int)v_coordinate << 4);
+    packet->count++;
+}

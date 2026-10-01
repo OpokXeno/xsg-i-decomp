@@ -37,14 +37,21 @@ struct RgParticleEffect {
  * member outside those six is claimed.
  */
 struct RgParticleEffectEssence {
-    u8 unmodeled_00[0x50];
+    char textureName[0x40];
+    int particleCount;
+    u8 unmodeled_44[0x50 - 0x44];
     RgVector position;
     RgVector direction;
     float interval;
     float duration;
-    u8 unmodeled_78[0x90 - 0x78];
+    u8 unmodeled_78[0x80 - 0x78];
+    RgVector unitDirection;
     float speed;
     float life;
+    float shotLife;
+    int repeat;
+    float resist;
+    u8 unmodeled_a4[0xB0 - 0xA4];
 };
 
 #endif /* INCLUDE_OV12_RG_PARTICLE_EFFECT_H */

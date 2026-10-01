@@ -610,7 +610,23 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", tgtFindFirst);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", tgtFindChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", tgtFindNext);
+/*
+ * tgtFindFirst's own candidate table (this TU, still asm): tgtNum entries
+ * of tgtTbl are filled in target-search order, tgtIdx walks them out one at
+ * a time. The gap between tgtTbl and tgtIdx (0x00a57e68..0x00a57e88, 0x20
+ * bytes) is this array's only size evidence.
+ */
+extern ObjectTask *tgtTbl[8];
+extern int tgtIdx;
+extern int tgtNum;
+
+ObjectTask *tgtFindNext(void)
+{
+    if (tgtIdx >= tgtNum) {
+        return 0;
+    }
+    return tgtTbl[tgtIdx++];
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcMoveChk);
 
@@ -686,9 +702,27 @@ int calcAgwsEquipOrg(int charaId, int agwsId) {
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcEngineEquipOrg);
+int calcEngineEquipOrg(int charaId, int engineId)
+{
+    CalcCharParaData *origin = dataUnitOrgGet(charaId);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcFrameEquipOrg);
+    if ((origin->flags & 0x40) == 0) {
+        return 0;
+    }
+    origin->engineId = (short) engineId;
+    return 1;
+}
+
+int calcFrameEquipOrg(int charaId, int frameId)
+{
+    CalcCharParaData *origin = dataUnitOrgGet(charaId);
+
+    if ((origin->flags & 0x40) == 0) {
+        return 0;
+    }
+    origin->frameId = (short) frameId;
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcDblActChk);
 
@@ -704,7 +738,29 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcDeadUnitNum);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcBattleChk);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcTrg2PE);
+/*
+ * Answers a target-selection flag word (cmdAtktbl, calcTgtUnitTbl and
+ * calcDeadUnitNum supply it) against the unit's own side bit, bit 0x40 of
+ * CalcActorRecord's flags: a selection of 0x40, and any word carrying 0x08,
+ * asks whether the unit is on that side; a selection of 0x80 asks whether it
+ * is not; every other selection answers 2.
+ */
+int calcTrg2PE(ObjectTask *unit, int trgFlags)
+{
+    if ((trgFlags & 0xC0) == 0x40 || (trgFlags & 8) != 0) {
+        if ((((CalcActorRecord *)unit->work)->flags & 0x40) != 0) {
+            return 1;
+        }
+        return 0;
+    }
+    if ((trgFlags & 0xC0) == 0x80) {
+        if ((((CalcActorRecord *)unit->work)->flags & 0x40) == 0) {
+            return 1;
+        }
+        return 0;
+    }
+    return 2;
+}
 
 /* calcStatIdx2Bit/calcStatReset: calcStatTurn's own callees, defined later
  * in this TU (calcStatIdx2Bit below) or still asm (calcStatReset). */
@@ -740,7 +796,10 @@ int calcStatProtectGet(ObjectTask *unit, int group, int mask)
     return calcUPGet(unit)->statProtect[group] & mask;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatProtectSet);
+void calcStatProtectSet(ObjectTask *unit, int group, int mask)
+{
+    calcUPGet(unit)->statProtect[group] |= mask;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatGet);
 
@@ -754,7 +813,25 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatReset);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatDefTurnGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatBit2Idx);
+/*
+ * The inverse of calcStatIdx2Bit below: the index of statBit's lowest set bit
+ * among the 16 status bits calcStatSet, calcStatReset and calcStatDefTurnGet
+ * index with it, or 16 when statBit holds none of them.
+ */
+int calcStatBit2Idx(int statBit)
+{
+    int statIdx;
+    int mask;
+
+    mask = 1;
+    for (statIdx = 0; statIdx < 16; statIdx++) {
+        if (statBit & mask) {
+            break;
+        }
+        mask <<= 1;
+    }
+    return statIdx;
+}
 
 int calcStatIdx2Bit(int statIdx)
 {

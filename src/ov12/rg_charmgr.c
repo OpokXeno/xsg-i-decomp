@@ -3,7 +3,9 @@
  */
 #include "common.h"
 #include "shared.h"
+#define _DestructCharMgr RgCharMgrHeaderDestructDecl
 #include "rg_charmgr.h"
+#undef _DestructCharMgr
 
 /*
  * RgChar is defined in src/ov12/rg_char.h (another translation unit). The
@@ -81,11 +83,70 @@ struct RgCharMgr {
     unsigned int count; /* +0x400 */
 };
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _FindPtr);
+extern const char D_00A53088[];
+extern const char D_00A530D0[];
+extern const char D_00A530E8[];
+extern const char D_00A530F8[];
+extern const char D_00A53148[];
+extern const char D_00A53158[];
+extern const char D_00A53178[];
+extern const char D_00A531A8[];
+extern const char D_00A531C0[];
+extern const char D_00A531D0[];
+extern int RgCharGetType(RgChar *pChar);
+extern void XrgLog(const char *format, const char *source_file, int line, ...);
+void InitRgCharMgr(RgCharMgr *manager);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _EntryPtr);
+static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar)
+{
+    unsigned int index;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _DeletePtr);
+    for (index = 0; index < count; index++) {
+        if (pChar == characters[index]) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar);
+
+static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
+                              RgChar *pChar)
+{
+    RgChar **characters = manager->chars;
+
+    if (_FindPtr(manager->chars, count, pChar) >= 0) {
+        assert_prog(D_00A53088, D_00A530B8, 32);
+    }
+    if (count >= 0x100) {
+        assert_prog(D_00A530D0, D_00A530B8, 33);
+    }
+    if (pChar == 0) {
+        assert_prog(D_00A530E8, D_00A530B8, 34);
+    }
+    characters[count] = pChar;
+    return count + 1;
+}
+
+static unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
+                               RgChar *pChar)
+{
+    int found_index;
+    unsigned int new_count;
+    unsigned int index;
+
+    found_index = _FindPtr(manager->chars, count, pChar);
+    if (found_index < 0) {
+        assert_prog(D_00A530F8, D_00A530B8, 46);
+    }
+    index = found_index;
+    new_count = count - 1;
+    for (; index < new_count; index++) {
+        manager->chars[index] = manager->chars[index + 1];
+    }
+    return new_count;
+}
 
 RgChar *RgCharMgrEntry(RgCharMgr *manager, RgChar *pChar)
 {
@@ -109,7 +170,22 @@ void RgCharMgrFree(RgCharMgr *manager, RgChar *pChar)
     RgCharFree(pChar);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", RgCharMgrSearch);
+RgChar *RgCharMgrSearch(RgCharMgr *manager, int type)
+{
+    unsigned int index;
+    RgChar *pChar;
+
+    if (manager == 0) {
+        assert_prog(D_00A53138, D_00A530B8, 81);
+    }
+    for (index = 0; index < manager->count; index++) {
+        pChar = manager->chars[index];
+        if (RgCharGetType(pChar) == type) {
+            return pChar;
+        }
+    }
+    return 0;
+}
 
 int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
 {
@@ -122,7 +198,26 @@ int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", RgCharMgrGC);
+void RgCharMgrGC(RgCharMgr *manager)
+{
+    RgChar *deleted_chars[256];
+    int deleted_count;
+    int index;
+
+    if (manager == 0) {
+        assert_prog(D_00A53148, D_00A530B8, 107);
+    }
+    deleted_count = 0;
+    for (index = 0; index < manager->count; index++) {
+        if (manager->chars[index]->type == -1) {
+            deleted_chars[deleted_count] = manager->chars[index];
+            deleted_count++;
+        }
+    }
+    for (index = 0; index < deleted_count; index++) {
+        RgCharMgrFree(manager, deleted_chars[index]);
+    }
+}
 
 /*
  * RgCharControl is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
@@ -214,7 +309,25 @@ void RgCharMgrDisp(RgCharMgr *manager)
     _RgCharMgrCallDisp(manager);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", _DestructCharMgr);
+static void _DestructCharMgr(RgCharMgr *manager)
+{
+    RgChar *characters[256];
+    unsigned int count;
+    unsigned int index;
+
+    count = manager->count;
+    for (index = 0; index < count; index++) {
+        characters[index] = manager->chars[index];
+    }
+    for (index = 0; index < count; index++) {
+        RgCharFree(characters[index]);
+    }
+    RgCharMgrGC(manager);
+    if (manager->count != 0) {
+        assert_prog(D_00A53158, D_00A530B8, 237);
+    }
+    InitRgCharMgr(manager);
+}
 
 static void _DisposeCharMgr(RgCharMgr *manager)
 {
@@ -252,4 +365,17 @@ RgCharMgr *InstanceOfRgCharMgrClear(void)
     return manager;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_charmgr", RgCharMgrDump);
+void RgCharMgrDump(RgCharMgr *manager)
+{
+    unsigned int index;
+    RgChar *pChar;
+
+    XrgLog(D_00A53178, D_00A530B8, 297, manager->count);
+    for (index = 0; index < manager->count; index++) {
+        pChar = manager->chars[index];
+        XrgLog(D_00A531A8, D_00A530B8, 300, pChar);
+        XrgLog(D_00A531C0, D_00A530B8, 301, RgCharGetType(pChar));
+        XrgLog(D_00A531D0, D_00A530B8, 302, pChar->controlMethod,
+               pChar->dispMethod, pChar->passTimeMethod);
+    }
+}

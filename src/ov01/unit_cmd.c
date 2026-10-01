@@ -16,15 +16,68 @@ void unitInit(void)
     unitEnNum = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTblGet);
+int unitTblGet(int side, UnitRecord ***table)
+{
+    if (side == 0) {
+        *table = (void *)unitTbl;
+        return 3;
+    }
+    if (side == 1) {
+        *table = (void *)&unitTbl[12];
+        return 5;
+    }
+    *table = (void *)unitTbl;
+    return 8;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTblSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTblRemove);
+int unitTblRemove(ObjectTask *unit)
+{
+    ObjectTask **units = (void *)unitTbl;
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTblChg);
+    for (i = 0; i < 8; i++) {
+        if (units[i] == unit) {
+            units[i] = 0;
+            if (i < 3) {
+                unitPlNum--;
+            } else {
+                unitEnNum--;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitNumGet);
+int unitTblChg(ObjectTask *oldUnit, ObjectTask *newUnit)
+{
+    ObjectTask **units = (void *)unitTbl;
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        if (units[i] == oldUnit) {
+            units[i] = newUnit;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int unitNumGet(int side)
+{
+    int count;
+
+    if (side == 0) {
+        count = unitPlNum;
+    } else if (side == 1) {
+        count = unitEnNum;
+    } else {
+        count = unitPlNum + unitEnNum;
+    }
+    return count;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitLiveNumGet);
 
@@ -804,7 +857,23 @@ int unitMotGet(ObjectTask *unit)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotStandSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitNoGet);
+int unitNoGet(ObjectTask *unit)
+{
+    ObjectTask **units = (void *)unitTbl;
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        if (units[i] == unit) {
+            return i;
+        }
+    }
+    {
+        extern const char D_00A43BD8[];
+
+        printf(D_00A43BD8, unit);
+    }
+    return -1;
+}
 
 extern const char D_00A43BF8[];
 extern int printf(const char *format, ...);

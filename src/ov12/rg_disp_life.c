@@ -23,7 +23,39 @@ extern const char D_00A54820[];
 /* ov12:0x00a54838 "pDisp != NIL" */
 extern const char D_00A54838[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_life", _GetAgwsNameUVWH);
+struct AgwsNameUvwh;
+
+static int _GetAgwsNameUVWH(int nameIndex, struct AgwsNameUvwh *uvwh)
+{
+    struct AgwsNameRecord {
+        int characterId;
+        unsigned char unmodeled_04[12];
+        int texture_u;
+        int texture_v;
+        int texture_width;
+        int texture_height;
+    };
+    extern const struct AgwsNameRecord s_aCharIDToUVWH_0[6];
+    unsigned int index;
+
+    for (index = 0; index < 6; index++) {
+        if (s_aCharIDToUVWH_0[index].characterId == nameIndex) {
+            /*
+             * Each record is 32 bytes, with an aligned 16-byte UVWH vector
+             * at +0x10. VF31 carries those four words into the output object;
+             * it is scratch VU state for this transfer.
+             */
+            __asm__ __volatile__(
+                "lqc2 vf31, 0(%0)\n\t"
+                "sqc2 vf31, 0(%1)\n\t"
+                :
+                : "r"(&s_aCharIDToUVWH_0[index].texture_u), "r"(uvwh)
+                : "memory");
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /*
  * The AGWS name texture's UV rectangle _GetAgwsNameUVWH (still INCLUDE_ASM)
@@ -124,8 +156,49 @@ void RgDispLifeSetTimer(RgDispLife *pDisp, float timer)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_life", RgDispLifeSetWin);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_life", RgDispLifeSetVsMode);
+extern void *RgBxxGetPic(struct RgBxx *bxx, const char *picture_name);
+extern const char D_00A54950[];
+extern const char D_00A54960[];
+extern const char D_00A54870[];
+extern const char D_00A54880[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_life", RgDispLifePassTime);
+void RgDispLifeSetVsMode(RgDispLife *pDisp, int vsMode)
+{
+    if (pDisp == 0) {
+        assert_prog(D_00A54838, D_00A54820, 250);
+    }
+
+    pDisp->vsMode = vsMode;
+    if (vsMode != 0) {
+        pDisp->primaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54950);
+        pDisp->secondaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54960);
+    } else {
+        pDisp->primaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54870);
+        pDisp->secondaryBoardPic = RgBxxGetPic(pDisp->dispBxx, D_00A54880);
+    }
+}
+
+extern float RgRobotGetLife(RgStatus *robot);
+extern void RgGaugeSetValue(RgGauge *gauge, float value);
+extern void RgGaugePassTime(RgGauge *gauge, float deltaTime);
+
+void RgDispLifePassTime(RgDispLife *pDisp, float deltaTime)
+{
+    unsigned int i;
+
+    if (pDisp == 0) {
+        assert_prog(D_00A54838, D_00A54820, 272);
+    }
+    for (i = 0; i < 2; i++) {
+        if (pDisp->robots[i] != 0) {
+            RgGaugeSetValue(pDisp->gauge[i], RgRobotGetLife(pDisp->robots[i]));
+        }
+        RgGaugePassTime(pDisp->gauge[i], deltaTime);
+    }
+    pDisp->elapsedTime += deltaTime;
+    if (pDisp->elapsedTime > 1.0f) {
+        pDisp->elapsedTime = 0.0f;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_life", RgDispLifeDisp);

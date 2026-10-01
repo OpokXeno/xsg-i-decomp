@@ -42,11 +42,17 @@ typedef struct RssdRpcResponse {
  * (see result.json header_divergence). Bytes this allocation does not access
  * stay explicit unmodeled spans.
  */
+struct SsdMemoryBlock;
+
 typedef struct RssdWorkFlags {
     int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
-    unsigned char _unmodeled_004[0x0c];   /* +0x004..0x00f */
+    unsigned char _unmodeled_004[4];      /* +0x004..0x007 */
+    int request_parameter;                /* +0x008: copied by RssdBusy from its request */
+    unsigned char _unmodeled_00c[4];      /* +0x00c..0x00f */
     unsigned short sample_rate;           /* +0x010: samples per second used by SsdGetTimeCode */
-    unsigned char _unmodeled_012[0x0e];   /* +0x012..0x01f */
+    short request_channel_count;          /* +0x012: copied by RssdBusy from its request */
+    int request_size;                     /* +0x014: copied by RssdBusy from its request */
+    unsigned char _unmodeled_018[0x08];   /* +0x018..0x01f */
     /*
      * Stored verbatim by SsdSetServerCallback (main:0x002403b0)
      * `sw $5,36($2)` / `sw $4,32($2)`, $2 = &RssdWork. No recovered function
@@ -103,7 +109,10 @@ typedef struct RssdWorkFlags {
     int next_wave_thread_id;              /* +0x1ac: RssdBackNextWaveThread */
     void *next_wave_thread_stack;         /* +0x1b0: MYwaveTransThStack */
     int sema_id;                          /* +0x1b4: signalled when the RPC completes */
-    unsigned char _unmodeled_1b8[0x18];   /* +0x1b8..0x1cf */
+    unsigned char _unmodeled_1b8[8];      /* +0x1b8..0x1bf */
+    struct SsdMemoryBlock *first_block;   /* +0x1c0: first allocator-list node */
+    unsigned char _unmodeled_1c4[8];     /* +0x1c4..0x1cb */
+    int spu_bytes_remaining;              /* +0x1cc: drained by RssdBackNextWaveThread */
     /*
      * Running destination pointer for streamed sample data. RssdSpuRead
      * (main:0x0023feb8) copies each request's payload here with

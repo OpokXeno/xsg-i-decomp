@@ -25,7 +25,19 @@ void Java_xeno_Stage_stop__(StageThread *thread, StageObjectCall *arguments,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_play__Ljava_lang_String_);
+void Java_xeno_Stage_play__Ljava_lang_String_(StageThread *thread,
+                                              StagePlayCall *arguments)
+{
+    StageJavaString *script = arguments->string;
+    StageStringStorage *storage;
+
+    thread->wait_kind = 7;
+    thread->resume_frames = thread->frame_depth;
+    storage = script->storage;
+    thread->flags |= 0x5;
+    SCRIPT_load_DBG(storage->text);
+    SCRIPT_exec();
+}
 
 void Java_xeno_Stage_setPartsLast__I(StageThread *thread, StageIntCall *arguments)
 {
@@ -56,9 +68,51 @@ void Java_xeno_Stage_setColor__FFF(StageThread *thread, StageColorCall *argument
     GameLoopState.color_b = arguments->b;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_setFade__IIFFF);
+void Java_xeno_Stage_setFade__IIFFF(StageThread *thread, StageFadeCall *arguments)
+{
+    int channel;
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_setEventFade__IFFFIFFF);
+    GameLoopState.fade_mode = arguments->mode;
+    GameLoopState.fade.components.duration = (float)arguments->duration_frames;
+    GameLoopState.fade.components.color[0] = arguments->red;
+    GameLoopState.fade.components.color[1] = arguments->green;
+    GameLoopState.fade.components.color[2] = arguments->blue;
+
+    EnemySound_StopAll(1);
+    for (channel = 0; channel < 3; channel++) {
+        float value = GameLoopState.fade.components.color[channel];
+        if (value > 1.0f) {
+            value = GameLoopState.fade.components.color[channel] = 1.0f;
+        }
+        if (value < 0.0f) {
+            GameLoopState.fade.components.color[channel] = 0.0f;
+        }
+    }
+    if (GameLoopState.fade.components.duration < 1.0f) {
+        GameLoopState.fade.components.duration = 1.0f;
+    }
+    GameLoopState.previous_fade_mode = GameLoopState.fade_mode;
+    /* Snapshot both naturally aligned doubleword lanes of the fade record. */
+    GameLoopState.previous_fade.aligned_words[0] = GameLoopState.fade.aligned_words[0];
+    GameLoopState.previous_fade.aligned_words[1] = GameLoopState.fade.aligned_words[1];
+    SCRIPT_fade(arguments->duration_frames);
+}
+
+void Java_xeno_Stage_setEventFade__IFFFIFFF(StageThread *thread,
+                                             StageNativeSlot *arguments)
+{
+    nmlModelSetFadeInInterrupt(arguments[0].integer,
+                               arguments[1].floating,
+                               arguments[2].floating,
+                               arguments[3].floating);
+
+    GameLoopState.fade_mode = 0;
+    GameLoopState.fade.components.duration = (float) arguments[4].integer;
+    GameLoopState.fade.components.color[0] = arguments[5].floating;
+    GameLoopState.fade.components.color[1] = arguments[6].floating;
+    GameLoopState.fade.components.color[2] = arguments[7].floating;
+    SCRIPT_fade(arguments[4].integer);
+}
 
 void Java_xeno_Stage_setFrameRender__II(StageThread *thread, StageFrameRenderCall *arguments)
 {
@@ -81,9 +135,43 @@ void Java_xeno_Stage_setFadeCancel__I(StageThread *thread, StageIntCall *argumen
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_setVisible__IZ);
+void Java_xeno_Stage_setVisible__IZ(StageThread *thread, StageVisibleCall *arguments)
+{
+    StageModel *model = GameLoopState.model;
+    StagePartList *parts;
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_setCFBG__II_F);
+    if (model == 0 || model->id == 0) {
+        return;
+    }
+    /* The model's integer ID is also the address of its part list. */
+    parts = (StagePartList *)model->id;
+    if (arguments->part_index >= 0) {
+        if (arguments->part_index < parts->part_count) {
+            nmlModelSetPartsVisible(parts, arguments->part_index,
+                                    arguments->visible);
+        }
+    } else {
+        return nmlModelInitPartsVisible(parts, arguments->visible);
+    }
+}
+
+void Java_xeno_Stage_setCFBG__II_F(StageThread *thread, StageCFBGCall *arguments)
+{
+    StageBackground *background = arguments->background;
+
+    switch (arguments->draw_type) {
+    case 0:
+        GameLoopState.background_mode = 0;
+        GameLoopState.background_parameter = 0;
+        break;
+    case 1:
+        GameBgDrawType1Entry(background->draw_parameter, background);
+        break;
+    case 2:
+        GameBgDrawType2Entry(background->draw_parameter, background);
+        break;
+    }
+}
 
 void Java_xeno_Stage_setEffectRender__I(StageThread *thread, StageIntCall *arguments)
 {
@@ -95,7 +183,13 @@ void Java_xeno_Stage_renderCommand__I(StageThread *thread, StageIntCall *argumen
     GameLoopState.render_command = arguments->value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_setBgColor__FFF);
+void Java_xeno_Stage_setBgColor__FFF(StageThread *thread, StageBgColorCall *arguments)
+{
+    xglRenderClearColor(
+        (((unsigned int)(arguments->blue * 255.0f) & 0xffu) << 16) +
+        (((unsigned int)(arguments->green * 255.0f) & 0xffu) << 8) +
+        ((unsigned int)(arguments->red * 255.0f) & 0xffu));
+}
 
 void Java_xeno_Stage_setBgClip__I(StageThread *thread, StageIntCall *arguments)
 {

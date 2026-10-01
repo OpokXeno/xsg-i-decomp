@@ -2,6 +2,134 @@
 #define INCLUDE_MAIN_SSD_INIT_H
 
 /*
+ * The 32-byte SIF RPC receive record copied into RssdWork.response.
+ *
+ * Evidence from RssdSifRpcCallback (main:0x00240188):
+ * - +0x02 is a signed halfword (lh v0,130(a2), a2 = &RssdWork, so
+ *   response+2): nonzero reports the -1 (error) status.
+ * - The record is copied as a whole with unaligned doubleword pairs
+ *   (ldl/ldr -> sdl/sdr, four of them): its type is not 8-byte aligned.
+ * - After the copy the compiler reloads RssdWork.flags (lw v0,0(a2) before
+ *   the sra/andi), i.e. the copied record may alias an `int` object under
+ *   GCC's type-based aliasing. The words after the two halfwords are
+ *   therefore `int`-typed.
+ * - The sequence command wrappers in main/tu113 return the word at +0x08.
+ *   Its protocol meaning is not yet known, so the neutral name is `value`.
+ * - SsdGetResultValue (main:0x002402a0) reads +0x00 as a signed halfword
+ *   (lh v0,128(a1)) and branches on it being negative before reporting the
+ *   "Rssd get result error !" message, i.e. it is a per-command error code
+ *   distinct from the RPC-level `result` at +0x02.
+ */
+typedef struct RssdRpcResponse {
+    short error_code;              /* +0x00: negative -> per-command error */
+    short result;                  /* +0x02: nonzero -> error status (-1) */
+    int _unmodeled_04;             /* +0x04: 32-bit word, meaning not recovered */
+    int value;                     /* +0x08: command result value */
+    int _unmodeled_0c[5];          /* +0x0c..0x1f: 32-bit words, not read here */
+} RssdRpcResponse;
+
+typedef struct RssdWorkFlags {
+    int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
+    unsigned char _unmodeled_004[4];      /* +0x004..0x007 */
+    int request_parameter;                /* +0x008: copied by RssdBusy from its request */
+    unsigned char _unmodeled_00c[4];      /* +0x00c..0x00f */
+    unsigned short sample_rate;           /* +0x010: samples per second used by SsdGetTimeCode */
+    short request_channel_count;          /* +0x012: copied by RssdBusy from its request */
+    int request_size;                     /* +0x014: copied by RssdBusy from its request */
+    unsigned char _unmodeled_018[0x08];   /* +0x018..0x01f */
+    /*
+     * Stored verbatim by SsdSetServerCallback (main:0x002403b0)
+     * `sw $5,36($2)` / `sw $4,32($2)`, $2 = &RssdWork. No recovered function
+     * reads them back, so their call signature is not evidenced and they
+     * stay untyped pointers named after the store site.
+     */
+    void *server_callback;                /* +0x020: SsdSetServerCallback arg0 */
+    void *server_callback_arg;            /* +0x024: SsdSetServerCallback arg1 */
+    void (*complete_callback)(int status, RssdRpcResponse *response,
+                              void *arg); /* +0x028: one-shot, cleared after use */
+    void *callback_arg;                   /* +0x02c: third complete_callback argument */
+    unsigned char _unmodeled_030[0x04];   /* +0x030..0x033 */
+    RssdRpcResponse *response_source;     /* +0x034: SIF RPC receive buffer */
+    unsigned char _unmodeled_038[0x48];   /* +0x038..0x07f */
+    RssdRpcResponse response;             /* +0x080..0x09f: copy of *response_source */
+    unsigned char _unmodeled_0a0[0xa8];   /* +0x0a0..0x147 */
+    /*
+     * The SCE SDK RPC server registration record: RssdInitIop
+     * (main:0x0023fbb8, still asm) passes its address as the `sd` argument of
+     * sceSifRegisterRpc (`addiu $4,$17,0x148`), and SsdQuit (main:0x0023fb08)
+     * passes the same address to sceSifRemoveRpc to unregister it on the way
+     * out. Its internal layout belongs to the SIF RPC middleware, not this
+     * TU, so the reserved extent runs to the next evidenced field at +0x18c.
+     */
+    unsigned char rpc_server[0x44];       /* +0x148..0x18b: sceSifRpcServerData_t */
+    /*
+     * The SIF RPC receive queue RSsdSifRpcThread (main:0x0023fb90) hands to
+     * sceSifRpcLoop after RssdInitIop returns (`addiu a0,v0,-24052` off
+     * `lui v0,0x4b`, v0 = &RssdWork, i.e. &RssdWork + 0x18c). Its internal
+     * layout belongs to the SIF RPC middleware, not this TU, and is not
+     * evidenced by any recovered function; the reserved extent runs to the
+     * next evidenced field at +0x1a4.
+     */
+    unsigned char rpc_queue[0x18];        /* +0x18c..0x1a3: sceSifRpcLoop queue */
+    /*
+     * The two service threads SsdInit (main:0x0023f960) creates, each stored
+     * as the (thread id, stack) pair the create/start idiom produces
+     * ($20 = &RssdWork throughout that function):
+     * - +0x1a4/+0x1a8: RSsdSifRpcThread, `sw $2,0x1a4($20)` in the delay slot
+     *   of `jal StartThread` at 0x0023fa88 and `sw $5,0x1a8($20)` at
+     *   0x0023fa74 with $5 = MYthreadStack;
+     * - +0x1ac/+0x1b0: RssdBackNextWaveThread, `sw $2,0x1ac($20)` in the
+     *   delay slot of `jal StartThread` at 0x0023facc and `sw $3,0x1b0($20)`
+     *   in the delay slot of its `jal CreateThread` at 0x0023fabc with
+     *   $3 = MYwaveTransThStack.
+     * Both ids are confirmed by a second, independent reader: SsdQuit
+     * (main:0x0023fb08) passes +0x1a4 to TerminateThread and DeleteThread
+     * (0x0023fb5c/0x0023fb64) and +0x1ac to the same pair
+     * (0x0023fb6c/0x0023fb74), next to its DeleteSema of +0x1b4.
+     * RssdBackgroundNextWave wakes +0x1ac, which is that same thread.
+     */
+    int rpc_thread_id;                    /* +0x1a4: RSsdSifRpcThread */
+    void *rpc_thread_stack;               /* +0x1a8: MYthreadStack */
+    int next_wave_thread_id;              /* +0x1ac: RssdBackNextWaveThread */
+    void *next_wave_thread_stack;         /* +0x1b0: MYwaveTransThStack */
+    int sema_id;                          /* +0x1b4: signalled when the RPC completes */
+    unsigned char _unmodeled_1b8[8];      /* +0x1b8..0x1bf */
+    struct SsdMemoryBlock *first_block;   /* +0x1c0: first allocator-list node */
+    unsigned char _unmodeled_1c4[8];     /* +0x1c4..0x1cb */
+    int spu_bytes_remaining;              /* +0x1cc: drained by RssdBackNextWaveThread */
+    /*
+     * Running destination pointer for streamed sample data. RssdSpuRead
+     * (main:0x0023feb8) copies each request's payload here with
+     * SsdCopyMemory and advances it by the copied byte count; SsdSpuDirectRead
+     * (main:0x00240690, still asm) sets it from its own destination argument.
+     */
+    unsigned char *spu_write_ptr;         /* +0x1d0: streamed sample write position */
+    unsigned char _unmodeled_1d4[0x14];   /* +0x1d4..0x1e7 */
+    /*
+     * Two (callback, argument) pairs stored verbatim by main/tu112:
+     * SsdSetSampleDmaCallback (main:0x002410a0) `sw $4,488($2)` /
+     * `sw $5,492($2)` and SsdSetSampleKeyoffCallback (main:0x002410b8)
+     * `sw $4,496($2)` / `sw $5,500($2)`, $2 = &RssdWork. No recovered
+     * function reads them back, so their call signature is not evidenced
+     * and they stay untyped pointers named after the store site.
+     */
+    void *sample_dma_callback;            /* +0x1e8: SsdSetSampleDmaCallback arg0 */
+    void *sample_dma_callback_arg;        /* +0x1ec: SsdSetSampleDmaCallback arg1 */
+    void *sample_keyoff_callback;         /* +0x1f0: SsdSetSampleKeyoffCallback arg0 */
+    void *sample_keyoff_callback_arg;     /* +0x1f4: SsdSetSampleKeyoffCallback arg1 */
+    /*
+     * Stored verbatim by SsdSetStreamEndCallback (main:0x002403e0)
+     * `sw $5,508($2)` / `sw $4,504($2)`, $2 = &RssdWork. No recovered
+     * function reads them back, so their call signature is not evidenced
+     * and they stay untyped pointers named after the store site.
+     */
+    void *stream_end_callback;            /* +0x1f8: SsdSetStreamEndCallback arg0 */
+    void *stream_end_callback_arg;        /* +0x1fc: SsdSetStreamEndCallback arg1 */
+} RssdWorkFlags;
+
+extern RssdWorkFlags RssdWork;
+
+/*
  * One argument word of an RSSD request. Most commands pass plain integers;
  * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence
  * data wrappers of main/tu113 pass a buffer address in the same slot, so the

@@ -147,7 +147,29 @@ static void _ShotCommonPassTimeGeom(RgShot *shot, float deltaTime)
     RgGeomPassTime(_CommonGetGeom(shot), deltaTime);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", _ShotCommonPassTimeLife);
+static void _ShotCommonPassTimeLife(RgShot *shot, float deltaTime)
+{
+    float remainingLife;
+
+    remainingLife = shot->life;
+    if (remainingLife == 1e8f) {
+        return;
+    }
+    remainingLife -= deltaTime;
+    shot->life = remainingLife;
+    if (remainingLife < 0.0f) {
+        if (shot->hitHistory != 0) {
+            shot->hitHistory();
+        } else {
+            RgCharFree((RgChar *)shot);
+            return;
+        }
+    } else {
+        return;
+    }
+    XrgSoundRingVol(shot->soundDriver, shot->noLifeSoundId,
+                    shot->noLifeSoundVolume);
+}
 
 static void _ShotCommonPassTimeEffect(RgShot *shot, float deltaTime)
 {
@@ -768,7 +790,16 @@ float RgShotGetDamage(RgShot *shot)
     return shot->damage;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot", RgShotIsReleased);
+int RgShotIsReleased(RgShot *shot)
+{
+    if (shot == 0) {
+        assert_prog(D_00A532E8, D_00A532F8, 1260);
+    }
+    if (shot->isReleased != 0) {
+        return shot->isReleased(shot);
+    }
+    return 1;
+}
 
 int RgShotGetHitRobNum(RgShot *shot)
 {

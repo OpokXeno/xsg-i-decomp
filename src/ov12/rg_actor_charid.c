@@ -121,4 +121,81 @@ int RgActorNameToCharID(const char *pszName) {
     return charID;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_actor_charid", RgActorCharIDToName);
+const char *RgActorCharIDToName(int charID) {
+    if (charID == 0) {
+        return D_00A56510;
+    }
+    if (charID == 1) {
+        return D_00A56518;
+    }
+    if (charID == 2) {
+        return D_00A56520;
+    }
+    if (charID == 3) {
+        return D_00A56528;
+    }
+    if (charID == 4) {
+        return D_00A56530;
+    }
+    if (charID == 5) {
+        return D_00A56538;
+    }
+    if (charID == 6) {
+        return D_00A56540;
+    }
+    if (charID == 7) {
+        return D_00A56548;
+    }
+    if (charID == 8) {
+        return D_00A56550;
+    }
+    if (charID == 9) {
+        return D_00A56558;
+    }
+    if (charID == 10) {
+        return D_00A56560;
+    }
+    if (charID == 11) {
+        return D_00A56568;
+    }
+    if (charID == 12) {
+        return D_00A56570;
+    }
+    if (charID == 13) {
+        return D_00A56578;
+    }
+    if (charID == 14) {
+        return D_00A56580;
+    }
+    if (charID == 15) {
+        return D_00A56588;
+    }
+    if (charID == 16) {
+        return D_00A56590;
+    }
+    if (charID == 17) {
+        return D_00A56598;
+    }
+    if (charID == 18) {
+        return D_00A565A0;
+    }
+    if (charID == 19) {
+        return D_00A565A8;
+    }
+    if (charID == 20) {
+        return D_00A565B0;
+    }
+    if (charID == 21) {
+        return D_00A565B8;
+    }
+    if (charID == 22) {
+        return D_00A565C0;
+    }
+    if (charID == 23) {
+        return D_00A565C8;
+    }
+    if (charID == 24) {
+        return D_00A565D0;
+    }
+    return 0;
+}

@@ -2,11 +2,40 @@
 #include "shared.h"
 #include "xgl_light.h"
 
+typedef unsigned int XglLightQuadword __attribute__((mode(TI)));
+
+/* Light vectors occupy aligned quadwords consumed by the VU light matrix program. */
+typedef struct {
+    XglLightQuadword intensity;
+    XglLightQuadword direction;
+} XglPackedParallelLight;
+
+typedef struct {
+    XglLightQuadword ambientIntensity;
+    XglPackedParallelLight parallel[3];
+} XglPackedLightSet;
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_light", xglLightSetDefault);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_light", xglLightIntensityAmbient);
+/* Volatile preserves the quadword update observed by the VU light calculation. */
+void xglLightIntensityAmbient(volatile XglPackedLightSet *lightSet, const XglLightQuadword *intensity)
+{
+    lightSet->ambientIntensity = *intensity;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_light", xglLightIntensityParallel);
+/* Volatile preserves the quadword update observed by the VU light calculation. */
+void xglLightIntensityParallel(XglPackedLightSet *lightSet, unsigned int index, const XglLightQuadword *intensity)
+{
+    /* EE pointers are 32-bit addresses; the selected array entry stays aligned. */
+    unsigned int lightSetAddress = (unsigned int)lightSet;
+    if (index < 3U) {
+        XglPackedParallelLight *parallelLight = (XglPackedParallelLight *)
+            (index * sizeof(XglPackedParallelLight) + lightSetAddress +
+             sizeof(lightSet->ambientIntensity));
+        volatile XglLightQuadword *destination = &parallelLight->intensity;
+        *destination = *intensity;
+    }
+}
 
 extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 

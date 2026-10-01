@@ -34,4 +34,24 @@ typedef struct GsDispEnv {
 extern GsClearEnv ClearEnv;
 extern GsDispEnv DispEnv;
 
+typedef void (*XglRenderFadeCallback)(XglPacket *packet);
+
+typedef struct XglRenderState {
+    unsigned char unmodeled_00[0x10];
+    u16 width;                         /* +0x10 */
+    u16 height;                        /* +0x12 */
+    unsigned char unmodeled_14[0x0c];
+    u16 display_buffer_base;            /* +0x20 */
+    u16 draw_buffer_base;               /* +0x22 */
+    unsigned char unmodeled_24[0x20];
+    XglRenderFadeCallback fade_callback; /* +0x44 */
+    u32 render_status;                  /* +0x48 */
+    u32 frame_delta;                    /* +0x4c */
+    u32 frame_count;                    /* +0x50 */
+    u32 frame_status;                   /* +0x54 */
+    unsigned char unmodeled_58[4];
+} XglRenderState;
+
+extern XglRenderState sRender;
+
 #endif

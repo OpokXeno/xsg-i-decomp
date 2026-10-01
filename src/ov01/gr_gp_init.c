@@ -29,6 +29,70 @@ typedef struct GrPacket {
     int count;   /* +0x4 */
 } GrPacket;
 
+/* GIF packet words are written as doubleword descriptors by the openers and
+ * as 32-bit lanes by the vertex writers. Both are the same packet storage. */
+typedef union GrGifWord {
+    unsigned long long bits;
+    unsigned int lanes[2];
+} GrGifWord;
+
+typedef struct GrGifOpenTag {
+    GrGifWord control;
+    GrGifWord register_id;
+} GrGifOpenTag;
+
+static inline void grGifOpenRegister(GrPacket *packet, unsigned long long register_id)
+{
+    GrGifOpenTag *tags = packet->data;
+    tags[packet->count].register_id.bits = register_id;
+}
+
+static inline void grGifAppendRegister(GrPacket *packet,
+                                       unsigned long long register_id,
+                                       unsigned long long control)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    grGifOpenRegister(packet, register_id);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = control;
+    *count = tag_index + 1;
+}
+
+typedef struct GrFrameBaseTable {
+    unsigned short base[3];
+} GrFrameBaseTable;
+
+typedef struct GrVramCopyParams {
+    unsigned short source_base;
+    unsigned short source_width;
+    unsigned short destination_base;
+    unsigned short destination_width;
+    unsigned short source_x;
+    unsigned short source_y;
+    unsigned short destination_x;
+    unsigned short destination_y;
+    unsigned short width;
+    unsigned short height;
+} GrVramCopyParams;
+
+extern const GrFrameBaseTable D_00A466E8;
+extern const GrVramCopyParams D_00A466F0;
+extern const char D_00A46708[];
+extern int printf(const char *format, ...);
+extern void grVramCopy(GrVramCopyParams *params);
+
+typedef struct GrRenderState {
+    unsigned char unmodeled_00[0x20];
+    unsigned short current_buffer;
+    unsigned short drawing_buffer;
+} GrRenderState;
+extern GrRenderState sRender;
+
 /* Framebuffer base addresses; grFBAdrGet indexes this table. */
 extern int fb[4];
 
@@ -144,15 +208,75 @@ int grFBAdrGet(int index)
     return fb[index];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grBBIdxGet);
+int grBBIdxGet(void)
+{
+    int index = 0;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grDBIdxGet);
+    if (fb[0] != 0xFFFFF) {
+        while (fb[index] != 0xFFFFF) {
+            if (fb[index] != sRender.drawing_buffer &&
+                fb[index] != sRender.current_buffer) {
+                return index;
+            }
+            index++;
+        }
+    }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grVramCopyFBtoFB);
+    return -1;
+}
+
+int grDBIdxGet(int *drawing_index, int *current_index)
+{
+    int index = 0;
+
+    if (fb[0] != 0xFFFFF) {
+        for (; fb[index] != 0xFFFFF; index++) {
+            if (sRender.drawing_buffer == fb[index]) {
+                *drawing_index = index;
+            }
+            if (sRender.current_buffer == fb[index]) {
+                *current_index = index;
+            }
+        }
+    }
+
+    return 1;
+}
+
+void grVramCopyFBtoFB(int source, int destination)
+{
+    GrFrameBaseTable bases = D_00A466E8;
+    GrVramCopyParams params = D_00A466F0;
+
+    if (source >= 3 || destination >= 3 || source == destination) {
+        printf(D_00A46708, source, destination);
+        return;
+    }
+
+    params.source_base = bases.base[source];
+    params.destination_base = bases.base[destination];
+    grVramCopy(&params);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grVramCopy);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenF2);
+void grOpenF2(GrPacket *packet)
+{
+    extern GrPacket f2GpSave;
+    extern int f2Num;
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    f2Num = 0;
+    f2GpSave = *packet;
+    grGifOpenRegister(packet, 81);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = 0x20A0C00000008000ULL;
+    *count = tag_index + 1;
+}
 
 /*
  * grOpenF2/grOpenF4/grOpenFT4/grOpenFT4STQ/grOpenSpr (siblings, not decoded
@@ -184,7 +308,21 @@ void grCloseF2(void)
     tags[f2GpSave.count].control |= f2Num;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenF4);
+void grOpenF4(GrPacket *packet)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    f4Num = 0;
+    f4GpSave = *packet;
+    grGifOpenRegister(packet, 81);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = 0x20A2400000008000ULL;
+    *count = tag_index + 1;
+}
 
 void grCloseF4(void)
 {
@@ -192,7 +330,21 @@ void grCloseF4(void)
     tags[f4GpSave.count].control |= f4Num;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenFT4);
+void grOpenFT4(GrPacket *packet)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    ft4Num = 0;
+    ft4GpSave = *packet;
+    grGifOpenRegister(packet, 1299);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = 0x30AA400000008000ULL;
+    *count = tag_index + 1;
+}
 
 void grCloseFT4(void)
 {
@@ -200,7 +352,21 @@ void grCloseFT4(void)
     tags[ft4GpSave.count].control |= ft4Num;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenFT4STQ);
+void grOpenFT4STQ(GrPacket *packet)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    ft4STQNum = 0;
+    ft4STQGpSave = *packet;
+    grGifOpenRegister(packet, 1298);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = 0x302A400000008000ULL;
+    *count = tag_index + 1;
+}
 
 void grCloseFT4STQ(void)
 {
@@ -208,7 +374,21 @@ void grCloseFT4STQ(void)
     tags[ft4STQGpSave.count].control |= ft4STQNum;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grOpenSpr);
+void grOpenSpr(GrPacket *packet)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    sprNum = 0;
+    sprGpSave = *packet;
+    grGifOpenRegister(packet, 1299);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = 0x30AB400000008000ULL;
+    *count = tag_index + 1;
+}
 
 void grCloseSpr(void)
 {
@@ -348,10 +528,47 @@ float grRotTransPers(GrScreenVertex *vertex, const Matrix4 matrix,
     return invW;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grBBCalc);
+int grBBCalc(MatrixCommand *command, int *screen_x, int *screen_y)
+{
+    Vector4 origin;
+    Matrix matrix;
+    GrScreenVertex vertex;
+    int clip_flags = 0;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grGsRegSet);
+    grCalcMatrix(command, &matrix);
+    origin.w = 1.0f;
+    origin.x = 0.0f;
+    origin.y = 0.0f;
+    origin.z = 0.0f;
+    grRotTransPers(&vertex, (const float (*)[4])&matrix, &origin, &clip_flags);
+    if (clip_flags & 0x8000) {
+        return 0;
+    }
+
+    *screen_x = (vertex.x - 0x7000) / 16;
+    *screen_y = (vertex.y - 0x7200) / 16;
+    return 1;
+}
+
+void grGsRegSet(GrPacket *packet, unsigned long long register_id,
+                unsigned long long value)
+{
+    grGifAppendRegister(packet, 14, 0x1000000000008001ULL);
+    grGifAppendRegister(packet, register_id, value);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grGsRegListSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", GS_REG_SET);
+void GS_REG_SET(GrPacket *packet, long long register_id, long long control)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    grGifOpenRegister(packet, register_id);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = control;
+    *count = tag_index + 1;
+}

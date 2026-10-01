@@ -2,6 +2,9 @@
 #include "shared.h"
 #include "xgl_packet.h"
 
+extern XglPacket asPacketSource[];
+extern void sceVif1PkInit(XglPacket *packet, u32 buffer_address);
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketTextureTrans);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketInterpolate);
@@ -13,7 +16,20 @@ XglPacket *xglPacketGetCurrent(void)
     return pCurrentPacket;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketInit);
+extern XglPacket *pSendPacket;
+
+void xglPacketInit(void)
+{
+    sceVif1PkInit(&asPacketSource[0], 0x00c00000);
+    sceVif1PkInit(&asPacketSource[1], 0x00e00000);
+
+    asPacketSource[0].limit = 0x00e00000;
+    asPacketSource[1].limit = 0x01000000;
+    asPacketSource[0].cursor = (u8 *)0x00e00000;
+    asPacketSource[1].cursor = (u8 *)0x01000000;
+    pCurrentPacket = &asPacketSource[0];
+    pSendPacket = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketMove);
 

@@ -39,7 +39,8 @@ typedef struct EventItemTask EventItemTask;
  */
 struct EventItemTask {
     XglTaskPrefix task;              /* +0x00 */
-    unsigned char unmodeled_10[8];   /* +0x10 */
+    unsigned int zero_word_10;       /* +0x10: cleared by CreateEvtItemGetTask */
+    unsigned int zero_word_14;       /* +0x14: cleared by CreateEvtItemGetTask */
     const char *item_name;           /* +0x18 */
     unsigned char unmodeled_1c[4];   /* +0x1c */
     ItemGetWindow *window;           /* +0x20 */

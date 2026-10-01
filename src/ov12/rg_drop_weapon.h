@@ -5,7 +5,11 @@
 #ifndef SRC_OV12_RG_DROP_WEAPON_H
 #define SRC_OV12_RG_DROP_WEAPON_H
 
-#include "rg_char.h"
+#include "shared.h"
+
+typedef struct RgChar RgChar;
+
+#include "ov12/rg_char.h"
 
 /*
  * The actor handle _Disp/_Destruct/CreateRgDropWeapon pass to the Xrg actor

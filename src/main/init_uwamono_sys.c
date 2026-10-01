@@ -71,7 +71,84 @@ void MAP_LoadUwamonoResource(UwamonoResourceUnit *unit, int resourceId)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", GetPartsPos);
+/*
+ * GetPartsPos's own additive view of the global game-loop record (TU-local
+ * by canon, config/header-canon.json): only the map-parts resource root
+ * pointer at +0x54 is read here.
+ */
+typedef struct MapPartsResource {
+    unsigned char unmodeled_00[0x50];
+    int arrayOffset;              /* +0x50, added to this pointer to form the entry array base */
+} MapPartsResource;
+
+typedef struct MapPartsRoot {
+    unsigned char unmodeled_00[4];
+    MapPartsResource *resource;   /* +0x04 */
+} MapPartsRoot;
+
+typedef struct UwamonoGameLoopState {
+    unsigned char unmodeled_00[0x54];
+    MapPartsRoot *partsRoot;          /* +0x54 */
+} UwamonoGameLoopState;
+
+extern UwamonoGameLoopState GameLoopState;
+
+/*
+ * GetPartsPos's own additive view of the same MapUnit[] record other
+ * functions in this TU already partially name; only the fields it writes
+ * are named here: position (+0x10, the full Vector4 copied from the
+ * resource entry, w set to 1.0f) and rotation's three touched components
+ * (+0x20/+0x24/+0x28, x and z always cleared, y set from atan2f); entry
+ * (+0x80, the resource entry pointer stored for later use); serial (+0xA4,
+ * this unit's index into the resource entry array).
+ */
+typedef struct GetPartsPosEntry {
+    unsigned char unmodeled_00[0x20];
+    float basisX;             /* +0x20 */
+    unsigned char unmodeled_24[4];
+    float basisZ;              /* +0x28 */
+    unsigned char unmodeled_2c[4];
+    float x;                    /* +0x30 */
+    float y;                     /* +0x34 */
+    float z;                      /* +0x38 */
+    unsigned char unmodeled_3c[4];
+} GetPartsPosEntry;
+
+typedef struct GetPartsPosUnit {
+    unsigned char unmodeled_00[0x10];
+    Vector4 position;      /* +0x10, w set to 1.0f */
+    float rotationX;         /* +0x20, always cleared */
+    float rotationY;          /* +0x24, atan2f(entry->basisX, entry->basisZ) */
+    float rotationZ;           /* +0x28, always cleared */
+    unsigned char unmodeled_2c[0x54];
+    GetPartsPosEntry *entry;      /* +0x80 */
+    unsigned char unmodeled_84[0x20];
+    short serial;                  /* +0xA4 */
+} GetPartsPosUnit;
+
+extern float atan2f(float y, float x);
+
+void GetPartsPos(GetPartsPosUnit *unit)
+{
+    MapPartsRoot *root;
+    MapPartsResource *resource;
+    GetPartsPosEntry *table;
+    GetPartsPosEntry *entry;
+
+    root = GameLoopState.partsRoot;
+    resource = root->resource;
+    table = (GetPartsPosEntry *) ((char *) resource + resource->arrayOffset);
+    entry = &table[unit->serial];
+
+    unit->entry = entry;
+    unit->position.x = entry->x;
+    unit->position.y = entry->y;
+    unit->position.z = entry->z;
+    unit->position.w = 1.0f;
+    unit->rotationX = 0.0f;
+    unit->rotationY = atan2f(entry->basisX, entry->basisZ);
+    unit->rotationZ = 0.0f;
+}
 
 void SendBrokenSignal(UwamonoMapUnit *unit)
 {

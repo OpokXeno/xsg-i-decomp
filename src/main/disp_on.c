@@ -88,7 +88,26 @@ static void loader(MapLoadTask *task)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/disp_on", LoadMap);
+void LoadMap(int map_id)
+{
+    XglTaskScheduler *scheduler;
+    MapLoadTask *task;
+
+    GameResourceReset(0);
+    ACT_init();
+    scheduler = GameLoopState.task_scheduler;
+    task = (MapLoadTask *)xglTaskEntryNext(
+        scheduler, (int (*)(XglTaskPrefix *))loader,
+        scheduler != 0 ? scheduler->active_tail : 0);
+    if (task != 0) {
+        task->header.state = &GameLoopState;
+        task->header.flags = 0;
+        task->header.next_callback = 0;
+    }
+    task->request = MAP_LOAD_MAP_AND_EVENT;
+    task->map_id = map_id;
+    task->event_index = -1;
+}
 
 void LoadMap2(int map_id, int event_index)
 {

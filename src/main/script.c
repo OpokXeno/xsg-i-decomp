@@ -100,6 +100,20 @@ typedef struct ScriptDbEntry {
 } ScriptDbEntry;
 extern ScriptDbEntry scriptDB[];
 
+/* The database pointer is at scriptDB + 8. This interior scaffold symbol
+ * starts at that pointer and each entry retains the evidenced 0x1C stride. */
+typedef struct ScriptDbPdbSlot {
+    void *pdb;
+    u8 unmodeled_04[0x1C - 4];
+} ScriptDbPdbSlot;
+extern ScriptDbPdbSlot D_004DEDE8[];
+
+typedef struct ScriptPdbFile {
+    u8 unmodeled_00[8];
+    int data;
+} ScriptPdbFile;
+extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
+
 /*
  * TU-local partial view of the engine's actor record (the 0xa70-strided
  * `actor` array at main 0x0043c1e0; other units keep their own scoped views
@@ -730,4 +744,12 @@ int XTK_getWindowOwner(void)
     return windowOwner;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/script", XTK_findFile);
+int XTK_findFile(const char *path)
+{
+    ScriptPdbFile *file;
+
+    file = PDB_findFile(D_004DEDE8[currentScriptDB].pdb, path);
+    if (file != 0)
+        return file->data;
+    return 0;
+}

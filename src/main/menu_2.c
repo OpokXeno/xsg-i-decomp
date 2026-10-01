@@ -1,4 +1,5 @@
 #include "common.h"
+#include "shared.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -55,13 +56,23 @@ typedef struct MenuStringArray {
  * requested cursor value setCursor__I stores at +0x68.
  */
 typedef struct MenuNative {
-    unsigned char unmodeled_00[0x10];
+    void *class_ref;                  /* +0x00 */
+    unsigned char unmodeled_04[0x10 - 0x04];
     unsigned int flags;             /* +0x10 */
-    unsigned char unmodeled_14[0x54 - 0x14];
+    unsigned char unmodeled_14[0x20 - 0x14];
+    float x;                         /* +0x20 */
+    float y;                         /* +0x24 */
+    unsigned char unmodeled_28[0x54 - 0x28];
     signed char selected;           /* +0x54 */
-    unsigned char unmodeled_55[0x68 - 0x55];
+    signed char state;              /* +0x55 */
+    unsigned char unmodeled_56[0x68 - 0x56];
     int cursor;                     /* +0x68 */
 } MenuNative;
+
+/* Menu.create writes the SceneObjectClassRef at +0x00 from its SceneClass
+ * instance-class-ref field. setLocation converts the integer arguments at
+ * +0x04/+0x08 and writes floats at +0x20/+0x24; getSelected reads signed
+ * bytes at +0x54/+0x55, using the latter as the negative-status override. */
 
 extern void TMENU_addQuery(MenuNative *menu, const char *text);
 extern void TMENU_addQuery2(MenuNative *menu, char **texts, int count);
@@ -117,11 +128,53 @@ void Java_xeno_util_Menu_addItem__Ljava_lang_String_(JThread *thread,
     TMENU_addItem(arguments->menu, arguments->string->value->bytes);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_2", Java_xeno_util_Menu_create__);
+extern MenuNative *TMENU_create(int menu_kind);
+extern void *classJava_xeno_util_Menu;
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_2", Java_xeno_util_Menu_getSelected__);
+/* These natives receive VM argument/result slots at four-byte intervals: the
+ * original accesses the object at +0, location integers at +4/+8 and results
+ * at +0. */
+typedef union MenuArgumentSlot {
+    int i;
+    float f;
+    void *ref;
+} MenuArgumentSlot;
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_2", Java_xeno_util_Menu_setLocation__II);
+void Java_xeno_util_Menu_create__(JThread *thread, void *arguments,
+                                  MenuArgumentSlot *result)
+{
+    SceneClass *menuClass;
+    MenuNative *menu;
+
+    menuClass = (SceneClass *)classJava_xeno_util_Menu;
+    menu = TMENU_create(-1);
+    menu->class_ref = menuClass->instance_class_ref;
+    result[0].ref = menu;
+}
+
+void Java_xeno_util_Menu_getSelected__(JThread *thread,
+                                       MenuArgumentSlot *arguments,
+                                       MenuArgumentSlot *result)
+{
+    MenuNative *menu;
+
+    menu = arguments[0].ref;
+    if (menu->state < 0)
+        result[0].i = menu->state;
+    else
+        result[0].i = menu->selected;
+}
+
+void Java_xeno_util_Menu_setLocation__II(JThread *thread,
+                                         MenuArgumentSlot *arguments,
+                                         MenuArgumentSlot *result)
+{
+    MenuNative *menu;
+
+    menu = arguments[0].ref;
+    menu->x = (float)arguments[1].i;
+    menu->y = (float)arguments[2].i;
+}
 
 void Java_xeno_util_Menu_setVisible__Z(void)
 {

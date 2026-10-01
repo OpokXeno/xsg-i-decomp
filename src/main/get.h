@@ -154,6 +154,8 @@ typedef struct UnduParam {
     short attrMask;                        /* +0x08 */
     unsigned char unmodeled_0a[0x18 - 0x0a];
     LayoutHeader *header;                  /* +0x18 */
+    unsigned char unmodeled_1c[0x20 - 0x1c];
+    long long attribute;                   /* +0x20: UnduCheck result */
 } UnduParam;
 
 extern void UnduParamInit(UnduParam *param);

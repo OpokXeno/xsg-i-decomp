@@ -1,7 +1,38 @@
 #include "common.h"
 #include "map_2.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_loadUnitResource);
+extern MapUnitResource *RES_loadFile(int command, int callback, int resource_id, int flags);
+extern void LOG(const char *format, ...);
+extern int MDL_create(void *model_instance, void *resource_model);
+extern const char D_004D2130[];
+
+int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
+{
+    MapUnitResource *resource = RES_loadFile(-1, 4, resource_id, 0);
+    void *model;
+    int status;
+
+    if (resource == 0) {
+        resource = RES_loadFile(-1, 4, resource_id & 0x7F00, 0);
+    }
+
+    if (resource != 0) {
+        model = resource->model;
+        status = resource->status;
+    } else {
+        model = 0;
+        status = 0;
+    }
+
+    if (model == 0) {
+        LOG((const char *)D_004D2130);
+    }
+
+    unit->resource_status = status;
+    unit->resource_model = model;
+    unit->model = model;
+    return MDL_create(&unit->model_state, model);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/map_2", MAP_initUnit);
 

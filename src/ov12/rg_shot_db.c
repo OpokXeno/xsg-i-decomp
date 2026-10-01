@@ -4,10 +4,37 @@
 #include "common.h"
 #include "shared.h"
 #include "ov12/rg_singleton_id.h"
+#include "ov12/rg_shot.h"
 #include "rg_shot_db.h"
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
+struct RgReadText;
+extern void RgReadTextGetString(struct RgReadText *pReader, char *pszOut);
+extern float RgReadTextGetFloat(struct RgReadText *pReader);
+extern int RgReadTextGetInt(struct RgReadText *pReader);
+extern void RgWarn(const char *format, const char *source_file, int line, ...);
+extern char *strcpy(char *destination, const char *source);
+extern int strcmp(const char *s1, const char *s2);
+extern const char D_00A53450[];
+extern const char D_00A53458[];
+extern const char D_00A53470[];
+extern const char D_00A53488[];
+extern const char D_00A53490[];
+extern const char D_00A53498[];
+extern const char D_00A534A0[];
+extern const char D_00A534B0[];
+extern const char D_00A534C0[];
+extern const char D_00A534D0[];
+extern const char D_00A534D8[];
+extern const char D_00A534E0[];
+extern const char D_00A534F0[];
+extern const char D_00A53500[];
+extern const char D_00A53510[];
+extern const char D_00A53538[];
+extern const char D_00A53548[];
+extern const char D_00A53550[];
+extern const char D_00A53560[];
 
 static void _EntryTemporariesShotDB(RgSimpleDB *database) {
 
@@ -53,7 +80,83 @@ void *RgShotDBGetEssence(RgSimpleDB *database, const char *name)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _ReadCommon_00A18730);
+/* Common settings are addressed through every shot-essence allocation. */
+typedef struct RgShotDbCommonFields RgShotDbCommonFields;
+struct RgShotDbCommonFields {
+    void *(*createFunc)(void *essence, void *info);
+    float damage;
+    float life;
+    char modelVariant[0x40];
+    char particleFile[0x40];
+    char texLineFile[0x20];
+    float texLineWidth;
+    float texLineHeight;
+    unsigned char unmodeled_0b4[0x0c];
+    int texLineColor[3];
+    unsigned char unmodeled_0cc[4];
+    char hitEffectFile[0x20];
+    char damageParticleFile[0x20];
+    float notDamLimit;
+    float notDamTime;
+    float slowTime;
+    float slowRate;
+};
+
+static int _ReadCommon(struct RgReadText *pReader, void *essence,
+                       char *pszToken)
+{
+    float defaultNoDamageTime;
+    char value[0x80];
+    RgShotDbCommonFields *shotEssence;
+
+    shotEssence = essence;
+    if (strcmp(pszToken, D_00A53450) == 0) {
+        RgReadTextGetString(pReader, value);
+        RgWarn(D_00A53458, D_00A53470, 87, value);
+    } else if (strcmp(pszToken, D_00A53488) == 0) {
+        RgReadTextGetString(pReader, value);
+        strcpy(shotEssence->modelVariant, value);
+    } else if (strcmp(pszToken, D_00A53490) == 0) {
+        RgReadTextGetString(pReader, value);
+        strcpy(shotEssence->particleFile, value);
+    } else if (strcmp(pszToken, D_00A53498) == 0) {
+        RgReadTextGetString(pReader, value);
+        strcpy(shotEssence->texLineFile, value);
+    } else if (strcmp(pszToken, D_00A534A0) == 0) {
+        RgReadTextGetString(pReader, value);
+        strcpy(shotEssence->hitEffectFile, value);
+    } else if (strcmp(pszToken, D_00A534B0) == 0) {
+        RgReadTextGetString(pReader, value);
+        strcpy(shotEssence->damageParticleFile, value);
+    } else if (strcmp(pszToken, D_00A534C0) == 0) {
+        RgReadTextGetString(pReader, value);
+        strcpy(shotEssence->texLineFile, value);
+        shotEssence->texLineWidth = RgReadTextGetFloat(pReader);
+        shotEssence->texLineHeight = RgReadTextGetFloat(pReader);
+        shotEssence->texLineColor[0] = RgReadTextGetInt(pReader);
+        shotEssence->texLineColor[1] = RgReadTextGetInt(pReader);
+        shotEssence->texLineColor[2] = RgReadTextGetInt(pReader);
+    } else if (strcmp(pszToken, D_00A534D0) == 0) {
+        shotEssence->damage = RgReadTextGetFloat(pReader);
+    } else if (strcmp(pszToken, D_00A534D8) == 0) {
+        shotEssence->life = RgReadTextGetFloat(pReader);
+    } else if (strcmp(pszToken, D_00A534E0) == 0) {
+        shotEssence->notDamLimit = RgReadTextGetFloat(pReader);
+        defaultNoDamageTime = 1.0f;
+        shotEssence->slowTime = 0.5f;
+        shotEssence->notDamTime = defaultNoDamageTime;
+        shotEssence->slowRate = 0.5f;
+    } else if (strcmp(pszToken, D_00A534F0) == 0) {
+        shotEssence->notDamTime = RgReadTextGetFloat(pReader);
+    } else if (strcmp(pszToken, D_00A53500) == 0) {
+        shotEssence->slowTime = RgReadTextGetFloat(pReader);
+    } else if (strcmp(pszToken, D_00A53510) == 0) {
+        shotEssence->slowRate = RgReadTextGetFloat(pReader);
+    } else {
+        return 0;
+    }
+    return 1;
+}
 
 /*
  * Opaque handle owned by ov12/tu036 (src/ov12/rg_read_text.c,
@@ -138,7 +241,33 @@ static RgShotDbNormalEssence *_ReadNormal(RgReadText *pReader)
     return pEss;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _ReadHomingMain);
+static int _ReadHomingMain(RgReadText *pReader,
+                           struct RgHomingShotEssence *essence,
+                           char *pszToken)
+{
+    if (essence == 0) {
+        assert_prog(D_00A53538, D_00A53470, 169);
+    }
+    if (pReader == 0) {
+        assert_prog(D_00A53520, D_00A53470, 170);
+    }
+
+    if (_ReadCommon(pReader, essence, pszToken) != 0) {
+        return 1;
+    }
+    if (strcmp(pszToken, D_00A53530) == 0) {
+        essence->speed = RgReadTextGetFloat(pReader);
+    } else if (strcmp(pszToken, D_00A53548) == 0) {
+        essence->turnRate = 3.1415927f / RgReadTextGetFloat(pReader);
+    } else if (strcmp(pszToken, D_00A53550) == 0) {
+        essence->cosThreshold = RgReadTextGetFloat(pReader) * 3.1415927f / 180.0f;
+    } else if (strcmp(pszToken, D_00A53560) == 0) {
+        essence->delay = RgReadTextGetFloat(pReader);
+    } else {
+        return 0;
+    }
+    return 1;
+}
 
 /*
  * RgHomingShotEssence is fully evidenced and completed by ov12/tu023
@@ -182,7 +311,67 @@ static RgHomingShotEssence *_ReadHoming(RgReadText *pReader)
     return pEss;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _ReadGrenade);
+/* The grenade initializer is defined in ov12/tu023; its essence is opaque here. */
+struct RgGrenadeEssence;
+extern void InitRgGrenadeEssence(struct RgGrenadeEssence *essence);
+extern int strcasecmp(const char *s1, const char *s2);
+extern const char D_00A53568[];
+extern const char D_00A53578[];
+extern const char D_00A53588[];
+extern const char D_00A53598[];
+
+typedef struct RgShotDbGrenadeEssence RgShotDbGrenadeEssence;
+struct RgShotDbGrenadeEssence {
+    RgHomingShotEssence homing;
+    float explosionRadius; /* +0x130, the "bom-size" key */
+    float duration;        /* +0x134, the "bom-time" key */
+    float proximity;       /* +0x138, the "bom-dist" key */
+    float repeatCount;     /* +0x13c, the "chaff" key */
+};
+
+static struct RgGrenadeEssence *_ReadGrenade(RgReadText *pReader)
+{
+    char szToken[0x80];
+    void *essenceStorage;
+    struct RgGrenadeEssence *grenade;
+    RgHomingShotEssence *homingEssence;
+    RgShotDbGrenadeEssence *parsedEssence;
+
+    essenceStorage = RgHeapAlloc(InstanceOfRgHeap(), 0x140, D_00A53470, 212);
+    grenade = essenceStorage;
+    homingEssence = essenceStorage;
+    parsedEssence = essenceStorage;
+    if (pReader == 0) {
+        assert_prog(D_00A53520, D_00A53470, 214);
+    }
+    InitRgGrenadeEssence(grenade);
+
+    while (RgReadTextIsEOF(pReader) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (_ReadHomingMain(pReader, homingEssence, szToken) != 0) {
+            continue;
+        }
+        if (strcasecmp(szToken, D_00A53568) == 0) {
+            parsedEssence->explosionRadius = RgReadTextGetFloat(pReader);
+            continue;
+        }
+        if (strcasecmp(szToken, D_00A53578) == 0) {
+            parsedEssence->duration = RgReadTextGetFloat(pReader);
+            continue;
+        }
+        if (strcasecmp(szToken, D_00A53588) == 0) {
+            parsedEssence->proximity = RgReadTextGetFloat(pReader);
+            continue;
+        }
+        if (strcasecmp(szToken, D_00A53598) == 0) {
+            parsedEssence->repeatCount = RgReadTextGetFloat(pReader);
+            continue;
+        }
+        RgReadTextUnget(pReader, szToken);
+        break;
+    }
+    return grenade;
+}
 
 /*
  * ov12:0x00a535a0 holds "attach-time", the text key _ReadBeam recognizes
@@ -235,7 +424,59 @@ static RgShotDbBeamEssence *_ReadBeam(RgReadText *pReader)
     return pEss;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", _ReadFire);
+/* The keys read by the fire essence parser are scaffold-owned string data. */
+extern const char D_00A535B0[];
+extern const char D_00A535B8[];
+extern const char D_00A535C8[];
+
+typedef struct RgShotDbFireEssence RgShotDbFireEssence;
+struct RgShotDbFireEssence {
+    unsigned char unmodeled_000[0x120];
+    float length;       /* +0x120, the "length" key */
+    float attachTime;   /* +0x124, the "attach-time" key */
+    int immDead;        /* +0x128, set by the "imm-dead" key */
+    int onceHit;        /* +0x12c, set by the "once-hit" key */
+};
+
+extern void InitRgFireEssence(void *essence);
+
+static RgShotDbFireEssence *_ReadFire(RgReadText *pReader)
+{
+    char szToken[0x80];
+    RgShotDbFireEssence *essence;
+
+    essence = RgHeapAlloc(InstanceOfRgHeap(), 0x130, D_00A53470, 265);
+    if (pReader == 0) {
+        assert_prog(D_00A53520, D_00A53470, 267);
+    }
+    InitRgFireEssence(essence);
+
+    while (RgReadTextIsEOF(pReader) == 0) {
+        RgReadTextGetString(pReader, szToken);
+        if (_ReadCommon(pReader, essence, szToken) != 0) {
+            continue;
+        }
+        if (strcmp(szToken, D_00A535B0) == 0) {
+            essence->length = RgReadTextGetFloat(pReader);
+            continue;
+        }
+        if (strcmp(szToken, D_00A535A0) == 0) {
+            essence->attachTime = RgReadTextGetFloat(pReader);
+            continue;
+        }
+        if (strcmp(szToken, D_00A535B8) == 0) {
+            essence->immDead = 1;
+            continue;
+        }
+        if (strcmp(szToken, D_00A535C8) == 0) {
+            essence->onceHit = 1;
+            continue;
+        }
+        RgReadTextUnget(pReader, szToken);
+        break;
+    }
+    return essence;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBRead);
 

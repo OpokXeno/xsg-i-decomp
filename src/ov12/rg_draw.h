@@ -90,7 +90,11 @@ typedef struct RgRect {
  * explicit unmodeled spans.
  */
 struct RgDrawView {
-    unsigned char unmodeled_00[0x68];
+    RgMatrix viewMatrix;
+    RgVector axisX;
+    RgVector axisY;
+    int projectionMode;
+    int clippingMode;
     RgDrawStudio *m_pParentStudio;
     unsigned char unmodeled_6c[4];
     RgRect screenRect;
@@ -109,9 +113,10 @@ struct RgDrawView {
  */
 typedef struct RgDrawRequest {
     void *pObject;
-    unsigned char unmodeled_04[4];
+    void (*drawFunc)(void *pObject, RgDrawStudio *pStudio);
     void (*clearFunc)(void *pObject);
-    unsigned char unmodeled_0c[8];
+    int priority;
+    int drawID;
 } RgDrawRequest;
 
 /*

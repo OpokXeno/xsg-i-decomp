@@ -4,6 +4,8 @@
 #include "nml_packet_add.h"
 #include "main/xgl_packet.h"
 
+extern u64 g_aGsTag[];
+
 /* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
 #define VIF_CODE_MSCAL 0x14000000
 
@@ -716,7 +718,12 @@ void nmlPacketGsInit(void)
     g_nGsEntry = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsClamp);
+void nmlPacketAddGsClamp(u64 clamp)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = clamp;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 8;
+    g_nGsEntry++;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPixeltest);
 
@@ -728,13 +735,33 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsZbuf1);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsTexture);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsAlpha);
+void nmlPacketAddGsAlpha(u64 alpha)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = alpha;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 66;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsAlpha1);
+void nmlPacketAddGsAlpha1(u64 alpha)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = alpha;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 67;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsScissor);
+void nmlPacketAddGsScissor(u64 scissor)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = scissor;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 64;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsScissor1);
+void nmlPacketAddGsScissor1(u64 scissor)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = scissor;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 65;
+    g_nGsEntry++;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFBA);
 
@@ -746,14 +773,29 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFrame);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFrame1);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPAbe);
+void nmlPacketAddGsPAbe(u64 pabe)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = pabe;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 73;
+    g_nGsEntry++;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPrmode);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPrmodecont);
+void nmlPacketAddGsPrmodecont(u64 prmode_control)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = prmode_control;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 26;
+    g_nGsEntry++;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", packet_gs_entry32);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", packet_gs_entry64);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFba);
+void nmlPacketAddGsFba(u64 fba)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2] = fba;
+    g_aGsTag[g_nGsEntry * 2 + 3] = 74;
+    g_nGsEntry++;
+}

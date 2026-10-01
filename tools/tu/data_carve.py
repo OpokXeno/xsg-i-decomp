@@ -43,8 +43,8 @@ at a local base symbol of the piece they reach (value = minus the piece's
 offset in the compiled section, so symbol + in-place addend is unchanged), and
 named symbols move with their piece.  The compiled object stays the one
 `tools/tu_audit.py`, the worker diagnostics and `derive` read.  A single run
-builds exactly as before (no split object).  Overlays still take one run per
-section (tools/tu/ninja_ovl.py links splat's object line).
+builds exactly as before (no split object). Overlays use the same split for
+several `.rodata` runs (tools/tu/ninja_ovl.py links the split object).
 
 Which compiled offset starts each run (`plan_split`): the C layout is the
 original layout minus the scaffold items, so run k starts after run k-1's last
@@ -500,7 +500,8 @@ def ovl_restore(ld_text):
             out.append(f'{indent}{obj}({sec});\n')
             continue
         out.append(line)
-    return ''.join(out)
+    text = ''.join(out)
+    return re.sub(r'(build/(?:scaffold/)?src/[\w-]+/[\w-]+)\.carved\.o(?=\()', r'\1.o', text)
 
 
 def ovl_tu_names(root, unit):
@@ -545,7 +546,7 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True):
         for sec, runs in sorted(secs.items()):
             if sec != '.rodata':
                 raise CarveError(f'{tu_id}: an overlay carve covers .rodata only (declared {sec})')
-            lo, hi = check_one_run(tu_id, sec, runs)
+            spans = declared_runs(tu_id, sec, runs)
             piece = ovl_piece(unit_dir, unit, name, sec)
             if piece is None:
                 raise CarveError(f'{tu_id} has no {sec} piece in {unit}/layout.json')
@@ -554,6 +555,7 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True):
             if not text_line:
                 raise CarveError(f'{tu_id}: {unit}.ld links no C object for {name} (is the TU C?)')
             c_obj = text_line.group(2)
+            linked_obj = c_obj[:-2] + SPLIT_OBJECT if len(spans) > 1 else c_obj
             if re.search(re.escape(c_obj) + r'\(' + re.escape(sec) + r'\)', text):
                 raise CarveError(f'{tu_id}: {unit}.ld already places {c_obj}({sec})')
             data_obj = f'build/asm/data/{unit}/{name}{sec}.o'
@@ -564,12 +566,13 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True):
             def read(p):
                 return piece_items(Path(unit_dir) / p['file'], p['start'], p['end'])
 
-            new = repiece(name, [piece], (lo, hi), read)
+            new = repiece(name, [piece], spans, read)
             indent = line.group(1)
             out = [f'{indent}{LD_ORIG}{data_obj}[{sec}] */\n']
             for p in new:
                 if p['c_split']:
-                    out.append(f'{indent}{c_obj}({sec}); {LD_MARK}\n')
+                    input_sec = split_section_name(sec, p['run']) if len(spans) > 1 else sec
+                    out.append(f'{indent}{linked_obj}({input_sec}); {LD_MARK}\n')
                     out.append(f'{indent}. = 0x{p["end"] - base:X}; {LD_MARK} /* pin: end of the C run of {tu_id} */\n')
                     continue
                 stem = p['name'].split('/')[-1]
@@ -578,7 +581,11 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True):
                     write_piece_file(Path(unit_dir) / f'{rel}.s', p['header'], p['items'])
                 out.append(f'{indent}build/{rel}.o({sec}); {LD_MARK}\n')
             text = text[:line.start()] + ''.join(out) + text[line.end():]
-            report.append(dict(tu=tu_id, section=sec, run=[h8(lo), h8(hi)], c_object=c_obj,
+            if linked_obj != c_obj:
+                text = text.replace(c_obj + '(', linked_obj + '(')
+            report.append(dict(tu=tu_id, section=sec, run=[h8(spans[0][0]), h8(spans[-1][1])],
+                               runs=[[h8(lo), h8(hi)] for lo, hi in spans], c_object=c_obj,
+                               link_object=linked_obj,
                                pieces=[(p['name'], h8(p['start']), h8(p['end']), p['c_split']) for p in new]))
     return text, report
 
@@ -694,7 +701,7 @@ def tu_object(unit_dir, unit, name):
     if not ld.is_file():
         return None
     m = re.search(r'(build/(?:scaffold/)?src/' + re.escape(unit) + '/' + re.escape(name) + r'\.o)\(\.text\);',
-                  ld.read_text())
+                  ovl_restore(ld.read_text()))
     return unit_dir / m.group(1) if m and (unit_dir / m.group(1)).is_file() else None
 
 
@@ -1091,7 +1098,7 @@ def split_object(data, plans):
 
 
 def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
-    """{section: plan} for the sections a MAIN TU declares with several runs."""
+    """{section: plan} for the sections a TU declares with several runs."""
     registry = load_registry(root) if registry is None else registry
     secs = registry['tus'].get(tu_id) or {}
     split = split_sections(secs)
@@ -1214,13 +1221,6 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                      referenced_by=sorted(n for n in files if n not in c_funcs
                                           and set(items[i]['labels']) & identifiers([files[n]])))
                 for a, b in zip(groups, groups[1:]) for i in range(a[-1] + 1, b[0])]
-        if len(groups) > 1 and unit != 'main':
-            out['problems'].append(
-                f'{sec}: the C-generated items form {len(groups)} runs separated by scaffold items '
-                f'({", ".join(x["item"] for x in detail["scaffold_between_runs"])}); an overlay TU takes one C '
-                f'run per section: recover the functions whose items lie in between, or keep this section '
-                f'scaffold-owned')
-            continue
         if orig is None:
             orig = Elf(Path(ctx['orig']).read_bytes())
         # A run whose C layout pads between two of its items (another alignment
@@ -1247,11 +1247,6 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
             continue
         if regrouped:
             detail['cut_by_c_alignment'] = regrouped
-            if unit != 'main':
-                out['problems'].append(
-                    f'{sec}: the C object pads inside the C-generated items ({regrouped}), which would take '
-                    f'{len(groups)} runs; an overlay TU takes one C run per section')
-                continue
         if plan['notes']:
             detail['split_notes'] = plan['notes']
 
@@ -1431,7 +1426,7 @@ def main(argv=None):
     p = sub.add_parser('show')
     p.add_argument('--root', type=Path, required=True)
     p.add_argument('--tu')
-    p = sub.add_parser('split', help='write the object a MAIN TU with several runs in a section links')
+    p = sub.add_parser('split', help='write the object a TU with several runs in a section links')
     p.add_argument('--root', type=Path, required=True)
     p.add_argument('--unit', default='main')
     p.add_argument('--unit-dir', type=Path, required=True)

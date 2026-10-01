@@ -3,6 +3,10 @@
 #include "main/xgl_2.h"
 #include "xgl_2.h"
 
+extern unsigned int D_004ADE80[];
+extern const float D_004D8858;
+extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglAtan2);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglMemCopy64);
@@ -445,7 +449,26 @@ float xglRotTransPers(Vector4 *out, const Matrix4 matrix, Vector4 *point, int ca
     return out->w;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglRotTransPersN);
+void xglRotTransPersN(Vector4 *destination, const Matrix4 matrix,
+                      const Vector4 *points, int count, int cameraId)
+{
+    StudioCamera *camera;
+
+    xglMatrixStackPush();
+    camera = xglStudioGetCamera2(cameraId);
+    xglMatrixStackLoad(camera->viewMatrix);
+    if (matrix != 0) {
+        xglMatrixStackMul(matrix);
+    }
+    while (count > 0) {
+        xglMatrixStackRTPS(destination, points,
+                           &camera->screenScale, &camera->screenOffset);
+        ++destination;
+        ++points;
+        --count;
+    }
+    xglMatrixStackPop(1);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglMatrixUnit);
 
@@ -494,7 +517,32 @@ void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right)
     );
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglMatrixReverse);
+void xglMatrixReverse(Matrix *destination, const Matrix *source)
+{
+    Matrix transposed;
+    XglQuadword copiedRow;
+    /* Both original callers transpose this matrix in place. */
+    volatile Matrix *copyDestination = destination;
+    const volatile Matrix *copySource;
+    int row;
+    int column;
+
+    for (row = 0; row < 4; ++row) {
+        for (column = 0; column < 4; ++column) {
+            transposed.elements[row * 4 + column] =
+                source->elements[column * 4 + row];
+        }
+    }
+    copySource = &transposed;
+    copiedRow = copySource->quadwords[0];
+    copyDestination->quadwords[0] = copiedRow;
+    copiedRow = copySource->quadwords[1];
+    copyDestination->quadwords[1] = copiedRow;
+    copiedRow = copySource->quadwords[2];
+    copyDestination->quadwords[2] = copiedRow;
+    copiedRow = copySource->quadwords[3];
+    copyDestination->quadwords[3] = copiedRow;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglMatrixInverse);
 
@@ -851,7 +899,30 @@ void xglMatrixRotZ(Matrix4 destination, const Matrix4 source, float angle)
     );
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglMatrixFrustum);
+void xglMatrixFrustum(Matrix *destination, Matrix *source,
+                      float left, float right, float bottom, float top,
+                      float nearPlane, float farPlane)
+{
+    Matrix projection;
+
+    projection.elements[0] = (2.0f * nearPlane) / (right - left);
+    projection.elements[1] = 0.0f;
+    projection.elements[2] = 0.0f;
+    projection.elements[3] = 0.0f;
+    projection.elements[4] = 0.0f;
+    projection.elements[5] = (2.0f * nearPlane) / (top - bottom);
+    projection.elements[6] = 0.0f;
+    projection.elements[7] = 0.0f;
+    projection.elements[8] = (right + left) / (right - left);
+    projection.elements[9] = (top + bottom) / (top - bottom);
+    projection.elements[10] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    projection.elements[11] = -1.0f;
+    projection.elements[12] = 0.0f;
+    projection.elements[13] = 0.0f;
+    projection.elements[14] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
+    projection.elements[15] = 0.0f;
+    xglMatrixMul(destination, source, &projection);
+}
 
 /*
  * xglMatrixStackUnit/.../RTPS (ee-vu-cop2): the eighteen thin VU0
@@ -1236,7 +1307,20 @@ void xglRandSeedInit(void)
     iRandSeed = 0x12345678ULL;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglGeometryInit);
+void xglGeometryInit(void)
+{
+    float random_seed = D_004D8858;
+
+    __asm__ __volatile__(
+        "qmtc2 %0,vf1\n\t"
+        "vrinit R,vf1x"
+        :
+        : "r"(random_seed)
+        : "memory"
+    );
+    iRandSeed = 0x12345678ULL;
+    xglDmaDirectSrcChain(0, (unsigned int)D_004ADE80);
+}
 
 unsigned short xglSRand(void)
 {
@@ -1286,6 +1370,38 @@ float I2F(int value)
     return (float) value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglSin);
+float xglSin(float angle)
+{
+    unsigned int entry = (unsigned int)Vu0CallSin >> 3;
+    float result;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglCos);
+    __asm__ __volatile__(
+        "ctc2.i %1,$vi27\n\t"
+        "vnop\n\t"
+        "qmtc2 %2,$vf4\n\t"
+        "vcallmsr $vi27\n\t"
+        "qmfc2.i %0,$vf1"
+        : "=r"(result)
+        : "r"(entry), "r"(angle)
+        : "memory"
+    );
+    return result;
+}
+
+float xglCos(float angle)
+{
+    unsigned int entry = (unsigned int)Vu0CallCos >> 3;
+    float result;
+
+    __asm__ __volatile__(
+        "ctc2.i %1,$vi27\n\t"
+        "vnop\n\t"
+        "qmtc2 %2,$vf4\n\t"
+        "vcallmsr $vi27\n\t"
+        "qmfc2.i %0,$vf1"
+        : "=r"(result)
+        : "r"(entry), "r"(angle)
+        : "memory"
+    );
+    return result;
+}

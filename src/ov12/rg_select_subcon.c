@@ -8,6 +8,7 @@ extern int s_bIgnoreEventFlag;
 
 extern int XrgEventIsUsablePlayer(unsigned int index);
 extern int XrgEventIsUsableEnemy(unsigned int index);
+extern int XrgRandIntRange(int lower, int upper);
 
 void RgSelectIgnoreEventFlag(void)
 {
@@ -65,6 +66,45 @@ unsigned int RgSelectWeapons(int *list, int characterID, int weaponType)
     return _get_all_weapons(list, characterID, weaponType, 2);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_subcon", RgSelectGetEnemyChar);
+int RgSelectGetEnemyChar(void)
+{
+    int usableEnemies[6];
+    int enemy;
+    int usableCount;
+    int maximumEnemy;
+    int result;
+
+    usableCount = 0;
+    for (enemy = 0; enemy < 6; enemy++)
+    {
+        if (s_bIgnoreEventFlag || XrgEventIsUsableEnemy(enemy))
+        {
+            usableEnemies[usableCount] = enemy;
+            usableCount++;
+        }
+    }
+
+    if (usableCount == 0)
+    {
+        usableEnemies[0] = 0;
+        usableCount = 1;
+    }
+
+    enemy = usableEnemies[XrgRandIntRange(0, usableCount)];
+    maximumEnemy = 5;
+    if (enemy < 0)
+    {
+        result = 0;
+    }
+    else if (enemy > maximumEnemy)
+    {
+        result = maximumEnemy;
+    }
+    else
+    {
+        result = enemy;
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_subcon", RgSelectGetEnemyWeapons);

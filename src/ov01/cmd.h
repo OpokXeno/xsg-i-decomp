@@ -309,8 +309,9 @@ typedef struct ThinkProcess {
     unsigned char unmodeled_6[2];
     int context;                    /* +0x8: thinkProcessExecSub */
     int waitActive;                /* +0xC */
-    unsigned char unmodeled_10[0x14 - 0x10];
+    int kind;                       /* +0x10: thinkProcessKindChk/thinkExec/camExec */
     int sortMode;                  /* +0x14 */
+    unsigned char unmodeled_18[0x24 - 0x18];
 } ThinkProcess;
 
 /*
@@ -324,6 +325,7 @@ extern void thinkRegSet(int regIndex, int value);
 extern int cmdNum(short pc);
 extern int cmdThinksetSub(ThinkProcess *proc);
 extern void cmdAtktblSortSub(ThinkProcess *proc);
+extern int thinkProcessChk(int slot);
 
 /*
  * thinkProcessKindChk (0x00a1d4b8, this TU, still asm) walks the AI process

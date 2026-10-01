@@ -1,6 +1,8 @@
 #include "common.h"
 #include "find_native_method.h"
 
+extern ClassEntry **classEntryPool;
+
 int strcmp(const char *, const char *);
 
 /* One row of the default_native[] table: a native method's exported name
@@ -178,7 +180,29 @@ int loadClass(int classKey, int skipLoad)
 
 INCLUDE_ASM("asm/main/nonmatchings/find_native_method", loadStaticClass);
 
-INCLUDE_ASM("asm/main/nonmatchings/find_native_method", reloadClassEntry);
+void reloadClassEntry(void *heapBoundary)
+{
+    ClassEntry **bucket = classEntryPool;
+    int bucketsRemaining = 511;
+
+    do {
+        ClassEntry *entry = *bucket;
+
+        if (entry != 0) {
+            ClassEntry *current = entry;
+
+            if ((unsigned int)current >= (unsigned int)heapBoundary) {
+                do {
+                    current = current->next;
+                } while (current != 0 &&
+                         (unsigned int)current >= (unsigned int)heapBoundary);
+            }
+            *bucket = current;
+        }
+        bucket++;
+        bucketsRemaining--;
+    } while (bucketsRemaining >= 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/find_native_method", lookupClassEntry);
 

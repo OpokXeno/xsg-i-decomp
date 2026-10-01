@@ -84,7 +84,11 @@ typedef struct MotionAdrTable {
 } MotionAdrTable;
 
 typedef struct EquipActor {
-    unsigned char unmodeled_0[0x8e0];
+    unsigned char unmodeled_0[0x8d0];
+    /* dataPackWpnMdl2 rebases these three packed weapon-model pointers in
+       place; its callers skip the call when wpnMdl[1] is already non-zero. */
+    unsigned char *wpnMdl[3]; /* +0x8d0 */
+    unsigned char unmodeled_8dc[0x8e0 - 0x8dc];
     int motionAdr;
 } EquipActor;
 

@@ -86,7 +86,11 @@ typedef struct {
                                               (setShootUwaCheck, bit 3) */
     unsigned char unmodeled_24[0x52 - 0x24];
     short entrance;                       /* +0x52, lh at 0x002f7424 */
-    unsigned char unmodeled_54[0x29F44 - 0x54];
+    unsigned char unmodeled_54[0xC1 - 0x54];
+    unsigned char player_flags;           /* +0xC1, lbu/ori/sb at
+                                              0x002f7448..0x002f7460
+                                              (setPlayerControl, bit 0x20) */
+    unsigned char unmodeled_c2[0x29F44 - 0xC2];
     float shoot_range;                    /* +0x29F44, swc1 at 0x002f799c */
     unsigned char unmodeled_29f48[0x2A018 - 0x29F48];
     int active_event_id;                  /* +0x2A018, lw at 0x002f8730 */
@@ -194,7 +198,16 @@ void Java_xeno_util_Runtime_getEntrance__(JThread *thread, void *arguments, int 
     *result = GameLoopState.entrance;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_setPlayerControl__Z);
+void Java_xeno_util_Runtime_setPlayerControl__Z(JThread *thread, unsigned char *arguments,
+                                                unsigned int *result)
+{
+    if (*arguments != 0) {
+        GameLoopState.flags &= ~0x8000;
+        GameLoopState.player_flags |= 0x20;
+    } else {
+        GameLoopState.flags |= 0x8000;
+    }
+}
 
 /* The call block of a native taking three plain floats (java signature "(FFF)"). */
 typedef struct {
@@ -303,7 +316,24 @@ static void scriptReset_evsExit(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_jumpCF__II);
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_jumpEvent__I);
+extern void (*jthreadResetFunc)(void);
+extern void SCRIPT_talkIgnoreSet(void);
+
+void Java_xeno_util_Runtime_jumpEvent__I(RuntimeThreadState *thread, IntPairCall *arguments,
+                                         unsigned int *result)
+{
+    int entrance;
+    unsigned int flags;
+
+    args_jump.destination = arguments->first + 0x10000000;
+    entrance = arguments->second;
+    jthreadResetFunc = scriptReset_jump;
+    args_jump.argument = entrance;
+    SCRIPT_talkIgnoreSet();
+    flags = thread->flags | 9;
+    thread->resume_frames = thread->frame_depth;
+    thread->flags = flags;
+}
 
 /* The call block of a native taking four plain ints (java signature "(IIII)"). */
 typedef struct {
@@ -322,7 +352,35 @@ void Java_xeno_util_Runtime_setDefocusQuick__IIII(JThread *thread, IntQuadCall *
                         arguments->fourth);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_setDefocus__IIaI);
+/*
+ * A partial, TU-local view of the Java int-array object (the same object
+ * fully recovered as `VMArray` in src/main/init_vm.c) for the `data` pointer
+ * setDefocus below reads at +0x08 (lw at 0x002f7800).
+ */
+typedef struct {
+    unsigned char unmodeled_00[8];
+    int *data;                            /* +0x08 */
+} RuntimeIntArray;
+
+/* The call block of setDefocus (java signature "(II[I)"): two plain ints and
+   an optional int-array reference, null when the caller passes none. */
+typedef struct {
+    int mode;
+    int strength;
+    RuntimeIntArray *table;
+} DefocusCall;
+
+extern void GameDefocusSet(int mode, int strength, int *table);
+
+void Java_xeno_util_Runtime_setDefocus__IIaI(JThread *thread, DefocusCall *arguments,
+                                             unsigned int *result)
+{
+    if (arguments->table == 0) {
+        GameDefocusSet(arguments->mode, arguments->strength, 0);
+    } else {
+        GameDefocusSet(arguments->mode, arguments->strength, arguments->table->data);
+    }
+}
 
 /* A defocus parameter table of seventeen-entry rows, one word ahead of the
    symbol (index 0 is untouched by this TU). */
@@ -516,11 +574,24 @@ INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_getPartyData
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_setPartyData__II);
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", cid2bic);
+/* The zero-terminated character-id table cid2bic searches, in the order the
+   battle party uses (config/symbols/main.txt, 0x42 bytes). */
+extern unsigned short tbl_0_0043B450[];
 
 /* Converts a Java character id to its battle-member index, as every
-   Party*Check/On/Off callee below expects (still asm in this TU). */
-extern int cid2bic(int character_id);
+   Party*Check/On/Off callee below expects: the one-based position of the id in
+   the table, or zero when the table does not list it. */
+static int cid2bic(int character_id)
+{
+    int index;
+
+    for (index = 0; tbl_0_0043B450[index] != 0; index++) {
+        if (tbl_0_0043B450[index] == character_id) {
+            return index + 1;
+        }
+    }
+    return 0;
+}
 
 extern void PartyFriendOn(int battle_index);
 
@@ -632,7 +703,17 @@ INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_setWindParam
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_mpeg2__Ljava_lang_String_);
 
-INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_mpeg2AfterCrossFade__I);
+extern void nmlModelSetMpeg2CrossFadeTime(int time);
+extern int s_nMpeg2ReserveCrossFade;
+
+void Java_xeno_util_Runtime_mpeg2AfterCrossFade__I(JThread *thread, int *arguments,
+                                                    unsigned int *result)
+{
+    int time = *arguments;
+
+    s_nMpeg2ReserveCrossFade = 1;
+    nmlModelSetMpeg2CrossFadeTime(time);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/runtime", Java_xeno_util_Runtime_mailFlag__I);
 

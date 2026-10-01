@@ -56,8 +56,11 @@ extern GameLoopStatePrefix GameLoopState;
  * and src/main/window_tex_load.c's UmnRenderSize for the screen-size
  * halfwords).
  */
+/* DrawBack reads the framebuffer-page halfword at sRender +0x14. */
 typedef struct {
-    u8 unmodeled_00[0x20];
+    u8 unmodeled_00[0x14];
+    u16 framebuffer_page;
+    u8 unmodeled_16[0x0a];
     u16 buffer_select;
 } DrawImageRenderState;
 
@@ -68,6 +71,7 @@ extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern u64 TestEnv_0_00369CC0[12];
 extern unsigned char TransEnv_1_00369D20[];
 extern unsigned char FlushEnv_2_00369D40[];
+extern u64 TestEnv_3_00369D70[20];
 
 static void DrawImage(void *framebuffer)
 {
@@ -84,7 +88,20 @@ static void DrawImage(void *framebuffer)
     sceVif1PkRef(packet, FlushEnv_2_00369D40, 3, 0, 0, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_over", DrawBack);
+static void DrawBack(int alpha)
+{
+    u64 nonnegative_alpha;
+    u64 gs_frame_address_bits;
+
+    nonnegative_alpha = alpha < 0 ? 0 : alpha;
+    gs_frame_address_bits = 0xc800;
+    TestEnv_3_00369D70[6] =
+        (0x24120000 | (sRender.framebuffer_page << 5)) |
+        (gs_frame_address_bits << 0x13);
+    TestEnv_3_00369D70[8] = (nonnegative_alpha << 32) | 100;
+    FlushCache(0);
+    sceVif1PkRef(xglPacketGetCurrent(), TestEnv_3_00369D70, 10, 0, 0, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_over", copyframe);
 

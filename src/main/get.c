@@ -31,7 +31,24 @@ void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
     destination->w = source->w;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Get_MiddlePoint);
+void Get_MiddlePoint(const float *start, const float *following,
+                     short point_index, short point_count, float *result)
+{
+    if (point_index == point_count) {
+        result[0] = following[0];
+        result[1] = following[1];
+        result[2] = following[2];
+        result[3] = 1.0f;
+    } else {
+        result[0] = start[0] + (following[0] - start[0]) * (float)point_index
+                    / (float)point_count;
+        result[1] = start[1] + (following[1] - start[1]) * (float)point_index
+                    / (float)point_count;
+        result[2] = start[2] + (following[2] - start[2]) * (float)point_index
+                    / (float)point_count;
+        result[3] = 1.0f;
+    }
+}
 
 void Get_MiddlePoint_Parabora(const ParabolaVec *first, const ParabolaVec *second,
                               int current, int total, float height,
@@ -128,7 +145,24 @@ float Get_Angle_Relative(const Point4 *first, const Point4 *second,
     return relative;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Check_CrossingOver);
+extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
+                          const Vector4 *point);
+
+int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
+                       const Vector4 *second_start, const Vector4 *second_end)
+{
+    int first_start_side = CheckPointLine(first_start, first_end, second_start);
+    int first_end_side = CheckPointLine(first_start, first_end, second_end);
+
+    if (first_start_side != first_end_side) {
+        int second_start_side = CheckPointLine(second_start, second_end, first_start);
+        int second_end_side = CheckPointLine(second_start, second_end, first_end);
+
+        if (second_start_side != second_end_side)
+            return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/get", Check_InsideFan);
 
@@ -222,9 +256,33 @@ void Get_Height(const Point4 *position, int mapIndex, int attrMask)
     UnduCheck(position, 0, &UnduTest);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Get_Attr);
+int Get_Attr(const Point4 *position, int mapIndex, int attrMask)
+{
+    UnduParamInit(&UnduTest);
+    UnduTest.queryFlags = 0;
+    UnduTest.attrMask = (short)(attrMask | 0x800);
+    if (mapIndex == 0) {
+        UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
+    } else {
+        UnduTest.header = UnduDataGetHeader(mapIndex, 0x8000);
+    }
+    UnduCheck(position, 0, &UnduTest);
+    return (int)UnduTest.attribute;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Get_Attr_NU);
+int Get_Attr_NU(const Point4 *position, int mapIndex, int attrMask)
+{
+    UnduParamInit(&UnduTest);
+    UnduTest.queryFlags = 0;
+    UnduTest.attrMask = (short)attrMask;
+    if (mapIndex == 0) {
+        UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
+    } else {
+        UnduTest.header = UnduDataGetHeader(mapIndex, 0x8000);
+    }
+    UnduCheck(position, 0, &UnduTest);
+    return (int)UnduTest.attribute;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/get", Check_Undu);
 

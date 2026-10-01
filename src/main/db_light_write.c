@@ -16,7 +16,21 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", drawVector4S);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", drawGrid);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", getCurrentCamera_00266210);
+static StudioCamera *getCurrentCamera(void)
+{
+    int camera_index;
+    StudioCamera *camera;
+
+    camera_index = 0;
+    for (;;) {
+        xglStudioGetCamera(&camera, camera_index);
+        camera_index++;
+        if (camera->active != 0)
+            return camera;
+        if (camera_index >= 8)
+            return 0;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", drawAxis);
 

@@ -5,13 +5,79 @@
 #include "shared.h"
 #include "card_play_sound1.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardPlaySound1);
+struct CardSoundPath {
+    char name[34];
+};
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardPlaySound3);
+extern const struct CardSoundPath D_00A4BBD0;
+extern const struct CardSoundPath D_00A4BBF8;
+extern const struct CardSoundPath D_00A4BC20;
+extern const struct CardSoundPath D_00A4BC48;
+extern const struct CardSoundPath D_00A4BC70;
+extern const struct CardSoundPath D_00A4BC98;
+extern int SsdSpuDmaCompleted(int wait);
+extern int xglSoundSendSwd(void *swd, int bank);
+extern void xglSoundSendSmd2(void *smd, int bank);
+extern void xglSoundSequenceNormal2(int channel, int volume);
+extern char BGFileNameList[6][16];
+extern char D_00A4BDA0[];
+extern char D_00A4BDA8[];
+extern char *strcpy(char *destination, const char *source);
+extern char *strcat(char *destination, const char *source);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardPlaySound2);
+void CardPlaySound1(void)
+{
+    struct CardSoundPath swdFile = D_00A4BBD0;
+    struct CardSoundPath smdFile = D_00A4BBF8;
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardPlaySound4);
+    if (xglCdReadFile(swdFile.name, (void *) 0x01900000, 0, 0) > 0) {
+        xglSoundSendSwd((void *) 0x01900000, -1);
+        while (SsdSpuDmaCompleted(0) != 0) {
+        }
+    }
+
+    if (xglCdReadFile(smdFile.name, (void *) 0x01900000, 0, 0) > 0)
+        xglSoundSendSmd2((void *) 0x01900000, 0);
+
+    xglSoundSequenceNormal2(0, 127);
+}
+
+void CardPlaySound3(void)
+{
+    struct CardSoundPath smdFile = D_00A4BC20;
+
+    if (xglCdReadFile(smdFile.name, (void *) 0x01C60000, 0, 1) > 0)
+        xglSoundSendSmd2((void *) 0x01C60000, 0);
+
+    xglSoundSequenceNormal2(0, 127);
+}
+
+void CardPlaySound2(void)
+{
+    struct CardSoundPath swdFile = D_00A4BC48;
+    struct CardSoundPath smdFile = D_00A4BC70;
+
+    if (xglCdReadFile(swdFile.name, (void *) 0x01900000, 0, 0) > 0) {
+        xglSoundSendSwd((void *) 0x01900000, -1);
+        while (SsdSpuDmaCompleted(0) != 0) {
+        }
+    }
+
+    if (xglCdReadFile(smdFile.name, (void *) 0x01900000, 0, 0) > 0)
+        xglSoundSendSmd2((void *) 0x01900000, 0);
+
+    xglSoundSequenceNormal2(0, 127);
+}
+
+void CardPlaySound4(void)
+{
+    struct CardSoundPath smdFile = D_00A4BC98;
+
+    if (xglCdReadFile(smdFile.name, (void *) 0x01C60000, 0, 1) > 0)
+        xglSoundSendSmd2((void *) 0x01C60000, 0);
+
+    xglSoundSequenceNormal2(0, 127);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardDataLoad);
 
@@ -26,11 +92,44 @@ u32 CardGraphicLoad(void) {
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardTitleInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CMIBGInit);
+void CMIBGInit(CardGameWork *work)
+{
+    char filename[32];
+
+    strcpy(filename, BGFileNameList[work->save->background]);
+    strcat(filename, D_00A4BDA0);
+    CardFread(0x01E40000, filename);
+
+    strcpy(filename, BGFileNameList[work->save->background]);
+    strcat(filename, D_00A4BDA8);
+    CardFread(0x01FB0300, filename);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardMainInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardMainItemGetSub);
+void CardMainItemGetSub(int *prizes, int round)
+{
+    prizes[0] = prizes[1] = prizes[2] = prizes[3] = 0;
+
+    if (round <= 0)
+        return;
+
+    {
+        int remaining = round;
+
+        do {
+            int result = xglSRand();
+
+            if (xglFlagsGet(301, 1) == 0)
+                result = 0;
+            if (result & 1)
+                prizes[1]++;
+            else
+                prizes[0]++;
+            remaining--;
+        } while (remaining != 0);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov10/card_play_sound1", CardMainAddItemSub);
 

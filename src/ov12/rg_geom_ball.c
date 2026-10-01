@@ -21,10 +21,21 @@ extern void *RgHeapAlloc(void *heap, unsigned int size,
  * radius at 0x70.
  */
 typedef struct RgGeomBall {
-    unsigned char unmodeled_00[0x70];
+    unsigned char unmodeled_00[0x20];
+    float position[4];
+    unsigned char unmodeled_30[0x40];
     float radius;
     unsigned char unmodeled_74[0x0c];
 } RgGeomBall;
+
+typedef struct RgGeomBallContact {
+    RgVector position1;
+    RgVector position2;
+    RgVector penetration;
+    float distance;
+} RgGeomBallContact;
+
+extern float XrgNormalizeVector(RgVector destination, RgVector source);
 
 /* InitRgGeomBall stores its first float at the radius and hands its second
  * to InitRgGeomPoint as the point's weight. */
@@ -116,4 +127,65 @@ void RgGeomBallPassTime(RgGeomBall *pBall, float deltaTime)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_ball", RgGeomBallCheckBall);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_ball", RgGeomBallCheckBallDist);
+int RgGeomBallCheckBallDist(RgGeomBall *ball1, RgGeomBall *ball2,
+                            RgGeomBallContact *contact)
+{
+    RgVector direction;
+    float radius_sum;
+    float penetration;
+    RgVector *penetration_vector;
+
+    /* The position begins at byte 0x20 in the point body of each ball.
+       Both operands are loaded before the difference overwrites VF30. */
+    __asm__ __volatile__("lqc2 $vf30, 0(%0)\n\t"
+                         "lqc2 $vf31, 0(%1)\n\t"
+                         "vsub.xyzw $vf30, $vf30, $vf31\n\t"
+                         "sqc2 $vf30, 0(%2)"
+                         :
+                         : "r"(&ball1->position), "r"(&ball2->position),
+                           "r"(direction)
+                         : "memory");
+    {
+        float distance = XrgNormalizeVector(direction, direction);
+
+        radius_sum = ball1->radius + ball2->radius;
+        if (distance < radius_sum) {
+            penetration = radius_sum - distance;
+            penetration_vector = &contact->penetration;
+            {
+                float x_component = direction[0];
+                float y_component = direction[1];
+
+                y_component *= penetration;
+                __asm__ __volatile__("" : : "f"(y_component));
+                x_component *= penetration;
+                (*penetration_vector)[1] = y_component;
+                (*penetration_vector)[0] = x_component;
+            }
+            /* Keep each pair's store order and its scalar inputs visible. */
+            __asm__ __volatile__("" : : "r"(penetration_vector));
+            {
+                float z_component = direction[2] * penetration;
+
+                (*penetration_vector)[2] = z_component;
+                __asm__ __volatile__("" : : "f"(z_component));
+                (*penetration_vector)[3] = direction[3] * penetration;
+            }
+            __asm__ __volatile__("lqc2 $vf31, 0(%0)\n\t"
+                                 "sqc2 $vf31, 0(%1)"
+                                 :
+                                 : "r"(&ball1->position),
+                                   "r"(contact->position1)
+                                 : "memory");
+            __asm__ __volatile__("lqc2 $vf31, 0(%0)\n\t"
+                                 "sqc2 $vf31, 0(%1)"
+                                 :
+                                 : "r"(&ball2->position),
+                                   "r"(contact->position2)
+                                 : "memory");
+            contact->distance = distance;
+            return 1;
+        }
+    }
+    return 0;
+}

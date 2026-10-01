@@ -39,6 +39,11 @@ typedef struct RgGaugeDisp {
 extern const char D_00A54640[];
 extern const char D_00A54650[];
 
+/* The literal at ov12:0x00a54668 ("pPaint != NIL") is scaffold-owned like the
+ * two above and has no entry in config/symbols/ov12.txt, so it keeps its
+ * splat name. */
+extern const char D_00A54668[];
+
 /*
  * The 2D paint context (defined by ov12/tu086 xrg_paint2d); this TU only
  * passes the pointer through to the XrgPaint2D* calls.

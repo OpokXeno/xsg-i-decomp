@@ -3,6 +3,41 @@
 
 extern int s_nIgnoreCulling;
 
+typedef int s32;
+
+/*
+ * One registered culling volume: the three vectors xglCullingMapSet and
+ * xglCullingMapCreate fill in from a 9-float box record, followed by the
+ * derived state culling_matrix builds from them and setup_occlusion and
+ * check_occlusion read back. position.w and scale.w are set to 1.0f by both
+ * writers; rotation.w is never written.
+ */
+typedef struct CullingVolume {
+    Vector4 position;
+    Vector4 rotation;
+    Vector4 scale;
+    u8 unmodeled_030[304];
+} CullingVolume;
+
+/*
+ * s_inCulling is the culling map's own state: an active/ready byte at
+ * offset 0, the ten registered volumes at offset 32 (the 352-byte stride
+ * xglCullingCheck, xglCullingCheckSeparate, xglCullingCheckSeparateInit,
+ * xglCullingMapSet and xglCullingMapCreate all index), an evidenced count
+ * at 0xDE0 (compared against 10 and incremented once per registered
+ * volume) and an evidenced source value at 0xDE4 (set from a caller
+ * argument by xglCullingMapSet and read back by xglCullingMapLastCheck).
+ */
+typedef struct CullingMap {
+    u8 active;
+    u8 unmodeled_001[31];
+    CullingVolume volumes[10];
+    s32 count;
+    s32 source;
+} CullingMap;
+
+extern CullingMap s_inCulling;
+
 INCLUDE_ASM("asm/main/nonmatchings/face_point", culling_matrix);
 
 /* Empty in this build: the original body is a bare return. */
@@ -68,11 +103,23 @@ INCLUDE_ASM("asm/main/nonmatchings/face_point", check_occlusion);
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheck);
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheckSeparateInit);
+void setup_occlusion(CullingVolume *volume, s32 camera);
+
+/*
+ * Rebuilds the occlusion planes of every registered volume for camera, so
+ * that the xglCullingCheckSeparate calls that follow only have to test
+ * model against them. xglCullingCheck does both steps per volume instead.
+ */
+void xglCullingCheckSeparateInit(s32 camera)
+{
+    s32 i;
+
+    for (i = 0; i < s_inCulling.count; i++) {
+        setup_occlusion(&s_inCulling.volumes[i], camera);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheckSeparate);
-
-typedef int s32;
 
 /*
  * Declared as an incomplete array, not a scalar: cc1 -G8 would otherwise
@@ -89,23 +136,6 @@ s32 xglCullingExist(void) {
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapLastCheck);
 
-/*
- * s_inCulling is the culling map's own state: an active/ready byte at
- * offset 0, an evidenced count at 0xDE0 (compared and incremented by
- * xglCullingCheck/xglCullingMapSet/xglCullingMapCreate) and an evidenced
- * source value at 0xDE4 (set from a caller argument by xglCullingMapSet and
- * read back by xglCullingMapLastCheck). The bytes between 0 and 0xDE0 are
- * accessed only by the still-untranslated culling functions of this TU.
- */
-typedef struct CullingMap {
-    u8 active;
-    u8 unmodeled_001[0xDDF];
-    s32 count;
-    s32 source;
-} CullingMap;
-
-extern CullingMap s_inCulling;
-
 void xglCullingMapInit(void)
 {
     s_nIgnoreCulling = 0;
@@ -114,7 +144,40 @@ void xglCullingMapInit(void)
     s_inCulling.source = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", check_culling_map);
+/*
+ * One row of the named culling-map table: entryCount and source mirror
+ * CullingMap's own count/source pair (source is copied verbatim into
+ * CullingMap.source by xglCullingMapSet once a row is matched) and are
+ * both zero for an unused row; name is compared against the sought name.
+ */
+typedef struct CullingMapEntry {
+    const char *name;
+    s32 entryCount;
+    s32 source;
+    u8 unmodeled_00C[4];
+} CullingMapEntry;
+
+extern CullingMapEntry s_aCullingMap[70];
+
+int strcmp(const char *, const char *);
+
+/*
+ * Finds a named culling-map entry in the current map table and returns its
+ * index or minus one. The table ends at the first row with entryCount and
+ * source both zero.
+ */
+s32 check_culling_map(const char *name) {
+    s32 result = -1;
+    s32 i;
+
+    for (i = 0; s_aCullingMap[i].entryCount != 0 || s_aCullingMap[i].source != 0; i++) {
+        if (strcmp(s_aCullingMap[i].name, name) == 0) {
+            result = i;
+            break;
+        }
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapSet);
 
@@ -195,7 +258,28 @@ INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClipMat1);
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClip);
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", nmlModelCalcClip);
+s32 xglStudioGetActiveCamera(void);
+s32 _ModelCalcClip(s32 model);
+s32 xglCullingCheck(s32 camera, s32 model);
+
+/*
+ * Tests model bounds against the active camera's combined view volume and
+ * returns its clipping mask: the frustum clip mask _ModelCalcClip computes,
+ * combined with xglCullingCheck's registered-volume mask for the same
+ * camera/model pair.
+ */
+s32 nmlModelCalcClip(s32 model) {
+    s32 clip;
+    s32 camera = xglStudioGetActiveCamera();
+
+    if (camera != 0) {
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip(model);
+        clip |= xglCullingCheck(camera, model);
+        return clip;
+    }
+    return camera;
+}
 
 s32 xglStudioGetActiveCamera(void);
 s32 _ModelCalcClip(s32 model);
@@ -214,9 +298,90 @@ s32 nmlModelCalcClipNoCulling(s32 model) {
     return camera;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", nmlModelCalcClipMat1);
+/*
+ * Transforms model's bounds by matrix (the same row-by-row point transform
+ * as _ApplyMatrix) into a stack-local Vector4, then passes its address in
+ * place of a model handle to _ModelCalcClip and xglCullingCheck: model is
+ * itself the address of a per-model bounding Vector4 (dereferenced here via
+ * lqc2, the same handle-as-address convention nmlModelCalcClipCam's
+ * camera + 0x4F0 cast already evidences), and the transformed copy is
+ * tested against the active camera's combined view volume the same way
+ * nmlModelCalcClip tests the untransformed one.
+ */
+s32 nmlModelCalcClipMat1(s32 model, s32 matrix) {
+    Vector4 bounds;
+    s32 clip;
+    s32 camera = xglStudioGetActiveCamera();
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", nmlModelCalcClipMat2);
+    if (camera != 0) {
+        __asm__ __volatile__(
+            "lqc2 vf31, 0(%0)\n\t"
+            "lqc2 vf27, 0(%1)\n\t"
+            "lqc2 vf28, 16(%1)\n\t"
+            "lqc2 vf29, 32(%1)\n\t"
+            "lqc2 vf30, 48(%1)\n\t"
+            "vmulax.xyz ACC, vf27, vf31x\n\t"
+            "vmadday.xyz ACC, vf28, vf31y\n\t"
+            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+            "vmaddw.xyz vf31, vf30, vf0w\n\t"
+            "sqc2 vf31, 0(%2)\n\t"
+            :
+            : "r"(model), "r"(matrix), "r"(&bounds)
+            : "memory"
+        );
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip((s32) &bounds);
+        clip |= xglCullingCheck(camera, (s32) &bounds);
+        return clip;
+    }
+    return camera;
+}
+
+s32 xglCullingCheck(s32 camera, s32 model);
+
+/*
+ * Transforms model's bounds through matrix1 and then matrix2 (the same
+ * two-pass point transform as _ApplyMatrix2Mat) into a stack-local Vector4,
+ * then tests that transformed copy against the active camera's combined
+ * view volume the way nmlModelCalcClip tests the untransformed one: model
+ * is itself the address of a per-model bounding Vector4.
+ */
+s32 nmlModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2) {
+    Vector4 bounds;
+    s32 clip;
+    s32 camera = xglStudioGetActiveCamera();
+
+    if (camera != 0) {
+        __asm__ __volatile__(
+            "lqc2 vf31, 0(%0)\n\t"
+            "lqc2 vf27, 0(%1)\n\t"
+            "lqc2 vf28, 16(%1)\n\t"
+            "lqc2 vf29, 32(%1)\n\t"
+            "lqc2 vf30, 48(%1)\n\t"
+            "vmulax.xyz ACC, vf27, vf31x\n\t"
+            "vmadday.xyz ACC, vf28, vf31y\n\t"
+            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+            "vmaddw.xyz vf31, vf30, vf0w\n\t"
+            "lqc2 vf27, 0(%2)\n\t"
+            "lqc2 vf28, 16(%2)\n\t"
+            "lqc2 vf29, 32(%2)\n\t"
+            "lqc2 vf30, 48(%2)\n\t"
+            "vmulax.xyz ACC, vf27, vf31x\n\t"
+            "vmadday.xyz ACC, vf28, vf31y\n\t"
+            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+            "vmaddw.xyz vf31, vf30, vf0w\n\t"
+            "sqc2 vf31, 0(%3)\n\t"
+            :
+            : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
+            : "memory"
+        );
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip((s32) &bounds);
+        clip |= xglCullingCheck(camera, (s32) &bounds);
+        return clip;
+    }
+    return camera;
+}
 
 s32 _ModelCalcClip(s32 model);
 
@@ -264,9 +429,116 @@ s32 nmlModelCalcClipStudio(s32 model, s32 cameraIndex) {
     return clip;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", nmlModelCalcClipMat1AllCam);
+extern int g_aSubWindow[4];
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", nmlModelCalcClipMat2AllCam);
+/*
+ * Transforms model's bounds by matrix and tests them in every enabled
+ * sub-window's camera: the model is clipped away (1) only when every
+ * enabled sub-window clips it, and the first sub-window that keeps it
+ * answers 0. A sub-window without a selectable camera ends the sweep.
+ */
+s32 nmlModelCalcClipMat1AllCam(s32 model, s32 matrix)
+{
+    Vector4 bounds;
+    s32 clipped = 1;
+    s32 camera;
+    s32 clip;
+    s32 i;
+
+    for (i = 0; i < 4; i++) {
+        camera = xglStudioSelectGetActiveCamera(i);
+        if (camera == 0) {
+            return camera;
+        }
+        if (g_aSubWindow[i] != 0) {
+            __asm__ __volatile__(
+                "lqc2 vf31, 0(%0)\n\t"
+                "lqc2 vf27, 0(%1)\n\t"
+                "lqc2 vf28, 16(%1)\n\t"
+                "lqc2 vf29, 32(%1)\n\t"
+                "lqc2 vf30, 48(%1)\n\t"
+                "vmulax.xyz ACC, vf27, vf31x\n\t"
+                "vmadday.xyz ACC, vf28, vf31y\n\t"
+                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+                "vmaddw.xyz vf31, vf30, vf0w\n\t"
+                "sqc2 vf31, 0(%2)\n\t"
+                :
+                : "r"(model), "r"(matrix), "r"(&bounds)
+                : "memory"
+            );
+            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+            clip = _ModelCalcClip((s32) &bounds);
+            clip |= xglCullingCheck(camera, (s32) &bounds);
+            if (clip == 0) {
+                clipped = 0;
+                break;
+            }
+        }
+    }
+    return clipped;
+}
+
+/*
+ * Transforms model's bounds through matrix1 and matrix2 and collects the
+ * frustum clip mask of every enabled sub-window: each tested sub-window
+ * contributes its mask shifted to its own bit, and bit 7 is added when
+ * every tested sub-window reported the same single clip bit. Only the
+ * first three sub-windows are swept, and a sub-window without a selectable
+ * camera answers 0.
+ */
+s32 nmlModelCalcClipMat2AllCam(s32 model, s32 matrix1, s32 matrix2)
+{
+    Vector4 bounds;
+    s32 clipMask = 0;
+    s32 tested = 0;
+    s32 total = 0;
+    s32 camera;
+    s32 clip;
+    s32 i;
+
+    for (i = 0; i < 3; i++) {
+        if (g_aSubWindow[i] != 0) {
+            camera = xglStudioSelectGetActiveCamera(i);
+            if (camera == 0) {
+                return camera;
+            }
+            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+            __asm__ __volatile__(
+                "lqc2 vf31, 0(%0)\n\t"
+                "lqc2 vf27, 0(%1)\n\t"
+                "lqc2 vf28, 16(%1)\n\t"
+                "lqc2 vf29, 32(%1)\n\t"
+                "lqc2 vf30, 48(%1)\n\t"
+                "vmulax.xyz ACC, vf27, vf31x\n\t"
+                "vmadday.xyz ACC, vf28, vf31y\n\t"
+                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+                "vmaddw.xyz vf31, vf30, vf0w\n\t"
+                "lqc2 vf27, 0(%2)\n\t"
+                "lqc2 vf28, 16(%2)\n\t"
+                "lqc2 vf29, 32(%2)\n\t"
+                "lqc2 vf30, 48(%2)\n\t"
+                "vmulax.xyz ACC, vf27, vf31x\n\t"
+                "vmadday.xyz ACC, vf28, vf31y\n\t"
+                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+                "vmaddw.xyz vf31, vf30, vf0w\n\t"
+                "sqc2 vf31, 0(%3)\n\t"
+                :
+                : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
+                : "memory"
+            );
+            clip = _ModelCalcClip((s32) &bounds);
+            tested++;
+            clipMask |= clip << i;
+            total += clip;
+        }
+    }
+    if (tested != 0) {
+        if (total == tested) {
+            clipMask |= 0x80;
+        }
+    }
+    return clipMask;
+}
 
 /*
  * ACC accumulates matrix * vector row by row: row 0 times x, row 1 times y,

@@ -3,8 +3,6 @@
 
 #include "shared.h"
 
-typedef unsigned char DataBufferByte;
-
 struct DataBuffer {
     DataBufferByte *base;
     DataBufferByte *position;

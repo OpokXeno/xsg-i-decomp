@@ -14,9 +14,10 @@ INCLUDE_ASM("asm/nonmatchings/ov02/umn_interface2", DrawUmnInterface2);
  * frame counters UmnInterface2Main touches are evidenced.
  */
 typedef struct UmnInterface2State {
-    unsigned char unmodeled_00[7];
+    unsigned int base_color;
+    unsigned char color_a[3];
     unsigned char intensity_a; /* decremented by 8 each frame until zero */
-    unsigned char unmodeled_08[3];
+    unsigned char color_b[3];
     unsigned char intensity_b; /* decremented by 2 each frame until zero */
 } UmnInterface2State;
 
@@ -38,4 +39,29 @@ void UmnInterface2Main(void) {
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov02/umn_interface2", UmnInterface2Init);
+void *UmnInterface2Init(void *memory) {
+    unsigned int aligned_address;
+    UmnInterface2State *color_a_state;
+    void *result;
+    UmnInterface2State *color_b_state;
+
+    result = 0;
+    if (memory != 0) {
+        aligned_address = ((unsigned int)memory + 15) & ~15u;
+        UmnInterface2 = (UmnInterface2State *)aligned_address;
+        result = (void *)(aligned_address + 12);
+    }
+
+    color_a_state = UmnInterface2;
+    color_a_state->color_a[0] = 0x80;
+    color_a_state->intensity_a = 0x80;
+    color_a_state->color_a[2] = 0x80;
+    color_a_state->color_a[1] = 0x80;
+    color_a_state->base_color = 0x00fffffe;
+    color_b_state = UmnInterface2;
+    color_b_state->intensity_b = 0x80;
+    color_b_state->color_b[2] = 0x80;
+    color_b_state->color_b[1] = 0x80;
+    color_b_state->color_b[0] = 0x80;
+    return result;
+}

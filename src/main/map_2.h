@@ -46,8 +46,21 @@ typedef struct MapUnitSlot {
     void (*typeUpdate)(struct MapUnitSlot *unit); /* +0x0C */
     unsigned char unmodeled_10[0x94];
     s16 serial; /* +0xA4 */
-    unsigned char unmodeled_a6[0x25a];
+    unsigned char unmodeled_a6[0x2E];
+    void *resource_model; /* +0xD4 */
+    unsigned char unmodeled_d8[8];
+    void *model; /* +0xE0 */
+    int resource_status; /* +0xE4 */
+    unsigned char unmodeled_e8[0x158];
+    void *model_state; /* +0x240, MDL_create's in-place state begins here */
+    unsigned char unmodeled_244[0xBC];
 } MapUnitSlot;
+
+/* The two words consumed from the map resource returned by RES_loadFile. */
+typedef struct MapUnitResource {
+    void *model;
+    int status;
+} MapUnitResource;
 
 extern MapUnitSlot MapUnit[64];
 

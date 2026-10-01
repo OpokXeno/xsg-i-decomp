@@ -19,6 +19,13 @@ typedef struct {
 
 typedef void (*ObjectTaskCallback)(ObjectTask *task);
 
+/* Canonical declaration from main/tu090's source header. This OV01 TU keeps a
+ * local boundary declaration because the generated main header does not yet
+ * export xglTaskEntryNext. */
+XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
+                                int (*callback)(XglTaskPrefix *task),
+                                XglTaskPrefix *entry);
+
 /*
  * The object task node as this unit's entry points allocate it.
  *
@@ -140,6 +147,11 @@ void objRemove(ObjectTask *task);
 void objWorkInit(void);
 
 extern void objWorkFree(void *work);
+
+extern const char D_00A43810[];
+extern const char D_00A43848[];
+extern const char D_00A43880[];
+extern const char D_00A438C0[];
 
 extern const char D_00A43860[];
 

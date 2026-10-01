@@ -4,7 +4,50 @@
 #include "common.h"
 #include "rg_handler.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_handler", RgHandlerRobotVsRobot);
+extern void *RgGeomGetParent(RgGeom *pGeom);
+extern unsigned int RgRobotGetStatusFlags(RgStatus *pRobot);
+extern void *RgRobotGetSpec(RgStatus *pRobot);
+extern void RgRobotHitByBody(RgStatus *pRobot, RgVector direction, RgVector position,
+                             float damage, float scale);
+extern void XrgNegateVector(RgVector destination, RgVector source);
+
+void RgHandlerRobotVsRobot(RgGeom *robotGeom, RgBgCollision *collision)
+{
+    RgStatus *robotAStatus;
+    RgStatus *robotBStatus;
+    unsigned int flagsA;
+    unsigned int flagsB;
+    RgRobotSpecPower *specA;
+    RgRobotSpecPower *specB;
+    float robotAPower;
+    float robotBPower;
+    RgVector negatedDirection;
+
+    robotAStatus = RgGeomGetParent(robotGeom);
+    robotBStatus = RgGeomGetParent(collision->geom);
+    flagsA = RgRobotGetStatusFlags(robotAStatus);
+    flagsB = RgRobotGetStatusFlags(robotBStatus);
+    specA = RgRobotGetSpec(robotAStatus);
+    specB = RgRobotGetSpec(robotBStatus);
+    robotAPower = specA->bodyPower;
+    robotBPower = specB->bodyPower;
+    if (flagsB & 0x400) {
+        RgRobotHitByBody(robotAStatus, collision->hitDirection, collision->direction,
+                         robotBPower, 600000.0f);
+    } else if (flagsB & 0x100) {
+        RgRobotHitByBody(robotAStatus, collision->hitDirection, collision->direction,
+                         0.0f, 3000000.0f);
+    }
+    XrgNegateVector(negatedDirection, collision->direction);
+    if (flagsA & 0x400) {
+        RgRobotHitByBody(robotBStatus, collision->hitDirection, negatedDirection,
+                         robotAPower, 600000.0f);
+    }
+    if (flagsA & 0x100) {
+        RgRobotHitByBody(robotBStatus, collision->hitDirection, negatedDirection,
+                         0.0f, 3000000.0f);
+    }
+}
 
 extern void *RgGeomGetParent(RgGeom *pGeom);
 extern void RgShotHitRobot(void *shot, int robot, RgVector position);

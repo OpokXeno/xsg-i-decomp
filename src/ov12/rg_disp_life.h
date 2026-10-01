@@ -6,6 +6,9 @@
 #define SRC_OV12_RG_DISP_LIFE_H
 
 #include "shared.h"
+#include "ov12/rg_bxx.h"
+
+struct RgBxx;
 
 /*
  * The gauge handle owned by ov12/rg_gauge.c; this allocation only disposes
@@ -41,13 +44,43 @@ typedef struct RgGauge RgGauge;
  * +0x24..+0x43 is still an unmodeled gap.
  */
 typedef struct RgDispLife {
-    unsigned char unmodeled_00[0x14];        /* +0x00 */
-    RgStatus *robot1P;                       /* +0x14 */
-    RgStatus *robot2P;                       /* +0x18 */
+    union {
+        struct {
+            unsigned char unmodeled_00[0x14]; /* +0x00 */
+        };
+        struct {
+            struct RgBxx *dispBxx;             /* +0x00 */
+            unsigned char unmodeled_04[4];    /* +0x04 */
+            void *primaryBoardPic;              /* +0x08 */
+            void *secondaryBoardPic;            /* +0x0c */
+            unsigned char unmodeled_10[4];    /* +0x10 */
+        };
+    };
+    union {
+        struct {
+            RgStatus *robot1P;               /* +0x14 */
+            RgStatus *robot2P;               /* +0x18 */
+        };
+        RgStatus *robots[2];                 /* +0x14 */
+    };
     RgGauge *gauge[2];                       /* +0x1c */
     unsigned char unmodeled_24[0x44 - 0x24]; /* +0x24 */
     float timer;                             /* +0x44 */
     void *paint;                             /* +0x48 */
+    union {
+        struct {
+            unsigned char unmodeled_4c[0x14]; /* +0x4c */
+        };
+        struct {
+            int vsMode;                       /* +0x4c */
+            unsigned char unmodeled_50[0x0c]; /* +0x50 */
+            float elapsedTime;                /* +0x5c */
+        };
+    };
 } RgDispLife;
+
+/* RgDispLifeSetVsMode uses dispBxx +0x00, board pictures +0x08/+0x0c, and
+ * vsMode +0x4c. RgDispLifePassTime updates elapsedTime +0x5c. These members
+ * are the additional ASM-offset-evidenced view of the original 0x60 object. */
 
 #endif /* SRC_OV12_RG_DISP_LIFE_H */

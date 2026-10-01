@@ -45,11 +45,28 @@ extern XglPacket *xglPacketGetCurrent(void);
 extern void xglRenderDrawFlipPk(XglPacket *packet);
 extern void nmlModelSetFadeInCancel(int model_id);
 extern void nmlModelSetFadeOutCancel(int model_id);
+extern char D_004BE308[];
+extern char D_004BE318[];
+extern char D_004BE328[];
 static void taskMapChange(void *task);
 extern MapTaskState tsk;
 extern MapRenderState sRender;
 
-INCLUDE_ASM("asm/main/nonmatchings/map_1", MAP_getPath);
+char *MAP_getPath(void)
+{
+    int test_path = UseTestPath;
+
+    if (test_path != 1) {
+        if (test_path < 2) {
+            return D_004BE308;
+        }
+        if (test_path != 2) {
+            return D_004BE308;
+        }
+        return D_004BE328;
+    }
+    return D_004BE318;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/map_1", taskMapChange);
 

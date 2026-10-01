@@ -3,7 +3,36 @@
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/set_path", splitName);
+extern unsigned int strlen(const char *string);
+
+static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name)
+{
+    int len;
+    int slash;
+    int i;
+    int nameLen;
+
+    len = strlen((const char *) filename);
+    slash = 0;
+    for (i = len; i >= 0; i--) {
+        if ((signed char) filename[i] == '/') {
+            slash = i;
+            break;
+        }
+    }
+
+    for (i = 0; i <= slash; i++) {
+        path[i] = filename[i];
+    }
+    path[slash + 1] = 0;
+
+    nameLen = 0;
+    for (i = slash + 1; i <= len; i++) {
+        name[nameLen] = filename[i];
+        nameLen++;
+    }
+    name[nameLen] = 0;
+}
 
 void splitName(unsigned char *filename, unsigned char *path, unsigned char *name);
 void srsSetViewPath(unsigned char *path);
@@ -18,7 +47,38 @@ void setPath(unsigned char *filename)
 
 INCLUDE_ASM("asm/main/nonmatchings/set_path", initFileSelect);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_path", execFileSelect);
+typedef struct CfSelectState {
+    unsigned char unmodeled_00[0x11c];
+    /* +0x11c: the selected entry's path, filled by xglCdFileSelect and
+     * handed to setPath() by execFileSelect; its extent past this offset
+     * is unmodeled. */
+    unsigned char selectedPath[1];
+} CfSelectState;
+extern CfSelectState cfs;
+extern void xglRenderClearFrame(void);
+extern void xglSleep(void);
+extern int xglCdFileSelect(CfSelectState *state);
+
+int execFileSelect(void)
+{
+    int result;
+
+    for (;;) {
+        xglRenderClearFrame();
+        result = xglCdFileSelect(&cfs);
+        switch (result) {
+        case 0:
+            break;
+        case 1:
+            setPath(cfs.selectedPath);
+            return 1;
+        case 2:
+            setPath(cfs.selectedPath);
+            return 2;
+        }
+        xglSleep();
+    }
+}
 
 /*
  * PARTIAL ACCESSED PREFIX of PadData (0xd0-byte object at 0x490d90).
@@ -32,7 +92,8 @@ INCLUDE_ASM("asm/main/nonmatchings/set_path", execFileSelect);
  * src/main/game.h's PadDataDebugLayout.
  */
 typedef struct PadDataEffectLayout {
-    u8 unmodeled_00[0x2a];
+    u8 unmodeled_00[0x28];
+    u16 half_28;
     u16 pressed;
     u16 half_2c;
 } PadDataEffectLayout;
@@ -106,13 +167,116 @@ INCLUDE_ASM("asm/main/nonmatchings/set_path", debugEffectSelect);
 
 INCLUDE_ASM("asm/main/nonmatchings/set_path", debugEnemySelect);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_path", debugCfSelect);
+typedef struct PadDataMenuLayout {
+    u8 unmodeled_00[0x28];
+    u64 buttons;
+} PadDataMenuLayout;
 
-INCLUDE_ASM("asm/main/nonmatchings/set_path", SCamTake);
+extern int sprintf(char *destination, const char *format, ...);
+extern void xglRenderClearFrame(void);
+extern void xglSleep(void);
+extern int cur_7;
+extern char D_004CBD68[];
+extern char D_004DBA28[];
+extern int srsGetEsdData2(int index);
+
+static int debugCfSelect(void)
+{
+    char text[0x100];
+    u16 held;
+    int esd;
+
+    for (;;) {
+        esd = srsGetEsdData2(cur_7);
+        xglRenderClearFrame();
+        sprintf(text, D_004DBA28, esd, cur_7);
+        xglFontDebugPrintf(0x10, 0x10, D_004CBD68);
+        xglFontDebugPrintf(0x10, 0x20, text);
+        if ((((PadDataMenuLayout *) &PadData)->buttons & 0x08000100) == 0x08000100) {
+            cur_7 = -1;
+            break;
+        }
+        held = PadData.half_2c;
+        if (held & 0x4) cur_7 -= 10;
+        if (held & 0x1) cur_7 -= 50;
+        if (held & 0x8000) cur_7--;
+        if (held & 0x2) cur_7 += 50;
+        if (held & 0x8) cur_7 += 10;
+        if (held & 0x2000) cur_7++;
+        if (cur_7 < 601) cur_7 = 1999;
+        if (cur_7 >= 2000) cur_7 = 601;
+        if (PadData.pressed & 0x20) break;
+        xglSleep();
+    }
+    xglSleep();
+    xglRenderClearFrame();
+    return cur_7;
+}
+
+extern void func_A31688(void);
+extern void func_A31920(int kind, float *params);
+extern void func_A318B8(void);
+extern float D_004D8298;
+extern float D_004D829C;
+extern void *memset(void *destination, int value, unsigned int count);
+
+static void SCamTake(void)
+{
+    float params[44];
+
+    func_A31688();
+    memset(params, 0, sizeof(params));
+    params[0] = 0.0f;
+    params[4] = D_004D8298;
+    params[5] = D_004D829C;
+    params[6] = 5.0f;
+    params[7] = 1.0f;
+    func_A31920(0, params);
+
+    params[4] = 0.0f;
+    params[5] = 2.0f;
+    params[6] = 0.0f;
+    params[7] = 1.0f;
+    func_A31920(1, params);
+
+    params[41] = 40.0f;
+    func_A31920(3, params);
+
+    func_A318B8();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/set_path", SinitCamera);
 
-INCLUDE_ASM("asm/main/nonmatchings/set_path", sbattleDebug);
+extern void PartyDataInit2(void);
+extern int dataItmBoxChk(int id);
+extern int dataItmBoxInc(int id);
+extern void func_A2F6A8(void);
+extern void func_A22668(void);
+extern int filelist;
+extern s16 loaded;
+
+static void sbattleDebug(void)
+{
+    int i;
+
+    filelist = 0;
+    loaded = 0;
+    PartyDataInit2();
+
+    for (;;) {
+        xglRenderClearFrame();
+        i = 0;
+        func_A2F6A8();
+        while (i < 0x63) {
+            i++;
+            if (dataItmBoxChk(0x15) >= 0x63) {
+                break;
+            }
+            dataItmBoxInc(0x15);
+        }
+        func_A22668();
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/set_path", seffectDebugDb);
 

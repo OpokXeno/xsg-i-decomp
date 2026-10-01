@@ -170,9 +170,15 @@ CalcUnitParam *calcUPGet(ObjectTask *unit);
  * +0x00/+0x02/+0x04/+0x06/+0x0A) under its own bounded view of the same
  * record.
  *
+ * - flags (+0x1C): a halfword bit set; calcEngineEquipOrg/calcFrameEquipOrg
+ *   (this TU, 0x00a16818/0x00a16858) both test bit 0x40 with
+ *   `lhu $3,28($4)`/`andi $3,$3,0x40` and refuse to write engineId/frameId
+ *   when it is clear.
  * - hp/ep (+0x34/+0x36): calcPara2OrgSub's copy destination for
  *   CalcUnitParam's currentHp/currentEp.
  * - agwsId (+0x54): calcAgwsEquipOrg's single equipped-AGWS slot.
+ * - engineId (+0x56): calcEngineEquipOrg's equipped engine slot.
+ * - frameId (+0x58): calcFrameEquipOrg's equipped frame slot.
  * - hand (+0x5A): calcWpnEquipOrg's per-weapon-slot hand byte.
  * - weaponId (+0x5E): calcWpnEquipOrg's per-slot equipped weapon id.
  * - accessoryId (+0x64): calcAccEquipOrg's per-slot equipped accessory id.
@@ -191,12 +197,15 @@ typedef struct CalcCharParaData CalcCharParaData;
 struct CalcCharParaData {
     short maxHp;                /* +0x00: calcTotalParaMenuSub's clamp ceiling */
     short maxEp;                 /* +0x02: calcTotalParaMenuSub's clamp ceiling */
-    unsigned char unmodeled_04[0x34 - 0x04];
+    unsigned char unmodeled_04[0x1C - 0x04];
+    u16 flags;                /* +0x1C: calcEngineEquipOrg/calcFrameEquipOrg's gate bit */
+    unsigned char unmodeled_1e[0x34 - 0x1E];
     short hp;                  /* +0x34 */
     short ep;                  /* +0x36 */
     unsigned char unmodeled_38[0x54 - 0x38];
     short agwsId;               /* +0x54 */
-    unsigned char unmodeled_56[0x5A - 0x56];
+    short engineId;              /* +0x56: calcEngineEquipOrg's equipped slot */
+    short frameId;               /* +0x58: calcFrameEquipOrg's equipped slot */
     signed char hand[3];         /* +0x5A */
     unsigned char unmodeled_5d[0x5E - 0x5D];
     short weaponId[3];          /* +0x5E */

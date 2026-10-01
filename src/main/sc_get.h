@@ -34,8 +34,8 @@ typedef struct ScriptTask ScriptTask;
  * `branch_depth` is the signed halfword at +0x54 that indexes it, cleared by
  * scDeleteTask (sh $0 at 0x002ea268).  Between +0x02 and +0x08, and from +0x20
  * to +0x54, this unit's C reads nothing: scCreateTask copies 32 bytes from its
- * caller into +0x30 and writes halfwords at +0x56 and +0x58, but what they mean
- * is not established here, so those spans stay byte ranges.
+ * caller into +0x30 and writes halfwords at +0x56 and +0x58. +0x56 is the
+ * scheduler handle described below; +0x58 remains unmodeled.
  */
 /*
  * This allocation's own WAIT opcode handlers evidence three more slots past
@@ -46,8 +46,8 @@ typedef struct ScriptTask ScriptTask;
  * 0x002eb534, 0x002eb670, 0x002eb7c4); scWAITEFTScript reads it (lhu at
  * 0x002eb374) and copies it into `wait_value` below.
  *
- * `wait_mode` at +0x5A records why the task yielded: scWAITCNTScript (still
- * asm) sets it to 1 for an elapsed frame count (sh at 0x002eb310), and
+ * `wait_mode` at +0x5A records why the task yielded: scWAITCNTScript sets it
+ * to 1 for a frame-count wait (sh at 0x002eb310), and
  * scWAITEVEScript, scWAITEFTScript, scWAITMOVIEScript and scWAITMISSILEScript
  * set it to 2, 3, 4 and 5 (sh at 0x002eb344, 0x002eb37c, 0x002eb3a4,
  * 0x002eb3b4).
@@ -55,11 +55,11 @@ typedef struct ScriptTask ScriptTask;
  * `wait_value` at +0x60 holds the operand for modes 2 and 3: the event
  * number scGetNumScript() returns (scWAITEVEScript, sh at 0x002eb340) or the
  * copied `effect_scheduler` (scWAITEFTScript, sh at 0x002eb384). Modes 4 and
- * 5 need none; mode 1's own count lives at +0x5E (scWAITCNTScript, still
- * asm, sh at 0x002eb308), outside this allocation.
+ * 5 need none. Mode 1's frame count is the `wait_count` field at +0x5E, stored
+ * by scWAITCNTScript (sh at 0x002eb308).
  *
- * +0x58 and +0x5C..+0x60 stay unmodeled: nothing this allocation reads or
- * writes touches them.
+ * +0x58 remains unmodeled. `missile_active` at +0x5C, `wait_count` at +0x5E,
+ * and `wait_value` at +0x60 name the halfwords used by the handlers above.
  */
 /*
  * This allocation's scSetAmbient and scMISSILEScript evidence `effect_no` at
@@ -67,8 +67,8 @@ typedef struct ScriptTask ScriptTask;
  * (lh 0x44 at 0x002eb48c and 0x002eb934) and hand to
  * sdvSetAmbState(2)/srsAnalyzeEftNo as an effect number.
  *
- * scMISSILEScript also writes past `wait_value`: `missile_active` at +0x5C
- * (sh 1 at 0x002eb91c), `missile_adr` at +0x70 (sw at 0x002eb910, the
+ * scMISSILEScript also writes missile state: `missile_active` at +0x5C (sh 1
+ * at 0x002eb91c), `missile_adr` at +0x70 (sw at 0x002eb910, the
  * address scGetAdrImmScript() resolved) and two halfwords at +0x66/+0x68 it
  * clears (sh $0 at 0x002eb92c/0x002eb930) with no read evidenced in this
  * allocation, named `missile_reset0`/`missile_reset1` here.
@@ -85,7 +85,8 @@ struct ScriptTask {
     unsigned char unmodeled_58[2];    /* +0x58 */
     unsigned short wait_mode;         /* +0x5A */
     short missile_active;             /* +0x5C */
-    unsigned char unmodeled_5E[2];    /* +0x5E */
+    /* scWAITCNTScript's mode-1 frame count is evidenced at +0x5E. */
+    short wait_count;                 /* +0x5E */
     short wait_value;                 /* +0x60 */
     unsigned char unmodeled_62[4];    /* +0x62 */
     short missile_reset0;             /* +0x66 */

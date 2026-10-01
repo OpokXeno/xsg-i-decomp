@@ -193,4 +193,20 @@ static void _disp_bar_rest(XrgPaint2D *paint, RgGaugeDisp *disp,
     XrgPaint2DDrawXYWH(paint, 0, rest->x, rest->y, rest->width, rest->height);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_gauge_disp", RgGaugeDispDraw);
+void RgGaugeDispDraw(RgGaugeDisp *disp, XrgPaint2D *paint)
+{
+    RgGaugeDispRect rest;
+
+    if (paint == 0)
+        assert_prog(D_00A54668, D_00A54650, 268);
+    if (disp == 0)
+        assert_prog(D_00A54640, D_00A54650, 269);
+    if (disp->validState != 1) {
+        if (disp->validState != 0)
+            return;
+        _disp_bar(paint, disp, &rest);
+        _disp_bar_rest(paint, disp, &rest);
+    } else {
+        _disp_bar(paint, disp, &rest);
+    }
+}

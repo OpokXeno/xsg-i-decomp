@@ -40,7 +40,7 @@ def generate(unit_dir, unit, flavor, main_symbols=None):
     overlay = next((s.name for s in orig.sections if s.name.startswith("ov") and s.flags & 2), None)
     inputs = {}
     last = None
-    for obj, insec, pad, align, pin in re.findall(r"(build/[\w/.\-]+\.o)\((\.\w+)\);|(\. \+= 0x[0-9A-Fa-f]+;)"
+    for obj, insec, pad, align, pin in re.findall(r"(build/[\w/.\-]+\.o)\((\.[\w.]+)\);|(\. \+= 0x[0-9A-Fa-f]+;)"
                                                   r"|(\. = ALIGN\(\d+\);)"
                                                   r"|(\. = 0x[0-9A-Fa-f]+;)(?= /\* data-carve \*/)", rom_ld):
         if pin:

@@ -124,7 +124,29 @@ static void _damage_disp_title(RgAnnounce *pAnn, int x, int y)
     _paint_uvwh(pAnn, 0x17, x, y, (const RgAnnounceUvRect *) &rect);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_announce", _damage_disp);
+extern void *InstanceOfRgBattleCommonData(void);
+extern int RgBattleCommonDataAnnounceFont(void *pEnv);
+extern float floorf(float value);
+extern void RgFontStr(XrgPaint2D *paint, int fontId, const char *text, int x,
+                      int y, int color);
+static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
+/* ov12:0x00a586d0 is the scaffold-owned "%d" format string. */
+extern const char D_00A586D0[];
+
+static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage)
+{
+    XrgPaint2D *paint;
+    int fontId;
+    unsigned int damageValue;
+    char damageText[32];
+
+    paint = pAnn->paint;
+    fontId = RgBattleCommonDataAnnounceFont(InstanceOfRgBattleCommonData());
+    damageValue = (unsigned int) floorf(damage);
+    sprintf(damageText, D_00A586D0, damageValue);
+    RgFontStr(paint, fontId, damageText, x + 0x11F, y, 1);
+    _paint_add(pAnn, 0x19, x, y - 0x10);
+}
 
 static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
 static void _paint_sub(RgAnnounce *pAnn, int index, int x, int y);

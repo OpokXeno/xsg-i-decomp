@@ -6,6 +6,23 @@
 
 static int _SetBit(int *flags, int bit, int value);
 static void _PassTimeVersion3(RgCamera *camera, float elapsed);
+static int _GetVer3TimerID(char *timerName);
+extern int strcmp(const char *left, const char *right);
+extern char *s_aszVer3TimerName[10];
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size, const char *source_file, int line);
+extern void RgError(const char *message, const char *source_file, int line, ...);
+extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
+extern float XrgLengthVector(RgVector vector);
+extern float atan2f(float y, float x);
+extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
+extern void RgDrawViewSetPosition(RgDrawView *view, RgVector position);
+extern void RgDrawViewSetRotateX(RgDrawView *view, float angle);
+extern void RgDrawViewSetRotateY(RgDrawView *view, float angle);
+extern void RgDrawViewSetRotateZ(RgDrawView *view, float angle);
+extern void RgDrawViewInit(RgDrawView *view);
+extern const char D_00A52920[];
+extern const char D_00A52940[];
+extern const char D_00A52958[];
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file, int line);
@@ -90,9 +107,48 @@ static void _InitAbstructCamera(RgCamera *camera, RgDrawStudio *studio)
     camera->actionState[6] = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _SetView);
+static void _SetView(RgCamera *camera)
+{
+    float direction[3];
+    RgDrawView *view;
+    float pitch;
+    float yaw;
+    float roll;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", _GetVer3TimerID);
+    XrgCopyVectorXYZ(direction, camera->target);
+    direction[1] = 0.0f;
+    pitch = atan2f(camera->target[1], XrgLengthVector(direction));
+    yaw = atan2f(direction[0], direction[2]) + 3.1415927f;
+    if (yaw > 3.1415927f) {
+        yaw -= 6.2831855f;
+        while (yaw > 3.1415927f) {
+            yaw -= 6.2831855f;
+        }
+    }
+    if (yaw < -3.1415927f) {
+        do {
+            yaw += 6.2831855f;
+        } while (yaw < -3.1415927f);
+    }
+    __builtin_memcpy(&roll, &camera->actionState[0], sizeof(roll));
+    view = RgDrawStudioGetView(camera->studio);
+    RgDrawViewSetPosition(view, camera->eye);
+    RgDrawViewSetRotateX(view, pitch);
+    RgDrawViewSetRotateY(view, yaw);
+    RgDrawViewSetRotateZ(view, roll);
+}
+
+static int _GetVer3TimerID(char *timerName)
+{
+    unsigned int timerIndex;
+
+    for (timerIndex = 0; timerIndex < 10; timerIndex++) {
+        if (strcmp(s_aszVer3TimerName[timerIndex], timerName) == 0) {
+            return timerIndex;
+        }
+    }
+    return -1;
+}
 
 static int _IsActionRoll(RgCamera *camera)
 {
@@ -217,7 +273,29 @@ static void _InitVersion3(RgCamera *camera, RgDrawStudio *studio)
     _SetVersion3Extent(camera);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", CreateRgCamera);
+RgCamera *CreateRgCamera(int cameraVersion, RgDrawStudio *studio)
+{
+    RgCamera *camera;
+
+    camera = 0;
+    if (cameraVersion == 0) {
+        RgError(D_00A52920, D_00A52760, 676, cameraVersion);
+    } else if (cameraVersion == 1) {
+        RgError(D_00A52920, D_00A52760, 679, cameraVersion);
+    } else if (cameraVersion == 2) {
+        RgCamera *allocatedCamera;
+
+        allocatedCamera = RgHeapAlloc(InstanceOfRgHeap(), 0x150, D_00A52760, 683);
+        if (allocatedCamera == 0) {
+            assert_prog(D_00A52750, D_00A52760, 684);
+        }
+        _InitVersion3(allocatedCamera, studio);
+        camera = allocatedCamera;
+    } else {
+        assert_prog(D_00A52940, D_00A52760, 689);
+    }
+    return camera;
+}
 
 void DisposeRgCamera(RgCamera *pRgCam)
 {
@@ -227,7 +305,29 @@ void DisposeRgCamera(RgCamera *pRgCam)
     RgHeapFree(InstanceOfRgHeap(), pRgCam, D_00A52760, 698);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_camera", RgCameraSetting);
+typedef struct RgCameraEssence {
+    int me_point_address;
+    int enemy_point_address;
+} RgCameraEssence;
+
+void RgCameraSetting(RgCamera *camera, RgCameraEssence *essence)
+{
+    void (*setCamera)(RgCamera *, RgCameraEssence *);
+
+    if (camera == 0) {
+        assert_prog(D_00A52750, D_00A52760, 709);
+    }
+    if (essence == 0) {
+        assert_prog(D_00A52958, D_00A52760, 710);
+    }
+    setCamera = (void (*)(RgCamera *, RgCameraEssence *))camera->actionState[5];
+    camera->actionState[2] = essence->me_point_address;
+    camera->actionState[3] = essence->enemy_point_address;
+    if (setCamera != 0) {
+        setCamera(camera, essence);
+    }
+    RgDrawViewInit(RgDrawStudioGetView(camera->studio));
+}
 
 void RgCameraLoadText(RgCamera *pCam, void *pReader)
 {

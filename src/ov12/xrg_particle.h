@@ -49,14 +49,45 @@ typedef struct XrgParticleCalcReq {
     float rate;                         /* +0x08 */
 } XrgParticleCalcReq;
 
+/*
+ * RgBxxPic is defined by ov12/tu073 (src/ov12/rg_bxx.c); this allocation
+ * only stores and forwards the pointer XrgParticleDriverDispReq receives, so
+ * an opaque forward declaration is enough here.
+ */
+typedef struct RgBxxPic RgBxxPic;
+
+/*
+ * One entry of the 1024-slot pending-display request array XrgParticleDriver
+ * stores at +0xCC: XrgParticleDriverDispReq (ov12:0x00a49a50) stores its own
+ * three arguments here in order (count, points, pic) and _DrawDriver
+ * (ov12:0x00a49be8) reads pPoints/pPic of each of the m_uReqDispNum live
+ * entries back. count is stored but not read by any function of this
+ * allocation. pPoints is asserted non-null with the same "pPoints != NIL"
+ * text XrgParticleDriverPassTimeReq uses for its own particle-array
+ * argument; pPic is asserted non-null with the original text at
+ * ov12:0x00a58fd8, "pPic != NIL".
+ */
+typedef struct XrgParticleDispReq {
+    int count;                          /* +0x00 */
+    struct XrgParticle *pPoints;        /* +0x04 */
+    RgBxxPic *pPic;                     /* +0x08 */
+} XrgParticleDispReq;
+
 typedef struct XrgParticleDriver {
     int params0;                        /* +0x00 */
     int params1;                        /* +0x04 */
     XrgParticleCalcReq calcReq[16];     /* +0x08 */
     unsigned int m_uReqCalcNum;         /* +0xC8 */
-    unsigned char unmodeled_0cc[0x30CC - 0xCC];
+    XrgParticleDispReq dispReq[1024];   /* +0xCC */
     unsigned int m_uReqDispNum;         /* +0x30CC */
 } XrgParticleDriver;
+
+/*
+ * Returns the registered singleton (RgSingletonIDGet id 7), creating and
+ * registering it through CreateXrgParticleDriver and RgSingletonIDEntry when
+ * absent.
+ */
+XrgParticleDriver *InstanceOfXrgParticleDriver(void);
 
 /*
  * Asserts driver non-null (ov12:0x00a49840), runs _DisposeDriver on it and
@@ -65,10 +96,24 @@ typedef struct XrgParticleDriver {
 void DisposeXrgParticleDriver(XrgParticleDriver *driver);
 
 /*
+ * Appends one three-word pass-time request (points, count, rate) to the
+ * driver's bounded REQ_CALC_MAX-entry queue.
+ */
+void XrgParticleDriverPassTimeReq(XrgParticleDriver *driver, struct XrgParticle *pPoints,
+                                  int count, float rate);
+
+/*
  * Runs _Calc (ov12:0x00a48da0, outside this allocation) for every queued
  * calc request and resets m_uReqCalcNum to 0.
  */
 void XrgParticleDriverPassTime(XrgParticleDriver *pDrv, float elapsed);
+
+/*
+ * Appends one three-word display request (points, count, pic) to the
+ * driver's bounded REQ_DISP_MAX-entry queue.
+ */
+void XrgParticleDriverDispReq(XrgParticleDriver *driver, struct XrgParticle *pPoints,
+                              int count, RgBxxPic *pPic);
 
 /*
  * Queues the driver's own draw and clear callbacks with RgDrawReq

@@ -6,6 +6,15 @@
 #define SRC_OV12_RG_HELP_H
 
 #include "shared.h"
+#include "ov12/rg_bxx.h"
+
+typedef struct RgBxx RgBxx;
+
+/* A catalog entry has a 64-byte archive name followed by its loaded archive. */
+typedef struct RgHelpArchiveEntry {
+    char archiveName[0x40];
+    RgBxx *archive;
+} RgHelpArchiveEntry;
 
 /*
  * Partial view of the picture object RgBxxGetPic returns for one of the help
@@ -60,7 +69,8 @@ typedef struct RgHelp RgHelp;
  */
 struct RgHelp {
     int ended;
-    unsigned char unmodeled_004[0x554];
+    RgHelpArchiveEntry archives[20];
+    int bxxCount;
     RgBxxPic *pics[62];
     void *paintContext;
     int phase;

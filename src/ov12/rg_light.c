@@ -12,6 +12,7 @@ extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 extern void XrgClearVector(RgVector destination);
 extern const char D_00A54C68[]; /* "pLight != NIL" */
 extern const char D_00A54C78[];
+extern const char D_00A54C90[]; /* "pSrc != NIL" */
 
 void InitRgLight(RgLight *light)
 {
@@ -55,4 +56,24 @@ RgLight *InstanceOfGlobalLight(void)
     return light;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_light", RgLightCopy);
+void RgLightCopy(void *pLight, void *pSrc)
+{
+    RgLight *destination;
+    RgLight *source;
+    int i;
+
+    if (pLight == 0) {
+        assert_prog(D_00A54C68, D_00A54C78, 55);
+    }
+    if (pSrc == 0) {
+        assert_prog(D_00A54C90, D_00A54C78, 56);
+    }
+
+    destination = pLight;
+    source = pSrc;
+    XrgCopyVector(destination->ambient_color, source->ambient_color);
+    for (i = 0; i < 3; i++) {
+        XrgCopyVector(destination->color[i], source->color[i]);
+        XrgCopyVector(destination->direction[i], source->direction[i]);
+    }
+}

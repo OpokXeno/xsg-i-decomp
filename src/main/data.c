@@ -7,6 +7,7 @@ extern unsigned char bltBox[0x1FE];
 extern unsigned char evtBox[0x1FE];
 extern unsigned char itmBox[0x1FE];
 extern unsigned char wpnBox[0x1FE];
+extern long long moneyBox;
 
 u16 *dataBoxPtrGet(int category) {
     switch (category) {
@@ -25,7 +26,10 @@ u16 *dataBoxPtrGet(int category) {
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/data", dataBoxChk);
+int dataBoxChk(int category, int id)
+{
+    return dataBoxPtrGet(category)[id - 1];
+}
 
 int dataBoxInc(int category, int id)
 {
@@ -126,8 +130,28 @@ void dataEvtBoxDec(int event_id)
     dataBoxDec(10, event_id);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/data", dataMoneyBoxChk);
+int dataMoneyBoxChk(void)
+{
+    return moneyBox;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/data", dataMoneyBoxInc);
+int dataMoneyBoxInc(int amount)
+{
+    moneyBox += amount;
+    if ((unsigned long long) moneyBox >= 1000000000ULL) {
+        moneyBox = 999999999;
+        return 0;
+    }
 
-INCLUDE_ASM("asm/main/nonmatchings/data", dataMoneyBoxDec);
+    return 1;
+}
+
+int dataMoneyBoxDec(int amount)
+{
+    if ((unsigned long long) moneyBox < (unsigned long long) amount) {
+        return 0;
+    }
+
+    moneyBox -= amount;
+    return 1;
+}

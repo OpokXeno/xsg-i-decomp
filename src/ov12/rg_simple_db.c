@@ -58,7 +58,27 @@ static void _EntryDB(RgSimpleDB *pDB, void *pDat, const char *pszName);
 static void *_GetDataDB(RgSimpleDB *pDB, int nDataID);
 static char *_GetDataDBName(RgSimpleDB *pDB, int nDataID);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_simple_db", _InitDB_00A14D38);
+static void _InitDB(RgSimpleDB *pDB, int capacity, int entry_size)
+{
+    int i;
+    unsigned int pointer_array_size;
+
+    if (pDB == 0) {
+        assert_prog(D_00A531F0, D_00A53200, 35);
+    }
+    pDB->m_nNumOfData = 0;
+    pointer_array_size = capacity * 4;
+    pDB->m_nDataCapa = capacity;
+    pDB->m_nEntrySize = entry_size;
+    pDB->m_apData = RgHeapAlloc(InstanceOfRgHeap(), pointer_array_size,
+                                D_00A53200, 39);
+    pDB->m_apName = RgHeapAlloc(InstanceOfRgHeap(), pointer_array_size,
+                                D_00A53200, 40);
+    for (i = 0; i < capacity; i++) {
+        pDB->m_apName[i] = RgHeapAlloc(InstanceOfRgHeap(), entry_size,
+                                       D_00A53200, 42);
+    }
+}
 
 static void _ClearDB(RgSimpleDB *pDB)
 {
@@ -73,7 +93,24 @@ static void _ClearDB(RgSimpleDB *pDB)
     pDB->m_nNumOfData = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_simple_db", _DisposeDB);
+static void _DisposeDB(RgSimpleDB *pDB)
+{
+    int i;
+
+    if (pDB == 0) {
+        assert_prog(D_00A531F0, D_00A53200, 60);
+    }
+    for (i = 0; i < pDB->m_nNumOfData; i++) {
+        RgHeapFree(InstanceOfRgHeap(), pDB->m_apData[i], D_00A53200, 63);
+    }
+    RgHeapFree(InstanceOfRgHeap(), pDB->m_apData, D_00A53200, 64);
+    pDB->m_apData = 0;
+    for (i = 0; i < pDB->m_nDataCapa; i++) {
+        RgHeapFree(InstanceOfRgHeap(), pDB->m_apName[i], D_00A53200, 68);
+    }
+    RgHeapFree(InstanceOfRgHeap(), pDB->m_apName, D_00A53200, 69);
+    pDB->m_apName = 0;
+}
 
 static int _GetDataID(RgSimpleDB *pDB, const char *pszName)
 {

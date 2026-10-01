@@ -181,4 +181,48 @@ static void _InitRgDispModelImpl(XrgDispModelImpl *pDisp, const char *pXtxData,
     pDisp->pLexData = pLexData;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_dispmodel_impl", CreateXrgDispModelImpl);
+extern RgHeap *InstanceOfRgHeap(void);
+extern void *RgHeapAlloc(RgHeap *heap, unsigned int size,
+                         const char *source_file, int line);
+extern char *strcpy(char *destination, const char *source);
+extern char *strcat(char *destination, const char *source);
+
+/*
+ * RgLinkData (src/ov12/rg_linkdata.c, ov12/tu063) is a struct whose only
+ * field is the archive buffer pointer InitRgLinkData stores at +0x00; a
+ * local pointer-sized slot is enough storage for its address to be passed
+ * opaquely to InitRgLinkData/RgLinkDataGet/RgLinkDataFindExt.
+ */
+extern void InitRgLinkData(void *pAna, void *pBuf);
+extern void *RgLinkDataGet(void *pAna, const char *name);
+extern void *RgLinkDataFindExt(void *pAna, const char *ext);
+
+RgDispModel *CreateXrgDispModelImpl(const char *name, const char *variant)
+{
+    char szLexName[128];
+    char szXtxName[128];
+    void *linkData;
+    const char *pLexData;
+    const char *pXtxData;
+    XrgDispModelImpl *pDisp;
+
+    strcat(strcpy(szLexName, variant), ".lex");
+    strcat(strcpy(szXtxName, variant), ".xtx");
+    InitRgLinkData(&linkData, (void *)name);
+    pLexData = RgLinkDataGet(&linkData, szLexName);
+    pXtxData = RgLinkDataGet(&linkData, szXtxName);
+    if (pXtxData == 0) {
+        pXtxData = RgLinkDataFindExt(&linkData, ".xtx");
+    }
+
+    if (pLexData != 0 && pXtxData != 0) {
+        pDisp = RgHeapAlloc(InstanceOfRgHeap(), 112, D_00A58760, 168);
+        if (pDisp == 0) {
+            assert_prog(D_00A58750, D_00A58760, 169);
+        }
+        _InitRgDispModelImpl(pDisp, pXtxData, pLexData);
+    } else {
+        pDisp = 0;
+    }
+    return (RgDispModel *)pDisp;
+}

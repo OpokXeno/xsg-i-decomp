@@ -1,6 +1,8 @@
 #include "common.h"
 #include "act_2.h"
 
+extern Actor actor[64];
+
 /*
  * JNT_getMoveElement (main/tu261, src/main/jnt.c) is not yet recovered as C.
  * It dereferences its argument (main:0x00313b50, addiu v1,a0,16; lhu
@@ -59,7 +61,7 @@ INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setArms);
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setRelation);
 
 extern int ACT_setParent(Actor *actor, int type, Actor *parent, int joint, int id);
-extern void ACT_setVisible(Actor *actor, int part, unsigned char visible);
+extern void ACT_setVisible(Actor *actor, int part, int visible);
 
 /*
  * Attaches `actor` to `parent` at joint 0x30 (type 2, id `faceId`); on
@@ -150,8 +152,30 @@ void ACT_animGetCurrent(Actor *actor)
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_loadMotion);
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_initExMotion);
+void ACT_initExMotion(Actor *target, unsigned int slot, void *motion)
+{
+    int i;
 
-INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setVisible);
+    if (target == 0) {
+        for (i = 0; i < 64; i++) {
+            actor[i].animPackTables[slot] = motion;
+        }
+        return;
+    }
+
+    target->animPackTables[slot] = motion;
+}
+
+extern void MDL_setGroupVisible(void *model, int part, int visible);
+extern void MDL_setVisible(void *model, int part, int visible);
+
+void ACT_setVisible(Actor *actor, int part, int visible)
+{
+    if ((unsigned int)part >= 128) {
+        MDL_setGroupVisible(actor->model, part, visible);
+    } else {
+        MDL_setVisible(actor->model, part, visible);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_setHumanHand);

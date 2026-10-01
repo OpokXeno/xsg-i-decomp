@@ -3,7 +3,19 @@
 
 #include "shared.h"
 
-typedef struct RgDrawStudio RgDrawStudio;
+#include "ov12/rg_draw.h"
+
+/*
+ * Opaque handles owned by other TUs: this allocation only creates, forwards
+ * or disposes of them, it never reads or writes a member.
+ *   RgCamera     - ov12/tu016 (src/ov12/rg_camera.h), CreateRgCamera's result
+ *   RgReadText   - ov12/tu036 (src/ov12/rg_read_text.h), the paragraph reader
+ *   RgDrawStudio - ov12/tu045 (include/ov12/rg_draw.h), _CreateBattleCamera's
+ *                  argument (assert message "pStudio != NIL")
+ *   RgGeomGroup  - ov12/tu059 (src/ov12/rg_geom_group.h), BattleField's
+ *                  geometry group
+ */
+typedef struct RgCamera RgCamera;
 
 /*
  * _InitAbstructCamera (ov12:0x00a10f78) attests the leading span: the draw

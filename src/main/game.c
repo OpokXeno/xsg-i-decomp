@@ -89,7 +89,29 @@ int GameModeDebugMenu(void);
 #define game_mode_pause_vector (GameLoopState.pause_vector.quad)
 #define game_mode_camera_callback (GameLoopState.camera_callback)
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameCFSoundPurgeSub);
+extern void xglSoundSendEffect(void *swd, void *sed, int bank);
+extern void After_Talk(SceneObject object);
+
+typedef struct EnemyWorkPostTalk {
+    u8 unmodeled_00[0x37b4];
+    u32 post_talk_flags;
+    u8 unmodeled_37b8[0x38b0 - 0x37b8];
+} EnemyWorkPostTalk;
+
+extern EnemyWorkPostTalk enepc[16];
+
+#define ACTOR_NUMBER_OFFSET 0x80
+
+static void GameCFSoundPurgeSub(void)
+{
+    int index = 0;
+
+    xglSoundSendEffect(0, 0, 2);
+    xglSoundSendEffect(0, 0, 3);
+    for (; index < 8; index++) {
+        xglSoundSendEffect(0, 0, index + 4);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GameCFSoundPurge);
 
@@ -130,7 +152,30 @@ INCLUDE_ASM("asm/main/nonmatchings/game", GamePopSaveDataUser);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", InitCfSystem);
 
-INCLUDE_ASM("asm/main/nonmatchings/game", checkAttr);
+extern u64 attrPrev;
+
+typedef struct GameActorAttributeView {
+    u8 unmodeled_00[0x4e8];
+    u64 attribute_flags;
+} GameActorAttributeView;
+
+static int checkAttr(GameActorAttributeView *actor)
+{
+    u64 attributes;
+    u64 selected_attributes;
+
+    if (actor == 0) {
+        return 0;
+    }
+    attributes = actor->attribute_flags;
+    selected_attributes = attributes & 0x1f00;
+    if (attributes & 0xe000) {
+        return 0;
+    }
+    selected_attributes >>= 8;
+    attrPrev = selected_attributes;
+    return selected_attributes;
+}
 
 #define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
 
@@ -309,7 +354,13 @@ INCLUDE_ASM("asm/main/nonmatchings/game", checkTalkPoint);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", actSequenceClear);
 
-INCLUDE_ASM("asm/main/nonmatchings/game", actTalkAfter);
+void actTalkAfter(SceneObject object)
+{
+    EnemyWorkPostTalk *enemy = &enepc[object[ACTOR_NUMBER_OFFSET]];
+
+    After_Talk(object);
+    enemy->post_talk_flags = GameLoopState.flags & 0x400;
+}
 
 static int GameModeCfEvent(void)
 {

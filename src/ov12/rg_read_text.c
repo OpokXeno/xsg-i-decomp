@@ -19,6 +19,12 @@ extern void RgHeapFree(void *heap, void *ptr, const char *source_file, int line)
 extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *pszFile,
                                      int iLine);
 
+extern const char D_00A54418[];
+extern const char D_00A54438[];
+extern const char D_00A54440[];
+extern double atof(const char *nptr);
+extern int strcmp(const char *string1, const char *string2);
+
 static int _InitReader(RgReadText *pReader, const char *pszName);
 
 static int _IsEOF(RgReadText *pReader);
@@ -85,7 +91,36 @@ static int _IsWhiteSpace(unsigned char ch)
     return isWhiteSpace;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _SkipWhiteSpace);
+static char *_SkipWhiteSpace(RgReadText *pReader)
+{
+    char *pCur;
+
+    pCur = pReader->m_pszCur;
+    if (pCur == 0) {
+        return 0;
+    }
+    for (;;) {
+        if ((unsigned char)pCur[0] == '#') {
+            while (!_IsCurOnEOF(pReader, pCur) && (unsigned char)pCur[0] != '\n') {
+                ++pCur;
+            }
+        }
+        while (!_IsCurOnEOF(pReader, pCur) && _IsWhiteSpace((unsigned char)pCur[0])) {
+            ++pCur;
+        }
+        if ((unsigned char)pCur[0] != '#') {
+            break;
+        }
+    }
+    if (_IsCurOnEOF(pReader, pCur) || (unsigned char)pCur[0] == '%') {
+        if ((unsigned char)pCur[0] == '%') {
+            pReader->m_pszDelim = pCur;
+        }
+        pCur = 0;
+    }
+    pReader->m_pszCur = pCur;
+    return pCur;
+}
 
 static void _SetCurrent(RgReadText *pReader, char *pCur)
 {
@@ -100,11 +135,30 @@ static void _SetCurrent(RgReadText *pReader, char *pCur)
     pReader->m_pszCur = pCur;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _IsEOF);
+static char *_SkipWhiteSpace(RgReadText *pReader);
+
+static int _IsEOF(RgReadText *pReader)
+{
+    if (pReader->m_bUngetPending != 0) {
+        return 0;
+    }
+    return _SkipWhiteSpace(pReader) == 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _GetString);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _GetFloat);
+static float _GetFloat(RgReadText *pReader)
+{
+    char szToken[RG_READ_TEXT_TOKEN_MAX];
+    char *pCur;
+
+    pCur = _SkipWhiteSpace(pReader);
+    if (pCur == 0) {
+        assert_prog(D_00A54418, D_00A543B8, 198);
+    }
+    _GetString(pReader, szToken, RG_READ_TEXT_TOKEN_MAX - 1);
+    return (float) atof(szToken);
+}
 
 /*
  * ov12:0x00a54418, 12 bytes, contains the assertion expression
@@ -129,7 +183,22 @@ int _GetInt(RgReadText *pReader)
     return atoi(szToken);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _GetBool);
+static int _GetBool(RgReadText *pReader)
+{
+    char szToken[RG_READ_TEXT_TOKEN_MAX];
+    char *pCur;
+
+    pCur = _SkipWhiteSpace(pReader);
+    if (pCur == 0) {
+        assert_prog(D_00A54418, D_00A543B8, 218);
+    }
+    _GetString(pReader, szToken, RG_READ_TEXT_TOKEN_MAX - 1);
+    if (strcmp(szToken, D_00A54438) == 0 ||
+        strcmp(szToken, D_00A54440) == 0) {
+        return 1;
+    }
+    return 0;
+}
 
 RgReadText *CreateRgReadText(const char *pszName)
 {
@@ -249,4 +318,30 @@ void RgReadTextNextParagraph(RgReadText *pReader)
     pReader->m_pszDelim = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", RgReadTextFindParagraph);
+int RgReadTextFindParagraph(RgReadText *pReader, const char *pszTag,
+                            const char *pszSubTag)
+{
+    char szToken[256];
+
+    if (pReader == 0) {
+        assert_prog(D_00A543A8, D_00A543B8, 357);
+    }
+    for (;;) {
+        if (RgReadTextIsEOF(pReader)) {
+            if (!RgReadTextIsOnDelimitor(pReader)) {
+                return 0;
+            }
+            RgReadTextNextParagraph(pReader);
+        }
+        RgReadTextGetString(pReader, szToken);
+        if (strcmp(szToken, pszTag) == 0) {
+            if (pszSubTag == 0) {
+                return 1;
+            }
+            RgReadTextGetString(pReader, szToken);
+            if (strcmp(szToken, pszSubTag) == 0) {
+                return 1;
+            }
+        }
+    }
+}

@@ -5,6 +5,27 @@
 #ifndef SRC_MAIN_SDV_H
 #define SRC_MAIN_SDV_H
 
+typedef struct SdvKeyCursor {
+    int position;
+    int elapsed;
+} SdvKeyCursor;
+
+typedef struct SdvCameraChoice {
+    int selected;
+    int script_base;
+    unsigned char unmodeled_08[8];
+    int animation;
+    unsigned char unmodeled_14[8];
+    int camera_commands[4][3];
+} SdvCameraChoice;
+
+/* These typed caller declarations agree with the defining sc_get and sef
+ * functions; their generated owner headers do not yet export these names. */
+extern int scGetImmAdrImmIdx2(int base, unsigned short *table, int index);
+extern short scGetImmNumIdx(short *table, int index);
+extern int sefIsEntryBoss(void);
+extern int rand(void);
+
 typedef short int16_t;
 
 /*

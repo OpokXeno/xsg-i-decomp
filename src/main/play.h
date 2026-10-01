@@ -41,6 +41,22 @@
  */
 typedef struct PlaySource PlaySource;
 
+struct PlaySource {
+    unsigned int formatTag;
+    unsigned char unmodeled_04[4];
+    unsigned short startFrame;
+    unsigned short endFrame;
+};
+
+typedef struct TCamera {
+    unsigned char unmodeled_00[0x0c];
+    unsigned int mode[3];
+} TCamera;
+
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+extern TCamera *TCAMERA_get(int camera_id);
+extern const float D_004D7D1C;
+
 /*
  * One registered playback observer (Play.observers, 32 entries of 12 bytes
  * each starting at +0x4c): PLAY_setupDefault clears the callback argument
@@ -52,7 +68,8 @@ typedef struct PlaySource PlaySource;
 typedef struct PlayObserver {
     SceneObject argument;          /* +0x00 */
     SceneMethod *method;           /* +0x04 */
-    unsigned char unmodeled_08[4]; /* +0x08 */
+    unsigned short chartIndex;     /* +0x08 */
+    unsigned short keyIndex;       /* +0x0a */
 } PlayObserver;
 
 /*
@@ -65,7 +82,9 @@ typedef struct PlayObserver {
  */
 typedef struct TCHParams {
     SceneObjectClassRef *class_ref; /* +0x00 */
-    unsigned char unmodeled_04[12]; /* +0x04 */
+    float value;                    /* +0x04 */
+    int frame;                      /* +0x08 */
+    int curveIndex;                 /* +0x0c */
 } TCHParams;
 
 extern SceneClass *classJava_xeno_util_TCHParams;
@@ -76,6 +95,43 @@ extern SceneClass *classJava_xeno_util_TCHParams;
  */
 extern const float D_004D7D14;
 extern const float D_004D7D18;
+
+typedef struct FCV2Value FCV2Value;
+typedef struct PlayTCHCurveSet {
+    unsigned short count;
+    unsigned char unmodeled_02[6];
+    FCV2Value *curves[1];
+} PlayTCHCurveSet;
+
+extern float FCV2_getValueAndKey(int *key, FCV2Value *curve, float frame);
+
+typedef struct PlayPadData {
+    PadPrefix buttons;
+    unsigned char unmodeled_2c[0x0e];
+    signed char axisX;
+    signed char axisY;
+} PlayPadData;
+
+extern PlayPadData PadData;
+
+#define PLAY_FLAG_ENABLED 0x01
+#define PLAY_FLAG_MANUAL_TIME 0x02
+#define PLAY_FLAG_LOOP 0x04
+#define PLAY_SOURCE_FORMAT_MAC 0x004D4143
+#define PLAY_PAD_FAST 0x0100
+#define PLAY_PAD_SHOW_FRAME 0x0200
+
+extern void DB_reset(int x, int y);
+extern void DB_println(const char *format, ...);
+extern void FCV2_setStep(float frame_step);
+extern PlayTCHCurveSet *TCH_getInfo(void *time_chart, unsigned short key_index);
+extern void TCAMERA_transMPack(StudioCamera *camera, PlaySource *source, float frame);
+extern void TCAMERA_transMPack2(StudioCamera *camera, PlaySource *source, float frame);
+extern void SCRIPT_test(SceneObject argument, SceneMethod *method);
+/* PLAY_ctrl loads each frame divisor once on its guarded path. */
+extern volatile const float D_004D7D20;
+extern volatile const float D_004D7D24;
+extern const char D_004C2308[];
 
 /*
  * The remaining members PLAY_setupDefault evidences (PLAY_setup,

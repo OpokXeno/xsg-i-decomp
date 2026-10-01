@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_piclist.h"
+#include "ov12/rg_debug_flags.h"
 
 /*
  * XrgPaint2DDrawXYWH's mode word is the same bit set XrgPaint2DRect.mode
@@ -31,6 +32,8 @@ extern void XrgPaint2DDrawXYWH(int paint, int mode, int x, int y, int width,
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
+extern RgDebugFlags *InstanceOfRgDebugFlags(void);
+extern RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
 
 /*
  * These are external file-backed witnesses, not candidate-emitted data.
@@ -124,7 +127,21 @@ int RgPicBinarySize(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPicFromBinary);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicRead);
+RgPic *RgPicRead(int handle, RgBxx *bxx)
+{
+    unsigned char buffer[0x400];
+    RgDebugFlags *debugFlags;
+
+    extern int XrgHostRead(int handle, void *buffer, int size);
+
+    debugFlags = InstanceOfRgDebugFlags();
+    if (debugFlags->flags[3] == 0)
+        return 0;
+    if (bxx == 0)
+        assert_prog(D_00A57338, D_00A57320, 165);
+    XrgHostRead(handle, buffer, RgPicBinarySize());
+    return CreateRgPicFromBinary(bxx, buffer);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPic);
 
@@ -312,7 +329,20 @@ RgPic *RgPicListAddPic(RgPicList *pList, const char *pszName)
     return pic;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListDelPic);
+void RgPicListDelPic(RgPicList *pList, int index)
+{
+    unsigned int i;
+
+    if (pList == 0)
+        assert_prog(D_00A57390, D_00A57320, 385);
+
+    if (index >= 0 && index < pList->m_uNum) {
+        DisposeRgPic(pList->pics[index]);
+        for (i = (unsigned int) index; i < pList->m_uNum - 1; i++)
+            pList->pics[i] = pList->pics[i + 1];
+        pList->m_uNum--;
+    }
+}
 
 RgPic *RgPicListGetPic(RgPicList *pList, int index)
 {
@@ -332,7 +362,21 @@ unsigned int RgPicListGetSize(RgPicList *pList)
     return pList->m_uNum;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListDraw);
+extern void XrgPaint2DOffset2DDot(int paint, int offsetX, int offsetY);
+
+void RgPicListDraw(RgPicList *pList, int paint)
+{
+    unsigned int i;
+
+    if (pList == 0)
+        assert_prog(D_00A57390, D_00A57320, 419);
+
+    if (pList->drawEnable != 0) {
+        XrgPaint2DOffset2DDot(paint, pList->ofsX, pList->ofsY);
+        for (i = 0; i < pList->m_uNum; i++)
+            RgPicDraw(pList->pics[i], paint);
+    }
+}
 
 void RgPicListSetDrawEnable(RgPicList *pList, int enable)
 {

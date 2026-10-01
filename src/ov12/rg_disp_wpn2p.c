@@ -16,6 +16,16 @@ extern RgHeap *InstanceOfRgHeap(void);
 extern float RgRobotGetDashTime(RgStatus *pRobot);
 extern void RgGaugeSetValue(void *gauge, float value);
 extern void RgGaugePassTime(void *gauge, float deltaTime);
+extern void *CreateRgGauge(void);
+extern void *CreateXrgPaint2D_sub(const char *source_file, int line);
+extern void XrgPaint2DSetDrawPrio(void *paint, int priority);
+extern void *RgGaugeGetDisp(void *gauge);
+extern void RgGaugeDispSetBarUVWH(void *disp, int u, int v, int width,
+                                  int height);
+extern void RgGaugeDispSetPos(void *disp, int x, int y);
+extern void RgGaugeDispSetTex(void *disp, int barTexture, int restTexture);
+extern void RgGaugeDispSetAlpha(void *disp, int alpha);
+extern void XrgPaint2DSetDrawID(void *paint, int drawId);
 
 static void _InitDisp(RgDispWpn2P *pDisp);
 static void _DestructRobInfo(RobInfo *pInfo);
@@ -38,6 +48,15 @@ extern const char D_00A547F0[];
  * so their forward prototypes stay static like the ones above.
  */
 static void _InitRobInfo(RobInfo *pInfo);
+
+/* ov12:0x00a547b0 "bar_dash.bmp" */
+extern const char D_00A547B0[];
+/* ov12:0x00a547c0 "board_sa.bmp" */
+extern const char D_00A547C0[];
+/* ov12:0x00a547d0 "board_sb.bmp" */
+extern const char D_00A547D0[];
+/* ov12:0x00a547e0 "boost.bmp" */
+extern const char D_00A547E0[];
 
 extern void *RgRobotGetWeapon(RgStatus *pRobot, unsigned int eSide);
 extern void *InstanceOfRgBattleCommonData(void);
@@ -159,7 +178,24 @@ static void _DispWep(WepInfo *pWep, void *paint, int weaponPic,
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_wpn2p", _InitRobInfo);
+static void _InitRobInfo(RobInfo *pInfo)
+{
+    unsigned int i;
+
+    if (pInfo == 0) {
+        assert_prog(D_00A547A0, D_00A54780, 171);
+    }
+    pInfo->robot = 0;
+    pInfo->paint = CreateXrgPaint2D_sub(D_00A54780, 174);
+    XrgPaint2DSetDrawPrio(pInfo->paint, 4);
+    pInfo->posX = 0;
+    pInfo->gauge = CreateRgGauge();
+    pInfo->boardSaPic = 0;
+    pInfo->boardSbPic = 0;
+    for (i = 0; i < 3; i++) {
+        _InitWep(&pInfo->wep[i]);
+    }
+}
 
 static void _DestructRobInfo(RobInfo *pInfo)
 {
@@ -175,7 +211,47 @@ static void _DestructRobInfo(RobInfo *pInfo)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_disp_wpn2p", _SetRobInfo);
+static void _SetRobInfo(RobInfo *pInfo, RgStatus *pRobot, int side)
+{
+    unsigned int i;
+    void *battleData;
+    int displayTexture;
+    int barTexture;
+    void *gaugeDisplay;
+
+    if (pInfo == 0) {
+        assert_prog(D_00A547A0, D_00A54780, 199);
+    }
+    pInfo->robot = pRobot;
+    battleData = InstanceOfRgBattleCommonData();
+    displayTexture = RgBattleCommonDataGetDispTex(battleData);
+    if (pRobot == 0) {
+        return;
+    }
+    for (i = 0; i < 3; i++) {
+        _SetWep(&pInfo->wep[i], RgRobotGetWeapon(pRobot, i), i);
+    }
+    barTexture = RgBxxGetPic(displayTexture, D_00A547B0);
+    gaugeDisplay = RgGaugeGetDisp(pInfo->gauge);
+    RgGaugeDispSetBarUVWH(gaugeDisplay, 14, 8, 183, 12);
+    RgGaugeDispSetPos(gaugeDisplay, 114, 383);
+    RgGaugeDispSetTex(gaugeDisplay, barTexture, 0);
+    RgGaugeDispSetAlpha(gaugeDisplay, 1);
+    pInfo->boardSaPic = RgBxxGetPic(displayTexture, D_00A547C0);
+    pInfo->boardSbPic = RgBxxGetPic(displayTexture, D_00A547D0);
+    pInfo->boostPic = RgBxxGetPic(displayTexture, D_00A547E0);
+    switch (side) {
+    case 0:
+        XrgPaint2DSetDrawID(pInfo->paint, 0);
+        pInfo->posX = 8;
+        break;
+    case 1:
+        XrgPaint2DSetDrawID(pInfo->paint, 1);
+        pInfo->posX = 264;
+        break;
+    }
+    RgGaugeDispSetPos(gaugeDisplay, pInfo->posX + 24, 426);
+}
 
 static void _PassTimeRobInfo(RobInfo *pInfo, float deltaTime)
 {

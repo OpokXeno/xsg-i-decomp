@@ -27,13 +27,58 @@ void *dataUnitOrgGet(int unitOrgId)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlChaGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitInitGet);
+/*
+ * D_426F48, D_426F50, D_426F54 and D_426F58 are byte offsets, from their own
+ * loaded battle-data table's start (8, 0x10, 0x14 and 0x18 bytes before each
+ * field respectively), the same idiom D_426F78 uses below for
+ * dataExpTblGet; each points to a table of fixed-size records that
+ * dataUnitInitGet, dataNormInitGet, dataSpecInitGet and dataEtherInitGet
+ * index with a one-based id, as dataUnitOrgGet does orgData.
+ */
+extern int D_426F48;
+extern int D_426F50;
+extern int D_426F54;
+extern int D_426F58;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataNormInitGet);
+void *dataUnitInitGet(int id)
+{
+    unsigned char *base;
+    int value;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecInitGet);
+    base = (unsigned char *)&D_426F48 - 8;
+    value = D_426F48;
+    return value + base + id * 0x34 - 0x34;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEtherInitGet);
+void *dataNormInitGet(int id)
+{
+    unsigned char *base;
+    int value;
+
+    base = (unsigned char *)&D_426F50 - 0x10;
+    value = D_426F50;
+    return value + base + id * 0xC - 0xC;
+}
+
+void *dataSpecInitGet(int id)
+{
+    unsigned char *base;
+    int value;
+
+    base = (unsigned char *)&D_426F54 - 0x14;
+    value = D_426F54;
+    return value + base + id * 0xC - 0xC;
+}
+
+void *dataEtherInitGet(int id)
+{
+    unsigned char *base;
+    int value;
+
+    base = (unsigned char *)&D_426F58 - 0x18;
+    value = D_426F58;
+    return value + base + id * 0x18 - 0x18;
+}
 
 /*
  * D_426F78 is a selector field 0x38 bytes into a loaded battle-data table;
@@ -47,11 +92,45 @@ unsigned char *dataExpTblGet(void)
     return (unsigned char *)&D_426F78 - 0x38 + D_426F78;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataParaTblGet);
+/*
+ * D_426F7C, D_426F80 and D_426F84 are the same kind of loaded-table byte
+ * offset as D_426F48 above (0x3C, 0x40 and 0x44 bytes before their own table
+ * start); dataParaTblGet, dataSpecTblGet and dataDefEquipGet each index a
+ * table of 0x20-byte records with a one-based id.
+ */
+extern int D_426F7C;
+extern int D_426F80;
+extern int D_426F84;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataDefEquipGet);
+void *dataParaTblGet(int id)
+{
+    unsigned char *base;
+    int value;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecTblGet);
+    base = (unsigned char *)&D_426F7C - 0x3C;
+    value = D_426F7C;
+    return value + base + id * 0x20 - 0x20;
+}
+
+void *dataDefEquipGet(int id)
+{
+    unsigned char *base;
+    int value;
+
+    base = (unsigned char *)&D_426F84 - 0x44;
+    value = D_426F84;
+    return value + base + id * 0x20 - 0x20;
+}
+
+void *dataSpecTblGet(int id)
+{
+    unsigned char *base;
+    int value;
+
+    base = (unsigned char *)&D_426F80 - 0x40;
+    value = D_426F80;
+    return value + base + id * 0x20 - 0x20;
+}
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
 extern const char D_00A456E8[];
@@ -229,9 +308,35 @@ void dataBattleInit(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitInitSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPosTblGet);
+/*
+ * posTbl is a table of 0x20-byte position records; dataPosTblGet and
+ * dataPosLineGet both index it with the absolute value of the caller's
+ * position id (negative ids alias the same record as their positive
+ * counterpart). dataPosLineGet reads the halfword at +0x10 of the record.
+ */
+typedef struct PosTblEntry {
+    unsigned char unmodeled_00[0x10];
+    short line; /* +0x10 */
+    unsigned char unmodeled_12[0x20 - 0x12];
+} PosTblEntry;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPosLineGet);
+extern PosTblEntry posTbl[];
+
+void *dataPosTblGet(int id)
+{
+    if (id < 0) {
+        id = -id;
+    }
+    return &posTbl[id];
+}
+
+short dataPosLineGet(int id)
+{
+    if (id < 0) {
+        id = -id;
+    }
+    return posTbl[id].line;
+}
 
 extern unsigned char D_00A45890[]; /* "** dataCidGet: err %d\n" */
 extern short cidChgTbl[];
@@ -401,7 +506,34 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMot);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadWep);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataWpnLRChk);
+/*
+ * dataWpnLRChk shares dataUnitFileLoadWep's own (ObjectTask *, weaponId,
+ * slot, fileInfo) argument list, passed through unchanged; it never reads
+ * the unit argument and only reaches the loaded file's weapon-id field 0xA0
+ * bytes into fileInfo.
+ */
+typedef struct WpnFileInfo {
+    unsigned char unmodeled_00[0xA0];
+    int weaponId; /* +0xA0 */
+} WpnFileInfo;
+
+int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo)
+{
+    /*
+     * The original guards both checks with a bnel to a shared fail exit
+     * (0x00a1c1b4, 0x00a1c1c0); a structured cascade of "if (...) return 0;"
+     * statements folds the second guard into a branchless compare instead.
+     */
+    if (slot != 1) {
+        goto fail;
+    }
+    if (weaponId != fileInfo->weaponId) {
+        goto fail;
+    }
+    return 1;
+fail:
+    return 0;
+}
 
 /*
  * The engine's actor record ACT_create hands out (main/near_dir.h and
@@ -467,7 +599,29 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoad2);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoad2Sub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackWpnMdl2);
+/*
+ * A packed model or animation file: 8 bytes not recovered, then one byte
+ * offset per packed entry, counted from the start of the header, the same
+ * idiom dataFpkAdrGet below resolves for a single entry.
+ */
+typedef struct PackedFile {
+    unsigned char unmodeled_00[8];
+    int entryOffset[3]; /* +0x08 */
+} PackedFile;
+
+void dataPackWpnMdl2(EquipActor *actor)
+{
+    PackedFile *pack;
+    int offset;
+
+    pack = (PackedFile *)actor->wpnMdl[0];
+    offset = pack->entryOffset[0];
+    actor->wpnMdl[0] = (unsigned char *)pack + offset;
+    offset = pack->entryOffset[1];
+    actor->wpnMdl[1] = (unsigned char *)pack + offset;
+    offset = pack->entryOffset[2];
+    actor->wpnMdl[2] = (unsigned char *)pack + offset;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotAdrSet);
 

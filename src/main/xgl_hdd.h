@@ -9,6 +9,18 @@ extern int xglCdGetFileData();
 
 #include "shared.h"
 
+struct HddRenderState {
+    unsigned char unmodeled_00[0x58];
+    unsigned char errorScreenActive;
+};
+
+extern struct HddRenderState sRender;
+extern PadPrefix PadData;
+extern unsigned char TestEnv_0_004A8A80[];
+extern char D_004D2628[];
+extern void xglDmaDirectNormal(int channel, const void *packet, int qwords);
+extern void xglSoundEffectNormalDirect(int sound_id);
+
 int sceRead(int descriptor, void *buffer, int bytes);
 
 int xglHddCheck2(void);
@@ -70,7 +82,82 @@ extern int sceDevctl(const char *device, int command, const void *input,
  */
 extern int sceOpen(const char *path, int flags, ...);
 
-extern int xglHddMcCheckYourSaves(int);
+extern char commonname[];
+extern char yoursaves[];
+
+struct HddLoadRequest {
+    int card;
+    void *data;
+    int size;
+};
+
+struct HddTransferInfo {
+    int unmodeled_00;
+    int begin;
+    int end;
+};
+
+struct HddCheckState {
+    int status;
+    struct HddTransferInfo *transfer;
+    int dataSize;
+};
+
+struct HddIoStat {
+    unsigned int mode;
+    unsigned int attributes;
+    unsigned int size;
+    unsigned char created[8];
+    unsigned char accessed[8];
+    unsigned char modified[8];
+    unsigned int sizeHigh;
+    unsigned int privateData[6];
+};
+
+struct HddSaveRequest {
+    int card;
+    const void *data;
+    int size;
+};
+
+struct HddExistRequest {
+    int card;
+    unsigned char *found;
+};
+
+struct HddFileStat {
+    unsigned char unmodeled_00[29];
+    unsigned char second;
+    unsigned char minute;
+    unsigned char hour;
+    unsigned char day;
+    unsigned char month;
+    unsigned short year;
+    unsigned char unmodeled_24[28];
+};
+
+struct HddDirectoryEntry {
+    struct HddFileStat stat;
+    char name[256];
+    unsigned char unmodeled_140[16];
+};
+
+extern int sceDopen(const char *path);
+extern int sceDread(int descriptor, struct HddDirectoryEntry *entry);
+extern int sceDclose(int descriptor);
+extern int sceGetstat(const char *path, struct HddFileStat *stat);
+extern int sceClose(int descriptor);
+extern int strncmp(const char *left, const char *right, unsigned int length);
+extern unsigned int xglClockDayTime2UInt(XglClock *clock_time);
+extern int sceWrite(int descriptor, const void *buffer, int size);
+extern int sceChstat(const char *path, const struct HddIoStat *stat, int flags);
+static int Judge_MakeNewFolder(void);
+extern int Judge_MakeNewSavedata(int descriptor, int card);
+static int xglHddMcCheckYourSaves(int);
+static int xglHddMcCheckCore(struct HddCheckState *state);
+extern int xglHddMcCheck(struct HddCheckState *state);
+static int create_file(int card, int slot, const void *data, int size);
+extern unsigned char *xglMcSetFullPath(int card, int slot);
 
 extern int xglHddMcGetFree(void);
 

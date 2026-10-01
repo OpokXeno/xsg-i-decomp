@@ -8,11 +8,10 @@ extern float wave;
 extern float waverad;
 extern EXM_WindState _wind;
 
+/* The +0x10 vector fields are named from the allocated reset and setter stores.
+ * The u64 at +0x08 preserves the 8-byte alignment of the complete wind state. */
+
 void EXM_ResetWind(void);
-
-INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_GetWindPower);
-
-INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_ResetWind);
 
 /*
  * EXM_GetWindPower/EXM_ResetWind/EXM_SetDirectionalWind/EXM_SetPointWind/
@@ -29,15 +28,39 @@ INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_ResetWind);
  * 4-byte aligned instead compiles the same `*wind = *para;` assignment to
  * ldl/ldr/sdl/sdr.
  */
+typedef struct EXM_WindVector {
+    float x;
+    float y;
+    float z;
+    float w;
+} EXM_WindVector;
+
 struct EXM_WindState {
     char mode;              /* +0x00, read signed (lb) by EXM_GetWindPower */
-    u8 unmodeled_01[0xf];
-    u64 unmodeled_10[2];    /* +0x10, evidenced size/alignment only */
+    u8 unmodeled_01[7];
+    u64 unmodeled_08;
+    EXM_WindVector direction; /* +0x10, four-component direction/position */
     float shake_power;      /* +0x20, EXM_SetShakePower */
     float shake_time;       /* +0x24, EXM_SetShakeTime */
     float shake_rad;        /* +0x28, EXM_SetShakeWind/EXM_GetShakeRad */
     u8 unmodeled_2c[4];
 };
+
+INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_GetWindPower);
+
+void EXM_ResetWind(void)
+{
+    float reset_value;
+    wind->mode = 0;
+    reset_value = 0.0f;
+    wind->direction.w = reset_value;
+    wind->direction.z = reset_value;
+    wind->direction.y = reset_value;
+    wind->direction.x = reset_value;
+    wind->shake_power = reset_value;
+    wind->shake_time = reset_value;
+    wind->shake_rad = reset_value;
+}
 
 void EXM_SetWindPara(EXM_WindState *para)
 {

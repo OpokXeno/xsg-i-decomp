@@ -183,7 +183,29 @@ static void MoveHokan(void *unused, float step, const Vector4 *target,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_camera", GetCenter);
+struct CameraCenterSource {
+    unsigned char unmodeled_00[0x10];
+    Vector4 position;
+    unsigned char unmodeled_20[0x66];
+    short type;
+};
+extern volatile const float D_004D7BB4;
+extern float CfCameraOfsNow[3];
+
+static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
+{
+    float vertical_offset;
+
+    vertical_offset = D_004D7BB4;
+    if (source->type >= 1618) {
+        vertical_offset = 3.0f;
+    }
+
+    center->x = CfCameraOfsNow[0] + source->position.x;
+    center->y = CfCameraOfsNow[1] + source->position.y + vertical_offset;
+    center->z = CfCameraOfsNow[2] + source->position.z;
+    center->w = 1.0f;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_camera", GetCameraPos);
 

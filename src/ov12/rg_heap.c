@@ -18,6 +18,13 @@ static struct RgHeapBlock *_SetHeapHead(void *pTop, u32 nBufSize);
 extern void XrgLog(const char *format, const char *source_file, int line,
                    ...);
 extern int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr);
+extern void RgHeapDump_sub(RgHeap *pHeap, const char *comment,
+                           const char *source_file, int line);
+extern const char D_00A52A40[];
+extern const char D_00A52A80[];
+extern const char D_00A52A98[];
+extern const char D_00A52AB8[];
+extern const char D_00A52AC8[];
 
 /*
  * External file-backed witnesses, not candidate-emitted data: this window is
@@ -47,7 +54,20 @@ extern const char D_00A52FB8[];
 extern const char D_00A52FD0[];
 extern const char D_00A52FE8[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _Error_00A13260);
+static void _Error(const char *expression, const char *tag, RgHeap *pHeap,
+                   const char *source_file, int line)
+{
+    XrgLog(D_00A52A40, D_00A52A68, 19, tag);
+    XrgLog(D_00A52A80, D_00A52A68, 20, expression, source_file, line);
+    if (pHeap != 0) {
+        XrgLog(D_00A52A98, D_00A52A68, 22, pHeap, pHeap->top, pHeap->size);
+        RgHeapDump_sub(pHeap, D_00A52AB8, D_00A52A68, 23);
+    } else {
+        XrgLog(D_00A52AC8, D_00A52A68, 25);
+    }
+    for (;;) {
+    }
+}
 
 /*
  * RgHeapBlock: the fixed 0x40-byte header RgHeapAlloc places immediately
@@ -95,7 +115,11 @@ static void _InsertNext(struct RgHeapBlock *pBlock, struct RgHeapBlock *pNew)
     pBlock->next = pNew;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _Unlink);
+static void _Unlink(struct RgHeapBlock *pBlock)
+{
+    pBlock->next->pre = pBlock->pre;
+    pBlock->pre->next = pBlock->next;
+}
 
 static void _MarkAlloc(struct RgHeapBlock *pBlock)
 {
@@ -127,7 +151,18 @@ static void _SetMagicString(struct RgHeapBlock *pBlock)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", _IsCollectMagicString);
+static int _IsCollectMagicString(struct RgHeapBlock *pBlock)
+{
+    const char *magic_string = (const char *)s_szMagicString;
+    int i;
+
+    for (i = 0; i < 0xF; i++) {
+        if ((unsigned char)pBlock->magic[i] != magic_string[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 /*
  * ov12:0x00a52af0 contains the assertion expression
@@ -216,7 +251,22 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapFree);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapIsInSelf);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_heap", RgHeapIsInvalidMemory);
+int RgHeapIsInvalidMemory(RgHeap *pHeap, void *pPtr)
+{
+    struct RgHeapBlock *pBlock;
+
+    if (pPtr == 0) {
+        return 1;
+    }
+    pBlock = (struct RgHeapBlock *)pPtr - 1;
+    if (!_IsAllocated(pBlock)) {
+        return 1;
+    }
+    if (!_IsCollectMagicString(pBlock)) {
+        return 1;
+    }
+    return !RgHeapIsInSelf(pHeap, pBlock);
+}
 
 /*
  * ov12:0x00a52e88 contains the format string

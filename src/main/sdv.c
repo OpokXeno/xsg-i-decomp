@@ -1,4 +1,5 @@
 #include "common.h"
+#include "shared.h"
 #include "sdv.h"
 
 extern void *memset(void *, int, unsigned int);
@@ -47,20 +48,234 @@ void sdvRestoreAmbient(void)
     sdvSetAmbient(_sdvMapRgb, _sdvAmbient);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecAmbient);
+extern Vector4 *MMathVectorInterpolation(Vector4 *destination,
+                                         const Vector4 *first,
+                                         const Vector4 *second,
+                                         float parameter);
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecSeqTbl);
+void sdvExecAmbient(void)
+{
+    Vector4 map_rgb;
+    Vector4 ambient;
+    float parameter;
+    int state = _sdvAmbState;
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvProgressKey);
+    if (state == 0) {
+        return;
+    }
+
+    if (state == 1) {
+        if (_sdvAmbFrame >= 20) {
+            _sdvAmbState = 0;
+            _sdvAmbFrame = 20;
+            state = 0;
+        } else {
+            _sdvAmbFrame++;
+        }
+    } else if (state == 2) {
+        if (_sdvAmbFrame <= 0) {
+            _sdvAmbFrame = 0;
+            state = 0;
+            _sdvAmbState = 0;
+        } else {
+            _sdvAmbFrame--;
+        }
+    }
+
+    if (state != 0) {
+        float half = 0.5f;
+        float divisor = 20.0f;
+
+        parameter = (float)_sdvAmbFrame / divisor;
+        /* These constrained operations implement the eight evidenced COP2 instructions. */
+        __asm__ __volatile__(
+            "lqc2 vf1, 0(%1)\n\t"
+            "mfc1 $8, %0\n\t"
+            "qmtc2 $8, vf2\n\t"
+            "vmulx.xyz vf1, vf1, vf2x\n\t"
+            "sqc2 vf1, 0(%2)"
+            :
+            : "f"(half), "r"(&_sdvMapRgb[0]), "r"(&map_rgb)
+            : "$8", "memory");
+        __asm__ __volatile__(
+            "lqc2 vf1, 0(%1)\n\t"
+            "mfc1 $8, %0\n\t"
+            "qmtc2 $8, vf2\n\t"
+            "vmulx.xyz vf1, vf1, vf2x\n\t"
+            "sqc2 vf1, 0(%2)"
+            :
+            : "f"(half), "r"(&_sdvAmbient[0]), "r"(&ambient)
+            : "$8", "memory");
+        MMathVectorInterpolation(&map_rgb, (const Vector4 *)_sdvMapRgb,
+                                 &map_rgb, parameter);
+        MMathVectorInterpolation(&ambient, (const Vector4 *)_sdvAmbient,
+                                 &ambient, parameter);
+        sdvSetAmbient(&map_rgb, &ambient);
+    }
+}
+
+extern unsigned char *sefGetBattleData(void);
+extern short _hitFlag;
+extern short _hitSignal;
+typedef struct SdvSequence {
+    unsigned int event_address;
+    unsigned char unmodeled_04[4];
+    int elapsed;
+    int position;
+    int stride;
+    int last_sound;
+} SdvSequence;
+
+int sdvExecSeqTbl(SdvSequence *sequence)
+{
+    int result = -1;
+    const short *events = (const short *)sequence->event_address;
+    short opcode = events[sequence->position * sequence->stride];
+    unsigned char *battle = sefGetBattleData();
+
+    if (opcode == 1024) {
+        return 1024;
+    }
+    if (opcode == 4096) {
+        if (battle[22] == 0) {
+            sequence->position++;
+        } else {
+            int *position = &sequence->position;
+            if (_hitFlag != 0 || _hitSignal != 0) {
+                result = *position;
+                *position = result + 1;
+            }
+        }
+    } else if (sequence->elapsed >= opcode) {
+        int *position = &sequence->position;
+        result = *position;
+        *position = result + 1;
+    }
+
+    sequence->elapsed++;
+    if (sequence->elapsed >= 1024) {
+        sequence->elapsed = 1023;
+    }
+    return result;
+}
+
+int sdvProgressKey(const short *sequence, SdvKeyCursor *cursor, int stride)
+{
+    int result = -1;
+    short opcode = sequence[cursor->position * stride];
+    unsigned char *battle = sefGetBattleData();
+
+    if (opcode == 1024) {
+        return 1024;
+    }
+    if (opcode == 4096) {
+        if (battle[22] == 0) {
+            cursor->position++;
+        } else if (_hitFlag != 0 || _hitSignal != 0) {
+            result = cursor->position;
+            cursor->position++;
+        }
+    } else if (cursor->elapsed >= opcode) {
+        result = cursor->position;
+        cursor->position++;
+    }
+
+    cursor->elapsed++;
+    if (cursor->elapsed >= 1024) {
+        cursor->elapsed = 1023;
+    }
+    return result;
+}
 
 void sdvPlaySound(int sound_id, int unused, int flags)
 {
     xglSoundEffectNormalID(sound_id, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvScheduleSound);
+void sdvScheduleSound(SdvSequence *sequence)
+{
+    struct SdvSoundEvent {
+        short command;
+        short latch;
+        int sound_id;
+    };
+    short latch;
+    int sound_id;
+    const struct SdvSoundEvent *event;
+    int event_index;
+    int word_index;
+    unsigned int event_address;
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSelectCamera);
+    if (sequence == 0) {
+        return;
+    }
+    if (sequence->event_address == 0) {
+        return;
+    }
+    event_index = sdvExecSeqTbl(sequence);
+    if ((unsigned int)event_index >= 1024) {
+        return;
+    }
+
+    word_index = event_index * sequence->stride;
+    event_address = word_index * sizeof(short) + sequence->event_address;
+    event = (const struct SdvSoundEvent *)event_address;
+    sound_id = event->sound_id;
+    latch = event->latch;
+    if (sound_id > 0) {
+        sdvPlaySound(sound_id, 0, 0);
+        if (latch > 0) {
+            sequence->last_sound = sound_id;
+        }
+    }
+}
+
+int sdvSelectCamera(SdvCameraChoice *choice, int script_base,
+                    unsigned short *table)
+{
+    int weights[8];
+    int candidates[8];
+    int chosen = 0;
+    int roll = rand() % 100;
+    int i;
+    int weight_sum;
+
+    if (table == 0 || script_base == 0) {
+        return 0;
+    }
+    for (i = 0; i < 5; i++) {
+        candidates[i] = scGetImmAdrImmIdx2(script_base, table, i * 2);
+        weights[i] = scGetImmNumIdx((short *)table, i * 2 + 1);
+    }
+
+    if (sefIsEntryBoss() != 0 && candidates[4] != 0) {
+        chosen = candidates[4];
+    } else {
+        weight_sum = 0;
+        for (i = 0; i < 4; i++) {
+            weight_sum += weights[i];
+            if (roll < weight_sum && candidates[i] != 0) {
+                chosen = candidates[i];
+                break;
+            }
+        }
+    }
+
+    if (chosen != 0) {
+        choice->camera_commands[0][0] =
+            scGetImmAdrImmIdx2(script_base, (unsigned short *)chosen, 0);
+        choice->camera_commands[1][0] =
+            scGetImmAdrImmIdx2(script_base, (unsigned short *)chosen, 1);
+        choice->camera_commands[2][0] =
+            scGetImmAdrImmIdx2(script_base, (unsigned short *)chosen, 2);
+        choice->camera_commands[3][0] =
+            scGetImmAdrImmIdx2(script_base, (unsigned short *)chosen, 3);
+    }
+    choice->script_base = script_base;
+    choice->selected = chosen;
+    choice->animation = 0;
+    return chosen;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetCameraParam);
 
@@ -130,7 +345,26 @@ void sdvClearSpecialWork(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvAllocSpecialWork);
+static int sdvAllocSpecialWork(int kind)
+{
+    int slot;
+
+    if (kind == 0) {
+        if (_sdvSpecialBuf[0] == 0) {
+            _sdvSpecialBuf[0] = 1;
+            return 0;
+        }
+        return -1;
+    }
+
+    for (slot = 1; slot < 8; slot++) {
+        if (_sdvSpecialBuf[slot] == 0) {
+            _sdvSpecialBuf[slot] = 1;
+            return slot;
+        }
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecSpecial);
 

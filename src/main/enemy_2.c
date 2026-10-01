@@ -2,7 +2,21 @@
 
 #include "enemy_2.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Get_ActorNumber);
+int Get_ActorNumber(int target)
+{
+    unsigned char *base;
+    int *id;
+    short i;
+
+    base = (unsigned char *)enepc;
+    id = (int *)(base + ENEMY_ID_OFFSET);
+    for (i = 0; i < 64; i++) {
+        if (*id == target)
+            return i;
+        id = (int *)((unsigned char *)id + sizeof(EnemyWork));
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Motion);
 
@@ -136,11 +150,70 @@ void Enemy_Command_Target(Actor *actor, int target)
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_LookAt);
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Scale);
+void Enemy_Command_Scale(Actor *actor, int scale_percent, int duration)
+{
+    unsigned char *work;
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Action);
+    work = (unsigned char *)(enepc + ENEMY_ACTOR_NUMBER(actor));
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Encount);
+    if (duration == 0) {
+        float scale;
+        unsigned short motion;
+
+        scale = (float)scale_percent / 100.0f;
+        ENEMY_SCALE(work)->frame = -1;
+        motion = ACTOR_MOTION_NUMBER(actor);
+        ENEMY_SCALE(work)->current = scale;
+        ENEMY_SCALE(work)->target = scale;
+        do {
+            ACT_setMotion(actor, motion);
+        } while (0);
+    } else {
+        ENEMY_SCALE(work)->duration = duration;
+        ENEMY_SCALE(work)->frame = 0;
+        ENEMY_SCALE(work)->start = ENEMY_SCALE(work)->current;
+        ENEMY_SCALE(work)->target = (float)scale_percent / 100.0f;
+    }
+}
+
+void Enemy_Command_Action(Actor *actor, int action_id, int value,
+                          int argument)
+{
+    unsigned char *work;
+    ActorAction *ext;
+    short *slot;
+    short *argument_slot;
+    short i;
+
+    ext = (ActorAction *)((unsigned char *)actor + ACTOR_EXT_OFFSET);
+    work = (unsigned char *)(enepc + ENEMY_ACTOR_NUMBER(actor));
+    slot = (short *)(work + ENEMY_ACTION_VALUE_OFFSET +
+                     action_id * ENEMY_ACTION_STRIDE);
+
+    for (i = 0; i < ENEMY_ACTION_SLOT_COUNT; i++) {
+        if (*slot == -1) {
+            *slot = value;
+            argument_slot = (short *)((unsigned char *)slot + ENEMY_ACTION_ARGUMENT_DELTA);
+            *argument_slot = argument;
+            ext->frame = 0;
+            ext->duration = 0;
+            return;
+        }
+        slot++;
+    }
+}
+
+void Enemy_Command_Encount(Actor *actor, signed char command)
+{
+    Actor *self;
+    int encount_command;
+
+    self = actor;
+    encount_command = command;
+    do {
+        Check_Encount(self, 1, encount_command);
+    } while (0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_2", Enemy_Command_Sac_Move);
 

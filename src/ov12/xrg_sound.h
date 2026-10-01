@@ -53,6 +53,6 @@ extern const char D_00A59288[];
    scaffold-owned. */
 extern const char D_00A592A0[];
 
-static int _LoadSequence(int, int, int);
+static int _LoadSequence(const char *, void *, int);
 
 #endif /* SRC_OV12_XRG_SOUND_H */

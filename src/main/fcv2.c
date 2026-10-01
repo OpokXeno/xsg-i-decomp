@@ -120,9 +120,31 @@ f32 FCV2_getValueAndKey(s32 *key, FCV2Value *curve, f32 frame)
 
 INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_readAttribute);
 
-INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_checkData);
+typedef struct FCV2DataHeader {
+    u32 signature;
+} FCV2DataHeader;
 
-INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_setStep);
+int FCV2_checkData(void *data)
+{
+    FCV2DataHeader *header;
+
+    if (data == 0) {
+        return 1;
+    }
+
+    header = data;
+    if (header->signature != 0x00564346) {
+        return 2;
+    }
+    return 0;
+}
+
+extern f32 fcv2Step;
+
+void FCV2_setStep(f32 step)
+{
+    fcv2Step = __builtin_fabsf(step) * 0.5f;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/fcv2", FCV2_resetPack);
 

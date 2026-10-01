@@ -7,6 +7,15 @@
 #include "ov01/obj.h"
 #include "cmd.h"
 
+typedef union {
+    unsigned char byteValue;
+    short halfwordValue;
+} CmdTecparaValue;
+
+extern CmdTecparaValue *cmdTecparaSub(int tec, short category, short *valueType);
+
+extern void unitCmdListSet(ObjectTask *unit, int *count);
+
 void thinkSysInit(void)
 {
     memset(processBuf, 0, sizeof(processBuf));
@@ -40,9 +49,36 @@ int thinkProcessDel(int *slot)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkProcessChk);
+/*
+ * thinkProcessChk returns whether AI process slot 1-16 (matching
+ * thinkProcessKindChk's sixteen-entry processBuf table) has a live entry
+ * (dataTop nonzero); an out-of-range slot returns 0.
+ */
+int thinkProcessChk(int slot)
+{
+    ThinkProcess *proc;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkProcessKindChk);
+    if ((unsigned int)(slot - 1) >= 16) {
+        return 0;
+    }
+    proc = (ThinkProcess *)(processBuf + (slot - 1) * 0x24);
+    return proc->dataTop != 0;
+}
+
+int thinkProcessKindChk(int kind)
+{
+    ThinkProcess *proc = (ThinkProcess *)processBuf;
+    int count = 0;
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        if (proc->dataTop != 0 && proc->kind == kind) {
+            count++;
+        }
+        proc = (ThinkProcess *)((unsigned char *)proc + 0x24);
+    }
+    return count;
+}
 
 int thinkProcessExecSub(ThinkProcess *proc);
 
@@ -227,9 +263,33 @@ int thinkUnitDmgExec(ObjectTask *unit, UnitDmgInfo *info)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkExec);
+extern int thinkProcessAdd(ThinkProcess *proc);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", camExec);
+int thinkExec(short scriptOffset)
+{
+    ThinkProcess proc;
+
+    proc.dataTop = pThinkTop;
+    proc.pc = scriptOffset;
+    proc.context = pContext;
+    proc.kind = 0;
+    thinkProcessAdd(&proc);
+    return 1;
+}
+
+int camExec(short scriptOffset)
+{
+    ThinkProcess proc;
+
+    if (cameraFlagGet() != 0) {
+        proc.dataTop = (int)pCamTop;
+        proc.pc = scriptOffset;
+        proc.context = pContext;
+        proc.kind = 1;
+        thinkProcessAdd(&proc);
+    }
+    return 1;
+}
 
 int thinkExecChk(void)
 {
@@ -249,7 +309,14 @@ int regChk(int operand)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkRegNo);
+short thinkRegNo(short pc)
+{
+    short *reg_address = (short *)thinkAdrGet(pc);
+    short reg = *reg_address;
+
+    ((int (*)(int, int))regChk)(reg & 0xFFFF, pc);
+    return reg;
+}
 
 int thinkValSet(int value)
 {
@@ -261,13 +328,48 @@ int thinkValSet(int value)
     return value;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkRegGet);
+int thinkRegGet(int regIndex)
+{
+    unsigned short reg = regIndex;
+    short *value_address = (short *)(pContext + ((reg & 0x3FFF) * 2));
+    unsigned int value = (unsigned int)(int)*value_address;
+
+    if (reg & 0x4000) {
+        value_address = (short *)thinkAdrGet(value);
+        value = (unsigned int)(int)*value_address;
+    }
+    value = (unsigned int)thinkValSet((short)value);
+    return (short)value;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", thinkRegSet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdReg);
+int cmdReg(short pc)
+{
+    unsigned short *reg_address = (unsigned short *)thinkAdrGet(pc);
+    unsigned short reg = *reg_address;
+    int register_value;
+    int result;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdNum);
+    ((int (*)(int, int))regChk)(reg, pc);
+    result = (register_value = thinkRegGet(reg));
+    return result;
+}
+
+int cmdNum(short pc)
+{
+    short *value_address = (short *)thinkAdrGet(pc);
+    short value = *value_address;
+    int result;
+
+    /* Bit 0x8000 marks a register operand; anything else is a literal. */
+    if (value & 0x8000) {
+        result = cmdReg(pc);
+    } else {
+        result = thinkValSet(value);
+    }
+    return result;
+}
 
 int cmdExit(void)
 {
@@ -522,7 +624,16 @@ void msgObj2(MessageTask *task)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdThinkset);
+int cmdThinkset(ThinkProcess *proc)
+{
+    int result;
+    int commandList[8];
+
+    result = cmdThinksetSub(proc);
+    commandList[0] = 8;
+    unitCmdListSet(pThinkUnit, commandList);
+    return result;
+}
 
 void cmdThinkset2(ThinkProcess *proc)
 {
@@ -662,7 +773,16 @@ int cmdTecparaGet(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdTecpara);
+int cmdTecpara(int tec, int category)
+{
+    short valueType;
+    CmdTecparaValue *valueAddress = cmdTecparaSub(tec, category, &valueType);
+
+    if (valueType == 1) {
+        return valueAddress->byteValue;
+    }
+    return valueAddress->halfwordValue;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdTecparaSub);
 
@@ -754,9 +874,23 @@ int cmdLightDir(ThinkProcess *proc)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", mcamPtrGet);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", mpersPtrGet);
+struct MpersParams;
+extern struct MpersParams mcamPers;
+extern struct MpersParams mcamPersMove;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", mbankPtrGet);
+struct MpersParams *mpersPtrGet(void)
+{
+    return persMode == -3 ? &mcamPersMove : persMode == 3 ? &mcamPers : 0;
+}
+
+struct MbankParams;
+extern struct MbankParams mcamBank;
+extern struct MbankParams mcamBankMove;
+
+struct MbankParams *mbankPtrGet(void)
+{
+    return bankMode == -4 ? &mcamBankMove : bankMode == 2 ? &mcamBank : 0;
+}
 
 void myMCamSet(int mode, void *params)
 {

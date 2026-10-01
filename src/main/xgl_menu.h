@@ -7,6 +7,45 @@
 
 #include "shared.h"
 
+typedef struct XglMenuNode XglMenuNode;
+
+typedef struct XglMenuRow {
+    const char *text;
+    XglMenuNode *next;
+} XglMenuRow;
+
+struct XglMenuNode {
+    unsigned char item_count;
+    unsigned char unmodeled_01[3];
+    signed char selected_item;
+    unsigned char unmodeled_05[19];
+    XglMenuRow *rows;
+};
+
+typedef struct XglMenuListData {
+    short position_x;
+    short position_y;
+    short position_z;
+    unsigned char flags;
+    unsigned char unmodeled_07;
+    int current_index;
+    XglMenuNode *items[8];
+    short row_offsets[8];
+} XglMenuListData;
+
+typedef struct XglMenuDrawContext {
+    unsigned char unmodeled_00[4];
+    int x;
+    int y;
+} XglMenuDrawContext;
+
+#define MENU_LIST_INDENT 8
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern const char D_004DC2B8[];
+extern const char D_004DC2C0[];
+extern const char D_004DC2C8[];
+
 /*
  * Partial view of one entry of the menutbl array (main 0x0021ce18/0x0021ce7c,
  * a 0x80-byte stride): xglMenuDrawType0 only touches the active flag at
@@ -21,7 +60,9 @@ typedef struct {
      * clear the active flag of every record; the rest of the record is not
      * recovered.
      */
-    unsigned char unmodeled_08[0x78];
+    unsigned char unmodeled_08[0x18];
+    XglMenuListData list;
+    unsigned char unmodeled_5c[0x24];
 } XglMenuEntry;
 
 #define MENU_TABLE_COUNT 16

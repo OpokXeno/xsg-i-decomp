@@ -28,11 +28,15 @@ typedef union {
 typedef union {
     LayoutSlot slots[200];
     struct {
-        unsigned char unmodeled_000[0x240];
+        unsigned char unmodeled_000[0x238];
+        int pixelAlpha;                     /* +0x238, full-width pixel-alpha word */
+        unsigned char unmodeled_23c[4];
         const char *texture;                /* +0x240 */
         int texfunc;                        /* +0x244 */
         u64 alpha;                          /* +0x248 */
         u32 render_status;                  /* +0x250 */
+        unsigned char unmodeled_254[0x2e0 - 0x254];
+        unsigned short mapShadowParts[8];    /* +0x2e0 */
     } fields;
 } LayoutStore;
 
@@ -121,6 +125,7 @@ extern int s_nEffectWrite;
 extern float s_fSortOffsetEntry;
 extern int s_nParent;
 extern int s_nMapLast;
+
 
 /*
  * Render-group counters CONSTRUCT_ALPHA_GROUP/FLUSH_ALPHA_GROUP reset to

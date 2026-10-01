@@ -105,4 +105,16 @@ typedef struct XrgActorEssence {
                                      allocation evidences its meaning beyond that */
 } XrgActorEssence;
 
+/*
+ * One of the 12 entries of s_aRawJntData (config/symbols/ov12.txt,
+ * size 0x6C0 = 12 * 0x90). _FindRawJntData is the only reader in this
+ * allocation and only compares id/jntID, so the rest of each 0x90-byte
+ * entry stays unmodeled.
+ */
+typedef struct RawJntData {
+    int id;                     /* 0x00 */
+    int jntID;                   /* 0x04 */
+    unsigned char unmodeled_008[0x90 - 0x008];
+} RawJntData;
+
 #endif /* SRC_OV12_XRG_ACTOR_H */

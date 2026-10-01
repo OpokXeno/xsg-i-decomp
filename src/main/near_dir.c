@@ -1,5 +1,12 @@
 #include "common.h"
 #include "near_dir.h"
+#include "main/xgl_studio.h"
+
+typedef struct {
+    u32 active;
+} StudioCameraActivePrefix;
+
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 
 INCLUDE_ASM("asm/main/nonmatchings/near_dir", nearDir);
 
@@ -179,7 +186,19 @@ void ACT_info(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/near_dir", getCurrentCamera_0030B6E0);
+static StudioCamera *getCurrentCamera(void)
+{
+    StudioCamera *camera;
+    int camera_index;
+
+    for (camera_index = 0; camera_index < 8; camera_index++) {
+        xglStudioGetCamera(&camera, camera_index);
+        if (((StudioCameraActivePrefix *)camera)->active)
+            return camera;
+    }
+
+    return 0;
+}
 
 /* play.c (main); no header is published for it yet. */
 extern void *PLAY_getCurrent(void);

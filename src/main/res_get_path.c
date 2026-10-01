@@ -124,7 +124,34 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", resource_typeid_translate);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", GameResourceSearch);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", resource_get_free);
+/*
+ * The runtime resource-block table: up to 128 blocks carved out of the
+ * arc-file load heap GameResourceInit sizes. address/size describe the
+ * block's extent; handle is a random token GameResourceAlloc
+ * (main:0x0024a9d8) assigns with xglSRand() when it hands a block out, and
+ * both it and GameResourceReset (main:0x0024d8e8) clear it back to 0; state
+ * is -1 for a free block (this TU's readers) and 9 once GameResourceAlloc
+ * marks one in use (original bytes; neither function is claimed here).
+ */
+typedef struct {
+    u32 address;   /* +0x0 */
+    int size;       /* +0x4 */
+    int handle;     /* +0x8 */
+    int state;      /* +0xC, -1 = free */
+} GameResourceEntry;
+
+extern GameResourceEntry GameResource[128];
+
+static int resource_get_free(void)
+{
+    int index;
+
+    for (index = 0; index < 0x80; index++) {
+        if (GameResource[index].state == -1)
+            return index;
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", GameResourceGetFreeAddr);
 
@@ -168,7 +195,12 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", next_arc_size);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", next_line);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", skip_space);
+static u8 *skip_space(u8 *cursor)
+{
+    while (*cursor == ' ' || *cursor == '\t')
+        cursor++;
+    return cursor;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", search_key);
 
@@ -283,7 +315,17 @@ INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_dummy);
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", RES_GetLeaderSeName);
 
-INCLUDE_ASM("asm/main/nonmatchings/res_get_path", RES_GetMapEnvSeName);
+extern char env_name[];
+
+void RES_GetMapEnvSeName(char *name)
+{
+    char *env = env_name;
+
+    while ((*name = *env) != 0) {
+        env++;
+        name++;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/res_get_path", command_loadse);
 

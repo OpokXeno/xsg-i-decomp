@@ -36,6 +36,9 @@ extern XglPacket *xglPacketGetCurrent(void);
 
 extern StudioCamera *xglStudioGetCamera2(int camera_id);
 
+XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
+                                int (*callback)(XglTaskPrefix *task),
+                                XglTaskPrefix *entry);
 int xglTaskWaitRemove(XglTaskPrefix *task);
 void xglTaskExecute(XglTaskScheduler *scheduler);
 
@@ -43,7 +46,14 @@ extern void xglSleep(void);
 
 void objRemovePure(ObjectTask *task);
 
+void resultProcInit(void);
+
 char *RgFileSysDataGetName(RgFileSysData *pFile);
+
+void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
+
+void RgRobotSetWeapon(RgStatus *pRobot, int eSide, int weaponID);
+void RgRobotSetSpareWeapon(RgStatus *pRobot, int eSide, int weaponID);
 
 extern void DisposeRgSimpleDB(RgSimpleDB *database);
 extern RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size);
@@ -54,7 +64,13 @@ extern void RgSingletonIDEntry(
     RgSimpleDB *database,
     void (*destructor)(RgSimpleDB *database));
 
+int XrgHostRead(int handle, void *buffer, int size);
+
+extern void XrgCopyMatrix(RgMatrix destination, const RgMatrix source);
 extern void XrgCopyVector(RgVector destination, RgVector source);
+void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 void XrgClearVector(RgVector destination);
+void XrgSubVector(RgVector destination, RgVector first, RgVector second);
+void XrgCalcMatrixXtoZ(RgMatrix matrix, RgVector xAxis, RgVector zAxis);
 
 #endif /* INCLUDE_UMBRELLA_PUBLIC_H */

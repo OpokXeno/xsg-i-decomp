@@ -22,4 +22,16 @@ typedef union PadDataRawView {
 
 typedef unsigned char LittleEndianWord[4];
 
+/*
+ * m_54 (0x0036A920, size 0x18): YajimaTest only touches the output-selection
+ * pointer xglMenuOpen fills in at +0x14; the rest of the record is not
+ * recovered.
+ */
+typedef struct YajimaMenuState {
+    unsigned char unmodeled_00[0x14];
+    int *selection;
+} YajimaMenuState;
+
+void YajimaTest(void);
+
 #endif /* SRC_MAIN_YAJIMA_TEST_H */

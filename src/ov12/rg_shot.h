@@ -210,8 +210,9 @@ struct RgShot {
     void *posOwner;                    /* +0x00: first argument to getPos */
     int (*getPos)(void *posOwner, RgVector position, RgVector aimPoint);
                                         /* +0x04 */
-    unsigned char unmodeled_008[0x18];        /* +0x08..+0x1f */
-    int hitHistory;                           /* +0x20 */
+    unsigned char unmodeled_008[0x14];        /* +0x08..+0x1b */
+    int (*isReleased)(RgShot *shot);          /* +0x1c */
+    void (*hitHistory)(void);                 /* +0x20: expiry callback */
     void (*release)(RgShot *shot);            /* +0x24 */
     void (*hitRobot)(RgShot *shot, int robot, RgVector position);  /* +0x28 */
     void (*hitBg)(RgShot *shot, int bgObject, RgVector position);  /* +0x2c */

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_2.h"
 
 /*
  * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
@@ -9,6 +10,8 @@ extern int SsdSpuDmaCompleted(int wait);
 extern void xglSoundSequenceNormal3(int channel, int volume, int time);
 extern void xglSoundSequenceFadeOut2(int channel, int time);
 extern void xglSoundSequenceStop2(int channel);
+void xglMakeSePacket(short command, ...);
+void SsdPlayEffectParam(int effect_id, int source_id, int volume, int pan);
 
 void xglSoundWaitDma(void)
 {
@@ -28,7 +31,37 @@ void xglSoundSendSmd(void *smd)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundSendSed);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundLoadSwd);
+extern const char SoundDataPath[];
+extern const unsigned char ext_0[5];
+
+int xglSoundLoadSwd(const char *file_name, void *buffer)
+{
+    char path[256];
+    char *destination = path;
+    const char *source = SoundDataPath;
+
+    while (*source != '\0') {
+        *destination = *source;
+        destination++;
+        source++;
+    }
+    source = file_name;
+    while (*source != '\0') {
+        *destination = *source;
+        destination++;
+        source++;
+    }
+    source = (const char *) ext_0;
+    for (;;) {
+        *destination = (unsigned char) *source;
+        if (((int) (signed char) *destination << 24) == 0) {
+            break;
+        }
+        source++;
+        destination++;
+    }
+    return xglCdReadFile(path, buffer, 0, 0);
+}
 
 extern int xglSoundSendSwd(void *swd, int bank);
 void xglSoundSendSed(void *sed, int bank);
@@ -152,13 +185,73 @@ void xglSoundSequenceStop(void)
     xglSoundSequenceStop2(0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundEffectNormalDirect);
+void SsdPlayEffectNormal(int effect_id, int source_id);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundEffectNormalID);
+void xglSoundEffectNormalDirect(int effect_id)
+{
+    unsigned short handle = SoundWork.effect_banks[effect_id >> 16].handle;
+    int source_id;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundEffectParamDirect);
+    if (handle == 0xFFFF) {
+        return;
+    }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundEffectParamID);
+    source_id = 0;
+    if (effect_id > 0 && (effect_id < 4 || effect_id == 5)) {
+        source_id = xglSRand() & 0x7FFF;
+    }
+
+    SsdPlayEffectNormal(((unsigned int) handle << 16)
+                            + (effect_id & 0xFFFF),
+                        source_id);
+}
+
+void xglSoundEffectNormalID(int soundEffectId, int pitch)
+{
+    int bank = soundEffectId >> 16;
+    unsigned short handle = SoundWork.effect_banks[bank].handle;
+
+    if (handle == 0xFFFF) {
+        return;
+    }
+
+    if ((pitch == 0) && (soundEffectId > 0)
+     && ((soundEffectId < 4) || (soundEffectId == 5))) {
+        pitch = xglSRand() & 0x7FFF;
+    }
+
+    xglMakeSePacket(112,
+                    ((int) handle << 16) + (soundEffectId & 0xFFFF),
+                    pitch);
+}
+
+void xglSoundEffectParamDirect(int soundEffectId, int volume, int pan)
+{
+    int bank = soundEffectId >> 16;
+    unsigned short handle = SoundWork.effect_banks[bank].handle;
+
+    if (handle != 0xFFFF) {
+        int effect_id = (int) ((unsigned int) handle << 16)
+                      + (soundEffectId & 0xFFFF);
+        int clamped_volume = volume < 0x80 ? volume : 0x7F;
+
+        SsdPlayEffectParam(effect_id, clamped_volume, pan, 0);
+    }
+}
+
+void xglSoundEffectParamID(int soundEffectId, int volume, int pan, int pitch)
+{
+    int bank = soundEffectId >> 16;
+    unsigned short handle = SoundWork.effect_banks[bank].handle;
+
+    if (handle != 0xFFFF) {
+        int effect_id = (int) ((unsigned int) handle << 16)
+                      + (soundEffectId & 0xFFFF);
+        int clamped_volume = volume < 0x80 ? volume : 0x7F;
+
+        xglMakeSePacket(113, effect_id, clamped_volume, pan, pitch);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundEffectPosID);
 
@@ -186,7 +279,19 @@ void xglSoundEffectStopBank(int bank)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundEffectStopID);
+void xglMakeSePacket(short command, ...);
+
+void xglSoundEffectStopID(int soundEffectId, int source)
+{
+    int bank = soundEffectId >> 16;
+    unsigned short handle = SoundWork.effect_banks[bank].handle;
+
+    if (handle != 0xFFFF) {
+        xglMakeSePacket(121,
+                        ((int) handle << 16) + (soundEffectId & 0xFFFF),
+                        source);
+    }
+}
 
 /*
  * xglSoundEffectCheckID below is the only caller of SsdCheckPlayEffect in
@@ -344,7 +449,60 @@ void xglSoundStreamOpenVagMulti(int stream, int source)
     xglSoundStreamOpenVagMultiParam(stream, source, 0x1000, 0x7F, 0x40);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundStreamStop);
+typedef struct CdStreamParam CdStreamParam;
+extern int xglCdStreamClose(CdStreamParam *stream);
+void SsdDisposePcmStream(void);
+void SsdStopPcmStream(int channel);
+int SsdGetPcmStreamStatus(void);
+void SsdGetVagStreamStatusStereo(void);
+void SsdDisposeVagStream(void);
+void SsdStopVagStream(int channel);
+
+void xglSoundStreamStop(int stream)
+{
+    SoundStreamState *state;
+    int result;
+    unsigned char type;
+
+    if (stream != 0) {
+        return;
+    }
+
+    state = (SoundStreamState *) &SoundWork.effect_banks[16];
+    xglCdStreamClose((CdStreamParam *) state);
+    type = state->type;
+    switch (type) {
+    case 0:
+        break;
+    case 1:
+        SsdGetPcmStreamStatus();
+        do {
+        } while (SsdGetResultValue(&result) < 0);
+        if ((unsigned char) result != 0) {
+            SsdStopPcmStream(0);
+            SsdDisposePcmStream();
+        }
+        break;
+    case 2:
+        SsdGetVagStreamStatusStereo();
+        do {
+        } while (SsdGetResultValue(&result) < 0);
+        if ((unsigned char) result != 0) {
+            SsdStopVagStream(0);
+            SsdDisposeVagStream();
+        }
+        break;
+    case 3:
+        SsdStopVagStream(0);
+        do {
+        } while (SsdGetResultValue(&result) < 0);
+        SsdDisposeVagStream();
+        do {
+        } while (SsdGetResultValue(&result) < 0);
+        break;
+    }
+    state->type = 0;
+}
 
 void SsdGetVagStreamStatusStereo(void);
 void SsdSetVagStreamDataStereo(int channel, int address, int size);
@@ -376,11 +534,97 @@ void xglSoundStreamMute(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", stream_check);
+/* CD stream ring fields used by this TU; see the owner, main/tu092. */
+typedef struct SoundRingStatus {
+    unsigned char unmodeled_00[8];
+    unsigned char state;
+    unsigned char unmodeled_09[23];
+    unsigned char *buffer;
+    int capacity;
+    int write_position;
+    int read_position;
+} SoundRingStatus;
+
+static int stream_check(int stream_flags, SoundRingStatus *ring)
+{
+    int request = stream_flags >> 8;
+    int remaining;
+    unsigned char *destination;
+    int result = 0;
+
+    if (request != 0) {
+        if (ring->state != 0) {
+            if (ring->state < 6) {
+                remaining = 4095;
+                destination = &ring->buffer[ring->write_position];
+                do {
+                    remaining--;
+                    *destination = 0;
+                    destination++;
+                } while (remaining >= 0);
+                ring->write_position =
+                    (ring->write_position + 4096) % ring->capacity;
+                ring->state++;
+            } else if (ring->read_position == ring->write_position) {
+                return request == 3 ? -1 : 0;
+            }
+        }
+        result = 1;
+    }
+    return result;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundStreamMain);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglMakeSePacket);
+typedef struct SePacket {
+    short command;
+    unsigned char unmodeled_02[14];
+    int arguments[4];
+} SePacket;
+
+typedef struct SoundArgumentSlot {
+    int value;
+    int upper;
+} SoundArgumentSlot;
+
+typedef char *SoundArgumentList;
+#define SOUND_ARGUMENT_START(ap, last) \
+    ((ap) = (SoundArgumentList) __builtin_next_arg(last) - \
+            (8 - __builtin_args_info(2)) * 8)
+
+void xglMakeSePacket(short command, ...)
+{
+    /* The 0x800-byte queue holds 64 fixed-size SE packets. */
+    typedef struct SoundPacketWork {
+        SoundChannelEntry channels[8];
+        SoundEffectBankEntry effect_banks[32];
+        int packet_count;
+        SePacket packets[64];
+    } SoundPacketWork;
+
+    SoundPacketWork *queue = (SoundPacketWork *) &SoundWork;
+    SoundArgumentList args;
+    struct SoundWork *work = &SoundWork;
+    SePacket *packet;
+    SoundArgumentSlot *arguments;
+    SoundArgumentSlot *slot;
+    int remaining;
+
+    if (work->packet_count < 65) {
+        SOUND_ARGUMENT_START(args, command);
+        packet = &queue->packets[work->packet_count];
+        arguments = (SoundArgumentSlot *) args;
+        queue->packets[work->packet_count].command = command;
+        remaining = 3;
+        do {
+            slot = arguments;
+            arguments++;
+            packet->arguments[3 - remaining] = slot->value;
+            remaining--;
+        } while (remaining >= 0);
+        SoundWork.packet_count++;
+    }
+}
 
 void SsdSendFuncPacket(void *packets, int count);
 extern void *memset(void *destination, int value, unsigned int count);
@@ -392,6 +636,68 @@ void xglSendSePacket(void)
     memset(SoundWork.packet_buffer, 0, 0x800U);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundReset);
+typedef struct SoundPlaybackState {
+    SoundRingStatus ring;
+    unsigned char type;
+    unsigned char unmodeled_31[2];
+    unsigned char segment_index;
+    unsigned char *playback_buffer;
+} SoundPlaybackState;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundInitial);
+void xglCdStreamParamInit(void *state);
+
+void xglSoundReset(void)
+{
+    SoundPlaybackState *state;
+    int bank;
+
+    for (bank = 0; bank < 8; bank++) {
+        xglSoundSendSwd(0, -1 - bank);
+        ((int (*)(void *, int)) xglSoundSendSmd2)(0, bank);
+    }
+    for (bank = 0; bank < 16; bank++) {
+        xglSoundSendEffect(0, 0, bank);
+    }
+    state = (SoundPlaybackState *) &SoundWork.effect_banks[16];
+    state->type = 0;
+    xglCdStreamParamInit(state);
+    state->ring.buffer = state->playback_buffer;
+    state->ring.capacity = 0x4000;
+    SoundWork.packet_count = 0;
+    memset(SoundWork.packet_buffer, 0, 0x800U);
+}
+
+extern unsigned char StreamBuffer[];
+void SsdInit(int size);
+
+void xglSoundInitial(void)
+{
+    SoundChannelEntry *channel;
+    SoundPlaybackState *state;
+    int result;
+    int index;
+
+    SsdInit(0x20000);
+    do {
+    } while (SsdGetResultValue(&result) < 0);
+
+    channel = SoundWork.channels;
+    state = (SoundPlaybackState *) &SoundWork.effect_banks[16];
+    state->playback_buffer = StreamBuffer;
+    index = 7;
+    do {
+        index--;
+        /* xglSoundSendSwd uses this low halfword for a sequence wave bank. */
+        channel->_unmodeled_00 = 0xFFFF;
+        channel->sequence = 0xFFFF;
+        channel++;
+    } while (index >= 0);
+
+    index = 0;
+    do {
+        SoundWork.effect_banks[index].handle = 0xFFFF;
+        SoundWork.effect_banks[index].file_handle = 0xFFFF;
+        index++;
+    } while (index < 16);
+    xglSoundReset();
+}

@@ -5,7 +5,85 @@
 #include "shared.h"
 #include "xrg_sound.h"
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", _LoadSequence);
+typedef struct {
+    u64 first;
+    u64 second;
+    u32 third;
+    u16 fourth;
+    u8 terminator;
+} SoundPathAlternatePrefix;
+
+typedef struct {
+    u64 first;
+    u64 second;
+} SoundPathStandardPrefix;
+
+typedef union {
+    char text[256];
+    SoundPathAlternatePrefix alternate;
+    SoundPathStandardPrefix standard;
+} SoundPath;
+
+extern const SoundPathAlternatePrefix D_00A59250;
+extern const char D_00A59268[];
+extern const SoundPathStandardPrefix D_00A59270;
+extern const char D_00A59280[];
+extern int xglSoundSendSwd(void *swd, int bank);
+extern int xglSoundSendSmd2(void *smd, int bank);
+extern int SsdSpuDmaCompleted(int wait);
+extern char *strcat(char *destination, const char *source);
+
+static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternatePath)
+{
+    int readResult;
+    SoundPath path;
+
+    if (sequenceName == 0 || buffer == 0) {
+        xglSoundSendSwd(0, -1);
+        return xglSoundSendSmd2(0, 0);
+    }
+
+    if (useAlternatePath != 0) {
+        path.alternate.first = D_00A59250.first;
+        path.alternate.second = D_00A59250.second;
+        path.alternate.third = D_00A59250.third;
+        path.alternate.fourth = D_00A59250.fourth;
+        path.alternate.terminator = D_00A59250.terminator;
+        strcat(strcat(path.text, sequenceName), D_00A59268);
+    } else {
+        path.standard.first = D_00A59270.first;
+        path.standard.second = D_00A59270.second;
+        strcat(strcat(path.text, sequenceName), D_00A59268);
+    }
+
+    readResult = xglCdReadFile(path.text, buffer, 0, 0);
+
+    if (readResult > 0) {
+        xglSoundSendSwd(buffer, -1);
+        while (SsdSpuDmaCompleted(0) != 0) {
+        }
+    }
+
+    if (useAlternatePath != 0) {
+        path.alternate.first = D_00A59250.first;
+        path.alternate.second = D_00A59250.second;
+        path.alternate.third = D_00A59250.third;
+        path.alternate.fourth = D_00A59250.fourth;
+        path.alternate.terminator = D_00A59250.terminator;
+        strcat(strcat(path.text, sequenceName), D_00A59280);
+    } else {
+        path.standard.first = D_00A59270.first;
+        path.standard.second = D_00A59270.second;
+        strcat(strcat(path.text, sequenceName), D_00A59280);
+    }
+
+    readResult = xglCdReadFile(path.text, buffer, 0, 0);
+
+    if (readResult > 0) {
+        return xglSoundSendSmd2(buffer, 0);
+    }
+    return readResult;
+}
 
 void InitXrgSoundSystem(void)
 {
@@ -158,7 +236,50 @@ void XrgSoundSetVolume(XrgSound *sound, float volume)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundRingMoving);
+void XrgSoundRingMoving(XrgSound *sound, int forceRestart, float timer)
+{
+    int soundEffectId = 0;
+
+    if (sound != 0) {
+        int restart = forceRestart != 0;
+
+        if ((unsigned int) sound->kind < 6) {
+            switch (sound->kind) {
+            case 0:
+                soundEffectId = (restart + 1) | 0x20000;
+                break;
+            case 4:
+                soundEffectId = (restart + 5) | 0x20000;
+                break;
+            case 2:
+                soundEffectId = (restart + 7) | 0x20000;
+                break;
+            case 5:
+                soundEffectId = (restart + 3) | 0x20000;
+                break;
+            case 3:
+                soundEffectId = (restart + 9) | 0x20000;
+                break;
+            case 1:
+                soundEffectId = (restart + 11) | 0x20000;
+                break;
+            }
+        }
+
+        if (soundEffectId != 0) {
+            int currentHandle = sound->handle;
+
+            if (soundEffectId != currentHandle) {
+                if (currentHandle == 0 || forceRestart != 0) {
+                    xglSoundEffectStopID(currentHandle, 0);
+                    _ring(sound, soundEffectId, 0x80);
+                    sound->handle = soundEffectId;
+                }
+            }
+            sound->timer = timer;
+        }
+    }
+}
 
 void XrgSoundRingStopMoving(XrgSound *sound)
 {
@@ -182,7 +303,21 @@ void XrgSoundRing(XrgSound *sound, int soundId)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_sound", XrgSoundRingVol);
+void XrgSoundRingVol(XrgSound *sound, int soundId, int gain)
+{
+    if (sound != 0) {
+        if (soundId > 0) {
+            int maxGain = 128;
+
+            if (gain < 0) {
+                gain = 0;
+            } else if (gain > maxGain) {
+                gain = maxGain;
+            }
+            _ring(sound, soundId, gain);
+        }
+    }
+}
 
 void XrgSoundRingStop(XrgSound *sound, int soundId)
 {

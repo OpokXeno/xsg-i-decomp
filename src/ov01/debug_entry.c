@@ -36,11 +36,61 @@ char *debugWpnGet(int wpnId) {
 
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugCmdPrint);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugThinkRegName);
+extern char *cmdStrTbl[];
+extern char D_00A5AA40[];
+extern const char D_00A50550[];
+extern const char D_00A50558[];
+extern const char D_00A50560[];
+extern const char D_00A50568[];
+
+#define DEBUG_THINK_REG_VALID 0x8000
+#define DEBUG_THINK_REG_TEXT 0x4000
+#define DEBUG_THINK_REG_INDEX_MASK 0x3FFF
+#define DEBUG_THINK_NUMERIC_LIMIT 16
+#define CMD_STR_TBL_REG_NAMES 0x28
+
+char *debugThinkRegName(int reg_code)
+{
+    int reg_index;
+
+    reg_index = reg_code & DEBUG_THINK_REG_INDEX_MASK;
+    if (reg_code & DEBUG_THINK_REG_VALID) {
+        if (reg_code & DEBUG_THINK_REG_TEXT) {
+            if (reg_index < DEBUG_THINK_NUMERIC_LIMIT) {
+                sprintf(D_00A5AA40, D_00A50550, reg_index);
+            } else {
+                sprintf(D_00A5AA40, D_00A50558, cmdStrTbl[CMD_STR_TBL_REG_NAMES + reg_index]);
+            }
+        } else {
+            if (reg_index < DEBUG_THINK_NUMERIC_LIMIT) {
+                sprintf(D_00A5AA40, D_00A50560, reg_index);
+            } else {
+                sprintf(D_00A5AA40, D_00A50568, cmdStrTbl[CMD_STR_TBL_REG_NAMES + reg_index]);
+            }
+        }
+    } else {
+        D_00A5AA40[0] = '\0';
+    }
+
+    return D_00A5AA40;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugThinkPrint);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugBattle);
+extern int debugStatDisp(void);
+extern int debugSpecDisp(void);
+extern int debugParaDisp(void);
+
+void debugBattle(int page)
+{
+    if (page == 0) {
+        debugStatDisp();
+    } else if (page == 1) {
+        debugParaDisp();
+    } else if (page == 2) {
+        debugSpecDisp();
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugStatDisp);
 
@@ -149,9 +199,45 @@ int plIchigekiGet(void)
     return plIchigeki;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugItemSet);
+extern int dataItmBoxInc(int id);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugEtherSet);
+void debugItemSet(void)
+{
+    int pass;
+    int item_id;
+
+    for (pass = 0; pass < 10; pass++) {
+        for (item_id = 1; item_id < 36; item_id++) {
+            dataItmBoxInc(item_id);
+        }
+    }
+}
+
+extern int calcEtherEquipOrg(int charaId, int slot, int etherId);
+
+void debugEtherSet(void)
+{
+    int slot;
+
+    for (slot = 0; slot < 12; slot++) {
+        calcEtherEquipOrg(3, slot, slot + 1);
+    }
+    for (slot = 0; slot < 10; slot++) {
+        calcEtherEquipOrg(1, slot, slot + 0x1B);
+    }
+    for (slot = 0; slot < 10; slot++) {
+        calcEtherEquipOrg(2, slot, slot + 0x11);
+    }
+    for (slot = 0; slot < 12; slot++) {
+        calcEtherEquipOrg(6, slot, slot + 0x25);
+    }
+    for (slot = 0; slot < 10; slot++) {
+        calcEtherEquipOrg(7, slot, slot + 0x31);
+    }
+    for (slot = 0; slot < 8; slot++) {
+        calcEtherEquipOrg(5, slot, slot + 0x48);
+    }
+}
 
 void debugSkillSet(void) {
 
@@ -282,7 +368,18 @@ int configCamera(void) {
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", configStat);
+int configStat(void)
+{
+    extern int statId;
+    extern PadPrefix PadData;
+    extern int configSeq;
+
+    valLR(&statId, 1, 0xC2, 1);
+    if (PadData.half_2a & 0x20) {
+        configSeq = 1;
+    }
+    return 0;
+}
 
 extern int equipId; /* debug equip menu's selected character index, 1..0x20 */
 extern PadPrefix PadData;
@@ -298,7 +395,20 @@ int configEqu(void) {
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", configGain);
+int configGain(void)
+{
+    extern int gainId;
+    extern PadPrefix PadData;
+    extern int configSeq;
+    extern int equipPosX;
+
+    valLR(&gainId, 1, 0xC2, 1);
+    if (PadData.half_2a & 0x20) {
+        configSeq = 3;
+        equipPosX = 0;
+    }
+    return 0;
+}
 
 int configPlMuteki(void) {
     int flag;
@@ -375,7 +485,9 @@ typedef struct UnitOrgData {
     short agwsId;                /* +0x54 */
     short engineId;               /* +0x56 */
     short frameId;                /* +0x58 */
-    unsigned char unmodeled_5a[0x64 - 0x5A];
+    signed char weaponVariant[3]; /* +0x5A */
+    unsigned char unmodeled_5d;
+    short weaponId[3];            /* +0x5E */
     short accessory[3];           /* +0x64 */
     short attachment[3];          /* +0x6A */
     unsigned char unmodeled_70[0x82 - 0x70];
@@ -467,7 +579,26 @@ int equipWpn2(void) {
     return equipWpn(2);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", equipWpn);
+int equipWpn(int slot)
+{
+    UnitOrgData *unit;
+    int weapon_id;
+    int weapon_variant;
+
+    unit = dataUnitOrgGet(equipId);
+    weapon_id = unit->weaponId[slot];
+    weapon_variant = unit->weaponVariant[slot];
+    if (equipPosX == 0) {
+        valLR(&weapon_variant, 0x18, 0x27, 1);
+    } else {
+        valLR(&weapon_id, 0, 0x73, 1);
+    }
+    calcWpnEquipOrg(unit->charaId, slot, weapon_id, weapon_variant);
+    if (PadData.half_2a & 0x20) {
+        equipPosX = (equipPosX != 0) ? 0 : 9;
+    }
+    return 0;
+}
 
 /* Debug equip menu: cycles the attachment in equipment slot `slot` of the
    character selected by equipId. */

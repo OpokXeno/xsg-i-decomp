@@ -10,8 +10,23 @@ extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
+extern void XrgLog(const char *format, const char *source_file, int line, ...);
+extern const char D_00A54F40[];
+extern const char D_00A54F68[];
+extern const char D_00A55030[];
+extern const char D_00A55090[];
+extern const char D_00A550B8[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", _VecAssert);
+static void _VecAssert(RgVectorPrefix *vector, const char *message,
+                       const char *file, int line)
+{
+    if (vector != 0) {
+        RgError(D_00A54F40, file, line, vector, message, vector->m_szFile,
+                vector->m_nLine);
+    } else {
+        RgError(D_00A54F68, file, line, message);
+    }
+}
 
 static void _InitRgVector(RgVectorPrefix *vector, unsigned int capacity)
 {
@@ -106,9 +121,34 @@ void RgVectorClear(RgVectorPrefix *vector)
     vector->m_uSize = 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", RgVectorFind_sub);
+int RgVectorFind_sub(RgVectorPrefix *vector, void *element,
+                     const char *file, int line)
+{
+    unsigned int index;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", RgVectorResize);
+    if (vector == 0)
+        _VecAssert(vector, rg_vector_not_null_message, file, line);
+    for (index = 0; index < vector->m_uSize; index++) {
+        if (vector->m_apList[index] == element)
+            return index;
+    }
+    return -1;
+}
+
+void RgVectorResize(RgVectorPrefix *vector, unsigned int size)
+{
+    unsigned int index;
+
+    if (vector == 0)
+        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 145);
+    if (size > vector->m_uCapa)
+        _VecAssert(vector, D_00A55030, D_00A54F90, 146);
+    if (size > vector->m_uSize) {
+        for (index = vector->m_uSize; index < size; index++)
+            vector->m_apList[index] = 0;
+    }
+    vector->m_uSize = size;
+}
 
 void RgVectorAssign(RgVectorPrefix *vector, unsigned int index, void *element)
 {
@@ -143,4 +183,16 @@ void **RgVectorGetArray(RgVectorPrefix *vector)
     return vector->m_apList;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_vector", RgVectorDump);
+void RgVectorDump(RgVectorPrefix *vector)
+{
+    unsigned int index;
+
+    if (vector == 0)
+        _VecAssert(vector, rg_vector_not_null_message, D_00A54F90, 187);
+    XrgLog(D_00A55090, D_00A54F90, 189, vector, vector->m_uCapa,
+           vector->m_uSize);
+    for (index = 0; index < vector->m_uSize; index++) {
+        XrgLog(D_00A550B8, D_00A54F90, 191, index,
+               vector->m_apList[index]);
+    }
+}

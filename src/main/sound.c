@@ -98,4 +98,68 @@ void Java_xeno_Sound_effectStop__I(JThread *thread, int *arguments,
     xglSoundEffectStopID(*arguments, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sound", Java_xeno_Sound_streamPlay__IIII);
+/* The call block for Sound.streamPlay(int, int, int, int). */
+typedef struct SoundStreamPlayCall {
+    int source_id;
+    int pitch;
+    int volume;
+    int pan;
+} SoundStreamPlayCall;
+
+extern const char base_0_0043C188[17];
+
+void xglSoundStreamStop(int channel);
+void xglSoundStreamOpenVagMultiParam(int stream, const char *path, int pitch,
+                                     int volume, int pan);
+void xglSoundStreamOpenVagStereoParam(int stream, const char *path, int pitch,
+                                     int volume);
+
+void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
+                                      SoundStreamPlayCall *arguments,
+                                      unsigned int *result)
+{
+    char path[256];
+    const char *prefix;
+    char *path_end;
+    int quotient;
+    int digit_index;
+
+    prefix = base_0_0043C188;
+    quotient = arguments->source_id;
+    path_end = path;
+    if ((*path_end = *prefix) != '\0') {
+        do {
+            prefix++;
+            path_end++;
+            *path_end = *prefix;
+        } while (*prefix != '\0');
+    }
+
+    for (digit_index = 5; digit_index >= 0; digit_index--) {
+        path_end[digit_index] = (char)('0' + quotient % 10);
+        quotient /= 10;
+    }
+
+    path_end[6] = '.';
+    path_end[7] = 'v';
+    path_end[8] = 'd';
+
+    if (quotient == 0) {
+        path_end[9] = 'm';
+        path_end[10] = '\0';
+        xglSoundStreamStop(0);
+        xglSoundStreamOpenVagMultiParam(
+            0, path,
+            (int)((unsigned int)arguments->pitch << 12) / 48000,
+            arguments->volume, arguments->pan);
+        return;
+    }
+
+    path_end[9] = 's';
+    path_end[10] = '\0';
+    xglSoundStreamStop(0);
+    xglSoundStreamOpenVagStereoParam(
+        0, path,
+        (int)((unsigned int)arguments->pitch << 12) / 48000,
+        arguments->volume);
+}

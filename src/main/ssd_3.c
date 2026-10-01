@@ -23,6 +23,13 @@ enum {
     RSSD_CMD_GET_VAG_STREAM_STATUS_ALL    = 0xbe
 };
 
+enum {
+    RSSD_CMD_SET_PCM_STREAM_DATA        = 0xa4,
+    RSSD_CMD_SET_VAG_STREAM_DATA_STEREO = 0xb5,
+    RSSD_CMD_SET_VAG_STREAM_DATA_MONO   = 0xb6,
+    RSSD_CMD_SET_VAG_STREAM_PARAM       = 0xbd
+};
+
 /*
  * channel is cached at RssdStrWork.pcm_channel right after the call (see
  * src/main/ssd_3.h); volume forwards to the sound server as the stream's
@@ -67,7 +74,15 @@ void SsdStopPcmStream(int channel)
     RssdCallFunc(RSSD_CMD_STOP_PCM_STREAM, &request, 0, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_3", SsdSetPcmStreamData);
+void SsdSetPcmStreamData(void *data, int size)
+{
+    RssdRequest request;
+
+    request.arg[0].pointer = data;
+    request.arg[1].value = size;
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_SET_PCM_STREAM_DATA, &request, data, size);
+}
 
 int SsdGetPcmStreamStatus(void)
 {
@@ -145,9 +160,27 @@ void SsdStopVagStream(int channel)
     RssdCallFunc(RSSD_CMD_STOP_VAG_STREAM, &request, 0, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_3", SsdSetVagStreamDataStereo);
+void SsdSetVagStreamDataStereo(int channel, int address, int size)
+{
+    RssdRequest request;
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_3", SsdSetVagStreamDataMono);
+    request.arg[0].value = channel;
+    request.arg[1].value = address;
+    request.arg[2].value = size;
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_SET_VAG_STREAM_DATA_STEREO, &request, (void *) address, size);
+}
+
+void SsdSetVagStreamDataMono(int channel, int address, int size)
+{
+    RssdRequest request;
+
+    request.arg[0].value = channel;
+    request.arg[1].value = address;
+    request.arg[2].value = size;
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_SET_VAG_STREAM_DATA_MONO, &request, (void *) address, size);
+}
 
 int SsdGetVagStreamStatusStereo(void)
 {
@@ -231,7 +264,17 @@ void SsdSetVagStreamPanpot(int channel, int panpot, int duration)
     RssdCallFunc(RSSD_CMD_SET_VAG_STREAM_PANPOT, &request, 0, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_3", SsdSetVagStreamParam);
+void SsdSetVagStreamParam(int channel, int parameter, int value, int duration)
+{
+    RssdRequest request;
+
+    request.arg[0].value = channel;
+    request.arg[1].value = parameter;
+    request.arg[2].value = value;
+    request.arg[3].value = duration;
+    RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
+    RssdCallFunc(RSSD_CMD_SET_VAG_STREAM_PARAM, &request, 0, 0);
+}
 
 void SsdClearStreamRingBuffer(int channel)
 {

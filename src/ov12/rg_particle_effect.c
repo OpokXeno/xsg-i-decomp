@@ -108,9 +108,43 @@ void DisposeRgParticleEffect(RgParticleEffect *effect)
     RgHeapFree(InstanceOfRgHeap(), effect, D_00A542D8, 333);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", InitRgParticleEffectEssence);
+void InitRgParticleEffectEssence(RgParticleEffectEssence *essence)
+{
+    extern const char D_00A54368[];
+    extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", RgParticleEffectEssenceSerialize);
+    if (essence == 0) {
+        assert_prog(D_00A54368, D_00A542D8, 339);
+    }
+    essence->textureName[0] = '\0';
+    essence->particleCount = 32;
+    XrgClearVector(essence->position);
+    XrgClearVector(essence->direction);
+    essence->position[0] = 0.1f;
+    essence->position[1] = 1.0f;
+    essence->direction[0] = -0.1f;
+    essence->duration = 0.0f;
+    essence->direction[1] = -1.0f;
+    essence->interval = 5.0f;
+    XrgSetVectorXYZ(essence->unitDirection, 0.0f, 0.0f, 1.0f);
+    essence->speed = 6.2831855f;
+    essence->life = 0.0f;
+    essence->shotLife = 5.0f;
+    essence->repeat = 0;
+    essence->resist = 0.0f;
+}
+
+void RgParticleEffectEssenceSerialize(RgParticleEffectEssence *essence,
+                                      RgParticleEffectEssence *destination)
+{
+    extern const char D_00A54368[];
+
+    if (essence == 0) {
+        assert_prog(D_00A54368, D_00A542D8, 365);
+    }
+    memset(destination, 0, 0x100);
+    *destination = *essence;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", RgParticleEffectEssenceResume);
 

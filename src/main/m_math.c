@@ -374,7 +374,21 @@ float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second)
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcDirVector);
+Vector4 *MMathCalcDirVector(Vector4 *destination, const Vector4 *source,
+                            const Vector4 *target)
+{
+    register Vector4 *normalized_destination asm("$2") = destination;
+    __asm__ __volatile__(
+        "lqc2 vf1,0(%1)\n\t"
+        "lqc2 vf2,0(%2)\n\t"
+        "vsub.xyz vf2,vf2,vf1\n\t"
+        "sqc2 vf2,0(%0)"
+        : "+r"(normalized_destination)
+        : "r"(source), "r"(target)
+        : "memory");
+    MMathNormalizeVector2(destination, normalized_destination);
+    return normalized_destination;
+}
 
 /* sef.c (main); no header is published for it yet. */
 extern float srsAtan2(float deltaX, float deltaZ);

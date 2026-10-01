@@ -7,6 +7,16 @@
 
 #include "shared.h"
 #include "ov01/obj.h"
+#include "ov01/calc.h"
+
+typedef struct {
+    int seType; /* +0x00: echoes the resolved sound-effect index; 0 on lookup failure */
+    void *dest; /* +0x04: destination address dataFileLoadNB loads into */
+    int size;   /* +0x08: file size rounded up to a 2048-byte CD sector */
+} SndSeLoadWork;
+
+extern int dataNormIdxGet(ObjectTask *unit, int seType);
+extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
 /*
  * The deferred sound-effect object sndSeTransPlay allocates and
@@ -34,11 +44,13 @@ typedef struct {
  * it and passes it to SsdAddSequenceData.
  */
 typedef struct {
-    unsigned char unmodeled_00[4];  /* +0x00 */
+    int mode;                       /* +0x00 */
     void *smdNormal;                /* +0x04 */
     void *smdAlt;                   /* +0x08 */
     void *swd;                      /* +0x0c */
-    unsigned char unmodeled_10[12]; /* +0x10 */
+    int smdSize;                    /* +0x10 */
+    int smdAltSize;                 /* +0x14 */
+    int swdSize;                    /* +0x18 */
 } SndMuData;
 
 extern SndMuData sndMuDat;
@@ -57,7 +69,8 @@ extern void xglSoundSequenceNormal(int volume);
 extern void xglSoundSequenceFadeOut(int time);
 extern void xglSoundSequenceNormal3(int channel, int volume, int time);
 
-void sndSePlay(int seId, int volume, int pan);
+/* The unit the sound belongs to, sound-effect id, and sound number. */
+int sndSePlay(int unit, int id, int no);
 
 int sndMuPlay(void);
 

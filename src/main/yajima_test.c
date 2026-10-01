@@ -105,6 +105,10 @@ static void HddTestUnmountCommon(void);
  * not see an implicit declaration. */
 static int xtxdec_sleep(void);
 
+/* xtxdec_sub is still INCLUDE_ASM; declare it here so XtxDecode does not
+ * see an implicit declaration. */
+static int xtxdec_sub(char *filename);
+
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern unsigned char TestEnv_0_0036A030[];
 
@@ -293,7 +297,62 @@ static void HddTestDummyFolder(void)
     HddTestUnmountCommon();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", HddTestDummySave);
+extern int sceWrite(int descriptor, void *buffer, unsigned int size);
+extern char D_004C0BB8[];
+extern char D_004C0BC8[];
+extern char D_004C0BD8[];
+extern char D_004C0BE8[];
+extern char D_004C0BF8[];
+extern char D_004C0C08[];
+extern char D_004DA300[];
+
+static void HddTestDummySave(void)
+{
+    int zone_size;
+    int chunk_size;
+    int remaining;
+    int write_size;
+    int counter;
+    int handle;
+    int wrote;
+    int mkdir_status;
+    int close_status;
+
+    HddTestMountCommon();
+    zone_size = sceDevctl(hdd_mount_point, 0x5001, 0, 0, 0, 0);
+    remaining = sceDevctl(hdd_mount_point, 0x5002, 0, 0, 0, 0) - 3;
+    chunk_size = 0x1000000 / zone_size;
+    printf(D_004C0BB8, remaining, zone_size);
+    printf(D_004C0BC8, chunk_size);
+    mkdir_status = sceMkdir(D_004C0BD8, 0x1ff);
+    printf(D_004C0BE8, mkdir_status);
+    handle = sceOpen(D_004C0BF8, 0x602, 0x1ff);
+    printf(D_004C0C08, handle);
+
+    counter = 0;
+    for (;;) {
+        if (remaining <= 0) {
+            break;
+        }
+        if (chunk_size < remaining) {
+            write_size = chunk_size * zone_size;
+            remaining -= chunk_size;
+        } else {
+            write_size = remaining * zone_size;
+            remaining = 0;
+        }
+        wrote = sceWrite(handle, (void *) 0x1000000, write_size);
+        printf(D_004DA300, counter, wrote);
+        counter++;
+        if (wrote < 0) {
+            break;
+        }
+    }
+
+    close_status = sceClose(handle);
+    printf(hdd_close_result_format, close_status);
+    HddTestUnmountCommon();
+}
 
 static void HddTestMakeYS(void)
 {
@@ -392,7 +451,17 @@ static void xtxdec_put4byte(LittleEndianWord *destination, int value)
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", xtxdec_sub);
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", xtxdec_sleep);
+extern char D_004C14B8[];
+
+static int xtxdec_sleep(void)
+{
+    if ((PAD_U64_AT(40) & 0x08000100ULL) == 0x08000100ULL) {
+        return 1;
+    }
+    xglFontDebugPrintf(0, 0, D_004C14B8);
+    xglSleep();
+    return 0;
+}
 
 static void xtxdec_error(int y, const char *message)
 {
@@ -404,7 +473,46 @@ static void xtxdec_error(int y, const char *message)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", XtxDecode);
+extern int main_param_argc;
+extern int main_param_argv;
+extern char D_004C14C8[];
+extern char D_004C14F8[];
+
+static void XtxDecode(void)
+{
+    int i;
+    int index;
+    int y;
+    int status;
+
+    if (main_param_argc < 2) {
+        xtxdec_error(16, D_004C14C8);
+        return;
+    }
+
+    i = 1;
+    y = 16;
+    for (;;) {
+        if (xtxdec_sleep()) {
+            break;
+        }
+        if (i >= main_param_argc) {
+            y = 16;
+            break;
+        }
+        y = 16;
+        for (index = 1; index <= i; index++) {
+            xglFontDebugPrintf(0, y, ((char **) main_param_argv)[index]);
+            y += 8;
+        }
+        status = xtxdec_sub(((char **) main_param_argv)[i]);
+        if (status < 0) {
+            break;
+        }
+        i++;
+    }
+    xtxdec_error(y, D_004C14F8);
+}
 
 static void Dummy(void)
 {
@@ -416,4 +524,48 @@ static void Dummy(void)
     tyaDrawGauge(0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/yajima_test", YajimaTest);
+extern void xglRenderClearFrame(void);
+extern void xglRenderClearColor(unsigned int color);
+extern void xglRenderClearDepth(void);
+extern void xglMenuInitial(void);
+extern void xglMenuOpen(int mode, YajimaMenuState *menu);
+extern void xglMenuDraw(void);
+extern void xglClockRead(XglClock *clock);
+extern int xglFRand(void);
+extern YajimaMenuState m_54;
+extern void (*func_51[7])(void);
+extern char D_004DA3A0[];
+extern char D_004C1518[];
+
+void YajimaTest(void)
+{
+    int selection;
+    XglClock clock;
+
+    PadData.bytes[0x4E] = 0x40;
+    PadData.bytes[0x4F] = 0x40;
+    xglRenderClearFrame();
+    xglRenderClearColor(0x80004000);
+
+    for (;;) {
+        xglMenuInitial();
+        m_54.selection = &selection;
+        selection = 0;
+        xglMenuOpen(-1, &m_54);
+        while (selection == 0) {
+            xglFontDebugPrintf(0, 0, D_004DA3A0);
+            xglMenuDraw();
+            xglClockRead(&clock);
+            xglFontDebugPrintf(0x80, 0x10, D_004C1518, clock.year, clock.month,
+                                clock.day, clock.hour, clock.minute, clock.second);
+            xglFRand();
+            xglSleep();
+        }
+        if (selection == -1) {
+            break;
+        }
+        func_51[selection - 1]();
+        xglSleep();
+    }
+    xglRenderClearDepth();
+}

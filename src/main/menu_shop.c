@@ -75,6 +75,30 @@ extern void eMessageMain(MenuShopMessage *message);
 extern MenuShopWeapon *func_A1A3D8(short item);
 extern const char **func_A2C738(int bullet);
 
+typedef struct MenuShopWindowSP {
+    unsigned char unmodeled_00;
+    unsigned char row_count;
+    unsigned char unmodeled_02[0x0A];
+    short width;
+    short height;
+    const char *title;
+    unsigned char columns;
+    unsigned char rows;
+    unsigned char unmodeled_16[0x06];
+    MenuShopListRow *items;
+    unsigned char unmodeled_20[0x06];
+    unsigned char state;
+} MenuShopWindowSP;
+
+extern MenuShopWindowSP *MenuShopWinSP;
+extern unsigned char MenuKeepSelect[0x64];
+extern const char D_004C7858[];
+extern MenuShopListRow *MenuListMake(int list, int mode);
+extern void MenuShopSortSet(int list, int type, int order, int option);
+extern void WindowSPItemChange(MenuShopWindowSP *window);
+extern void WindowSPSetSelect(MenuShopWindowSP *window, unsigned char *saved_selection);
+extern int WindowSPSelect(MenuShopWindowSP *window, int input);
+
 INCLUDE_ASM("asm/main/nonmatchings/menu_shop", MenuShopAgwsListChange);
 
 static void TskObjectSet3(TskObject *task, TskObjectWorker worker, void *data)
@@ -149,7 +173,34 @@ void MenuShopListColorChange(int list, int kind)
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_shop", MenuShopListChange00);
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_shop", MenuShopListChange01);
+int MenuShopListChange01(void)
+{
+    int type = 18;
+    MenuShopWindowSP *window;
+    short window_width;
+
+    if (MenuShopWork->sort_mode_selector == 0)
+        type = 19;
+
+    MenuShopSortSet(0, type, 0, 0);
+    MenuListMake(0, -10);
+    MenuShopListColorChange(0, 2);
+
+    window = MenuShopWinSP;
+    MenuShopWinSP->rows = 9;
+    window_width = 272;
+    window->height = 222;
+    window->width = window_width;
+    MenuShopWinSP->columns = 1;
+    MenuShopWinSP->title = D_004C7858;
+    MenuShopWinSP->row_count = 7;
+    MenuShopWinSP->items = MenuListGet(0);
+    WindowSPItemChange(MenuShopWinSP);
+    WindowSPSetSelect(MenuShopWinSP, &MenuKeepSelect[type * 5]);
+
+    MenuShopWinSP->state = 6;
+    return WindowSPSelect(MenuShopWinSP, 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_shop", MenuShopList);
 

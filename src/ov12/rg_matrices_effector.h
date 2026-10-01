@@ -113,6 +113,25 @@ struct MatrixCombine {
     float weight;
 };
 
+/*
+ * The constraint allocation contains this evidenced prefix through its ramp
+ * weight.  The three manipulator slots are written by _ConstraintSetRoot and
+ * _ConstraintSetTop; the point vector and two matrices are read or written by
+ * the constraint helpers.  The allocator requests 0xD0 bytes, but the final
+ * twelve bytes have no field witness and remain outside this partial type.
+ */
+struct MatrixConstraint {
+    MatrixEffector effector;
+    void *root_manipulator;
+    void *joint_manipulator;
+    void *top_manipulator;
+    unsigned char unmodeled_2c[4];
+    RgVector point_to;
+    RgMatrix root_inverse;
+    RgMatrix constrained_frame;
+    float weight;
+};
+
 static void _ManiGet(void *manipulator, RgMatrix matrix);
 
 /*

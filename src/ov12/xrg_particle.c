@@ -140,7 +140,22 @@ static void _WrapperDestruct(XrgParticleDriver *driver)
     DisposeXrgParticleDriver(driver);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", InstanceOfXrgParticleDriver);
+extern void *RgSingletonIDGet(unsigned int singleton_id);
+extern void RgSingletonIDEntry(int singleton_id, RgSimpleDB *database,
+                               void (*destructor)(RgSimpleDB *database));
+
+XrgParticleDriver *InstanceOfXrgParticleDriver(void)
+{
+    XrgParticleDriver *driver;
+
+    driver = RgSingletonIDGet(7U);
+    if (driver == 0) {
+        driver = CreateXrgParticleDriver();
+        RgSingletonIDEntry(7, (RgSimpleDB *)driver,
+                           (void (*)(RgSimpleDB *))_WrapperDestruct);
+    }
+    return driver;
+}
 
 void XrgParticleDriverSet(XrgParticleDriver *driver, int params0, int params1)
 {
@@ -151,9 +166,68 @@ void XrgParticleDriverSet(XrgParticleDriver *driver, int params0, int params1)
     driver->params1 = params1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", XrgParticleDriverPassTimeReq);
+/*
+ * ov12:0x00a58f78 ("pDrv->m_uReqCalcNum < REQ_CALC_MAX") and ov12:0x00a58fa0
+ * ("pPoints != NIL") are further scaffold-owned assertion strings of this
+ * allocation (same ownership as D_00A58F20/D_00A58F30 above).
+ */
+extern const char D_00A58F78[];
+extern const char D_00A58FA0[];
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_particle", XrgParticleDriverDispReq);
+#define REQ_CALC_MAX 16
+
+void XrgParticleDriverPassTimeReq(XrgParticleDriver *driver, struct XrgParticle *pPoints,
+                                  int count, float rate)
+{
+    unsigned int idx;
+
+    if (driver == 0) {
+        assert_prog(D_00A58F20, D_00A58F30, 392);
+    }
+    if (driver->m_uReqCalcNum >= REQ_CALC_MAX) {
+        assert_prog(D_00A58F78, D_00A58F30, 394);
+    }
+    if (pPoints == 0) {
+        assert_prog(D_00A58FA0, D_00A58F30, 395);
+    }
+    idx = driver->m_uReqCalcNum++;
+    driver->calcReq[idx].particle = pPoints;
+    driver->calcReq[idx].count = count;
+    driver->calcReq[idx].rate = rate;
+}
+
+/*
+ * ov12:0x00a58fb0 ("pDrv->m_uReqDispNum < REQ_DISP_MAX") and ov12:0x00a58fd8
+ * ("pPic != NIL") are further scaffold-owned assertion strings of this
+ * allocation.
+ */
+extern const char D_00A58FB0[];
+extern const char D_00A58FD8[];
+
+#define REQ_DISP_MAX 1024
+
+void XrgParticleDriverDispReq(XrgParticleDriver *driver, struct XrgParticle *pPoints,
+                              int count, RgBxxPic *pPic)
+{
+    unsigned int idx;
+
+    if (driver == 0) {
+        assert_prog(D_00A58F20, D_00A58F30, 417);
+    }
+    if (driver->m_uReqDispNum >= REQ_DISP_MAX) {
+        assert_prog(D_00A58FB0, D_00A58F30, 419);
+    }
+    if (pPoints == 0) {
+        assert_prog(D_00A58FA0, D_00A58F30, 420);
+    }
+    if (pPic == 0) {
+        assert_prog(D_00A58FD8, D_00A58F30, 421);
+    }
+    idx = driver->m_uReqDispNum++;
+    driver->dispReq[idx].pPoints = pPoints;
+    driver->dispReq[idx].count = count;
+    driver->dispReq[idx].pPic = pPic;
+}
 
 static void _Calc(struct XrgParticle *particle, int count, float rate,
                   float elapsed);

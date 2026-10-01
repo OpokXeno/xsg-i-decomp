@@ -1,8 +1,23 @@
 #include "common.h"
 #include "shared.h"
 #include "end_print.h"
+#include "main/xgl_jpeg.h"
 
 #define NULL ((void *)0)
+
+typedef struct EndPrintRenderState {
+    unsigned char unmodeled_00[4];
+    short scissor_width;                 /* +0x04 */
+    short scissor_height;                /* +0x06 */
+    unsigned char unmodeled_08[0x0c];
+    unsigned short draw_back_value;      /* +0x14 */
+    unsigned char unmodeled_16[0x0a];
+    unsigned short draw_back_reset_value; /* +0x20 */
+} EndPrintRenderState;
+
+extern EndPrintRenderState sRender;
+extern unsigned char D_00532A38[];
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
 int ePrintWHGet(void)
 {
@@ -43,7 +58,21 @@ print_flush_loop:
     eMessageSpriteReset();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/end_print", endPrintExtFuncPack);
+void endPrintExtFuncPack(void (*func)(EndPrintContext *context, int param), int param)
+{
+    PrintFuncEntry *entry;
+
+    entry = pPrintFuncTop;
+    entry->func = func;
+    entry->param = param;
+    entry++;
+    pPrintFuncTop = entry;
+    if ((u32)D_00532A38 < (u32)entry) {
+        endPrintInit();
+        entry = pPrintFuncTop;
+    }
+    entry->func = NULL;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/end_print", endPrintInfoSet);
 
@@ -112,7 +141,18 @@ INCLUDE_ASM("asm/main/nonmatchings/end_print", PrintTagFont);
 
 INCLUDE_ASM("asm/main/nonmatchings/end_print", ScissorSet);
 
-INCLUDE_ASM("asm/main/nonmatchings/end_print", ScissorReset);
+static void ScissorReset(EndPrintContext *context)
+{
+    u64 *scratch;
+
+    scratch = context->scratch;
+    scratch[0] = ((u64)0x10000000 << 32) | 0x8001;
+    scratch[1] = 14;
+    scratch[2] = ((u64)(sRender.scissor_width - 1) << 16) |
+                 ((u64)(sRender.scissor_height - 1) << 48);
+    scratch[3] = 64;
+    sceVif1PkAddDirectDataN(context->packet, scratch, 2);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/end_print", PrintNumber);
 
@@ -171,9 +211,43 @@ static void FontTexReload(EndPrintContext *context)
 
 INCLUDE_ASM("asm/main/nonmatchings/end_print", FontTexChange);
 
-INCLUDE_ASM("asm/main/nonmatchings/end_print", DrawBackSet);
+static void DrawBackSet(DrawBackContext *context)
+{
+    u64 *scratch;
+    unsigned int draw_back_control;
 
-INCLUDE_ASM("asm/main/nonmatchings/end_print", DrawBackReset);
+    scratch = context->scratch;
+    draw_back_control = sRender.draw_back_value;
+    draw_back_control |= 0x80000;
+    scratch[0] = ((u64)0x10000000 << 32) | 0x8003;
+    scratch[1] = 14;
+    scratch[3] = 63;
+    scratch[4] = (u64)0x8000 << 17;
+    scratch[5] = 78;
+    scratch[6] = draw_back_control;
+    scratch[7] = 76;
+    scratch[2] = 0;
+    sceVif1PkAddDirectDataN(context->packet, scratch, 4);
+}
+
+static void DrawBackReset(DrawBackContext *context)
+{
+    u64 *scratch;
+    unsigned int draw_back_control;
+
+    scratch = context->scratch;
+    draw_back_control = sRender.draw_back_reset_value;
+    draw_back_control |= 0x80000;
+    scratch[0] = ((u64)0x10000000 << 32) | 0x8003;
+    scratch[1] = 14;
+    scratch[3] = 63;
+    scratch[4] = (u64)0x3100 << 16;
+    scratch[5] = 78;
+    scratch[6] = draw_back_control;
+    scratch[7] = 76;
+    scratch[2] = 0;
+    sceVif1PkAddDirectDataN(context->packet, scratch, 4);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/end_print", ScreenClear);
 
@@ -202,8 +276,6 @@ void endPrintDirectFrameCopy(XglPacket *packet, int tagLow, int tagHigh)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/end_print", endPrintDirectLine);
-
-extern int xglJpegDecode(void *request);
 
 /*
  * The JPEG-decode setup context: only the fields endDecodeJpeg itself

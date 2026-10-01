@@ -2,7 +2,32 @@
 #include "shared.h"
 #include "spl.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/spl", SPL_init);
+void SPL_init(SplineState *spline, unsigned int weight_mode,
+              const float *samples, unsigned int sample_count,
+              unsigned int component_count)
+{
+    spline->component_count = component_count;
+    spline->weight_mode = (unsigned short)weight_mode;
+    spline->samples = samples;
+    spline->sample_count = (unsigned short)sample_count;
+
+    switch ((int)weight_mode) {
+    case 0:
+        return;
+    case 1:
+        SPL_cardinalInit(spline);
+        return;
+    case 2:
+        setWeightLen((SplinePoint *)samples, (int)sample_count);
+        return;
+    case 3:
+        setWeightLen((SplinePoint *)samples, (int)sample_count);
+        SPL_cardinalInit(spline);
+        break;
+    default:
+        break;
+    }
+}
 
 static void setWeightLen2(SplinePoint *points, int count)
 {

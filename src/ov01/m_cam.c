@@ -34,6 +34,8 @@ extern void *sysCam;
 extern unsigned char sysCamBuff[0x5F0];
 extern int camFlags;
 extern unsigned char camParams[0x5B0];
+extern float D_00A5B220;
+extern float D_00A5B224;
 
 #define CAM_FLAG_ACTIVE 0x1
 #define CAM_FLAG_DUMP_DISABLED 0x10
@@ -66,7 +68,20 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamGetCurrentAngle);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamGetCurrentEye);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamGetLengthActor);
+float MCamGetLengthActor(int selector)
+{
+    float length = 0.0f;
+
+    switch (selector) {
+    case 0:
+        length = D_00A5B220;
+        break;
+    case 1:
+        length = D_00A5B224;
+        break;
+    }
+    return length;
+}
 
 void MCamInit(void)
 {

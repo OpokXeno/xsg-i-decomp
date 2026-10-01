@@ -6,6 +6,10 @@
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
+typedef unsigned char SceneByte;
+typedef struct SceneClass SceneClass;
+typedef struct SceneString SceneString;
+typedef SceneByte *SceneObject;
 
 /*
  * The JVM's class-field handle, as `lookupClassField` returns it. Only the
@@ -52,6 +56,21 @@ typedef struct ChrRotCall ChrRotCall;
  * an incomplete type until that callee is recovered.
  */
 typedef struct ChrMotionCall ChrMotionCall;
+
+/* Java_xeno_Chr_setMotionFlags__IZ call block: object +0, mask +4,
+ * enabled byte +8 (original reads lw 4(a1), lbu 8(a1)). */
+typedef struct ChrMotionFlagsCall {
+    u8 *object;
+    int mask;
+    u8 enabled;
+} ChrMotionFlagsCall;
+
+/* Java_xeno_Chr_shadow_map_id__I reads its id as an unsigned halfword at
+ * +4; its native object pointer is at +0. */
+typedef struct ChrShadowMapIdCall {
+    u8 *object;
+    u16 id;
+} ChrShadowMapIdCall;
 
 /* Verbatim the engine's four-float vector record of include/shared.h and of
  * src/main/near_dir.h, which defines the actor below with it. */
@@ -191,7 +210,9 @@ typedef struct Actor {
     unsigned char unmodeled_4d2[0x4dc - 0x4d2];
     float translate_y;                          /* +0x4dc */
     LayoutHeader *data_header;                  /* +0x4e0 */
-    unsigned char unmodeled_4e4[0x62c - 0x4e4];
+    unsigned char unmodeled_4e4[0x620 - 0x4e4];
+    /* The look_point native copies three float argument slots here. */
+    float look_point[3];                     /* +0x620 */
     float look_eye_speed;                       /* +0x62c */
     unsigned char unmodeled_630[0x66c - 0x630];
     float look_speed;                           /* +0x66c */
@@ -200,9 +221,11 @@ typedef struct Actor {
     unsigned char unmodeled_676[0x678 - 0x676];
     int look_eye_control;                       /* +0x678 */
     void *look_target;                          /* +0x67c */
-    unsigned char unmodeled_680[0x690 - 0x680];
+    u16 shadow_map_ids[8];                     /* +0x680 */
     int shadow_map;                             /* +0x690 */
-    unsigned char unmodeled_694[0x754 - 0x694];
+    unsigned char unmodeled_694[0x6f0 - 0x694];
+    u32 motion_flags;                          /* +0x6f0 */
+    unsigned char unmodeled_6f4[0x754 - 0x6f4];
     int hair_stop_a;                            /* +0x754 */
     int hair_stop_b;                            /* +0x758 */
     unsigned char unmodeled_75c[0x9a0 - 0x75c];
@@ -667,8 +690,8 @@ extern void *classJava_xeno_Chr;
  * field up on xeno.Unit's class, not xeno.Chr's (lw a0,-13252(gp) at
  * 0x00300b5c). */
 extern void *classJava_xeno_Unit;
-extern int JNI_isInstanceOf(void *object, void *class_object);
-extern void *loadConstString(const char *text, int length);
+extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
+extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern const char chr_peer_string[];
 extern const char chr_algorithm_string[];

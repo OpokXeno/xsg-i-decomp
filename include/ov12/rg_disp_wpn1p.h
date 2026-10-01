@@ -34,7 +34,7 @@ typedef struct RgGauge RgGauge;
 typedef struct WepDisp {
     RgBxx *bxx;                    /* +0x00 */
     RgWeapon *weapon;              /* +0x04 */
-    unsigned char unmodeled_08[4]; /* +0x08 */
+    unsigned int index;            /* +0x08 */
     RgGauge *gauge;                /* +0x0c */
 } WepDisp;
 
@@ -73,7 +73,7 @@ struct RgDispWpn1P {
     int boardSaPic;                  /* +0x34 */
     int boardSbPic;                  /* +0x38 */
     int boostPic;                    /* +0x3c */
-    unsigned char unmodeled_40[4];   /* +0x40 */
+    int mphPic;                      /* +0x40 */
     int bulletFont;                  /* +0x44 */
     int weaponFont;                  /* +0x48 */
     int timeFont;                    /* +0x4c */

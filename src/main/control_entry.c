@@ -14,7 +14,66 @@ extern void xglThreadRotate(void);
  */
 static void InitializeSystem(void);
 
-INCLUDE_ASM("asm/main/nonmatchings/control_entry", ControlEntry);
+/*
+ * REGIST/REGIST2 (main:0x0021826c/0x0021827c): the sound-effect bank name
+ * and SWD bank name ControlEntry loads before the boot logo. Still owned by
+ * asm data.
+ */
+extern const char D_004D8A00[];
+extern const char D_004BE280[];
+
+/*
+ * xglCdLoadOverlay, the sound and SPU-DMA entry points and the ov02 boot
+ * screens ControlEntry drives: each is defined in a different translation
+ * unit that is still assembly or does not yet publish a shared header for
+ * it, so the prototype is declared here from this call site's evidence.
+ */
+extern void xglCdLoadOverlay(int overlayId);
+extern void xglSoundLoadEffect(const char *bankName, void *buffer, int mode);
+extern void xglSoundLoadSwd(const char *swdName, void *buffer);
+extern int SsdAddWaveData(void *data, int size, int wave);
+extern int SsdSpuDmaCompleted(int wait);
+extern void xglRenderDispOn(void);
+extern void LogoFirst(void);
+extern int Title(void);
+
+/*
+ * Loads the boot sound banks, waits for the SPU DMA transfer to finish,
+ * shows the boot logo, then repeatedly runs the ov02 title screen: while it
+ * returns 0 (no selection yet) or its own entry address (stay on title), it
+ * reloads ov02 and calls it again; otherwise the low 24 bits are the chosen
+ * screen's entry address and the top byte is the overlay to load before
+ * jumping to it. Never returns.
+ */
+void ControlEntry(void)
+{
+    unsigned int selection;
+    int (*entry)(void);
+
+    xglSleep();
+    xglSoundLoadEffect(D_004D8A00, WorkEnd, 0);
+    xglSoundLoadSwd(D_004BE280, WorkEnd);
+    SsdAddWaveData(WorkEnd, 0, 0);
+    while (SsdSpuDmaCompleted(0) != 0) {
+    }
+    xglRenderDispOn();
+    xglCdLoadOverlay(2);
+    LogoFirst();
+
+    for (;;) {
+        xglCdLoadOverlay(2);
+        selection = Title();
+        if (selection == 0) {
+            continue;
+        }
+        entry = (int (*)(void))(selection & 0x00ffffff);
+        if (entry == Title) {
+            continue;
+        }
+        xglCdLoadOverlay(selection >> 24);
+        entry();
+    }
+}
 
 /*
  * SCE SDK entry points InitializeSystem calls to bring the IOP and its

@@ -383,7 +383,33 @@ static void copyArgs(u8 *dst, u8 *src, int count)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/unit", Java_xeno_Unit_setArgs__III);
+/*
+ * The three-int overload of setArgs: unlike setArgs__ILjava_lang_Object_I
+ * above, the bytes to copy come straight from the Java int argument (at
+ * +0x8 of the call block) instead of an Object's data, and the destination
+ * offset within the peer's argument buffer is itself a caller-supplied
+ * argument (+0x4), not always the start.
+ */
+void Java_xeno_Unit_setArgs__III(JThread *thread, UnitArgsWordCall *arguments)
+{
+    JavaField *peer_field;
+    UnitPeer *peer;
+    int value;
+    u8 *object;
+    int offset;
+    int size;
+
+    value = arguments->value;
+    object = arguments->object;
+    offset = arguments->offset;
+    size = arguments->size;
+    peer_field = lookupClassField(classJava_xeno_Unit,
+                                  loadConstString(D_004DC1D0, -1), 0);
+    peer = *(UnitPeer **)(object + peer_field->offset);
+    if ((unsigned int)(size - 1) < 4U) {
+        copyArgs(peer->args + offset, (u8 *)&value, size);
+    }
+}
 
 void Java_xeno_Unit_getArgs__II(JThread *thread, UnitArgsGetCall *arguments,
                                 u32 *failure_result)
@@ -436,7 +462,29 @@ void Java_xeno_Unit_setArgs__ILjava_lang_Object_I(JThread *thread,
 
 INCLUDE_ASM("asm/main/nonmatchings/unit", Java_xeno_Unit_setArgs__IIIII);
 
-INCLUDE_ASM("asm/main/nonmatchings/unit", Java_xeno_Unit_getScale__);
+/*
+ * Unconditional, like setCollision__Z above. The peer's scale is handed back
+ * through the one shared xeno.util.Vector4f object scale_0_007C0A58, whose
+ * class-ref slot is re-seeded on every call (see UnitScaleVector).
+ */
+void Java_xeno_Unit_getScale__(JThread *thread, UnitObjectCall *arguments,
+                               UnitResultValue *result)
+{
+    JavaField *peer_field;
+    u8 *object;
+    UnitPeer *peer;
+
+    object = arguments->object;
+    peer_field = lookupClassField(classJava_xeno_Unit,
+                                  loadConstString(D_004DC1D0, -1), 0);
+    peer = *(UnitPeer **)(object + peer_field->offset);
+    scale_0_007C0A58.class_ref = classJava_xeno_util_Vector4f->instance_class_ref;
+    scale_0_007C0A58.x = peer->scale_x;
+    scale_0_007C0A58.y = peer->scale_y;
+    scale_0_007C0A58.z = peer->scale_z;
+    scale_0_007C0A58.w = peer->scale_w;
+    result->object = &scale_0_007C0A58;
+}
 
 /* Unconditional, like setCollision__Z above. */
 void Java_xeno_Unit_setScale__FFF(JThread *thread, UnitVector3Call *arguments)
