@@ -25,15 +25,63 @@ void *dataUnitOrgGet(int unitOrgId)
     return &orgData[unitOrgId - 1];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlChaGet);
+extern const char D_00A456C8[];
+extern PlCharacter plChaData[];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitInitGet);
+PlCharacter *dataPlChaGet(int cid)
+{
+    if (cid >= 0x21) {
+        printf(D_00A456C8, cid);
+        return 0;
+    }
+    return &plChaData[cid - 1];
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataNormInitGet);
+/*
+ * The loaded battle-data table starts eight bytes before D_426F48.
+ * Its selector words at +0x08/+0x10/+0x14/+0x18 locate the unit, normal,
+ * special and ether initialization tables. Entries are one-based, with
+ * respective strides 0x34, 0x0C, 0x0C and 0x18.
+ */
+extern int D_426F48;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSpecInitGet);
+unsigned char *dataUnitInitGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F48;
+    int selector = *(volatile int *)base;
+    base -= 0x8;
+    return base + selector + entry * 0x34 - 0x34;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEtherInitGet);
+extern int D_426F50;
+
+unsigned char *dataNormInitGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F50;
+    int selector = *(volatile int *)base;
+    base -= 0x10;
+    return base + selector + entry * 0xC - 0xC;
+}
+
+extern int D_426F54;
+
+unsigned char *dataSpecInitGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F54;
+    int selector = *(volatile int *)base;
+    base -= 0x14;
+    return base + selector + entry * 0xC - 0xC;
+}
+
+extern int D_426F58;
+
+unsigned char *dataEtherInitGet(int entry)
+{
+    unsigned char *base = (unsigned char *)&D_426F58;
+    int selector = *(volatile int *)base;
+    base -= 0x18;
+    return base + selector + entry * 0x18 - 0x18;
+}
 
 /*
  * D_426F78 is a selector field 0x38 bytes into a loaded battle-data table;
@@ -137,13 +185,74 @@ void dataEtherTecSet(int selector)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEtherLearnSet);
+extern const char D_00A45730[];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEtherLearnGet);
+/* The third argument is supplied by dataEtherTecSet but is not read here. */
+void dataEtherLearnSet(int cid, int techniqueId, int selector)
+{
+    PlCharacter *pl;
+    int index;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSkillLearnSet);
+    if (cid >= 0x11) {
+        printf(D_00A45730, cid);
+        return;
+    }
+    if (techniqueId != 0) {
+        pl = dataPlChaGet(cid);
+        index = techniqueId - 1;
+        pl->learnedEther[index / 8] |= 1 << (index % 8);
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataSkillLearnGet);
+extern const char D_00A45750[];
+
+int dataEtherLearnGet(int cid, int techniqueId)
+{
+    PlCharacter *pl;
+    int index;
+
+    if (cid >= 0x11) {
+        printf(D_00A45750, cid);
+        return 0;
+    }
+    pl = dataPlChaGet(cid);
+    index = techniqueId - 1;
+    return pl->learnedEther[index / 8] & (1 << (index % 8));
+}
+
+extern const char D_00A45770[];
+
+void dataSkillLearnSet(int cid, int skillId)
+{
+    PlCharacter *pl;
+    int index;
+
+    if (cid >= 0x11) {
+        printf(D_00A45770, cid);
+        return;
+    }
+    if (skillId != 0) {
+        pl = dataPlChaGet(cid);
+        index = skillId - 1;
+        pl->learnedSkill[index / 8] |= 1 << (index % 8);
+    }
+}
+
+extern const char D_00A45790[];
+
+int dataSkillLearnGet(int cid, int skillId)
+{
+    PlCharacter *pl;
+    int index;
+
+    if (cid >= 0x11) {
+        printf(D_00A45790, cid);
+        return 0;
+    }
+    pl = dataPlChaGet(cid);
+    index = skillId - 1;
+    return pl->learnedSkill[index / 8] & (1 << (index % 8));
+}
 
 typedef struct ThinkMapTable {
     unsigned char unmodeled_000[0x18C];
@@ -189,9 +298,9 @@ void dataSpecLearnSet(int cid, int specialId)
 
 /*
  * thinkMapTbl's tail is a per-character-id table of special-technique base
- * ids; dataSpecLearnGet subtracts the caller's entry from a learned special
- * id before indexing PlCharacter.special, the same subtraction
- * dataSpecLearnSet performs through dataSpecBaseGet (still asm).
+ * ids; dataSpecLearnGet subtracts the character's base from specialId
+ * before indexing PlCharacter.special, the same subtraction
+ * dataSpecLearnSet performs through dataSpecBaseGet.
  */
 extern const char D_00A457D0[];
 

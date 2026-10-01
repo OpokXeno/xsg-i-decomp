@@ -46,16 +46,24 @@ typedef struct PlSpecialSlot {
 } PlSpecialSlot;
 
 /*
- * The player character record dataPlChaGet (this TU, still asm) returns for
- * a character id in 0..0x10. dataSpecLearnSet below is the only claimed
- * accessor and reaches only the special-technique table at +0x48; the
- * record's own layout before that offset is not established by any function
- * this TU claims. The table is indexed by specialId - dataSpecBaseGet(cid)
- * with no bound this TU claims, so it keeps a one-slot declared length.
+ * dataPlChaGet indexes plChaData in 0xA8-byte strides using cid - 1.
+ * It rejects cid >= 0x21; the learning helpers separately reject cid >=
+ * 0x11. The original functions do not check a lower bound.
+ *
+ * dataEtherLearnGet/Set access the signed-byte bitmap at +0x28, and
+ * dataSkillLearnGet/Set access the one at +0x38. Each bitmap occupies the
+ * 0x10-byte span before the next field; technique ids select byte and bit
+ * with (id - 1) / 8 and (id - 1) % 8.
+ *
+ * dataSpecDataGet searches eight 0xC-byte special-technique slots from
+ * +0x48, establishing the rest of the 0xA8-byte record. dataSpecLearnSet
+ * indexes these slots by specialId - dataSpecBaseGet(cid).
  */
 typedef struct PlCharacter {
-    unsigned char unmodeled_0[0x48];
-    PlSpecialSlot special[1]; /* +0x48, indexed dynamically */
+    unsigned char unmodeled_0[0x28];
+    signed char learnedEther[0x10]; /* +0x28 */
+    signed char learnedSkill[0x10]; /* +0x38 */
+    PlSpecialSlot special[8]; /* +0x48 */
 } PlCharacter;
 
 extern PlCharacter *dataPlChaGet(int cid);
