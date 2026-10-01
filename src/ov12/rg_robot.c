@@ -929,7 +929,14 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _IsBackWeaponReady);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecShotOrAttackCmd);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecTargettingCmd);
+static void _InitTargettingStatus(RgStatus *status, RgBody *body, int target);
+static int _ExecTargettingCmd(RgStatus *status, RgBody *body,
+                              void *unused, int target)
+{
+    (void)unused;
+    _InitTargettingStatus(status, body, target);
+    return 0x100;
+}
 
 static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)
 {

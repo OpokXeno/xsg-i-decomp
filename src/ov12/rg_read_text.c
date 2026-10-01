@@ -100,7 +100,14 @@ static void _SetCurrent(RgReadText *pReader, char *pCur)
     pReader->m_pszCur = pCur;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _IsEOF);
+static char *_SkipWhiteSpace(RgReadText *pReader);
+static int _IsEOF(RgReadText *pReader)
+{
+    if (pReader->m_bUngetPending != 0) {
+        return 0;
+    }
+    return _SkipWhiteSpace(pReader) == 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _GetString);
 
@@ -114,7 +121,6 @@ extern const char D_00A54418[];
 
 extern int atoi(const char *nptr);
 
-static char *_SkipWhiteSpace(RgReadText *pReader);
 
 int _GetInt(RgReadText *pReader)
 {
