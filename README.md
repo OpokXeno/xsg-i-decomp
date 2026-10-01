@@ -30,6 +30,11 @@ Recovered 3,688 of 7,645 in-scope game function(s) (48.241%).
 
 ## Building
 
+The historical compilers are 32-bit Linux executables. On 64-bit Ubuntu,
+install `libc6-i386` and `python3-venv`. On Windows, use WSL and keep the
+checkout and build on a Linux filesystem: the old compilers cannot read some
+Windows filesystem metadata and report `Value too large for defined data type`.
+
 You need three things the repository does not contain: your own copy of the
 game, the original toolchain, and a Python environment for the disassembler.
 
@@ -108,6 +113,11 @@ ninja gate          # + per-unit status and the whole-file SHA-256 gate
 
 `ninja gate` writes `build/gate.json`. `"result": "pass"` means every one of the
 six files came out byte for byte identical to your original.
+
+Public builds use `config/objects/data-carves.json` to place constants and jump
+tables emitted by the recovered C functions. Terminal object padding is verified
+from the published object ranges and original ELF symbols when the private
+`config/tu-build.json` is absent. Neither requires private acceptance records.
 
 ## Contributing
 

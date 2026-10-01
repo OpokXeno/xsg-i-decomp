@@ -6,7 +6,7 @@
 #
 # Versions are pinned: a different splat or rabbitizer disassembles differently
 # and the scaffold stops assembling back to the original bytes.
-splat64==0.50.0
+splat64[mips]==0.50.0
 spimdisasm==1.42.4
 rabbitizer==1.16.2
 pyyaml==6.0.3

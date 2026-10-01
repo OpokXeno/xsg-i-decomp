@@ -1,0 +1,842 @@
+{
+ "schema": "tu-data-carves/1",
+ "tus": {
+  "main/tu106": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004d2800",
+      "0x004d2820"
+     ],
+     "generated": [
+      "0x004d2800",
+      "0x004d2814"
+     ],
+     "generated_by": [
+      "nmlModelSendSignalMovieFinish"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004D2800"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu143": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c1b00",
+      "0x004c1b70"
+     ],
+     "generated": [
+      "0x004c1b00",
+      "0x004c1b64"
+     ],
+     "generated_by": [
+      "TWSYS_draw",
+      "TWSYS_update"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C1B00",
+      "D_004C1B18",
+      "D_004C1B30",
+      "jtbl_004C1B50"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu169": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c53d0",
+      "0x004c5400"
+     ],
+     "generated": [
+      "0x004c53d0",
+      "0x004c5400"
+     ],
+     "generated_by": [
+      "OptMntToWpnPos"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C53D0"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu170": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c5510",
+      "0x004c5530"
+     ],
+     "generated": [
+      "0x004c5510",
+      "0x004c5530"
+     ],
+     "generated_by": [
+      "MenuParaPtNowGet"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C5510"
+     ],
+     "also_referenced_by_c": []
+    },
+    {
+     "range": [
+      "0x004c55c0",
+      "0x004c58a0"
+     ],
+     "generated": [
+      "0x004c55c0",
+      "0x004c5898"
+     ],
+     "generated_by": [
+      "CharPasMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C55C0"
+     ],
+     "also_referenced_by_c": []
+    },
+    {
+     "range": [
+      "0x004c58c0",
+      "0x004c5d70"
+     ],
+     "generated": [
+      "0x004c58c0",
+      "0x004c5d70"
+     ],
+     "generated_by": [
+      "CharInfoMain"
+     ],
+     "c_owned_symbols": [
+      "D_004C58C0",
+      "D_004C58E0",
+      "D_004C58F8",
+      "D_004C5920",
+      "D_004C5930",
+      "D_004C5958",
+      "D_004C5988",
+      "D_004C5998",
+      "D_004C59E0",
+      "D_004C5A10",
+      "D_004C5A38",
+      "D_004C5A48",
+      "D_004C5A80",
+      "D_004C5A98",
+      "D_004C5AC8",
+      "D_004C5AE0",
+      "D_004C5B00",
+      "D_004C5B18",
+      "D_004C5B30",
+      "D_004C5B48",
+      "D_004C5B60",
+      "D_004C5B78",
+      "D_004C5B88",
+      "D_004C5BA8",
+      "D_004C5BC0",
+      "D_004C5BE0",
+      "D_004C5BF8",
+      "D_004C5C30",
+      "D_004C5C50",
+      "D_004C5C78",
+      "D_004C5C90",
+      "D_004C5CC0",
+      "D_004C5CF8",
+      "D_004C5D28",
+      "D_004C5D58"
+     ],
+     "also_referenced_by_c": [],
+     "reached_through": {
+      "D_004C58C0": "D_004C5920",
+      "D_004C58E0": "D_004C5920",
+      "D_004C58F8": "D_004C5920",
+      "D_004C5930": "D_004C5998",
+      "D_004C5958": "D_004C5998",
+      "D_004C5988": "D_004C5998",
+      "D_004C59E0": "D_004C5A38",
+      "D_004C5A10": "D_004C5A38",
+      "D_004C5A48": "D_004C5B00",
+      "D_004C5A80": "D_004C5B00",
+      "D_004C5A98": "D_004C5B00",
+      "D_004C5AC8": "D_004C5B00",
+      "D_004C5AE0": "D_004C5B00",
+      "D_004C5B18": "D_004C5B60",
+      "D_004C5B30": "D_004C5B60",
+      "D_004C5B48": "D_004C5B60",
+      "D_004C5B78": "D_004C5C50",
+      "D_004C5B88": "D_004C5C50",
+      "D_004C5BA8": "D_004C5C50",
+      "D_004C5BC0": "D_004C5C50",
+      "D_004C5BE0": "D_004C5C50",
+      "D_004C5BF8": "D_004C5C50",
+      "D_004C5C30": "D_004C5C50",
+      "D_004C5C78": "D_004C5D58",
+      "D_004C5C90": "D_004C5D58",
+      "D_004C5CC0": "D_004C5D58",
+      "D_004C5CF8": "D_004C5D58",
+      "D_004C5D28": "D_004C5D58"
+     }
+    },
+    {
+     "range": [
+      "0x004c5d70",
+      "0x004c6048"
+     ],
+     "generated": [
+      "0x004c5d70",
+      "0x004c6048"
+     ],
+     "generated_by": [
+      "CharInfoMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C5D70"
+     ],
+     "also_referenced_by_c": [
+      "D_004C6048"
+     ]
+    },
+    {
+     "range": [
+      "0x004c60c0",
+      "0x004c6398"
+     ],
+     "generated": [
+      "0x004c60c0",
+      "0x004c6398"
+     ],
+     "generated_by": [
+      "CharStatusMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C60C0"
+     ],
+     "also_referenced_by_c": [
+      "D_004C6398"
+     ]
+    },
+    {
+     "range": [
+      "0x004c63b0",
+      "0x004c6550"
+     ],
+     "generated": [
+      "0x004c63b0",
+      "0x004c6550"
+     ],
+     "generated_by": [
+      "CharListMain",
+      "CharWeaponMain"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C63B0",
+      "jtbl_004C64D0"
+     ],
+     "also_referenced_by_c": [
+      "D_004C6770",
+      "D_004C67D0",
+      "D_004C67F0"
+     ]
+    },
+    {
+     "range": [
+      "0x004c6800",
+      "0x004c6bc0"
+     ],
+     "generated": [
+      "0x004c6800",
+      "0x004c6bc0"
+     ],
+     "generated_by": [
+      "MenuCharactor"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C6800"
+     ],
+     "also_referenced_by_c": []
+    }
+   ],
+   ".lit4": [
+    {
+     "range": [
+      "0x004d7e14",
+      "0x004d7e1c"
+     ],
+     "generated": [
+      "0x004d7e14",
+      "0x004d7e1c"
+     ],
+     "generated_by": [
+      "CharCategoryMain"
+     ],
+     "c_owned_symbols": [
+      "D_004D7E14",
+      "D_004D7E18"
+     ],
+     "also_referenced_by_c": [
+      "D_004D7E50",
+      "D_004D7E54"
+     ]
+    }
+   ],
+   ".sdata": [
+    {
+     "range": [
+      "0x004dad68",
+      "0x004dadb0"
+     ],
+     "generated": [
+      "0x004dad68",
+      "0x004dadb0"
+     ],
+     "generated_by": [
+      "CharInfoMain"
+     ],
+     "c_owned_symbols": [
+      "D_004DAD68",
+      "D_004DAD70",
+      "D_004DAD78",
+      "D_004DAD80",
+      "D_004DAD88",
+      "D_004DAD90",
+      "D_004DAD98",
+      "D_004DADA0",
+      "D_004DADA8"
+     ],
+     "also_referenced_by_c": [
+      "D_004DADB0"
+     ],
+     "reached_through": {
+      "D_004DAD68": "D_004C5998",
+      "D_004DAD78": "D_004C5A38",
+      "D_004DAD80": "D_004C5B00",
+      "D_004DAD88": "D_004C5B60",
+      "D_004DAD90": "D_004C5B60",
+      "D_004DADA0": "D_004C5C50",
+      "D_004DADA8": "D_004C5C50"
+     }
+    },
+    {
+     "range": [
+      "0x004dadb8",
+      "0x004dadc0"
+     ],
+     "generated": [
+      "0x004dadb8",
+      "0x004dadbc"
+     ],
+     "generated_by": [
+      "CharInfoMain"
+     ],
+     "c_owned_symbols": [
+      "D_004DADB8"
+     ],
+     "also_referenced_by_c": [
+      "D_004DADC8",
+      "D_004DADD0",
+      "D_004DADF0",
+      "D_004DADF8",
+      "D_004DAE40",
+      "D_004DAE48",
+      "D_004DAE58",
+      "ParaDataBuf",
+      "CharPas",
+      "CharInfo",
+      "CharCategory",
+      "CharMenu",
+      "CharEx",
+      "CharL1R1",
+      "CharStatus",
+      "CharParameter",
+      "CharWeapon",
+      "CharList",
+      "CharSwitch",
+      "CharPoint"
+     ]
+    }
+   ]
+  },
+  "main/tu180": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004c9bc0",
+      "0x004c9bf0"
+     ],
+     "generated": [
+      "0x004c9bc0",
+      "0x004c9bec"
+     ],
+     "generated_by": [
+      "dataBoxPtrGet"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004C9BC0"
+     ],
+     "also_referenced_by_c": []
+    }
+   ]
+  },
+  "main/tu226": {
+   ".rodata": [
+    {
+     "range": [
+      "0x004cd140",
+      "0x004cd628"
+     ],
+     "generated": [
+      "0x004cd140",
+      "0x004cd624"
+     ],
+     "generated_by": [
+      "virtualMachine"
+     ],
+     "c_owned_symbols": [
+      "jtbl_004CD140",
+      "jtbl_004CD470",
+      "jtbl_004CD4E0",
+      "jtbl_004CD550",
+      "jtbl_004CD5C0"
+     ],
+     "also_referenced_by_c": [
+      "D_004CD0C0",
+      "D_004CD0D0",
+      "D_004CD0E0",
+      "D_004CD0F0",
+      "D_004CD100",
+      "D_004CD110",
+      "D_004CD120",
+      "D_004CD628",
+      "D_004CD640",
+      "D_004CD658"
+     ]
+    }
+   ]
+  },
+  "ov01/tu002_00a00d60": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a43a60",
+      "0x00a43ab8"
+     ],
+     "generated": [
+      "0x00a43a60",
+      "0x00a43ab8"
+     ],
+     "generated_by": [
+      "unitDeadSpecChk"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A43A60"
+     ],
+     "also_referenced_by_c": [
+      "D_00A438F0",
+      "D_00A43BF8"
+     ]
+    }
+   ]
+  },
+  "ov01/tu005_00a191c0": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a45710",
+      "0x00a45730"
+     ],
+     "generated": [
+      "0x00a45710",
+      "0x00a45730"
+     ],
+     "generated_by": [
+      "dataEtherTecSet"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A45710"
+     ],
+     "also_referenced_by_c": [
+      "D_00A456A8",
+      "D_00A456E8",
+      "D_00A457B0",
+      "D_00A457D0",
+      "D_00A45890",
+      "D_00A458A8",
+      "D_00A459E0",
+      "D_00A459F8",
+      "D_00A45AC8",
+      "D_00A45F38",
+      "D_00A45FE8",
+      "D_00A46008",
+      "D_00A46028",
+      "D_00A46030"
+     ]
+    }
+   ]
+  },
+  "ov01/tu006_00a1d348": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a46230",
+      "0x00a46248"
+     ],
+     "generated": [
+      "0x00a46230",
+      "0x00a46248"
+     ],
+     "generated_by": [
+      "cmdBra"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A46230"
+     ],
+     "also_referenced_by_c": [
+      "D_00A46068",
+      "D_00A460A0",
+      "D_00A46148",
+      "D_00A46160",
+      "D_00A46180",
+      "D_00A46198",
+      "D_00A461B8",
+      "D_00A461E8",
+      "D_00A46300",
+      "D_00A46308",
+      "D_00A46468",
+      "D_00A46578"
+     ]
+    }
+   ]
+  },
+  "ov10/tu001_00a00410": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a4c930",
+      "0x00a4d130"
+     ],
+     "generated": [
+      "0x00a4c930",
+      "0x00a4d128"
+     ],
+     "generated_by": [
+      "CardMainProc"
+     ],
+     "c_owned_symbols": [
+      "D_00A4C930",
+      "D_00A4C938",
+      "D_00A4C940",
+      "D_00A4C948",
+      "D_00A4C950",
+      "D_00A4C958",
+      "D_00A4C960",
+      "D_00A4C968",
+      "D_00A4C970",
+      "D_00A4C980",
+      "D_00A4C990",
+      "D_00A4C9A0",
+      "D_00A4C9B0",
+      "D_00A4C9C0",
+      "D_00A4C9D0",
+      "D_00A4C9E0",
+      "D_00A4C9F0",
+      "D_00A4CA08",
+      "D_00A4CA20",
+      "D_00A4CA38",
+      "D_00A4CA50",
+      "D_00A4CA68",
+      "D_00A4CA80",
+      "D_00A4CA98",
+      "D_00A4CAB0",
+      "D_00A4CAC8",
+      "D_00A4CAE0",
+      "D_00A4CAF8",
+      "D_00A4CB10",
+      "D_00A4CB28",
+      "D_00A4CB40",
+      "D_00A4CB50",
+      "D_00A4CB80",
+      "D_00A4CBB0",
+      "D_00A4CBE0",
+      "D_00A4CC10",
+      "D_00A4CC30",
+      "D_00A4CC48",
+      "D_00A4CC68",
+      "D_00A4CC88",
+      "D_00A4CCA8",
+      "D_00A4CCC8",
+      "D_00A4CCF0",
+      "D_00A4CD08",
+      "D_00A4CD20",
+      "D_00A4CD40",
+      "D_00A4CD58",
+      "D_00A4CD80",
+      "D_00A4CD90",
+      "D_00A4CDA8",
+      "D_00A4CDD0",
+      "D_00A4CDF8",
+      "D_00A4CE10",
+      "D_00A4CE30",
+      "D_00A4CE38",
+      "D_00A4CE48",
+      "D_00A4CE70",
+      "D_00A4CE80",
+      "D_00A4CEE8",
+      "D_00A4CEF0",
+      "D_00A4CEF8",
+      "D_00A4CF00",
+      "D_00A4CF08",
+      "D_00A4CF10",
+      "D_00A4CF18",
+      "D_00A4CF20",
+      "D_00A4CF28",
+      "D_00A4CF30",
+      "D_00A4CF38",
+      "D_00A4CF40",
+      "D_00A4CF48",
+      "D_00A4CF58",
+      "D_00A4CF60",
+      "jtbl_00A4CF70",
+      "jtbl_00A4CFB0",
+      "jtbl_00A4CFE0",
+      "jtbl_00A4D000",
+      "jtbl_00A4D060",
+      "jtbl_00A4D090",
+      "jtbl_00A4D0D0",
+      "jtbl_00A4D100"
+     ],
+     "also_referenced_by_c": [
+      "D_00A4BD00",
+      "D_00A4C5A0",
+      "D_00A4C5B8",
+      "D_00A4C5D0",
+      "D_00A4C5E8",
+      "D_00A4C600",
+      "D_00A4C618",
+      "D_00A4C780",
+      "D_00A4C788",
+      "D_00A4C790",
+      "D_00A4C7C8",
+      "D_00A4C7D0",
+      "D_00A4C868",
+      "D_00A4C870"
+     ]
+    }
+   ]
+  },
+  "ov10/tu003_00a12a90": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a4d7f0",
+      "0x00a4da50"
+     ],
+     "generated": [
+      "0x00a4d7f0",
+      "0x00a4da44"
+     ],
+     "generated_by": [
+      "CardPlayCommandPlay"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A4D7F0",
+      "jtbl_00A4D940",
+      "jtbl_00A4D970",
+      "jtbl_00A4D9A0",
+      "jtbl_00A4D9C0",
+      "jtbl_00A4D9E0",
+      "jtbl_00A4DA00",
+      "jtbl_00A4DA30"
+     ],
+     "also_referenced_by_c": [
+      "D_00A4D7C8"
+     ]
+    }
+   ]
+  },
+  "ov11/tu001_00a00100": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a0bf60",
+      "0x00a0c030"
+     ],
+     "generated": [
+      "0x00a0bf60",
+      "0x00a0c030"
+     ],
+     "generated_by": [
+      "PoGetMark"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A0BF60"
+     ],
+     "also_referenced_by_c": [
+      "D_00A0BBB0",
+      "D_00A0BBD8",
+      "D_00A0BC08",
+      "D_00A0BE10",
+      "D_00A0BE28",
+      "D_00A0BE40",
+      "D_00A0BE58",
+      "D_00A0BE70",
+      "D_00A0C078",
+      "D_00A0C088",
+      "D_00A0C098",
+      "D_00A0C0B8",
+      "D_00A0C0C8",
+      "D_00A0C0D8",
+      "D_00A0C100",
+      "D_00A0C120",
+      "D_00A0C1B8",
+      "D_00A0C1C8",
+      "D_00A0C270",
+      "D_00A0C288",
+      "D_00A0C2A0",
+      "D_00A0C2B8",
+      "D_00A0C2D0",
+      "D_00A0C2E8",
+      "D_00A0C320",
+      "D_00A0C338",
+      "D_00A0C390",
+      "D_00A0C3B0",
+      "D_00A0C590",
+      "D_00A0C5B0",
+      "D_00A0C6D0"
+     ]
+    }
+   ]
+  },
+  "ov12/tu006_00a09ba0": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a51db0",
+      "0x00a51dd0"
+     ],
+     "generated": [
+      "0x00a51db0",
+      "0x00a51dcc"
+     ],
+     "generated_by": [
+      "_JobEnemy"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A51DB0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A51D90",
+      "D_00A51DD0",
+      "D_00A51DE0",
+      "D_00A51DF0"
+     ]
+    }
+   ]
+  },
+  "ov12/tu069_00a380d8": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a56740",
+      "0x00a56758"
+     ],
+     "generated": [
+      "0x00a56740",
+      "0x00a56754"
+     ],
+     "generated_by": [
+      "_EquipCurIDToEquipType"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A56740"
+     ],
+     "also_referenced_by_c": [
+      "D_00A56650",
+      "D_00A56660",
+      "D_00A56698",
+      "D_00A566A8",
+      "D_00A566B8",
+      "D_00A566D0",
+      "D_00A566E8",
+      "D_00A56720",
+      "D_00A56758",
+      "D_00A56768",
+      "D_00A56798",
+      "D_00A56838",
+      "D_00A568C0",
+      "D_00A568E0",
+      "D_00A568F0",
+      "D_00A56928",
+      "D_00A56968",
+      "D_00A56978",
+      "D_00A56988",
+      "D_00A56998",
+      "D_00A569A8",
+      "D_00A569B8",
+      "D_00A569C8",
+      "D_00A569D8",
+      "D_00A569F0",
+      "D_00A56A08",
+      "D_00A56A18",
+      "D_00A56A28",
+      "D_00A56A48",
+      "D_00A56A68",
+      "D_00A56A88",
+      "D_00A56AA8",
+      "D_00A56AC8",
+      "D_00A56AE8",
+      "D_00A56B08",
+      "D_00A56B28",
+      "D_00A56B48",
+      "D_00A56B68",
+      "D_00A56BB0",
+      "D_00A56BC8",
+      "D_00A56C48",
+      "D_00A56C90",
+      "D_00A56CA8",
+      "D_00A56CB8",
+      "D_00A56CC8",
+      "D_00A56CE0",
+      "D_00A56CF0",
+      "D_00A56D00",
+      "D_00A56D10",
+      "D_00A56D20"
+     ]
+    }
+   ]
+  },
+  "ov12/tu086_00a4a620": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00a590b0",
+      "0x00a590c8"
+     ],
+     "generated": [
+      "0x00a590b0",
+      "0x00a590c8"
+     ],
+     "generated_by": [
+      "XrgPaint2DAlpha"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00A590B0"
+     ],
+     "also_referenced_by_c": [
+      "D_00A59030",
+      "D_00A59058",
+      "D_00A59098",
+      "D_00A590C8"
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -111,6 +111,7 @@ sys.path.insert(0, str(HERE))
 from elfinfo import Elf  # noqa: E402
 
 REGISTRY = 'config/tu/data-carves.json'
+PUBLIC_REGISTRY = 'config/objects/data-carves.json'
 SCHEMA = 'tu-data-carves/1'
 # Sections a compiler fills with anonymous constants of a function: jump tables
 # and string/float/double literals (.rodata), gp-relative float literals (.lit4)
@@ -164,9 +165,14 @@ def registry_path(root):
     return Path(root) / REGISTRY
 
 
+def registry_input_path(root):
+    private = registry_path(root)
+    return private if private.is_file() else Path(root) / PUBLIC_REGISTRY
+
+
 def load_registry(root):
     """{'schema', 'tus': {tu_id: {section: [run]}}}; an absent file declares nothing."""
-    path = registry_path(root)
+    path = registry_input_path(root)
     if not path.is_file():
         return dict(schema=SCHEMA, tus={})
     data = json.loads(path.read_bytes())
@@ -505,8 +511,12 @@ def ovl_restore(ld_text):
 
 def ovl_tu_names(root, unit):
     """{tu id: TU name} of an overlay (config/tu-build.json path stems)."""
-    build = json.loads((Path(root) / 'config/tu-build.json').read_bytes())
-    return {t['id']: Path(t['path']).stem for t in build['tus'] if t['unit'] == unit}
+    private = Path(root) / 'config/tu-build.json'
+    if private.is_file():
+        build = json.loads(private.read_bytes())
+        return {t['id']: Path(t['path']).stem for t in build['tus'] if t['unit'] == unit}
+    build = json.loads((Path(root) / 'config/objects/overlays.compile.json').read_bytes())
+    return {t['id']: t['name'] for t in build['units'][unit]['tus']}
 
 
 def ovl_piece(unit_dir, unit, name, sec='.rodata'):
