@@ -3,6 +3,14 @@
 #include "main/xgl_task.h"
 #include "seisan_count_init1.h"
 
+extern const SeisanRibbonData D_004C7350;
+
+unsigned char *SeisanWork = 0;
+XglTaskScheduler *SeisanBgTask = 0;
+XglTaskScheduler *SeisanTask = 0;
+SeisanResultData *SeisanResult = 0;
+static SeisanCountData SeisanCN;
+
 void SeisanCountInit1(void)
 {
     int chrNo;
@@ -182,3 +190,10 @@ void SeisanDisp(void)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/seisan_count_init1", SeisanInit);
+
+const SeisanRibbonData D_004C7350 = {
+    { 0x00000000, 0x0000FFFF, 0x80000000, 0x01C00000,
+      0x0000FFFF, 0x80000000, 0x00000200, 0x0000FFFF,
+      0x80000000, 0x01C00200, 0x0000FFFF, 0x80000000,
+      0x00000000, 0x00000000, 0x00000000 }
+};

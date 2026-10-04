@@ -2,6 +2,18 @@
 #include "shared.h"
 #include "toolkit.h"
 
+/* Referenced original data recovered from this translation unit. */
+const char unit_field_algorithm[16] = "algorithm";
+const char unit_field_id[8] = "id";
+const char unit_field_px[8] = "px";
+const char unit_field_py[8] = "py";
+const char unit_field_pz[8] = "pz";
+const char unit_field_rx[8] = "rx";
+const char unit_field_ry[8] = "ry";
+const char unit_field_rz[8] = "rz";
+const char unit_field_peer[8] = "peer";
+const char D_004DC118[8] = "light";
+
 /* These field accesses are needed before the later toolkit helper block. */
 #define TOOLKIT_JAVA_INT_FIELD(object, field) \
     (*(int *)((char *)(object) + (field)->offset))
@@ -63,9 +75,9 @@ void *getPeer_Enepc(void *java_character)
                              loadConstString(unit_field_peer, -1), 0);
     TOOLKIT_JAVA_OBJECT_FIELD(java_character, field) = peer;
 
-    peer->rotation_x = peer->rotation_x / 180.0f * D_004D83AC;
-    peer->rotation_y = peer->rotation_y / 180.0f * D_004D83AC;
-    peer->rotation_z = peer->rotation_z / 180.0f * D_004D83AC;
+    peer->rotation_x = peer->rotation_x / 180.0f * 3.141592741f;
+    peer->rotation_y = peer->rotation_y / 180.0f * 3.141592741f;
+    peer->rotation_z = peer->rotation_z / 180.0f * 3.141592741f;
 
     field = lookupClassField(character_class,
                              loadConstString(D_004DC118, -1), 0);
@@ -146,9 +158,9 @@ void *getPeer_Uwamono(void *java_unit)
     peer->rotation_z = JAVA_FLOAT_FIELD(java_unit, field);
     field = lookupClassField(unit_class,
                              loadConstString(unit_field_peer, -1), 0);
-    peer->rotation_x = peer->rotation_x / 180.0f * pi;
-    peer->rotation_y = peer->rotation_y / 180.0f * pi;
-    peer->rotation_z = peer->rotation_z / 180.0f * pi;
+    peer->rotation_x = peer->rotation_x / 180.0f * 3.141592741f;
+    peer->rotation_y = peer->rotation_y / 180.0f * 3.141592741f;
+    peer->rotation_z = peer->rotation_z / 180.0f * 3.141592741f;
     JAVA_OBJECT_FIELD(java_unit, field) = peer;
     return peer;
 }

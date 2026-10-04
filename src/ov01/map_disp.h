@@ -54,7 +54,6 @@ extern void nmlModelEntry(NmlModel *model);
 
 /* "ten" (ceiling) and "yuka" (floor), the two named map parts mapDisp shows
  * or hides through nmlModelSetNameVisible. */
-extern const char *mapPartsName[2];
 
 void mapDisp(int mapNo);
 

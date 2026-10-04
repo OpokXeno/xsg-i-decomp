@@ -123,16 +123,15 @@ static void fnSMP01_PR010(Smp01Object *object, Smp01Work *work)
 extern Vector4 *MMathRotateMatrixYXZ(Vector4 *out, const Vector4 *matrix, const Vector4 *angles);
 extern Vector4 *MMathScaleMatrix(Vector4 *out, const Vector4 *matrix, const Vector4 *scale);
 extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
-extern Vector4 scale_0_00A514A0;
-
 static void fnSMP01_DM000(Smp01Object *self, Smp01Work *work)
 {
+    static const Vector4 scale = { 0.038f, 0.038f, 0.15f, 1.0f };
     Vector4 matrix[4];
 
     (void)self;
     if (work->frame < SMP01_DRAW_FRAME_LIMIT) {
         MMathRotateMatrixYXZ(matrix, 0, &work->angles);
-        MMathScaleMatrix(matrix, matrix, &scale_0_00A514A0);
+        MMathScaleMatrix(matrix, matrix, &scale);
         __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&work->position) : "memory");
         __asm__ __volatile__("vmove.w vf1, vf0" : : : "memory");
         __asm__ __volatile__("sqc2 vf1, 48(%0)" : : "r"(matrix) : "memory");

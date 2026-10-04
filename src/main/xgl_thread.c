@@ -23,8 +23,23 @@ typedef struct {
     int initial_priority;
 } ee_thread_t;
 
-extern ee_thread_t sThreadParam;
+static ee_thread_t sThreadParam;
+static ee_sema_t sSemaParam;
+static int iRotateSignal;
+static unsigned int iCurrentThread;
+static active_thread_t asActiveThreadList[4];
 extern int CreateThread(ee_thread_t *thread);
+extern void xglRenderEntry(void *argument);
+extern void xglCdControlThread(void *argument);
+extern void xglStudioEntry(void *argument);
+extern void ControlEntry(void *argument);
+
+static system_thread_entry_t asSystemThreadList[4] = {
+    { xglRenderEntry, 0, 0x1000, 9, 0 },
+    { xglCdControlThread, 0, 0x1000, 10, 0 },
+    { xglStudioEntry, 0, 0x1000, 12, 0 },
+    { ControlEntry, 0, 0x10000, 11, 0 },
+};
 
 static int xglCreateSignal(void)
 {

@@ -2,6 +2,12 @@
 #include "shared.h"
 #include "e_battle_win_open.h"
 
+int BW3BattleOrDataBase = 0;
+BattleWindow *BW = 0;
+BattleWindow2 *BW2 = 0;
+BattleWindow3 *BW3 = 0;
+BattleWindow4 *BW4 = 0;
+
 INCLUDE_ASM("asm/main/nonmatchings/e_battle_win_open", eBattleWinOpen);
 
 void eBattleWinClose(void *window)
@@ -120,3 +126,11 @@ void WindowSPKeepSelectCheck(WindowSPKeepBuffer keep)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/e_battle_win_open", WindowSPSetSelect);
+
+
+
+const char D_004C3A90[16] = "Hard Disk Drive";
+
+const char D_004DA9F8[8] = "slot 2";
+
+const char D_004DAA00[8] = "slot 1";

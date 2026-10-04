@@ -240,3 +240,12 @@ void RgSimpleDBClear(RgSimpleDB *pDB)
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_simple_db", RgSimpleDBDump);
+
+const char D_00A531F0[16] = "pDB != NIL";
+const char D_00A53200[24] = "../rg_simple_db.euc.c";
+const char D_00A53218[16] = "pszName != NIL";
+const char D_00A53228[16] = "pDat != NIL";
+const char D_00A53238[40] = "pDB->m_nNumOfData < pDB->m_nDataCapa";
+const char D_00A53260[40] = "\n***** already entried name '%s'\n\n";
+const char D_00A53288[8] = "0";
+const char D_00A53290[48] = "0 <= nDataID && nDataID < pDB->m_nNumOfData";

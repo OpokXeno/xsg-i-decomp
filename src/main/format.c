@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "format.h"
 
+FormatString *JAVA_tmpString = 0;
+
 /*
  * The script VM's per-thread context, recovered as `JThread` in
  * src/main/chr.h (main's chr TU). Every Java native receives

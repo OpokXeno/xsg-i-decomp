@@ -2,6 +2,9 @@
 #include "shared.h"
 #include "jthread.h"
 
+const char D_004DC080[] = "peer";
+const char D_004DC088[] = "%s.%s";
+
 /*
  * The Java runtime installs this as the thread's `entry` hook for a
  * xeno.Unit instance. It runs the pending method unless the Unit's native

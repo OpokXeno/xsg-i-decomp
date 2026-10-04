@@ -4,6 +4,24 @@
 #include "common.h"
 #include "shared.h"
 #include "rg_battlemgr.h"
+
+const char D_00A54CA0[16] = "rg_camera.info";
+const char D_00A54CB0[16] = "pStudio != NIL";
+const char D_00A54CC0[24] = "../rg_battlemgr.euc.c";
+const char D_00A54CD8[8] = "CAM";
+const char D_00A54CE0[8] = "2";
+const char D_00A54CE8[16] = "pList != NIL";
+const char D_00A54CF8[16] = "i < PLAYER_MAX";
+const char D_00A54D08[24] = "i < pList->m_uNum";
+const char D_00A54D50[16] = "pField != NIL";
+const char D_00A54D60[24] = "uIndex < pField->m_uNum";
+const char D_00A54D78[32] = "pField->m_uNum < BTL_STUDIO_MAX";
+const char D_00A54D98[16] = "pDisp != NIL";
+const char D_00A54DA8[16] = "pInfo != NIL";
+const char D_00A54DB8[24] = "0 <= nHost && nHost < 2";
+const char D_00A54DD0[24] = "0 <= nSub && nSub < 2";
+const char D_00A54DE8[16] = "pMgr != NIL";
+const char D_00A54DF8[32] = "*** max = %f life = %f ***\n";
 #include "ov12/rg_draw.h"
 
 extern void assert_prog(const char *expression, const char *source_file,

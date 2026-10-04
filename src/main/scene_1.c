@@ -2,6 +2,13 @@
 #include "shared.h"
 #include "scene_1.h"
 
+const char scene_window_class_name[24] = "xeno/util/Window";
+const char scene_constructor_format[8] = "(L%s;)V";
+const char scene_message_field_name[8] = "msg";
+const char scene_init_name[8] = "init";
+const char scene_void_signature[8] = "()V";
+const char scene_cleanup_name[8] = "cleanup";
+
 void SCENE_instance(SceneVm *vm, SceneObject scene_object)
 {
     SceneObject arguments[2];

@@ -256,6 +256,37 @@ def check(root, units=UNITS, build=None):
     return problems
 
 
+def freeze_carves(root):
+    """Publish native C storage routes and their overlay allocation guards."""
+    root = Path(root).resolve()
+    private = root / 'config/tu/data-carves.json'
+    data = json.loads(private.read_text())
+    for sections in data['tus'].values():
+        for rows in sections.values():
+            for row in rows:
+                correction = row.get('basis', {}).get('owner_correction')
+                row.pop('basis', None)
+                if correction:
+                    row['basis'] = {'owner_correction': correction}
+    records = {}
+    for unit in OVERLAYS:
+        path = root / 'gates' / (unit + '-bss-manifest.json')
+        if not path.is_file():
+            continue
+        record = json.loads(path.read_text())
+        records[unit] = dict(unit=unit, recovered_location_candidates=
+                            record.get('recovered_location_candidates', []))
+    prefix = str(root) + '/'
+    data['overlay_bss_records'] = _map_strings(
+        records, lambda text: text[len(prefix):] if text.startswith(prefix) else text)
+    data['doc'] = 'Native C data routes and guarded compiler storage allocations.'
+    target = root / 'config/objects/data-carves.json'
+    temporary = target.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(data, indent=1) + '\n')
+    temporary.replace(target)
+    return str(target.relative_to(root))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -265,8 +296,13 @@ def main(argv=None):
     ap.add_argument("--stage", action="store_true")
     ap.add_argument("--freeze", action="store_true")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--freeze-carves", action="store_true",
+                    help="publish C data routes and overlay storage guards")
     a = ap.parse_args(argv)
     root = a.root.resolve()
+    if a.freeze_carves:
+        print(json.dumps(dict(written=[freeze_carves(root)])))
+        return 0
     if a.check:
         problems = check(root, [a.unit] if a.unit else UNITS)
         for p in problems:

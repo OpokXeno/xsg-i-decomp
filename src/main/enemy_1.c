@@ -1,6 +1,17 @@
 #include "common.h"
 #include "enemy_1.h"
 
+/* Per-actor work records are cleared before use. */
+EnemyWorkEntry enepc[16] = {{0}};
+static unsigned short CoolDown_0 = 0;
+static unsigned short CoolDown_1 = 0;
+void *AdrsEnemyPreset = 0;
+void *AdrsEnemySpline = 0;
+void *AdrsEnemyExclamation = 0;
+void *AdrsEnemyQuestion = 0;
+void *AdrsEnemySphere = 0;
+void *AdrsEnemySquare = 0;
+
 int Get_EffectCode(int attr)
 {
     int effect[15] = {
@@ -369,3 +380,9 @@ void Disp_EnemyMark(void)
     mark[15].sphere = AdrsEnemySphere;
     mark[14] = mark[15];
 }
+
+/* Distance thresholds and retreat speeds used by the two look-back paths. */
+const float D_004D8034 = 0.012f;
+const float D_004D8038 = 0.06666667f;
+const float D_004D803C = 0.012f;
+const float D_004D8040 = 0.06666667f;

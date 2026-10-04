@@ -15,14 +15,12 @@ typedef struct EventEndMail {
     signed char follow_mail_id;
 } EventEndMail;
 
-extern EventEndMail event_end_mail;
 
 /* "data\\endou\\umn\\histree.bin", ov02 .data; no witnessed rename. */
 extern const char D_00A13620[];
 
 /* "data\\endou\\umn\\umntxt.bin" filename buffer, shared by UmnTextLoad's
  * synchronous and menu-load paths. */
-extern char f_name_0[];
 
 /* 128 history-tree words (UmnHistoryTreeGet), placed by UmnHistoryTreeLoad. */
 extern int *UmnHistoryTreeBuf;
@@ -74,11 +72,7 @@ extern unsigned char *UmnMailDataGet(int box_id);
 /* main:0x002751B0, defined in src/main/window_tex_load.c. */
 extern int MenuLoadFile(const char *name, void *buffer);
 
-/* Attachment table, 3 bytes per entry (ov02 .data, 0x45 bytes). */
-extern unsigned char umn_attach_tbl[];
-
 /* Four reward records and their four resolved box ids. */
-extern unsigned char kosmos_special_tbl[4][4];
 extern short UmnKosmosSpecialBox[4];
 
 /* Mail ids used by the event/mail availability checks. */
@@ -87,8 +81,6 @@ typedef struct UmnEventTextRecordBuf {
     unsigned short cur;
 } UmnEventTextRecordBuf;
 
-extern unsigned char event_tbl[18];
-extern signed char compulsion_down_load_tbl[13];
 
 typedef struct UmnAttachmentState {
     unsigned char unmodeled_00[0x86];

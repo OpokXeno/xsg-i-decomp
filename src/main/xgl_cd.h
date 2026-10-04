@@ -74,7 +74,6 @@ static int xglCdGetFilePos(CdFilePosition *file_position, const char *path,
 
 void xglCdPowerOffCB(void);
 
-extern unsigned char LW[];
 
 extern signed char ReadClockInterval;
 
@@ -112,7 +111,6 @@ extern int sceCdRead(int lbn, int sectors, void *destination, CdReadMode *read_m
 
 void xglCdArcCheck(void);
 
-extern unsigned char ArcHeader[];
 
 static void xglCdArcInit(void);
 

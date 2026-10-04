@@ -2,6 +2,62 @@
 #include "main/xgl_cd.h"
 #include "menu_1.h"
 
+static char f_name_0_0036D6C8[21] = "data\\endou\\mapex.bin";
+static char f_name_1[23] = "data\\endou\\savemap.bin";
+int map_ex_text = 0;
+int save_map_text = 0;
+/* MenuNumberTextGet's same-TU assembly writes and returns this buffer. */
+static char msg_2_00532A78[0x18];
+/* MenuFileNameGet builds names into this same-TU filename buffer. */
+static char fname_13[0x80];
+static int sort[2][0x100];
+static MenuListEntry mw_list[2][256];
+
+extern char D_004C51D8[];
+extern char D_004DABB0[];
+extern char D_004C51C0[];
+extern char D_004C51A8[];
+extern char D_004DABA8[];
+extern char D_004DABA0[];
+extern char D_004DAB98[];
+extern char D_004DAB90[];
+extern char D_004DABC8[];
+extern char D_004DABC0[];
+extern char D_004C5290[];
+extern char D_004C5280[];
+extern char D_004C5270[];
+extern char D_004C5260[];
+extern char D_004C5250[];
+extern char D_004DABB8[];
+extern char D_004DABF8[];
+extern char D_004DABF0[];
+extern char D_004DABE8[];
+extern char D_004DABE0[];
+extern char D_004DABD8[];
+extern char D_004DABD0[];
+
+static char *tag_name_3[9] = {
+    0, D_004C51D8, D_004DABB0, D_004C51C0, D_004C51A8,
+    D_004DABA8, D_004DABA0, D_004DAB98, D_004DAB90
+};
+static char *para_name_4[8] = {
+    D_004DABC8, D_004DABC0, D_004C5290, D_004C5280,
+    D_004C5270, D_004C5260, D_004C5250, D_004DABB8
+};
+static char *para_name2_5[8] = {
+    D_004DABC8, D_004DABC0, D_004DABF8, D_004DABF0,
+    D_004DABE8, D_004DABE0, D_004DABD8, D_004DABD0
+};
+
+static unsigned char opt_mnt_tbl[8][2] = {
+    {0x20, 0x00}, {0x21, 0x00}, {0x22, 0x00}, {0x23, 0x00},
+    {0x18, 0x00}, {0x19, 0x00}, {0x1A, 0x00}, {0x1B, 0x00}
+};
+static char msg_12[9] = "No data.";
+unsigned char ParaDataChangeTbl[8] __attribute__((section(".data"))) = {
+    6, 7, 0, 1, 2, 3, 4, 5
+};
+
 /* OptMntToPosEquip2 maps the mount code through this asm sibling first. */
 int OptMntToPosEquip(int mountCode);
 
@@ -52,8 +108,6 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuSegmentMapNameGet);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuSegmentItemNameGet);
 
-extern char f_name_0_0036D6C8[];
-extern int map_ex_text;
 
 /*
  * MenuLoadFile is defined in src/main/window_tex_load.c; not yet published
@@ -85,8 +139,6 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuSaveMapNameGet);
  */
 extern int MenuLoadFile(const char *name, void *buffer);
 
-extern char f_name_1[];
-extern int save_map_text;
 
 int MenuSaveMapTextLoad(int work, int mode)
 {
@@ -138,8 +190,6 @@ int MenuMainAgwsCheck(int charId)
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuNumberTextGet);
 
-extern char *tag_name_3[];
-
 char *MenuTagTextGet(int index)
 {
     return tag_name_3[index];
@@ -147,14 +197,10 @@ char *MenuTagTextGet(int index)
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuFaceEpidGet);
 
-extern char *para_name_4[];
-
 char *MenuParaNameGet(int index)
 {
     return para_name_4[index];
 }
-
-extern char *para_name2_5[];
 
 char *MenuParaNameGet2(int index)
 {
@@ -181,7 +227,6 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuRWeaponCheck);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuRWeaponCheck2);
 
-extern unsigned char opt_mnt_tbl[8][2];
 
 unsigned char PosEquipToOptMnt(int posEquip)
 {
@@ -477,7 +522,6 @@ static void MenuSortSubType00(unsigned int *first, unsigned int *second)
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuSortChange);
 
-extern int sort[2][0x100];
 
 int MenuSortCheck(int listIndex)
 {
@@ -527,15 +571,12 @@ void subListMake01(MenuListEntry *entry, int index)
     entry->flag = 0;
 }
 
-extern const char msg_12[];
 
 /*
  * mw_list is defined below, right before MenuListGet, which is the only
  * other function reading it directly; forward-declared again here since
  * MenuListMake needs it earlier in the file.
  */
-extern MenuListEntry mw_list[2][256];
-
 /*
  * mode == -10 selects the shop price fill (subListMake01, which fills
  * amount from MenuBoxMoneyGet); every other value uses the plain owned-
@@ -570,11 +611,55 @@ MenuListEntry *MenuListMake(int listIndex, int mode)
     return list;
 }
 
-extern MenuListEntry mw_list[2][256];
-
 MenuListEntry *MenuListGet(int listIndex)
 {
     return mw_list[listIndex];
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_1", MenuFileNameGet);
+
+
+
+char D_004C51A8[24] = "Registered Reserve";
+
+char D_004C51C0[24] = "Registered Combatant";
+
+char D_004C51D8[16] = "Combatant";
+
+char D_004C5250[16] = "Dexterity";
+
+char D_004C5260[16] = "Ether Defense";
+
+char D_004C5270[16] = "Ether Attack";
+
+char D_004C5280[16] = "Vitality";
+
+char D_004C5290[16] = "Strength";
+
+char D_004DAB90[8] = "To";
+
+char D_004DAB98[8] = "Target";
+
+char D_004DABA0[8] = "From";
+
+char D_004DABA8[8] = "User";
+
+char D_004DABB0[8] = "Reserve";
+
+char D_004DABB8[8] = "Evasion";
+
+char D_004DABC0[8] = "EP";
+
+char D_004DABC8[8] = "HP";
+
+char D_004DABD0[8] = "EVA";
+
+char D_004DABD8[8] = "DEX";
+
+char D_004DABE0[8] = "EDEF";
+
+char D_004DABE8[8] = "EATK";
+
+char D_004DABF0[8] = "VIT";
+
+char D_004DABF8[8] = "STR";

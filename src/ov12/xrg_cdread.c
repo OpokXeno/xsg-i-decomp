@@ -10,11 +10,14 @@ extern void assert_prog(const char *expression, const char *source_file,
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 
-extern char D_00A58E28[];
+const char D_00A58E28[8] = {0};
+const char root_name_name_check[] = "pszName != NIL";
+const char root_name_source_file[] = "../xrg_cdread.euc.c";
+const char root_name_result_check[] = "pszResult != NIL";
 
 char *_GetLocalPath(void)
 {
-    return D_00A58E28;
+    return (char *) D_00A58E28;
 }
 
 static char *_RootName(const char *pszName, char *pszResult, const char *pszRoot)

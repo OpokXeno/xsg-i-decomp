@@ -6,7 +6,7 @@ typedef struct MenuTecData {
     unsigned short waitPointCost[8];
 } MenuTecData;
 
-extern MenuTecData *MenuTecDataBuf;
+MenuTecData *MenuTecDataBuf = 0;
 void *MenuTecDataGet(int chrNo);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_tec", MenuTecSaveDataGet);

@@ -13,9 +13,10 @@ extern int xglMovieClose(void *movie);
 typedef struct MovieInfo {
     unsigned char unmodeled_00[0x40];
     short state;
+    unsigned char unmodeled_42[0xD0 - 0x42];
 } MovieInfo;
 
-extern MovieInfo mi;
+static MovieInfo mi;
 
 void GameMovieStop(void)
 {

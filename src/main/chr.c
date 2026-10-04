@@ -1,6 +1,16 @@
 #include "common.h"
 #include "chr.h"
 
+static float defaultOffset[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+const char chr_algorithm_string[] = "algorithm";
+const char chr_peer_string[] = "peer";
+const char D_004DC1A0[] = "px";
+const char D_004DC1A8[] = "py";
+const char D_004DC1B0[] = "pz";
+const char D_004DC1B8[] = "rx";
+const char D_004DC1C0[] = "ry";
+const char D_004DC1C8[] = "rz";
+
 void Java_xeno_Chr_getPlayer__(JThread *thread, ChrScaleCall *arguments)
 {
     JavaField *peer_field;
@@ -510,7 +520,7 @@ void Java_xeno_Chr_getState__(JThread *thread, ChrObjectCall *arguments,
                                   loadConstString(chr_peer_string, -1), 0);
     peer = *(Actor **)(object + peer_field->offset);
     slot = ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET];
-    entry = (SequenceState *)(actSequence + slot * SEQUENCE_STRIDE);
+    entry = &actSequence[slot].state;
     *failure_result = entry->state_flags;
 }
 
@@ -590,8 +600,7 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
     if ((*(u32 *)(object + algorithm_field->offset) & 1) == 0)
         scale_source = defaultOffset;
 
-    sequence = (SequenceState *)(actSequence +
-        ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET] * SEQUENCE_STRIDE);
+    sequence = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]].state;
     SEQUENCE_SCALE_HANDLER(sequence) = SEQ_scale;
     sequence->state_flags |= 0x20;
     scale = (SequenceScale *)((u8 *)sequence + SEQUENCE_SCALE_OFFSET);
@@ -678,8 +687,7 @@ static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
     if ((*(u32 *)(object + algorithm_field->offset) & 1) == 0)
         scale_source = defaultOffset;
 
-    sequence = (SequenceState *)(actSequence +
-        ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET] * SEQUENCE_STRIDE);
+    sequence = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]].state;
     SEQUENCE_SCALE_HANDLER(sequence) = SEQ_scale;
     sequence->state_flags |= 0x40;
     scale = (SequenceScale *)((u8 *)sequence + SEQUENCE_SCALE_OFFSET);
@@ -766,8 +774,7 @@ static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
     if ((*(u32 *)(object + algorithm_field->offset) & 1) == 0)
         scale_source = defaultOffset;
 
-    sequence = (SequenceState *)(actSequence +
-        ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET] * SEQUENCE_STRIDE);
+    sequence = &actSequence[((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET]].state;
     SEQUENCE_SCALE_HANDLER(sequence) = SEQ_scale;
     sequence->state_flags |= 0x80;
     scale = (SequenceScale *)((u8 *)sequence + SEQUENCE_SCALE_OFFSET);

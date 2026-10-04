@@ -88,8 +88,6 @@ static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle)
     return 1;
 }
 
-extern const char D_00A51D90[]; /* "../rg_enemy.euc.c" */
-
 typedef struct RgWeapon RgWeapon;
 
 extern RgGeomPoint *RgRobotGetGeom(RgRobot *pRobot);
@@ -217,8 +215,8 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     pEnemy = pCtrl->pEnemyRobot;
     pGeom = RgRobotGetGeom(pRobot);
     pEnemyGeom = RgRobotGetGeom(pEnemy);
-    __RgGeomPointGetPos(pGeom, position, D_00A51D90, 427);
-    __RgGeomPointGetPos(pEnemyGeom, enemyPosition, D_00A51D90, 428);
+    __RgGeomPointGetPos(pGeom, position, "../rg_enemy.euc.c", 427);
+    __RgGeomPointGetPos(pEnemyGeom, enemyPosition, "../rg_enemy.euc.c", 428);
     XrgSubVector(direction, enemyPosition, position);
     direction[1] = 0.0f;
     direction[3] = 0.0f;
@@ -903,13 +901,11 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-extern const char D_00A51D90[]; /* "../rg_enemy.euc.c" */
-extern const char D_00A51DD0[]; /* "pBaka != NIL" */
 
 static void _DestructEnemy(RgEnemyControl *pBaka)
 {
     if (pBaka == 0) {
-        assert_prog(D_00A51DD0, D_00A51D90, 1562);
+        assert_prog("pBaka != NIL", "../rg_enemy.euc.c", 1562);
     }
 }
 
@@ -920,7 +916,7 @@ static void _InitEnemy(RgEnemyControl *pControl, RgRobot *pRobot,
     float zeroVelocity;
 
     if (pControl == 0) {
-        assert_prog(D_00A51DD0, D_00A51D90, 1570);
+        assert_prog("pBaka != NIL", "../rg_enemy.euc.c", 1570);
     }
 
     InitRgRobotControlCommon(pBaseControl, pRobot);
@@ -954,8 +950,6 @@ extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
 
-extern const char D_00A51DE0[]; /* "pRobot != NIL" */
-extern const char D_00A51DF0[]; /* "pEnemyRobot != NIL" */
 
 /*
  * _InitEnemy is defined later in this TU (a local sibling still in asm).
@@ -971,13 +965,13 @@ RgEnemyControl *CreateRgEnemyControl(RgRobot *pRobot, RgRobot *pEnemyRobot,
     RgEnemyControl *pControl;
 
     if (pRobot == 0) {
-        assert_prog(D_00A51DE0, D_00A51D90, 1612);
+        assert_prog("pRobot != NIL", "../rg_enemy.euc.c", 1612);
     }
     if (pEnemyRobot == 0) {
-        assert_prog(D_00A51DF0, D_00A51D90, 1613);
+        assert_prog("pEnemyRobot != NIL", "../rg_enemy.euc.c", 1613);
     }
     pControl = RgHeapAlloc(InstanceOfRgHeap(), RG_ENEMY_CONTROL_SIZE,
-                           D_00A51D90, 1615);
+                           "../rg_enemy.euc.c", 1615);
     _InitEnemy(pControl, pRobot, pEnemyRobot, enemyType);
     return pControl;
 }

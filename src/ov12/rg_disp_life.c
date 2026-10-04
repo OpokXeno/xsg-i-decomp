@@ -16,26 +16,38 @@ extern RgHeap *InstanceOfRgHeap(void);
 static void _InitDisp(RgDispLife *pDisp, int dispTex, int timeFont);
 static void _DestructDisp(RgDispLife *pDisp);
 
-/* ov12:0x00a54820 "../rg_disp_life.euc.c" (source filename, scaffold-owned
- * per config/tu-build.json data_ownership: this .rodata window is still
- * owner "asm"). */
-extern const char D_00A54820[];
-/* ov12:0x00a54838 "pDisp != NIL" */
-extern const char D_00A54838[];
+/* The original TU-local tables and strings used by the C accessors below. */
 
 struct AgwsNameUvwh;
 
+typedef struct AgwsNameRecord {
+    int characterId;
+    unsigned char unmodeled_04[12];
+    int texture_u;
+    int texture_v;
+    int texture_width;
+    int texture_height;
+} AgwsNameRecord;
+
+static AgwsNameRecord s_aCharIDToUVWH_0[6] = {
+    {0, {0}, 0, 0, 88, 16},
+    {2, {0}, 168, 0, 80, 16},
+    {4, {0}, 88, 0, 80, 16},
+    {5, {0}, 0, 32, 88, 16},
+    {3, {0}, 88, 32, 80, 16},
+    {1, {0}, 168, 32, 80, 16}
+};
+
+const char D_00A54810[] = "pPic != NIL";
+const char D_00A54820[] = "../rg_disp_life.euc.c";
+const char D_00A54838[] = "pDisp != NIL";
+const char D_00A54870[] = "board_na.bmp";
+const char D_00A54880[] = "board_nb.bmp";
+const char D_00A54950[] = "board_nc.bmp";
+const char D_00A54960[] = "board_nd.bmp";
+
 static int _GetAgwsNameUVWH(int nameIndex, struct AgwsNameUvwh *uvwh)
 {
-    struct AgwsNameRecord {
-        int characterId;
-        unsigned char unmodeled_04[12];
-        int texture_u;
-        int texture_v;
-        int texture_width;
-        int texture_height;
-    };
-    extern const struct AgwsNameRecord s_aCharIDToUVWH_0[6];
     unsigned int index;
 
     for (index = 0; index < 6; index++) {
@@ -77,9 +89,6 @@ extern void XrgPaint2DSetUVSize(void *paint, int width, int height);
 extern void XrgPaint2DAlpha(void *paint, int blendMode);
 extern void XrgPaint2DDrawXYWH(void *paint, int mode, int x, int y,
                                int width, int height);
-
-/* ov12:0x00a54810 "pPic != NIL" */
-extern const char D_00A54810[];
 
 static void _DispAgwsName(void *paint, void *pPic, int nameIndex, int x,
                           int y)

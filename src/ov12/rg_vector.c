@@ -196,3 +196,17 @@ void RgVectorDump(RgVectorPrefix *vector)
                vector->m_apList[index]);
     }
 }
+
+const char D_00A54F40[40] = "vector(%p) error (%s)\ncreated at %s,%d";
+const char D_00A54F68[24] = "vector nil error (%s)";
+const char rg_vector_not_null_message[16] = "pVector != NIL";
+const char D_00A54F90[24] = "../rg_vector.euc.c";
+const char D_00A54FA8[16] = "uCapa > 0";
+const char D_00A54FB8[32] = "pVector->m_apList != NIL";
+const char D_00A54FD8[16] = "pVec != NIL";
+const char D_00A54FE8[40] = "vec(%p) capa over (capa %d size %d)";
+const char rg_vector_index_message[32] = "pVector->m_uSize > uIndex";
+const char D_00A55030[48] = "0U <= uSize && uSize <= pVector->m_uCapa";
+const char D_00A55060[48] = "0 <= uIndex && uIndex < pVector->m_uSize";
+const char D_00A55090[40] = "--- dump vector (%p:capa=%d size=%d)\n";
+const char D_00A550B8[16] = "  [%d] -> %p\n";

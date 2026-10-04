@@ -21,7 +21,13 @@ extern void XrgOuterVector(RgVector destination, RgVector first,
                            RgVector second);
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
 extern float XrgInnerVector(RgVector first, RgVector second);
-extern const char D_00A55548[];
+const char D_00A554F0[] = "pData != NIL";
+const char D_00A55500[] = "../rg_colidata.euc.c";
+const char D_00A55518[] = "nCapa > 0";
+const char D_00A55528[] = "pData->m_pTriangles != NIL";
+const char D_00A55548[] = "nNumOfTriangles > 0";
+const char D_00A55560[] = "pData->m_nCapaOfTri > pData->m_nNumOfTri";
+const char D_00A55670[] = "pPoly != NIL && pArg != NIL && pResult != NIL";
 
 static void _InitTriColi(void *pTri, void *pV0, void *pV1, void *pV2)
 {

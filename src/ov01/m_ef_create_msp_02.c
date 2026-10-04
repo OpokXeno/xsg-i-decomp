@@ -20,7 +20,6 @@ extern void MMathScaleMatrix(Vector4 *destination, const Vector4 *matrix,
                              const Vector4 *scale);
 extern void MMathApplyMatrix(Vector4 *destination, Matrix4 matrix, Vector4 *source);
 extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
-extern Vector4 scale_0_00A516A0;
 extern float tanf(float value);
 
 /*
@@ -329,6 +328,7 @@ static void fnMSP02_PR000(void *task, MspEffect *effect)
 
 static void fnMSP02_DM000(void *task, MspEffect *effect)
 {
+    static const Vector4 scale = {0.05f, 0.05f, 0.22f, 1.0f};
     Vector4 angles;
     Matrix4 matrix;
     Matrix4 *matrix_destination;
@@ -349,7 +349,7 @@ static void fnMSP02_DM000(void *task, MspEffect *effect)
         matrix_destination = &matrix;
         MMathScaleMatrix((Vector4 *)matrix_destination,
                          (const Vector4 *)matrix_destination,
-                         &scale_0_00A516A0);
+                         &scale);
 
         {
             /* Keep the target translation's address in v1, as the original does. */

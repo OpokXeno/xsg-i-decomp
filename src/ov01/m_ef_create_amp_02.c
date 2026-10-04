@@ -73,8 +73,8 @@ extern float MMathCalcDir(const void *first, const void *second);
 extern void MGsGPInit(void *packet, void *address, int size);
 extern Amp02GsParameter *svGetPrmFromName(const char *name, Amp02GsParameter *output);
 extern void *memset(void *destination, int value, unsigned int size);
-extern const char D_00A51580[];
-extern const char D_00A51590[];
+const char D_00A51580[16] = "de_cld01";
+const char D_00A51590[16] = "de_cld02";
 
 static void fnAMP02_PR000(void *self, void *work);
 static void fnAMP02_DP000(void *self, void *work);
@@ -133,7 +133,6 @@ extern void *MEfCalcAngle(Vector4 *destination, const Vector4 *from, const Vecto
 extern void MMathRotateMatrixYX(Vector4 *destination, const Vector4 *source, const Vector4 *angles);
 extern void MMathScaleMatrix(Vector4 *out, const Vector4 *matrix, const Vector4 *scale);
 extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
-extern Vector4 scale_0_00A515A0;
 
 /* Same hit-frame threshold fnAMP02_PO000 (below) checks; DM000 stops drawing
    once that frame is reached. */
@@ -164,13 +163,14 @@ typedef struct Amp02DrawState {
  * draws the model.
  */
 static void fnAMP02_DM000(void *self, Amp02DrawState *work) {
+    static const Vector4 scale = { 0.08f, 0.08f, 0.25f, 1.0f };
     Vector4 angles;
     Vector4 matrix[4];
 
     if (work->frame < AMP02_DRAW_FRAME) {
         MEfCalcAngle(&angles, &work->position, &work->target);
         MMathRotateMatrixYX(matrix, (const Vector4 *)0, &angles);
-        MMathScaleMatrix(matrix, matrix, &scale_0_00A515A0);
+        MMathScaleMatrix(matrix, matrix, &scale);
         __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&work->position) : "memory");
         __asm__ __volatile__("vmove.w vf1, vf0" : : : "memory");
         __asm__ __volatile__("sqc2 vf1, 48(%0)" : : "r"(matrix) : "memory");

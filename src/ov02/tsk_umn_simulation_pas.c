@@ -67,7 +67,18 @@ typedef struct UmnSharedWork {
     int pending_script;
 } UmnSharedWork;
 extern UmnSharedWork UmnWork;
-extern const char *msg00_0_00A10888;
+static int UmnSimulationScriptNoTbl[] = {
+    0x000300EF,
+    0x00040149,
+    0x00010333,
+    0x00010419,
+    0x0001058B,
+    0x0001097D,
+    0x00010B35
+};
+static const char *msg00_0_00A10888 = "Environmental Simulator";
+const char D_00A132F8[] =
+    "\245\267\245\337\245\345\245\354\241\274\245\267\245\347\245\363";
 extern void WindowDXSet(void *window);
 extern void WindowDXMain(void *window);
 extern void MoveSlide(short *current, short *target, float rate);
@@ -161,9 +172,7 @@ typedef struct UmnGameLoopState {
 extern PadPrefix PadData;
 extern UmnGameLoopState GameLoopState;
 extern int UmnWorkEnd;
-extern int UmnSimulationScriptNoTbl[];
 extern int UmnSimulationNo;
-extern const char D_00A132F8[];
 extern int MenuScenarioNoGet(void);
 extern void tskUmnSimulationInfo(UmnTaskCommand *task, void *work);
 extern void tskUmnSimulationList(UmnTaskCommand *task, void *work);

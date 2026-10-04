@@ -32,9 +32,10 @@ INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", InitUwamonoSys);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", Unit_CreateUwamono);
 
-extern unsigned char D_004CA028[];
-extern int uwares_tbl[14];
-extern int xtxres_tbl[14];
+/* Runtime-loaded object message with a hexadecimal unit identifier. */
+const char D_004CA028[24] = "\xBE\xEF\xC3\xF3\xBE\xE5\xCA\xAA\xA5\xED\xA1\xBC\xA5\xC9 %x\n";
+int uwares_tbl[14] = { 0 };
+int xtxres_tbl[14] = { 0 };
 extern int printf(const char *format, ...);
 
 /*
@@ -256,11 +257,11 @@ INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", MAP_updateUnitSaveSymbol);
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", MAP_updateUnitShopSymbol);
 
-extern const float D_004D7EBC;
+#define UWAMONO_SYMBOL_PHASE_STEP 0.05f
 
 void MAP_updateUnitSymbol(UwamonoMapUnit *unit)
 {
-    unit->symbolPhase = unit->symbolPhase + D_004D7EBC;
+    unit->symbolPhase = unit->symbolPhase + UWAMONO_SYMBOL_PHASE_STEP;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/init_uwamono_sys", SetUwaWind);

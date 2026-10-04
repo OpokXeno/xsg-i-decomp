@@ -1,7 +1,7 @@
 #include "common.h"
 
 /* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
-extern char *snapnameno;
+static char *snapnameno;
 
 int GameSnapShotNumber(int number) {
     if (number >= 0) {
@@ -64,11 +64,25 @@ typedef struct {
     unsigned char unmodeled_00[0x50];
     short game_state_value;
 } GameSnapShotGameState;
+
+static char snapname[40] = "host0:/home/xeno/work/snap/game0000.jpg";
+static GameSnapShotQuality quality_table[5] = {
+    { { { 100, { 0 } }, { 100, { 0 } }, { 0, { 0 } } }, { 0 } },
+    { { { 90, { 0 } }, { 90, { 0 } }, { 0, { 0 } } }, { 0 } },
+    { { { 75, { 0 } }, { 75, { 0 } }, { 0, { 0 } } }, { 0 } },
+    { { { 50, { 0 } }, { 50, { 0 } }, { 0, { 0 } } }, { 0 } },
+    { { { 30, { 0 } }, { 30, { 0 } }, { 0, { 0 } } }, { 0 } }
+};
+static char *snapnameno = snapname + 31;
+static char *snapnamext = snapname + 36;
+char GameMovieTransparent = 0;
+char GameMovieAlpha = 0;
+short GameMovieFrame = 0;
+const char D_004C01C8[] = "*** SnapShot:%s,%08x ***\n";
+const char D_004C01E8[] = "%d,%d,%d\n";
+
 extern GameSnapShotDrawEnv DrawEnv;
 extern GameSnapShotGameState GameLoopState;
-extern GameSnapShotQuality quality_table[5];
-extern char snapname[40];
-extern char *snapnamext;
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceClose(int descriptor);
 extern int sceWrite(int descriptor, const void *buffer, unsigned int size);
@@ -76,8 +90,6 @@ extern void xglClockUInt2DayTime(XglClock *clock, unsigned int seconds);
 extern void xglJpegEncode(GameSnapShotJpegParams *params);
 extern void *memset(void *destination, int value, unsigned int size);
 extern int printf(const char *format, ...);
-extern const char D_004C01C8[];
-extern const char D_004C01E8[];
 
 void GameSnapShotExecute(int quality, int flags) {
     GameSnapShotJpegParams params;

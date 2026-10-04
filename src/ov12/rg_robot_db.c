@@ -33,15 +33,8 @@ extern int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
 extern void *RgSimpleDBGet(RgSimpleDB *pDB, int nDataID);
 extern void RgSimpleDBClear(RgSimpleDB *pDB);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a52280 contains the assertion expression "pDB != NIL".
- * ov12:0x00a52290 contains the source filename "../rg_robot_db.euc.c".
- */
-extern const char D_00A52280[];
-extern const char D_00A52290[];
+const char D_00A52280[] = "pDB != NIL";
+const char D_00A52290[] = "../rg_robot_db.euc.c";
 
 void RgRobotDBClear(RgSimpleDB *database)
 {
@@ -86,20 +79,52 @@ void *RgRobotDBGetByID(RgSimpleDB *database, int charID)
     return RgRobotDBGet(database, name);
 }
 
-typedef struct RgRobotSpec RgRobotSpec;
+/* Assertion, parse, and diagnostic strings used by this translation unit. */
+const char D_00A522A8[] = "char id (%d) has no char-name";
+const char D_00A522C8[] = "pReader != NIL";
+const char D_00A522D8[] = "character";
+const char D_00A522E8[] = "character '%s' is defined more than twice";
+const char D_00A52318[] = "character name '%s' cannot be used";
+const char D_00A52340[] = "NAME [%s] -------\n";
+
+typedef struct RgRobotSpec {
+    int charID;
+    int type;
+    unsigned char unmodeled_08[4];
+    float baseSpeed;
+    unsigned char unmodeled_10[4];
+    float turnRate;
+    unsigned char unmodeled_18[4];
+    float speedRating;
+    float accelRate;
+    float rotateForce;
+    float moveResist;
+    float rotResist;
+    unsigned char unmodeled_30[4];
+    float attackAdvanceRate;
+    unsigned char unmodeled_38[8];
+    int unmodeled_40;
+    float unmodeled_44;
+    int unmodeled_48;
+    float unmodeled_4c;
+    float unmodeled_50;
+    float unmodeled_54;
+    unsigned char unmodeled_58;
+    unsigned char unmodeled_59[0x1f];
+    unsigned char unmodeled_78;
+    unsigned char unmodeled_79[0x1f];
+    unsigned char unmodeled_98[8];
+    unsigned char unmodeled_a0[0x20];
+} RgRobotSpec;
 
 extern void InitRgRobotSpec(RgRobotSpec *pSpec);
 
-/*
- * Scaffold-owned (.bss still owner: asm): the default robot spec instance
- * RgRobotDBGetDefault fills in place and returns.
- */
-extern RgRobotSpec D_00A599E0;
-
 RgRobotSpec *RgRobotDBGetDefault(void)
 {
-    InitRgRobotSpec(&D_00A599E0);
-    return &D_00A599E0;
+    static RgRobotSpec inSpec;
+
+    InitRgRobotSpec(&inSpec);
+    return &inSpec;
 }
 
 /* ov12/tu067 (src/ov12/rg_actor_charid.c), already accepted there. */
@@ -124,22 +149,6 @@ extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
 extern void RgRobotSpecReadFromText(RgRobotSpec *pSpec, RgReadText *pReader);
 /* ov12/tu022 (src/ov12/rg_simple_db.c), already accepted there. */
 extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat, const char *pszName);
-
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a522c8 contains the assertion expression "pReader != NIL".
- * ov12:0x00a522d8 contains the paragraph tag "character".
- * ov12:0x00a522e8 contains the format string
- *   "character '%s' is defined more than twice".
- * ov12:0x00a52318 contains the format string
- *   "character name '%s' cannot be used".
- */
-extern const char D_00A522C8[];
-extern const char D_00A522D8[];
-extern const char D_00A522E8[];
-extern const char D_00A52318[];
 
 void RgRobotDBRead(RgSimpleDB *database, RgReadText *pReader)
 {
@@ -183,11 +192,6 @@ extern char *RgSimpleDBGetName(RgSimpleDB *pDB, int nDataID);
 extern void XrgLog(const char *format, const char *source_file, int line,
                    ...);
 extern void RgRobotSpecDump(RgRobotSpec *pSpec);
-
-/*
- * ov12:0x00a52340 contains the format string "NAME [%s] -------\n".
- */
-extern const char D_00A52340[];
 
 void RgRobotDBDump(RgSimpleDB *database)
 {

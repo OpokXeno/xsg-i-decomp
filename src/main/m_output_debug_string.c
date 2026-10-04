@@ -6,9 +6,9 @@ typedef char *va_list;
 #define va_end(ap) ((void)0)
 
 extern int vprintf(const char *format, va_list args);
-extern char dstr[0x100];
-extern const char D_004CCA40[];
-extern const char D_004CCA58[];
+static char dstr[0x100];
+const char D_004CCA40[] = "\033[1;36mMDMSG:\033[m %s\n";
+const char D_004CCA58[] = "\033[1;35mMDMSG:\033[m %s\n";
 
 void MOutputDebugString(const char *format, ...)
 {

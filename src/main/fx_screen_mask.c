@@ -18,6 +18,10 @@ static void screenMask(ScreenMaskTask *task)
     }
 }
 
+static int (*fxFunction[1])(XglTaskPrefix *) = {
+    (int (*)(XglTaskPrefix *))screenMask
+};
+
 INCLUDE_ASM("asm/main/nonmatchings/fx_screen_mask", fxAdapter);
 
 void FX_ScreenMask(int unused, int color, int duration, int mode)

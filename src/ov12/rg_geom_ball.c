@@ -51,8 +51,8 @@ extern void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime);
 /* This TU's own .rodata (scaffold-owned; kept under their splat names,
  * docs/naming.md "Scaffold-owned data keeps its splat name"): 0x00a55148
  * "pBall != NIL", 0x00a55158 "../rg_geom_ball.euc.c". */
-extern const char D_00A55148[];
-extern const char D_00A55158[];
+const char D_00A55148[16] = "pBall != NIL";
+const char D_00A55158[24] = "../rg_geom_ball.euc.c";
 
 /*
  * InitRgGeomPoint, RgGeomSetType and RgGeomSetPassTimeMeshod are original

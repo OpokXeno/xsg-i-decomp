@@ -2,21 +2,21 @@
 #include "shared.h"
 #include "xgl_packet.h"
 
-extern XglPacket asPacketSource[];
+static XglPacket asPacketSource[2];
 extern void sceVif1PkInit(XglPacket *packet, u32 buffer_address);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketTextureTrans);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketInterpolate);
 
-extern XglPacket *pCurrentPacket;
+static XglPacket *pCurrentPacket;
 
 XglPacket *xglPacketGetCurrent(void)
 {
     return pCurrentPacket;
 }
 
-extern XglPacket *pSendPacket;
+static XglPacket *pSendPacket;
 
 void xglPacketInit(void)
 {
@@ -33,7 +33,6 @@ void xglPacketInit(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_packet", xglPacketMove);
 
-extern XglPacket *pSendPacket;
 extern void xglDmaDirectSrcChain(u32 channel, u32 address);
 
 void xglPacketSend(void)

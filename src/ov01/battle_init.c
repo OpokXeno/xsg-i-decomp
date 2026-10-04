@@ -7,6 +7,10 @@
 #include "ov01/calc.h"
 #include "main/party.h"
 
+/* Define this before TU-local INCLUDE_ASM output so cc1 emits its storage
+ * outside their #APP blocks. */
+const char s_battleCtrlBoostEnFormat[32] = "** BOOST EN=%d %d%% (%d)\n";
+
 #define CURSOR_STATE_OFF 0x10
 #define STATE_FLAGS_OFF 0x00
 #define STATE_UNK70_OFF 0x70
@@ -23,8 +27,7 @@
 #define CALC_PARAM_BOOST_CHANCE_OFF 0x20
 #define CALC_PARAM_BOOST_LEVEL_OFF 0x3C
 
-extern int escapeFlag;
-extern const char D_00A44080[];
+static int escapeFlag;
 extern int printf(const char *format, ...);
 
 const char **dataItmNameGet(int index);
@@ -100,7 +103,6 @@ typedef struct CamEvent {
     BattleUnit *unit;     /* +0x08 */
     BattleUnit *target;   /* +0x0C */
 } CamEvent;
-extern CamEvent D_00A57B80;
 
 extern void camEventExec(CamEvent *event, BattleUnit *unit);
 
@@ -138,14 +140,13 @@ extern void transWepOutDraw(Actor *actor);
  * The battle AI script identifier (data still asm-owned: the extern keeps
  * its splat name until the owning data TU recovers it, docs/naming.md).
  */
-extern int D_00A57C80;
+static int D_00A57C80;
 
 /*
  * The unit currently executing a battle action / the unit that most
  * recently acted (data still asm-owned; original ELF symbol names).
  */
-extern BattleUnit *pActUnit;
-extern BattleUnit *pLastUnit;
+static BattleUnit *pLastUnit;
 BattleUnit **tgtUnitAdrGet(void);
 BattleUnit *tgtUnitGet(void);
 
@@ -159,16 +160,19 @@ typedef struct ManWork {
     unsigned char unmodeled_00[0xc];
     int controlPhase;     /* +0xc */
     ObjectTask *unitTask; /* +0x10 */
+    unsigned char unmodeled_14[4]; /* original named span continues to +0x18 */
 } ManWork;
-extern ManWork manWk;
+static ManWork manWk;
 
 /*
  * Opaque battle-control record. batCtrlGet is its only reference in the
  * mapped functions so far; no dereference evidences any member layout
  * (data still asm-owned; original ELF symbol name).
  */
-typedef struct BatCtrl BatCtrl;
-extern BatCtrl batCtrl;
+typedef struct BatCtrl {
+    unsigned char unmodeled_00[4];
+} BatCtrl;
+static BatCtrl batCtrl;
 
 /*
  * Scenario-battle phase-dispatch record. scenarioBatInit and every
@@ -209,7 +213,24 @@ typedef struct ScenarioBatState {
     ScenarioPhaseFunc nextPhase; /* +0x10 */
     int phaseTimer;              /* +0x14 */
 } ScenarioBatState;
-extern ScenarioBatState scenarioPtr;
+
+/*
+ * Private battle state, in original BSS address order. Keeping these local
+ * definitions together lets the guarded overlay linker map each exact object
+ * to its original storage span.
+ */
+static ObjectTask *pTaskEnCur;
+static BattleUnit *pActUnit;
+static int oldCurGrp;
+static int keyBuffIdx;
+static int keyBuff[8];
+static int batMainFlag;
+static ScenarioStep scenarioSrc[8];
+static ScenarioStep scenarioDst[24];
+static ScenarioBatState scenarioPtr;
+static int helpFlag;
+static CamEvent D_00A57B80;
+static int batRetCode;
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleInit);
 
@@ -221,8 +242,6 @@ void battleEndChk(void);
  * Set unconditionally at the start of every battleMain tick (data still
  * asm-owned; original ELF symbol name); no other write is evidenced in this TU.
  */
-extern int batMainFlag;
-
 void battleMain(void)
 {
     /* Separate load keeps this store in its own register. */
@@ -241,7 +260,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlConfusion);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlJunk);
 
-extern int actStock;
+static int actStock[9];
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockInit);
 
@@ -258,19 +277,15 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockRemove);
  * actStockRemove (still INCLUDE_ASM here) read and write through the
  * address this returns (data still asm-owned; original ELF symbol name).
  */
-extern int actStock;
-
 int *actStockGet(void)
 {
-    return &actStock;
+    return actStock;
 }
 
 /*
  * The battle help page index, cycled 0..2 (data still asm-owned, splat
  * name kept).
  */
-extern int helpFlag;
-
 int battleCtrlHelp(void)
 {
     helpFlag = (helpFlag + 1) % 3;
@@ -290,7 +305,6 @@ extern int calcBoost(BattleUnit *unit, int mode);
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlBoostPl);
 
 extern int rnd(int max);
-extern const char D_00A43D90[];
 
 int battleCtrlBoostEn(void)
 {
@@ -304,7 +318,7 @@ int battleCtrlBoostEn(void)
         if (table[i] != 0) {
             chance = ((signed char *)calcUPGet((ObjectTask *)table[i]))[CALC_PARAM_BOOST_CHANCE_OFF];
             if (calcBoostChk(table[i], 1) != 0 && rnd(100) < chance) {
-                printf(D_00A43D90, calcUPGet((ObjectTask *)table[i])->charaId, chance,
+                printf(s_battleCtrlBoostEnFormat, calcUPGet((ObjectTask *)table[i])->charaId, chance,
                        ((signed char *)calcUPGet((ObjectTask *)table[i]))[CALC_PARAM_BOOST_LEVEL_OFF]);
                 calcBoost(table[i], 1);
                 return 1;
@@ -333,13 +347,13 @@ void camEventTurnStartSet(void)
  * original ELF symbol names); cmdListPtrGet is the only place both addresses are
  * taken together.
  */
-extern int fifoCmd;
-extern int cmdList;
+static int fifoCmd[6];
+static int cmdList[0xC0];
 
 void cmdListPtrGet(int **list, int **altList)
 {
-    *list = &fifoCmd;
-    *altList = &cmdList;
+    *list = fifoCmd;
+    *altList = cmdList;
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cmdListSet);
@@ -397,9 +411,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyCmd2wno);
  * Buffered battle-input queue (data still asm-owned; original ELF symbol names):
  * keyBuffIdx is the current insertion index into the keyBuff queue.
  */
-extern int keyBuffIdx;
-extern int keyBuff[8];
-
 void keyBuffClear(void)
 {
     memset(keyBuff, 0, sizeof(keyBuff));
@@ -497,8 +508,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleEndChk);
  * The battle result code consumed by phase transitions and shutdown
  * processing (data still asm-owned; original ELF symbol name).
  */
-extern int batRetCode;
-
 int battleRetCodeGet(void)
 {
     return batRetCode;
@@ -539,7 +548,7 @@ typedef struct PlUnitEntry {
     short attackPosition;  /* +0x2 */
     unsigned char unmodeled_04[4];
 } PlUnitEntry;
-extern PlUnitEntry plTbl[3];
+static PlUnitEntry plTbl[3];
 
 PlUnitEntry *plUnitTblGet(void) {
     PartyAttackSlot *slot;
@@ -686,23 +695,19 @@ void scenarioPtrFuncSet(ScenarioPhaseFunc func)
 
 void scenarioBatExecPhase10(void);
 extern void sndInit2(void);
-extern unsigned char scenarioDst[];
-extern unsigned char scenarioSrc[];
-
 void scenarioBatInit(void)
 {
     sndInit2();
     scenarioPtr.source = (ScenarioStep *)scenarioSrc;
     scenarioPtr.count = 0;
     scenarioPtr.index = 0;
-    scenarioPtr.dest = scenarioDst;
+    scenarioPtr.dest = (unsigned char *)scenarioDst;
     scenarioPtrFuncSet(scenarioBatExecPhase10);
 }
 
 int scenarioSrcSet(const ScenarioStep *source)
 {
-    extern int D_00A57B64;
-    ScenarioStep *destination = (ScenarioStep *)D_00A57B64;
+    ScenarioStep *destination = scenarioPtr.source;
 
     *destination = *source;
     return 1;
@@ -714,11 +719,9 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioDstSet);
  * The scenario source index (data still asm-owned, splat name kept); a
  * different object from the ScenarioBatState record above.
  */
-extern int D_00A57B64;
-
 int scenarioSrcGet(void)
 {
-    return D_00A57B64;
+    return (int)scenarioPtr.source;
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioDstGet);
@@ -780,7 +783,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecMain);
  * The stolen-item state nusumeSet/nusumeGet share (data still asm-owned;
  * original ELF symbol name).
  */
-extern int nusumuFlag;
+static int nusumuFlag;
 
 void nusumeSet(int value)
 {
@@ -838,7 +841,7 @@ const char *itemNameGet(int group, int index)
         name = *dataAccNameGet(index);
         break;
     default:
-        printf(D_00A44080, group, index);
+        printf("itemNameGet: err=%d %d\n", group, index);
         break;
     }
     return name;
@@ -1025,7 +1028,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", dmgValPut);
 typedef struct MonsGain {
     unsigned char unmodeled_00[0x58];
 } MonsGain;
-extern MonsGain monsGain;
+static MonsGain monsGain;
 
 MonsGain *monsGainPtrGet(void)
 {
@@ -1163,8 +1166,6 @@ ObjectTask *objEnCurCreate(float x, float y, float z)
  * TU-local header and is not includable here).
  */
 extern void objRemove(ObjectTask *task);
-extern ObjectTask *pTaskEnCur;
-
 void objCurRemove(void)
 {
     if (pTaskEnCur != 0) {
@@ -1325,15 +1326,13 @@ typedef struct CurSelGrp {
     unsigned char unmodeled_00[0x58];
     u32 group; /* +0x58: written 0 or 1 by curSelGrpSet */
 } CurSelGrp;
-extern CurSelGrp curMove;
+static CurSelGrp curMove;
 
 /*
  * Written -1 whenever curSelGrpSet derives the group from flags instead of
  * receiving it directly (data still asm-owned; original ELF symbol name); no other
  * reference is evidenced in this TU.
  */
-extern int oldCurGrp;
-
 void curSelGrpSet(u32 group, int flags)
 {
     CurSelGrp *state = &curMove;
@@ -1356,11 +1355,9 @@ void curSelGrpSet(u32 group, int flags)
  * The current selection group (data still asm-owned, splat name kept); a
  * different object from CurSelGrp above, whose writer is not in this TU.
  */
-extern int D_00A57C48;
-
 int curSelGrpGet(void)
 {
-    return D_00A57C48;
+    return curMove.group;
 }
 
 void objDispPlCur(void)

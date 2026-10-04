@@ -5,6 +5,10 @@
 #include "shared.h"
 #include "rg_geom_robot.h"
 
+const char D_00A55170[] = "pGeom != NIL";
+const char D_00A55180[] = "../rg_geom_robot.euc.c";
+const char D_00A55198[] = "pRobot != NIL";
+
 /*
  * InitRgGeomBall, RgGeomSetType, RgGeomSetStatus and RgGeomSetPassTimeMeshod
  * are original functions of other OV12 translation units, already recovered

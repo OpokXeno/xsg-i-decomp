@@ -40,17 +40,17 @@ extern void DisposeRgFileSysData_sub(struct RgFileSysData *pFile,
  * "../rg_effect_env.euc.c", 0x00a540f0 "shot.rbg", 0x00a54100
  * "data\\nisimori\\", 0x00a54110 "particle_effect.rpl", 0x00a54128
  * "effect.bxx". */
-extern const char D_00A540C8[];
-extern const char D_00A540D8[];
-extern const char D_00A540F0[];
-extern const char D_00A54100[];
-extern const char D_00A54110[];
-extern const char D_00A54128[];
+const char D_00A540C8[] = "pEnv != NIL";
+const char D_00A540D8[] = "../rg_effect_env.euc.c";
+const char D_00A540F0[] = "shot.rbg";
+const char D_00A54100[] = "data\\nisimori\\";
+const char D_00A54110[] = "particle_effect.rpl";
+const char D_00A54128[] = "effect.bxx";
 
 /* Two more witnesses in the same window: 0x00a54138 "pszName != NIL",
  * 0x00a54148 "aResult != NIL". */
-extern const char D_00A54138[];
-extern const char D_00A54148[];
+const char D_00A54138[] = "pszName != NIL";
+const char D_00A54148[] = "aResult != NIL";
 
 /*
  * RgLinkData is defined by ov12/tu063 (src/ov12/rg_linkdata.c); this

@@ -29,9 +29,11 @@ int CheckActorExist(RadarActor *actor)
     return actor->parent == 0;
 }
 
-extern u8 *image_004DC554;
-extern u8 rate;
-extern const char D_004C0618[];
+#define image_004DC554 radarImage
+#define rate radarRate
+static u8 *radarImage;
+static u8 radarRate;
+static const char D_004C0618[32] = "data\\yajima\\cf_rader00.xtx";
 
 void GameRadarInit(void)
 {

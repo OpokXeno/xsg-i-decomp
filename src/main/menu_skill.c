@@ -3,6 +3,9 @@
 #include "main/party.h"
 #include "menu_skill.h"
 
+/* Base of the loaded skill table used by this translation unit. */
+unsigned char *SkillDataBuf = 0;
+
 int SkillSetLvGet(int skill_id)
 {
     int skill_index = (unsigned short)skill_id;

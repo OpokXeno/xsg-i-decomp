@@ -27,7 +27,8 @@ extern unsigned char PadData[];
 /* This TU's own .rodata (scaffold-owned; kept under its splat name,
  * docs/naming.md "Scaffold-owned data keeps its splat name"): the debug
  * font control sequence NisimoriTest passes to xglFontDebugPrintf. */
-extern const char D_00A51430[];
+/* Font control bytes used by NisimoriTest; operands remain partially unknown. */
+const char D_00A51430[16] = "\x0b\xc0\xbe\xbf\xb9";
 
 /*
  * Waits for the debug pad combination (0x08000100, held+pressed bits at

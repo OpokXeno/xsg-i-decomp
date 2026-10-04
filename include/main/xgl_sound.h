@@ -36,4 +36,10 @@ struct SoundWork {
     unsigned char packet_buffer[0x800];
 };
 
+typedef struct SePacket {
+    short command;
+    unsigned char unmodeled_02[14];
+    int arguments[4];
+} SePacket;
+
 #endif /* INCLUDE_MAIN_XGL_SOUND_H */

@@ -99,7 +99,27 @@ typedef struct {
 #define DEFOCUS_SCREEN_Y_BIAS 29175
 #define DEFOCUS_HEAD_WORDS 16
 #define DEFOCUS_SOLID_WORDS 20
-extern const u32 Head_6_00367240[];
+/* The data reference in the original GIF/VIF packet points one word into VU memory. */
+/* Partial model of the fixed packet template; unknown words stay explicit. */
+typedef struct DefocusSolidPacketHeader {
+    u8 unmodeled_00[0x0c];
+    u32 packet_tag_0c;
+    u32 vu_memory_address_10;
+    u32 packet_header_14;
+    u32 packet_header_18;
+    u32 unmodeled_1c;
+    u32 packet_header_20;
+    u32 unmodeled_24;
+    u32 packet_header_28;
+    u32 unmodeled_2c;
+    u32 packet_header_30;
+    u32 unmodeled_34;
+    u32 packet_header_38;
+    u32 unmodeled_3c;
+} DefocusSolidPacketHeader;
+
+#define DEFOCUS_VU_MEMORY_WORD ((u32 *)0x8001)
+static DefocusSolidPacketHeader defocus_solid_packet_header;
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 
@@ -137,7 +157,7 @@ static void DefocusMainType06(DefocusSolidRect *rect, XglPacket *packet)
     draw->flags = 0;
     draw->second_flags = 0;
     sceVif1PkCnt(packet, 0);
-    sceVif1PkAddDataN(packet, Head_6_00367240, DEFOCUS_HEAD_WORDS);
+    sceVif1PkAddDataN(packet, &defocus_solid_packet_header, DEFOCUS_HEAD_WORDS);
     sceVif1PkAddDataN(packet, DEFOCUS_SCRATCH, DEFOCUS_SOLID_WORDS);
 }
 
@@ -196,8 +216,6 @@ static void GameDefocusFinalize(int index)
 }
 
 extern int printf(const char *format, ...);
-extern const char D_004C0200[];
-
 void GameDefocusSet(int index, int type, const int *settings)
 {
     int clear_index;
@@ -205,7 +223,7 @@ void GameDefocusSet(int index, int type, const int *settings)
     DefocusLayer *layer;
 
     if (index >= 16) {
-        printf(D_004C0200, index);
+        printf("GameDefocusSet()\xA4\xCE\xB0\xFA\xBF\xF4\xA4\xAC\xB0\xDB\xBE\xEF\xA4\xC7\xA4\xB9(%d)\xA1\xA3\n", index);
         return;
     }
     if (index < 0) {
@@ -229,8 +247,6 @@ void GameDefocusSet(int index, int type, const int *settings)
     GameDefocusCheck();
 }
 
-extern const char D_004C0228[];
-
 void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
 {
     DefocusLayer *layers;
@@ -239,7 +255,7 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
 
     row_address = (u32)GameDefocusParam + (u32)group_index * 0x110u;
     if (group_index >= 4) {
-        printf(D_004C0228, group_index);
+        printf("GameDefocusQuickSet()\xA4\xCE\xB0\xFA\xBF\xF4\xA4\xAC\xB0\xDB\xBE\xEF\xA4\xC7\xA4\xB9(%d)\xA1\xA3\n", group_index);
         return;
     }
 
@@ -344,3 +360,12 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
     }
     GameDefocusCheck();
 }
+
+static DefocusSolidPacketHeader defocus_solid_packet_header = {
+    {0}, 0x51000003, (u32)DEFOCUS_VU_MEMORY_WORD, 0x20000000,
+    0x000000EE, 0, 0x00071001, 0, 0x47, 0, 0x84, 0, 0x42, 0
+};
+
+/* Runtime writes the layer entries through DefocusSet; the original table is
+ * sixteen 0x44-byte records whose initial bytes are all zero. */
+DefocusLayer GameDefocusParam[16] = { 0 };

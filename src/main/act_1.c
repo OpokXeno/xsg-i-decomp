@@ -1,6 +1,11 @@
 #include "common.h"
 #include "act_1.h"
 
+static MatrixHeap matrixHeap;
+static unsigned char actMatrix[0xC0000];
+static unsigned char matrixHeapBlock[0x400];
+static MatrixHeap *actMatrixHeap = 0;
+
 extern void *memset(void *destination, int value, unsigned int count);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_1", ACT_allocMatrix);
@@ -38,8 +43,9 @@ void *ACT_allocBlock(int tag, int blockCount)
  *   sh a0,16(s1) with a0 = count+1); loop bound in RSRC_info.
  * - heap_max (+0x12): max items 64 (0x0026d7d8: lhu v1,18(s1) /
  *   sltu v1,v0,v1 gate).
- * Later MatrixHeap fields past offset 0x14 remain unknown; this private type
- * intentionally stops at the six evidenced offsets.
+ * The scaffold reserves 0x20 bytes for matrixHeap. Later fields past offset
+ * 0x14 remain unknown; the tail records that established object extent without
+ * assigning names or invented semantics to those bytes.
  */
 
 void ACT_matrixInit(void)

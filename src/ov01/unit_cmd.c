@@ -5,13 +5,18 @@
 #include "shared.h"
 #include "unit_cmd.h"
 
-extern unsigned char unitTbl[0x20];
-extern int unitPlNum;
-extern int unitEnNum;
+/* The same eight unit pointers have full-record and scheduler-prefix views. */
+typedef union UnitTableStorage {
+    UnitRecord *records[8];
+    ObjectTask *tasks[8];
+} UnitTableStorage;
+static UnitTableStorage unitTbl;
+static int unitPlNum;
+static int unitEnNum;
 
 void unitInit(void)
 {
-    memset(unitTbl, 0, 0x20);
+    memset(&unitTbl, 0, sizeof(unitTbl));
     unitPlNum = 0;
     unitEnNum = 0;
 }
@@ -19,14 +24,14 @@ void unitInit(void)
 int unitTblGet(int side, UnitRecord ***table)
 {
     if (side == 0) {
-        *table = (void *)unitTbl;
+        *table = unitTbl.records;
         return 3;
     }
     if (side == 1) {
-        *table = (void *)&unitTbl[12];
+        *table = &unitTbl.records[3];
         return 5;
     }
-    *table = (void *)unitTbl;
+    *table = unitTbl.records;
     return 8;
 }
 
@@ -34,7 +39,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitTblSet);
 
 int unitTblRemove(ObjectTask *unit)
 {
-    ObjectTask **units = (void *)unitTbl;
+    ObjectTask **units = unitTbl.tasks;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -53,7 +58,7 @@ int unitTblRemove(ObjectTask *unit)
 
 int unitTblChg(ObjectTask *oldUnit, ObjectTask *newUnit)
 {
-    ObjectTask **units = (void *)unitTbl;
+    ObjectTask **units = unitTbl.tasks;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -97,9 +102,15 @@ int unitCidGet(ObjectTask *unit)
 }
 
 extern int unitAgwsPilotGet(s16 charaId);
-extern const char D_00A438F0[];
 extern int printf(const char *format, ...);
 void unitPlFunc(ObjectTask *unit);
+
+/* Original OV01 formatting strings, with their full 32-byte slots retained. */
+static const char UnitPlCreateAgwsFormat[32] =
+    "unitPlCreate: AGWS (pilot %d)\n";
+#define D_00A438F0 UnitPlCreateAgwsFormat
+#define D_00A43BD8 UnitNoGetFailureFormat
+#define D_00A43BF8 UnitPtrGetFailureFormat
 
 /*
  * unitCreate/unitTblSet/unitLoad are unitPlCreate's own siblings; unitCreate
@@ -857,9 +868,11 @@ int unitMotGet(ObjectTask *unit)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotStandSet);
 
+static const char UnitNoGetFailureFormat[32] = "** unitNoGet: err -> %X\n";
+
 int unitNoGet(ObjectTask *unit)
 {
-    ObjectTask **units = (void *)unitTbl;
+    ObjectTask **units = unitTbl.tasks;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -867,25 +880,19 @@ int unitNoGet(ObjectTask *unit)
             return i;
         }
     }
-    {
-        extern const char D_00A43BD8[];
-
-        printf(D_00A43BD8, unit);
-    }
+    printf(D_00A43BD8, unit);
     return -1;
 }
 
-extern const char D_00A43BF8[];
 extern int printf(const char *format, ...);
 
-/*
- * unitTbl (declared above) is read here as a table of eight 4-byte slots;
- * unitPtrGet is the only claimed reader of it besides unitInit's own clear.
- */
+/* This legacy accessor returns a unit pointer as its 32-bit address. */
+static const char UnitPtrGetFailureFormat[32] = "** unitPtrGet: err -> %d\n";
+
 int unitPtrGet(int index)
 {
     if (index < 8) {
-        return ((int *)unitTbl)[index];
+        return (int)unitTbl.tasks[index];
     }
     printf(D_00A43BF8, index);
     return 0;

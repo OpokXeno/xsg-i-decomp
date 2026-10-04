@@ -21,45 +21,43 @@ extern void XTK_setWindowOwner(int owner);
 extern void talkCancel(ScriptObserverTask *task);
 extern void actTalkAfter(SceneObject object);
 extern void initVM(void);
-extern SceneThread *defaultVM;
+SceneThread *defaultVM;
 extern SceneThread *JNI_createThread(int kind, int stack_words,
                                      int frame_words);
 extern void JNI_pushFrame(void);
 extern void JNI_loadNativeClass(void);
-extern SceneThread *stageVM;
-extern SceneThread *evtVM[2];
-extern int UseVMFlag;
-extern int currentScriptDB;
+int UseVMFlag;
+SceneThread *stageVM;
+SceneThread *evtVM[2];
 extern SceneClass *classJava_xeno_Stage;
 extern SceneClass *classJava_xeno_Chr;
 extern void createTalkTask(void *actor, const char *method_name);
-extern const char call_method_signature_void[4];
-extern const char call_method_signature_int[5];
-extern const char call_method_signature_int_int[6];
-/* These TU-local signature literals remain assembler-owned data. Their ELF
- * local-symbol names are required by the CallMethod-family relocations. */
-extern const char sig_2[4];
-extern const char sig_3[5];
-extern const char sig_4[6];
+const char D_004C1D50[] = "setColor";
+const char D_004C1D60[] = "setDirection2";
 #define call_method_signature_void sig_2
 #define call_method_signature_int sig_3
 #define call_method_signature_int_int sig_4
-extern const char func_observer_debug_text[16];
+/* EUC-JP text: イベント実行中 ("event in progress"). */
+const char func_observer_debug_text[16] =
+    "\xa5\xa4\xa5\xd9\xa5\xf3\xa5\xc8\xbc\xc2\xb9\xd4\xc3\xe6";
 extern void funcObserver(ScriptObserverTask *task);
 int getEmptyVM(ScriptObserverTask *observer);
 extern PadPrefix PadData;
 
-extern unsigned int s_nScriptCfTime;
-extern unsigned int s_nScriptFadeOutTime;
-extern unsigned int s_nScriptFadeRequest;
-extern unsigned char s_nScriptChangeTime;
-extern unsigned int s_nScriptSequenceReset;
-extern unsigned int s_nScriptEventFin;
-extern unsigned int s_nScriptEventActive;
-extern unsigned int s_nScriptTalkLock;
-extern unsigned int s_nScriptFrameLockEntry;
-extern int resourceID;
-extern int windowOwner;
+static unsigned int s_nScriptFadeOutTime = 30;
+static unsigned int s_nScriptFadeRequest = 0;
+static unsigned char s_nScriptChangeTime = 0;
+static unsigned int s_nScriptSequenceReset = 0;
+static unsigned int s_nScriptFrameLockEntry = 0;
+static unsigned int s_nScriptCfTime = 0;
+static unsigned int s_nScriptEventFin = 0;
+static unsigned int s_nScriptEventActive = 0;
+static unsigned int s_nScriptTalkLock = 0;
+extern const char D_004DA460[];
+static const char sig_2[4] = "()V";
+static const char sig_3[5] = "(I)V";
+static const char sig_4[6] = "(II)V";
+static int windowOwner = 0;
 
 typedef void (*JSNativeMethod)(void);
 extern void JS_init(int state, int class_capacity, int method_capacity);
@@ -67,9 +65,6 @@ extern int JS_loadClass(const char *class_name);
 extern void JS_classSetup(int class_id, JSNativeMethod get_peer);
 extern void JS_classAddMethod(int class_id, const char *name,
                               JSNativeMethod method);
-extern const char D_004DA460[];
-extern const char D_004C1D50[];
-extern const char D_004C1D60[];
 extern void JS_classLight_getPeer(void);
 extern void JS_classLight_setColor(void);
 extern void JS_classLight_setDirection2(void);
@@ -82,6 +77,9 @@ typedef struct GameLoopMovieStatePrefix {
     unsigned short movie_state;
 } GameLoopMovieStatePrefix;
 
+static int currentScriptDB;
+static int resourceID;
+
 /* TU-local declarations for the main-00261860 observer/CallMethod allocation
  * (talktoObserver, CallMethod, CallMethod_I, CallMethod_II, funcObserver).
  * New-shared-name proposals are marked below; the integrator reconciles them
@@ -93,20 +91,14 @@ typedef struct GameLoopMovieStatePrefix {
  * evidenced by *7*4 in every CallMethod family function) is fixed by that
  * indexing arithmetic, not invented. */
 typedef struct ScriptDbEntry {
-    u8 unmodeled_00[0xC];
+    u8 unmodeled_00[8];
+    void *pdb;            /* +0x8: event data used for resource lookup */
     int active;          /* +0xC: nonzero when this script slot is bound (zero test only) */
     SceneThread *thread; /* +0x10: the script's VM thread; its own object is at +0x10 */
     u8 unmodeled_14[0x1C - 0x14];
 } ScriptDbEntry;
-extern ScriptDbEntry scriptDB[];
+static ScriptDbEntry scriptDB[2];
 
-/* The database pointer is at scriptDB + 8. This interior scaffold symbol
- * starts at that pointer and each entry retains the evidenced 0x1C stride. */
-typedef struct ScriptDbPdbSlot {
-    void *pdb;
-    u8 unmodeled_04[0x1C - 4];
-} ScriptDbPdbSlot;
-extern ScriptDbPdbSlot D_004DEDE8[];
 
 typedef struct ScriptPdbFile {
     u8 unmodeled_00[8];
@@ -748,8 +740,10 @@ int XTK_findFile(const char *path)
 {
     ScriptPdbFile *file;
 
-    file = PDB_findFile(D_004DEDE8[currentScriptDB].pdb, path);
+    file = PDB_findFile(scriptDB[currentScriptDB].pdb, path);
     if (file != 0)
         return file->data;
     return 0;
 }
+
+const char D_004DA460[8] = "light";

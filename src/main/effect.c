@@ -1,6 +1,18 @@
 #include "common.h"
 #include "effect.h"
 
+char D_004DC130[8] = "id";
+char D_004DC138[8] = "args";
+char D_004DC140[8] = "peer";
+char D_004DC148[8] = "px";
+char D_004DC150[8] = "py";
+char D_004DC158[8] = "pz";
+char D_004DC160[8] = "rx";
+char D_004DC168[8] = "ry";
+char D_004DC170[8] = "rz";
+
+#define EFFECT_PI 3.1415927f
+
 void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
 {
     unsigned char *object;
@@ -108,7 +120,7 @@ void Java_xeno_Effect_getRotate__(JThread *thread, EffectCall *arguments)
 
     object = arguments->object;
     if (object != 0) {
-        pi = D_004D83BC;
+        pi = EFFECT_PI;
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
         rotate = (*(NativeEffectPeer **)(object + field->offset))->rotate;
 

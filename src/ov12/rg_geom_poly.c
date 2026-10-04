@@ -5,6 +5,11 @@
 #include "shared.h"
 #include "rg_geom_poly.h"
 
+const char D_00A551A8[16] = "pData != NIL";
+const char D_00A551B8[24] = "../rg_geom_poly.euc.c";
+const char D_00A551D0[16] = "pPoly != NIL";
+const char D_00A551E0[56] = "pPoly != NIL && pOrgArg != NIL && pResult != NIL";
+
 #define RgGeomLocalMatricesAt(geom) \
     ((RgGeomLocalMatrices *)((unsigned char *)(geom) + 0x20))
 #define RgGeomLocalMatricesConstAt(geom) \

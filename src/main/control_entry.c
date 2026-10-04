@@ -1,8 +1,19 @@
 #include "common.h"
 #include "shared.h"
 
+extern char D_004D8A00[];
+extern char D_004D8A08[];
+extern char D_004D8A10[];
+extern char D_004D8A18[];
+extern char D_004D8A20[];
+extern char D_004D8A28[];
+extern char D_004D8A30[];
+extern char D_004D8A38[];
+extern u8 *WorkEnd;
 extern int main_param_argc;
 extern int main_param_argv;
+extern const char D_004BE280[16];
+extern const char D_004BE290[32];
 
 extern void BootDisplay(void);
 extern void xglThreadInitial(void);
@@ -19,8 +30,6 @@ static void InitializeSystem(void);
  * and SWD bank name ControlEntry loads before the boot logo. Still owned by
  * asm data.
  */
-extern const char D_004D8A00[];
-extern const char D_004BE280[];
 
 /*
  * xglCdLoadOverlay, the sound and SPU-DMA entry points and the ov02 boot
@@ -112,14 +121,6 @@ extern void xglFontInitial(void);
 extern int xglMovieInit(void);
 extern void xglMenuInitial(void);
 
-extern const char D_004BE290[];
-extern const char D_004D8A08[];
-extern const char D_004D8A10[];
-extern const char D_004D8A18[];
-extern const char D_004D8A20[];
-extern const char D_004D8A28[];
-extern const char D_004D8A30[];
-extern const char D_004D8A38[];
 
 static void InitializeSystem(void)
 {
@@ -173,3 +174,17 @@ int main(int argc, int argv)
     xglThreadRotate();
     return 0;
 }
+
+char D_004D8A00[8] = "REGIST";
+char D_004D8A08[8] = "sio2man";
+char D_004D8A10[8] = "mcman";
+char D_004D8A18[8] = "mcserv";
+char D_004D8A20[8] = "padman";
+char D_004D8A28[8] = "libsd";
+char D_004D8A30[8] = "ssd";
+char D_004D8A38[8] = "rssd";
+u8 *WorkEnd = 0;
+int main_param_argc = 0;
+int main_param_argv = 0;
+const char D_004BE280[16] = "sed\\REGIST2";
+const char D_004BE290[32] = "cdrom0:\\IOP\\IOPRP24D.IMG;1";

@@ -43,33 +43,44 @@ static RgBxxHeader *_GetHeader(RgBxx *pBxx);
 static RgBxxPic *_GetPicTop(RgBxx *pBxx);
 static int _FindPicByName(RgBxx *pBxx, const char *pszName);
 
-/* ov12:0x00a56f90 "pBxx != NIL" */
 extern const char D_00A56F90[];
-/* ov12:0x00a56fa0 "../rg_bxx.euc.c" */
 extern const char D_00A56FA0[];
-/* ov12:0x00a56fb0 "invalid memory (link) %s %d\n(created %s %d)" */
 extern const char D_00A56FB0[];
-/* ov12:0x00a56fe0 "invalid memory (load) %s %d\n(created %s %d)" */
 extern const char D_00A56FE0[];
-/* ov12:0x00a57010 "pszName" */
 extern const char D_00A57010[];
-/* ov12:0x00a570f0 "pszName != NIL" */
-extern const char D_00A570F0[];
-/* ov12:0x00a57018 "data\\nisimori\\" */
 extern const char D_00A57018[];
-/* ov12:0x00a57028 "pData != NIL" */
 extern const char D_00A57028[];
-/* ov12:0x00a57078 "pBxx->m_pLink != NIL" */
-extern const char D_00A57078[];
-/* ov12:0x00a570c8 "texture ID error (id=%d count=%d)" */
+extern const char D_00A57038[];
+extern const char D_00A57050[];
+typedef struct RgBxxMessageBlock {
+    char linkRequired[24];
+    char pictureSize[24];
+    char headerSize[28];
+    char empty[4];
+} RgBxxMessageBlock;
+extern const RgBxxMessageBlock D_00A57078;
 extern const char D_00A570C8[];
-/* ov12:0x00a57100 "unknown texture name %s" */
+extern const char D_00A570F0[];
 extern const char D_00A57100[];
+
+#define RG_BXX_NOT_NULL D_00A56F90
+#define RG_BXX_SOURCE_FILE D_00A56FA0
+#define RG_BXX_INVALID_LINK_MEMORY D_00A56FB0
+#define RG_BXX_INVALID_LOAD_MEMORY D_00A56FE0
+#define RG_BXX_NAME_PARAMETER D_00A57010
+#define RG_BXX_DATA_ROOT D_00A57018
+#define RG_BXX_DATA_REQUIRED D_00A57028
+#define RG_BXX_LOAD_REQUIRED D_00A57038
+#define RG_BXX_DATA_FORMAT_ERROR D_00A57050
+#define RG_BXX_LINK_REQUIRED D_00A57078.linkRequired
+#define RG_BXX_TEXTURE_COUNT_ERROR D_00A570C8
+#define RG_BXX_NAME_REQUIRED D_00A570F0
+#define RG_BXX_UNKNOWN_TEXTURE D_00A57100
 
 static void _InitBxx(RgBxx *pBxx, const char *pszName, int nMode)
 {
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 34);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 34);
     }
     pBxx->m_pLink = 0;
     pBxx->m_pLoad = 0;
@@ -82,23 +93,23 @@ static void _DestructBxx(RgBxx *pBxx, const char *pszFile, int nLine)
     RgHeap *heap;
 
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 43);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 43);
     }
     heap = InstanceOfRgHeap();
     if (RgHeapIsInvalidMemory(heap, pBxx->m_pLink)) {
-        RgError(D_00A56FB0, D_00A56FA0, 46, pszFile, nLine, pBxx->m_szName,
+        RgError(RG_BXX_INVALID_LINK_MEMORY, RG_BXX_SOURCE_FILE, 46, pszFile, nLine, pBxx->m_szName,
                 pBxx->m_nMode);
     }
     heap = InstanceOfRgHeap();
     if (RgHeapIsInvalidMemory(heap, pBxx->m_pLoad)) {
-        RgError(D_00A56FE0, D_00A56FA0, 49, pszFile, nLine, pBxx->m_szName,
+        RgError(RG_BXX_INVALID_LOAD_MEMORY, RG_BXX_SOURCE_FILE, 49, pszFile, nLine, pBxx->m_szName,
                 pBxx->m_nMode);
     }
     if (pBxx->m_pLink != 0) {
-        RgHeapFree(InstanceOfRgHeap(), pBxx->m_pLink, D_00A56FA0, 53);
+        RgHeapFree(InstanceOfRgHeap(), pBxx->m_pLink, RG_BXX_SOURCE_FILE, 53);
     }
     if (pBxx->m_pLoad != 0) {
-        DisposeRgFileSysData_sub(pBxx->m_pLoad, D_00A56FA0, 55);
+        DisposeRgFileSysData_sub(pBxx->m_pLoad, RG_BXX_SOURCE_FILE, 55);
     }
 }
 
@@ -108,7 +119,7 @@ RgBxx *CreateRgBxx_sub(const char *pszName, int nMode)
     RgBxx *pBxx;
 
     heap = InstanceOfRgHeap();
-    pBxx = RgHeapAlloc(heap, sizeof(RgBxx), D_00A56FA0, 62);
+    pBxx = RgHeapAlloc(heap, sizeof(RgBxx), RG_BXX_SOURCE_FILE, 62);
     _InitBxx(pBxx, pszName, nMode);
     return pBxx;
 }
@@ -121,11 +132,11 @@ RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
 
     pBxx = CreateRgBxx_sub(pszArchiveName, nMode);
     if (pszName == 0) {
-        assert_prog(D_00A57010, D_00A56FA0, 71);
+        assert_prog(RG_BXX_NAME_PARAMETER, RG_BXX_SOURCE_FILE, 71);
     }
-    pFile = RgFileSysRead(InstanceOfRgFileSys(), pszName, D_00A57018);
+    pFile = RgFileSysRead(InstanceOfRgFileSys(), pszName, RG_BXX_DATA_ROOT);
     if (pFile == 0) {
-        assert_prog(D_00A57028, D_00A56FA0, 73);
+        assert_prog(RG_BXX_DATA_REQUIRED, RG_BXX_SOURCE_FILE, 73);
     }
     RgBxxSetData(pBxx, pFile->data);
     pBxx->m_pLoad = pFile;
@@ -135,16 +146,11 @@ RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
 void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine)
 {
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 81);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 81);
     }
     _DestructBxx(pBxx, pszFile, nLine);
-    RgHeapFree(InstanceOfRgHeap(), pBxx, D_00A56FA0, 83);
+    RgHeapFree(InstanceOfRgHeap(), pBxx, RG_BXX_SOURCE_FILE, 83);
 }
-
-/* ov12:0x00a57038 "pBxx->m_pLoad == NIL" */
-extern const char D_00A57038[];
-/* ov12:0x00a57050 "bxx data format error (link num %d)" */
-extern const char D_00A57050[];
 
 extern void InitRgLinkData(RgLinkData *pAna, void *pBuf);
 extern unsigned int RgLinkDataNumOfData(RgLinkData *pAna);
@@ -169,23 +175,23 @@ void RgBxxSetData(RgBxx *pBxx, void *pData)
     unsigned int picIndex;
 
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 93);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 93);
     }
     if (pBxx->m_pLoad != 0) {
-        assert_prog(D_00A57038, D_00A56FA0, 94);
+        assert_prog(RG_BXX_LOAD_REQUIRED, RG_BXX_SOURCE_FILE, 94);
     }
     if (pBxx->m_pLink != 0) {
         heap = InstanceOfRgHeap();
-        RgHeapFree(heap, pBxx->m_pLink, D_00A56FA0, 96);
+        RgHeapFree(heap, pBxx->m_pLink, RG_BXX_SOURCE_FILE, 96);
         pBxx->m_pLink = 0;
     }
     if (pData != 0) {
         heap = InstanceOfRgHeap();
-        pLink = RgHeapAlloc(heap, 4, D_00A56FA0, 100);
+        pLink = RgHeapAlloc(heap, 4, RG_BXX_SOURCE_FILE, 100);
         pBxx->m_pLink = pLink;
         InitRgLinkData(pLink, pData);
         if (RgLinkDataNumOfData(pBxx->m_pLink) != 2) {
-            RgError(D_00A57050, D_00A56FA0, 103,
+            RgError(RG_BXX_DATA_FORMAT_ERROR, RG_BXX_SOURCE_FILE, 103,
                     RgLinkDataNumOfData(pBxx->m_pLink));
         }
         count = RgBxxGetTexNum(pBxx);
@@ -204,10 +210,10 @@ void RgBxxSetData(RgBxx *pBxx, void *pData)
 static RgBxxHeader *_GetHeader(RgBxx *pBxx)
 {
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 124);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 124);
     }
     if (pBxx->m_pLink == 0) {
-        assert_prog(D_00A57078, D_00A56FA0, 125);
+        assert_prog(RG_BXX_LINK_REQUIRED, RG_BXX_SOURCE_FILE, 125);
     }
     return RgLinkDataGetIndex(pBxx->m_pLink, 0);
 }
@@ -217,10 +223,10 @@ static RgBxxPic *_GetPicTop(RgBxx *pBxx)
     RgBxxHeader *header;
 
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 132);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 132);
     }
     if (pBxx->m_pLink == 0) {
-        assert_prog(D_00A57078, D_00A56FA0, 133);
+        assert_prog(RG_BXX_LINK_REQUIRED, RG_BXX_SOURCE_FILE, 133);
     }
     header = _GetHeader(pBxx);
     return (RgBxxPic *)(header + 1);
@@ -253,7 +259,7 @@ RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id)
     picTop = _GetPicTop(pBxx);
     count = header->numTex;
     if (id >= count) {
-        RgError(D_00A570C8, D_00A56FA0, 162, id, count);
+        RgError(RG_BXX_TEXTURE_COUNT_ERROR, RG_BXX_SOURCE_FILE, 162, id, count);
     }
     return (RgBxxPic *)((char *)picTop + id * 0x60);
 }
@@ -270,7 +276,7 @@ static int _FindPicByName(RgBxx *pBxx, const char *pszName)
     header = _GetHeader(pBxx);
     picTop = _GetPicTop(pBxx);
     if (pszName == 0) {
-        assert_prog(D_00A570F0, D_00A56FA0, 175);
+        assert_prog(RG_BXX_NAME_REQUIRED, RG_BXX_SOURCE_FILE, 175);
     }
     nameLength = strlen(pszName);
     /* Names begin at byte zero of each 0x60-byte picture record. */
@@ -295,7 +301,7 @@ int RgBxxGetFindPic(RgBxx *pBxx, const char *pszName)
 
     index = _FindPicByName(pBxx, pszName);
     if (index < 0) {
-        RgError(D_00A57100, D_00A56FA0, 192, pszName);
+        RgError(RG_BXX_UNKNOWN_TEXTURE, RG_BXX_SOURCE_FILE, 192, pszName);
     }
     return index;
 }
@@ -316,10 +322,29 @@ RgBxxPic *RgBxxGetPic(RgBxx *pBxx, const char *pszName)
 void RgBxxGetXtx(RgBxx *pBxx)
 {
     if (pBxx == 0) {
-        assert_prog(D_00A56F90, D_00A56FA0, 212);
+        assert_prog(RG_BXX_NOT_NULL, RG_BXX_SOURCE_FILE, 212);
     }
     if (pBxx->m_pLink == 0) {
-        assert_prog(D_00A57078, D_00A56FA0, 213);
+        assert_prog(RG_BXX_LINK_REQUIRED, RG_BXX_SOURCE_FILE, 213);
     }
     RgLinkDataGetIndex(pBxx->m_pLink, 1);
 }
+
+const char D_00A56F90[16] = "pBxx != NIL";
+const char D_00A56FA0[16] = "../rg_bxx.euc.c";
+const char D_00A56FB0[48] = "invalid memory (link) %s %d\n(created %s %d)";
+const char D_00A56FE0[48] = "invalid memory (load) %s %d\n(created %s %d)";
+const char D_00A57010[8] = "pszName";
+const char D_00A57018[16] = "data\\nisimori\\";
+const char D_00A57028[16] = "pData != NIL";
+const char D_00A57038[24] = "pBxx->m_pLoad == NIL";
+const char D_00A57050[40] = "bxx data format error (link num %d)";
+const RgBxxMessageBlock D_00A57078 = {
+    "pBxx->m_pLink != NIL",
+    "sizeof(RgBxxPic) == 96",
+    "sizeof(RgBxxHeader) == 48",
+    ""
+};
+const char D_00A570C8[40] = "texture ID error (id=%d count=%d)";
+const char D_00A570F0[16] = "pszName != NIL";
+const char D_00A57100[24] = "unknown texture name %s";

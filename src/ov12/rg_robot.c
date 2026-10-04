@@ -5,6 +5,22 @@
 #include "shared.h"
 #include "rg_robot.h"
 
+const char D_00A51830[] = "pThread != NIL";
+const char D_00A51840[] = "../rg_robot.euc.c";
+const char D_00A51858[] = "fBaseSpeed > RG_FCONST(0.0)";
+const char D_00A518F0[] = "pStatus != NIL";
+const char D_00A51A58[] = "pQ != NIL";
+const char D_00A51A68[] = "pBody != NIL";
+const char D_00A51A78[] = "pGeom != NIL";
+const char D_00A51A88[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
+const char D_00A51B48[] = "pCmd != NIL";
+const char D_00A51B58[] = "already disposed body %p";
+const char D_00A51B78[] = "unknown equip type (drop weapon) %d";
+const char D_00A51BA0[] = "eff06.ptcl";
+const char D_00A51BB0[] = "pRobot != NIL";
+const char D_00A51BC0[] = "already disposed robot %p\n";
+const char D_00A51BE0[] = "RG_EQUIP_TYPE_MIN <= (eSide) && (eSide) < RG_EQUIP_TYPE_NUM";
+
 /* RgShotThread is defined in tu011 and stays opaque at this call site. */
 struct RgShotThread;
 extern void RgShotThreadSleep(struct RgShotThread *thread);
@@ -1061,14 +1077,15 @@ extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
 static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
                               RgCmd *command, int flag, float p5, float p6);
-extern unsigned char D_00A51BA0[];
+extern const char D_00A51BA0[];
 
 static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgVector force;
 
+    /* The legacy API accepts char * but only reads this effect name. */
     CreateRgHitEffectPosDir(&command->scratch0, (float *) command,
-                            D_00A51BA0, 0);
+                            (char *) D_00A51BA0, 0);
     XrgNormalizeVector(force, (float *) command);
     XrgScaleVector(force, force, command->scratch5);
     RgGeomPointAddForce(body->geometry, force);

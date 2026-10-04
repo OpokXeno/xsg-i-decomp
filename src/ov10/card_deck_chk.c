@@ -2,6 +2,8 @@
  * OV10 original TU 4: 0x00a19a20..0x00a1c1b8 (5 functions)
  */
 #include "common.h"
+
+char ZenkakuListA[20] = "\xA1\xA1" "1 2 3 4 5 6 7 8 9 ";
 #include "shared.h"
 
 int CardDeckChk(s16 *cards) {

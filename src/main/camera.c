@@ -7,34 +7,28 @@
  * the radian-to-degree divisor (bits 0x40490fdb, pi); the scaffold still
  * owns the pool and did not merge the three entries.
  */
-extern const float D_004D83C4;
-
 void Java_xeno_Camera_getRotateX__(JavaEnvironment *environment,
                                    CameraGetterArgs *arguments, float *result)
 {
     (void)environment;
     *result = xglStudioGetCamera2(arguments->camera->camera_id)->rotation.x
-              / D_004D83C4 * 180.0f;
+              / 3.1415927f * 180.0f;
 }
-
-extern const float D_004D83C8;
 
 void Java_xeno_Camera_getRotateY__(JavaEnvironment *environment,
                                    CameraGetterArgs *arguments, float *result)
 {
     (void)environment;
     *result = xglStudioGetCamera2(arguments->camera->camera_id)->rotation.y
-              / D_004D83C8 * 180.0f;
+              / 3.1415927f * 180.0f;
 }
-
-extern const float D_004D83CC;
 
 void Java_xeno_Camera_getRotateZ__(JavaEnvironment *environment,
                                    CameraGetterArgs *arguments, float *result)
 {
     (void)environment;
     *result = xglStudioGetCamera2(arguments->camera->camera_id)->rotation.z
-              / D_004D83CC * 180.0f;
+              / 3.1415927f * 180.0f;
 }
 
 void Java_xeno_Camera_getTranslateX__(JavaEnvironment *environment,
@@ -178,7 +172,6 @@ void Java_xeno_Camera_setActive__Z(JavaEnvironment *environment,
 
 /* This TU's own .lit4 copy of the fov-scale seed 1.2, stored at CameraWork
  * +0x12b4 (docs above CameraWork). */
-extern const float D_004D83D0;
 extern void *classJava_xeno_Camera;
 /* The engine's camera table (main:0x00465e10, size 0x9600 = 8 * 0x12c0):
  * TCAMERA_get (still asm, src/main/tcamera.c) indexes it the same way. */
@@ -195,7 +188,7 @@ void Java_xeno_Camera_create__I(JavaEnvironment *environment,
     /* CameraWork stops at +0x2c (docs above CameraWork); +0x12b4 is beyond
      * that partial extent, so the fov-scale seed is stored through the byte
      * pointer rather than a struct member. */
-    *(float *)(camera_bytes + 0x12b4) = D_004D83D0;
+    *(float *)(camera_bytes + 0x12b4) = 1.2f;
     /* CameraWork's own +0x00 word: filled from +0x18 of the loaded class
      * record (docs above CameraWork); its meaning is not recovered, so it
      * is stored through the byte pointer rather than the anonymous
@@ -270,8 +263,6 @@ INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_setTranslate__FFF);
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_setFov__F);
 
-extern const float D_004D83D4;
-
 /*
  * The studio camera's field-of-view scalar, at +0x94 inside StudioCamera's
  * unmodeled_90 span (include/shared.h): that struct is shared with other
@@ -286,7 +277,7 @@ void Java_xeno_Camera_getFov__(JavaEnvironment *environment,
 {
     (void)environment;
     *result = CAMERA_STUDIO_FOV(xglStudioGetCamera2(arguments->camera->camera_id))
-              / D_004D83D4 * 180.0f;
+              / 3.1415927f * 180.0f;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_setView__FFF);
@@ -295,11 +286,7 @@ extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern void *classJava_xeno_Chr;
-/* This TU's own copy of the field name string "peer" (the scaffold still
- * owns the literal pool, so it is a separate address from chr.c's
- * chr_peer_string). */
 extern const char D_004DC178[];
-
 void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
                                                  CameraStartArgs *arguments,
                                                  void *result)
@@ -331,6 +318,9 @@ void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
         }
     }
 }
+
+/* Keep the field name data after Java_xeno_Camera_start's external use. */
+const char D_004DC178[8] = "peer";
 
 INCLUDE_ASM("asm/main/nonmatchings/camera", Java_xeno_Camera_setCFAngle__IFFFF);
 

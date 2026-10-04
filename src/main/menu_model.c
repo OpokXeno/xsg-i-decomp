@@ -152,8 +152,8 @@ void xglCameraSetWindow(StudioCamera *camera, int x, int y, int width, int heigh
 void xglStudioChange(int studioId);
 void ACT_setMotion(MenuModelMotionActor *actor, unsigned int dataId);
 
-extern XglTaskScheduler *MenuModelTask;
-extern int MenuModelFlag;
+XglTaskScheduler *MenuModelTask = 0;
+int MenuModelFlag = 0;
 
 static void MenuModelDrawTypeSet(MenuModelActor *actor, int drawType);
 void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex);
@@ -198,7 +198,7 @@ typedef struct MenuModelMemoryStateBuffer {
     unsigned char unmodeled_0C[0x1C0];
 } MenuModelMemoryStateBuffer;
 
-extern MenuModelMemoryStateBuffer MenuModelMemoryState;
+MenuModelMemoryStateBuffer MenuModelMemoryState = {0};
 
 void MenuModelMemoryInit(void *base, int size) {
     memset(&MenuModelMemoryState, 0, sizeof(MenuModelMemoryState));
@@ -244,7 +244,9 @@ typedef struct MenuModelResourceStateBuffer {
     int motionHandle; /* +0xC8 */
 } MenuModelResourceStateBuffer;
 
-extern MenuModelResourceStateBuffer MenuModelResourceState;
+MenuModelResourceStateBuffer MenuModelResourceState = {0};
+
+MenuModelSubWindowAccess MenuModelSubWindow[3] = {{0}};
 
 int MenuModelMenuMotionGet(void) {
     int handle;
@@ -401,7 +403,6 @@ void MenuModelSubWindowBreak(MenuModelUnit *unit)
  */
 void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
 {
-    extern unsigned char MenuModelSubWindow[];
     MenuModelSubWindowAccess *subWindow;
     StudioCamera *camera;
     MenuModelActor *actor;
@@ -430,8 +431,6 @@ void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
     }
     xglStudioChange(0);
 }
-
-extern unsigned char MenuModelSubWindow[];
 
 void MenuModelSubWindowinit(void) {
     memset(MenuModelSubWindow, 0, 0x30U);
@@ -570,7 +569,15 @@ void MenuModelMotionSet(MenuModelMotionTarget *target, unsigned int dataId)
 #define MENU_MODEL_DRAW_STATE_FUNC(state) \
     ((void (**)(MenuModelActor *))((state) + MENU_MODEL_DRAW_STATE_FUNC_OFFSET))
 
-extern float D_004D7DF8;
+/* Shared fade-step values used by the draw-type routines below. */
+float D_004D7DF8
+    = 0.1f;
+float D_004D7DFC
+    = 0.1f;
+float D_004D7E00
+    = 0.1f;
+float D_004D7E04
+    = 0.2f;
 
 /*
  * Clears the draw-type function pointer (+0x64) once the fade-in progress
@@ -590,8 +597,6 @@ void ModelDrawTypeOpen01(MenuModelActor *actor)
     }
 }
 
-extern float D_004D7DFC;
-
 void ModelDrawTypeClose01(MenuModelActor *actor)
 {
     unsigned char *state;
@@ -605,9 +610,6 @@ void ModelDrawTypeClose01(MenuModelActor *actor)
         *MENU_MODEL_DRAW_STATE_FUNC(state) = 0;
     }
 }
-
-extern float D_004D7E00;
-extern float D_004D7E04;
 
 void ModelDrawTypeClose02(MenuModelActor *actor)
 {

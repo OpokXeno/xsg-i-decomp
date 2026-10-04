@@ -6,8 +6,8 @@
 extern void XrgOut(const char *format, ...);
 extern void XrgExit(int status);
 
-extern const char D_00A529E8[];
-extern const char D_00A52A20[];
+const char D_00A529E8[56] = "------------------------------------------------\n";
+const char D_00A52A20[32] = "NIS ASSERT (in %s at %d) : %s\n";
 
 void assert_prog(const char *expression, const char *source_file, int line)
 {

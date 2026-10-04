@@ -51,7 +51,18 @@ typedef struct FileObjectEntryView {
 } FileObjectEntryView;
 
 extern void FileJpegDecode(int number);
-extern char *name_0_0036D628[];
+extern char D_004DAA00[];
+extern char D_004DA9F8[];
+extern char D_004C3A90[];
+static char *name_0_0036D628[3] = {
+    D_004DAA00,
+    D_004DA9F8,
+    D_004C3A90,
+};
+
+FileWorkBlock *FileWork = 0;
+byte *FileJpegDec = 0;
+byte *FileObjectData = 0;
 
 static void VersionUpDate(SaveDataHeader *save_data)
 {

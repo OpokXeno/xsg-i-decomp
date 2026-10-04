@@ -3,6 +3,8 @@
 #include "sc_wait_parse_script.h"
 #include "main/sef.h"
 
+static int (*moveHandlerTbl_1[])(ScriptObject *);
+
 /* WAITNOP: no condition to wait on; the command finishes on its first visit. */
 static int scWaitParseNopScript(void)
 {
@@ -70,8 +72,17 @@ static int scWaitParseMovScript(ScriptObject *script)
     return ((script->flags >> 5) ^ 1) & 1;
 }
 
-extern int (*waitHandlerTbl_0[])(ScriptObject *);
-extern int (*moveHandlerTbl_1[])(ScriptObject *);
+extern int scWaitMissileScript(ScriptObject *);
+
+static int (*waitHandlerTbl_0[6])(ScriptObject *) = {
+    (int (*)(ScriptObject *))scWaitParseNopScript,
+    scWaitParseCntScript,
+    scWaitParseEveScript,
+    (int (*)(ScriptObject *))scWaitParseEftScript,
+    (int (*)(ScriptObject *))scWaitParseMovieScript,
+    scWaitParseMovScript
+};
+
 
 int scWaitParseScript(ScriptObject *script)
 {
@@ -108,3 +119,7 @@ int scMoveParseScript(ScriptObject *script)
 
     return (short)result;
 }
+
+static int (*moveHandlerTbl_1[])(ScriptObject *) = {
+    scWaitParseNopScript, scWaitMissileScript
+};

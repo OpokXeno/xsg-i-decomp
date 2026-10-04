@@ -40,34 +40,34 @@ extern void XrgSoundSystemCancel(void);
 #define TITLE_PI 3.1415927f
 #define TITLE_TWO_PI 6.2831855f
 
-extern const char D_00A57118[]; /* "pPaint != NIL" */
-extern const char D_00A57128[]; /* "../rg_title.euc.c" */
-extern const char D_00A57140[]; /* "pPic != NIL" */
-extern const char D_00A57150[]; /* "pTitle != NIL" */
-extern const char D_00A57160[];
-extern const char D_00A57170[];
-extern const char D_00A57188[];
-extern const char D_00A571A0[];
-extern const char D_00A571B0[];
-extern const char D_00A571C0[];
-extern const char D_00A571D0[];
-extern const char D_00A571E0[];
-extern const char D_00A571F0[];
-extern const char D_00A57200[];
-extern const char D_00A57208[];
-extern const char D_00A57218[];
-extern const char D_00A57228[];
-extern const char D_00A57238[];
-extern const char D_00A57248[];
-extern const char D_00A57258[];
-extern const char D_00A57268[];
-extern const char D_00A57278[];
-extern const char D_00A57288[];
-extern const char D_00A57298[];
-extern const char D_00A572A8[];
-extern const char D_00A572B8[];
-extern const char D_00A572C8[];
-extern const char D_00A572D8[];
+const char D_00A57118[] = "pPaint != NIL";
+const char D_00A57128[] = "../rg_title.euc.c";
+const char D_00A57140[] = "pPic != NIL";
+const char D_00A57150[] = "pTitle != NIL";
+const char D_00A57160[] = "top_base.bxx";
+const char D_00A57170[] = "top_base_ag02.bxx";
+const char D_00A57188[] = "top_base_vx01.bxx";
+const char D_00A571A0[] = "top_title.bxx";
+const char D_00A571B0[] = "top_red.bxx";
+const char D_00A571C0[] = "top_b1h.bxx";
+const char D_00A571D0[] = "top_ve.bxx";
+const char D_00A571E0[] = "top_cur_1e.bxx";
+const char D_00A571F0[] = "top_cur_vh.bxx";
+const char D_00A57200[] = "bg.bmp";
+const char D_00A57208[] = "bg_ag02.bmp";
+const char D_00A57218[] = "bg_vx10.bmp";
+const char D_00A57228[] = "blue_e.bmp";
+const char D_00A57238[] = "red_ecpt.bmp";
+const char D_00A57248[] = "red_1p.bmp";
+const char D_00A57258[] = "red_exit.bmp";
+const char D_00A57268[] = "red_help.bmp";
+const char D_00A57278[] = "red_vs.bmp";
+const char D_00A57288[] = "sel_btn.bmp";
+const char D_00A57298[] = "sel_e1p.bmp";
+const char D_00A572A8[] = "sel_ehlp.bmp";
+const char D_00A572B8[] = "sel_evs.bmp";
+const char D_00A572C8[] = "sel_eext.bmp";
+const char D_00A572D8[] = "cannot find %d pic";
 
 /*
  * The blend color XrgPaint2DColor copies into a paint object with one
@@ -85,7 +85,7 @@ typedef struct XrgColor {
 } XrgColor;
 
 extern void XrgPaint2DColor(XrgPaint2D *paint, const XrgColor *color);
-extern XrgColor s_aCol;
+static XrgColor s_aCol = {128, 128, 128, 127};
 
 #include "rg_title.h"
 
@@ -278,9 +278,9 @@ void DisposeRgTitle(RgTitle *pTitle)
 extern void RgError(const char *message, const char *source_file, int line, ...);
 extern int XrgPadIsSelectLevelLR(void);
 extern int XrgEventGetLevel(void);
-extern const char D_00A572F0[];
-extern float s_fRot_0;
-extern int s_nID_1;
+const char D_00A572F0[] = "unknown title cursor id %d";
+static float s_fRot_0 = 0.0f;
+static int s_nID_1 = 0;
 extern void XrgPaint2DFlush(XrgPaint2D *paint);
 static void _disp_blight(float brightness);
 static void _disp_add_blight(XrgPaint2D *paint, void *picture, int x, int y,

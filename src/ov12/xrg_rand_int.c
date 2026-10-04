@@ -23,7 +23,7 @@ int XrgRandIntRange(int lower, int upper)
     return (rand() % (upper - lower)) + lower;
 }
 
-extern RgVector s_aRes_0;
+static RgVector s_aRes_0 = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 float *XrgVectorZero(void)
 {
@@ -36,21 +36,21 @@ void XrgUnitVector(RgVector vector)
     vector[3] = 1.0f;
 }
 
-extern RgVector s_aRes_1;
+static RgVector s_aRes_1 = { 1.0f, 0.0f, 0.0f, 0.0f };
 
 float *XrgVectorX(void)
 {
     return s_aRes_1;
 }
 
-extern RgVector s_aRes_2;
+static RgVector s_aRes_2 = { 0.0f, 1.0f, 0.0f, 0.0f };
 
 float *XrgVectorY(void)
 {
     return s_aRes_2;
 }
 
-extern RgVector s_aRes_3;
+static RgVector s_aRes_3 = { 0.0f, 0.0f, 1.0f, 0.0f };
 
 float *XrgVectorZ(void)
 {
@@ -393,8 +393,8 @@ float XrgCalcRotY(const Vector4 *vector)
     return (float) atan2((double) vector->x, (double) vector->z);
 }
 
-extern unsigned char s_aStack[];
-extern float *s_paTop;
+static float s_aStack[256];
+static float *s_paTop;
 
 void XrgClearMatStack(void)
 {
@@ -405,7 +405,6 @@ void XrgClearMatStack(void)
 /* The current matrix-stack top. The data is still scaffold-owned
  * (docs/naming.md); the scaffold defines it under the original ELF symbol
  * name s_paTop, imported through config/symbols/ov12.txt. */
-extern float *s_paTop;
 
 void XrgPushMatStack(void)
 {

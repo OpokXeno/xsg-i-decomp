@@ -13,7 +13,7 @@
  * handle at 0x00a5b630/0x00a5b6d0 have no ledger entry and keep the splat
  * default.
  */
-extern int mvFlags_00A43720;
+static int mvFlags_00A43720 = 0;
 
 #define MV_FLAG_INITIALIZED 0x1
 #define MV_FLAG_PLAYING 0x2
@@ -28,12 +28,13 @@ typedef struct MvParams {
     unsigned char unmodeled_00[0xe4];
     short totalTime;   /* +0xe4 */
     short currentTime; /* +0xe6 */
+    unsigned char unmodeled_e8[0x180 - 0xe8];
 } MvParams;
 
-extern MvParams D_00A5B630;
+static MvParams D_00A5B630;
 
-/* Movie playback handle MMvPlay opens and MMvStop closes; still opaque. */
-extern unsigned char D_00A5B6D0[];
+/* Interior label in D_00A5B630 at the movie-info structure. */
+#define D_00A5B6D0 ((unsigned char *)&D_00A5B630 + 0xa0)
 
 typedef struct MvGifEnvironment {
     unsigned char unmodeled_00[0x30];

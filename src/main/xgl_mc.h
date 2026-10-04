@@ -7,13 +7,7 @@
 
 int xglMcGetState(void);
 
-extern unsigned char mw[];
-
 extern void xglMcReset(void);
-
-extern unsigned char queue_top;
-
-extern unsigned char queue_end;
 
 extern void xglMcSetMapName(const unsigned char *primary_euc_name,
                             const unsigned char *secondary_euc_name);

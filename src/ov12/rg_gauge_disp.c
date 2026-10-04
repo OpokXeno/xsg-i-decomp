@@ -5,6 +5,10 @@
 #include "shared.h"
 #include "rg_gauge_disp.h"
 
+const char D_00A54640[] = "pDisp != NIL";
+const char D_00A54650[] = "../rg_gauge_disp.euc.c";
+const char D_00A54668[] = "pPaint != NIL";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern void *RgHeapAlloc(void *heap, unsigned int size,

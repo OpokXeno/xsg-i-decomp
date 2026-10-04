@@ -6,7 +6,7 @@ typedef char *va_list;
 
 extern int printf(const char *format, ...);
 extern int vsprintf(char *buffer, const char *format, va_list args);
-extern unsigned char D_004DBB78[];
+extern const unsigned char D_004DBB78[];
 
 void tracePrint(const char *format, ...) {
     va_list args;
@@ -32,3 +32,5 @@ void sefPrintVector()
 void sefPrintMatrix()
 {
 }
+
+const unsigned char D_004DBB78[8] = "%s\n";

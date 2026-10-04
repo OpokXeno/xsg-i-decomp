@@ -1,6 +1,32 @@
 #include "common.h"
 #include "shared.h"
 #include "sdv.h"
+#include "m_ef_obj.h"
+
+static float _sdvMapRgb[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+static float _sdvAmbient[4] = {0.25f, 0.25f, 0.25f, 1.0f};
+const float McMathUnitMatrix[4][4] = {
+    {1.0f, 0.0f, 0.0f, 0.0f},
+    {0.0f, 1.0f, 0.0f, 0.0f},
+    {0.0f, 0.0f, 1.0f, 0.0f},
+    {0.0f, 0.0f, 0.0f, 1.0f},
+};
+static short _sdvSpecialBuf[8];
+static SdvAlter _sdvAlter[16];
+static int _sdvAmbFrame = 0;
+static int _sdvAmbState = 0;
+static unsigned char charID_0;
+static int eftCate_1;
+unsigned short itmBox[255] = {0};
+unsigned short wpnBox[255] = {0};
+unsigned short bltBox[255] = {0};
+unsigned short accBox[255] = {0};
+unsigned short evtBox[255] = {0};
+long long moneyBox = 0;
+unsigned char orgData[33][0x180] = {{0}};
+unsigned char batDatBuf[0x10000] = {0};
+unsigned char thinkBuf[0x4000] = {0};
+MEfObjCamParams mefCamParams = {0};
 
 extern void *memset(void *, int, unsigned int);
 

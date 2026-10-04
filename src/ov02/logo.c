@@ -7,7 +7,7 @@
 
 extern int xglMcMain(void);
 extern void xglFontPrintDirectOT(int color, void *param);
-extern int D_00A10D28;
+const char D_00A10D28[8] = "\x19\x03";
 
 static int device_check_sync(void)
 {
@@ -38,15 +38,67 @@ typedef struct LogoMovieInfo {
     u8 stopped;
     u8 unmodeled_ca[6];
 } LogoMovieInfo;
+typedef struct LogoGifTag {
+    u32 control_low;
+    u32 control_high;
+    u32 registers_low;
+    u32 registers_high;
+} LogoGifTag;
+typedef struct LogoGifAdCommand {
+    u64 value;
+    u32 register_address;
+    u32 unused;
+} LogoGifAdCommand;
+typedef struct LogoGifRgbaq {
+    u32 red;
+    u32 green;
+    u32 blue;
+    u32 alpha;
+} LogoGifRgbaq;
+typedef struct LogoGifUv {
+    u32 u;
+    u32 v;
+    u32 unused_08;
+    u32 unused_0c;
+} LogoGifUv;
+typedef struct LogoGifXyz2 {
+    u16 x;
+    u16 unused_x;
+    u16 y;
+    u16 unused_y;
+    u32 z;
+    u32 unused;
+} LogoGifXyz2;
 typedef struct LogoTestEnvironment {
-    u8 unmodeled_00[0x30];
+    LogoGifTag tag;
+    LogoGifAdCommand flush_texture_cache;
+    LogoGifAdCommand set_clamp_1;
     u64 command;
+    u32 set_tex0_register_address;
+    u32 set_tex0_unused;
+    LogoGifRgbaq color;
+    LogoGifUv texture_coordinates_0;
+    LogoGifXyz2 vertex_0;
+    LogoGifUv texture_coordinates_1;
+    LogoGifXyz2 vertex_1;
 } LogoTestEnvironment;
 typedef struct LogoRenderState {
     u8 unmodeled_00[0x14];
     u16 display_buffer;
 } LogoRenderState;
-extern LogoTestEnvironment TestEnv_1_00A0F690;
+static LogoTestEnvironment TestEnv_1_00A0F690 = {
+    .tag = { 0x00008001, 0x808B4000, 0x53531EEE, 0 },
+    .flush_texture_cache = { 0, 0x3F, 0 },
+    .set_clamp_1 = { 0x00000000007FFFF0ULL, 0x08, 0 },
+    .command = 0,
+    .set_tex0_register_address = 0x06,
+    .set_tex0_unused = 0,
+    .color = { 0x80, 0x80, 0x80, 0x80 },
+    .texture_coordinates_0 = { 0, 0, 0, 0 },
+    .vertex_0 = { 0x6FF8, 0, 0x71F7, 0, 0x40000000, 0 },
+    .texture_coordinates_1 = { 0x2000, 0x1C00, 0, 0 },
+    .vertex_1 = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
+};
 extern LogoRenderState sRender;
 extern void xglSoundEffectNormalDirect(int effect_id);
 extern PadPrefix PadData;
@@ -110,8 +162,8 @@ static int ipuplay(char *path);
 extern void xglRenderClearColor(u32 color);
 extern void xglRenderClearDepth(void);
 extern void xglRenderClearFrame(void);
-extern char D_00A115A8[];
-extern char D_00A115B8[];
+const char D_00A115A8[] = "data\\namco.ipu";
+const char D_00A115B8[] = "data\\logo_msi.ipu";
 
 void Logo(void)
 {

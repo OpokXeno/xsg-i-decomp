@@ -33,9 +33,9 @@ typedef struct TComponent {
     unsigned char unmodeled_a4[0x5B0 - 0xA4];
 } TComponent;
 
-extern TComponent tcomponent[4];
-extern unsigned char groupStatus[3];
-extern unsigned char D_004DC593;
+static TComponent tcomponent[4];
+static unsigned char groupStatus[3];
+static unsigned char D_004DC593;
 
 void EW_init(unsigned char *freeSpace);
 void MBUF_init(void);
@@ -122,11 +122,10 @@ void TMENU_drawDefault(TComponent *component);
 void TSLIDER_drawDefault(TComponent *component);
 void TWIN_draw2(TComponent *component);
 void TWIN_drawScene2(TComponent *component);
+extern const char D_004DA420[];
 
 /* Defined by xgl_font.c; `text` is a font control-code string. */
 extern void xglFontPrintDirectOT(int ot, const char *text);
-
-extern const char D_004DA420[];
 
 /*
  * The font control strings TWSYS_draw emits before a component's own drawing
@@ -208,6 +207,8 @@ void STRING_h2zEUC(char *destination, const char *source)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", STRING_toUInt);
+
+const char D_004DA420[8] = "\x0b";
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TW_setPos);
 

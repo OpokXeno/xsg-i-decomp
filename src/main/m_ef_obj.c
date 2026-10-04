@@ -3,14 +3,24 @@
 #include "main/xgl_studio.h"
 #include "m_ef_obj.h"
 
-/* The object-pool storage remains scaffold-owned; its record layout is unresolved. */
-extern u8 mefObjBuff[];
-extern u32 mefObjSysFlags;
+/* The pool contains 96 records of 0x420 bytes each. */
+#define MEFOBJ_COUNT 0x60
+#define MEFOBJ_ACTIVE 1
+
+typedef struct MEfObj MEfObj;
+typedef void (*MEfObjUpdate)(MEfObj *self, void *work);
+
+struct MEfObj {
+    u32 flags;
+    MEfObjUpdate exec1st[2];
+    MEfObjUpdate exec2nd[2];
+    u8 unmodeled_14[12];
+    u8 work[0x400];
+};
+
+static MEfObj mefObjBuff[MEFOBJ_COUNT];
+static u32 mefObjSysFlags = 0;
 extern void MOutputDebugStringWarn(const char *format, ...);
-extern const char D_004CC990[];
-extern const char D_004CC9C0[];
-extern const char D_004CC9F0[];
-extern const char D_004CCA20[];
 
 void MEfObjInit(void)
 {
@@ -30,22 +40,6 @@ void MEfObjEnabled(short enabled)
     mefObjSysFlags &= ~MEFOBJ_SYS_ENABLED;
 }
 
-/* mefObjBuff holds MEFOBJ_COUNT fixed-size object records (MEfObjInit clears
- * MEFOBJ_COUNT * 0x420 bytes); only the fields the pass loops touch are named. */
-#define MEFOBJ_COUNT 0x60
-#define MEFOBJ_ACTIVE 1
-
-typedef struct MEfObj MEfObj;
-typedef void (*MEfObjUpdate)(MEfObj *self, void *work);
-
-struct MEfObj {
-    u32 flags; /* bit 0: object active */
-    MEfObjUpdate exec1st[2]; /* called in order by MEfObjExec1st */
-    MEfObjUpdate exec2nd[2]; /* called in order by MEfObjExec2nd */
-    u8 unmodeled_14[12];
-    u8 work[0x400];
-};
-
 void MEfObjExec1st(void)
 {
     if ((mefObjSysFlags & (MEFOBJ_SYS_READY | MEFOBJ_SYS_ENABLED)) ==
@@ -64,7 +58,7 @@ void MEfObjExec1st(void)
         mefCamParams.rotation = rotation;
         MMathRotateMatrixYXZ(&mefCamParams.basis, 0, rotation);
 
-        objects = (MEfObj *)mefObjBuff;
+        objects = mefObjBuff;
         for (index = 0; index < MEFOBJ_COUNT; index++) {
             MEfObj *obj = &objects[index];
             if (obj->flags & MEFOBJ_ACTIVE) {
@@ -83,7 +77,7 @@ void MEfObjExec2nd(void)
 {
     if ((mefObjSysFlags & (MEFOBJ_SYS_READY | MEFOBJ_SYS_ENABLED)) ==
         (MEFOBJ_SYS_READY | MEFOBJ_SYS_ENABLED)) {
-        MEfObj *objects = (MEfObj *)mefObjBuff;
+        MEfObj *objects = mefObjBuff;
         int index;
 
         for (index = 0; index < MEFOBJ_COUNT; index++) {
@@ -105,9 +99,9 @@ void *MEfObjCreate(void)
     MEfObj *object;
     int index;
 
-    object = (MEfObj *)mefObjBuff;
+    object = mefObjBuff;
     if ((mefObjSysFlags & MEFOBJ_SYS_READY) == 0) {
-        MOutputDebugStringWarn(D_004CC990);
+        MOutputDebugStringWarn("MEfObjCreate: MEfObj is not be initialized");
         return 0;
     }
 
@@ -123,7 +117,7 @@ void *MEfObjCreate(void)
         object = &object[1];
     }
 
-    MOutputDebugStringWarn(D_004CC9C0);
+    MOutputDebugStringWarn("MEfObjCreate: Failed to create an Object");
     return 0;
 }
 
@@ -132,12 +126,12 @@ int MEfObjDestroy(void *object)
     MEfObj *effect = object;
 
     if ((mefObjSysFlags & MEFOBJ_SYS_READY) == 0) {
-        MOutputDebugStringWarn(D_004CC9F0);
+        MOutputDebugStringWarn("MEfObjDestroy: MEfObj is not be initialized");
         return 0;
     }
 
     if ((effect->flags & MEFOBJ_ACTIVE) == 0) {
-        MOutputDebugStringWarn(D_004CCA20);
+        MOutputDebugStringWarn("MEfObjDestroy: Not alive");
         return 0;
     }
 

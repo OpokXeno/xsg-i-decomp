@@ -41,6 +41,7 @@ typedef struct ManWork {
     unsigned char unmodeled_00[0xc];
     int controlPhase;     /* +0xc */
     ObjectTask *unitTask; /* +0x10 */
+    unsigned char unmodeled_14[4]; /* original named span continues to +0x18 */
 } ManWork;
 
 /*

@@ -9,12 +9,13 @@ typedef struct SchedulerState SchedulerState;
 
 int sefIsDeadSchduler(unsigned int scheduler_index);
 
-/* The original scheduler table is an array of 0xab0-byte records. */
-extern unsigned char _scheduler[];
+/* Opaque owner span to _lineData; C callers view evidenced 0xab0-byte rows. */
+static unsigned char _scheduler[0x55800];
 
 SchedulerState *sefGetNowScheduler(void);
 
-extern SchedulerState *_nowScheduler;
+/* Original TU-local current-scheduler pointer (main:0x004DC670). */
+static SchedulerState *_nowScheduler;
 
 /*
  * SchedulerState's flags word, the only field of the 0xab0-byte record this
@@ -108,7 +109,8 @@ extern const float D_004D8318;
 
 /* sefGetLineAdr (main:0x002e7ea0): the line-effect table, scaffold-owned like
  * _scheduler/_ptAlloc/_battleData above; only its pointer accessor is C. */
-extern unsigned char _lineData[];
+/* 128 records of the evidenced 0x820-byte line-data stride. */
+static unsigned char _lineData[0x41000];
 
 /*
  * sefGetDmgNull (main:0x002e7e40): 0x0079411C is _battleData + SEF_BATTLE_PHASE

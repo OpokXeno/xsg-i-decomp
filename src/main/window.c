@@ -81,7 +81,7 @@ void Java_xeno_util_Window_signal__I(JThread *thread, WindowSignalCall *argument
     arguments->window->closeState = arguments->value;
 }
 
-extern const char D_004D1658[]; /* "/[clear()]" */
+const char D_004D1658[] = "/[clear()]";
 
 void Java_xeno_util_Window_clear__(JThread *thread, WindowCall *arguments,
                                    void *result)
@@ -89,7 +89,7 @@ void Java_xeno_util_Window_clear__(JThread *thread, WindowCall *arguments,
     MSG_print2(arguments->window, D_004D1658, -1);
 }
 
-extern const char D_004D1668[]; /* "/[close()]" */
+const char D_004D1668[] = "/[close()]";
 
 void Java_xeno_util_Window_close__(JThread *thread, WindowCall *arguments,
                                    void *result)
@@ -104,7 +104,7 @@ typedef struct WindowIntCall {
     int value;
 } WindowIntCall;
 
-extern const char D_004D1678[]; /* "/[waitkey(%d)]" */
+const char D_004D1678[] = "/[waitkey(%d)]";
 extern int sprintf(char *destination, const char *format, ...);
 
 void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
@@ -118,7 +118,7 @@ void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
     MSG_print2(window, buffer, -1);
 }
 
-extern const char D_004D1688[]; /* "/[wait(%d)]" */
+const char D_004D1688[] = "/[wait(%d)]";
 
 void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
                                    void *result)
@@ -332,7 +332,7 @@ void Java_xeno_util_Window_setName__Ljava_lang_String_(JThread *thread, void *ar
 {
 }
 
-extern const char D_004D1698[]; /* "/[waitkey(0);close()]" */
+const char D_004D1698[] = "/[waitkey(0);close()]";
 
 void Java_xeno_util_Window_closeWaitKey__(JThread *thread, WindowCall *arguments,
                                           void *result)

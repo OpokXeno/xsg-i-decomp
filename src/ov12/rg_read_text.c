@@ -19,9 +19,6 @@ extern void RgHeapFree(void *heap, void *ptr, const char *source_file, int line)
 extern void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *pszFile,
                                      int iLine);
 
-extern const char D_00A54418[];
-extern const char D_00A54438[];
-extern const char D_00A54440[];
 extern double atof(const char *nptr);
 extern int strcmp(const char *string1, const char *string2);
 
@@ -41,24 +38,30 @@ static int _GetBool(RgReadText *pReader);
  * ov12:0x00a543a8, 15 bytes, contains the assertion expression
  * "pReader != NIL".
  */
-extern const char D_00A543A8[];
+const char D_00A543A8[] = "pReader != NIL";
 
 /*
  * ov12:0x00a543b8, 23 bytes, contains the source filename
  * "../rg_read_text.euc.c".
  */
-extern const char D_00A543B8[];
+const char D_00A543B8[] = "../rg_read_text.euc.c";
 
 /*
  * ov12:0x00a543e0, 54 bytes, contains the range-check message
  * "pCur - pReader->m_pszBuf = %d\npReader->m_nSize = %d\n".
  */
-extern const char D_00A543E0[];
+const char D_00A543E0[] = "pCur - pReader->m_pszBuf = %d\npReader->m_nSize = %d\n";
+
+const char D_00A54418[] = "pCur != NIL";
+const char D_00A54438[] = "true";
+const char D_00A54440[] = "on";
+const char D_00A54448[] = "pszUngetToken != NIL";
 
 /*
  * ov12:0x00a54460, 19 bytes, contains the message "not find delimiter".
  */
-extern const char D_00A54460[];
+const char D_00A54460[0x18] = "not find delimiter";
+const char D_00A54478[8] = "?";
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_read_text", _InitReader);
 
@@ -160,12 +163,6 @@ static float _GetFloat(RgReadText *pReader)
     return (float) atof(szToken);
 }
 
-/*
- * ov12:0x00a54418, 12 bytes, contains the assertion expression
- * "pCur != NIL".
- */
-extern const char D_00A54418[];
-
 extern int atoi(const char *nptr);
 
 static char *_SkipWhiteSpace(RgReadText *pReader);
@@ -239,12 +236,6 @@ int RgReadTextIsOnDelimitor(RgReadText *pReader)
     }
     return pReader->m_pszDelim != 0;
 }
-
-/*
- * ov12:0x00a54448, 21 bytes, contains the assertion expression
- * "pszUngetToken != NIL".
- */
-extern const char D_00A54448[];
 
 extern unsigned int strlen(const char *string);
 extern char *strncpy(char *dest, const char *src, unsigned int n);

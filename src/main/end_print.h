@@ -40,7 +40,4 @@ typedef struct PrintFuncEntry {
     int param;
 } PrintFuncEntry;
 
-extern PrintFuncEntry PrintFunc[];
-extern PrintFuncEntry *pPrintFuncTop;
-
 #endif /* SRC_MAIN_END_PRINT_H */

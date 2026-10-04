@@ -3,9 +3,26 @@
 #include "game_pause_disp.h"
 #include "main/xgl_packet.h"
 
+static PauseShadowCommand ShadowEnv = {
+    .dma_tag = 0,
+    .vif_nop = 0,
+    .vif_direct = 0x51000006,
+    .gif_tag = {0x00008001, 0x50234000, 0x000551EE, 0},
+    .set_shadow_context = {{.value = 0x0000000000071001ULL}, 0x47, 0},
+    .set_shadow_environment = {{.value = 0x44}, 0x42, 0},
+    .set_shadow_test = {{.value = 0}, 0, 0x40},
+    .set_shadow_alpha = {{.words = {0x00006FF8, 0x000071F7}}, 0x40000000, 0},
+    .set_shadow_color = {{.words = {0x00008FF8, 0x00008DF7}}, 0x40000000, 0},
+};
+
+/* In-band font commands precede the English pause captions. */
+static char pause_0[13] = "\013\015\003\031\003PAUSE\031\002";
+static char msg1_1[44] = "\013\015\003\014 \200 \242\244\014\200\200\200\031\003 Button : Skip and proceed\031\002";
+static char msg2_2[35] = "\013\015\003\031\003START Button : Cancel PAUSE\031\002";
+
 static void DrawShadow(PauseDrawContext *context)
 {
-    sceVif1PkAddDirectDataN(context->packet, ShadowEnv, 7);
+    sceVif1PkAddDirectDataN(context->packet, &ShadowEnv, 7);
 }
 
 static void DrawCredit(PauseDrawContext *context)
@@ -77,7 +94,7 @@ void PauseMenu(void)
 
 void GamePauseDispBG(void)
 {
-    sceVif1PkRef(xglPacketGetCurrent(), ShadowEnv, 7, 0, 0, 0);
+    sceVif1PkRef(xglPacketGetCurrent(), &ShadowEnv, 7, 0, 0, 0);
 }
 
 void GamePauseDispCf(void)

@@ -8,7 +8,16 @@ static int _SetBit(int *flags, int bit, int value);
 static void _PassTimeVersion3(RgCamera *camera, float elapsed);
 static int _GetVer3TimerID(char *timerName);
 extern int strcmp(const char *left, const char *right);
-extern char *s_aszVer3TimerName[10];
+extern const char D_00A527F0[], D_00A527E8[], D_00A527E0[], D_00A527D0[];
+extern const char D_00A527C8[], D_00A527C0[], D_00A527B8[], D_00A527A8[];
+extern const char D_00A52798[], D_00A52788[];
+const char D_00A52750[] = "pCam != NIL";
+const char D_00A52760[] = "../rg_camera.euc.c";
+const char D_00A52778[] = "pStudio != NIL";
+static const char *s_aszVer3TimerName[10] = {
+    D_00A527F0, D_00A527E8, D_00A527E0, D_00A527D0, D_00A527C8,
+    D_00A527C0, D_00A527B8, D_00A527A8, D_00A52798, D_00A52788
+};
 extern void *RgHeapAlloc(RgHeap *heap, unsigned int size, const char *source_file, int line);
 extern void RgError(const char *message, const char *source_file, int line, ...);
 extern void XrgCopyVectorXYZ(RgVector destination, RgVector source);
@@ -20,9 +29,10 @@ extern void RgDrawViewSetRotateX(RgDrawView *view, float angle);
 extern void RgDrawViewSetRotateY(RgDrawView *view, float angle);
 extern void RgDrawViewSetRotateZ(RgDrawView *view, float angle);
 extern void RgDrawViewInit(RgDrawView *view);
-extern const char D_00A52920[];
-extern const char D_00A52940[];
-extern const char D_00A52958[];
+const char D_00A52920[] = "camera version error (%d)";
+const char D_00A52940[] = "0";
+const char D_00A52948[] = "pRgCam != NIL";
+const char D_00A52958[] = "pEssence != NIL";
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file, int line);
@@ -35,13 +45,12 @@ extern void __RgGeomPointGetPos(RgGeomPoint *point, RgPointVector *destination,
 extern void XrgLog(const char *format, const char *source_file, int line, ...);
 
 /* ov12:0x00a52948 "pRgCam != NIL" */
-extern const char D_00A52948[];
 /* ov12:0x00a52968 "pReader != NIL" */
-extern const char D_00A52968[];
+const char D_00A52968[] = "pReader != NIL";
 /* ov12:0x00a52978 "---------- camera dump %p\n" */
-extern const char D_00A52978[];
+const char D_00A52978[] = "---------- camera dump %p\n";
 /* ov12:0x00a52998 "  me=%p enemy=%p\n" */
-extern const char D_00A52998[];
+const char D_00A52998[] = "  me=%p enemy=%p\n";
 
 static int _SetBit(int *flags, int bit, int value)
 {
@@ -70,13 +79,6 @@ extern void assert_prog(const char *expression, const char *source_file, int lin
 extern void XrgClearVector(RgVector vector);
 extern void XrgCopyVector(RgVector destination, RgVector source);
 extern float *XrgVectorY(void);
-
-/* ov12:0x00a52750 "pCam != NIL" */
-extern const char D_00A52750[];
-/* ov12:0x00a52760 "../rg_camera.euc.c" */
-extern const char D_00A52760[];
-/* ov12:0x00a52778 "pStudio != NIL" */
-extern const char D_00A52778[];
 
 static void _InitAbstructCamera(RgCamera *camera, RgDrawStudio *studio)
 {
@@ -470,3 +472,25 @@ void RgCameraDump(RgCamera *pRgCam)
     XrgLog(D_00A52998, D_00A52760, 859,
            (void *)pRgCam->actionState[2], (void *)pRgCam->actionState[3]);
 }
+
+
+
+const char D_00A52788[16] = "all-false";
+
+const char D_00A52798[16] = "all-true";
+
+const char D_00A527A8[16] = "see-target";
+
+const char D_00A527B8[8] = "lock";
+
+const char D_00A527C0[8] = "in-scrn";
+
+const char D_00A527C8[8] = "dash";
+
+const char D_00A527D0[16] = "lock-attack";
+
+const char D_00A527E0[8] = "attack";
+
+const char D_00A527E8[8] = "advance";
+
+const char D_00A527F0[8] = "roll";

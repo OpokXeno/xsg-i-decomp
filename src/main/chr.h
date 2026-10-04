@@ -6,6 +6,7 @@
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
+#include "main/near_dir.h"
 typedef unsigned char SceneByte;
 typedef struct SceneClass SceneClass;
 typedef struct SceneString SceneString;
@@ -15,16 +16,9 @@ typedef SceneByte *SceneObject;
  * The JVM's class-field handle, as `lookupClassField` returns it. Only the
  * object field offset (+0x10) is observed: `lw v1,0x10(v0)` at 0x002ff5b0,
  * 0x002ff5d8 and the same pair in CHR_sclY/CHR_sclZ, CHR_rotX (0x002fd6ac)
- * and JTHREAD_defaultChr (0x00305548). Verbatim the canonical spelling of
- * include/shared.h.
+ * and JTHREAD_defaultChr (0x00305548). The canonical definition is supplied
+ * by include/shared.h through the defining sequence TU's header.
  */
-typedef struct JavaField {
-    unsigned int : 32; /* +0 */
-    unsigned int : 32; /* +4 */
-    unsigned int : 32; /* +8 */
-    unsigned int : 32; /* +12 */
-    int offset;        /* +16: read at 0x2f9438/0x2f94ac/... (lw v1,16(v0)) */
-} JavaField;
 
 /* Call block: object +0x0, first +0x4, second +0x8, wait byte +0xC. */
 typedef union ChrScaleArgument {
@@ -72,14 +66,7 @@ typedef struct ChrShadowMapIdCall {
     u16 id;
 } ChrShadowMapIdCall;
 
-/* Verbatim the engine's four-float vector record of include/shared.h and of
- * src/main/near_dir.h, which defines the actor below with it. */
-typedef struct Vector4 {
-    float x;
-    float y;
-    float z;
-    float w;
-} Vector4;
+/* Vector4 is the shared four-float record used by the actor owner as well. */
 
 /*
  * UnduDataGetHeader's return type, defined by src/math/main/review09-002f6c50
@@ -379,10 +366,7 @@ typedef struct JThread {
  * below request an axis by setting its `state_flags` bit (0x20 for x, 0x40 for
  * y, 0x80 for z).
  */
-typedef struct {
-    u32 flags;
-    u32 state_flags;
-} SequenceState;
+/* SequenceState and ActSequenceEntry come from their defining TU's header. */
 
 /* The entry array's stride: the sequence index is multiplied by 0x260 in
  * every one of its users (CHR_sclX 0x002ff604..0x002ff614). */
@@ -707,8 +691,7 @@ extern const char D_004DC1B0[];
 extern const char D_004DC1B8[];
 extern const char D_004DC1C0[];
 extern const char D_004DC1C8[];
-extern u8 actSequence[0x9800];
-extern float defaultOffset[];
+extern ActSequenceEntry actSequence[64];
 extern void SEQ_scale(void);
 
 #endif

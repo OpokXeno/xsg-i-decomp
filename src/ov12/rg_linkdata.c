@@ -193,3 +193,10 @@ void *RgLinkDataGetIndex(RgLinkData *pAna, int index) {
     offset = (RgLinkDataOffset *) ((char *) header + _get_uint(header->offsetTableOffset));
     return (char *) header + _get_uint(offset[index]);
 }
+
+const char D_00A556C0[16] = "pAna != NIL";
+const char D_00A556D0[24] = "../rg_linkdata.euc.c";
+const char D_00A556E8[16] = "pBuf != NIL";
+const char D_00A556F8[16] = "uNum > nIndex";
+const char D_00A55708[32] = "RgLinkDataVersion(pAna) >= 2";
+const char D_00A55728[16] = "uNum > uIndex";

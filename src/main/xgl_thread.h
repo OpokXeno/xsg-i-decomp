@@ -20,6 +20,10 @@ typedef void (*thread_entry_t)(void *);
 
 typedef struct {
     thread_entry_t entry;
+    int unmodeled_04;
+    int stack_size;
+    int priority;
+    int unmodeled_10;
 } system_thread_entry_t;
 
 typedef struct {
@@ -59,7 +63,6 @@ void xglThreadInitial(void);
 
 extern active_thread_t asActiveThreadList[];
 
-extern system_thread_entry_t asSystemThreadList[];
 
 void xglThreadRotate(void);
 

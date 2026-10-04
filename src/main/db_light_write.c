@@ -1,6 +1,17 @@
 #include "common.h"
+
+static int mode_004DC5A8;
 #include "shared.h"
 #include "db_light_write.h"
+
+/*
+ * The retail ELF has a GLOBAL OBJECT named cursor at 0x0099C7F0 with size
+ * 0x60. The shared declaration and this TU's uses establish a 16-byte
+ * HomogeneousVector slot at +0x10; the callback pair is accessed as raw
+ * words at +0x50/+0x54. Six slots of the existing vector type express the
+ * recorded object extent without assigning meanings to the other words.
+ */
+HomogeneousVector cursor[6];
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", DB_lightWrite);
 

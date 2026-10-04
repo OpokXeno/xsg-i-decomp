@@ -71,8 +71,13 @@ typedef struct MenuSystemInfoBlock {
 typedef struct MenuSystemMessageTable {
     int messages[7];
 } MenuSystemMessageTable;
-extern MenuSystemInfoBlock *MenuSystemInfo;
-extern const MenuSystemMessageTable D_004C9480;
+typedef union MenuSystemMessageStorage {
+    MenuSystemMessageTable table;
+    unsigned int words[8];
+} MenuSystemMessageStorage;
+MenuSystemInfoBlock *MenuSystemInfo = 0;
+XglClock _CountTime = {0};
+extern const MenuSystemMessageStorage D_004C9480;
 extern void MenuInfoWindow(void);
 extern void WindowDXSet(void *window);
 extern void WindowDXMain(void *window);
@@ -83,7 +88,7 @@ extern void *memset(void *destination, int value, unsigned int count);
 void MenuSystemInfoMain(void)
 {
     MenuSystemInfoBlock *info = MenuSystemInfo;
-    MenuSystemMessageTable messageTable = D_004C9480;
+    MenuSystemMessageTable messageTable = D_004C9480.table;
     short targetY;
 
     if (info->state != 0) {
@@ -213,3 +218,8 @@ int MenuSystem2(void)
     endPrintExtFunc(0, 100, 0);
     return MenuWork.state != 0xFF;
 }
+
+const MenuSystemMessageStorage D_004C9480 = {
+    .words = {0x004C9338, 0x004C9380, 0x004C93A8, 0x004C93D0,
+              0x004C93F8, 0x004C9428, 0x004C9460, 0}
+};

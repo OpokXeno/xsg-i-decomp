@@ -5,9 +5,9 @@
 #include "shared.h"
 
 /* ov12:0x00a51e08 contains the assertion expression "pGeom != NIL". */
-extern const char D_00A51E08[];
+static const char D_00A51E08[16] = "pGeom != NIL";
 /* ov12:0x00a51e18 contains the source filename "../rg_robot_subcon.euc.c". */
-extern const char D_00A51E18[];
+static const char D_00A51E18[32] = "../rg_robot_subcon.euc.c";
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -25,8 +25,6 @@ extern void __RgGeomPointGetPos(RgGeomPoint *point,
                                 RgPointVector *destination,
                                 const char *source_file, int source_line);
 extern int XrgQuantAngle(float angle);
-extern const int s_aeAdvMotID_0[8];
-extern const int s_aeDashMotID_1[8];
 extern int XrgQuantAngle4(float angle);
 extern void XrgSubVector(RgVector destination, RgVector first,
                          RgVector second);
@@ -34,9 +32,9 @@ extern void RgGeomRobotSetRotVel(RgGeom *geom, float rotVel);
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
 /* ov12:0x00a51e38 contains "0 <= nDir8 && nDir8 < 8". */
-extern const char D_00A51E38[];
+static const char D_00A51E38[24] = "0 <= nDir8 && nDir8 < 8";
 /* ov12:0x00a51e50 contains "unknown damage dir %d". */
-extern const char D_00A51E50[];
+static const char D_00A51E50[24] = "unknown damage dir %d";
 
 void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction, float scale)
 {
@@ -137,6 +135,8 @@ void RgRobSubDirTo(RgGeomPoint *geometry, RgVector direction)
 
 int RgRobSubGetAdvanceMot(RgGeomPoint *geometry, int dash)
 {
+    static int s_aeAdvMotID[8] = { 1, 8, 7, 6, 5, 4, 3, 2 };
+    static int s_aeDashMotID[8] = { 11, 18, 17, 16, 15, 14, 13, 12 };
     RgVector velocity;
     float rotate;
     int direction;
@@ -148,9 +148,9 @@ int RgRobSubGetAdvanceMot(RgGeomPoint *geometry, int dash)
         assert_prog(D_00A51E38, D_00A51E18, 122);
     }
     if (dash != 0) {
-        return s_aeDashMotID_1[direction];
+        return s_aeDashMotID[direction];
     }
-    return s_aeAdvMotID_0[direction];
+    return s_aeAdvMotID[direction];
 }
 
 extern float RgGeomRobotGetRotForce(const RgGeom *geom);

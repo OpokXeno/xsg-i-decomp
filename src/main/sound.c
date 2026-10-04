@@ -106,8 +106,6 @@ typedef struct SoundStreamPlayCall {
     int pan;
 } SoundStreamPlayCall;
 
-extern const char base_0_0043C188[17];
-
 void xglSoundStreamStop(int channel);
 void xglSoundStreamOpenVagMultiParam(int stream, const char *path, int pitch,
                                      int volume, int pan);
@@ -118,13 +116,14 @@ void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
                                       SoundStreamPlayCall *arguments,
                                       unsigned int *result)
 {
+    static char base[17] = "data\\sound\\vda\\s";
     char path[256];
     const char *prefix;
     char *path_end;
     int quotient;
     int digit_index;
 
-    prefix = base_0_0043C188;
+    prefix = base;
     quotient = arguments->source_id;
     path_end = path;
     if ((*path_end = *prefix) != '\0') {

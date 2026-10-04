@@ -10,8 +10,8 @@
  */
 typedef struct EtherTreeObjectData EtherTreeObjectData;
 
-extern EtherTreeObjectData *EtherTreeObject;
-extern EtherTreeObjectData *EtherTreeObjectP;
+EtherTreeObjectData *EtherTreeObject = 0;
+EtherTreeObjectData *EtherTreeObjectP = 0;
 
 void EtherTreeObjectGetClear(void)
 {
@@ -71,8 +71,21 @@ typedef struct EtherTreeSystemData {
  * targetNodeX/targetNodeY (offsets 0x40/0x44, always) and, when its mode
  * argument is 1, also into nodeX/nodeY (offsets 0x30/0x34).
  */
-extern EtherTreeSystemData *EtherTreeSystem;
-extern int EtherTreeFirstData[];
+EtherTreeSystemData *EtherTreeSystem = 0;
+typedef struct EtherTreeFirstDataEntry {
+    unsigned char childIds[3];
+    unsigned char unmodeled_03;
+} EtherTreeFirstDataEntry;
+
+static EtherTreeFirstDataEntry EtherTreeFirstData[7] = {
+    { { 27, 0, 0 }, 0 },
+    { { 17, 0, 0 }, 0 },
+    { { 1, 0, 0 }, 0 },
+    { { 59, 0, 0 }, 0 },
+    { { 72, 0, 0 }, 0 },
+    { { 37, 43, 46 }, 0 },
+    { { 49, 57, 0 }, 0 }
+};
 
 void *EtherTreeFirstDataGet(void)
 {
@@ -94,7 +107,12 @@ struct EtherTreeColorTable {
     unsigned char colors[4][4];
 };
 
-extern const struct EtherTreeColorTable D_004C9AB0;
+const struct EtherTreeColorTable D_004C9AB0 = {
+    { { 0x00, 0x00, 0x00, 0x00 },
+      { 0x40, 0x40, 0x40, 0x60 },
+      { 0x80, 0x80, 0x80, 0x80 },
+      { 0xa0, 0xa0, 0x40, 0x80 } }
+};
 
 void EtherTreeLineColorGet(unsigned char *color, int colorIndex)
 {
@@ -169,7 +187,7 @@ INCLUDE_ASM("asm/main/nonmatchings/ether_tree", subJoutoPosSet);
 
 INCLUDE_ASM("asm/main/nonmatchings/ether_tree", EtherTreeParaSet);
 
-extern EtherTreeLineData *EtherTreeLine;
+EtherTreeLineData *EtherTreeLine = 0;
 
 /* Collect the active non-root object records into the line table. */
 void EtherTreeLineSet(void)
@@ -296,7 +314,7 @@ typedef struct EtherTreeRightData {
     unsigned char unmodeled_34[0x0c];
 } EtherTreeRightData;
 
-extern EtherTreeRightData *EtherTreeRight;
+EtherTreeRightData *EtherTreeRight = 0;
 extern EtherTreeObjectData *EtherTreeObjectGet(int id);
 
 void EtherTreeRightTargetChange(int id, int index)
@@ -343,7 +361,7 @@ typedef struct EtherTreeBlackData {
     short counter;
 } EtherTreeBlackData;
 
-extern EtherTreeBlackData *EtherTreeBlack;
+EtherTreeBlackData *EtherTreeBlack = 0;
 
 void EtherTreeBlackSet(void)
 {
@@ -446,7 +464,7 @@ void subLine2_DrawType_1(EtherTreeLine2Data *line2)
     } while (remaining >= 0);
 }
 
-extern EtherTreeLine2Data *EtherTreeLine2;
+EtherTreeLine2Data *EtherTreeLine2 = 0;
 extern void subLine2_DrawType_1(EtherTreeLine2Data *line2);
 
 void EtherTreeLine2Draw(void)

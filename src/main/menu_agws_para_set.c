@@ -2,6 +2,110 @@
 #include "shared.h"
 #include "menu_agws_para_set.h"
 
+/* These labels are the original menu strings referenced by the message table. */
+extern const char D_004C6C10[];
+extern const char D_004C6C20[];
+extern const char D_004C6C00[];
+extern const char D_004C6BF0[];
+extern const char D_004C6BE0[];
+extern const char D_004C6BD0[];
+extern const char D_004C6BC0[];
+extern const char D_004C6C30[];
+extern const char D_004C6CC8[];
+extern const char D_004C6C98[];
+extern const char D_004C6C78[];
+extern const char D_004C6C48[];
+extern const char D_004C6CF8[];
+extern const char D_004C6CE8[];
+extern const char D_004C6D60[];
+extern const char D_004C6D48[];
+extern const char D_004C6D28[];
+extern const char D_004C6D08[];
+extern const char D_004C6DC0[];
+extern const char D_004C6DA8[];
+extern const char D_004C6D98[];
+extern const char D_004C6D80[];
+extern const char D_004C6E00[];
+extern const char D_004C6DE0[];
+extern const char D_004C6F08[];
+extern const char D_004C6EF0[];
+extern const char D_004C6ED0[];
+extern const char D_004C6EC0[];
+extern const char D_004C6E70[];
+extern const char D_004C6E60[];
+extern const char D_004C6E48[];
+extern const char D_004C6E38[];
+extern const char D_004C6E28[];
+extern const char D_004C6E18[];
+extern const char D_004DAEF8[];
+extern const char D_004DAEF0[];
+extern const char D_004DAEE8[];
+extern const char D_004DAEE0[];
+extern const char D_004DAED8[];
+extern const char D_004DAED0[];
+extern const char D_004DAEC8[];
+extern const char D_004DAEC0[];
+extern const char D_004DAEB8[];
+extern const char D_004DAEB0[];
+extern const char D_004DAF18[];
+extern const char D_004DAF10[];
+extern const char D_004DAF08[];
+extern const char D_004DAF00[];
+extern const char D_004DAF20[];
+extern const char D_004DAF38[];
+extern const char D_004DAF30[];
+extern const char D_004DAF28[];
+extern const char D_004DAF70[];
+extern const char D_004DAF68[];
+extern const char D_004DAF60[];
+extern const char D_004DAF58[];
+extern const char D_004DAF50[];
+extern const char D_004DAF78[];
+extern const char D_004DAFC8[];
+extern const char D_004DAFC0[];
+extern const char D_004DAFB8[];
+extern const char D_004DAFB0[];
+extern const char D_004DAFA8[];
+extern const char D_004DAFA0[];
+extern const char D_004DAF98[];
+
+static const char *msg00_0_0036D940[17] = {
+    D_004C6C20, D_004DAEF8, D_004C6C10, D_004DAEF0, D_004DAEE8,
+    D_004DAEE0, D_004DAED8, D_004C6C00, D_004C6BF0, D_004DAED0,
+    D_004DAEC8, D_004DAEC0, D_004C6BE0, D_004DAEB8, D_004DAEB0,
+    D_004C6BD0, D_004C6BC0,
+};
+
+static int msg_10[7] = {
+    (int)D_004DAFC8, (int)D_004DAFC0, (int)D_004DAFB8,
+    (int)D_004DAFB0, (int)D_004DAFA8, (int)D_004DAFA0,
+    (int)D_004DAF98,
+};
+
+AgwsParaDisplay MenuAgwsPara = {{0}};
+AgwsParaDisplay MenuAgwsPara2 = {{0}};
+
+const unsigned char D_004C6F38[24] = "Menu         Party";
+const AgwsCameraPreset D_004C7190 = {{
+    { 0.5f, 2.8f, 4.5f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+}};
+const AgwsCameraTargets D_004C71B0 = {{
+    { 0.5f, 2.8f, 4.5f, 1.0f },
+    { -1.5f, 2.0f, 8.0f, 1.0f },
+}};
+const AgwsModelPositions D_004C71D0 = {{
+    { 0.0f, 0.0f, 0.0f, 0.0f },
+    { 0.0f, 1.04719758f, 0.0f, 0.0f },
+    { 0.0f, -1.04719758f, 0.0f, 0.0f },
+    { 0.7853982f, 0.7853982f, 0.0f, 0.0f },
+    { 0.7853982f, -0.7853982f, 0.0f, 0.0f },
+    { 0.3926991f, 2.0943952f, 0.0f, 0.0f },
+    { 0.3926991f, -2.0943952f, 0.0f, 0.0f },
+}};
+const AgwsModelVector D_004C7240 = {{ 1.0f, 1.0f, 1.0f, 1.0f }};
+extern AgwsSwitchSlideStep D_004DAFE8[4];
+
 /* Sums the WAGL rating of every nonzero mounted weapon of para's three
  * equipped weapon slots. */
 static short WaglGet(AgwsCharPara *para)
@@ -421,6 +525,16 @@ void AgwsStatusMain(void)
     }
 }
 
+/* Keep the switch-slide offsets after AgwsStatusMain's generated small data. */
+AgwsSwitchSlideStep D_004DAFE8[4] = {
+    { { 1, -1 } }, { { 0, 0 } }, { { 0, 0 } }, { { 0, 0 } },
+};
+AgwsPasWork *AgwsPas = 0;
+AgwsListWork *AgwsList = 0;
+AgwsStatusWork *AgwsStatus = 0;
+AgwsFaceWork *AgwsFace = 0;
+AgwsSwitchWork *AgwsSwitch = 0;
+
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsWeapon2Main);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsNameMain);
@@ -671,3 +785,19 @@ void MenuAgwsModelMain(AgwsModelUnit *self)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", MenuAgws);
+
+
+
+const char D_004DAF98[8] = "\001Weight";
+
+const char D_004DAFA0[8] = "\001WAGL";
+
+const char D_004DAFA8[8] = "\001AGL";
+
+const char D_004DAFB0[8] = "\001EARM";
+
+const char D_004DAFB8[8] = "\001PARM";
+
+const char D_004DAFC0[8] = "\001DPOW";
+
+const char D_004DAFC8[8] = "\001FHP";

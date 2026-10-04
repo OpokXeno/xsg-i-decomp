@@ -31,8 +31,8 @@ void xglSoundSendSmd(void *smd)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_sound", xglSoundSendSed);
 
-extern const char SoundDataPath[];
-extern const unsigned char ext_0[5];
+static char SoundDataPath[12] = "data\\sound\\";
+static unsigned char ext_0[5] = { '.', 'S', 'W', 'D', '\0' };
 
 int xglSoundLoadSwd(const char *file_name, void *buffer)
 {
@@ -114,7 +114,8 @@ struct SoundWork {
     unsigned char packet_buffer[0x800];
 };
 
-extern struct SoundWork SoundWork;
+/* The original linker places this all-zero, 0x8a4-byte object in .data. */
+struct SoundWork SoundWork = { 0 };
 
 void SsdStartSequence(int sequence, int start, int loop);
 int SsdGetResultValue(int *value);
@@ -667,7 +668,7 @@ void xglSoundReset(void)
     memset(SoundWork.packet_buffer, 0, 0x800U);
 }
 
-extern unsigned char StreamBuffer[];
+static unsigned char StreamBuffer[0x4000];
 void SsdInit(int size);
 
 void xglSoundInitial(void)

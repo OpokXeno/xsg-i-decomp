@@ -4,6 +4,10 @@
 #include "common.h"
 #include "shared.h"
 
+const char D_00A53418[] = "pEff != NIL";
+const char D_00A53428[] = "../rg_shot_effect.euc.c";
+const char D_00A53440[] = "pShotEff != NIL";
+
 /* Opaque handles this TU only ever passes through by pointer. */
 typedef struct RgDispModel RgDispModel;
 typedef struct RgParticleEffect RgParticleEffect;

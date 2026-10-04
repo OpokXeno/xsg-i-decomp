@@ -20,9 +20,13 @@ struct UmnPluginState {
 
 extern struct UmnPluginState UmnWork;
 extern unsigned char *UmnWorkEnd;
-extern unsigned char plugin_folder[16];
-extern const char D_00A13450[];
-extern const char D_00A13540[];
+extern const char D_00A13440[];
+static void *msg00_0_00A10C40 = (void *)D_00A13440;
+unsigned char plugin_folder[16] = { 0 };
+static const char D_00A13450[8] = "";
+/* The original EUC-JP debug label spells プラグイン. */
+static const char D_00A13540[16] =
+    "\xA5\xD7\xA5\xE9\xA5\xB0\xA5\xA4\xA5\xF3";
 extern unsigned short D_4A1A0C[];
 
 /* PadData's +0x2a halfword records newly pressed controller buttons. */
@@ -101,7 +105,6 @@ struct UmnPluginPasWork {
     struct UmnPluginPasRect caption_rect;
 };
 
-extern void *msg00_0_00A10C40;
 void eMessageSet(void *message, void *text);
 void eMessageMain(void *message);
 void endPrintExtFunc(int color, int mode, void *rectangle);
@@ -321,3 +324,7 @@ void UmnPlugin(void)
     xglFontDebugPrintf(32, 208, D_00A13540);
     xglFontDebugHex(0, 64, UmnWork.plugin_mode, 2);
 }
+
+
+
+const char D_00A13440[16] = "Plug-ins";

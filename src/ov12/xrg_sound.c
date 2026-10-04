@@ -24,10 +24,19 @@ typedef union {
     SoundPathStandardPrefix standard;
 } SoundPath;
 
-extern const SoundPathAlternatePrefix D_00A59250;
-extern const char D_00A59268[];
-extern const SoundPathStandardPrefix D_00A59270;
-extern const char D_00A59280[];
+const SoundPathAlternatePrefix D_00A59250 = {
+    0x6d61795c61746164ULL, 0x6e735c6f746f6d61ULL,
+    0x6d735c64u, 0x5c64u, 0x00u,
+};
+static const char D_00A59268[8] = ".SWD";
+const SoundPathStandardPrefix D_00A59270 = {
+    0x756f735c61746164ULL, 0x5c646d735c646eULL,
+};
+static const char D_00A59280[8] = ".SMD";
+static const char D_00A59288[24] = "../xrg_sound.euc.c";
+static const char D_00A592A0[8] = "MINIBAT";
+static int s_eLoadedSeq = -1;
+static int s_bNowPlaying = 0;
 extern int xglSoundSendSwd(void *swd, int bank);
 extern int xglSoundSendSmd2(void *smd, int bank);
 extern int SsdSpuDmaCompleted(int wait);

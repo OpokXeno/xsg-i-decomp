@@ -8,8 +8,8 @@ extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern char *strcpy(char *destination, const char *source);
 
-extern const char D_00A59218[];
-extern const char D_00A59230[];
+const char D_00A59218[24] = "pszString != NIL";
+const char D_00A59230[32] = "../xrg_main_font.euc.c";
 
 void XrgDispMainFont(int x, int y, const char *pszString, int bright)
 {

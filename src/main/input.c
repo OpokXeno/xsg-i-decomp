@@ -132,3 +132,5 @@ void Java_xeno_util_Input_getRepeat__(JThread *thread, InputObjectCall *argument
     id = *(int *)(object + id_field->offset);
     *result = PadData[id].repeat;
 }
+
+const char D_004DC0A8[] = "id";

@@ -13,8 +13,6 @@ extern unsigned char *umn_task;
 extern unsigned char *task_xmx;
 extern int UmnWorkEndTop;
 extern int UmnEventTextMakeWork;
-extern const char D_00A11D90[];
-extern const char D_00A11DB0[];
 extern void endPrintInit(void);
 extern void GameCFSoundMenuPurge(int flag);
 extern void xglRenderClearDepth(void);
@@ -102,9 +100,11 @@ extern int UmnTextLoad(int work, int mode);
 
 /* "data\\endou\\umn\\cube.xtx", "data\\endou\\umn\\cube.lex" and
  * "data\\endou\\umn\\umn00.xtx" filename buffers loaded below. */
-extern const char D_00A11D40[];
-extern const char D_00A11D58[];
-extern const char D_00A11D70[];
+static const char D_00A11D40[24] = "data\\endou\\umn\\cube.xtx";
+static const char D_00A11D58[24] = "data\\endou\\umn\\cube.lex";
+static const char D_00A11D70[32] = "data\\endou\\umn\\umn00.xtx";
+static const char D_00A11D90[32] = "data\\sound\\smd\\Umnmode.SWD";
+static const char D_00A11DB0[32] = "data\\sound\\smd\\Umnmode.SMD";
 
 extern int UmnBgCubeXtx;
 extern int UmnBgCubeLex;

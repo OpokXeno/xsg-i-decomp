@@ -189,14 +189,13 @@ struct CameraCenterSource {
     unsigned char unmodeled_20[0x66];
     short type;
 };
-extern volatile const float D_004D7BB4;
-extern float CfCameraOfsNow[3];
+static float CfCameraOfsNow[4];
 
 static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
 {
     float vertical_offset;
 
-    vertical_offset = D_004D7BB4;
+    vertical_offset = 1.2f;
     if (source->type >= 1618) {
         vertical_offset = 3.0f;
     }

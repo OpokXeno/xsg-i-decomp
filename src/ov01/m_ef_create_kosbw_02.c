@@ -92,8 +92,8 @@ extern void MGsGPInit(void *packet, void *address, int size);
 extern Kosbw02GsParameter *svGetPrmFromName(const char *name,
                                             Kosbw02GsParameter *output);
 extern float MMathMakeRandom2PI(void);
-extern const char D_00A51880[];
-extern const char D_00A51890[];
+const char D_00A51880[16] = "de_cld01";
+const char D_00A51890[16] = "de_cld02";
 extern Vector4 *MMathRotateMatrixYXZ(Vector4 *destination,
                                      const Vector4 *source,
                                      const Vector4 *angles);

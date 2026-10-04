@@ -55,8 +55,6 @@ static void sdvSetAmbStateSub(int state, int effect_no, int force);
 extern void *xglStudioGetLight2(void);
 extern void xglLightIntensityAmbient(void *light, void *ambient);
 extern void func_A2C3D8(void *map_rgb);
-extern unsigned char _sdvAmbient[16];
-extern unsigned char _sdvMapRgb[16];
 extern void xglSoundEffectNormalID(int sound_id, int variant);
 
 extern int srsAnalyzeEftNo(int effectId, unsigned char *charId,

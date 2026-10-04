@@ -135,8 +135,5 @@ typedef struct XrgParticle XrgParticle;
  * entry in config/symbols/ov12.txt, so they keep their splat names
  * (docs/naming.md, "Scaffold-owned data keeps its splat name").
  */
-extern const char D_00A58F20[];
-extern const char D_00A58F30[];
-extern const char D_00A59018[];
 
 #endif /* SRC_OV12_XRG_PARTICLE_H */

@@ -21,8 +21,6 @@ void RgGeomTrayGetLocal(void *tray, Matrix4 destination);
  * config/symbols/ov12.txt, so they keep their splat names (docs/naming.md,
  * "Scaffold-owned data keeps its splat name").
  */
-extern const char D_00A55218[];
-extern const char D_00A55228[];
 
 /*
  * Partial view of the tray's own 0xa0-byte allocation (CreateRgGeomTray).

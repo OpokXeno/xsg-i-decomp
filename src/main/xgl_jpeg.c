@@ -16,7 +16,7 @@ typedef struct JpegWork {
     float idct_stage[8];
 } JpegWork;
 
-extern JpegWork *sw;
+static JpegWork *sw = (JpegWork *)0x70000000;
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", ConvertYUV2MCU);
 

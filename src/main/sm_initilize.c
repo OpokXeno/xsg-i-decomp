@@ -21,13 +21,12 @@ typedef struct SmMemInfo {
 #define MC_TAG_USED 0x5678
 #define SM_ALLOC_ALIGNMENT 2048U
 
-extern MemCell *pmcHead;
+static MemCell *pmcHead;
 
-extern unsigned int nMemCell;
+static unsigned int nMemCell;
 
-static void smInitMemInfo(unsigned char *memory_info)
+static void smInitMemInfo(SmMemInfo *info)
 {
-    SmMemInfo *info = (void *)memory_info;
     unsigned int pool_bytes = (nMemCell + 1) * sizeof(MemCell);
 
     info->freeList = pmcHead;
@@ -38,10 +37,13 @@ static void smInitMemInfo(unsigned char *memory_info)
     info->largestBlockBytes = pool_bytes;
 }
 
-static void smInitMemInfo(unsigned char *info);
-
 extern unsigned int nMemCell;
-extern unsigned char stMemInfo[];
+/* The six modeled statistics occupy the prefix of a 32-byte retail slot. */
+typedef union SmMemInfoStorage {
+    SmMemInfo info;
+    unsigned char bytes[0x20];
+} SmMemInfoStorage;
+static SmMemInfoStorage stMemInfo;
 
 void smInitilize(MemCell *pool, unsigned int poolSize)
 {
@@ -55,7 +57,7 @@ void smInitilize(MemCell *pool, unsigned int poolSize)
     pool->prev = 0;
     pool->next = 0;
 
-    smInitMemInfo(stMemInfo);
+    smInitMemInfo(&stMemInfo.info);
 }
 
 void smPrintInfo(void);

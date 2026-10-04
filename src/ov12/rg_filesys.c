@@ -57,6 +57,31 @@ static int _FindFile(RgFileSys *pSys, const char *pszName)
     return 0;
 }
 
+const char rg_filesys_source_file[24] = "../rg_filesys.euc.c";
+const char pSys_not_nil[16] = "pSys != NIL";
+const char D_00A559B0[16] = "pszName != NIL";
+const char D_00A559F0[32] = "free -> %s (mode=%d ref=%d)\n";
+const char D_00A55A10[32] = "strlen(pszName) <= NAME_LEN";
+const char D_00A55A30[16] = "pFile != NIL";
+const char D_00A55A40[40] = "read prepare data by normal read %s";
+const char D_00A55A68[16] = "pOrg != NIL";
+const char D_00A55A78[32] = "pDup->common.m_pBuf != NIL";
+const char prepare_count_check[40] = "pSys->m_uPrepareNum < PREPARE_MAX";
+const char D_00A55AC0[16] = "pPrepare != NIL";
+const char D_00A55AD0[32] = "prepare '%s' is referenced (%d)";
+const char D_00A55AF0[32] = "prepare '%s' collect dispose";
+const char D_00A55B10[16] = "pBuf != NIL";
+const char D_00A55B20[48] = "RgFileSysOnMemory failure (already loaded %s)\n";
+const char D_00A55B50[40] = "RG_FILESYS : on memory (%s %p:%d)\n";
+const char D_00A55B78[24] = "pFile->m_pSys != NIL";
+const char D_00A55B90[24] = "pFile->m_pOrg != NIL";
+const char D_00A55BA8[40] = "unknown filesys error (%s) call NIS!";
+const char D_00A55BD0[48] = "************* file sys (file=%d) *************\n";
+const char D_00A55C00[24] = "[%s]:ptr=%p alloc=%d\n";
+const char D_00A55C18[16] = "  normal\n";
+const char D_00A55C28[16] = "  dup org=%p\n";
+const char D_00A55C38[16] = "  prepare\n";
+
 extern unsigned int RgVectorSize(void *vector);
 extern void *RgVectorIndex(void *vector, unsigned int index,
                            const char *source_file, int line);

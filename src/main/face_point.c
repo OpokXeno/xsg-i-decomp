@@ -1,7 +1,7 @@
 #include "common.h"
 #include "shared.h"
 
-extern int s_nIgnoreCulling;
+static int s_nIgnoreCulling = 0;
 
 typedef int s32;
 
@@ -36,7 +36,7 @@ typedef struct CullingMap {
     s32 source;
 } CullingMap;
 
-extern CullingMap s_inCulling;
+static CullingMap s_inCulling;
 
 INCLUDE_ASM("asm/main/nonmatchings/face_point", culling_matrix);
 
@@ -144,20 +144,162 @@ void xglCullingMapInit(void)
     s_inCulling.source = 0;
 }
 
-/*
- * One row of the named culling-map table: entryCount and source mirror
- * CullingMap's own count/source pair (source is copied verbatim into
- * CullingMap.source by xglCullingMapSet once a row is matched) and are
- * both zero for an unused row; name is compared against the sought name.
- */
+/* The map table stores pointers to separately scaffolded volume and index data. */
 typedef struct CullingMapEntry {
     const char *name;
-    s32 entryCount;
-    s32 source;
+    /* The unchanged loop tests these pointer fields only for nullness. */
+    const float *entryCount;
+    const s32 *source;
     u8 unmodeled_00C[4];
 } CullingMapEntry;
 
-extern CullingMapEntry s_aCullingMap[70];
+static const float s_aMapCullingKou01[18];
+static const float s_aMapCullingPro02[18];
+static const float s_aMapCullingVok03[18];
+static const float s_aMapCullingVok04[27];
+static const float s_aMapCullingVok07[27];
+static const float s_aMapCullingVok10[27];
+static const float s_aMapCullingVok11[27];
+static const float s_aMapCullingVok12[36];
+static const s32 s_aMapLastDyu04[12];
+static const s32 s_aMapLastDyu07[12];
+static const s32 s_aMapLastDyu10[12];
+static const s32 s_aMapLastDyu12[12];
+static const s32 s_aMapLastDyu13[12];
+static const s32 s_aMapLastDyu15[12];
+static const s32 s_aMapLastDyu16[12];
+static const s32 s_aMapLastEls01[12];
+static const s32 s_aMapLastEls02[12];
+static const s32 s_aMapLastEls02b[12];
+static const s32 s_aMapLastEls03[12];
+static const s32 s_aMapLastEls04[12];
+static const s32 s_aMapLastEls04b[12];
+static const s32 s_aMapLastEls09[12];
+static const s32 s_aMapLastEls10[12];
+static const s32 s_aMapLastGnk02[12];
+static const s32 s_aMapLastGnk04[12];
+static const s32 s_aMapLastGnk09[12];
+static const s32 s_aMapLastGnk10[12];
+static const s32 s_aMapLastGnk11[12];
+static const s32 s_aMapLastGnk12[12];
+static const s32 s_aMapLastGnk13[12];
+static const s32 s_aMapLastGnk14[12];
+static const s32 s_aMapLastGnk15[12];
+static const s32 s_aMapLastGnk18[12];
+static const s32 s_aMapLastGnk20[12];
+static const s32 s_aMapLastGnk21[12];
+static const s32 s_aMapLastGnu01[12];
+static const s32 s_aMapLastGnu02[12];
+static const s32 s_aMapLastGnu03[12];
+static const s32 s_aMapLastGnu04[12];
+static const s32 s_aMapLastGnu05[12];
+static const s32 s_aMapLastGnu06[12];
+static const s32 s_aMapLastKas04[12];
+static const s32 s_aMapLastKas12[12];
+static const s32 s_aMapLastKas13[12];
+static const s32 s_aMapLastKas18[12];
+static const s32 s_aMapLastKas19[12];
+static const s32 s_aMapLastKas20[12];
+static const s32 s_aMapLastKas31[12];
+static const s32 s_aMapLastKou01[12];
+static const s32 s_aMapLastKou04[12];
+static const s32 s_aMapLastKou05[12];
+static const s32 s_aMapLastKuk02[12];
+static const s32 s_aMapLastKuk11[12];
+static const s32 s_aMapLastKuk12[12];
+static const s32 s_aMapLastKuk16[12];
+static const s32 s_aMapLastUta03[12];
+static const s32 s_aMapLastUta04[12];
+static const s32 s_aMapLastUta05[12];
+static const s32 s_aMapLastUta06[12];
+static const s32 s_aMapLastUta07[12];
+static const s32 s_aMapLastUta08[12];
+static const s32 s_aMapLastUta13[12];
+static const s32 s_aMapLastUta17[12];
+static const s32 s_aMapLastUtk04[12];
+static const s32 s_aMapLastUtk05[12];
+static const s32 s_aMapLastVok03[12];
+static const s32 s_aMapLastVok04[12];
+static const s32 s_aMapLastVok07[12];
+static const s32 s_aMapLastVok10[12];
+static const s32 s_aMapLastVok12[12];
+static const s32 s_aMapLastVok12b[12];
+static const s32 s_aMapLastVok13[12];
+static const s32 s_aMapLastVok13b[12];
+static const s32 s_aMapLastVok24[12];
+
+static const CullingMapEntry s_aCullingMap[70] = {
+    { ((const char *)0x004D49D8), s_aMapCullingVok03, s_aMapLastVok03, {0, 0, 0, 0} },
+    { ((const char *)0x004D49C8), s_aMapCullingVok04, s_aMapLastVok04, {0, 0, 0, 0} },
+    { ((const char *)0x004D49B8), s_aMapCullingVok07, s_aMapLastVok07, {0, 0, 0, 0} },
+    { ((const char *)0x004D49A8), s_aMapCullingVok10, s_aMapLastVok10, {0, 0, 0, 0} },
+    { ((const char *)0x004D4998), s_aMapCullingVok11, 0, {0, 0, 0, 0} },
+    { ((const char *)0x004D4988), s_aMapCullingVok12, s_aMapLastVok12, {0, 0, 0, 0} },
+    { ((const char *)0x004D4978), s_aMapCullingVok12, s_aMapLastVok12b, {0, 0, 0, 0} },
+    { ((const char *)0x004D4968), s_aMapCullingPro02, 0, {0, 0, 0, 0} },
+    { ((const char *)0x004D4958), 0, s_aMapLastEls10, {0, 0, 0, 0} },
+    { ((const char *)0x004D4948), 0, s_aMapLastEls09, {0, 0, 0, 0} },
+    { ((const char *)0x004D4938), 0, s_aMapLastEls02, {0, 0, 0, 0} },
+    { ((const char *)0x004D4928), 0, s_aMapLastEls02b, {0, 0, 0, 0} },
+    { ((const char *)0x004D4918), 0, s_aMapLastEls03, {0, 0, 0, 0} },
+    { ((const char *)0x004D4908), 0, s_aMapLastEls04, {0, 0, 0, 0} },
+    { ((const char *)0x004D48F8), 0, s_aMapLastEls04b, {0, 0, 0, 0} },
+    { ((const char *)0x004D48E8), 0, s_aMapLastEls01, {0, 0, 0, 0} },
+    { ((const char *)0x004D48D8), 0, s_aMapLastVok24, {0, 0, 0, 0} },
+    { ((const char *)0x004D48C8), s_aMapCullingVok11, 0, {0, 0, 0, 0} },
+    { ((const char *)0x004D48B8), s_aMapCullingKou01, s_aMapLastKou01, {0, 0, 0, 0} },
+    { ((const char *)0x004D48A8), 0, s_aMapLastKou04, {0, 0, 0, 0} },
+    { ((const char *)0x004D4898), 0, s_aMapLastKou05, {0, 0, 0, 0} },
+    { ((const char *)0x004D4888), 0, s_aMapLastDyu16, {0, 0, 0, 0} },
+    { ((const char *)0x004D4878), 0, s_aMapLastDyu15, {0, 0, 0, 0} },
+    { ((const char *)0x004D4868), 0, s_aMapLastDyu13, {0, 0, 0, 0} },
+    { ((const char *)0x004D4858), 0, s_aMapLastDyu12, {0, 0, 0, 0} },
+    { ((const char *)0x004D4848), 0, s_aMapLastDyu10, {0, 0, 0, 0} },
+    { ((const char *)0x004D4838), 0, s_aMapLastDyu07, {0, 0, 0, 0} },
+    { ((const char *)0x004D4828), 0, s_aMapLastDyu04, {0, 0, 0, 0} },
+    { ((const char *)0x004D4818), 0, s_aMapLastKuk02, {0, 0, 0, 0} },
+    { ((const char *)0x004D4808), 0, s_aMapLastKuk11, {0, 0, 0, 0} },
+    { ((const char *)0x004D47F8), 0, s_aMapLastKuk12, {0, 0, 0, 0} },
+    { ((const char *)0x004D47E8), 0, s_aMapLastKuk16, {0, 0, 0, 0} },
+    { ((const char *)0x004D47D8), 0, s_aMapLastGnu06, {0, 0, 0, 0} },
+    { ((const char *)0x004D47C8), 0, s_aMapLastGnu05, {0, 0, 0, 0} },
+    { ((const char *)0x004D47B8), 0, s_aMapLastGnu04, {0, 0, 0, 0} },
+    { ((const char *)0x004D47A8), 0, s_aMapLastGnu03, {0, 0, 0, 0} },
+    { ((const char *)0x004D4798), 0, s_aMapLastGnu02, {0, 0, 0, 0} },
+    { ((const char *)0x004D4788), 0, s_aMapLastGnu01, {0, 0, 0, 0} },
+    { ((const char *)0x004D4778), 0, s_aMapLastVok13b, {0, 0, 0, 0} },
+    { ((const char *)0x004D4768), 0, s_aMapLastVok13, {0, 0, 0, 0} },
+    { ((const char *)0x004D4758), 0, s_aMapLastGnk02, {0, 0, 0, 0} },
+    { ((const char *)0x004D4748), 0, s_aMapLastGnk21, {0, 0, 0, 0} },
+    { ((const char *)0x004D4738), 0, s_aMapLastGnk20, {0, 0, 0, 0} },
+    { ((const char *)0x004D4728), 0, s_aMapLastGnk18, {0, 0, 0, 0} },
+    { ((const char *)0x004D4718), 0, s_aMapLastGnk15, {0, 0, 0, 0} },
+    { ((const char *)0x004D4708), 0, s_aMapLastGnk14, {0, 0, 0, 0} },
+    { ((const char *)0x004D46F8), 0, s_aMapLastGnk13, {0, 0, 0, 0} },
+    { ((const char *)0x004D46E8), 0, s_aMapLastGnk12, {0, 0, 0, 0} },
+    { ((const char *)0x004D46D8), 0, s_aMapLastGnk11, {0, 0, 0, 0} },
+    { ((const char *)0x004D46C8), 0, s_aMapLastGnk10, {0, 0, 0, 0} },
+    { ((const char *)0x004D46B8), 0, s_aMapLastGnk09, {0, 0, 0, 0} },
+    { ((const char *)0x004D46A8), 0, s_aMapLastGnk04, {0, 0, 0, 0} },
+    { ((const char *)0x004D4698), 0, s_aMapLastUta17, {0, 0, 0, 0} },
+    { ((const char *)0x004D4688), 0, s_aMapLastUta13, {0, 0, 0, 0} },
+    { ((const char *)0x004D4678), 0, s_aMapLastUta08, {0, 0, 0, 0} },
+    { ((const char *)0x004D4668), 0, s_aMapLastUta07, {0, 0, 0, 0} },
+    { ((const char *)0x004D4658), 0, s_aMapLastUta06, {0, 0, 0, 0} },
+    { ((const char *)0x004D4648), 0, s_aMapLastUta05, {0, 0, 0, 0} },
+    { ((const char *)0x004D4638), 0, s_aMapLastUta04, {0, 0, 0, 0} },
+    { ((const char *)0x004D4628), 0, s_aMapLastUta03, {0, 0, 0, 0} },
+    { ((const char *)0x004D4618), 0, s_aMapLastKas20, {0, 0, 0, 0} },
+    { ((const char *)0x004D4608), 0, s_aMapLastKas19, {0, 0, 0, 0} },
+    { ((const char *)0x004D45F8), 0, s_aMapLastKas18, {0, 0, 0, 0} },
+    { ((const char *)0x004D45E8), 0, s_aMapLastKas13, {0, 0, 0, 0} },
+    { ((const char *)0x004D45D8), 0, s_aMapLastKas12, {0, 0, 0, 0} },
+    { ((const char *)0x004D45C8), 0, s_aMapLastKas04, {0, 0, 0, 0} },
+    { ((const char *)0x004D45B8), 0, s_aMapLastKas31, {0, 0, 0, 0} },
+    { ((const char *)0x004D45A8), 0, s_aMapLastUtk04, {0, 0, 0, 0} },
+    { ((const char *)0x004D4598), 0, s_aMapLastUtk05, {0, 0, 0, 0} },
+    { ((const char *)0x004DC4D0), 0, 0, {0, 0, 0, 0} },
+};
 
 int strcmp(const char *, const char *);
 
@@ -626,3 +768,295 @@ void _ApplyMatrix2Mat(Vector4 *destination, const Matrix4 matrix1, const Matrix4
         : "memory"
     );
 }
+
+
+
+static const float s_aMapCullingVok03[18] = { 0.0f, -0.20000000298023224f, 25.5f, -1.5184364318847656f, 0.0f, 0.0f, 18.899999618530273f, 11.600000381469727f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok04[27] = { -10.600000381469727f, 2.0999999046325684f, 25.5f, 0.0f, 0.0f, 0.0f, 17.899999618530273f, 12.100000381469727f, 1.0f, -10.300000190734863f, 2.4000000953674316f, 15.0f, 0.0f, 0.0f, 0.0f, 17.200000762939453f, 10.399999618530273f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok07[27] = { -18.200000762939453f, 3.0f, 22.0f, 0.0f, 0.0f, 0.0f, 7.1999998092651367f, 10.0f, 1.0f, 0.0f, 2.9000000953674316f, 21.799999237060547f, 0.0f, 0.0f, 0.0f, 6.9000000953674316f, 10.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok10[27] = { 9.3999996185302734f, 0.40000000596046448f, -9.1000003814697266f, 0.0f, 0.13962635397911072f, 0.0f, 20.600000381469727f, 10.699999809265137f, 1.0f, -26.0f, 0.0f, -9.0f, 0.0f, -0.29670599102973938f, 0.0f, 9.8000001907348633f, 9.8999996185302734f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok11[27] = { 0.0f, 0.40000000596046448f, 9.5f, -1.3613568544387817f, 0.0f, 0.0f, 2.0999999046325684f, 4.5999999046325684f, 1.0f, 0.0f, 0.0f, 6.5999999046325684f, -0.45378562808036804f, 0.0f, 0.0f, 1.0f, 2.0999999046325684f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok12[36] = { -2.2000000476837158f, 2.4000000953674316f, 7.1999998092651367f, 0.0f, 0.0f, 0.0f, 19.159999847412109f, 10.0f, 1.0f, 16.600000381469727f, 2.7000000476837158f, 0.20000000298023224f, 0.0f, 1.5707963705062866f, 0.0f, 11.300000190734863f, 10.0f, 1.0f, -3.7000000476837158f, 2.5999999046325684f, -8.3000001907348633f, 0.0f, 0.0f, 0.0f, 20.729999542236328f, 10.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingKou01[18] = { 10.199999809265137f, -1.6000000238418579f, -2.5999999046325684f, 0.0f, -0.66322511434555054f, 0.0f, 5.5999999046325684f, 4.3000001907348633f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const s32 s_aMapLastVok13[12] = { 136, 127, 91, 122, 113, 104, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKou01[12] = { 214, 215, 216, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKou04[12] = { 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu06[12] = { 236, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk11[12] = { 158, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu04[12] = { 274, 273, 272, 255, 252, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu12[12] = { 18, 195, 196, 74, 75, 66, 65, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu13[12] = { 22, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu15[12] = { 156, 157, 155, 158, 136, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok10[12] = { 172, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok12[12] = { 164, 165, 163, 162, 167, 138, 147, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok12b[12] = { 163, 87, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk09[12] = { 24, 23, 22, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk04[12] = { 19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUtk05[12] = { 23, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+const char D_004D4598[16] = "MC_UTK05";
+
+const char D_004D45A8[16] = "MC_UTK04";
+
+const char D_004D45B8[16] = "MC_KAS31";
+
+const char D_004D45C8[16] = "MC_KAS04";
+
+const char D_004D45D8[16] = "MC_KAS12";
+
+const char D_004D45E8[16] = "MC_KAS13";
+
+const char D_004D45F8[16] = "MC_KAS18";
+
+const char D_004D4608[16] = "MC_KAS19";
+
+const char D_004D4618[16] = "MC_KAS20";
+
+const char D_004D4628[16] = "MC_UTA03";
+
+const char D_004D4638[16] = "MC_UTA04";
+
+const char D_004D4648[16] = "MC_UTA05";
+
+const char D_004D4658[16] = "MC_UTA06";
+
+const char D_004D4668[16] = "MC_UTA07";
+
+const char D_004D4678[16] = "MC_UTA08";
+
+const char D_004D4688[16] = "MC_UTA13";
+
+const char D_004D4698[16] = "MC_UTA17";
+
+const char D_004D46A8[16] = "MC_GNK04";
+
+const char D_004D46B8[16] = "MC_GNK09";
+
+const char D_004D46C8[16] = "MC_GNK10";
+
+const char D_004D46D8[16] = "MC_GNK11";
+
+const char D_004D46E8[16] = "MC_GNK12";
+
+const char D_004D46F8[16] = "MC_GNK13";
+
+const char D_004D4708[16] = "MC_GNK14";
+
+const char D_004D4718[16] = "MC_GNK15";
+
+const char D_004D4728[16] = "MC_GNK18";
+
+const char D_004D4738[16] = "MC_GNK20";
+
+const char D_004D4748[16] = "MC_GNK21";
+
+const char D_004D4758[16] = "MC_GNK02";
+
+const char D_004D4768[16] = "MC_VOK13";
+
+const char D_004D4778[16] = "MC_VOK13B";
+
+const char D_004D4788[16] = "MC_GNU01";
+
+const char D_004D4798[16] = "MC_GNU02";
+
+const char D_004D47A8[16] = "MC_GNU03";
+
+const char D_004D47B8[16] = "MC_GNU04";
+
+const char D_004D47C8[16] = "MC_GNU05";
+
+const char D_004D47D8[16] = "MC_GNU06";
+
+const char D_004D47E8[16] = "MC_KUK16";
+
+const char D_004D47F8[16] = "MC_KUK12";
+
+const char D_004D4808[16] = "MC_KUK11";
+
+const char D_004D4818[16] = "MC_KUK02";
+
+const char D_004D4828[16] = "Mc_dyu04";
+
+const char D_004D4838[16] = "MC_DYU07";
+
+const char D_004D4848[16] = "MC_DYU10";
+
+const char D_004D4858[16] = "MC_DYU12";
+
+const char D_004D4868[16] = "MC_DYU13";
+
+const char D_004D4878[16] = "MC_DYU15";
+
+const char D_004D4888[16] = "MC_DYU16";
+
+const char D_004D4898[16] = "MC_KOU05";
+
+const char D_004D48A8[16] = "MC_KOU04";
+
+const char D_004D48B8[16] = "MC_KOU01";
+
+const char D_004D48C8[16] = "MC_DYU01";
+
+const char D_004D48D8[16] = "MC_VOK24";
+
+const char D_004D48E8[16] = "MC_ELS01";
+
+const char D_004D48F8[16] = "MC_ELS04B";
+
+const char D_004D4908[16] = "MC_ELS04";
+
+const char D_004D4918[16] = "MC_ELS03";
+
+const char D_004D4928[16] = "MC_ELS02B";
+
+const char D_004D4938[16] = "mc_els02";
+
+const char D_004D4948[16] = "MC_ELS09";
+
+const char D_004D4958[16] = "MC_ELS10";
+
+const char D_004D4968[16] = "MC_PRO02";
+
+const char D_004D4978[16] = "MC_VOK12b";
+
+const char D_004D4988[16] = "mc_vok12";
+
+const char D_004D4998[16] = "MC_VOK11";
+
+const char D_004D49A8[16] = "MC_VOK10";
+
+const char D_004D49B8[16] = "MC_VOK07";
+
+const char D_004D49C8[16] = "mc_vok04";
+
+const char D_004D49D8[16] = "MC_VOK03";
+
+
+
+static const s32 s_aMapLastVok13b[12] = { 104, 113, 122, 91, 127, 136, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKou05[12] = { 61, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu01[12] = { 50, 49, 48, 47, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu02[12] = { 26, 24, 25, 22, 21, 20, 19, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu05[12] = { 36, 37, 42, 43, 44, 45, 46, 47, 55, 56, -1, -1 };
+
+static const s32 s_aMapLastKuk16[12] = { 90, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk12[12] = { 70, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk02[12] = { 113, 114, 115, 116, 117, 118, 119, 93, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu07[12] = { 58, 59, 62, 63, 68, 69, 66, 67, 26, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu10[12] = { 98, 78, 17, 325, 67, 66, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok24[12] = { 59, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok03[12] = { 118, 119, 114, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok04[12] = { 124, 123, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok07[12] = { 102, 105, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls03[12] = { 102, 105, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls02[12] = { 57, 58, 84, 85, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls02b[12] = { 56, 57, 59, 60, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls09[12] = { 117, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls10[12] = { 93, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls04[12] = { 70, 71, 74, 75, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls04b[12] = { 75, 74, 70, 71, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls01[12] = { 63, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk21[12] = { 80, 81, 64, 65, 79, 78, 77, 76, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk20[12] = { 90, 103, 104, 49, 88, 81, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk15[12] = { 76, 67, 68, 66, 65, 69, 61, 56, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk14[12] = { 36, 33, 32, 35, 34, 65, 68, 26, 27, 30, -1, -1 };
+
+static const s32 s_aMapLastGnk13[12] = { 83, 84, 85, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk12[12] = { 70, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk11[12] = { 79, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk10[12] = { 80, 81, 82, 83, 51, 96, 97, 95, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta17[12] = { 36, 34, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta13[12] = { 115, 116, 61, 111, 84, 85, 113, 112, 17, -1, -1, -1 };
+
+static const s32 s_aMapLastUta08[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta07[12] = { 63, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta06[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta05[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta04[12] = { 60, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta03[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas20[12] = { 101, 44, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas19[12] = { 103, 100, 104, 101, 102, 99, 106, 17, 112, 113, -1, -1 };
+
+static const s32 s_aMapLastKas13[12] = { 38, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas12[12] = { 71, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas04[12] = { 125, 123, 120, 122, 121, 134, 132, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas31[12] = { 48, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUtk04[12] = { 54, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+
+
+static const float s_aMapCullingPro02[18] = { -28.899999618530273f, -0.0f, 1.0f, 0.0f, 1.5707963705062866f, 0.0f, 1.0f, 3.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const s32 s_aMapLastGnu03[12] = { 32, 33, 51, 52, 53, 54, 155, 61, 60, 63, 116, 129 };
+
+static const s32 s_aMapLastGnu04[12] = { 32, 34, 26, 31, 33, 48, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu16[12] = { 32, 30, 62, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk02[12] = { 33, 34, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk18[12] = { 26, 30, 29, 43, 35, 28, 27, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas18[12] = { 38, 37, 29, 30, 35, 34, 33, 31, -1, -1, -1, -1 };

@@ -16,8 +16,46 @@ struct HddRenderState {
 
 extern struct HddRenderState sRender;
 extern PadPrefix PadData;
-extern unsigned char TestEnv_0_004A8A80[];
-extern char D_004D2628[];
+
+/* The fixed six-qword VIF-to-GIF packet used by the HDD error screen. */
+typedef struct HddGifTag {
+    u32 low_word;
+    u32 high_word;
+    u64 registers;
+} HddGifTag;
+
+typedef struct HddGsAdRegister {
+    u64 value;
+    u64 address;
+} HddGsAdRegister;
+
+typedef struct HddGsRgbaq {
+    u32 red;
+    u32 green;
+    u32 blue;
+    u32 alpha;
+} HddGsRgbaq;
+
+typedef struct HddGsXyz2 {
+    u32 x;
+    u32 y;
+    u32 z;
+    u32 : 32;
+} HddGsXyz2;
+
+typedef struct HddErrorPacket {
+    u32 vif_nop_00;
+    u32 vif_nop_04;
+    u32 vif_nop_08;
+    u32 vif_direct;
+    HddGifTag gif_tag;
+    HddGsAdRegister ad_register;
+    HddGsRgbaq color;
+    HddGsXyz2 corners[2];
+} HddErrorPacket;
+
+extern HddErrorPacket TestEnv_0_004A8A80[];
+extern const unsigned char D_004D2628[];
 extern void xglDmaDirectNormal(int channel, const void *packet, int qwords);
 extern void xglSoundEffectNormalDirect(int sound_id);
 
@@ -43,11 +81,9 @@ int xglHddUninstall(void);
 
 extern int sceRemove(const char *path);
 
-extern char partitionname[];
 
 extern u8 system_cnf[];
 
-extern u8 HddActive;
 
 extern u8 mount_device[];
 
@@ -60,9 +96,8 @@ extern u8 mount_device[];
  */
 extern char xgl_hdd_device[];
 
-extern u8 hddcheck[];
 
-extern u8 cd_filename[];
+extern const char cd_filename[];
 
 extern int xglHddCheck(void);
 
@@ -82,8 +117,6 @@ extern int sceDevctl(const char *device, int command, const void *input,
  */
 extern int sceOpen(const char *path, int flags, ...);
 
-extern char commonname[];
-extern char yoursaves[];
 
 struct HddLoadRequest {
     int card;

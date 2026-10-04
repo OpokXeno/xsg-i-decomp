@@ -6,13 +6,9 @@
 #include "ov12/rg_singleton_id.h"
 #include "rg_debug_flags.h"
 
-/*
- * ov12:0x00a52438 "pFlags != NIL" (the assert_prog expression text) and
- * ov12:0x00a52448 "../rg_debug_flags.euc.c" (the assert_prog source-file
- * text) are asm-owned .rodata (config/tu/ov12/tu012.json data_ownership).
- */
-extern const char D_00A52438[];
-extern const char D_00A52448[];
+/* Assertion expression and source location used by the guards below. */
+const char D_00A52438[16] = "pFlags != NIL";
+const char D_00A52448[24] = "../rg_debug_flags.euc.c";
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);

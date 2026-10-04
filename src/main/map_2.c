@@ -4,7 +4,6 @@
 extern MapUnitResource *RES_loadFile(int command, int callback, int resource_id, int flags);
 extern void LOG(const char *format, ...);
 extern int MDL_create(void *model_instance, void *resource_model);
-extern const char D_004D2130[];
 
 int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
 {
@@ -25,7 +24,8 @@ int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
     }
 
     if (model == 0) {
-        LOG((const char *)D_004D2130);
+        /* Report the missing model resource. */
+        LOG("\245\342\245\307\245\353\244\254\270\253\244\304\244\253\244\352\244\336\244\273\244\363\244\307\244\267\244\277\241\243\n");
     }
 
     unit->resource_status = status;

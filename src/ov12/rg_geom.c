@@ -38,8 +38,8 @@ extern RgHeap *InstanceOfRgHeap(void);
 /* Referenced by every accessor below: the assertion text "pGeom != NIL" and
    this TU's own original file name "../rg_geom.euc.c", both scaffold-owned
    .rodata (not registered under a friendlier name in config/symbols/ov12.txt). */
-extern const char D_00A550C8[];
-extern const char D_00A550D8[];
+const char D_00A550C8[] = "pGeom != NIL";
+const char D_00A550D8[] = "../rg_geom.euc.c";
 
 void RgGeomInit(RgGeom *pGeom)
 {

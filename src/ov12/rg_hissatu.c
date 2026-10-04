@@ -4,23 +4,25 @@
 #include "common.h"
 #include "rg_hissatu.h"
 
-extern const char D_00A52670[];
-extern const char D_00A52688[];
-extern const char D_00A52698[];
-extern const char D_00A526A0[];
-extern const char D_00A526A8[];
-extern const char D_00A526B0[];
-extern const char D_00A526B8[];
-extern const char D_00A526C0[];
-extern const char D_00A526C8[];
-extern const char D_00A526D0[];
-extern const char D_00A526D8[];
+const char D_00A52670[24] = "../rg_hissatu.euc.c";
+const char D_00A52688[16] = "apWep != NIL";
+const char D_00A52698[8] = "LM11VX";
+const char D_00A526A0[8] = "SHD02AG";
+const char D_00A526A8[8] = "SHD12VX";
+const char D_00A526B0[8] = "HG75VX";
+const char D_00A526B8[8] = "HG45VX";
+const char D_00A526C0[8] = "ER-VX";
+const char D_00A526C8[8] = "BSW13AG";
+const char D_00A526D0[8] = "GRD20AG";
+const char D_00A526D8[8] = "HMR55AG";
+
 
 extern void assert_prog(const char *expression, const char *sourceFile,
                         int sourceLine);
 extern int RgWeaponIsNotBusy(RgWeapon *weapon);
 
 static int _IsSpecWep(RgWeapon *weapon, const char *weaponName);
+
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_hissatu", _IsSpecWep);
 

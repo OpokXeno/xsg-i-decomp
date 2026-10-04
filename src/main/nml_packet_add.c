@@ -3,8 +3,20 @@
 #include "main/xgl_2.h"
 #include "nml_packet_add.h"
 #include "main/xgl_packet.h"
+#include "ssd_init.h"
 
-extern u64 g_aGsTag[];
+static XglPacket *s_pPacket = 0;
+static void *s_pCacheTexture = 0;
+static void *s_pMatrixCache = 0;
+static void *s_pModelCache = 0;
+static void *s_pModelLayout = 0;
+static void *s_pLightLayout = 0;
+static int s_nProgType = -1;
+static int s_nReflRotType = -1;
+static float s_inReflRotX = 0.0f;
+static float s_inReflRotY = 0.0f;
+const char eye_name[8] = "eye";
+const char lenz_name[8] = "lenz";
 
 /* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
 #define VIF_CODE_MSCAL 0x14000000
@@ -21,7 +33,57 @@ typedef struct UcodeTableRow {
     u32 *programs[7];
 } UcodeTableRow;
 
-extern UcodeTableRow s_aUcodeTbl[];
+static u32 s_aUcodeEnvAdrZbuf[12];
+static u32 s_aUcodeAdrZbuf[6];
+static u32 s_aUcodeProSkipAdr[7];
+static u32 s_aUcodeAddEnvAdrZbuf[12];
+static u32 s_aUcodeAddAdrZbuf[5];
+static u32 s_aUcodeTexEnvNull[5];
+static u32 s_aUcodeDropNull[5];
+static u32 s_aUcodeEnvFaceAdr[12];
+static u32 s_aUcodeFaceAdr[6];
+static u32 s_aUcodeProFaceAdr[6];
+static u32 s_aUcodeAddEnvFaceAdr[12];
+static u32 s_aUcodeAddFaceAdr[5];
+static u32 s_aUcodeTexEnv[5];
+static u32 s_aUcodeDrop[5];
+static u32 s_aUcodeEnvBackAdr[12];
+static u32 s_aUcodeBackAdr[6];
+static u32 s_aUcodeProBackAdr[6];
+static u32 s_aUcodeAddEnvBackAdr[12];
+static u32 s_aUcodeAddBackAdr[5];
+static u32 s_aUcodeEnvAdr[12];
+static u32 s_aUcodeAdr[6];
+static u32 s_aUcodeProAdr[6];
+static u32 s_aUcodeAddEnvAdr[12];
+static u32 s_aUcodeAddAdr[5];
+static u32 s_aUcodeEnvNullAdr[12];
+static u32 s_aUcodeAddEnvNullAdr[12];
+
+static UcodeTableRow s_aUcodeTbl[6] = {
+    {{s_aUcodeEnvAdrZbuf, s_aUcodeAdrZbuf, s_aUcodeProSkipAdr,
+      s_aUcodeAddEnvAdrZbuf, s_aUcodeAddAdrZbuf, s_aUcodeTexEnvNull,
+      s_aUcodeDropNull}},
+    {{s_aUcodeEnvFaceAdr, s_aUcodeFaceAdr, s_aUcodeProFaceAdr,
+      s_aUcodeAddEnvFaceAdr, s_aUcodeAddFaceAdr, s_aUcodeTexEnv,
+      s_aUcodeDrop}},
+    {{s_aUcodeEnvBackAdr, s_aUcodeBackAdr, s_aUcodeProBackAdr,
+      s_aUcodeAddEnvBackAdr, s_aUcodeAddBackAdr, s_aUcodeTexEnv,
+      s_aUcodeDrop}},
+    {{s_aUcodeEnvAdr, s_aUcodeAdr, s_aUcodeProAdr,
+      s_aUcodeAddEnvAdr, s_aUcodeAddAdr, s_aUcodeTexEnv,
+      s_aUcodeDrop}},
+    {{s_aUcodeEnvAdr, s_aUcodeFaceAdr, s_aUcodeProFaceAdr,
+      s_aUcodeAddEnvAdr, s_aUcodeAddFaceAdr, s_aUcodeTexEnv,
+      s_aUcodeDrop}},
+    {{s_aUcodeEnvNullAdr, s_aUcodeBackAdr, s_aUcodeProBackAdr,
+      s_aUcodeAddEnvNullAdr, s_aUcodeAddBackAdr, s_aUcodeTexEnv,
+      s_aUcodeDrop}}
+};
+
+u64 g_aGsTag[162] = {0};
+RssdWorkFlags RssdWork = {0};
+char RssdStrWork[32] = {0};
 
 extern int g_aSubWindow[4];
 
@@ -278,7 +340,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketTextureTrans);
 /* The cached texture built by the (still asm) texture cache builder;
  * cleared to invalidate it, like s_pMatrixCache/s_pModelCache/
  * s_pModelLayout/s_pLightLayout below. */
-extern void *s_pCacheTexture;
 
 void nmlPacketClrTextureCache(void)
 {
@@ -288,10 +349,6 @@ void nmlPacketClrTextureCache(void)
 /* The cached VU1 upload state a model was last sent with: matrix data,
  * model geometry and the light/model attribute layouts. Cleared together
  * to force the next nmlPacket* draw call to resend all four. */
-extern void *s_pMatrixCache;
-extern void *s_pModelCache;
-extern void *s_pModelLayout;
-extern void *s_pLightLayout;
 
 void nmlPacketClrModelCache(void)
 {
@@ -799,3 +856,61 @@ void nmlPacketAddGsFba(u64 fba)
     g_aGsTag[g_nGsEntry * 2 + 3] = 74;
     g_nGsEntry++;
 }
+
+
+
+static u32 s_aUcodeDropNull[5] = { 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeDrop[5] = { 3200U, 0U, 1776U, 2296U, 2712U };
+
+static u32 s_aUcodeTexEnvNull[5] = { 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeTexEnv[5] = { 3432U, 0U, 1776U, 2224U, 2744U };
+
+static u32 s_aUcodeAddAdr[5] = { 3232U, 4464U, 5048U, 5912U, 6880U };
+
+static u32 s_aUcodeAddAdrZbuf[5] = { 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeAddFaceAdr[5] = { 3808U, 8008U, 8304U, 8600U, 9272U };
+
+static u32 s_aUcodeAddBackAdr[5] = { 4392U, 9760U, 9760U, 9760U, 9760U };
+
+static u32 s_aUcodeAddEnvAdr[12] = { 1784U, 2632U, 3816U, 5072U, 6488U, 7280U, 8392U, 9568U, 10904U, 11856U, 13024U, 14264U };
+
+static u32 s_aUcodeAddEnvAdrZbuf[12] = { 1784U, 1784U, 1784U, 1784U, 6488U, 6488U, 6488U, 6488U, 10904U, 10904U, 10904U, 10904U };
+
+static u32 s_aUcodeAddEnvNullAdr[12] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeAddEnvFaceAdr[12] = { 2520U, 3704U, 4960U, 6376U, 7168U, 8280U, 9456U, 10792U, 11744U, 12912U, 14152U, 15552U };
+
+static u32 s_aUcodeAddEnvBackAdr[12] = { 2576U, 3760U, 5016U, 6432U, 7224U, 8336U, 9512U, 10848U, 11800U, 12968U, 14208U, 15608U };
+
+static u32 s_aUcodeProAdr[6] = { 2216U, 3000U, 3704U, 4584U, 5272U, 6200U };
+
+static u32 s_aUcodeProSkipAdr[7] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeProFaceAdr[6] = { 2216U, 3000U, 3704U, 4584U, 5272U, 6200U };
+
+static u32 s_aUcodeProBackAdr[6] = { 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeEnvAdr[12] = { 1456U, 2272U, 3424U, 4648U, 6032U, 6792U, 7872U, 9016U, 10320U, 11240U, 12376U, 13584U };
+
+static u32 s_aUcodeEnvAdrZbuf[12] = { 1456U, 1456U, 1456U, 1456U, 6032U, 6032U, 6032U, 6032U, 10320U, 10320U, 10320U, 10320U };
+
+static u32 s_aUcodeEnvFaceAdr[12] = { 2160U, 3312U, 4536U, 5920U, 6680U, 7760U, 8904U, 10208U, 11128U, 12264U, 13472U, 14840U };
+
+static u32 s_aUcodeEnvBackAdr[12] = { 2216U, 3368U, 4592U, 5976U, 6736U, 7816U, 8960U, 10264U, 11184U, 12320U, 13528U, 14896U };
+
+static u32 s_aUcodeEnvNullAdr[12] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeAdr[6] = { 3032U, 3552U, 5144U, 5880U, 6920U, 8032U };
+
+static u32 s_aUcodeAdrZbuf[6] = { 3032U, 3552U, 5144U, 5144U, 5144U, 5144U };
+
+static u32 s_aUcodeFaceAdr[6] = { 3984U, 4576U, 5704U, 6744U, 7856U, 9128U };
+
+static u32 s_aUcodeBackAdr[6] = { 4824U, 4896U, 5792U, 5792U, 5792U, 5792U };
+
+
+
+const char D_004DC4D0[4] = "";

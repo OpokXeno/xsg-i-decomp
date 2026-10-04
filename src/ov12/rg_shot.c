@@ -8,20 +8,20 @@
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-extern const char D_00A532E8[]; /* "pShot != NIL" */
-extern const char D_00A532F8[]; /* "../rg_shot.euc.c" */
-extern const char D_00A53338[]; /* "pExtInfo != NIL" */
-extern const char D_00A53348[]; /* "pEssence != NIL" */
-extern const char D_00A53358[]; /* "pInfo != NIL" */
-extern const char D_00A53368[]; /* "pBom != NIL" */
-extern const char D_00A53378[]; /* "tama" (bomb model variant) */
-extern const char D_00A53390[]; /* "pEss != NIL" */
-extern const char D_00A533D8[]; /* "pRob != NIL" */
-extern const char D_00A533E8[]; /* "pBgObj != NIL" */
-extern const char D_00A53380[]; /* "eff11.ptcl" (default hit-effect file) */
-extern const char D_00A533A0[]; /* "pFire != NIL" */
-extern const char D_00A533C8[]; /* "pBeam != NIL" */
-extern const char D_00A53310[]; /* "pGeom != NIL" */
+const char D_00A532E8[16] = "pShot != NIL";
+const char D_00A532F8[24] = "../rg_shot.euc.c";
+const char D_00A53310[16] = "pGeom != NIL";
+const char D_00A53338[16] = "pExtInfo != NIL";
+const char D_00A53348[16] = "pEssence != NIL";
+const char D_00A53358[16] = "pInfo != NIL";
+const char D_00A53368[16] = "pBom != NIL";
+const char D_00A53378[8] = "tama";
+const char D_00A53380[16] = "eff11.ptcl";
+const char D_00A53390[16] = "pEss != NIL";
+const char D_00A533A0[16] = "pFire != NIL";
+const char D_00A533C8[16] = "pBeam != NIL";
+const char D_00A533D8[16] = "pRob != NIL";
+const char D_00A533E8[16] = "pBgObj != NIL";
 
 extern void *RgCharAlloc(unsigned int size, int type);
 static void *_InitBeam(void *beam, void *essence, void *info);

@@ -37,41 +37,41 @@ extern void tyaDrawGauge(int);
  * the first one hdd_device_name, which HddTestShutdown's record uses for the
  * second. The merged TU keeps hdd_device for 0x004DA2D0 (canon, HddTest.c).
  */
-extern char hdd_device[];
-extern char hdd_device_name[];
-extern char pfs_device_name[];
-extern char hdd_common_device[];
-extern char hdd_format_start_message[];
-extern char hdd_format_result_format[];
-extern char hdd_pfs_format_result_format[];
-extern char hdd_shutdown_message[];
-extern char hdd_full_path[];
-extern char hdd_create_partition_format[];
-extern char hdd_partition_size[];
-extern char hdd_subcommand_format[];
-extern char hdd_close_result_format[];
+static char hdd_device[];
+static char hdd_device_name[];
+static char pfs_device_name[];
+static char hdd_common_device[];
+static char hdd_format_start_message[];
+static char hdd_format_result_format[];
+static char hdd_pfs_format_result_format[];
+static char hdd_shutdown_message[];
+static char hdd_full_path[];
+static char hdd_create_partition_format[];
+static char hdd_partition_size[];
+static char hdd_subcommand_format[];
+static char hdd_close_result_format[];
 /* "pfs1:" (0x004DA2F0): HddTestMakeYourSaves' record calls it pfs_mount_point,
  * the mount/unmount records hdd_mount_point; one object, one name here. */
-extern char hdd_mount_point[];
-extern char hdd_mount_result_format[];
-extern char hdd_unmount_result_format[];
-extern char hdd_your_saves_directory[];
+static char hdd_mount_point[];
+static char hdd_mount_result_format[];
+static char hdd_unmount_result_format[];
+static char hdd_your_saves_directory[];
 /* "make YourSaves:%d\n" (0x004C0B70). */
-extern char hdd_mkdir_result_format[];
-extern char hdd_zone_size_format[];
-extern char hdd_zone_free_format[];
-extern char hdd_1024_directory_name[];
-extern char hdd_chstat_failure_format[];
-extern char hdd_dummy_folder_name[];
-extern HddTestMenuEntry hdd_test_menu[];
-extern char hdd_status_format[];
-extern char hdd_status_error_format[];
-extern char hdd_free_format[];
-extern char hdd_test_title[];
-extern char hdd_use_title[];
-extern char hdd_no_use_title[];
-extern char menu_cursor[];
-extern char *name_47[];
+static char hdd_mkdir_result_format[];
+static char hdd_zone_size_format[];
+static char hdd_zone_free_format[];
+static char hdd_1024_directory_name[];
+static char hdd_chstat_failure_format[];
+static char hdd_dummy_folder_name[];
+static HddTestMenuEntry hdd_test_menu[];
+static char hdd_status_format[];
+static char hdd_status_error_format[];
+static char hdd_free_format[];
+static char hdd_test_title[];
+static char hdd_use_title[];
+static char hdd_no_use_title[];
+static char menu_cursor[];
+static char *name_47[];
 
 /*
  * "%s:%d\n" (0x004DA2F8), the per-directory mkdir report of HddTest1024Save
@@ -80,7 +80,7 @@ extern char *name_47[];
  * .sdata stays scaffold-owned the only name the link has for the object is
  * the splat label of its data piece.
  */
-extern char D_004DA2F8[];
+static char D_004DA2F8[];
 #define hdd_mkdir_status_format D_004DA2F8
 
 /*
@@ -110,7 +110,7 @@ static int xtxdec_sleep(void);
 static int xtxdec_sub(char *filename);
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-extern unsigned char TestEnv_0_0036A030[];
+static unsigned char TestEnv_0_0036A030[];
 
 /* Only the packet handle at +0x00 is evidenced. */
 static void testfunc(XglPacket **packet) {
@@ -138,7 +138,7 @@ typedef struct TestLineVertex {
     unsigned char unmodeled_08[8];
 } TestLineVertex;
 
-extern TestLineVertex TestEnv_34[6];
+static TestLineVertex TestEnv_34[];
 
 static void FontTestLine(int xIndex, int yIndex, int width)
 {
@@ -298,13 +298,13 @@ static void HddTestDummyFolder(void)
 }
 
 extern int sceWrite(int descriptor, void *buffer, unsigned int size);
-extern char D_004C0BB8[];
-extern char D_004C0BC8[];
-extern char D_004C0BD8[];
-extern char D_004C0BE8[];
-extern char D_004C0BF8[];
-extern char D_004C0C08[];
-extern char D_004DA300[];
+static char D_004C0BB8[];
+static char D_004C0BC8[];
+static char D_004C0BD8[];
+static char D_004C0BE8[];
+static char D_004C0BF8[];
+static char D_004C0C08[];
+static char D_004DA300[];
 
 static void HddTestDummySave(void)
 {
@@ -451,7 +451,7 @@ static void xtxdec_put4byte(LittleEndianWord *destination, int value)
 
 INCLUDE_ASM("asm/main/nonmatchings/yajima_test", xtxdec_sub);
 
-extern char D_004C14B8[];
+static char D_004C14B8[];
 
 static int xtxdec_sleep(void)
 {
@@ -475,8 +475,8 @@ static void xtxdec_error(int y, const char *message)
 
 extern int main_param_argc;
 extern int main_param_argv;
-extern char D_004C14C8[];
-extern char D_004C14F8[];
+static char D_004C14C8[];
+static char D_004C14F8[];
 
 static void XtxDecode(void)
 {
@@ -532,10 +532,25 @@ extern void xglMenuOpen(int mode, YajimaMenuState *menu);
 extern void xglMenuDraw(void);
 extern void xglClockRead(XglClock *clock);
 extern int xglFRand(void);
-extern YajimaMenuState m_54;
-extern void (*func_51[7])(void);
-extern char D_004DA3A0[];
-extern char D_004C1518[];
+static YajimaMenuState m_54;
+extern void FontTest(void);
+extern void UmlDispTest(void);
+extern void MemcardTest(void);
+extern void DatabaseTest(void);
+extern void XenoMovieCheck(void);
+extern char D_004DA308[];
+extern char D_004C0C68[];
+extern char D_004C0C58[];
+extern char D_004C0C48[];
+extern char D_004C0C38[];
+extern char D_004C0C28[];
+extern char D_004C0C18[];
+extern char D_004C0CF8[];
+extern char D_004C0CE8[];
+extern char D_004DA320[];
+static void (*func_51[])(void);
+static char D_004DA3A0[];
+static char D_004C1518[];
 
 void YajimaTest(void)
 {
@@ -569,3 +584,139 @@ void YajimaTest(void)
     }
     xglRenderClearDepth();
 }
+
+/* Exact storage objects from original initialized data; the partial types above reflect only caller-visible fields. */
+static char hdd_format_start_message[16] = "format HDD\n";
+static char hdd_format_result_format[16] = " result:%d\n";
+static char hdd_common_device[16] = "hdd0:__common";
+static char hdd_pfs_format_result_format[24] = " format __common:%d\n";
+static char hdd_shutdown_message[16] = "shutdown hdd\n";
+static char hdd_full_path[40] = "hdd0:PP.SLPS-99999.DUMMY.DUMMY,,,1G,PFS";
+static char hdd_create_partition_format[24] = "create partition:%d\n";
+static char hdd_subcommand_format[16] = "sub%d:%d\n";
+static char hdd_close_result_format[16] = "close:%d\n";
+static char hdd_mount_result_format[16] = "mount:%d\n";
+static char hdd_unmount_result_format[16] = "umount:%d\n";
+static char hdd_your_saves_directory[24] = "pfs1:/Your Saves";
+static char hdd_mkdir_result_format[24] = "make YourSaves:%d\n";
+static char hdd_zone_size_format[16] = "zonesz:%d\n";
+static char hdd_zone_free_format[16] = "zonefree:%d\n";
+static char hdd_chstat_failure_format[16] = "chstat:%d\n";
+static char D_004C0BB8[16] = "zone:%d,%d\n";
+static char D_004C0BC8[16] = "step:%d\n";
+static char D_004C0BD8[16] = "pfs1:/999";
+static char D_004C0BE8[16] = "mkdir:%d\n";
+static char D_004C0BF8[16] = "pfs1:/999/dummy";
+static char D_004C0C08[16] = "open:%d\n";
+static char hdd_status_format[24] = "HDIOC_STATUS:%d\n";
+static char hdd_status_error_format[32] =
+    "HDD\xA5\xC7\xA5\xD0\xA5\xA4\xA5\xB9\xA4\xAC\xC2\xB8\xBA\xDF\xA4\xB7\xA4\xDE\xA4\xBB\xA4\xF3:%d\n";
+static char hdd_free_format[24] = "xglHddMcGetFree:%d\n";
+static char hdd_test_title[16] = "\x0B\xA3\xC8\xA3\xC4\xA3\xC4\xA5\xC6\xA5\xB9\xA5\xC8";
+static char hdd_no_use_title[16] = "HDD NoUse";
+static char D_004C14B8[16] = "\x0B\xA3\xD8\xA3\xD4\xA3\xD8\xA5\xC7\xA5\xB3\xA1\xBC\xA5\xC9";
+static char D_004C14C8[48] = "\x0B\xB5\xAF\xC6\xB0\xBB\xFE\xA5\xAA\xA5\xD7\xA5\xB7\xA5\xE7\xA5\xF3\xA4\xC7\xA5\xD5\xA5\xA1\xA5\xA4\xA5\xEB\xCC\xBE\xA4\xF2\xBB\xD8\xC4\xEA\xA4\xB7\xA4\xC6\xA4\xAF\xA4\xC0\xA4\xB5\xA4\xA4";
+static char D_004C14F8[16] = "\xBD\xAA\xCE\xBB\xA4\xB7\xA4\xDE\xA4\xB7\xA4\xBF";
+static char D_004C1518[24] = "%4d.%2d.%2d\n%2d.%2d.%2d";
+static char hdd_device[8] = "hdd0:";
+static char pfs_device_name[8] = "pfs:";
+static char hdd_device_name[8] = "hdd:";
+static char hdd_partition_size[8] = "1G";
+static char hdd_mount_point[8] = "pfs1:";
+static char D_004DA2F8[8] = "%s:%d\n";
+static char D_004DA300[8] = "%d:%d\n";
+static char hdd_use_title[8] = "HDD Use";
+static char menu_cursor[8] = ">";
+static char D_004DA3A0[8] = "SELECT";
+static char hdd_1024_directory_name[22] = "pfs1:/Your Saves/0000";
+static char hdd_dummy_folder_name[10] = "pfs1:/000";
+static unsigned char TestEnv_0_0036A030[0x90] = {
+    0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x8B, 0x80, 0xEE, 0x1E, 0x53, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0xB8, 0x42, 0xA9, 0x06, 0x00, 0x07, 0x20, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7A, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8A, 0x00, 0x00, 0x00, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
+};
+static TestLineVertex TestEnv_34[6] = {
+    { 0, 0, { 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x51 } },
+    { 32769, 1073823744, { 0x1E, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } },
+    { 458752, 0, { 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } },
+    { 192, 128, { 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00 } },
+    { 0, 0, { 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00 } },
+    { 0, 0, { 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00 } }
+};
+static HddTestMenuEntry hdd_test_menu[8] = {
+    { D_004DA308, HddTestFormat },
+    { D_004C0C68, HddTestShutdown },
+    { D_004C0C58, HddTestHddFull },
+    { D_004C0C48, HddTest1024Save },
+    { D_004C0C38, HddTestDummyFolder },
+    { D_004C0C28, HddTestDummySave },
+    { D_004C0C18, HddTestMakeYS },
+    { 0, 0 },
+};
+static char *name_47[3] = { D_004C0CF8, D_004C0CE8, D_004DA320 };
+static void (*func_51[7])(void) = {
+    FontTest, UmlDispTest, HddTest, MemcardTest,
+    DatabaseTest, XenoMovieCheck, XtxDecode,
+};
+static YajimaMenuState m_54 = {
+    { 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xA9, 0x36, 0x00 },
+    0
+};
+
+
+
+const char D_004C0948[16] = "DATABASE";
+
+char D_004C0C18[16] = "MAKE YOURSAVES";
+
+char D_004C0C28[16] = "COMMON FULL";
+
+char D_004C0C38[16] = "DUMMY FOLDER";
+
+char D_004C0C48[16] = "1024 SAVE";
+
+char D_004C0C58[16] = "HDD FULL";
+
+char D_004C0C68[16] = "SHUTDOWN";
+
+char D_004C0CE8[16] = "\245\335\241\274\245\310\243\262";
+
+char D_004C0CF8[16] = "\245\335\241\274\245\310\243\261";
+
+const char D_004C1508[16] = "XTX DECODE";
+
+char D_004DA308[8] = "FORMAT";
+
+char D_004DA320[8] = "\243\310\243\304\243\304";
+
+const char D_004DA378[8] = "MOVIE";
+
+const char D_004DA380[8] = "MEMCARD";
+
+const char D_004DA390[8] = "UMLDISP";
+
+const char D_004DA398[8] = "FONT";
+
+#include "xgl_menu.h"
+/* Leaf rows encode the action ID in the menu next-node slot. */
+#define XGL_MENU_ACTION(id) ((XglMenuNode *)(id))
+extern const char D_004DA398[];
+extern const char D_004DA390[];
+extern const char D_004DA388[];
+extern const char D_004DA380[];
+extern const char D_004C0948[];
+extern const char D_004DA378[];
+extern const char D_004C1508[];
+static XglMenuRow i1_52[];
+
+static XglMenuRow i1_52[7] = {
+    { D_004DA398, XGL_MENU_ACTION(1) },
+    { D_004DA390, XGL_MENU_ACTION(2) },
+    { D_004DA388, XGL_MENU_ACTION(3) },
+    { D_004DA380, XGL_MENU_ACTION(4) },
+    { D_004C0948, XGL_MENU_ACTION(5) },
+    { D_004DA378, XGL_MENU_ACTION(6) },
+    { D_004C1508, XGL_MENU_ACTION(7) }
+};
+
+static XglMenuNode l1_53 = { 7, { 255, 1, 8 }, 0, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, i1_52 };
+
+const char D_004DA388[8] = "HDD";

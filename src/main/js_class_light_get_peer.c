@@ -83,3 +83,5 @@ int JS_classLight_setDirection2(void *peer)
     initLight2();
     return 0;
 }
+
+char D_004DA5A8[8] = "light";

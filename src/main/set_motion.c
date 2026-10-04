@@ -356,11 +356,29 @@ typedef struct BeltUndulation {
     LayoutHeader *header;
     unsigned char unmodeled_1c[4];
     unsigned long long surface_flags;
+    unsigned char unmodeled_028[0x18];
 } BeltUndulation;
+/* The original scratch blocks are 0x40 bytes; only this prefix is modeled. */
 extern BeltUndulation UnduTemp;
-extern unsigned char idx_0[16];
-extern float vec_1[9][2];
-extern float rate_2_003B2008[4];
+
+typedef struct UnduTestStorage {
+    int queryFlags;
+    unsigned char unmodeled_04[4];
+    short attrMask;
+    unsigned char unmodeled_0a[0x0e];
+    LayoutHeader *header;
+    unsigned char unmodeled_1c[4];
+    long long attribute;
+    unsigned char unmodeled_028[0x18];
+} UnduTestStorage;
+extern UnduTestStorage UnduTest;
+static unsigned char idx_0[16] = {0, 1, 3, 2, 5, 0, 4, 0, 7, 8, 0, 0, 6, 0, 0, 0};
+static float vec_1[9][2] = {
+    {0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f},
+    {1.0f, -1.0f}, {0.0f, -1.0f}, {-1.0f, -1.0f}, {-1.0f, 0.0f},
+    {-1.0f, 1.0f},
+};
+static float rate_2_003B2008[4] = {1.0f, 2.0f, 0.5f, 3.0f};
 extern void UnduParamInit(BeltUndulation *param);
 extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 extern void UnduCheck(const Vector4 *position, void *exclude, BeltUndulation *param);
@@ -536,8 +554,14 @@ typedef struct PlayerHistoryActor {
     unsigned char unmodeled_70[0x9e8 - sizeof(Actor)];
     float interaction_radius;
 } PlayerHistoryActor;
-extern float PlayHis[64][4];
-extern float BackPos[4];
+float PlayHis[64][4] = {{0.0f}};
+float BackPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+float LocaterAngle[16] = {
+    -3.2f, -3.0f, -2.4f, -2.2f, -1.6f, -1.4f, -0.8f, -0.6f,
+    -0.1f, 0.1f, 0.6f, 0.8f, 1.4f, 1.6f, 2.2f, 2.3f,
+};
+BeltUndulation UnduTemp = {0};
+UnduTestStorage UnduTest = {0};
 extern short PhCunt[1];
 extern int Check_Straight_ID(float heading, float *previous,
                              unsigned char *enemy_state, int limit,
@@ -639,11 +663,12 @@ typedef struct ActorShadow {
 extern float Get_Distance(const Vector4 *source, const Vector4 *destination);
 extern const float D_004D8134;
 extern const float D_004D8138;
+#define D_004D8138 5000.0f
 
 void Set_Shadow(Actor *reference_actor)
 {
     float nearest_y;
-    float nearest_distance = D_004D8134;
+    float nearest_distance = 5000.0f;
     AlignedHomingPosition nearest_position;
     short actor_index;
 

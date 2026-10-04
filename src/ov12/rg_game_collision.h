@@ -78,15 +78,15 @@ static void _JobCheck(RgGameCollision *pGameColi);
  * under their splat names, docs/naming.md "Scaffold-owned data keeps its
  * splat name"): 0x00a553c8 "../rg_game_collision.euc.c", 0x00a55420
  * "pArg != NIL", 0x00a55430 "pGameColi != NIL". */
-extern const char D_00A553C8[];
-extern const char D_00A55420[];
-extern const char D_00A55430[];
+extern const char D_00A553C8[32];
+extern const char D_00A55420[16];
+extern const char D_00A55430[24];
 
 /* File-backed OV12 witnesses, this TU's own .rodata (scaffold-owned; kept
  * under their splat names, docs/naming.md "Scaffold-owned data keeps its
  * splat name"): 0x00a553e8 "pSrc != NIL", 0x00a553f8
  * "pSrc->m_pGroup1 != pSrc->m_pGroup2". */
-extern const char D_00A553E8[];
-extern const char D_00A553F8[];
+extern const char D_00A553E8[16];
+extern const char D_00A553F8[40];
 
 #endif /* SRC_OV12_RG_GAME_COLLISION_H */

@@ -5,13 +5,20 @@
 #include "shared.h"
 #include "rg_font.h"
 
+const char D_00A56F20[] = "../rg_font.euc.c";
+const char D_00A56F38[] = "pFontTable != NIL";
+const char D_00A56F50[] = "pPic != NIL";
+const char D_00A56F60[] = "pFont != NIL";
+const char D_00A56F70[] = "pPaint != NIL";
+const char D_00A56F80[] = "pszStr != NIL";
+
 /*
  * These are external file-backed witnesses, not candidate-emitted data.
  * Neither address has an entry in config/symbols/ov12.txt, so this
  * allocation keeps the splat default names rather than inventing new ones.
  */
-extern const char D_00A56F20[]; /* "../rg_font.euc.c" */
-extern const char D_00A56F60[]; /* "pFont != NIL" */
+extern const char D_00A56F20[];
+extern const char D_00A56F60[];
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);

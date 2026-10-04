@@ -5,6 +5,10 @@
 #include "rg_robot_control.h"
 #include "ov12/rg_camera.h"
 
+const char D_00A51C20[] = "pControl != NIL";
+const char D_00A51C30[] = "../rg_robot_control.euc.c";
+const char D_00A51C50[] = "pCam != NIL";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgHeap *InstanceOfRgHeap(void);

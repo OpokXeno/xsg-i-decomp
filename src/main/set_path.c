@@ -3,6 +3,10 @@
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"
 
+static unsigned char path_0[0x80];
+static unsigned char name_1[0x40];
+
+
 extern unsigned int strlen(const char *string);
 
 static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name)
@@ -36,9 +40,6 @@ static void splitName(unsigned char *filename, unsigned char *path, unsigned cha
 
 void splitName(unsigned char *filename, unsigned char *path, unsigned char *name);
 void srsSetViewPath(unsigned char *path);
-extern unsigned char name_1[];
-extern unsigned char path_0[];
-
 void setPath(unsigned char *filename)
 {
     splitName(filename, path_0, name_1);
@@ -53,8 +54,9 @@ typedef struct CfSelectState {
      * handed to setPath() by execFileSelect; its extent past this offset
      * is unmodeled. */
     unsigned char selectedPath[1];
+    unsigned char unmodeled_11d[0x268 - 0x11d];
 } CfSelectState;
-extern CfSelectState cfs;
+static CfSelectState cfs;
 extern void xglRenderClearFrame(void);
 extern void xglSleep(void);
 extern int xglCdFileSelect(CfSelectState *state);
@@ -175,8 +177,8 @@ typedef struct PadDataMenuLayout {
 extern int sprintf(char *destination, const char *format, ...);
 extern void xglRenderClearFrame(void);
 extern void xglSleep(void);
-extern int cur_7;
-extern char D_004CBD68[];
+static int cur_7;
+extern const char D_004CBD68[];
 extern char D_004DBA28[];
 extern int srsGetEsdData2(int index);
 
@@ -216,8 +218,8 @@ static int debugCfSelect(void)
 extern void func_A31688(void);
 extern void func_A31920(int kind, float *params);
 extern void func_A318B8(void);
-extern float D_004D8298;
-extern float D_004D829C;
+#define D_004D8298 0.1f
+#define D_004D829C 2.6f
 extern void *memset(void *destination, int value, unsigned int count);
 
 static void SCamTake(void)
@@ -252,8 +254,8 @@ extern int dataItmBoxChk(int id);
 extern int dataItmBoxInc(int id);
 extern void func_A2F6A8(void);
 extern void func_A22668(void);
-extern int filelist;
-extern s16 loaded;
+static int filelist;
+static s16 loaded;
 
 static void sbattleDebug(void)
 {
@@ -287,13 +289,12 @@ INCLUDE_ASM("asm/main/nonmatchings/set_path", seffectDebugBattle);
 extern void func_A1D1C0(int level);
 extern void func_A2C3A0(int level);
 extern int srsFileLoad(void *buffer, const char *name, int mode);
-extern char *gridlexTop;
-extern char *gridxtxTop;
-extern char *hamalexTop;
-extern char *hamaxtxTop;
-extern s16 loaded;
-extern char D_004CBDD8[];
-extern char D_004CBDE8[];
+static char *gridlexTop;
+static char *gridxtxTop;
+static char *hamalexTop;
+static char *hamaxtxTop;
+extern const char D_004CBDD8[];
+extern const char D_004CBDE8[];
 extern char D_004DBA38[];
 extern char D_004DBA40[];
 
@@ -322,13 +323,13 @@ extern void xglLightSetDefault(StudioLight *light);
 extern StudioLight *xglStudioGetLight2(void);
 extern unsigned char _defMatLcMod[];
 extern unsigned char _defMatLn[];
-extern s16 casdisp;
-extern Vector4 caspos_15;
-extern s16 mapdisp;
-extern Vector4 pos_14;
-extern Vector4 scale_17;
-extern s16 tgtdisp;
-extern Vector4 tgtpos_16;
+static s16 casdisp;
+static Vector4 caspos_15;
+static s16 mapdisp;
+static Vector4 pos_14;
+static Vector4 scale_17;
+static s16 tgtdisp;
+static Vector4 tgtpos_16;
 
 static void dummyMapDraw(void)
 {
@@ -385,3 +386,29 @@ static void dummyMapDraw(void)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/set_path", SimajiriTest);
+
+/* Initialized objects recovered for this TU. */
+const char D_004CBD68[40] =
+    "\xA3\xC3\xA3\xC6\xCE\xCE\xB0\xE8\xA5\xC6\xA5\xB9\xA5\xC8\xCD\xD1"
+    "\xA4\xCE\xA5\xA8\xA5\xD5\xA5\xA7\xA5\xAF\xA5\xC8\xC1\xAA\xC2\xF2";
+static Vector4 pos_14 = {0.0f, 0.0f, 0.0f, 1.0f};
+static Vector4 caspos_15 = {0.0f, 0.0f, 0.0f, 1.0f};
+static Vector4 tgtpos_16 = {0.0f, 0.0f, -4.0f, 1.0f};
+static Vector4 scale_17 = {0.1f, 0.1f, 0.1f, 1.0f};
+static int filelist = 0;
+static char *gridlexTop = 0;
+static char *gridxtxTop = 0;
+static char *hamalexTop = 0;
+static char *hamaxtxTop = 0;
+static s16 loaded = 0;
+static s16 mapdisp = 1;
+static s16 casdisp = 0;
+static s16 tgtdisp = 0;
+s16 _debugPause = 0;
+char D_004DBA08[8] = "PAUSE";
+char D_004DBA28[8] = "%s : %d";
+static int cur_7 = 0x259;
+char D_004DBA38[8] = "sen.lex";
+char D_004DBA40[8] = "sen.xtx";
+const char D_004CBDD8[16] = "hama.lex";
+const char D_004CBDE8[24] = "hama.xtx";

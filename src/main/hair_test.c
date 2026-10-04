@@ -42,7 +42,7 @@ typedef union HairTestVectorBlock {
 
 typedef struct HairResourceEntry {
     int resourceId;
-    unsigned char unmodeled_04[12];
+    char name[12];
 } HairResourceEntry;
 
 typedef struct HairTestParticle {
@@ -66,19 +66,63 @@ typedef struct HairTestActInitial {
     unsigned char jointMatrix;
 } HairTestActInitial;
 
-extern int listnum;
-extern int listnow;
-extern int listpos;
-extern int mot;
-extern int pause;
-extern unsigned char list[];
-extern float crx_004DC650;
-extern float cry_004DC654;
-extern float lookY;
-extern HairTestParticle cpos_00585200;
-extern const HairTestVectorBlock D_004CBBE0;
-extern StudioCamera *pCamera_004DC634;
-extern struct HairTestAct *pAct_004DC638;
+static StudioCamera *pCamera_004DC634;
+static struct HairTestAct *pAct_004DC638;
+static int listpos;
+static int listnum;
+static int mot;
+static int listnow;
+static float lookY;
+static float crx_004DC650;
+static float cry_004DC654;
+static int pause;
+static HairTestParticle cpos_00585200;
+const HairTestVectorBlock D_004CBBE0 = {
+    .vector = { 1.0f, 1.0f, 1.0f, 1.0f }
+};
+const char D_004CBBF0[] = "\x0bHairTest";
+const char D_004CBC00[] = "\x0bmodel:%3d/%s";
+const char D_004CBC10[] = "\x0bmotion:%3d/%3d";
+const char D_004CBC20[] = "\x0b* PUASE *";
+static HairResourceEntry list[] = {
+    { 1, "shion" }, { 9, "shion1" }, { 10, "shion2" },
+    { 11, "shion3" }, { 12, "shion4" }, { 13, "shion5" },
+    { 30, "shion_h" }, { 43, "shion1_h" }, { 45, "shion2_h" },
+    { 46, "shion3_h" }, { 8, "shion_ch" }, { 2, "kosmos" },
+    { 14, "kosmos1" }, { 15, "kosmos2" }, { 16, "kosmos3" },
+    { 16, "kosmos5" }, { 31, "kosmos_h" }, { 37, "kosmos_h1" },
+    { 38, "kosmos_h2" }, { 39, "kosmos_h3" }, { 40, "kosmos_h4" },
+    { 41, "kosmos_h5" }, { 42, "kosmos_h6" }, { 3, "chaos" },
+    { 18, "chaos1" }, { 32, "chaos_h" }, { 4, "momo" },
+    { 20, "momo1" }, { 21, "momo2" }, { 22, "momo3" },
+    { 23, "momo4" }, { 50, "momo5" }, { 33, "momo_h" },
+    { 51, "momo5_h" }, { 5, "jr" }, { 24, "jr1" },
+    { 25, "jr2" }, { 26, "jr3" }, { 34, "jr_h" },
+    { 44, "jr1_h" }, { 47, "jr4" }, { 6, "ziggy" },
+    { 27, "ziggy1" }, { 35, "ziggy_h" }, { 7, "shitan" },
+    { 28, "shitan1" }, { 29, "shitan2" }, { 36, "shitan_h" },
+    { 259, "gaignun" }, { 339, "gaignun_h" }, { 261, "albelt" },
+    { 315, "albelt_h" }, { 329, "albelt2_h" }, { 316, "allen_h" },
+    { 265, "kebin" }, { 266, "kebin1" }, { 267, "kebin2" },
+    { 322, "kebin1_h" }, { 268, "virgil" }, { 273, "fried" },
+    { 274, "elly" }, { 275, "matehws" }, { 276, "matehws1" },
+    { 277, "tonny" }, { 278, "hammer" }, { 284, "feb" },
+    { 285, "yuri" }, { 286, "joachim" }, { 313, "joachim1" },
+    { 287, "sellers" }, { 288, "mary" }, { 289, "shelley" },
+    { 290, "abel" }, { 291, "helmer" }, { 292, "voyager" },
+    { 293, "miyuki" }, { 294, "lapis" }, { 295, "cecilia" },
+    { 311, "cecilia1" }, { 296, "cath" }, { 312, "cath1" },
+    { 297, "shi_dad" }, { 298, "shi_mam" }, { 299, "step_mam" },
+    { 300, "pelegri" }, { 306, "and_wife" }, { 307, "and_daug" },
+    { 1028, "hyaku" }, { 1029, "ass_m" }, { 1030, "ass_m1" },
+    { 1031, "ass_m2" }, { 1039, "ass_m3" }, { 1040, "ass_m4" },
+    { 1285, "utic_w" }, { 1597, "bread" }, { 1598, "bar_oji" },
+    { 1606, "bread_ch" }, { 1607, "inn_girl" }, { 1567, "wman_a" },
+    { 1573, "oba_a" }, { 1594, "girl_b" }, { 1595, "girl_b1" },
+    { 523, "off_w" }, { 1603, "robot" }, { 1608, "mouth" },
+    { 1605, "cle_oba" }, { 0, "" }
+};
+
 extern void GameResourceInit(int resourceType, int resourceGroup);
 extern void ppInit(HairTestParticle *particle);
 extern void ppSetPos(HairTestParticle *particle, float x, float y, float z);
@@ -98,7 +142,7 @@ extern void __JNT_computeMatrix(void *joint, void *matrix);
 extern void JNT_addConsumer(void *joint, int consumerIndex,
                             void (*computeMatrix)(void *, void *), int flags);
 
-#define HAIR_RESOURCE(i) (((HairResourceEntry *)list)[(i)].resourceId)
+#define HAIR_RESOURCE(i) (list[(i)].resourceId)
 
 static void InitTest(void)
 {
@@ -154,14 +198,6 @@ static void InitTest(void)
     pause = 0;
 }
 
-extern int listpos;
-extern int mot;
-extern int pause;
-extern char D_004CBBF0[];
-extern char D_004CBC00[];
-extern char D_004CBC10[];
-extern char D_004CBC20[];
-extern unsigned char list[];
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 static int getNumFCV(FpkFcvHeader *header);
 
@@ -175,12 +211,10 @@ typedef struct HairTestAct {
     FpkFcvHeader *fcvHeader;
 } HairTestAct;
 
-extern HairTestAct *pAct_004DC638;
-
 static void PrintDisp(void)
 {
     xglFontDebugPrintf(0, 0, D_004CBBF0);
-    xglFontDebugPrintf(0x64, 0xC, D_004CBC00, listpos, list + 4 + listpos * 0x10);
+    xglFontDebugPrintf(0x64, 0xC, D_004CBC00, listpos, list[listpos].name);
     xglFontDebugPrintf(0x5C, 0x14, D_004CBC10, mot, getNumFCV(pAct_004DC638->fcvHeader) - 1);
     if (pause != 0) {
         xglFontDebugPrintf(0x50, 0, D_004CBC20);

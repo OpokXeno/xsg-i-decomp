@@ -27,8 +27,28 @@ extern XrgLightMatrixSet *xglStudioGetLight2(void);
 extern void xglLightCalcMatrix(XrgLightMatrixSet *lightSet);
 extern void XrgUnitMatrix(RgMatrix destination);
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
-extern RgVector ainLight_0[3];
-extern RgVector ainLightCol_1[3];
+
+static const char xrg_system_init_log_1[16] = "sys init 1\n";
+const char xrg_system_init_source_file[24] = "../xrg_sysinit.euc.c";
+static const char xrg_system_init_log_2[16] = "sys init 2\n";
+static const char xrg_system_init_log_3[48] =
+    "sys init 3\n\0\0\0\0\0over 32 M (tail %x %x,%x)\n";
+static const char xrg_system_init_log_4[16] = "sys init 4\n";
+static const char xrg_system_init_log_5[16] = "sys init 5\n";
+static const char xrg_system_init_log_6[16] = "sys init 6\n";
+static const char xrg_system_init_log_7[16] = "sys init 7\n";
+static const char xrg_system_init_log_8[16] = "sys init 8\n";
+
+static RgVector ainLight_0[3] = {
+    {1.0f, -1.0f, -0.5f, 0.0f},
+    {-1.0f, 1.0f, 0.5f, 0.0f},
+    {0.0f, 0.0f, 0.0f, 0.0f},
+};
+static RgVector ainLightCol_1[3] = {
+    {0.5f, 0.5f, 0.5f, 1.0f},
+    {0.3f, 0.38f, 0.3f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 1.0f},
+};
 
 static void _SetDefaultLight(void) {
     XrgLightMatrixSet *lightSet;
@@ -87,14 +107,8 @@ extern void RgHeapDump_sub(RgHeap *pHeap, const char *comment,
                            const char *source_file, int line);
 extern void RgSingletonDispose(void);
 
-/*
- * External file-backed witnesses, not candidate-emitted data.
- *
- * ov12:0x00a591c0 contains the tag "system dispose".
- * ov12:0x00a591d0 contains the tag "system dispose 2".
- */
-extern const char D_00A591C0[];
-extern const char D_00A591D0[];
+static const char D_00A591C0[16] = "system dispose";
+static const char D_00A591D0[24] = "system dispose 2";
 
 void XrgSystemDispose(void) {
     RgSingletonDispose();

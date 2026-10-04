@@ -1,6 +1,14 @@
 #ifndef INCLUDE_UMBRELLA_PUBLIC_H
 #define INCLUDE_UMBRELLA_PUBLIC_H
 
+extern u8 *WorkEnd;
+
+extern HomogeneousVector cursor[];
+
+extern struct ClassEntry _dummyClass;
+
+extern void *classJava_xeno_Unit;
+
 int MEfObjDestroy(void *object);
 
 float *MMathCalcHermite(float *destination, float parameter,
@@ -34,6 +42,8 @@ extern void xglFontPrint(int x, int y, int color, const char *text);
 int xglHddMount(void);
 extern int xglHddActivate(int state);
 
+extern unsigned char SaveData[];
+
 extern XglPacket *xglPacketGetCurrent(void);
 
 extern StudioCamera *xglStudioGetCamera2(int camera_id);
@@ -51,6 +61,8 @@ void objRemovePure(ObjectTask *task);
 void resultProcInit(void);
 
 char *RgFileSysDataGetName(RgFileSysData *pFile);
+
+void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
 
 void RgRobotSetWeapon(RgStatus *pRobot, int eSide, int weaponID);
 void RgRobotSetSpareWeapon(RgStatus *pRobot, int eSide, int weaponID);

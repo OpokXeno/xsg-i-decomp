@@ -5,6 +5,8 @@
 #include "data_unit_org_get.h"
 #include "ov01/calc.h"
 
+extern const char D_00A457B0[32];
+
 /*
  * orgData is a 33-entry table of 0x180-byte unit-origin records; callers
  * pass a one-based index, so dataUnitOrgGet returns orgData[id - 1].
@@ -13,8 +15,11 @@ typedef struct UnitOrgRecord {
     unsigned char unmodeled_0[0x180];
 } UnitOrgRecord;
 
-extern const char D_00A456A8[];
+static const char D_00A456A8[32];
 extern UnitOrgRecord orgData[];
+
+/* This string precedes dataEtherTecSet's jump table in the original rodata. */
+static const char D_00A456A8[32] = "** dataUnitOrgGet: err %d\n";
 
 void *dataUnitOrgGet(int unitOrgId)
 {
@@ -160,7 +165,9 @@ SpecialTableRecord *dataSpecTblGet(int entry)
 }
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
-extern const char D_00A456E8[];
+/* The scaffold-owned D_00A456C8 string lies between this and the first
+ * definition above; the following switch table is emitted after this string. */
+static const char D_00A456E8[40] = "dataEtherTecSet: err %d\n";
 extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 extern void *dataUnitFileGet(ObjectTask *unit, int charaId);
 extern int dataUnitFileLoadMot(ObjectTask *unit, int motionId, int slot, void *fileInfo);
@@ -299,11 +306,11 @@ typedef union ThinkMapTable {
     int mapNo[THINK_MAP_COUNT];
     struct {
         int mapPrefix[THINK_MAP_COUNT - 1];
-        int specBase[PL_LEARNING_CHARACTER_ID_END];
+        int specBase[1]; /* +0x18C; the original object ends after this word */
     } special;
 } ThinkMapTable;
 
-extern ThinkMapTable thinkMapTbl;
+static ThinkMapTable thinkMapTbl;
 
 int dataSpecBaseGet(int cid)
 {
@@ -315,11 +322,11 @@ int dataSpecBaseGet(int cid)
  * table dataBakpBaseGet reads.
  */
 typedef struct SpecTable {
-    unsigned char unmodeled_00[0x3C];
+    int specialBase[0x3C / sizeof(int)];
     int bakpBase[1]; /* +0x3C, indexed dynamically */
 } SpecTable;
 
-extern SpecTable specTbl;
+static SpecTable specTbl;
 
 int dataBakpBaseGet(int cid)
 {
@@ -346,7 +353,7 @@ void dataSpecLearnSet(int cid, int specialId)
  * before indexing PlCharacter.special, the same subtraction
  * dataSpecLearnSet performs through dataSpecBaseGet.
  */
-extern const char D_00A457D0[];
+static const char D_00A457D0[32];
 
 short dataSpecLearnGet(int cid, int specialId)
 {
@@ -415,8 +422,13 @@ typedef struct BattleUnitInfo {
 } BattleUnitInfo;
 
 extern void dataFileInfoInit(void);
-extern BattleUnitInfo playerData[7];
-extern BattleUnitInfo enemyData[5];
+static BattleUnitInfo playerData[7];
+static BattleUnitInfo enemyData[5];
+static UnitFileInfo unitFileInfo[6];
+static int cdReqNum;
+static int leaderCid;
+static int padMode;
+static short padData;
 
 void dataBattleInit(void)
 {
@@ -440,12 +452,12 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitInitSet);
  * counterpart). dataPosLineGet reads the halfword at +0x10 of the record.
  */
 typedef struct PosTblEntry {
-    unsigned char unmodeled_00[0x10];
+    float position[4]; /* +0x00, four coordinates used by unit positioning */
     short line; /* +0x10 */
     unsigned char unmodeled_12[0x20 - 0x12];
 } PosTblEntry;
 
-extern PosTblEntry posTbl[];
+static PosTblEntry posTbl[];
 
 void *dataPosTblGet(int id)
 {
@@ -463,8 +475,8 @@ short dataPosLineGet(int id)
     return posTbl[id].line;
 }
 
-extern unsigned char D_00A45890[]; /* "** dataCidGet: err %d\n" */
-extern short cidChgTbl[];
+static const unsigned char D_00A45890[24]; /* "** dataCidGet: err %d\n" */
+static short cidChgTbl[];
 
 short dataCidGet(unsigned int cid)
 {
@@ -475,8 +487,8 @@ short dataCidGet(unsigned int cid)
     return cidChgTbl[cid];
 }
 
-extern unsigned char D_00A458A8[]; /* "** dataWidGet: err %d" */
-extern short widChgTbl[];
+static const unsigned char D_00A458A8[24]; /* "** dataWidGet: err %d" */
+static short widChgTbl[];
 
 short dataWidGet(unsigned int wid)
 {
@@ -520,8 +532,8 @@ void dataCdSyncClear(void)
 }
 
 extern int printf(const char *format, ...);
-extern const char D_00A459E0[];
-extern const char D_00A459F8[];
+static const char D_00A459E0[24];
+static const char D_00A459F8[24];
 
 void dataNBreadCB(int result) {
     if (result < 0) {
@@ -560,8 +572,8 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotNameGetMenu);
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int dataMotNameGetSub(char *name, CalcUnitParam *up, int motionId, int weaponId);
-extern char *motNameBase;
-extern char *motNameExt;
+static char *motNameBase;
+static char *motNameExt;
 
 int dataMotNameGet(char *name, ObjectTask *unit, int motionId, int weaponId)
 {
@@ -580,7 +592,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotNameGetSub);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoad);
 
-extern const char D_00A45AC8[];
+static const char D_00A45AC8[32];
 
 void *dataUnitFileGet(ObjectTask *unit, int charaId)
 {
@@ -634,7 +646,7 @@ extern void ACT_initMotion(BattleModelActor *actor);
 extern char mdlFileName[];
 extern char mdlFileName2[];
 extern char *pcNameBase;
-extern const char D_00A44898[];
+extern char D_00A44898[];
 extern const char D_00A45DD0[];
 extern const char D_00A45DF8[];
 extern const char D_00A45E00[];
@@ -737,7 +749,7 @@ int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo
 }
 
 extern BattleModelActor *ACT_create(int parent, int callerId);
-extern const char D_00A45F38[];
+static const char D_00A45F38[32];
 
 void *dataChildActorCreate(int callerId)
 {
@@ -846,18 +858,19 @@ int dataDefWpnGet(void *unit)
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMtdRead);
 
 typedef struct XtxFileEntry {
-    unsigned char unmodeled_0[8];
+    const char *name;
+    unsigned int address;
 } XtxFileEntry;
 
-extern XtxFileEntry xtxFile[];
+static XtxFileEntry xtxFile[];
 
 void *dataXtxFileGet(int index)
 {
     return &xtxFile[index];
 }
 
-extern const char D_00A45FE8[];
-extern unsigned short xtxAdr[0x13];
+static const char D_00A45FE8[32];
+static unsigned short xtxAdr[0x13];
 
 unsigned short dataXtxAdrGet(int index)
 {
@@ -881,7 +894,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataXtxLoad);
 
 extern int dataFileLoad(const char *name, void *dst);
 
-extern const char D_00A46008[];
+static const char D_00A46008[32];
 extern unsigned char batDatBuf[0x10000];
 
 void dataBatDatLoad(void)
@@ -912,10 +925,10 @@ extern int thinkMapGet(int mapNo);
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int sprintf(char *buffer, const char *format, ...);
-extern char *thinkName;
-extern char *thinkNameBase;
-extern char *thinkNameExt;
-extern const char D_00A46028[];
+static char *thinkName;
+static char *thinkNameBase;
+static char *thinkNameExt;
+static const char D_00A46028[8];
 
 int dataThinkNameGet(char *name, int thinkNo)
 {
@@ -953,10 +966,10 @@ int dataThinkDataSet(int thinkNo, const void *data)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataThinkFileLoad);
 
-extern char *thinkName;
-extern char *thinkNameBase;
-extern char *thinkNameExt;
-extern const char D_00A46028[];
+static char *thinkName;
+static char *thinkNameBase;
+static char *thinkNameExt;
+static const char D_00A46028[8];
 
 void dataThinkLoad(int thinkNo)
 {
@@ -992,11 +1005,11 @@ void *dataMapCameraAdrGet(int mapNo)
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int sprintf(char *buffer, const char *format, ...);
-extern char *mapNameBase;
-extern char *mapName;
-extern char *mapNameExt;
-extern const char D_00A46028[];
-extern const char D_00A46030[];
+static char *mapNameBase;
+static char *mapName;
+static char *mapNameExt;
+static const char D_00A46028[8];
+static const char D_00A46030[32];
 
 void dataMapLoad(int mapNo)
 {
@@ -1014,6 +1027,9 @@ void dataMapLoad(int mapNo)
     }
     printf(D_00A46030, mapNo);
 }
+
+#include "data_unit_org_get_data.inc"
+
 
 void dataVPadModeSet(int mode)
 {
@@ -1043,3 +1059,23 @@ void dataVPadSet(int virtualPad)
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPadRead);
+
+
+
+char D_00A44880[24] = "data\\yamamoto\\mot\\";
+
+char D_00A44898[8] = ".bin";
+
+char D_00A448A0[24] = "data\\yamamoto\\map\\";
+
+char D_00A448B8[8] = "map";
+
+char D_00A448C0[24] = "data\\yamamoto\\think\\";
+
+char D_00A448D8[8] = "think";
+
+char D_00A448E0[32] = "data\\yamamoto\\stat\\cur.xtx";
+
+char D_00A44900[32] = "data\\yamamoto\\stat\\manu.xtx";
+
+char D_00A44920[32] = "data\\yamamoto\\stat\\stat.xtx";

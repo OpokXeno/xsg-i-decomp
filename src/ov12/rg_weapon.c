@@ -9,6 +9,18 @@
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
+const char D_00A53648[16] = "pAttach != NIL";
+const char D_00A53658[24] = "../rg_weapon.euc.c";
+const char D_00A536F0[16] = "pWpn != NIL";
+const char D_00A53710[16] = "pEss != NIL";
+const char D_00A53720[16] = "pInfo != NIL";
+const char D_00A53730[16] = "eff15.ptcl";
+const char D_00A53740[16] = "eff11.ptcl";
+const char D_00A53768[32] = "pEss != NIL && pInfo != NIL";
+const char D_00A53788[32] = "pEss->m_pCreateMethod != NIL";
+const char D_00A537D8[48] = "0 <= eCharID && eCharID < RG_ACTOR_CHAR_ROBNUM";
+const char D_00A53808[16] = "pRobot != NIL";
+
 /*
  * Scaffold-owned (.rodata still owner: asm, config/tu-build.json
  * data_ownership window 0x00a53642..0x00a53818): the assert_prog expression
@@ -358,14 +370,14 @@ void _HitBgAttackType(RgWeaponAttackType *weapon, int bgObject)
     }
 }
 
-extern void CreateRgHitEffectPosDir(int id, RgVector direction, void *param3, void *param4);
+extern void CreateRgHitEffectPosDir(int id, RgVector direction, const void *param3, const void *param4);
 extern int RgRobotGetGeom(int robotId);
 extern void RgRobotGiveDamage(int robotId, RgVector direction, int flags, float damage);
 extern void RgRobotInvalidAttack(int robotId, RgVector direction, float damage);
 extern int RgRobotIsInvalidAttack(int robotId, RgVector direction);
 extern unsigned char *RgWeaponEssCastToAttack(int ess);
-extern unsigned char D_00A53730[];
-extern unsigned char D_00A53740[];
+extern const char D_00A53730[];
+extern const char D_00A53740[];
 
 void _HitRobotAttackType(RgWeaponAttackType *weapon, int robotId, int damage)
 {
@@ -581,9 +593,9 @@ RgWeaponEnergyType *_CreateWeaponEnergyType(RgWeaponEnergyEssence *pEss,
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", InitRgWeaponEnergyEssence);
 
 /* ov12:0x00a53768 "pEss != NIL && pInfo != NIL" */
-extern unsigned char D_00A53768[];
+extern const char D_00A53768[];
 /* ov12:0x00a53788 "pEss->m_pCreateMethod != NIL" */
-extern unsigned char D_00A53788[];
+extern const char D_00A53788[];
 
 RgWeapon *CreateRgWeaponFromEssence(RgWeaponEssenceCommon *pEss, RgWeaponCreateInfo *pInfo)
 {

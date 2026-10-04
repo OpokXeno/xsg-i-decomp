@@ -9,7 +9,39 @@ extern void PauseMenu(void);
 
 extern void GamePauseDispBG(void);
 
-extern unsigned char ShadowEnv[];
+typedef union GifCommandData {
+    u64 value;
+    struct {
+        u32 low;
+        u32 high;
+    } words;
+} GifCommandData;
+
+typedef struct GifAdCommand {
+    GifCommandData data;
+    u32 register_address;
+    u32 unused;
+} GifAdCommand;
+
+typedef struct GifTag {
+    u32 control_low;
+    u32 control_high;
+    u32 registers_low;
+    u32 registers_high;
+} GifTag;
+
+typedef struct PauseShadowCommand {
+    u64 dma_tag;
+    u32 vif_nop;
+    u32 vif_direct;
+    GifTag gif_tag;
+    GifAdCommand set_shadow_context;
+    GifAdCommand set_shadow_environment;
+    GifAdCommand set_shadow_test;
+    GifAdCommand set_shadow_alpha;
+    GifAdCommand set_shadow_color;
+} PauseShadowCommand;
+
 
 /*
  * Only the packet handle at +0x00 is evidenced (DrawShadow). The rest of the
@@ -36,13 +68,9 @@ extern void GamePauseDispCf(void);
 
 extern int xglFontGetStringWidth(const char *text);
 
-extern const char pause_0[];
 
 void GamePauseDispEvent(void);
 
-extern const char msg1_1[];
-
-extern const char msg2_2[];
 
 /* The pause menu reads these fields from the game loop's global state. */
 typedef struct PauseGameLoopState {

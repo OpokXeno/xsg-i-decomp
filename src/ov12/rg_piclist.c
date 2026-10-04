@@ -40,8 +40,8 @@ extern RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer);
  * Neither address has an entry in config/symbols/ov12.txt, so this
  * allocation keeps the splat default names rather than inventing new ones.
  */
-extern const char D_00A57310[];
-extern const char D_00A57320[];
+const char D_00A57310[] = "pPic != NIL";
+const char D_00A57320[] = "../rg_piclist.euc.c";
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
@@ -59,12 +59,12 @@ extern void DisposeRgPicList(RgPicList *pList);
  * Additional file-backed witnesses this allocation's assertions reference,
  * none registered with a name in config/symbols/ov12.txt.
  */
-extern const char D_00A57338[]; /* "pBxx != NIL" */
-extern const char D_00A57358[]; /* "pszName != NIL" */
-extern const char D_00A57380[]; /* "pPaint != NIL" */
-extern const char D_00A57390[]; /* "pList != NIL" */
-extern const char D_00A573A0[]; /* "pList->m_uNum < PIC_MAX" */
-extern const char D_00A573B8[]; /* "pDebug != NIL" */
+const char D_00A57338[] = "pBxx != NIL";
+const char D_00A57358[] = "pszName != NIL";
+const char D_00A57380[] = "pPaint != NIL";
+const char D_00A57390[] = "pList != NIL";
+const char D_00A573A0[] = "pList->m_uNum < PIC_MAX";
+const char D_00A573B8[] = "pDebug != NIL";
 
 static void _draw_add(int paintId, int picGroup, int picIndex, int x, int y)
 {

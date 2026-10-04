@@ -1,6 +1,8 @@
 #include "common.h"
 #include "xgl_pad.h"
 
+static unsigned char PadDmaBuffer[0x200];
+
 void xglPadInitial(void) {
     unsigned int byte_index;
     int map_remaining;

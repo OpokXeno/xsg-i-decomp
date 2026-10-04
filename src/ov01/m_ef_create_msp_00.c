@@ -12,7 +12,6 @@ extern Matrix4 *MMathScaleMatrix(Matrix4 *destination,
                                  Matrix4 *matrix,
                                  const Vector4 *scale);
 extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
-extern const Vector4 scale_0_00A51380;
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_00", MEfCreate_MSP00);
 
@@ -32,11 +31,12 @@ typedef struct MSP00DrawState {
 
 static void fnMSP00_DM000(void *self, MSP00DrawState *work)
 {
+    static const Vector4 scale = { 0.04f, 0.04f, 0.2f, 1.0f };
     Matrix4 matrix;
 
     if (work->frame < 18) {
         MMathRotateMatrixYXZ(&matrix, 0, &work->angles);
-        MMathScaleMatrix(&matrix, &matrix, &scale_0_00A51380);
+        MMathScaleMatrix(&matrix, &matrix, &scale);
         __asm__ __volatile__(
             "lqc2 vf1, 0(%1)\n\t"
             "vmove.w vf1, vf0\n\t"

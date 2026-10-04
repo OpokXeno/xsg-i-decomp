@@ -1,5 +1,28 @@
 #include "common.h"
 
+struct FontImage {
+    unsigned char unmodeled_00000[0x78040];
+    unsigned short proportional_widths[256];
+};
+
+struct FontState {
+    struct FontImage *font_image;
+    void *window_image;
+    unsigned short flags;
+    unsigned char unmodeled_0a[6];
+    unsigned char default_width;
+    unsigned char unmodeled_11;
+    unsigned char proportional_mode;
+};
+
+/* The partial state view shares the complete 0x20-byte retail allocation. */
+typedef union FontStateStorage {
+    struct FontState state;
+    unsigned char bytes[0x20];
+} FontStateStorage;
+static FontStateStorage FS;
+#define D_00881188 (FS.state.flags)
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontDebugMode);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontGetKanjiClutUV);
@@ -14,14 +37,13 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintSub);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontPrintDirectCore);
 
-extern unsigned char D_00881188[];
 
 static void set_xyz(int x, int y, int color);
 static void xglFontPrintSub(void *args);
 
 void xglFontPrintf(int x, int y, unsigned int color, void *arg)
 {
-    if (*(unsigned short *)D_00881188 & 1 & 0xFFFF) {
+    if (D_00881188 & 1 & 0xFFFF) {
         set_xyz(x, y, color);
         xglFontPrintSub(arg);
     }
@@ -31,7 +53,7 @@ static void xglFontPrintDirectCore(const char *text);
 
 void xglFontPrint(int x, int y, int color, const char *text)
 {
-    if (*(unsigned short *)D_00881188 & 1 & 0xFFFF) {
+    if (D_00881188 & 1 & 0xFFFF) {
         set_xyz(x, y, color);
         xglFontPrintDirectCore(text);
     }
@@ -49,7 +71,7 @@ static void set_ot(int ot);
 
 void xglFontPrintDirectOT(int ot, const char *text)
 {
-    if (*(unsigned short *)D_00881188 & 1 & 0xFFFF) {
+    if (D_00881188 & 1 & 0xFFFF) {
         set_ot(ot);
         xglFontPrintDirectCore(text);
     }
@@ -73,7 +95,13 @@ typedef struct FontQueueSlot {
     unsigned short selfOffset;
 } FontQueueSlot;
 
-extern FontQueueSlot D_008811A0[16];
+typedef union FontPrintQueueStorage {
+    unsigned long long alignment;
+    FontQueueSlot slots[16];
+    unsigned char bytes[0x2860];
+} FontPrintQueueStorage;
+static FontPrintQueueStorage D_008811A0;
+#define FONT_PRINT_QUEUE (D_008811A0.slots)
 
 /*
  * buffer_reset also reaches two fields 0x20 bytes before the queue buffer:
@@ -93,15 +121,15 @@ static void buffer_reset(void)
     int remaining;
 
     remaining = 15;
-    slot = D_008811A0;
+    slot = FONT_PRINT_QUEUE;
     do {
-        slot->selfOffset = (unsigned char *)slot - (unsigned char *)D_008811A0;
+        slot->selfOffset = (unsigned char *)slot - (unsigned char *)FONT_PRINT_QUEUE;
         remaining--;
         slot->link = 0;
         slot++;
     } while (remaining >= 0);
 
-    header = (unsigned char *)D_008811A0 - FONT_QUEUE_HEADER_OFFSET;
+    header = (unsigned char *)FONT_PRINT_QUEUE - FONT_QUEUE_HEADER_OFFSET;
     *(FontQueueSlot **)(header + FONT_QUEUE_HEADER_CURSOR_OFFSET) = slot;
     header[FONT_QUEUE_HEADER_RESET_FLAG_OFFSET] = 0;
 }
@@ -128,24 +156,9 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontFlushCore);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontCheckProportional);
 
-struct FontImage {
-    unsigned char unmodeled_00000[0x78040];
-    unsigned short proportional_widths[256];
-};
-
-struct FontState {
-    struct FontImage *font_image;
-    unsigned char unmodeled_04[0x0c];
-    unsigned char default_width;
-    unsigned char unmodeled_11;
-    unsigned char proportional_mode;
-};
-
-extern unsigned char FS[];
-
 unsigned int xglFontGetProportionalSize(int code)
 {
-    struct FontState *state = (struct FontState *)FS;
+    struct FontState *state = &FS.state;
     struct FontImage *font_image = state->font_image;
     unsigned int width;
     signed char average_width;
@@ -199,31 +212,34 @@ int xglFontGetStringWidth(const char *text)
     return xglFontGetStringWidth2(text, 0);
 }
 
-/* The font resource's load address (scaffold-owned real symbol, offset 0:
- * xglFontGetLoadAddress reads its whole first word; the object's further
- * extent is not evidenced within this allocation). */
-extern unsigned char FS[];
-
 void *xglFontGetLoadAddress(void)
 {
-    return *(void **)FS;
+    return FS.state.font_image;
 }
 
-/* The font module's flags word (scaffold-owned splat name; xglFontGetFlags
- * and xglFontSetFlags are its only accessors in this allocation, and its
- * further extent is not evidenced here). */
-extern unsigned char D_00881188[];
+/* D_00881188 is the original interior label for the font-state flags. */
 
 unsigned short xglFontGetFlags(void)
 {
-    return *(unsigned short *)D_00881188;
+    return D_00881188;
 }
 
 void xglFontSetFlags(int flags)
 {
-    *(unsigned short *)D_00881188 = flags & 0xFFFD;
+    D_00881188 = flags & 0xFFFD;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontLoad);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_font", xglFontInitial);
+
+
+
+/* xglFontInitial supplies this file-read buffer to xglFontLoad.
+ * The recovered FontImage view names its proportional-width table. The
+ * complete retail capacity also includes bytes beyond that partial view. */
+typedef union FontImageStorage {
+    struct FontImage image;
+    unsigned char bytes[0x78800];
+} FontImageStorage;
+static FontImageStorage FontImage;

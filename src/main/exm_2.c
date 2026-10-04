@@ -3,10 +3,10 @@
 
 typedef struct EXM_WindState EXM_WindState;
 
-extern EXM_WindState *wind;
+static EXM_WindState *wind;
 extern float wave;
 extern float waverad;
-extern EXM_WindState _wind;
+static EXM_WindState _wind;
 
 /* The +0x10 vector fields are named from the allocated reset and setter stores.
  * The u64 at +0x08 preserves the 8-byte alignment of the complete wind state. */
@@ -35,6 +35,21 @@ typedef struct EXM_WindVector {
     float w;
 } EXM_WindVector;
 
+/* The 64 unitSequence entries have a 0x260-byte stride in the named callers. */
+typedef struct UnitSequenceEntry {
+    unsigned char unmodeled_00[0x04];
+    int state;
+    unsigned char unmodeled_08[0x240 - 0x08];
+    float pivot_x;
+    float pivot_y;
+    float pivot_z;
+    unsigned char unmodeled_24c[0x250 - 0x24c];
+    float axis_x;
+    float axis_y;
+    float axis_z;
+    float axis_w;
+} UnitSequenceEntry;
+
 struct EXM_WindState {
     char mode;              /* +0x00, read signed (lb) by EXM_GetWindPower */
     u8 unmodeled_01[7];
@@ -45,6 +60,69 @@ struct EXM_WindState {
     float shake_rad;        /* +0x28, EXM_SetShakeWind/EXM_GetShakeRad */
     u8 unmodeled_2c[4];
 };
+
+static EXM_WindState _wind = { 0 };
+static EXM_WindState *wind = &_wind;
+static float wave = 0.0f;
+static float waverad = 0.0f;
+
+/*
+ * MapUnit is a 64-entry array with a 0x300-byte stride.  These are additive
+ * record views from existing callers: map_2 names the update/render callback,
+ * resource and model-state fields; map_create_unit_peer names transforms and
+ * the unit sequence byte; init_drill names the cleanup value; and the door
+ * TU names its position vector.  A union keeps those independently evidenced
+ * views without asserting that same-offset fields have one shared meaning.
+ */
+typedef struct MapUnitDrawView {
+    unsigned int flags; /* +0x00 */
+    void (*update)(void *unit); /* +0x04 */
+    unsigned char unmodeled_08[4];
+    void (*type_update)(void *unit); /* +0x0c */
+    unsigned char unmodeled_10[0x94];
+    short serial; /* +0xa4 */
+    unsigned char unmodeled_a6[0x2e];
+    void *resource_model; /* +0xd4 */
+    unsigned char unmodeled_d8[8];
+    void *model; /* +0xe0 */
+    int resource_status; /* +0xe4 */
+    unsigned char unmodeled_e8[0x158];
+    void *model_state; /* +0x240 */
+    unsigned char unmodeled_244[0xbc];
+} MapUnitDrawView;
+
+typedef struct MapUnitTransformView {
+    unsigned int flags; /* +0x00 */
+    unsigned char unmodeled_04[0x0c];
+    Vector4 position; /* +0x10 */
+    Vector4 rotation; /* +0x20 */
+    Vector4 scale; /* +0x30 */
+    Matrix4 matrix; /* +0x40 */
+    unsigned char unmodeled_80[0x20];
+    unsigned char serial; /* +0xa0 */
+    unsigned char signal; /* +0xa1 */
+    unsigned char unmodeled_a2[0x1a2 - 0xa2];
+    unsigned short drill_reset_value; /* +0x1a2 */
+    unsigned char unmodeled_1a4[0x15c];
+} MapUnitTransformView;
+
+typedef struct MapUnitDoorView {
+    unsigned char unmodeled_00[0xc0];
+    Vector4 position; /* +0xc0 */
+    unsigned char unmodeled_d0[0x230];
+} MapUnitDoorView;
+
+typedef struct MapUnitRecord {
+    union {
+        MapUnitDrawView draw;
+        MapUnitTransformView transform;
+        MapUnitDoorView door;
+    };
+} MapUnitRecord;
+
+MapUnitRecord MapUnit[64] = { 0 };
+
+UnitSequenceEntry unitSequence[64] = { 0 };
 
 INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_GetWindPower);
 
@@ -93,10 +171,9 @@ void EXM_SetShakePower(float power)
     wind->shake_power = power;
 }
 
-/* D_004D8774 = 6.2831855f (2*pi), the upper clamp for the shake phase. */
-extern float D_004D8774;
-/* D_004D8778 = -6.2831855f (-2*pi), the lower clamp for the shake phase. */
-extern float D_004D8778;
+/* D_004D8774/D_004D8778 are the two clamp values, +/- 2*pi. */
+#define D_004D8774 6.2831855f
+#define D_004D8778 -6.2831855f
 
 void EXM_SetShakeTime(float time)
 {

@@ -5,6 +5,11 @@
 
 #include "create_evt_item_get_task.h"
 
+/* Event-item IDs index a 0x80-byte formatted name slot. */
+extern unsigned char EvtItemTbl[255 * 0x80];
+extern const char evt_item_format_special[24];
+extern const char evt_item_format_normal[16];
+
 extern int dataBoxInc(int category, int id);
 extern char *GetItemName(int category, int id);
 extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
@@ -61,7 +66,7 @@ extern void SetItemSymbolRsrc(ItemMapUnit *unit);
 extern int xglFlagsGet1(int bitOffset);
 extern int printf(const char *format, ...);
 extern void sefDeleteEffectCf(int effectId);
-extern const char D_004CA5D0[];
+static const char D_004CA5D0[32];
 
 typedef struct ItemOwnerUnit {
     unsigned char unmodeled_00[0xa4];
@@ -71,9 +76,9 @@ typedef struct ItemOwnerUnit {
 extern ItemOwnerUnit MapUnit[64];
 extern void nmlModelSetPartsVisible(void *model, short partsNo, int visible);
 extern void DrawActiveCursol(ItemMapUnit *unit);
-extern const float D_004D7F7C;
+extern float D_004D7F7C;
 extern signed char printflg;
-extern const char D_004CA650[];
+static const char D_004CA650[48];
 
 INCLUDE_ASM("asm/main/nonmatchings/create_evt_item_get_task", taskItemGet);
 
@@ -299,3 +304,14 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
         break;
     }
 }
+
+/* Definitions follow their callers so references remain address-based. */
+unsigned char EvtItemTbl[255 * 0x80] = { 0 };
+
+const char evt_item_format_special[24] =
+    "Obtained \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
+const char evt_item_format_normal[16] = "Obtained %s.";
+
+static const char D_004CA5D0[32] = "ItemSymbol serial error!! %d\n";
+float D_004D7F7C = 0.05f;
+static const char D_004CA650[48] = "unit koware delete id=0x%x serial=%d\n";

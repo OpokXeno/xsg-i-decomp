@@ -13,8 +13,14 @@ typedef struct OpenCloseCallbacks {
     void (*entry[4])(OpenCloseController *);
 } OpenCloseCallbacks;
 
+extern void OpenSubType00(OpenCloseController *);
+extern void OpenSubType01(OpenCloseController *);
+extern void CloseSubType00(OpenCloseController *);
+
 /* Four original function pointers: open subtype 00/01, close 00/00. */
-extern OpenCloseCallbacks D_004C2FD0;
+const OpenCloseCallbacks D_004C2FD0 = {
+    { OpenSubType00, OpenSubType01, CloseSubType00, CloseSubType00 }
+};
 
 INCLUDE_ASM("asm/main/nonmatchings/open_close_main", OpenSubType00);
 

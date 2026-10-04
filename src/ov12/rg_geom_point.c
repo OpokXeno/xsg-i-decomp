@@ -28,9 +28,10 @@ extern unsigned int RgGeomGetStatus(RgGeom *pGeom);
  * "fWeight > RG_FCONST(0.0)".
  * ov12:0x00a55138 contains the assertion expression "pGeom != NIL".
  */
-extern const char D_00A55100[];
-extern const char D_00A55118[];
-extern const char D_00A55138[];
+const char rg_point_assert_expression[16] = "pPoint != NIL";
+const char D_00A55100[24] = "../rg_geom_point.euc.c";
+const char D_00A55118[32] = "fWeight > RG_FCONST(0.0)";
+const char D_00A55138[16] = "pGeom != NIL";
 
 float RgGetGeomGravity(void)
 {

@@ -6,6 +6,10 @@
 #include "ov12/rg_singleton_id.h"
 #include "rg_light.h"
 
+const char D_00A54C68[] = "pLight != NIL";
+const char D_00A54C78[] = "../rg_light.euc.c";
+const char D_00A54C90[] = "pSrc != NIL";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);

@@ -9,14 +9,10 @@ INCLUDE_ASM("asm/main/nonmatchings/wind_test", MoveWind);
 
 INCLUDE_ASM("asm/main/nonmatchings/wind_test", MoveWind2);
 
-extern signed char wtype;
-extern float shake;
-extern const char D_004CBB80[];
-extern const char D_004CBB90[];
-extern const char D_004CBBA0[];
-extern const char D_004CBBB8[];
-extern const char D_004DB9D0[];
-extern float D_0058518C[];
+static signed char wtype;
+static float shake;
+static Vector4 wpos;
+#define D_0058518C (&wpos.w)
 extern double fptodp(float value);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
@@ -24,15 +20,17 @@ static void PrintDisp(void)
 {
     const char *position_format;
 
-    xglFontDebugPrintf(0, 0, D_004CBB80);
+    xglFontDebugPrintf(0, 0, "\013WindTest");
     if (wtype == 2) {
-        xglFontDebugPrintf(8, 8, D_004DB9D0);
+        xglFontDebugPrintf(8, 8, "\013point");
     } else {
-        xglFontDebugPrintf(8, 8, D_004CBB90);
+        xglFontDebugPrintf(8, 8, "\013directional");
     }
-    position_format = D_004CBBA0;
+    position_format = "\013\033\030\033\036\033\037WindPow:%f";
     xglFontDebugPrintf(0x64, 0xC8, position_format, fptodp(D_0058518C[0]));
-    xglFontDebugPrintf(0x64, 0xD0, D_004CBBB8, fptodp(shake));
+    xglFontDebugPrintf(0x64, 0xD0,
+                       "\013\033\030\033\035\033\034RandPow:%f",
+                       fptodp(shake));
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/wind_test", WindTest);

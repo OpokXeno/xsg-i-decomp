@@ -1,6 +1,8 @@
 #include "common.h"
 #include "shared.h"
 
+extern const char D_004DC328[];
+
 /*
  * xglMpeg2InfoInit2's own body is still INCLUDE_ASM below, but its tail at
  * 0x00222818..0x00222828 computes align64(arena + allocated_size +
@@ -396,7 +398,6 @@ typedef struct {
 } MpegCallbackState;
 
 extern int printf(const char *format, ...);
-extern const char D_004DC328[];
 
 static int errorCallback(int event, MpegErrorInfo *error, MpegCallbackState *state)
 {
@@ -525,3 +526,5 @@ int xglMovieInit(void)
 {
     return sceIpuInit();
 }
+
+const char D_004DC328[] = "%s\n";

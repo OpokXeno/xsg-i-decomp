@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "xgl_pad.h"
 
 /*
  * The DMA channel table and the MFIFO state are provided by the scaffold data
@@ -20,8 +21,20 @@ typedef struct XglDmaBuffer {
     u32 *current;
 } XglDmaBuffer;
 
-extern XglDmaChannel *tbl[10];
-extern XglDmaChannel *mfifo_drain;
+static XglDmaChannel *tbl[10] = {
+    (XglDmaChannel *)0x10008000,
+    (XglDmaChannel *)0x10009000,
+    (XglDmaChannel *)0x1000a000,
+    (XglDmaChannel *)0x1000b000,
+    (XglDmaChannel *)0x1000b400,
+    (XglDmaChannel *)0x1000c000,
+    (XglDmaChannel *)0x1000c400,
+    (XglDmaChannel *)0x1000c800,
+    (XglDmaChannel *)0x1000d000,
+    (XglDmaChannel *)0x1000d400
+};
+XglPadRecord PadData[2] = {{0}};
+static XglDmaChannel *mfifo_drain;
 
 extern void FlushCache(int mode);
 extern int sceGsSyncPath(int mode, int timeout);

@@ -52,7 +52,11 @@ static void _openVifGif(XglPacket *packet, unsigned int prim,
  * address+data register code), the constant _openVifGifAD passes to
  * sceVif1PkOpenGifTag.
  */
-extern const XrgPaint2DGifTag D_00A59030;
+const XrgPaint2DGifTag D_00A59030 = {
+    .part = {0x1000000000008000ULL, 0xE}
+};
+const char D_00A59058[24] = "../xrg_paint2d.euc.c";
+const char D_00A59098[24] = "pPaint != NIL";
 
 static void _openVifGifAD(XglPacket *packet)
 {
@@ -345,7 +349,7 @@ void XrgPaint2DAlpha(XrgPaint2D *paint, unsigned int mode)
 
 extern void RgBxxGetHeader(int header);
 extern long long XrgBxxPs2Tex0(void *texture);
-extern const char D_00A590C8[];
+const char D_00A590C8[16] = "pPic != NIL";
 static void _DrawWithTex(XrgPaint2D *paint, void *pStudio);
 
 /*

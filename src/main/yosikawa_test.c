@@ -15,13 +15,16 @@ typedef struct YosikawaPadInputPrefix {
     } input;
 } YosikawaPadInputPrefix;
 extern YosikawaPadInputPrefix PadData;
-extern int csr;
-extern void (*funclist[3])(void);
+static int csr;
+extern const char D_004DB9C8[];
+extern void HairTest(void);
+extern void WindTest(void);
+extern void ColliTest(void);
+static void (*funclist[3])(void);
 extern const char D_004CBB18[];
 extern const char D_004CBB28[];
 extern const char D_004CBB38[];
 extern const char D_004CBB48[];
-extern const char D_004DB9C8[];
 extern void xglRenderClearFrame(void);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
@@ -84,3 +87,7 @@ void YosikawaTest(void)
         xglSleep();
     }
 }
+
+static int csr = 0;
+const char D_004DB9C8[8] = "\013\033\034";
+static void (*funclist[3])(void) = { HairTest, WindTest, ColliTest };

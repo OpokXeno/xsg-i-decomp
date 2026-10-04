@@ -1,6 +1,8 @@
 #include "common.h"
 #include "string_utf_get_hash.h"
 
+static int constStringCount = 0;
+
 int StringUtf_getHash(const char *bytes, int length)
 {
     const unsigned char *current = (const unsigned char *)bytes;

@@ -6,6 +6,12 @@
 #include "ov12/rg_game_collision.h"
 #include "rg_geom_group.h"
 
+const char D_00A55338[] = "pGroup != NIL";
+const char D_00A55348[] = "../rg_geom_group.euc.c";
+const char D_00A55360[] = "pGroup != NIL && pElm != NIL";
+const char D_00A55380[] = "RgVectorFind(pGroup->m_pList,pElm) < 0";
+const char D_00A553A8[] = "pGeom != NIL";
+
 static void _InitGroup(RgGeomGroup *pGroup)
 {
     if (pGroup == 0) {

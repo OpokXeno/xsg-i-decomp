@@ -31,16 +31,26 @@ static void _InitDisp(RgDispWpn2P *pDisp);
 static void _DestructRobInfo(RobInfo *pInfo);
 static void _SetRobInfo(RobInfo *pInfo, RgStatus *pRobot, int side);
 
-/* ov12:0x00a54780 "../rg_disp_wpn2p.euc.c" (source filename, scaffold-owned
- * per config/tu-build.json data_ownership: this .rodata window is still
- * owner "asm"). */
-extern const char D_00A54780[];
 /* ov12:0x00a54770 "pWep != NIL" */
-extern const char D_00A54770[];
+const char D_00A54770[] = "pWep != NIL";
+/* ov12:0x00a54780 "../rg_disp_wpn2p.euc.c" */
+const char D_00A54780[] = "../rg_disp_wpn2p.euc.c";
+/* ov12:0x00a54798 "UNARMED" */
+const char D_00A54798[] = "UNARMED";
 /* ov12:0x00a547a0 "pInfo != NIL" */
-extern const char D_00A547A0[];
+const char D_00A547A0[] = "pInfo != NIL";
+/* ov12:0x00a547b0 "bar_dash.bmp" */
+const char D_00A547B0[] = "bar_dash.bmp";
+/* ov12:0x00a547c0 "board_sa.bmp" */
+const char D_00A547C0[] = "board_sa.bmp";
+/* ov12:0x00a547d0 "board_sb.bmp" */
+const char D_00A547D0[] = "board_sb.bmp";
+/* ov12:0x00a547e0 "boost.bmp" */
+const char D_00A547E0[] = "boost.bmp";
 /* ov12:0x00a547f0 "pDisp != NIL" */
-extern const char D_00A547F0[];
+const char D_00A547F0[] = "pDisp != NIL";
+/* ov12:0x00a54800 "wpn_all.bmp" */
+const char D_00A54800[] = "wpn_all.bmp";
 
 /*
  * _InitRobInfo (ov12:0x00a254a0) and _SetRobInfo (ov12:0x00a255e8) are still
@@ -48,15 +58,6 @@ extern const char D_00A547F0[];
  * so their forward prototypes stay static like the ones above.
  */
 static void _InitRobInfo(RobInfo *pInfo);
-
-/* ov12:0x00a547b0 "bar_dash.bmp" */
-extern const char D_00A547B0[];
-/* ov12:0x00a547c0 "board_sa.bmp" */
-extern const char D_00A547C0[];
-/* ov12:0x00a547d0 "board_sb.bmp" */
-extern const char D_00A547D0[];
-/* ov12:0x00a547e0 "boost.bmp" */
-extern const char D_00A547E0[];
 
 extern void *RgRobotGetWeapon(RgStatus *pRobot, unsigned int eSide);
 extern void *InstanceOfRgBattleCommonData(void);
@@ -82,12 +83,7 @@ extern void XrgPaint2DUseTexture(void *paint, int texture);
 
 /* ov12:0x00a4fb18 "anYPos_0", size 0xc: the on-screen Y position of each
  * weapon slot's text, indexed by WepInfo.index. */
-extern int anYPos_0[3];
-
-/* ov12:0x00a54798 "UNARMED" */
-extern const char D_00A54798[];
-/* ov12:0x00a54800 "wpn_all.bmp" */
-extern const char D_00A54800[];
+static int anYPos_0[3] = { 0x168, 0x17C, 0x190 };
 
 /*
  * Name field offset within the weapon-essence record RgWeaponGetEss

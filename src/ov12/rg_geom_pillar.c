@@ -30,25 +30,15 @@ extern void RgGeomSetType(RgGeom *pGeom, int type);
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-/* Referenced by InitRgGeomPillar: the assertion text "pPillar != NIL" and
- * this TU's own original file name "../rg_geom_pillar.euc.c", both
- * scaffold-owned .rodata (config/tu-build.json, data_ownership.rodata). */
-extern const char D_00A55260[];
-extern const char D_00A55270[];
+/* Assertion and source strings referenced by InitRgGeomPillar. */
+const char D_00A55260[16] = "pPillar != NIL";
+const char D_00A55270[32] = "../rg_geom_pillar.euc.c";
 
 /* The type tag InitRgGeomPillar and CreateRgGeomPillar pass to
  * RgGeomSetType; no other OV12 translation unit names this value yet. */
 #define RG_GEOM_TYPE_PILLAR 5
 
-/* Scaffold-owned (.bss still owner: asm, config/tu-build.json): the function's
- * own four file-local scratch vectors, kept under their splat names
- * (docs/naming.md, "Scaffold-owned data keeps its splat name").  The original
- * object names them aFrom.0, aTo.1, aLeftC.2 and aRightC.3, the GCC spelling
- * of four function-scope statics declared in that order. */
-extern RgVector D_00A5AB80;
-extern RgVector D_00A5AB90;
-extern RgVector D_00A5ABA0;
-extern RgVector D_00A5ABB0;
+/* The four scratch vectors are defined as function-scope statics below. */
 
 /* The members this TU evidences.  RgGeom's two matrix members are the ones
  * rg_geom_tray.c and rg_geom_poly.c already document at +0x20 and +0x60; the
@@ -108,45 +98,47 @@ RgGeom *CreateRgGeomPillar(void)
  * matrix, tested against a box whose two diagonal corners carry the pillar's
  * own half-extents in local X and Z, and the hit point is brought back out
  * with the local matrix.  The two path endpoints and the box's two corners
- * are the function's own scratch vectors, aFrom, aTo, aLeftC and aRightC in
- * the original object, still named for their addresses here because this TU's
- * .bss is scaffold-owned.
+ * are the function's own four scratch vectors.
  *
  */
 int RgGeomPillarCheckPoint(RgGeom *pillar, RgGeomPoint *point, RgVector contact)
 {
+    static RgVector aFrom;
+    static RgVector aTo;
+    static RgVector aLeftC;
+    static RgVector aRightC;
     RgVector *corners[4];
     int hit;
 
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
-        : : "r"(D_00A5AB80), "r"(point->oldPosition) : "memory");
+        : : "r"(aFrom), "r"(point->oldPosition) : "memory");
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
-        : : "r"(D_00A5AB90), "r"(point->position) : "memory");
+        : : "r"(aTo), "r"(point->position) : "memory");
 
     {
         const float *inverseLocal = pillar->inverseLocal;
 
-        D_00A5AB90[3] = 1.0f;
-        D_00A5AB80[3] = 1.0f;
-        XrgApplyVector(D_00A5AB80, inverseLocal, D_00A5AB80);
-        XrgApplyVector(D_00A5AB90, inverseLocal, D_00A5AB90);
+        aTo[3] = 1.0f;
+        aFrom[3] = 1.0f;
+        XrgApplyVector(aFrom, inverseLocal, aFrom);
+        XrgApplyVector(aTo, inverseLocal, aTo);
     }
-    D_00A5AB80[3] = point->radius;
-    D_00A5AB90[3] = point->radius;
+    aFrom[3] = point->radius;
+    aTo[3] = point->radius;
 
-    XrgSetVectorXYZ(D_00A5ABA0, -pillar->halfWidth,
+    XrgSetVectorXYZ(aLeftC, -pillar->halfWidth,
                     RG_GEOM_PILLAR_CORNER_Y, -pillar->halfDepth);
-    XrgSetVectorXYZ(D_00A5ABB0, pillar->halfWidth,
+    XrgSetVectorXYZ(aRightC, pillar->halfWidth,
                     RG_GEOM_PILLAR_CORNER_Y, pillar->halfDepth);
 
-    corners[0] = &D_00A5ABA0;
-    corners[1] = &D_00A5ABB0;
-    corners[2] = &D_00A5AB80;
-    corners[3] = &D_00A5AB90;
+    corners[0] = &aLeftC;
+    corners[1] = &aRightC;
+    corners[2] = &aFrom;
+    corners[3] = &aTo;
     hit = CheckBallBoxCollision(contact, corners, 0);
 
     if (hit != 0) {

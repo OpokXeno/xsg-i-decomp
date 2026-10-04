@@ -177,7 +177,7 @@ int RssdGetCallCompletedCode(void)
 }
 
 extern int printf(const char *format, ...);
-extern const char D_004D4AA0[]; /* "Rssd get result error !" */
+const char D_004D4AA0[] = "Rssd get result error !\n";
 
 int SsdGetResultValue(int *value)
 {

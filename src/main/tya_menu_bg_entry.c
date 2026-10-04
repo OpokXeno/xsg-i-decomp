@@ -44,11 +44,58 @@ extern float I2F(int value);
 extern void xglCameraMove(StudioCamera *camera);
 extern int xglTaskRemove(XglTaskPrefix *task);
 extern void nmlModelDirectSend(int mode, u8 *data, int count);
-extern const float D_004D7C88;
-extern const float D_004D7C8C;
-extern const float D_004D7C90;
-extern u8 TestEnv_2_0036AAA0[];
-extern u8 TestEnv_3_0036AB50[];
+/* Original .lit4 words byte-pinned at their mapped VAs. */
+#define MENUBG_VERTICAL_OFFSET_SCALE (0.4f) /* 0x004D7C88: cd cc cc 3e */
+#define MENUBG_HORIZONTAL_SCALE_DECAY (0.7f) /* 0x004D7C8C: 33 33 33 3f */
+#define MENUBG_MIN_HORIZONTAL_SCALE (0.001f) /* 0x004D7C90: 6f 12 83 3a */
+#define D_004D7C88 MENUBG_VERTICAL_OFFSET_SCALE
+#define D_004D7C8C MENUBG_HORIZONTAL_SCALE_DECAY
+#define D_004D7C90 MENUBG_MIN_HORIZONTAL_SCALE
+/* DMA/VIF header and GIF tag are stored little-endian on EE. These
+ * initializer helpers express packet words, not opaque packet-byte blobs. */
+#define EE_U32_BYTES(value) \
+    (u8)((u32)(value)), (u8)((u32)(value) >> 8), \
+    (u8)((u32)(value) >> 16), (u8)((u32)(value) >> 24)
+#define EE_U64_BYTES(value) \
+    EE_U32_BYTES((u32)(value)), EE_U32_BYTES((u32)((u64)(value) >> 32))
+#define NML_DIRECT_HEADER(direct) \
+    EE_U64_BYTES(0), EE_U32_BYTES(0), EE_U32_BYTES(direct)
+#define GIF_TAG_WORDS(control_low, control_high, registers_low, registers_high) \
+    EE_U32_BYTES(control_low), EE_U32_BYTES(control_high), \
+    EE_U32_BYTES(registers_low), EE_U32_BYTES(registers_high)
+#define GIF_AD_ENTRY(value, register_id) \
+    EE_U64_BYTES(value), EE_U32_BYTES(register_id), EE_U32_BYTES(0)
+#define NML_ZERO_QWORD EE_U64_BYTES(0), EE_U64_BYTES(0)
+
+/* 11-qword palette transfer: DMA/VIF header, GIFtag, four A+D writes,
+ * then five original zero qwords retained by the original transfer count. */
+static u8 TestEnv_2_0036AAA0[176] = {
+    NML_DIRECT_HEADER(0x51000005),
+    GIF_TAG_WORDS(0x8004, 0x10000000, 0x0000000e, 0),
+    GIF_AD_ENTRY(0x0008380000000000ULL, 0x50),
+    GIF_AD_ENTRY(0, 0x51),
+    GIF_AD_ENTRY(0x0000000800000040ULL, 0x52),
+    GIF_AD_ENTRY(0, 0x53),
+    NML_ZERO_QWORD, NML_ZERO_QWORD, NML_ZERO_QWORD,
+    NML_ZERO_QWORD, NML_ZERO_QWORD,
+};
+
+/* 7-qword entry transfer: DMA/VIF header, GIFtag, and five A+D writes. */
+static u8 TestEnv_3_0036AB50[112] = {
+    NML_DIRECT_HEADER(0x51000006),
+    GIF_TAG_WORDS(0x8001, 0x50000000, 0x000eeeee, 0),
+    GIF_AD_ENTRY(0x0000000000070000ULL, 0x47),
+    GIF_AD_ENTRY(0x0000000000000060ULL, 0x14),
+    GIF_AD_ENTRY(0x20000004d8023800ULL, 0x06),
+    GIF_AD_ENTRY(0x0000000000000044ULL, 0x42),
+    GIF_AD_ENTRY(0, 0x08),
+};
+#undef NML_ZERO_QWORD
+#undef GIF_AD_ENTRY
+#undef GIF_TAG_WORDS
+#undef NML_DIRECT_HEADER
+#undef EE_U64_BYTES
+#undef EE_U32_BYTES
 static int task_menubg(XglTaskPrefix *task);
 static void task_menubg_sub(XglTaskPrefix *task, float scale);
 

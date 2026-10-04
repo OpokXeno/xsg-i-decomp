@@ -8,15 +8,15 @@
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-extern const char D_00A53E98[]; /* "pEquip != NIL" */
-extern const char D_00A53E80[]; /* "../rg_equip_type.euc.c" */
-extern const char D_00A53E10[];
-extern const char D_00A53EC8[];
-extern const char D_00A53F90[]; /* "left" */
-extern const char D_00A53F98[]; /* "right" */
-extern const char D_00A53FA0[]; /* "back" */
-extern const char D_00A53FA8[];
-extern const int s_aePosToJntID[];
+static int s_aePosToJntID[8] = {0, 2, 4, 1, 3, 5, 6, 7};
+const char D_00A53E10[] = "(RG_EQUIP_POS_LEFT_HAND <= (ePos) && (ePos) <= RG_EQUIP_POS_BACK_RIGHT) || (ePos) == RG_EQUIP_POS_INVALID";
+const char D_00A53E80[] = "../rg_equip_type.euc.c";
+const char D_00A53E98[] = "pEquip != NIL";
+const char D_00A53EC8[] = "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM";
+const char D_00A53F90[] = "left";
+const char D_00A53F98[] = "right";
+const char D_00A53FA0[] = "back";
+const char D_00A53FA8[] = "???";
 
 #define RG_EQUIP_TYPE_COUNT 3
 

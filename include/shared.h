@@ -239,6 +239,8 @@ typedef struct RgSimpleDB RgSimpleDB;
 
 typedef struct RgCharMgr RgCharMgr;
 
+struct stat;
+
 typedef struct StreamXssBuffer StreamXssBuffer;
 
 typedef struct StreamRing StreamRing;
@@ -300,39 +302,20 @@ typedef struct RgStatus RgStatus;
 
 extern int WakeupThread(int thread_id);
 
-extern unsigned char SaveData[];
-
 extern void sceVif1PkRef(XglPacket *packet, const void *environment,
                          int count, int mode, int offset, int flags);
-
-extern void *classJava_xeno_Unit;
 
 extern int sprintf(char *destination, const char *format, ...);
 
 int open();
 
-extern u8 *WorkEnd;
+int close(int fd);
+
+int stat(const char *path, struct stat *status);
 
 extern u8 *buffer;
 
-/*
- * VW_getCursor copies the three floats stored at cursor+0x10/+0x14/+0x18
- * into a homogeneous output vector and forces w to 1.0f.
- *
- * Bounded users prove discrete facts only: VW_setCursorMode writes a mode
- * word at cursor+0, VW_setCursor writes the XYZ floats at
- * cursor+0x10/+0x14/+0x18, drawCursor reads cursor+0x10 as a translation
- * vector and writes 1.0f at cursor+0x1c, VW_setCursorFunc writes two words
- * at cursor+0x50/+0x54, and updateCursorMode2 copies an actor position into
- * cursor+0x10..+0x18. The complete 96-byte cursor object declaration,
- * its historical type name, its source file and its original TU are not
- * proven, so this header makes no size, member or layout claim beyond the
- * access below: the extern array is incomplete (no element count), and
- * index 1 selects the evidenced 16-byte position slot at +0x10 using only
- * the demonstrated HomogeneousVector type. Slot 0, slots 2..N and the
- * bytes at +0x04..+0x0F, +0x1C..+0x4F and +0x58..+0x5F are unclaimed here.
- */
-extern HomogeneousVector cursor[];
+extern float defaultOffset[];
 
 extern void xglMatrixUnit(float matrix[4][4]);
 

@@ -6,6 +6,11 @@
 #include "main/xgl_studio.h"
 #include "ov01/battle_init.h"
 
+static int cameraFlag = 1;
+static int frameCnt;
+static EntryPhaseFunc battleSeq;
+static int fadeFlag;
+
 extern void sefInitEffect(void);
 extern void MBattleInit(void);
 extern void dataBatDatLoad(void);
@@ -25,8 +30,6 @@ void entryFirstInit(void) {
 INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", battleProc);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", battleProcEnd);
-
-extern int frameCnt;
 
 int frameCntGet(void) {
     return frameCnt;
@@ -94,14 +97,14 @@ extern int monsSetNoGet(void);
 extern int thinkMonsTblNumGet(void);
 extern int thinkNoGet(void);
 extern int cfEncountGet(void);
-extern const char D_00A46620[];
+const char D_00A46620[] = "** map=%d monsSet=%d/%d Think=%d cfEncount=%X cfEvent=%X**\n";
 extern int printf(const char *format, ...);
 extern void GameDefocusQuickSet(int first, int second, int third, int fourth);
 extern int sndSysSePlay(int soundId);
 int entryPhase10(void);
-extern int battleDispMode;
-extern Vector4 sIntPararel2_0;
-extern Vector4 sIntAmbient_1;
+static int battleDispMode;
+static Vector4 sIntPararel2_0 = { 0.0f, 0.0f, 0.0f, 1.0f };
+static Vector4 sIntAmbient_1 = { 0.5f, 0.5f, 0.5f, 1.0f };
 
 int entryPhase00(void) {
     StudioLight *light;
@@ -148,17 +151,17 @@ int entryPhase00(void) {
 INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", entryPhase10);
 
 extern int dataCdSync(void);
-extern int D_00A5A214;
+static int loadNum;
 extern void sndMuTransPlay(int id);
 extern void dataXtxLoad(void);
-extern FadeObjTask *pFadeIn;
+static FadeObjTask *pFadeIn;
 int entryPhase16(void);
 
 int entryPhase15(void)
 {
-    if (dataCdSync() <= D_00A5A214) {
+    if (dataCdSync() <= loadNum) {
         sndMuTransPlay(0);
-        D_00A5A214 = dataCdSync();
+        loadNum = dataCdSync();
         dataXtxLoad();
         battleSeq = entryPhase16;
     }
@@ -171,8 +174,8 @@ int entryPhase20(void);
 
 int entryPhase16(void)
 {
-    if (dataCdSync() <= D_00A5A214) {
-        D_00A5A214 = dataCdSync();
+    if (dataCdSync() <= loadNum) {
+        loadNum = dataCdSync();
         dataMapLoad(mapNoGet());
         battleSeq = entryPhase20;
     }
@@ -187,10 +190,10 @@ INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", entryPhase25);
 int entryPhase25(void);
 extern int sefCheckLoad(void);
 extern void dataUnitFileLoad2(int unit);
-extern int pCreateUnit;
+static int pCreateUnit;
 
 /*
- * D_00A5A220 is a second camera-event request record: camEventExec's other
+ * camEv is a second camera-event request record: camEventExec's other
  * caller (src/ov01/battle_init.c's D_00A57B80) fills the same two fields,
  * a type code at +0x00 and the acting unit at +0x08, before the call.
  */
@@ -198,8 +201,9 @@ typedef struct EntryCamEvent {
     int type;                  /* +0x00 */
     unsigned char unmodeled_04[4];
     BattleUnit *unit;          /* +0x08 */
+    unsigned char unmodeled_0c[4];
 } EntryCamEvent;
-extern EntryCamEvent D_00A5A220;
+static EntryCamEvent camEv;
 
 /*
  * This TU's own call site sets up only the event-record argument, unlike
@@ -211,11 +215,11 @@ extern int camEventExec(EntryCamEvent *event);
 
 int entryPhase26(void)
 {
-    if (dataCdSync() <= D_00A5A214 && sefCheckLoad() == 0) {
+    if (dataCdSync() <= loadNum && sefCheckLoad() == 0) {
         dataUnitFileLoad2(pCreateUnit);
-        D_00A5A220.unit = (BattleUnit *)pCreateUnit;
-        D_00A5A220.type = 0x17;
-        camEventExec(&D_00A5A220);
+        camEv.unit = (BattleUnit *)pCreateUnit;
+        camEv.type = 0x17;
+        camEventExec(&camEv);
         battleSeq = entryPhase25;
     }
     return 1;
@@ -226,13 +230,12 @@ extern int selectPL(int excludeUnit);
 extern void dataSndSeLoad(int unit, int seId);
 extern int entryPhase31(void);
 
-extern int D_00A5A214;
-extern int pCvUnit;
+static int pCvUnit;
 
 int entryPhase30(void) {
     int unit;
 
-    D_00A5A214 = dataCdSync();
+    loadNum = dataCdSync();
     unit = selectPL(0);
     pCvUnit = unit;
     if (unit != 0) {
@@ -242,19 +245,19 @@ int entryPhase30(void) {
     return 1;
 }
 
-extern int unitIdx;
+static int unitIdx;
 extern void dataSndSeLoad2(int unit);
 extern void sndSeTransPlay(int unit, int seId, int volume);
 extern int entryPhase35(void);
 
 int entryPhase31(void)
 {
-    if (dataCdSync() <= D_00A5A214) {
+    if (dataCdSync() <= loadNum) {
         if (pCvUnit != 0) {
             dataSndSeLoad2(pCvUnit);
             sndSeTransPlay(pCvUnit, 0x18, 1);
         }
-        D_00A5A214 = dataCdSync();
+        loadNum = dataCdSync();
         unitIdx = 0;
         battleSeq = entryPhase35;
     }
@@ -266,11 +269,11 @@ INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", entryPhase35);
 extern void dataUnitFileLoad2(int unit);
 extern int entryPhase35(void);
 extern int sefCheckLoad(void);
-extern int pCreateUnit;
+static int pCreateUnit;
 
 int entryPhase36(void)
 {
-    if (dataCdSync() <= D_00A5A214 && sefCheckLoad() == 0) {
+    if (dataCdSync() <= loadNum && sefCheckLoad() == 0) {
         dataUnitFileLoad2(pCreateUnit);
         battleSeq = entryPhase35;
     }
@@ -312,7 +315,7 @@ int entryPhase50(void)
     int unit;
 
     if (battleMain() == 0) {
-        D_00A5A214 = dataCdSync();
+        loadNum = dataCdSync();
         if (battleRetCodeGet() == 1) {
             unit = selectPL((int)lastUnitGet());
             pCvUnit = unit;
@@ -338,7 +341,7 @@ int entryPhase60(void);
 
 int entryPhase51(void)
 {
-    if (dataCdSync() <= D_00A5A214) {
+    if (dataCdSync() <= loadNum) {
         if (pCvUnit != 0) {
             dataSndSeLoad2(pCvUnit);
             sndSeTransPlay(pCvUnit, 0x19, 1);

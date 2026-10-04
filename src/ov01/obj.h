@@ -118,7 +118,6 @@ typedef struct {
     ObjectWorkTransform transform;    /* +0x90 */
 } ObjectWork;
 
-extern ObjectWork objWork[60];
 
 int xglTaskRemove(XglTaskPrefix *task);
 
@@ -126,7 +125,6 @@ void objInit(void);
 
 void objExec(void);
 
-extern TaskManager taskMan;
 
 extern void objExecSub(void *manager);
 

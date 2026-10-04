@@ -101,8 +101,6 @@ void nmlModelSetFadeDoit(void);
 /* canon: config/header-canon.json chose src/math/main/spark-cont01-00231d50/nmlModelCalcDropShadow.c over 0 other accepted spellings */
 extern LayoutStore s_inLayout;
 
-extern unsigned int s_nShadowVec;
-
 extern Vector4 s_inShadowVec;
 
 /* The four fade-control instances nmlModelSendSignalMovieStart initializes
@@ -113,18 +111,7 @@ extern FadeControl s_inActiveFadeIn;
 extern FadeControl s_inActiveFadeOut;
 
 /* TU-local scalar state referenced by the recovered model-system setters. */
-extern int s_nMapClip;
-extern int s_nRenderCancelOld;
-extern int s_nUseBackBuffer;
-extern int s_nPause;
-extern int s_nMenu;
-extern int s_nFrameLockOff;
-extern int s_nPacketSignal;
-extern int s_nFadeDoit;
 extern int s_nEffectWrite;
-extern float s_fSortOffsetEntry;
-extern int s_nParent;
-extern int s_nMapLast;
 
 
 /*
@@ -140,7 +127,6 @@ extern int s_nNonAlphaGroup;
  * an index into the s_aParentBuf entries (main 0x0095bb50), also still
  * INCLUDE_ASM in this TU.
  */
-extern int s_nParentBuf;
 
 /*
  * These two status words have no published C owner in this TU. They are

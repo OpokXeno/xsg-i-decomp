@@ -13,6 +13,7 @@ extern const char D_004CAEC0[];
 typedef struct EnemyPresetPathPrefix {
     char bytes[15];
 } EnemyPresetPathPrefix;
+extern const EnemyPresetPathPrefix D_004CAEE0;
 typedef struct EnemyPresetPathParts {
     EnemyPresetPathPrefix prefix;
     char suffix[241];
@@ -21,7 +22,6 @@ typedef union EnemyPresetPathStorage {
     EnemyPresetPathParts parts;
     char bytes[256];
 } EnemyPresetPathStorage;
-extern const EnemyPresetPathPrefix D_004CAEE0;
 extern const char D_004DB858[];
 extern char *strcat(char *destination, const char *source);
 
@@ -61,3 +61,12 @@ int Enemy_LoadPreset(void *buffer, const char *preset_name)
 INCLUDE_ASM("asm/main/nonmatchings/enemy_system_init", TM_Script_Spline_Add);
 
 INCLUDE_ASM("asm/main/nonmatchings/enemy_system_init", ACT_createEnemy);
+
+const char D_004CAE30[24] = "data\\matumoto\\enemy.dat";
+const char D_004CAE48[32] = "data\\matumoto\\spline.dat";
+const char D_004CAE68[32] = "data\\matumoto\\bikkuri.lex";
+const char D_004CAE88[32] = "data\\matumoto\\hatena.lex";
+const char D_004CAEA8[24] = "data\\matumoto\\maru.lex";
+const char D_004CAEC0[32] = "data\\matumoto\\sikaku.lex";
+const EnemyPresetPathPrefix D_004CAEE0 = { "data\\matumoto\\" };
+const char D_004DB858[8] = ".dat";

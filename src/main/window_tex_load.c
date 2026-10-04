@@ -6,7 +6,8 @@ INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", WindowTexLoad);
 
 INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", WindowTexAddrGet);
 
-extern unsigned char MenuWorkEndTop[];
+/* MenuWorkEndGet clears and returns this entire 64 KiB work region. */
+static unsigned char MenuWorkEndTop[0x10000];
 
 void *MenuWorkEndGet(void) {
     memset(MenuWorkEndTop, 0, 0x10000U);
@@ -44,7 +45,7 @@ void ChangeTopLevel(int top_level)
 }
 
 /* Twelve consecutive five-byte saved menu-selection records. */
-extern unsigned char MenuKeepSelect[12 * 5];
+extern unsigned char MenuKeepSelect[0x64];
 
 void MenuKeepSelectReset(void)
 {
@@ -310,6 +311,25 @@ INCLUDE_ASM("asm/main/nonmatchings/window_tex_load", UmnInterface);
 extern void UmnMain2(int menuId);
 extern void UmnkosmosSpecialSet(void);
 extern void endPrintDirectFrameCopy(XglPacket *packet, int width, int height);
+
+MenuWorkState MenuWork = { 0 };
+unsigned char MenuKeepSelect[0x64] = { 0 };
+int MenuModelOut[4] = { 0 };
+
+int UmnSimulationNo = 0;
+int MenuScenarioNo = 0;
+int MenuModelWorkTop = 0;
+void *UmnGunoDataBaseTop = 0;
+unsigned char UmnKosmosSpecialBox[8] = { 0 };
+XglTaskScheduler *MenuTask_XMX = 0;
+unsigned char *MainMenuWorkEnd = 0;
+int MenuLoadCount = 0;
+unsigned char MenuBibrationCount = 0;
+unsigned char MenuBibrationAct = 0;
+unsigned char MenuBibrationSpeed = 0;
+unsigned char MenuBibrationPad = 0;
+XglTaskScheduler *MenuBgTask = 0;
+MenuBgColor MenuBgRgba = { 0 };
 extern void xglCdLoadOverlay(int overlayId);
 
 /*
@@ -418,3 +438,10 @@ int hen(void)
 {
     return MenuModelInit(0);
 }
+
+
+
+static unsigned char Menu02Tex[0x40800];
+/* WindowTexLoad reads the third window texture file into this buffer.
+ * MenuWorkEndTop starts immediately after its retail storage. */
+

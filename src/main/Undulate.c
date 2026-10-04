@@ -1,7 +1,9 @@
 #include "common.h"
 #include "Undulate.h"
 
-extern unsigned char *CurrentColiHead;
+static unsigned char *CurrentColiHead;
+int StudioEntrySkip = 0;
+signed char FLAG_FRAME_60 = 0;
 
 INCLUDE_ASM("asm/main/nonmatchings/Undulate", UnduInit);
 

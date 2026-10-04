@@ -186,7 +186,17 @@ void TWIN_initScene(TwinWindow2 *window)
     window->y = 324.0f;
 }
 
-extern const char D_004C1D18[]; /* "/[waitkey(0);close()]" */
+typedef struct TsliderLiteralPool {
+    char close_command[24];
+    char script_root[28];
+    char trailing_empty_string[4];
+} TsliderLiteralPool;
+
+const TsliderLiteralPool D_004C1D18 = {
+    "/[waitkey(0);close()]",
+    "host0:/home/xeno/script/",
+    ""
+};
 
 void *createItemGetWin(const char *text)
 {
@@ -199,6 +209,6 @@ void *createItemGetWin(const char *text)
     window->param = length + 2;
     TWIN_initCF(window);
     MSG_print2(window, text, length);
-    MSG_print2(window, D_004C1D18, -1);
+    MSG_print2(window, D_004C1D18.close_command, -1);
     return window->body;
 }

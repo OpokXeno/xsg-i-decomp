@@ -6,6 +6,35 @@
 #include "rg_select_robot.h"
 #include "main/xgl_studio.h"
 
+static int s_bLoading = 0;
+static unsigned int s_uReqNum;
+static unsigned int s_uOkNum;
+static char s_aszData[4][64];
+static void *s_apBuf[4];
+static void *s_pWhoAreYou;
+
+typedef union AlignedLightVector {
+    double alignment;
+    Vector4 value;
+    float components[4];
+} AlignedLightVector;
+typedef struct AlignedLightBlock {
+    AlignedLightVector vectors[4];
+} AlignedLightBlock;
+
+const char D_00A56D90[] = "who are you ?";
+const char D_00A56DA0[] = "../rg_select_robot.euc.c";
+const char D_00A56DD8[] = "pAct != NIL";
+const AlignedLightBlock D_00A56E10 = {
+    .vectors = {
+        { .components = { 0x1.0p-2f, 0x1.0p-2f, 0x1.0p-2f, 0x1.0p+0f } },
+        { .components = { 0x1.99999ap-1f, 0x1.99999ap-1f, 0x1.99999ap-1f, 0x1.0p+0f } },
+        { .components = { 0x1.0p-1f, 0x1.0p-1f, 0x1.0p-1f, 0x1.0p+0f } },
+        { .components = { 0x1.0p-1f, 0x1.0p-1f, 0x1.0p-1f, 0x1.0p+0f } }
+    }
+};
+const char D_00A56EF8[] = "pCont != NIL";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgHeap *InstanceOfRgHeap(void);
@@ -17,13 +46,6 @@ extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
 static void _InitSelRob(RgSelectRobot *pCont);
 static void _DestructSelRob(RgSelectRobot *pCont);
 static void _JobAct(RgSelectRobot *pCont, float deltaTime);
-
-/* Linker witness: this TU's own source-file name, used by every assert here. */
-extern const char D_00A56DA0[];
-/* Linker witness for the original literal at ov12:0x00a56ef8 ("pCont != NIL"). */
-extern const char D_00A56EF8[];
-/* Linker witness for the original literal at ov12:0x00a56d90 ("who are you ?"). */
-extern const char D_00A56D90[];
 
 /* jal RgWarn(format, file, line, ...), the XrgLogSys-shaped debug warning
    (also declared this way by src/ov12/rg_main.c, its accepted caller). */
@@ -86,9 +108,6 @@ static int _IsEndOfLoad(void)
 }
 
 extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-extern void *s_apBuf[4];
-extern char s_aszData[4][64];
-
 static void _JobLoad(void)
 {
     if (s_uReqNum != 0 && s_uOkNum < s_uReqNum) {
@@ -131,19 +150,16 @@ extern void xglLightIntensityParallel(StudioLight *light, unsigned int index,
                                      const Vector4 *intensity);
 extern void xglLightAngle(StudioLight *light, unsigned int index,
                          const Vector4 *direction);
-typedef union AlignedLightVector {
-    double alignment; /* Preserve 8-byte alignment for the original copy. */
-    Vector4 value;
-    float components[4];
-} AlignedLightVector;
-typedef struct AlignedLightBlock {
-    AlignedLightVector vectors[4];
-} AlignedLightBlock;
-extern const AlignedLightBlock D_00A56E10;
-extern AlignedLightBlock asDirection_0;
-
 void _select_light(StudioLight *light)
 {
+    static AlignedLightBlock asDirection = {
+        .vectors = {
+            { .components = { 0.0f, 0.0f, 0.0f, 0x1.0p+0f } },
+            { .components = { -0x1.0c3e5p-2f, 0x1.0ffa8ep-1f, -0x1.45216cp-6f, 0x1.0p+0f } },
+            { .components = { 0x1.2d97c8p+1f, 0x1.45facp+0f, 0x1.921fb6p+1f, 0x1.0p+0f } },
+            { .components = { 0x1.71e67ep-2f, 0x1.e350ap+1f, 0x1.d38938p-6f, 0x1.0p+0f } }
+        }
+    };
     AlignedLightBlock intensity;
     int i;
 
@@ -165,7 +181,7 @@ void _select_light(StudioLight *light)
             xglLightIntensityParallel(light, i - 1,
                                       &intensity.vectors[i].value);
             xglLightAngle(light, i - 1,
-                          &asDirection_0.vectors[i].value);
+                          &asDirection.vectors[i].value);
         }
     }
 }
@@ -175,11 +191,13 @@ extern void XrgLinearIntpVector(RgVector destination, RgVector first,
 /* The two positions _ActorPos interpolates between, weighted by
    RgSelectRobot::screenPos: index 1 is the weighted argument, index 0 the
    complement-weighted one. */
-extern RgVector s_aPos_1[2];
-
 static void _ActorPos(RgSelectRobot *pCont, RgVector position)
 {
-    XrgLinearIntpVector(position, s_aPos_1[1], s_aPos_1[0], pCont->screenPos);
+    static RgVector s_aPos[2] = {
+        { 0x1.333334p+1f, -0x1.8p+0f, -0x1.a66666p+2f, 0.0f },
+        { -0x1.333334p+1f, -0x1.8p+0f, -0x1.a66666p+2f, 0.0f }
+    };
+    XrgLinearIntpVector(position, s_aPos[1], s_aPos[0], pCont->screenPos);
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ActorPosUpdate);
@@ -188,7 +206,6 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ActivateAct);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_robot", _ReqAct);
 
-extern const char D_00A56DD8[];
 extern void DisposeRgDispModel(RgDispModel *pDispModel);
 extern void DisposeRgFileSysData_sub(RgFileSysData *pFile,
                                      const char *sourceFile, int line);

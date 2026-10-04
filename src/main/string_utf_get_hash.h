@@ -40,8 +40,6 @@ void reloadConstString(void *heap_boundary);
 
 extern ConstString **constStringTable;
 
-extern int constStringCount;
-
 SceneString *loadConstString(const char *bytes, int length);
 
 SceneString *loadConstString2(const char *bytes, int length);

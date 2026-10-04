@@ -39,25 +39,22 @@ extern void XrgActorDisposeEffector(XrgActor *pActor, MatrixEffector *effector);
  * ov12:0x00a53d98 "eArmType != RG_EQUIP_BACK"
  * ov12:0x00a53db8 "invalid arm type %d"
  * ov12:0x00a53dd0 "pCont != NIL"
- * All six strings are scaffold .rodata (config/tu-build.json data_ownership
- * .rodata: owner asm) with no config/symbols/ov12.txt entry, so they keep
- * their splat names.
+ * All six keep their original splat names.
  */
-extern const char D_00A53D18[];
-extern const char D_00A53D30[];
-extern const char D_00A53D50[];
-extern const char D_00A53D98[];
-extern const char D_00A53DB8[];
-extern const char D_00A53DD0[];
+const char D_00A53D18[24] = "pParentActor != NIL";
+const char D_00A53D30[32] = "../rg_shotmot_control.euc.c";
+const char D_00A53D50[72] = "RG_EQUIP_TYPE_MIN <= (eArmType) && (eArmType) < RG_EQUIP_TYPE_NUM";
+const char D_00A53D98[32] = "eArmType != RG_EQUIP_BACK";
+const char D_00A53DB8[24] = "invalid arm type %d";
+const char D_00A53DD0[16] = "pCont != NIL";
 
 /*
  * ov12:0x00a53de0 "pCont->m_pMatEff != NIL"
  * ov12:0x00a53df8 "pCont->m_pParent != NIL"
- * Same scaffold .rodata as the six strings above, no config/symbols/ov12.txt
- * entry.
+ * Both keep their original splat names.
  */
-extern const char D_00A53DE0[];
-extern const char D_00A53DF8[];
+const char D_00A53DE0[24] = "pCont->m_pMatEff != NIL";
+const char D_00A53DF8[24] = "pCont->m_pParent != NIL";
 
 /*
  * RgEquipType slot count and the BACK slot _CreateMatEffector rejects,

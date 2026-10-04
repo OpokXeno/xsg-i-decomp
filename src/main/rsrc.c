@@ -1,10 +1,11 @@
 #include "common.h"
 #include "shared.h"
 
-/* These globals remain provided by this TU's assembly-owned small-data area. */
-extern int infoIndex;
-extern int infoLength;
-extern char *rsrcDefaultPath;
+/* These cursors begin at the sentinel used before a resource table is found. */
+static int infoIndex = -1;
+static int infoLength = -1;
+extern char D_004C23C0[];
+static char *rsrcDefaultPath = D_004C23C0;
 
 typedef struct RsrcManager {
     u8 *heap_origin;

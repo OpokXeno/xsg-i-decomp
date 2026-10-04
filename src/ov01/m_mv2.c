@@ -8,8 +8,8 @@
  * .bss for this TU is still scaffold-owned: the flag word keeps its ledger
  * name (config/symbols/ov01.txt) and the MPEG context its splat name.
  */
-extern int mvFlags_00A43724;
-extern unsigned char D_00A5B838[0xC0];
+static int mvFlags_00A43724 = 0;
+static unsigned char D_00A5B838[0xC0];
 
 #define MV2_FLAG_INITIALIZED 0x1
 #define MV2_FLAG_PLAYING 0x2
@@ -33,7 +33,7 @@ typedef struct Mv2Params {
     unsigned char unmodeled_82[6];
 } Mv2Params;
 
-extern Mv2Params D_00A5B7B0;
+static Mv2Params D_00A5B7B0;
 
 extern void xglSleep(void);
 extern int xglMpeg2Play(unsigned char *mpegContext);

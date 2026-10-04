@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "game_debug_menu.h"
 
+extern char D_004D9EF8[];
+
 static void PauseMenuPage0(void)
 {
     int y;
@@ -27,3 +29,5 @@ INCLUDE_ASM("asm/main/nonmatchings/game_debug_menu", PauseMenuPage2);
 INCLUDE_ASM("asm/main/nonmatchings/game_debug_menu", PauseMenuPage3);
 
 INCLUDE_ASM("asm/main/nonmatchings/game_debug_menu", GameDebugMenu);
+
+char D_004D9EF8[8] = "%4x";

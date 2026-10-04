@@ -45,3 +45,6 @@ int XrgHostWrite(int handle, const void *buffer, int size)
     RgError(xrg_host_unsupported_message, xrg_host_source_file, 81);
     return 0;
 }
+
+const char xrg_host_unsupported_message[24] = "use host function";
+const char xrg_host_source_file[24] = "../xrg_hostfile.euc.c";

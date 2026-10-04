@@ -3,8 +3,8 @@
 #include "init_map_door.h"
 
 extern signed char printflg;
-extern unsigned char D_004CA3B8[];
-extern unsigned char D_004CA3C8[];
+extern const char D_004CA3B8[16];
+extern const char D_004CA3C8[24];
 int printf(const char *, ...);
 
 /*
@@ -50,9 +50,7 @@ typedef struct DoorGameLoopState {
 
 extern DoorGameLoopState GameLoopState;
 extern PadPrefix PadData;
-/* The original reads this fallback literal before testing the height. */
-extern volatile const float D_004D7F4C;
-extern const float D_004D7F50;
+/* The original uses these as compiler-emitted single-precision constants. */
 float CheckDist2D(Vector4 *player_position, DoorPosition *door_position);
 float atan2f(float y, float x);
 float nearDir(float first, float second);
@@ -429,6 +427,9 @@ void HalfAutoDoorOpenNowFunc(DoorUnit *door)
     }
 }
 
+const char D_004CA3B8[16] = "id=%d DoorOpen\n";
+const char D_004CA3C8[24] = "id=%d DoorClose\n";
+
 void DoorCommonFunc(DoorUnit *door)
 {
     DoorPosition resting = door->resting_position;
@@ -508,7 +509,7 @@ void DoorOpenStanbyFunc(DoorUnit *door)
 float CheckDoorDist(DoorUnit *door)
 {
     DoorPlayerState *player = GameLoopState.player;
-    float distance = D_004D7F4C;
+    float distance = 65535.0f;
 
     if (__builtin_fabsf(player->position.y - door->y) > 2.0f) {
         return distance;
@@ -531,7 +532,7 @@ int CheckDoorSwitch(DoorUnit *door)
     if ((PadData.half_2a & 0x20) != 0) {
         angle = atan2f(position.x - player->position.x, position.z - player->position.z);
         angle = nearDir(angle, player->facing_angle);
-        if (__builtin_fabsf(angle) < D_004D7F50) {
+        if (__builtin_fabsf(angle) < 1.04719758f) {
             return 1;
         }
     }

@@ -3,6 +3,7 @@
  */
 #include "common.h"
 #include "shared.h"
+static struct CasinoResourcePrefix *ResData;
 #include "res.h"
 #include "mini_g.h"
 
@@ -42,7 +43,7 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SetTest);
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SetRegAD);
 
-extern short BoxRGBA[4];
+static short BoxRGBA[4];
 
 static void ResetRGBA(void)
 {
@@ -58,7 +59,7 @@ static void ResetRGBA(void)
 /* ov11:0x00a007e0. Stores the four caller-supplied components in the
  * shared untextured box color state (original LOCAL data symbol
  * BoxRGBA, ov11:0x00a0df78). */
-extern short BoxRGBA[4];
+static short BoxRGBA[4];
 
 static void SetRGBA(short red, short green, short blue, short alpha)
 {
@@ -67,6 +68,72 @@ static void SetRGBA(short red, short green, short blue, short alpha)
     BoxRGBA[2] = blue;
     BoxRGBA[3] = alpha;
 }
+
+/* Candidate-backed OV11/tu001 initialized DATA objects; function bodies are retained. */
+typedef unsigned int CasinoSpriteWords[7];
+typedef unsigned int CasinoRectWords[4];
+static short real11array[21];
+static short real12array[21];
+static short real13array[21];
+static short real21array[21];
+static short real22array[21];
+static short real23array[21];
+static short real31array[21];
+static short real32array[21];
+static short real33array[21];
+static short real41array[21];
+static short real42array[21];
+static short real43array[21];
+static short real51array[21];
+static short real52array[21];
+static short real53array[21];
+extern short real61array[];
+extern short real62array[];
+extern short real63array[];
+static char *SaveWork  = (char *)SaveData + 0x15190;
+static short real01array[21];
+static short real02array[21];
+static short real03array[21];
+static short *realpt[18]  = {
+    real01array, real02array, real03array, real11array, real12array, real13array,
+    real21array, real22array, real23array, real31array, real32array, real33array,
+    real41array, real42array, real43array, real51array, real52array, real53array
+};
+static CasinoSpriteWords pay_window[2]  = {
+    {224, 0, 32, 32, 0, 572, 0},
+    {224, 32, 32, 32, 0, 572, 0}
+};
+static CasinoRectWords pay_window_rect_4[5]  = {
+    {36, 33, 32, 32}, {36, 82, 32, 32}, {36, 131, 32, 32},
+    {36, 180, 32, 32}, {36, 229, 32, 32}
+};
+static int status_keep_5  = 0;
+static CasinoSpriteWords BoxSpr  = {0, 0, 511, 447, 0, 1020, 0};
+static CasinoRectWords BoxRect  = {0, 0, 511, 447};
+static CasinoSpriteWords NineGameBG_Tex_43  = {0, 0, 511, 447, 0, 1020, 0};
+static CasinoRectWords NineGameBG_Rect_44  = {0, 0, 512, 448};
+static CasinoSpriteWords tex_68  = {0, 0, 512, 448, 0, 1020, 0};
+static CasinoRectWords rect_69  = {0, 0, 512, 448};
+static CasinoSpriteWords tex_80  = {0, 0, 352, 176, 0, 1020, 0};
+static CasinoRectWords rect_81  = {16, 256, 352, 176};
+static CasinoRectWords result_rect_97[9]  = {
+    {204, 362, 160, 32}, {204, 330, 160, 32}, {204, 298, 160, 32},
+    {204, 266, 160, 32}, {0, 394, 244, 32}, {0, 362, 244, 32},
+    {0, 330, 244, 32}, {0, 298, 244, 32}, {0, 266, 244, 32}
+};
+static CasinoSpriteWords tex_98  = {96, 224, 160, 32, 0, 756, 0};
+static CasinoSpriteWords SubWindow_Tex  = {0, 0, 176, 120, 0, 564, 2};
+static CasinoSpriteWords Level_Tex[4]  = {
+    {176, 0, 72, 16, 0, 564, 2}, {176, 16, 72, 16, 0, 564, 2},
+    {176, 32, 72, 16, 0, 564, 2}, {176, 48, 72, 16, 0, 564, 2}
+};
+static CasinoSpriteWords ExChange_Tex[3]  = {
+    {176, 64, 64, 16, 0, 564, 2}, {176, 80, 64, 16, 0, 564, 2},
+    {176, 96, 64, 16, 0, 564, 2}
+};
+static CasinoSpriteWords BGTEST_Tex  = {0, 0, 511, 447, 0, 1136, 0};
+static CasinoRectWords BGTEST_Rect  = {0, 0, 512, 448};
+static int flg_104  = 0;
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MakeBoxPos);
 
@@ -132,7 +199,7 @@ static char *RES_Coin_Info(int offer_index)
 #define CASINO_SOUND_ID_TABLE_OFFSET 0x193C
 
 extern void xglSoundEffectNormalID(int soundEffectId, int variant);
-extern const char D_00A0BBB0[]; /* "Sound Req = SE_%.3d:Sound num = %x\n" */
+static const char D_00A0BBB0[] = "Sound Req = SE_%.3d:Sound num = %x\n";
 
 static void RES_SoundEffect(int soundId)
 {
@@ -143,7 +210,7 @@ static void RES_SoundEffect(int soundId)
 }
 
 extern void xglSoundEffectStopDirect(int soundEffectId);
-extern const char D_00A0BBD8[]; /* "Sound Req = SE_%.3d:Sound Stop num = %x\n" */
+static const char D_00A0BBD8[] = "Sound Req = SE_%.3d:Sound Stop num = %x\n";
 
 static void RES_SoundEffectStop(int soundId)
 {
@@ -156,7 +223,7 @@ static void RES_SoundEffectStop(int soundId)
 /* ov11:0x00a00af0. Loads the casino resource table (CASINO.res) into the
  * fixed asset staging address and records it as ResData, the same
  * (void *)FIXED_ADDRESS pattern PokerInit and the other loaders below use. */
-extern const char D_00A0BC08[]; /* "data\\tanaka\\CASINO.res" */
+static const char D_00A0BC08[] = "data\\tanaka\\CASINO.res";
 
 #define CASINO_RES_BUFFER 0x01000000
 
@@ -191,7 +258,6 @@ static int AddCoin(int amount)
     return 1;
 }
 
-extern short *realpt[18];
 extern int D_00A0DD34[];
 
 static short SlGetPic(int reel, int positionOffset, int row)
@@ -250,8 +316,6 @@ static int check_mode(void)
     return 0;
 }
 
-extern unsigned char pay_window[2][28];
-extern unsigned char pay_window_rect_4[5][16];
 static void MakeSprite(void *sprite, void *rect);
 static void SetDrawStatus(int mode, int enable);
 
@@ -267,7 +331,6 @@ static void SlPayWindowPrint(void)
     }
 }
 
-extern int status_keep_5;
 
 static int check_spin(void)
 {
@@ -309,8 +372,6 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", point_control);
 static void MakeSprite(void *sprite, void *rect);
 static void SetDrawStatus(int mode, int enable);
 static void SetTest(int value);
-extern unsigned char BoxSpr[0x1C];
-extern unsigned char BoxRect[0x10];
 
 static void SlBgDraw(void)
 {
@@ -363,11 +424,11 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", slot_main);
 
 /* ov11:0x00a034d8. Loads the five slot-machine texture resources into their
  * fixed rendering buffers through the resource loader. */
-extern const char D_00A0BE10[]; /* "data\\tanaka\\slot_1.xtx" */
-extern const char D_00A0BE28[]; /* "data\\tanaka\\slot_2.xtx" */
-extern const char D_00A0BE40[]; /* "data\\tanaka\\base.xtx" */
-extern const char D_00A0BE58[]; /* "data\\tanaka\\w1.xtx" */
-extern const char D_00A0BE70[]; /* "data\\tanaka\\help_all.xtx" */
+static const char D_00A0BE10[] = "data\\tanaka\\slot_1.xtx";
+static const char D_00A0BE28[] = "data\\tanaka\\slot_2.xtx";
+static const char D_00A0BE40[] = "data\\tanaka\\base.xtx";
+static const char D_00A0BE58[] = "data\\tanaka\\w1.xtx";
+static const char D_00A0BE70[] = "data\\tanaka\\help_all.xtx";
 
 #define SLOT_1_TEX_BUFFER 0x01008000
 #define SLOT_2_TEX_BUFFER 0x01048800
@@ -420,9 +481,7 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", NgLamp);
  * (src/main/xgl_packet.c, still INCLUDE_ASM there). */
 extern void xglPacketTextureTrans(void *buffer);
 static void SetRegAD(XglPacket *packet, int reg, int value);
-extern XglPacket *Pkt;
-extern unsigned char NineGameBG_Tex_43[0x1C];
-extern unsigned char NineGameBG_Rect_44[0x10];
+static XglPacket *Pkt;
 
 static void NineGameBG_Draw(void)
 {
@@ -491,8 +550,6 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoDialog);
 /* ov11:0x00a04dc0. Selects the loaded poker table-1 background texture
  * (0x0138f000, the "poker_1.xtx" buffer PokerInit below fills as
  * POKER_TABLE1_TEX_BUFFER) and emits the fixed poker background sprite. */
-extern unsigned char tex_68[0x1C];
-extern unsigned char rect_69[0x10];
 
 static void PoBgDraw(void)
 {
@@ -512,8 +569,6 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoBonusCardAnime);
 /* ov11:0x00a05358. Emits the single fixed poker payout table sprite.
  * MakeSprite is a LOCAL asm sibling. */
 static void MakeSprite(void *sprite, void *rect);
-extern unsigned char tex_80[0x1C];
-extern unsigned char rect_81[0x10];
 
 static void PoRateTableDraw(void)
 {
@@ -666,7 +721,7 @@ extern void dprintf(const char *fmt, ...);
 
 /* ov11:0x00a05de0. Reports category 1, printing D_00A0C078 through
  * dprintf, when PoMultiChk's multiplicity equals 1. */
-extern const char D_00A0C078[];
+static const char D_00A0C078[16] = "\xA5\xEF\xA5\xF3\xA5\xDA\xA5\xA2\n";
 
 static int PoChk1(void)
 {
@@ -679,7 +734,7 @@ static int PoChk1(void)
 
 /* ov11:0x00a05e20. Reports category 2, printing D_00A0C088 through
  * dprintf, when PoMultiChk's multiplicity equals 2. */
-extern const char D_00A0C088[];
+static const char D_00A0C088[16] = "\xA5\xC4\xA1\xBC\xA5\xDA\xA5\xA2\n";
 
 static int PoChk2(void)
 {
@@ -692,7 +747,7 @@ static int PoChk2(void)
 
 /* ov11:0x00a05e60. Reports category 3, printing D_00A0C098 through
  * dprintf, when PoMultiChk's multiplicity equals 3. */
-extern const char D_00A0C098[];
+static const char D_00A0C098[16] = "\xA5\xB9\xA5\xEA\xA1\xBC\xA5\xAB\xA1\xBC\xA5\xC9\n";
 
 static int PoChk3(void)
 {
@@ -708,7 +763,7 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PoChk4);
 /* ov11:0x00a05fb0. Substitutes category 5 and prints D_00A0C0B8 through
  * dprintf whenever PoFlushChk returns nonzero; PoFlushChk's own nonzero
  * value is discarded rather than reused as the category. */
-extern const char D_00A0C0B8[];
+static const char D_00A0C0B8[16] = "\xA5\xD5\xA5\xE9\xA5\xC3\xA5\xB7\xA5\xE5\n";
 
 static int PoChk5(void)
 {
@@ -723,7 +778,7 @@ static int PoChk5(void)
 
 /* ov11:0x00a05fe8. Reports category 6, printing D_00A0C0C8 through
  * dprintf, when PoMultiChk's multiplicity equals 4. */
-extern const char D_00A0C0C8[];
+static const char D_00A0C0C8[16] = "\xA5\xD5\xA5\xEB\xA5\xCF\xA5\xA6\xA5\xB9\n";
 
 static int PoChk6(void)
 {
@@ -736,7 +791,7 @@ static int PoChk6(void)
 
 /* ov11:0x00a06028. Reports category 7, printing D_00A0C0D8 through
  * dprintf, when PoMultiChk's multiplicity equals 5. */
-extern const char D_00A0C0D8[];
+static const char D_00A0C0D8[16] = "\xA5\xD5\xA5\xA9\xA1\xBC\xA5\xAB\xA1\xBC\xA5\xC9\n";
 
 static int PoChk7(void)
 {
@@ -747,7 +802,7 @@ static int PoChk7(void)
     return 0;
 }
 
-extern const char D_00A0C0E8[];
+static const char D_00A0C0E8[24] = "\xA5\xB9\xA5\xC8\xA5\xEC\xA1\xBC\xA5\xC8\xA5\xD5\xA5\xE9\xA5\xC3\xA5\xB7\xA5\xE5\n";
 
 static int PoChk8(void)
 {
@@ -780,7 +835,7 @@ static int PoChk8(void)
  * this run, reports 0. */
 #define POKER_HAND_RANK_INDEX 0xD1 /* short index; 0x1A2 / sizeof(short) */
 
-extern const char D_00A0C100[];
+static const char D_00A0C100[32] = "\xA5\xED\xA5\xA4\xA5\xE4\xA5\xEB\xA5\xB9\xA5\xC8\xA5\xEC\xA1\xBC\xA5\xC8\xA5\xD5\xA5\xE9\xA5\xC3\xA5\xB7\xA5\xE5\n";
 
 static int PoChk9(void)
 {
@@ -824,7 +879,7 @@ static int PoChk4(void);
 static int PoChk8(void);
 static int PoChk9(void);
 static void RES_SoundEffect(int soundId);
-extern const char D_00A0C120[];
+static const char D_00A0C120[] = "result = %d\n";
 
 static int PoCardCheck(void)
 {
@@ -880,8 +935,6 @@ defaultSound:
  * index category, selecting its fixed rect from a shared row of 0x10-byte
  * rects (the same tex/rect MakeSprite pair shape used throughout this TU;
  * the row's entry count beyond this stride is not separately evidenced). */
-extern unsigned char tex_98[0x1C];
-extern unsigned char result_rect_97[][0x10];
 
 static void PoResultLamp(int category)
 {
@@ -918,6 +971,10 @@ typedef struct {
 
 static void PoWindowMessage(const char *message, int width);
 extern int D_00A0DD2C;
+extern const char D_00A0C130[];
+extern const char D_00A0C150[];
+extern const char D_00A0C170[];
+extern const char D_00A0C190[];
 extern const PokerReadyMessageTable D_00A0C1B8; /* "Play 5/10/30/100 coins" */
 extern const PokerReadyWidthTable D_00A0C1C8;
 
@@ -928,6 +985,11 @@ static void PokerReadyMes(void)
 
     PoWindowMessage(readyMessage.text[D_00A0DD2C], readyWidth.width[D_00A0DD2C]);
 }
+
+const PokerReadyMessageTable D_00A0C1B8 = {{
+    D_00A0C130, D_00A0C150, D_00A0C170, D_00A0C190,
+}};
+const PokerReadyWidthTable D_00A0C1C8 = {{29, 30, 30, 31}};
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", PokerMain);
 
@@ -950,12 +1012,12 @@ static void PoInitWork(void)
  * D_00A0Cxxx strings themselves) into fixed EE main RAM staging addresses,
  * following the same (void *)FIXED_ADDRESS pattern as src/main/game_over.c's
  * IMAGE_LOAD_BUFFER. */
-extern const char D_00A0C270[]; /* "data\\tanaka\\spade.xtx" */
-extern const char D_00A0C288[]; /* "data\\tanaka\\clover.xtx" */
-extern const char D_00A0C2A0[]; /* "data\\tanaka\\heart.xtx" */
-extern const char D_00A0C2B8[]; /* "data\\tanaka\\dia.xtx" */
-extern const char D_00A0C2D0[]; /* "data\\tanaka\\poker_1.xtx" */
-extern const char D_00A0C2E8[]; /* "data\\tanaka\\poker_2.xtx" */
+static const char D_00A0C270[] = "data\\tanaka\\spade.xtx";
+static const char D_00A0C288[] = "data\\tanaka\\clover.xtx";
+static const char D_00A0C2A0[] = "data\\tanaka\\heart.xtx";
+static const char D_00A0C2B8[] = "data\\tanaka\\dia.xtx";
+static const char D_00A0C2D0[] = "data\\tanaka\\poker_1.xtx";
+static const char D_00A0C2E8[] = "data\\tanaka\\poker_2.xtx";
 
 #define POKER_SPADE_TEX_BUFFER  0x0128D000
 #define POKER_CLOVER_TEX_BUFFER 0x012CD800
@@ -989,7 +1051,6 @@ typedef struct {
     int height;
 } SubWindowRect;
 
-extern unsigned char SubWindow_Tex[0x1C];
 
 static void sub_window(int windowId, int y, int x)
 {
@@ -1017,7 +1078,6 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", submenu_select);
 static void sub_window(int windowId, int y, int x);
 static int submenu_select(int windowId, int y, int x, int iconCount,
                           void *icons, int *selected);
-extern unsigned char Level_Tex[];
 extern int D_00A0DD2C;
 
 static int level_select(int windowId, int y, int x)
@@ -1030,7 +1090,6 @@ static int level_select(int windowId, int y, int x)
  * mode selection, the same sub_window()+submenu_select() shape level_select
  * uses above; exchange_select's own tail call (`j submenu_select`) is why its
  * return value is submenu_select's. */
-extern unsigned char ExChange_Tex[];
 extern int D_00A0DD24;
 
 static int exchange_select(int windowId, int y, int x)
@@ -1044,8 +1103,8 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", menu_mode);
 /* ov11:0x00a07410. Loads the menu background and window textures, then
  * resets the menu mode and game level selection in the Gwork work
  * block. */
-extern const char D_00A0C320[]; /* "data\\tanaka\\BG.xtx" */
-extern const char D_00A0C338[]; /* "data\\tanaka\\window.xtx" */
+static const char D_00A0C320[] = "data\\tanaka\\BG.xtx";
+static const char D_00A0C338[] = "data\\tanaka\\window.xtx";
 
 #define MENU_BG_TEX_BUFFER 0x0114A800
 #define MENU_WINDOW_TEX_BUFFER 0x0118B000
@@ -1076,9 +1135,6 @@ static void init_test_mode(void)
  * test-mode background sprite. xglPacketGetCurrent is main:0x0022c450
  * (src/main/xgl_packet.c). */
 extern XglPacket *xglPacketGetCurrent(void);
-extern unsigned char BGTEST_Tex[0x1C];
-extern unsigned char BGTEST_Rect[0x10];
-extern int flg_104;
 
 static void test_mode(void)
 {
@@ -1102,7 +1158,7 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", coin_main);
 /* ov11:0x00a07c38. Loads the casino coin-exchange minigame's background and
  * exchange textures (D_00A0BE40 is the same "base.xtx" path init_test_mode
  * uses, into a different fixed buffer address here). */
-extern const char D_00A0C390[]; /* "data\\tanaka\\exchange2.xtx" */
+static const char D_00A0C390[] = "data\\tanaka\\exchange2.xtx";
 
 #define COIN_EXCHANGE_TEX_BUFFER 0x011CB800
 
@@ -1114,7 +1170,7 @@ static void init_coin(void)
 
 /* ov11:0x00a07c80. Loads the casino shop's exchange and background textures
  * (D_00A0BE40 "base.xtx" again, into the same fixed buffer init_coin uses). */
-extern const char D_00A0C3B0[]; /* "data\\tanaka\\exchange1.xtx" */
+static const char D_00A0C3B0[] = "data\\tanaka\\exchange1.xtx";
 
 #define SHOP_EXCHANGE_TEX_BUFFER 0x0120C000
 
@@ -1130,8 +1186,8 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", shop_main);
 
 /* ov11:0x00a083f8. Loads the data-viewer minigame's dataviewer and sampler
  * textures. */
-extern const char D_00A0C590[]; /* "data\\tanaka\\dataviewer.xtx" */
-extern const char D_00A0C5B0[]; /* "data\\tanaka\\sam.xtx" */
+static const char D_00A0C590[] = "data\\tanaka\\dataviewer.xtx";
+static const char D_00A0C5B0[] = "data\\tanaka\\sam.xtx";
 
 #define VW_DATAVIEWER_TEX_BUFFER 0x0124C800
 #define VW_SAM_TEX_BUFFER        0x01410000
@@ -1261,7 +1317,7 @@ static void InitWork(void)
 /* ov11:0x00a09020. Logs the configured heap address, then delegates all
  * casino state initialization to InitWork (LOCAL asm sibling). */
 static void InitWork(void);
-extern const char D_00A0C6D0[]; /* "work size = %x\n" */
+static const char D_00A0C6D0[] = "work size = %x\n";
 
 void MiniG_Init(void)
 {
@@ -1270,3 +1326,49 @@ void MiniG_Init(void)
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", MiniG_Main);
+
+
+
+static short real01array[21] = { 1, 3, 1, 0, 4, 4, 0, 1, 3, 1, 0, 2, 1, 0, 1, 2, 1, 0, 5, 5, 0 };
+
+static short real02array[21] = { 3, 0, 1, 3, 0, 0, 0, 1, 2, 0, 4, 0, 1, 2, 0, 1, 0, 0, 3, 5, 1 };
+
+static short real03array[21] = { 1, 0, 0, 0, 2, 1, 0, 2, 1, 4, 2, 0, 0, 1, 5, 3, 1, 0, 5, 5, 3 };
+
+static short real11array[21] = { 1, 3, 1, 0, 4, 4, 0, 1, 3, 1, 0, 2, 1, 0, 1, 2, 1, 0, 7, 7, 0 };
+
+static short real12array[21] = { 3, 0, 1, 3, 0, 0, 0, 1, 2, 0, 4, 0, 1, 2, 0, 1, 0, 0, 3, 7, 1 };
+
+static short real13array[21] = { 1, 0, 0, 0, 2, 1, 0, 2, 1, 4, 2, 0, 0, 1, 7, 3, 1, 0, 7, 7, 3 };
+
+static short real21array[21] = { 1, 3, 1, 6, 4, 6, 0, 1, 3, 1, 6, 2, 1, 0, 1, 2, 1, 0, 5, 5, 0 };
+
+static short real22array[21] = { 3, 0, 1, 3, 6, 0, 0, 1, 2, 0, 4, 0, 1, 2, 0, 1, 0, 0, 3, 5, 1 };
+
+static short real23array[21] = { 1, 0, 0, 6, 2, 1, 6, 2, 1, 4, 2, 0, 0, 1, 5, 3, 1, 0, 5, 5, 3 };
+
+static short real31array[21] = { 6, 3, 1, 6, 4, 6, 6, 1, 3, 1, 0, 2, 1, 0, 6, 2, 1, 6, 5, 5, 6 };
+
+static short real32array[21] = { 3, 0, 1, 3, 0, 0, 0, 1, 2, 0, 4, 0, 1, 2, 0, 1, 0, 0, 3, 5, 1 };
+
+static short real33array[21] = { 1, 0, 0, 0, 2, 1, 0, 2, 1, 4, 2, 0, 0, 1, 5, 3, 1, 0, 5, 5, 3 };
+
+static short real41array[21] = { 8, 7, 8, 7, 8, 7, 8, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
+
+static short real42array[21] = { 8, 8, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 7, 8, 8, 7, 8, 8, 8, 8 };
+
+static short real43array[21] = { 8, 8, 8, 8, 7, 8, 8, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8 };
+
+static short real51array[21] = { 1, 3, 8, 0, 4, 4, 0, 8, 3, 1, 0, 2, 8, 0, 8, 2, 1, 0, 5, 5, 0 };
+
+static short real52array[21] = { 3, 0, 1, 8, 0, 8, 8, 1, 2, 8, 4, 0, 1, 2, 0, 8, 0, 8, 3, 5, 1 };
+
+static short real53array[21] = { 1, 0, 8, 8, 2, 1, 0, 2, 1, 8, 2, 8, 0, 8, 5, 3, 1, 0, 5, 5, 3 };
+
+const char D_00A0C130[32] = "Play 5 coins per round poker\241\251";
+
+const char D_00A0C150[32] = "Play 10 coins per round poker\241\251";
+
+const char D_00A0C170[32] = "Play 30 coins per round poker\241\251";
+
+const char D_00A0C190[40] = "Play 100 coins per round poker\241\251";

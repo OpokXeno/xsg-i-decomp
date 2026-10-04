@@ -12,11 +12,27 @@ typedef struct MenuEtherStatusEntry {
     short etherStatus;
 } MenuEtherStatusEntry;
 
-extern const signed char *font_0;
-extern const signed char *font_1;
+extern const signed char D_00A46AF8[];
+extern const signed char D_00A46BE0[];
 extern void menuStatSprite();
 
-extern ObjectTask *pMenuBat;
+/* Keep source-owned local BSS objects in their original address order;
+ * intervening original-only storage remains scaffold-owned between runs. */
+static ObjectTask *pMenuBat;
+static ObjectTask *pPreObj;
+static ObjectTask *pAtbObj;
+static ObjectTask *pKeyGuideObj;
+static ObjectTask *pBoostObj;
+static ObjectTask *pCritObj;
+static ObjectTask *pStatObj[4];
+static ObjectTask *pStockObj[5];
+static int eventTimer;
+static int eventTimerX;
+static float RingRot;
+static int mapHDist;
+static int menuResBat;
+static unsigned char ethWin[0x28];
+static unsigned char itmWin[0x28];
 
 void menuInitBat(void) {
     pMenuBat = 0;
@@ -24,7 +40,6 @@ void menuInitBat(void) {
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuOpenBat);
 
-extern int menuResBat;
 void objRemove(ObjectTask *task);
 int sndSysSePlay(int soundId);
 
@@ -87,7 +102,6 @@ int menuEtherNumChk(ObjectTask *unit)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuOpenEth);
 
-extern unsigned char ethWin[];
 void eBattleWinClose(void *window);
 
 void menuCloseEth(void) {
@@ -99,8 +113,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuResultEth);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuOpenItm);
 
-extern unsigned char itmWin[];
-
 void menuCloseItm(void) {
     eBattleWinClose(itmWin);
     sndSysSePlay(8);
@@ -109,14 +121,6 @@ void menuCloseItm(void) {
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuResultItm);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatDispCreate);
-
-extern ObjectTask *pPreObj;
-extern ObjectTask *pAtbObj;
-extern ObjectTask *pKeyGuideObj;
-extern ObjectTask *pBoostObj;
-extern ObjectTask *pCritObj;
-extern ObjectTask *pStatObj[4];
-extern ObjectTask *pStockObj[5];
 
 void menuStatDispRemove(void) {
     int i;
@@ -192,8 +196,6 @@ void menuKeyGuideObjDraw(int packet) {
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatObj);
-
-extern float RingRot;
 
 void menuBoostObj(ObjectTask *task) {
     float twoPi;
@@ -318,8 +320,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuATBObjDraw);
  * The battle map's height-scan distance (data still asm-owned; original
  * ELF symbol name).
  */
-extern int mapHDist;
-
 void menuMapHSet(int enable)
 {
     if (enable != 0) {
@@ -397,8 +397,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuTimeSet);
 
 /* menuTimeSet (this TU, still asm) applies a new menu time setting. */
 void menuTimeSet(int time);
-extern int eventTimer;
-
 int menuTimeNext(void) {
     eventTimer++;
     if (eventTimer >= 4) {
@@ -411,8 +409,6 @@ int menuTimeNext(void) {
 int menuTimeGet(void) {
     return eventTimer;
 }
-
-extern int eventTimerX;
 
 int menuTimeXGet(void) {
     return eventTimerX;
@@ -539,12 +535,12 @@ struct StatNameOpenParams {
     int flags;                   /* +0x08: 0x00FFFFFD */
     int priority;                 /* +0x0C: 0x800000B0 at this call site */
     int target;                    /* +0x10: dataStatNameGet's resolved name id */
-    unsigned char *iconGraphic;    /* +0x14: D_00A468E8 */
+    const char *iconGraphic;       /* +0x14: D_00A468E8 */
 };
 int *dataStatNameGet(int charaId, int iconSlot);
 void eBattleWinOpen2(struct StatNameOpenParams *params);
 int menuStatIconChk(int charaId, int iconSlot);
-extern unsigned char D_00A468E8[];
+const char D_00A468E8[8] = "Status";
 extern void eBattleWinMain2(void);
 
 void menuStatNamePut(ObjectTask *task)
@@ -629,10 +625,11 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", dmgNumPut);
 
 int menuFontIdxGet(const signed char *text)
 {
+    static const signed char *font = D_00A46AF8;
     int index;
 
     for (index = 0; index < 230; index++) {
-        if (text[0] == font_0[index]) {
+        if (text[0] == font[index]) {
             return index;
         }
     }
@@ -641,10 +638,11 @@ int menuFontIdxGet(const signed char *text)
 
 int menuDFontIdxGet(const signed char *text)
 {
+    static const signed char *font = D_00A46BE0;
     int index;
 
     for (index = 0; index < 230; index++) {
-        if (text[0] == font_1[index * 2] && text[1] == font_1[index * 2 + 1]) {
+        if (text[0] == font[index * 2] && text[1] == font[index * 2 + 1]) {
             return index + 175;
         }
     }
@@ -715,3 +713,11 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontEnvMake);
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatIconEnvMake);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuATBEnvPalSet);
+
+
+
+const signed char D_00A46AF8[232] = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz                                                                                    .    '                      /                   -                                 ";
+
+
+
+const signed char D_00A46BE0[40] = "\241\277\241\241\241\246\241\241\241\260\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241\241";

@@ -147,15 +147,11 @@ extern void nmlPacketAddTransData(NmlMaterialRenderState *material);
 
 extern void nmlPacketAddWaitMicrocode(void);
 
-extern XglPacket *s_pPacket;
 
 void nmlPacketSetCurrent(void);
 
-extern int s_nReflRotType;
 
-extern float s_inReflRotX;
 
-extern float s_inReflRotY;
 
 extern void sceVif1PkCnt(NmlPacket packet, int count);
 
@@ -170,7 +166,6 @@ extern void sceVif1PkCloseUpkCode(NmlPacket packet);
 void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
                          const NmlModelRenderState *model);
 
-extern int s_nProgType;
 
 void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
                                 const NmlModelRenderState *model);

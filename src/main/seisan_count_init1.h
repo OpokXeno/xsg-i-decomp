@@ -93,7 +93,7 @@ typedef struct SeisanResultData {
 extern SeisanResultData *SeisanResult;
 
 /*
- * D_004C7350 (.rodata, 0x3c bytes): SeisanDisp copies it onto its stack with
+ * D_004C7350 (.rodata, 0x40 bytes): SeisanDisp copies it onto its stack with
  * the ldl/ldr/sdl/sdr unaligned-doubleword sequence at 0x002a1900..0x002a1974
  * and passes the copy's address to endPrintDirectRibbon (still asm, main/tu164
  * src/main/end_print.c); the fields it holds are not otherwise evidenced here.

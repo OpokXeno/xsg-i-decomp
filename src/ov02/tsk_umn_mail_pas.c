@@ -67,7 +67,18 @@ typedef struct UmnMailState {
     unsigned char saved_visible_folder_index;
 } UmnMailState;
 extern UmnMailState UmnWork;
-extern const char *msg00_0_00A10618[5];
+extern const char D_00A12268[];
+extern const char D_00A12260[];
+extern const char D_00A12258[];
+extern const char D_00A12250[];
+extern const char D_00A12240[];
+static const char *msg00_0_00A10618[5] = {
+    D_00A12268,
+    D_00A12260,
+    D_00A12258,
+    D_00A12250,
+    D_00A12240,
+};
 extern int MenuPasLengthGet(const char *text);
 extern void WindowDXSet(void *window);
 extern void WindowDXMain(void *window);
@@ -196,3 +207,15 @@ INCLUDE_ASM("asm/nonmatchings/ov02/tsk_umn_mail_pas", SisoSiso_6);
 INCLUDE_ASM("asm/nonmatchings/ov02/tsk_umn_mail_pas", UmnMailFolderSet);
 
 INCLUDE_ASM("asm/nonmatchings/ov02/tsk_umn_mail_pas", UmnMail);
+
+
+
+const char D_00A12240[16] = "/History";
+
+const char D_00A12250[8] = "/Reply";
+
+const char D_00A12258[8] = "/Read";
+
+const char D_00A12260[8] = "/Folder";
+
+const char D_00A12268[8] = "Mail";

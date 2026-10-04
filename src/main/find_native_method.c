@@ -237,3 +237,7 @@ INCLUDE_ASM("asm/main/nonmatchings/find_native_method", sizeofDescripter);
 INCLUDE_ASM("asm/main/nonmatchings/find_native_method", instanceOf);
 
 INCLUDE_ASM("asm/main/nonmatchings/find_native_method", sizeofDescripterType);
+
+
+
+static ClassEntry _dummyClass;

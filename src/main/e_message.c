@@ -1,7 +1,7 @@
 #include "common.h"
 
 /* Number of message sprites currently allocated by the print routines. */
-extern int msg_spr_count;
+static int msg_spr_count = 0;
 
 void eMessageSpriteReset(void)
 {
@@ -101,7 +101,7 @@ void eMessageDraw(EMessageParam *message)
 }
 
 /* Current write position of the message text being built. */
-extern char *MessageCpyEnd;
+static char *MessageCpyEnd;
 
 extern void eMessageCat(char *src);
 

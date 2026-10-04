@@ -5,6 +5,10 @@
 #include "shared.h"
 #include "rg_shot_thread.h"
 
+const char D_00A523F0[] = "pThread != NIL";
+const char D_00A52400[] = "../rg_shot_thread.euc.c";
+const char D_00A52418[] = "unknown shot thread status %d";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 

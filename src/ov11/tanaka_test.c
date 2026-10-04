@@ -46,8 +46,8 @@ extern void xglRenderClearDepth(void);
 extern int printf(const char *format, ...);
 extern void MiniG_Init(void);
 extern int MiniG_Main(void);
-extern const char D_00A0BB10[];
-extern const char D_00A0BB20[];
+const char D_00A0BB10[] = "Casino Entry\n";
+const char D_00A0BB20[] = "Casino Exit\n";
 
 void TanakaTest(void)
 {

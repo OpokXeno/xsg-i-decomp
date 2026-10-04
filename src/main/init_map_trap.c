@@ -52,11 +52,11 @@ extern TrapDamageActor actor[64];
 extern TrapEnemyWorkEntry enepc[16];
 extern signed char collflg;
 extern signed char printflg;
-extern const char D_004CA470[];
-extern const char D_004CA488[];
-extern const char D_004CA4A0[];
-extern const char D_004CA4B0[];
-extern const char D_004CA4C0[];
+const char D_004CA470[24] = "act[%d] Electric\n";
+const char D_004CA488[24] = "act[%d] Explosion\n";
+const char D_004CA4A0[16] = "act[%d] Fall\n";
+const char D_004CA4B0[16] = "act[%d] Slot\n";
+const char D_004CA4C0[16] = "act[%d] Seal\n";
 extern float CheckDist3D(const TrapPosition *, const TrapPosition *);
 extern int printf(const char *, ...);
 

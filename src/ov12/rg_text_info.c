@@ -3,6 +3,15 @@
  */
 #include "common.h"
 
+const char D_00A54480[24] = "pParaList != NIL";
+const char D_00A54498[24] = "../rg_text_info.euc.c";
+const char D_00A544B0[16] = "pszName != NIL";
+const char D_00A544C0[24] = "pReadText != NIL";
+const char D_00A544D8[16] = "pStr != NIL";
+const char D_00A544E8[24] = "unknown key word '%s'";
+const char D_00A54500[8] = ".";
+const char D_00A54508[40] = "unknown parameter type %d";
+
 struct RgTextInfoEntry {
     unsigned int type;
     const char *pszName;
@@ -46,14 +55,6 @@ extern void RgReadTextGetString(struct RgReadText *pReader, char *pszOut);
 extern float RgReadTextGetFloat(struct RgReadText *pReader);
 extern int RgReadTextGetInt(struct RgReadText *pReader);
 extern int RgReadTextGetBool(struct RgReadText *pReader);
-extern const char D_00A54480[];
-extern const char D_00A54498[];
-extern const char D_00A544B0[];
-extern const char D_00A544C0[];
-extern const char D_00A544D8[];
-extern const char D_00A544E8[];
-extern const char D_00A54500[];
-extern const char D_00A54508[];
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_text_info", _FindEntry);
 

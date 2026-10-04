@@ -52,9 +52,12 @@ typedef struct GameLoopStateLayout {
     u8 _unmodeled_29f41[0x0f];
     QuadVector pause_vector;
     u16 saved_kind;
+    u8 _unmodeled_29f62[0x2a030 - 0x29f62];
 } GameLoopStateLayout;
 
-extern GameLoopStateLayout GameLoopState;
+GameLoopStateLayout GameLoopState = {0};
+unsigned char SnapDrawCreditFlag = 0;
+unsigned char UseTestPath = 0;
 
 /*
  * PadData (0xd0-byte object at 0x490d90) through the shared
@@ -152,7 +155,7 @@ INCLUDE_ASM("asm/main/nonmatchings/game", GamePopSaveDataUser);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", InitCfSystem);
 
-extern u64 attrPrev;
+static u64 attrPrev;
 
 typedef struct GameActorAttributeView {
     u8 unmodeled_00[0x4e8];

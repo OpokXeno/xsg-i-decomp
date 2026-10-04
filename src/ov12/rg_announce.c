@@ -15,8 +15,8 @@ extern void assert_prog(const char *expression, const char *source_file,
  * ov12:0x00a57bc0 contains the source filename "../rg_announce.euc.c".
  * ov12:0x00a57bb0 contains the assertion expression "pAnn != NIL".
  */
-extern const char D_00A57BB0[];
-extern const char D_00A57BC0[];
+const char D_00A57BB0[] = "pAnn != NIL";
+const char D_00A57BC0[] = "../rg_announce.euc.c";
 
 extern void XrgPaint2DUseTexture(XrgPaint2D *paint, int texture);
 extern void XrgPaint2DAlpha(XrgPaint2D *paint, int blend);
@@ -96,8 +96,12 @@ typedef struct RgAnnounceUvRectHalves {
  * config/symbols/ov12.txt entry): ov12:0x00a586b0 belongs to the time title
  * and ov12:0x00a586c0 to the damage title.
  */
-extern const RgAnnounceUvRectHalves D_00A586B0;
-extern const RgAnnounceUvRectHalves D_00A586C0;
+const RgAnnounceUvRectHalves D_00A586B0 = {
+    0, 0x0000001800000200LL
+};
+const RgAnnounceUvRectHalves D_00A586C0 = {
+    0x0000003800000000LL, 0x0000001200000200LL
+};
 
 static void _paint_uvwh(RgAnnounce *pAnn, int index, int x, int y,
                         const RgAnnounceUvRect *rect);
@@ -131,7 +135,7 @@ extern void RgFontStr(XrgPaint2D *paint, int fontId, const char *text, int x,
                       int y, int color);
 static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
 /* ov12:0x00a586d0 is the scaffold-owned "%d" format string. */
-extern const char D_00A586D0[];
+const char D_00A586D0[] = "%d";
 
 static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage)
 {
@@ -265,16 +269,19 @@ static void _paint_flush(RgAnnounce *pAnn)
     XrgPaint2DFlush(pAnn->paint);
 }
 
-extern RgAnnounceDrawFunc s_apFuncs_0[RG_ANNOUNCE_DRAW_KIND_COUNT];
-
 void RgAnnounceDispInit(RgAnnounce *pAnn, int kind)
 {
+    static RgAnnounceDrawFunc s_apFuncs[RG_ANNOUNCE_DRAW_KIND_COUNT] = {
+        _round1, _round2, _round3, _ready, _fight, _youwin, _youlose,
+        _draw, _gameover, _timeover, _stageclear, _gameclear,
+        _you_win_you_lose, _you_lose_you_win
+    };
     if (pAnn == 0) {
         assert_prog(D_00A57BB0, D_00A57BC0, 466);
     }
     if ((unsigned int) kind < RG_ANNOUNCE_DRAW_KIND_COUNT) {
         pAnn->timer = RG_ANNOUNCE_TIMER_INFINITE;
-        pAnn->drawFunc = s_apFuncs_0[kind];
+        pAnn->drawFunc = s_apFuncs[kind];
     } else {
         pAnn->drawFunc = 0;
     }
@@ -312,7 +319,8 @@ void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
 }
 
 /* "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])" */
-extern const char D_00A586D8[];
+const char D_00A586D8[] =
+    "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])";
 
 void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
                             const float *afDamage, unsigned int uStage)

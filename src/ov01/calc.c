@@ -115,8 +115,10 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHpDmg);
  */
 extern CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, unsigned char *table);
 
-/* The per-charaId table calcTotalParaMenu hands calcTotalParaMenuSub. */
-extern unsigned char D_00A57CE8[];
+/* calcCopyParaMake copies twelve 0x20-byte units into this scratch table;
+ * calcTotalParaMenuSub then reads the CalcCharParaData and CalcUnitParam
+ * views from the same storage. */
+static unsigned char D_00A57CE8[0x180];
 
 CalcCharParaData *calcTotalParaMenu(int charaId, int *attack, int *defense)
 {
@@ -616,9 +618,9 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", tgtFindChk);
  * a time. The gap between tgtTbl and tgtIdx (0x00a57e68..0x00a57e88, 0x20
  * bytes) is this array's only size evidence.
  */
-extern ObjectTask *tgtTbl[8];
-extern int tgtIdx;
-extern int tgtNum;
+static ObjectTask *tgtTbl[8];
+static int tgtIdx;
+static int tgtNum;
 
 ObjectTask *tgtFindNext(void)
 {

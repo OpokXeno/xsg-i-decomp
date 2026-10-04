@@ -92,7 +92,6 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry);
 
-extern int (*fxFunction[])(XglTaskPrefix *task);
 
 extern void nmlModelSetActiveFadeIn(int argument0, int argument1, int command);
 extern void nmlModelSetActiveFadeOut(int argument0, int argument1, int command);

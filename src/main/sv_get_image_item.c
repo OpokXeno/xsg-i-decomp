@@ -3,6 +3,13 @@
 #include "main/xgl_packet.h"
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
+typedef struct Matrix { float elements[16]; } Matrix;
+static int _draw3D = 0;
+static int _nEffect2D = 0;
+static int eft_5 = -1;
+static unsigned char charID_3;
+static int eftCate_4;
+static int _nowImage;
 
 /*
  * One 0x24-byte entry of the working image list svImageListCreate clears
@@ -42,25 +49,6 @@ typedef struct SvImageMapperItem {
     unsigned char unmodeled_04[0x24 - 4];
 } SvImageMapperItem;
 
-/*
- * SvTypeListFields and SvTypeList (below, next to svDeleteImageMapper) name
- * the same physical 0x241C-byte per-type record svGetTypeList indexes; they
- * are not two different objects. svDeleteImageMapper's own text completes
- * the SvTypeList tag with only its one evidenced field (entryCount, +0x14)
- * and is published, unallocated prelude here, so it is restated byte-
- * identical and never grown (AGENTS.md, "Source and acceptance": a
- * published struct cannot grow). svImageListDestroy and svAddImageMapper
- * (this allocation) sit earlier in the file and evidence more of the same
- * record than that completion models, so they read/write it through this
- * second tag naming only their own fields, at the identical offsets:
- * `total` (+0x00, unconditionally cleared), `size` (+0x04, read and
- * archived into `savedSize` at +0x0C before the clear), `width`/`height`
- * (+0x10/+0x12, the two fields svAddImageMapper stores its own second and
- * fourth arguments into, both cleared here) and `entryCount` (+0x14, the
- * same field and offset SvTypeList already names). Bytes 0x08-0x0B stay an
- * explicit unmodeled span; nothing in this allocation touches them.
- */
-typedef struct SvTypeList SvTypeList;
 
 /*
  * The image-mapper table has a 0x1C-byte header followed by 0x100 entries
@@ -77,14 +65,17 @@ typedef struct SvTypeListEntry {
     const char *name;
 } SvTypeListEntry;
 
-typedef struct SvTypeListStorage {
-    unsigned char unmodeled_00[0x10];
+typedef struct SvTypeList {
+    int total;
+    int size;
+    unsigned char unmodeled_08[4];
+    int savedSize;
     short width;
     short height;
     short entryCount;
     unsigned char unmodeled_16[6];
     SvTypeListEntry entries[0x100];
-} SvTypeListStorage;
+} SvTypeList;
 
 typedef struct SvReferenceImageSlot {
     unsigned int words[2];
@@ -93,23 +84,20 @@ typedef struct SvReferenceImageSlot {
 /* _imageMapper's symbol-table size is 40 mapper records followed by these
  * forty two-word reference-image slots. */
 typedef struct SvImageMapperStorage {
-    SvTypeListStorage typeLists[40];
+    SvTypeList typeLists[40];
     SvReferenceImageSlot referenceImages[40];
 } SvImageMapperStorage;
 
-typedef struct SvTypeListFields {
-    int total;         /* 0x00 */
-    int size;           /* 0x04 */
-    unsigned char unmodeled_08[4];
-    int savedSize;       /* 0x0C */
-    short width;          /* 0x10 */
-    short height;         /* 0x12 */
-    short entryCount;     /* 0x14 */
-} SvTypeListFields;
+/* Forty 0x241C-byte mapper records followed by forty reference-image slots. */
+SvImageMapperStorage _imageMapper = {0};
+Matrix _defMatLcMod = {{0.0f}};
+Matrix _defMatLn = {{0.0f}};
+SvImageList _imageList = {0};
+
 
 void svImageListDestroy(SvTypeList *typeList)
 {
-  SvTypeListFields *header = (SvTypeListFields *) typeList;
+  SvTypeList *header = typeList;
   SvImageMapperItem *item = (SvImageMapperItem *) (((unsigned char *) typeList) + 0x24);
   int count = 0xFF;
 
@@ -133,10 +121,10 @@ void svImageListDestroy(SvTypeList *typeList)
 
 static int svImageListAlloc(int typeListAddr)
 {
-    SvTypeListStorage *typeList;
+    SvTypeList *typeList;
     int index;
 
-    typeList = (SvTypeListStorage *)typeListAddr;
+    typeList = (SvTypeList *)typeListAddr;
     for (index = 0; index < 0x100; index++) {
         if (typeList->entries[index].used == 0) {
             return index;
@@ -145,21 +133,20 @@ static int svImageListAlloc(int typeListAddr)
     return -1;
 }
 
-extern unsigned char _imageMapper[];
 
 static SvTypeList * svGetTypeList(int type) {
-    return (SvTypeList *) (_imageMapper + (type * 0x241C));
+    return &_imageMapper.typeLists[type];
 }
 
 static void *svGetImageListItemSub(int type, unsigned int flags)
 {
     SvTypeList *typeList;
-    SvTypeListStorage *storage;
+    SvTypeList *storage;
     SvTypeListEntry *entry;
     int index;
 
     typeList = svGetTypeList(type);
-    storage = (SvTypeListStorage *)typeList;
+    storage = typeList;
     entry = storage->entries;
     index = 0;
     while (index < 0x100) {
@@ -179,12 +166,12 @@ int strcmp(const char *, const char *);
 static SvTypeListEntry *svGetResFromName(const char *name)
 {
     SvTypeList *typeList;
-    SvTypeListStorage *storage;
+    SvTypeList *storage;
     SvTypeListEntry *entry;
     int index;
 
     typeList = svGetTypeList(0);
-    storage = (SvTypeListStorage *)typeList;
+    storage = typeList;
     entry = storage->entries;
     index = 0;
     while (index < 0x100) {
@@ -242,30 +229,23 @@ void svLoadClut(ClutUploadRequest *clut)
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svLoadImageList);
 
-s16 svLoadImageList(void *);
+s16 svLoadImageList(SvTypeList *typeList);
 
 s16 svLoadMapperList(void)
 {
-  s16 ret;
-  s16 loadResult;
-  int reverseIndex;
-  int typeOffset;
+    s16 result;
+    int type;
+    SvTypeList *typeLists = _imageMapper.typeLists;
 
-  typeOffset = 0;
-  reverseIndex = 0x27;
-  do
-  {
-    ret = *((s16 *) (((unsigned char *) (((s16 *) ((s16 *) (((int) ((void *) _imageMapper)) + 0x14))) + ((reverseIndex - 39) * -4622))) + 0));
-    if (ret > 0)
-    {
-      loadResult = svLoadImageList((void *) (typeOffset + ((int) ((void *) _imageMapper))));
-      ret = loadResult;
+    for (type = 0; type < 40; type++) {
+        /* Preserve the original loop's separate entry-count pointer. */
+        const s16 *entryCount = &typeLists[type].entryCount;
+        result = *entryCount;
+        if (result > 0) {
+            result = svLoadImageList(&_imageMapper.typeLists[type]);
+        }
     }
-    typeOffset += 0x241C;
-    reverseIndex -= 1;
-  }
-  while (reverseIndex >= 0);
-  return ret;
+    return result;
 }
 
 static int svGetSizeBit(unsigned int value)
@@ -356,7 +336,7 @@ static void svInitRefImage(void)
     SvImageMapperStorage *storage;
     int index;
 
-    storage = (SvImageMapperStorage *)_imageMapper;
+    storage = &_imageMapper;
     for (index = 0; index < 40; index++) {
         storage->referenceImages[index].words[0] = 0;
         storage->referenceImages[index].words[1] = 0;
@@ -367,10 +347,10 @@ int svAnalyzeChunk(SvTypeList *typeList, void *chunk);
 
 void svAddImageMapper(int type, int width, void *chunk, int height) {
     SvTypeList *typeList;
-    SvTypeListFields *header;
+    SvTypeList *header;
 
     typeList = svGetTypeList(type);
-    header = (SvTypeListFields *) typeList;
+    header = typeList;
     if (header->entryCount != 0) {
         svImageListDestroy(typeList);
     }
@@ -380,17 +360,6 @@ void svAddImageMapper(int type, int width, void *chunk, int height) {
     svAnalyzeChunk(typeList, chunk);
 }
 
-/*
- * One image mapper's list: svGetTypeList (LOCAL in the original symbol
- * table) returns entry `type` of _imageMapper, 0x241c bytes apart. Only the
- * entry count is modeled: svDeleteImageMapper tests it (lh +0x14) and
- * svImageListDestroy clears it; the rest of the record stays an explicit
- * unmodeled span.
- */
-typedef struct SvTypeList {
-    unsigned char unmodeled_00[0x14];
-    short entryCount; /* 0x14 */
-} SvTypeList;
 
 static SvTypeList *svGetTypeList(int type);
 void svImageListDestroy(SvTypeList *typeList);
@@ -564,9 +533,6 @@ static void sefDrawSchedulerEffect(int schedulerIndex);
 extern void SGsSetZTestEnv(int enable);
 extern int srsAnalyzeEftNo(short effectId, unsigned char *charId,
                             int *effectCategory);
-extern unsigned char charID_3;
-extern int eftCate_4;
-extern int eft_5;
 
 /*
  * One 0xab0-byte record of the scheduler table sefGetScheduler returns
@@ -621,7 +587,6 @@ static void svDrawSchedulerBlk(int eftCate, int eftNo)
     } while (schedulerIndex < SCHEDULER_COUNT);
 }
 
-extern int _draw3D;
 
 /* Draws the alters whose group (+0x0E) equals layer. */
 void sdvDrawAlters(int layer);
@@ -648,8 +613,6 @@ static void svDrawMissile(int category)
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDrawSchedulerParticle);
 
-extern int _nEffect2D;
-extern int _nowImage;
 
 static void svDrawSchedulerParticle(void);
 

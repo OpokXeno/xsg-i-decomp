@@ -6,24 +6,17 @@
 #include "ov12/rg_singleton_id.h"
 #include "rg_motion_info_db.h"
 
-/*
- * ov12:0x00a52460, "pInfo != NIL"
- * ov12:0x00a52470, "../rg_motion_info_db.euc.c"
- * ov12:0x00a524e0, "pDB != NIL"
- * Scaffold .rodata (config/tu-build.json data_ownership .rodata: owner asm),
- * so they keep their splat names.
- */
-extern const char D_00A52460[];
-extern const char D_00A52470[];
-extern const char D_00A524C0[];
-extern const char D_00A524E0[];
-extern const char D_00A525A8[];
-extern const char D_00A525D8[];
-extern const char D_00A525F0[];
-extern const char D_00A52608[];
-extern const char D_00A52618[];
-extern const char D_00A52630[];
-extern const char D_00A52598[];
+const char D_00A52460[16] = "pInfo != NIL";
+const char D_00A52470[32] = "../rg_motion_info_db.euc.c";
+const char D_00A524C0[32] = "pTable->m_uTblSize < ENTRY_MAX";
+const char D_00A524E0[16] = "pDB != NIL";
+const char D_00A52598[16] = "pMotInfo != NIL";
+const char D_00A525A8[48] = "dump shot info %d ----------------------\n";
+const char D_00A525D8[24] = "--- list mot %d ---\n";
+const char D_00A525F0[24] = "  ** char %d **\n";
+const char D_00A52608[16] = "   mot id = %d\n";
+const char D_00A52618[24] = "   mot flag = %x\n";
+const char D_00A52630[48] = "    [action %d (%f,%f) shift-mot %d wep %d]\n";
 
 #define RG_MOTION_ANY_TIME 100000000.0f
 

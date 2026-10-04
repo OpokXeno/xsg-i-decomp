@@ -183,7 +183,9 @@ void EW_drawContainer(int context, EwContainerState *container)
 
 INCLUDE_ASM("asm/main/nonmatchings/ew_sprt_set_cursor_uv", EW_drawComoponent);
 
-extern EwWidget ewComponent[64];
+/* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
+ * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
+EwWidget ewComponent[64];
 
 void EW_init(void)
 {
@@ -197,7 +199,7 @@ void EW_init(void)
 
 extern void EW_setDrawEnv(int context);
 extern void xglFontReloadTexture(int context, int mode);
-extern int ew_send_mode;
+static int ew_send_mode = 0;
 
 void EW_sendPacket(int context)
 {

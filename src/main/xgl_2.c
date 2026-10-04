@@ -4,7 +4,7 @@
 #include "xgl_2.h"
 
 extern unsigned int D_004ADE80[];
-extern const float D_004D8858;
+static unsigned long long iRandSeed;
 extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_2", xglAtan2);
@@ -1309,7 +1309,7 @@ void xglRandSeedInit(void)
 
 void xglGeometryInit(void)
 {
-    float random_seed = D_004D8858;
+    float random_seed = 0.1f;
 
     __asm__ __volatile__(
         "qmtc2 %0,vf1\n\t"

@@ -5,6 +5,7 @@
 #include "shared.h"
 #include "ov01/battle_init.h"
 #include "ov01/calc.h"
+#include "debug_entry_data.h"
 
 /* Debug menu: enters the battle debug interface; page 0/1/2 selects the
  * status, parameter or spec display (debugBattle tail-calls one of them). */
@@ -15,17 +16,12 @@ void debugEntry(int page)
     debugBattle(page);
 }
 
-extern char *err; /* fallback string returned for an out-of-range debug table index */
-extern char *nameTbl[0xC3]; /* debug menu's character name table */
-
 char *debugNameGet(int charaId) {
     if (charaId < 0xC3) {
         return nameTbl[charaId];
     }
     return err;
 }
-
-extern char *wpnTbl[0x74]; /* debug menu's weapon name table */
 
 char *debugWpnGet(int wpnId) {
     if (wpnId < 0x74) {
@@ -35,13 +31,6 @@ char *debugWpnGet(int wpnId) {
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugCmdPrint);
-
-extern char *cmdStrTbl[];
-extern char D_00A5AA40[];
-extern const char D_00A50550[];
-extern const char D_00A50558[];
-extern const char D_00A50560[];
-extern const char D_00A50568[];
 
 #define DEBUG_THINK_REG_VALID 0x8000
 #define DEBUG_THINK_REG_TEXT 0x4000
@@ -142,12 +131,6 @@ typedef struct DebugUnitPara {
 
 extern DebugUnitPara *calcUPGet(ObjectTask *unit);
 
-extern const char D_00A506C0[]; /* "** UNIT PARA **\n" */
-extern const char D_00A50668[]; /* "** %d) %s LV=%d HP=%d/%d EP=%d/%d\n" */
-extern const char D_00A506D8[]; /* " STR=%3d VIT=%3d EATK=%3d EDEF=%3d HIT=%3d EVA=%3d\n" */
-extern const char D_00A50710[]; /* " AGL=%3d BC =%3d BP = %3d MVTYPE=%1d C_RATE=%3d\n" */
-extern const char D_00A50748[]; /* " WEAK=%04X SPEC=%04X INFO=%04X OBJSTAT=%04X\n" */
-extern const char D_00A50778[]; /* " WCT=%3d/%3d AGLPLUS=%3d ETHERDIS=%04X WPNATKADJ=%3d\n" */
 extern int printf(const char *format, ...);
 
 int debugParaDisp(void)
@@ -178,21 +161,15 @@ int debugParaDisp(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", debugSpecDisp);
 
-extern int plMuteki; /* debug menu: player invincibility flag */
-
 int plMutekiGet(void)
 {
     return plMuteki;
 }
 
-extern int enMuteki; /* debug menu: enemy invincibility flag */
-
 int enMutekiGet(void)
 {
     return enMuteki;
 }
-
-extern int plIchigeki; /* debug menu: player one-hit-kill flag */
 
 int plIchigekiGet(void)
 {
@@ -339,8 +316,6 @@ int configPlPos(int slot)
 extern int valLR(int *value, int min, int max, int step);
 
 extern void monsSetNoSet(int monsSetNo);
-extern int monsSet; /* debug menu's selected monster-set number */
-
 int configMonsSet(void) {
     valLR(&monsSet, 0, 0x63, 1);
     monsSetNoSet(monsSet);
@@ -348,8 +323,6 @@ int configMonsSet(void) {
 }
 
 extern void mapNoSet(int mapNo);
-extern int mapNo; /* debug menu's selected map number */
-
 int configMap(void) {
     valLR(&mapNo, 0, 0x63, 1);
     mapNoSet(mapNo);
@@ -370,9 +343,7 @@ int configCamera(void) {
 
 int configStat(void)
 {
-    extern int statId;
     extern PadPrefix PadData;
-    extern int configSeq;
 
     valLR(&statId, 1, 0xC2, 1);
     if (PadData.half_2a & 0x20) {
@@ -381,10 +352,7 @@ int configStat(void)
     return 0;
 }
 
-extern int equipId; /* debug equip menu's selected character index, 1..0x20 */
 extern PadPrefix PadData;
-extern int configSeq; /* debug menu's current top-level page */
-extern int equipPosX; /* debug menu's cursor column on the equip screen */
 
 int configEqu(void) {
     valLR(&equipId, 1, 0x20, 1);
@@ -397,10 +365,7 @@ int configEqu(void) {
 
 int configGain(void)
 {
-    extern int gainId;
     extern PadPrefix PadData;
-    extern int configSeq;
-    extern int equipPosX;
 
     valLR(&gainId, 1, 0xC2, 1);
     if (PadData.half_2a & 0x20) {
@@ -438,8 +403,6 @@ int configPlIchigeki(void) {
 }
 
 extern void cfEncountSet(int cfEncount);
-extern int cfEncount; /* debug menu's CF encounter value */
-
 int configCFEncount(void) {
     valLR(&cfEncount, 0, 0xFFFF, 1);
     cfEncountSet(cfEncount);
@@ -447,8 +410,6 @@ int configCFEncount(void) {
 }
 
 extern void cfEventSet(int cfEvent);
-extern int cfEvent; /* debug menu's CF event value */
-
 int configCFEvent(void) {
     valLR(&cfEvent, 0, 0xFFFF, 1);
     cfEventSet(cfEvent);
@@ -456,8 +417,6 @@ int configCFEvent(void) {
 }
 
 extern void thinkNoSet(int thinkNo);
-extern int D_00A5AA60; /* debug menu's selected think (AI) number */
-
 int configThink(void) {
     valLR(&D_00A5AA60, 0, 0x63, 1);
     thinkNoSet(D_00A5AA60);
@@ -518,8 +477,6 @@ int configYadoya(void) {
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", valUD);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/debug_entry", valLR);
-
-extern int equipId;
 
 int equipChar(void) {
     valLR(&equipId, 1, 0x20, 1);

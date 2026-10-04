@@ -7,8 +7,8 @@
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-extern const char D_00A54560[];
-extern const char D_00A54570[];
+const char D_00A54560[16] = "pInfo != NIL";
+const char D_00A54570[32] = "../rg_disp_gameinfo.euc.c";
 extern void *InstanceOfRgBattleCommonData(void);
 extern int RgBattleCommonDataGetDispTex(void *env);
 extern XrgPaint2D *CreateXrgPaint2D_sub(const char *sourceFile, int line);
@@ -51,8 +51,6 @@ extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
  * ov12:0x00a54560 contains the assertion expression "pInfo != NIL".
  * ov12:0x00a54570 contains the source filename "../rg_disp_gameinfo.euc.c".
  */
-extern const char D_00A54560[];
-extern const char D_00A54570[];
 
 void _DisposeInfo(RgDispGameInfo *pInfo) {
     if (pInfo == 0) {
@@ -103,7 +101,7 @@ extern void XrgPaint2DUseTexture(XrgPaint2D *paint, void *pic);
 /*
  * ov12:0x00a54590 contains the error message "not exist '%s' picture".
  */
-extern const char D_00A54590[];
+const char D_00A54590[24] = "not exist '%s' picture";
 
 void _paint_one_texture_alpha(RgDispGameInfo *pInfo, const char *pictureName,
                               int x, int y, int blendMode) {

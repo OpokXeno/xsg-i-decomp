@@ -7,26 +7,34 @@
 
 #include "shared.h"
 
-/*
- * The AI process table thinkSysInit (0x00a1d348) clears with a 0x240-byte
- * memset; no function this TU claims establishes any member layout for it
- * yet, so it stays a byte range. Scaffold-owned data (docs/naming.md).
- */
-extern unsigned char processBuf[0x240];
+/* The process table saves each script base, program counter and context. */
+typedef struct ThinkProcess {
+    int dataTop;
+    short pc;
+    unsigned char unmodeled_6[2];
+    int context;
+    int waitActive;
+    int kind;
+    int sortMode;
+    unsigned char unmodeled_18[0x24 - 0x18];
+} ThinkProcess;
+
+/* Keep the table before the following work area in the original storage order. */
+static ThinkProcess processBuf[16];
 
 /*
  * The AI work area thinkSysInit (0x00a1d348) clears with a 0x1D0-byte memset,
  * immediately after processBuf. No function this TU claims establishes any
  * member layout for it either. Scaffold-owned data (docs/naming.md).
  */
-extern unsigned char context[0x1D0];
+static unsigned char context[0x1D0];
 
 /*
  * AI script data-segment base address: thinkTopSet (0x00a1d380) installs it
  * and thinkAdrGet (0x00a1d3a0) adds a script offset to it. Scaffold-owned
  * data (docs/naming.md).
  */
-extern int pDataTop;
+static int pDataTop;
 
 /*
  * AI execution-context value that thinkContextSet (0x00a1d390) installs
@@ -34,14 +42,14 @@ extern int pDataTop;
  * use beyond storage is not yet evidenced. Scaffold-owned data
  * (docs/naming.md).
  */
-extern int pContext;
+static int pContext;
 
 /*
  * AI script data-segment base thinkMonsTblGet (0x00a1d790) installs through
  * thinkTopSet before it looks up a monster-set entry. Scaffold-owned data
  * (docs/naming.md).
  */
-extern int pThinkTop;
+static int pThinkTop;
 
 /*
  * One entry of the monster-set table pMonsSetTop below indexes. thinkMonsTblGet
@@ -74,7 +82,7 @@ typedef struct MonsTblEntry {
  * Monster-set table base thinkMonsTblGet (0x00a1d790) indexes by monster-set
  * number. Scaffold-owned data (docs/naming.md).
  */
-extern MonsTblEntry *pMonsSetTop;
+static MonsTblEntry *pMonsSetTop;
 
 /*
  * The current map's camera-control table entry. camInitExec (0x00a1d820) is
@@ -91,7 +99,7 @@ typedef struct CamTopEntry {
  * Camera-control table entry the map's own init data selects. Scaffold-owned
  * data (docs/naming.md).
  */
-extern CamTopEntry *pCamTop;
+static CamTopEntry *pCamTop;
 
 typedef struct MessageTask MessageTask;
 
@@ -153,26 +161,26 @@ extern const char D_00A46578[];
  * turn; scaffold-owned data under its original ELF symbol name
  * (docs/naming.md).
  */
-extern int camMode;
+static int camMode;
 
 /*
  * Perspective-camera mode selector. cmdCamPersMode/cmdCamPersMoveMode below
  * write 3 and -3 to it; scaffold-owned data (docs/naming.md).
  */
-extern int persMode;
+static int persMode;
 
 /*
  * Bank-camera mode selector. cmdCamBankMode/cmdCamBankMoveMode below write 2
  * and -4 to it; scaffold-owned data (docs/naming.md).
  */
-extern int bankMode;
+static int bankMode;
 
 /*
  * The current AI unit. thinkUnitPtrGetReg (0x00a1f348) substitutes it for
  * unitNoGet when a script register holds the self-reference sentinel 0x7FFF.
  * Scaffold-owned data under its original ELF symbol name (docs/naming.md).
  */
-extern ObjectTask *pThinkUnit;
+static ObjectTask *pThinkUnit;
 
 /*
  * unitNoGet/unitPtrGet (src/ov01/unit_cmd.c, still asm) search and index the
@@ -303,17 +311,6 @@ extern int monsSetNoGet(void);
  * free (thinkProcessDel clears it) and nonzero while a process is live;
  * +0x8 is its saved AI execution context (thinkContextSet's argument).
  */
-typedef struct ThinkProcess {
-    int dataTop;                    /* +0x0: thinkProcessExec/thinkProcessExecSub */
-    short pc;                      /* +0x4 */
-    unsigned char unmodeled_6[2];
-    int context;                    /* +0x8: thinkProcessExecSub */
-    int waitActive;                /* +0xC */
-    int kind;                       /* +0x10: thinkProcessKindChk/thinkExec/camExec */
-    int sortMode;                  /* +0x14 */
-    unsigned char unmodeled_18[0x24 - 0x18];
-} ThinkProcess;
-
 /*
  * thinkRegNo/thinkRegGet/thinkRegSet/cmdNum/cmdThinksetSub/cmdAtktblSortSub
  * are this TU's own siblings, still asm; forward-declared here for the
@@ -380,7 +377,7 @@ extern int thinkNoGet(void);
  * count; scaffold-owned data under its original ELF symbol name
  * (docs/naming.md).
  */
-extern short camTblIdx;
+static short camTblIdx;
 
 /*
  * thinkCamTblNumGet (this TU, still asm) returns the camera-table entry
@@ -419,7 +416,7 @@ extern const char D_00A46308[];
  * 0x00a1ed28) set and clear it; scaffold-owned data under its original ELF symbol
  * name (docs/naming.md).
  */
-extern int cmdPutFlag;
+static int cmdPutFlag;
 
 /*
  * thinkExec (this TU, still asm) runs the AI script at the given offset;

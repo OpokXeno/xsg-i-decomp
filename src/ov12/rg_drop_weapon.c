@@ -10,8 +10,8 @@ typedef struct RgChar RgChar;
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-extern const char D_00A53CF0[]; /* "pDrop != NIL" */
-extern const char D_00A53D00[]; /* "../rg_drop_weapon.euc.c" */
+const char D_00A53CF0[] = "pDrop != NIL";
+const char D_00A53D00[] = "../rg_drop_weapon.euc.c";
 
 extern void XrgActorDraw(XrgActor *actor);
 extern void XrgActorSetDraw(XrgActor *actor, int flags);

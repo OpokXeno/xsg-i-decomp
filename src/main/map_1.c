@@ -26,6 +26,7 @@ typedef struct {
 typedef struct {
     u8 unmodeled_00[0x10];
     u8 state;
+    u8 unmodeled_11[3];
 } MapTaskState;
 
 typedef void (*MapTaskCallback)(void *task);
@@ -45,14 +46,14 @@ extern XglPacket *xglPacketGetCurrent(void);
 extern void xglRenderDrawFlipPk(XglPacket *packet);
 extern void nmlModelSetFadeInCancel(int model_id);
 extern void nmlModelSetFadeOutCancel(int model_id);
-extern char D_004BE308[];
-extern char D_004BE318[];
-extern char D_004BE328[];
+const char D_004BE308[16] = "data\\map\\";
+const char D_004BE318[16] = "data\\map\\test\\";
+const char D_004BE328[16] = "data\\map\\check\\";
 static void taskMapChange(void *task);
-extern MapTaskState tsk;
+MapTaskState tsk = { { 0 }, 0, { 0, 0, 0 } };
 extern MapRenderState sRender;
 
-char *MAP_getPath(void)
+const char *MAP_getPath(void)
 {
     int test_path = UseTestPath;
 

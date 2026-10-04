@@ -74,18 +74,21 @@ typedef struct ParticleState {
     CollisionPoint velocity;
     float gravity;
     float damping;
+    /* The symbol's 0x40-byte extent is evidenced, while the last eight
+     * bytes have no known semantic use in this translation unit. */
+    unsigned char unmodeled_38[8];
 } ParticleState;
 extern void ppSetPos(ParticleState *particle, float x, float y, float z);
-extern int hit;
-extern int mode_004DB9D8;
-extern float radius;
-extern CollisionPoint box1;
-extern CollisionPoint box2;
-extern CollisionPoint box3;
-extern CollisionPoint box4;
-extern CollisionPoint hitpos;
-extern ParticleState pos1;
-extern ParticleState pos2;
+static int mode_004DB9D8 = 0;
+static int hit = 0;
+static float radius;
+static ParticleState pos1;
+static ParticleState pos2;
+static CollisionPoint box1;
+static CollisionPoint box2;
+static CollisionPoint hitpos;
+static CollisionPoint box3;
+static CollisionPoint box4;
 typedef struct BallBoxCollisionArgs {
     CollisionPoint *box_corner_a;
     CollisionPoint *box_corner_b;
@@ -110,9 +113,10 @@ extern CollisionPadState PadData;
 static int CheckBallBoxCollision(CollisionPoint *hit_position,
                                  const BallBoxCollisionArgs *args, int mode);
 static int InitTest(void);
-extern const float D_004D828C;
-extern const char D_004CBC58[];
-extern const char D_004CBC70[];
+/* The debug payload begins with four in-band control bytes, including a
+ * separator, followed by the CollisionHit!! label text. */
+static const char D_004CBC58[24] = "\013\014\200\000\000CollisionHit!!";
+static const char D_004CBC70[16] = "\013CollisionTest";
 extern void xglRenderClearFrame(void);
 extern void xglSleep(void);
 extern void xglFontDebugPrintf(int x, int y, const char *text, ...);
@@ -134,7 +138,7 @@ void ColliTest(void)
     if ((PadData.state.bits & 0x08000100ULL) == 0x08000100ULL)
         return;
 
-    move_step = D_004D828C;
+    move_step = 0.1f;
     do {
         switch (mode_004DB9D8) {
         case 0:

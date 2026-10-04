@@ -309,14 +309,12 @@ extern AgwsSwitchWork *AgwsSwitch;
 extern AgwsStatusWork *AgwsStatus;
 extern AgwsPasWork *AgwsPas;
 extern PadPrefix PadData;
-extern unsigned char D_004C6F38[];
-extern int msg_10[7];
-extern const char *const msg00_0_0036D940[17];
+extern const unsigned char D_004C6F38[];
 extern const AgwsCameraPreset D_004C7190;
 extern const AgwsCameraTargets D_004C71B0;
 extern const AgwsModelPositions D_004C71D0;
 extern const AgwsModelVector D_004C7240;
-extern const AgwsSwitchSlideStep D_004DAFE8[];
+extern AgwsSwitchSlideStep D_004DAFE8[];
 
 extern WeaponWaglData *func_A1A3D8(int weaponId);
 extern int MenuRWeaponCheck2(int weaponId);

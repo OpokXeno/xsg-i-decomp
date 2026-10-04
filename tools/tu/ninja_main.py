@@ -76,6 +76,10 @@ DISCARD = ["*(.reginfo)", "*(.MIPS.abiflags)", "*(.pdr)", "*(.gnu.attributes)", 
            # would duplicate the payload and move every following file offset.
            "*(.vutext)", "*(.vubss)", "*(.DVP.ovlytab)", "*(.DVP.ovlystrtab)",
            "*(.DVP.overlay.*)"]
+# Compiler data sections enter the MAIN image only through an explicit C-owned
+# piece in the TU map/carve registry.  Any remaining candidate C contribution
+# is uncredited and must not fall through after the pinned original layout.
+DISCARD += [f"build/c/*({sec})" for sec in DATA_SECTIONS]
 
 INCLUDE_ASM_H = r'''#ifndef INCLUDE_ASM_H
 #define INCLUDE_ASM_H
@@ -225,17 +229,31 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", type=Path, default=None)
     ap.add_argument("--unit-dir", type=Path, default=None)
+    ap.add_argument("--carve-registry", type=Path, default=None,
+                    help="explicit data ownership registry for this build")
     a = ap.parse_args(argv)
     if a.root is not None:
         ROOT = a.root.resolve()
     BIN, PY, DVPAS = resolve_tools(ROOT)
     UNIT_DIR = (a.unit_dir.resolve() if a.unit_dir is not None else ROOT / "build/main")
     unit_dir = UNIT_DIR
-    m = json.loads((unit_dir / "tu-manifest.json").read_bytes())
+    registry_path = a.carve_registry.resolve() if a.carve_registry else data_carve.registry_input_path(ROOT)
+    registry = json.loads(registry_path.read_bytes())
+    base_manifest = json.loads((unit_dir / "tu-manifest.json").read_bytes())
     # Declared C-owned data runs (config/tu/data-carves.json, tools/tu/data_carve.py):
     # the jump tables and literals recovered C functions generate, cut out of their
     # TU's scaffold piece. Nothing declared: `m` is the tracked manifest unchanged.
-    m, carve_report = data_carve.apply_main(ROOT, unit_dir, m)
+    m, carve_report = data_carve.apply_main(ROOT, unit_dir, base_manifest, registry=registry)
+    # Allocate tentative definitions whenever their storage has an explicit
+    # native owner, including the original linker COMMON tail. The subsequent
+    # carve checks the emitted section, symbol and extent before substitution.
+    common_tail_tus = {row['tu']
+                       for rows in registry.get('common_tail', {}).values()
+                       for row in rows if row.get('c_input_span')}
+    bss_alloc_tus = {t['name'] for t in m['tus']
+                     if t['id'] in common_tail_tus
+                     or any(r['tu'] == t['id'] and r['section'] in ('.sbss', '.bss')
+                            for r in carve_report)}
     manifest_name = "tu-manifest.json"
     if carve_report:
         manifest_name = "tu-manifest.carved.json"
@@ -288,7 +306,12 @@ def main(argv=None):
 
     def base_manifest_pieces(name, sec):
         """The splat pieces of a section before the carve (what `data_carve.py split` reads)."""
-        ts = base_tus[name]["sections"][sec]
+        ts = base_tus[name]["sections"].get(sec)
+        if ts is None:
+            # A narrowly evidenced owner correction can transfer an original
+            # scaffold suffix into the compiler-owned TU's private manifest.
+            # Its source piece is retained in the effective carved manifest.
+            ts = by_name[name]["sections"][sec]
         return ts.get("pieces") or [dict(name=name, start=ts["start"], end=ts["end"])]
     edges = []
     word_sites = []   # `.word` inside the text scaffold (reported)
@@ -376,15 +399,30 @@ def main(argv=None):
                     deps.append(str(local_h))
             inc_flags = " ".join(f"-I{ROOT / r}" for r in incs) + " -Iinclude -I."
             obj[(n, "c")] = f"build/c/{n}.o"
-            edges += cc_edge(obj[(n, "c")], cfile, con, flags, inc_flags, deps + [str(HERE / "cinc.py")],
-                             overlay=f"build/cinc/{n}")
+            raw_obj = f"build/c/{n}.raw.o"
+            if n in bss_alloc_tus:
+                edges += cc_edge(raw_obj, cfile, con, flags, inc_flags, deps + [str(HERE / "cinc.py")],
+                                 overlay=f"build/cinc/{n}")
+                edges += [f"build {obj[(n, 'c')]} {obj[(n, 'c')]}.s {obj[(n, 'c')]}.i: alloccommon {raw_obj}",
+                          f"  obj = {obj[(n, 'c')]}"]
+            else:
+                edges += cc_edge(obj[(n, 'c')], cfile, con, flags, inc_flags,
+                                 deps + [str(HERE / "cinc.py")], overlay=f"build/cinc/{n}")
             if t.get("c_link_object"):
                 # several C runs in one data section (tools/tu/data_carve.py): the link takes
                 # the compiled object with that section cut into one input section per run
-                split_deps = sorted({str(data_carve.registry_input_path(ROOT)), str(HERE / "data_carve.py"),
+                c_split_sections = t.get("c_split_sections")
+                if c_split_sections is None:
+                    # A common-tail-only split creates a linked split object without
+                    # ordinary scaffold runs.  Its inputs are pinned by
+                    # `common_tail_native` and split_plans() from the registry.
+                    if not (t.get("c_common_tail_splits") and t.get("common_tail_native")):
+                        raise ValueError(f"{t['id']}: c_link_object has no declared split spans")
+                    c_split_sections = {}
+                split_deps = sorted({str(registry_path), str(HERE / "data_carve.py"),
                                      str(HERE / "elfinfo.py"), "tu-manifest.json", "orig/SLUS_204.69"}
-                                    | {pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s"
-                                       for sec in t["c_split_sections"]
+                                     | {pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s"
+                                       for sec in c_split_sections
                                        for pc in base_manifest_pieces(n, sec)})
                 edges += [f"build {t['c_link_object']}: carvesplit {obj[(n, 'c')]} | {' '.join(split_deps)}",
                           f"  tu = {t['id']}"]
@@ -394,12 +432,21 @@ def main(argv=None):
     def dobj(name, sec):
         return f"build/data/{name}.{sec[1:]}.o"
 
-    for sec, v in m["sections"].items():
-        for pc in v["order"]:
-            src = pc.get("file") or f"asm/main/data/{pc['piece']}.{sec[1:]}.s"
-            edges.append(f"build {dobj(pc['piece'], sec)}: as {src}")
+    data_pieces = [(sec, pc) for manifest in (m, base_manifest)
+                   for sec, v in manifest["sections"].items() for pc in v["order"]]
+    emitted_data = set()
+    for sec, pc in data_pieces:
+        if (pc['piece'], sec) in emitted_data:
+            continue
+        emitted_data.add((pc['piece'], sec))
+        src = pc.get("file") or f"asm/main/data/{pc['piece']}.{sec[1:]}.s"
+        edges.append(f"build {dobj(pc['piece'], sec)}: as {src}")
     for sec, name in ((".sbss", "linker/scommon"), (".bss", "linker/common")):
         edges.append(f"build {dobj(name, sec)}: as asm/main/data/{name}.{sec[1:]}.s")
+        tail = m["sections"][sec].get("common_tail")
+        for piece in (tail or {}).get("native_common_pieces", []):
+            if piece["kind"] == "scaffold":
+                edges.append(f"build {piece['object']}: as {piece['source']}")
     for b in ("reginfo", "ctors", "dtors", "eh_frame"):
         edges.append(f"build build/data/blobs/{b}.o: as asm/main/data/blobs/{b}.data.s")
     # The VU0 microprogram: assembled from the recovered source by the DVP
@@ -449,13 +496,39 @@ def main(argv=None):
         if sec == ".text":
             return text_contents(main_tus, S[".text"].addr, carve)
         out, prev_c = [], False
-        for p in m["sections"][sec]["order"]:
+        # The all-scaffold diagnostic must use the original unsplit inputs.
+        # C-owned fragments can start inside an alignment phase; they are
+        # compiler-input plans, not standalone replacements for that scaffold.
+        sections = base_manifest["sections"] if carve else m["sections"]
+        for p in sections[sec]["order"]:
             n = p["tu"]
             t = by_name[n]
             owner = t["owners"].get(sec)
+            # A verified explicit input span can place a C raw section into a
+            # different original scaffold family. Only that exact split piece
+            # becomes C-owned; the section's ordinary scaffold owner is kept.
+            explicit_c_piece = bool(p.get("c_split") and p.get("c_section")
+                                    and p.get("c_input_spans"))
             own = "c" if (t["mode"] == "c" and not carve
-                          and (owner == "c" or (owner == "split" and p["c_split"]))) else "asm"
+                          and (owner == "c" or (owner == "split" and p["c_split"])
+                               or explicit_c_piece)) else "asm"
             if own == "c":
+                storage = p.get("c_input_spans")
+                if storage:
+                    # A single original NOBITS span may be backed by native
+                    # compiler .sbss/.bss plus allocated SCOMMON input. Pin each
+                    # real input subsection at its independently proven VA.
+                    # The registry supplies exact ranges; mapcheck verifies the
+                    # object section size/alignment and symbol ownership.
+                    for i, part in enumerate(storage):
+                        sec_lo = int(part["range"][0], 16)
+                        out.append(f". = 0x{sec_lo - S[sec].addr:X}; "
+                                   f"/* pin: C storage {n} {part['section']} */")
+                        if i == 0:
+                            out.append(f"{piece_sym(n, sec)} = .;")
+                        out.append(f"{c_link(n)}({part['section']});")
+                    prev_c = True
+                    continue
                 csec = p.get("c_section")
                 if csec:
                     # one run of a split section: pinned at its original address
@@ -468,14 +541,27 @@ def main(argv=None):
                 out.append(f". = 0x{int(p['start'], 16) - S[sec].addr:X}; /* pin: {p['piece']} after a C-owned piece */")
             out.append(f"{dobj(p['piece'], sec)}({sec});")
             prev_c = False
-        tail = m["sections"][sec].get("common_tail")
+        tail = sections[sec].get("common_tail")
         if tail:
-            if prev_c:
-                out.append(f". = 0x{int(tail['start'], 16) - S[sec].addr:X}; /* pin: common tail after a C-owned piece */")
-            out.append(f"{dobj(tail['name'], sec)}({sec});")
+            native = tail.get("native_common_pieces")
+            if native and not carve:
+                for piece in native:
+                    start = int(piece["start"], 16)
+                    out.append(f". = 0x{start - S[sec].addr:X}; /* pin: common-tail {piece['kind']} {piece['name']} */")
+                    if piece["kind"] == "c":
+                        out.append(f"{piece['object']}({piece['input_section']});")
+                    else:
+                        out.append(f"{piece['object']}({sec});")
+                prev_c = False
+            else:
+                if prev_c:
+                    out.append(f". = 0x{int(tail['start'], 16) - S[sec].addr:X}; /* pin: common tail after a C-owned piece */")
+                out.append(f"{dobj(tail['name'], sec)}({sec});")
             out.append("*(.scommon);" if sec == ".sbss" else "*(COMMON);")
-        # every other contribution of this section (C/INCLUDE_ASM objects' unowned sections): must be empty
-        out.append(f"build/expected/*({sec}) build/hasm/*({sec}) build/c/*({sec}); "
+        # Expected/hand-assembly objects remain visible to the map checker.
+        # Unowned C sections are explicitly discarded by the final /DISCARD/
+        # rules instead of being silently appended to the original data layout.
+        out.append(f"build/expected/*({sec}) build/hasm/*({sec}); "
                    "/* code objects' other contributions: must stay empty (mapcheck) */")
         return out
 
@@ -516,7 +602,11 @@ def main(argv=None):
         ov = S["ov02"]
         L += [f"  ov02 0x{ov.addr:X} : AT(0x{ov.offset:X})", "  {"] + ["    " + x for x in ov02_contents(carve)] + ["  }"]
         sd = S[".sdata"]
-        L += [f"  .blob_pad_before_ov02 0x{0x10000000 + sd.offset + sd.size:X} : AT(0x{sd.offset + sd.size:X}) "
+        # The pad blob occupies the exact gap between the current .sdata end
+        # and OV02. Rounding this start upward shortens that gap and overlaps
+        # the fixed OV02 LMA by the alignment delta.
+        pad_lma = sd.offset + sd.size
+        L += [f"  .blob_pad_before_ov02 0x{0x10000000 + pad_lma:X} : AT(0x{pad_lma:X}) "
               f"{{ build/assets/pad_before_ov02.o(.data); }}"]
         for line in (unit_dir / "splat.yaml").read_text().splitlines():
             mm = re.match(r"  - \[0x([0-9A-F]+), bin, blobs/(\w+)\]", line)
@@ -571,6 +661,7 @@ def main(argv=None):
     # neighbour); resolve them as <piece start> + original offset (PROVIDE: never overrides
     # a definition of the C object)
     c_alias = ["/* scaffold labels of C-owned pieces, relative to the linked C object (generated) */"]
+    emitted_c_aliases = set()
     for t in tus:
         if t["mode"] != "c":
             continue
@@ -579,6 +670,32 @@ def main(argv=None):
         for sec, p in t["sections"].items():
             for pc in p.get("pieces", [dict(name=n, start=p["start"], c_split=False)]):
                 if t["owners"].get(sec) == "c" or (t["owners"].get(sec) == "split" and pc["c_split"]):
+                    # Interior scaffold labels remain aliases of the actual C
+                    # storage owner. Require the alias and complete owner extent
+                    # to fit this exact linked piece before emitting a PROVIDE.
+                    for storage_alias in pc.get("c_storage_aliases", []):
+                        piece_lo = int(pc["start"], 16)
+                        piece_hi = int(pc["end"], 16)
+                        owner = storage_alias.get("storage_owner") or {}
+                        try:
+                            alias_va = int(storage_alias["address"], 16)
+                            owner_va = int(owner["address"], 16)
+                            owner_size = int(owner["size"])
+                        except (KeyError, TypeError, ValueError):
+                            continue
+                        if (not storage_alias.get("original_name") or not owner.get("name")
+                                or owner.get("name") not in pc.get("c_owned_symbols", [])
+                                or owner_size <= 0
+                                or owner_va < piece_lo or owner_va + owner_size > piece_hi
+                                or alias_va < owner_va or alias_va >= owner_va + owner_size):
+                            continue
+                        alias_name = storage_alias["original_name"]
+                        if alias_name in emitted_c_aliases:
+                            continue
+                        output_section = pc.get("c_section") or sec
+                        c_alias.append(
+                            f'PROVIDE("{alias_name}" = 0x{alias_va:X});')
+                        emitted_c_aliases.add(alias_name)
                     owned.append((pc.get("c_section") or sec, int(pc["start"], 16),
                                   [unit_dir / (pc.get("file") or f"asm/main/data/{pc['name']}.{sec[1:]}.s")]))
         for sec, base, files in owned:
@@ -589,9 +706,14 @@ def main(argv=None):
                     if mm:
                         cur = mm[1]
                         continue
-                    am = re.match(r"\s*/\* [0-9A-F]+ ([0-9A-F]{8}) ", line)
+                    am = re.match(r"\s*/\*\s*(?:[0-9A-F]+\s+)?([0-9A-F]{8})(?:\s|\*/)", line)
                     if cur and am:
-                        c_alias.append(f'PROVIDE("{cur}" = {piece_sym(n, sec)} + 0x{int(am[1], 16) - base:X});')
+                        # Use the exact address printed by the source scaffold. A TU
+                        # can own several runs in one section, and the generated linker
+                        # script reassigns the shared piece symbol at each run.
+                        if cur not in emitted_c_aliases:
+                            c_alias.append(f'PROVIDE("{cur}" = 0x{int(am[1], 16):X});')
+                            emitted_c_aliases.add(cur)
                         cur = None
     write_if_changed(unit_dir / "c_aliases.ld", "\n".join(c_alias) + "\n")
     # scaffold references to functions that INCLUDE_ASM now defines under their original
@@ -681,7 +803,10 @@ def main(argv=None):
          "rule eeas_s", "  command = " + strict.format(T=T, src="$in"), "  description = EE-AS $in",
          "# several C runs in one data section: one input section per run (tools/tu/data_carve.py split)",
          "rule carvesplit", f"  command = {T} $py {HERE}/data_carve.py split --root {ROOT} --unit main "
-         f"--unit-dir {unit_dir} --tu $tu --obj $in --out $out", "  description = CARVE-SPLIT $out",
+         f"--unit-dir {unit_dir} --registry {registry_path} --tu $tu --obj $in --out $out", "  description = CARVE-SPLIT $out",
+         "rule alloccommon", f"  command = {T} $ld -r -d -EL -m elf32lr5900 -o $obj $in && "
+         f"{T} cp $in.s $obj.s && {T} cp $in.i $obj.i",
+         "  description = LD-ALLOC $out",
          "# splat's undefined_*_auto.txt minus every name a linked object defines (review finding F8)",
          "rule undeffilter", f"  command = {T} $py {HERE}/undef_filter.py --objects @$out.rsp --out $out --report $out.json",
          "  rspfile = $out.rsp", "  rspfile_content = $objs", "  description = UNDEF-FILTER $out",
@@ -694,7 +819,7 @@ def main(argv=None):
          "rule compare", f"  command = $py {HERE}/compare.py $mode --original orig/SLUS_204.69 --rebuilt $in --report $out",
          "  description = COMPARE $in",
          "rule mapcheck", f"  command = {T} $py {HERE}/mapcheck.py --map $in.map --report $out --rom $carve"
-         + (f" --manifest {manifest_name}" if carve_report else ""),
+         + " --manifest $manifest",
          "  description = MAPCHECK $in",
          "# ACCEPTED_ASM/INCLUDE_ASM provenance (tu-main-v2 review finding 3)",
          "rule provenance",
@@ -728,13 +853,13 @@ def main(argv=None):
           "build build/main.bin: flat build/main.rom.elf",
           "build build/main.compare.json: compare build/main.bin", "  mode =",
           f"build build/accepted_asm.json: provenance | tu-manifest.json {HERE}/accepted_asm_gate.py " + " ".join(prov_deps),
-          f"build build/main.mapcheck.json: mapcheck build/main.rom.elf | {manifest_name} {HERE}/mapcheck.py " + " ".join([o for (n, k), o in obj.items() if k == "c"] + sorted(link_obj.values())), "  carve =",
+          f"build build/main.mapcheck.json: mapcheck build/main.rom.elf | {manifest_name} {HERE}/mapcheck.py " + " ".join([o for (n, k), o in obj.items() if k == "c"] + sorted(link_obj.values())), "  carve =", f"  manifest = {manifest_name}",
           f"build build/carve/main.rom.elf: ld | {' '.join(carve_objs)} main.carve.rom.ld {common} build/carve/main.undefined.ld",
           "  script = main.carve.rom.ld", "  extra =", "  undef = build/carve/main.undefined.ld",
           "build build/carve/main.bin: flat build/carve/main.rom.elf",
           "build build/carve/main.compare.json: compare build/carve/main.bin", "  mode =",
-          f"build build/carve/main.mapcheck.json: mapcheck build/carve/main.rom.elf | {manifest_name} {HERE}/mapcheck.py",
-          "  carve = --carve",
+          f"build build/carve/main.mapcheck.json: mapcheck build/carve/main.rom.elf | tu-manifest.json {HERE}/mapcheck.py",
+          "  carve = --carve", "  manifest = tu-manifest.json",
           f"build build/main.elf: ld_elf | {' '.join(elf_objs)} main.elf.ld {common} c_aliases.ld externals.ld build/main.undefined.ld",
           "  script = main.elf.ld", "  extra = -T c_aliases.ld -T externals.ld", "  undef = build/main.undefined.ld",
           f"  entry = 0x{entry:X}",

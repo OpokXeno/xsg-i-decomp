@@ -1,14 +1,91 @@
 #include "common.h"
 #include "shared.h"
 
-/* Only the command words touched before ACT_DrawShadowBegin sends the buffer. */
+typedef union {
+    u64 value;
+    struct {
+        u32 low;
+        u32 high;
+    } words;
+} GifCommandData;
+
 typedef struct {
-    u8 unmodeled_00[0x50];
-    u64 shadow_command_word_10;
-    u8 unmodeled_58[0x38];
-    u64 shadow_command_word_18;
-    u8 unmodeled_98[8];
+    GifCommandData data;
+    u32 register_address;
+    u32 unused;
+} GifAdCommand;
+
+typedef struct {
+    u32 control_low;
+    u32 control_high;
+    u32 registers_low;
+    u32 registers_high;
+} GifTag;
+
+typedef struct {
+    GifCommandData low_color;
+    u32 blue_and_unused;
+    u32 alpha_and_unused;
+} GifRgbaq;
+
+typedef struct {
+    u16 x;
+    u16 unused_x;
+    u16 y;
+    u16 unused_y;
+    u32 z;
+    u32 unused;
+} GifXyz2;
+
+#define GIF_TAG_NLOOP_1 1u
+#define GIF_TAG_EOP (1u << 15)
+#define GIF_TAG_PRE (1u << 14)
+#define GIF_TAG_PRIM_SPRITE (6u << 15)
+#define GIF_TAG_NREG_8 (8u << 28)
+#define GIF_TAG_NREG_1 (1u << 28)
+#define GIF_REG_A_D 0xEu
+#define GIF_REG_RGBAQ 0x1u
+#define GIF_REG_XYZ2 0x5u
+#define SHADOW_GIF_REGISTERS \
+    ((GIF_REG_A_D << 0) | (GIF_REG_A_D << 4) | \
+     (GIF_REG_A_D << 8) | (GIF_REG_A_D << 12) | \
+     (GIF_REG_RGBAQ << 16) | (GIF_REG_XYZ2 << 20) | \
+     (GIF_REG_XYZ2 << 24) | (GIF_REG_A_D << 28))
+
+#define GS_CLAMP_REGION_REPEAT 2u
+#define GS_CLAMP_MIN_U 0u
+#define GS_CLAMP_MAX_U 511u
+#define GS_CLAMP_MIN_V 0u
+#define GS_CLAMP_MAX_V 447u
+#define GS_CLAMP_1_VALUE \
+    ((u64)GS_CLAMP_REGION_REPEAT | ((u64)GS_CLAMP_REGION_REPEAT << 2) | \
+     ((u64)GS_CLAMP_MIN_U << 4) | ((u64)GS_CLAMP_MAX_U << 14) | \
+     ((u64)GS_CLAMP_MIN_V << 24) | ((u64)GS_CLAMP_MAX_V << 34))
+
+/* DMA TTE carries DIRECT; its payload is one GIFtag and eight packed registers. */
+typedef struct {
+    u64 dma_tag;
+    u32 vif_nop;
+    u32 vif_direct;
+    GifTag gif_tag;
+    GifAdCommand set_gs_mode;
+    GifAdCommand set_draw_environment;
+    GifAdCommand set_clamp_1;
+    GifAdCommand set_color_control;
+    GifRgbaq base_color;
+    GifXyz2 top_left;
+    GifXyz2 bottom_right;
+    GifAdCommand set_shadow_context;
 } ActShadowCommand;
+
+/* The final direct packet has one packed A+D register write. */
+typedef struct {
+    u64 dma_tag;
+    u32 vif_nop;
+    u32 vif_direct;
+    GifTag gif_tag;
+    GifAdCommand set_shadow_register;
+} ActShadowEndPacket;
 
 /* The render-state halfword read by the shadow command builder is at +0x20. */
 typedef struct {
@@ -59,7 +136,6 @@ typedef struct {
     DropShadowBackPacket back_shadow_packet;
 } ActDropShadowState;
 
-extern ActShadowCommand Head_9;
 extern ActShadowRenderState sRender;
 extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
@@ -135,23 +211,54 @@ INCLUDE_ASM("asm/main/nonmatchings/act_3", DrawDropShadow);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_3", DrawDropCircle);
 
+static ActShadowCommand Head_9 = {
+        .dma_tag = 0,
+        .vif_nop = 0,
+        .vif_direct = 0x51000009,
+        .gif_tag = {
+            GIF_TAG_NLOOP_1 | GIF_TAG_EOP,
+            GIF_TAG_NREG_8 | GIF_TAG_PRE | GIF_TAG_PRIM_SPRITE,
+            SHADOW_GIF_REGISTERS,
+            0
+        },
+        .set_gs_mode = { { .words = { 0x31000000, 1 } }, 0x4E, 0 },
+        .set_draw_environment = { { .value = 0x00071001 }, 0x47, 0 },
+        .set_clamp_1 = { { .value = GS_CLAMP_1_VALUE }, 0x08, 0 },
+        .set_color_control = { { .value = 0 }, 0x4C, 0 },
+        .base_color = { { .value = 0 }, 0, 0x80 },
+        .top_left = { 0x6FF8, 0, 0x71F7, 0, 0x00F00000, 0 },
+        .bottom_right = { 0x8FF8, 0, 0x8DF7, 0, 0x00F00000, 0 },
+        .set_shadow_context = { { .value = 0 }, 0x4C, 0 },
+};
+
+static ActShadowEndPacket Tail_10 = {
+    .dma_tag = 0,
+    .vif_nop = 0,
+    .vif_direct = 0x51000002,
+    .gif_tag = {
+        GIF_TAG_NLOOP_1 | GIF_TAG_EOP,
+        GIF_TAG_NREG_1,
+        GIF_REG_A_D,
+        0
+    },
+    .set_shadow_register = { { .value = 0x31000000 }, 0x4E, 0 },
+};
+
 void ACT_DrawShadowBegin(void)
 {
     u16 shadow_state = sRender.shadow_state;
 
-    Head_9.shadow_command_word_10 = shadow_state | 0xFFFFFF00080000ULL;
-    Head_9.shadow_command_word_18 = shadow_state;
+    Head_9.set_color_control.data.value = shadow_state | 0xFFFFFF00080000ULL;
+    Head_9.set_shadow_context.data.value = shadow_state;
     /* Set the command-enable bit after initializing the state bits. */
-    Head_9.shadow_command_word_18 |= 0x80000;
+    Head_9.set_shadow_context.data.value |= 0x80000;
     nmlModelDirectSend(1, (u8 *)&Head_9, 10);
 }
 
 extern void nmlModelDirectSend(int mode, u8 *data, int count);
-extern u8 Tail_10[];
-
 void ACT_DrawShadowEnd(void)
 {
-    nmlModelDirectSend(1, Tail_10, 3);
+    nmlModelDirectSend(1, (u8 *)&Tail_10, 3);
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/act_3", ACT_DrawShadow);

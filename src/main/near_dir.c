@@ -1,5 +1,7 @@
 #include "common.h"
 #include "near_dir.h"
+
+ActSequenceEntry actSequence[64] = { 0 };
 #include "main/xgl_studio.h"
 
 typedef struct {
@@ -24,7 +26,7 @@ void SEQ_rotateSPL(Actor *actor)
      * It is past the recovered head of Actor, so it keeps the byte view. */
     u8 *actor_bytes = (u8 *)actor;
     SequenceState *sequence =
-        (SequenceState *)(actSequence + actor_bytes[0x80] * 0x260u);
+        &actSequence[actor_bytes[0x80]].state;
     /* The sequence entry carries several spline tracks; +0xb8 is the rotation
      * track, as +0x38 is the movement track SEQ_moveSPL below walks and
      * Java_xeno_Chr_move fills in (0x002fd398..0x002fd3e4). */
@@ -39,9 +41,9 @@ void SEQ_rotateSPL(Actor *actor)
 
     SPL_getValueXYZ(sample, spline, (float)track->frame);
 
-    actor->rotation.x = sample[0] / 180.0f * sequence_pi;
-    actor->rotation.y = sample[1] / 180.0f * sequence_pi;
-    actor->rotation.z = sample[2] / 180.0f * sequence_pi;
+    actor->rotation.x = sample[0] / 180.0f * 3.141592741f;
+    actor->rotation.y = sample[1] / 180.0f * 3.141592741f;
+    actor->rotation.z = sample[2] / 180.0f * 3.141592741f;
 
     track->frame++;
     if (track->last_frame < (short)track->frame)
@@ -55,7 +57,7 @@ void SEQ_moveSPL(Actor *actor)
      * routine (0x002fd398..0x002fd3e4). */
     u8 *actor_bytes = (u8 *)actor;
     SequenceState *sequence =
-        (SequenceState *)(actSequence + actor_bytes[0x80] * 0x260u);
+        &actSequence[actor_bytes[0x80]].state;
     SplineTrack *track = (SplineTrack *)((u8 *)sequence + 0x38);
     void *spline = track->spline;
     Vector4 sample;
@@ -155,7 +157,7 @@ INCLUDE_ASM("asm/main/nonmatchings/near_dir", ACT_updatePlayer);
 void ACT_initSequenceAt(Actor *actor)
 {
     SequenceState *sequence =
-        (SequenceState *)(actSequence + actor->number * 0x260u);
+        &actSequence[actor->number].state;
 
     sequence->flags = 0;
     sequence->state_flags = 0;

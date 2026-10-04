@@ -26,13 +26,13 @@ static void _SetWepDisp(WepDisp *pWepDisp, RgWeapon *weapon,
                         unsigned int index);
 
 /* ov12:0x00a54678 "pDisp != NIL" */
-extern const char D_00A54678[];
+const char D_00A54678[] = "pDisp != NIL";
 /* ov12:0x00a54688 "../rg_disp_wpn1p.euc.c" (source filename, scaffold-owned
  * per config/tu-build.json data_ownership: this .rodata window is still
  * owner "asm"). */
-extern const char D_00A54688[];
+const char D_00A54688[] = "../rg_disp_wpn1p.euc.c";
 /* ov12:0x00a546a0 "pBxx != NIL" */
-extern const char D_00A546A0[];
+const char D_00A546A0[] = "pBxx != NIL";
 
 static void _InitWepDisp(WepDisp *pWepDisp, RgBxx *pBxx)
 {
@@ -64,11 +64,11 @@ extern void RgGaugeDispSetRestUVWH(void *gaugeDisp, int x, int y, int width,
                                     int height);
 extern void RgGaugeDispSetPos(void *gaugeDisp, int x, int y);
 extern void RgGaugeDispSetAlpha(void *gaugeDisp, int alpha);
-extern const char D_00A546B0[];
-extern const char D_00A546C0[];
-extern const char D_00A546D0[];
-extern const char D_00A546E0[];
-extern const char D_00A546F0[];
+const char D_00A546B0[] = "bar_wepd.bmp";
+const char D_00A546C0[] = "bar_wepl.bmp";
+const char D_00A546D0[] = "pBarTex != NIL";
+const char D_00A546E0[] = "bar_wepr.bmp";
+const char D_00A546F0[] = "bar_wepb.bmp";
 
 static void _SetWepDisp(WepDisp *pWepDisp, RgWeapon *weapon,
                         unsigned int index)
@@ -168,10 +168,8 @@ static void _PassTimeWepDisp(WepDisp *pWepDisp, float deltaTime)
 typedef struct WepTextPositions {
     int xy[3][2];
 } WepTextPositions;
-extern const WepTextPositions D_00A54700;
-extern const char D_00A54718[];
-extern const int s_anTextPos_0[3][2];
-extern const int s_abOrder_1[3];
+const WepTextPositions D_00A54700 = {{{8, 365}, {452, 366}, {416, 401}}};
+const char D_00A54718[] = "UNARMED";
 extern void RgDispWpnDat_CreateRestNumStr(RgWeapon *weapon, char *buffer);
 extern void RgFontStr(void *paint, int fontId, const char *text, int x,
                       int y, int color);
@@ -187,6 +185,8 @@ extern void RgGaugeDraw(RgGauge *gauge, void *paint);
 static void _DispWepDisp(WepDisp *pWepDisp, void *paint, int bulletFont,
                          int weaponFont)
 {
+    static int s_anTextPos[3][2] = {{183, 359}, {392, 351}, {243, 383}};
+    static int s_abOrder[3] = {1, 1, 0};
     WepTextPositions textPositions = D_00A54700;
     int index;
     char restNumber[64];
@@ -200,8 +200,8 @@ static void _DispWepDisp(WepDisp *pWepDisp, void *paint, int bulletFont,
         RgGaugeDraw(pWepDisp->gauge, paint);
         RgDispWpnDat_CreateRestNumStr(pWepDisp->weapon, restNumber);
         RgFontStr(paint, bulletFont, restNumber,
-                  s_anTextPos_0[index][0], s_anTextPos_0[index][1],
-                  s_abOrder_1[index]);
+                  s_anTextPos[index][0], s_anTextPos[index][1],
+                  s_abOrder[index]);
         if (weaponFont != 0) {
             essence = RgWeaponGetEss(pWepDisp->weapon);
             if (essence != 0) {
@@ -231,11 +231,11 @@ extern void RgGaugeDispSetBarUVWH(void *gaugeDisp, int x, int y, int width,
 extern void RgGaugeDispSetPos(void *gaugeDisp, int x, int y);
 extern void RgGaugeDispSetAlpha(void *gaugeDisp, int alpha);
 
-extern const char D_00A54720[];
-extern const char D_00A54730[];
-extern const char D_00A54740[];
-extern const char D_00A54750[];
-extern const char D_00A54760[];
+const char D_00A54720[] = "board_sa.bmp";
+const char D_00A54730[] = "board_sb.bmp";
+const char D_00A54740[] = "boost.bmp";
+const char D_00A54750[] = "mph1.bmp";
+const char D_00A54760[] = "bar_dash.bmp";
 
 static void _InitDisp(RgDispWpn1P *pDisp)
 {

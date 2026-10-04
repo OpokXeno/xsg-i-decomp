@@ -7,16 +7,34 @@
 #include "ov01/obj.h"
 #include "obj.h"
 
-extern unsigned char taskBuf[];
 extern void *memset(void *destination, int value, unsigned int size);
 extern void *xglTaskInitial(void *manager, int capacity, int flags);
 extern void objWorkInit(void);
+
+static ObjectWork objWork[60];
+static TaskManager taskMan;
+/* objInit clears fifty 0x80-byte slots. ObjectTaskNode models each prefix. */
+typedef union ObjectTaskStorage {
+    ObjectTaskNode node;
+    unsigned char bytes[0x80];
+} ObjectTaskStorage;
+static ObjectTaskStorage taskBuf[50];
+
+const char objRemoveError[24] = "** objRemove: Error\n";
+const char D_00A43810[24] = "** objEntryPure: Error\n";
+const char objRemovePureError[32] = "** objRemovePure: Error\n";
+const char D_00A43848[24] = "** objWorkGet: Error\n";
+const char D_00A43860[32] = "** objWorkFree: Error %x\n";
+const char D_00A43880[32] = "** objCmdPush: buff over\n";
+const char D_00A438A0[32] = "** objCmdPop: buff over\n";
+const char D_00A438C0[24] = "** fifoPush error\n";
+const char D_00A438D8[24] = "** fifoPop error\n";
 
 void objInit(void) {
     int index;
     unsigned char *slot;
 
-    slot = taskBuf;
+    slot = taskBuf[0].bytes;
     for (index = 0; index < 50; index++) {
         memset(slot, 0, 0x80);
         slot += 0x80;

@@ -29,13 +29,28 @@ extern const CardHelpPackedVector D_00A4E1A0;
 extern const CardHelpPackedVector D_00A4E1C0;
 extern const CardHelpPackedVector D_00A4E1D0;
 extern const char *cardxtx_tbl[];
-extern const u32 cardlex_tbl[];
+extern u32 cardlex_tbl[];
 
 extern const CardHelpPackedVector D_00A4E0B0;
 extern const CardHelpPackedVector D_00A4E0C0;
+
+/* Original packed vectors retained in their existing word representation. */
+const CardHelpPackedVector D_00A4E0A0 = {{0x3E23D70A3FBD70A4ULL, 0x3F80000000000000ULL}};
+const CardHelpPackedVector D_00A4E0B0 = {{0x3E4CCCCD3FAF5C29ULL, 0x3F80000000000000ULL}};
+const CardHelpPackedVector D_00A4E0C0 = {{0x3F6666663F666666ULL, 0x3F8000003F800000ULL}};
+const CardHelpPackedVector D_00A4E0D0 = {{0x3E3851EC3FC00000ULL, 0x3F80000000000000ULL}};
+const CardHelpPackedVector D_00A4E0E0 = {{0x3F6666663F666666ULL, 0x3F8000003F800000ULL}};
+const CardHelpPackedVector D_00A4E170 = {{0x3E2E147B3E2E147BULL, 0x3F8000003F800000ULL}};
+const CardHelpPackedVector D_00A4E180 = {{0x3F947AE1C028F5C3ULL, 0x3F8000003CA3D70AULL}};
+const CardHelpPackedVector D_00A4E190 = {{0x3F147AE1C00CCCCDULL, 0x3F8000003CA3D70AULL}};
+const CardHelpPackedVector D_00A4E1A0 = {{0x3FC3D70ABF8CCCCDULL, 0x3F8000003CA3D70AULL}};
+const CardHelpPackedVector D_00A4E1C0 = {{0x3E19999A3FAE147BULL, 0x3F80000000000000ULL}};
+const CardHelpPackedVector D_00A4E1D0 = {{0x3E19999A3FAE147BULL, 0x3F80000000000000ULL}};
+const char *cardxtx_tbl[64] = {0};
+u32 cardlex_tbl[64] = {0};
 extern void nmlModelSetLight(Matrix4 color, Matrix4 direction);
 extern float xglSin(float angle);
-extern int ChangeCnt;
+static int ChangeCnt = 0;
 extern Matrix4 asDir;
 
 /*

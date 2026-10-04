@@ -1,6 +1,30 @@
 #include "common.h"
 #include "shared.h"
 #include "jni.h"
+
+const u8 D_004CCA70[16] = "xeno/vm/System";
+const u8 D_004CCA80[24] = "xeno/util/Format";
+const u8 D_004CCA98[16] = "xeno/util/Menu";
+const u8 D_004CCAA8[24] = "xeno/util/Window";
+const u8 D_004CCAC0[16] = "xeno/util/Input";
+const u8 D_004CCAD0[24] = "xeno/util/Layout";
+const u8 D_004CCAE8[24] = "xeno/util/Runtime";
+const u8 D_004CCB00[24] = "xeno/util/Toolkit";
+const u8 D_004CCB18[24] = "xeno/util/TCHParams";
+const u8 D_004CCB30[24] = "xeno/util/Spline";
+const u8 D_004CCB48[24] = "xeno/util/Vector4f";
+const u8 D_004CCB60[16] = "xeno/Camera";
+const u8 D_004CCB70[16] = "xeno/Effect";
+const u8 D_004CCB80[16] = "xeno/Light";
+const u8 D_004CCB90[16] = "xeno/Chr";
+const u8 D_004CCBA0[16] = "xeno/Enepc";
+const u8 D_004CCBB0[16] = "xeno/Unit";
+const u8 D_004CCBC0[16] = "xeno/Uwamono";
+const u8 D_004CCBD0[16] = "xeno/Stage";
+const u8 D_004CCBE0[16] = "xeno/Scene";
+const u8 D_004CCBF0[24] = "xeno/PlayControl";
+const u8 D_004CCC08[24] = "xeno/Movie";
+
 extern DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
 extern unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
 extern DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer);
@@ -14,28 +38,28 @@ void JNI_initSystem(xheap_block *heap, int size)
 
 void JNI_loadNativeClass(void)
 {
-    loadStaticClass(&classJava_xeno_vm_System, D_004CCA70);
-    loadStaticClass(&classJava_xeno_util_Format, D_004CCA80);
-    loadStaticClass(&classJava_xeno_util_Menu, D_004CCA98);
-    loadStaticClass(&classJava_xeno_util_Window, D_004CCAA8);
-    loadStaticClass(&classJava_xeno_util_Input, D_004CCAC0);
-    loadStaticClass(&classJava_xeno_util_Layout, D_004CCAD0);
-    loadStaticClass(&classJava_xeno_util_Runtime, D_004CCAE8);
-    loadStaticClass(&classJava_xeno_util_Toolkit, D_004CCB00);
-    loadStaticClass(&classJava_xeno_util_TCHParams, D_004CCB18);
-    loadStaticClass(&classJava_xeno_util_Spline, D_004CCB30);
-    loadStaticClass(&classJava_xeno_util_Vector4f, D_004CCB48);
-    loadStaticClass(&classJava_xeno_Camera, D_004CCB60);
-    loadStaticClass(&classJava_xeno_Effect, D_004CCB70);
-    loadStaticClass(&classJava_xeno_Light, D_004CCB80);
-    loadStaticClass(&classJava_xeno_Chr, D_004CCB90);
-    loadStaticClass(&classJava_xeno_Enepc, D_004CCBA0);
-    loadStaticClass(&classJava_xeno_Unit, D_004CCBB0);
-    loadStaticClass(&classJava_xeno_Uwamono, D_004CCBC0);
-    loadStaticClass(&classJava_xeno_Stage, D_004CCBD0);
-    loadStaticClass(&classJava_xeno_Scene, D_004CCBE0);
-    loadStaticClass(&classJava_xeno_PlayControl, D_004CCBF0);
-    loadStaticClass(&classJava_xeno_Movie, D_004CCC08);
+    loadStaticClass(&classJava_xeno_vm_System, (u8 *)D_004CCA70);
+    loadStaticClass(&classJava_xeno_util_Format, (u8 *)D_004CCA80);
+    loadStaticClass(&classJava_xeno_util_Menu, (u8 *)D_004CCA98);
+    loadStaticClass(&classJava_xeno_util_Window, (u8 *)D_004CCAA8);
+    loadStaticClass(&classJava_xeno_util_Input, (u8 *)D_004CCAC0);
+    loadStaticClass(&classJava_xeno_util_Layout, (u8 *)D_004CCAD0);
+    loadStaticClass(&classJava_xeno_util_Runtime, (u8 *)D_004CCAE8);
+    loadStaticClass(&classJava_xeno_util_Toolkit, (u8 *)D_004CCB00);
+    loadStaticClass(&classJava_xeno_util_TCHParams, (u8 *)D_004CCB18);
+    loadStaticClass(&classJava_xeno_util_Spline, (u8 *)D_004CCB30);
+    loadStaticClass(&classJava_xeno_util_Vector4f, (u8 *)D_004CCB48);
+    loadStaticClass(&classJava_xeno_Camera, (u8 *)D_004CCB60);
+    loadStaticClass(&classJava_xeno_Effect, (u8 *)D_004CCB70);
+    loadStaticClass(&classJava_xeno_Light, (u8 *)D_004CCB80);
+    loadStaticClass(&classJava_xeno_Chr, (u8 *)D_004CCB90);
+    loadStaticClass(&classJava_xeno_Enepc, (u8 *)D_004CCBA0);
+    loadStaticClass(&classJava_xeno_Unit, (u8 *)D_004CCBB0);
+    loadStaticClass(&classJava_xeno_Uwamono, (u8 *)D_004CCBC0);
+    loadStaticClass(&classJava_xeno_Stage, (u8 *)D_004CCBD0);
+    loadStaticClass(&classJava_xeno_Scene, (u8 *)D_004CCBE0);
+    loadStaticClass(&classJava_xeno_PlayControl, (u8 *)D_004CCBF0);
+    loadStaticClass(&classJava_xeno_Movie, (u8 *)D_004CCC08);
 }
 
 void JNI_pushFrame(void)
@@ -295,3 +319,27 @@ int JNI_getRegister(int register_index)
 {
     return VMRegister[register_index & 0x1f];
 }
+
+/* Cached native Java class handles populated by JNI_loadNativeClass. */
+void *classJava_xeno_Enepc;
+void *classJava_xeno_Scene;
+void *classJava_xeno_util_Window;
+void *classJava_xeno_Uwamono;
+void *classJava_xeno_Chr;
+void *classJava_xeno_util_Format;
+void *classJava_xeno_Unit;
+void *classJava_xeno_vm_System;
+void *classJava_xeno_util_Vector4f;
+void *classJava_xeno_util_Runtime;
+void *classJava_xeno_util_Layout;
+void *classJava_xeno_Effect;
+void *classJava_xeno_Light;
+void *classJava_xeno_util_Menu;
+void *classJava_xeno_util_Toolkit;
+void *classJava_xeno_Stage;
+void *classJava_xeno_PlayControl;
+void *classJava_xeno_util_TCHParams;
+void *classJava_xeno_util_Spline;
+void *classJava_xeno_util_Input;
+void *classJava_xeno_Camera;
+void *classJava_xeno_Movie;

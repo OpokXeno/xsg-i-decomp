@@ -9,10 +9,10 @@
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-extern const char D_00A54E18[]; /* "pInfo != NIL" */
-extern const char D_00A54E28[]; /* "../rg_battle_init.euc.c" */
+extern const char D_00A54E18[];
+extern const char D_00A54E28[];
+extern const unsigned char D_00A54E40[8];
 extern const char D_00A54E48[];
-extern const unsigned char D_00A54E40[];
 extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 extern char *strcpy(char *destination, const char *source);
 
@@ -88,3 +88,8 @@ void RgBattleInitCreateBg(RgBattleInitInfo *pInfo, int bgId)
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battle_init", _CreateBg);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_battle_init", RgBattleInitDump);
+
+const char D_00A54E18[] = "pInfo != NIL";
+const char D_00A54E28[] = "../rg_battle_init.euc.c";
+const unsigned char D_00A54E40[8] = "";
+const char D_00A54E48[] = "pDst != NIL && pSrc != NIL";

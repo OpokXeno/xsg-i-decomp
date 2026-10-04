@@ -3,10 +3,21 @@
 #include "main/xgl_task.h"
 #include "menu_shop.h"
 
+static MenuShopWorkData *MenuShopWork;
+
+/* Referenced original data recovered from this translation unit. */
+const char D_004C7858[40] = "List                   Price";
+extern const char D_004DB230[];
+
 typedef struct ShopDataCategory {
     unsigned short count;
     unsigned char unmodeled_02[38];
 } ShopDataCategory;
+
+typedef struct ShopDataTail {
+    unsigned short count;
+    unsigned char unmodeled_02[6];
+} ShopDataTail;
 
 typedef struct MenuShopListRow {
     const char *name;
@@ -50,7 +61,10 @@ typedef struct MenuShopWeapon {
     short bullet;
 } MenuShopWeapon;
 
-extern ShopDataCategory ShopData[];
+/* The map anchors nine 0x28-byte count records and a separate 8-byte tail.
+ * The remaining bytes stay explicitly unmodeled. */
+static ShopDataCategory ShopData[9];
+static ShopDataTail ShopDataTailStorage __attribute__((section(".bss")));
 extern int MenuScenarioNo;
 
 extern int *MenuSortAddrGet(void);
@@ -90,7 +104,7 @@ typedef struct MenuShopWindowSP {
     unsigned char state;
 } MenuShopWindowSP;
 
-extern MenuShopWindowSP *MenuShopWinSP;
+static MenuShopWindowSP *MenuShopWinSP;
 extern unsigned char MenuKeepSelect[0x64];
 extern const char D_004C7858[];
 extern MenuShopListRow *MenuListMake(int list, int mode);
@@ -322,3 +336,6 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_shop", subMenuShopNumerDec_12);
 INCLUDE_ASM("asm/main/nonmatchings/menu_shop", MenuShopCore);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_shop", MenuShopMain);
+
+/* Referenced original data recovered from this translation unit. */
+const char D_004DB230[8] = "Bullet";

@@ -22,8 +22,13 @@ extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
                        int line);
-extern const char D_00A565D8[];
-extern const char D_00A56610[];
+const char D_00A565D8[] = "../rg_matrices_effector.euc.c";
+const char D_00A565F8[] = "unknown effector type";
+const char D_00A56610[] = "pEff != NIL";
+const char D_00A56620[] = "_IsSingleEffector(pEff)";
+const char D_00A56638[] = "_IsDoubleEffector(pEff)";
+static int s_inSingleIdentifier;
+static int s_inDoubleIdentifier;
 
 static void _InitCombine(MatrixCombine *combine);
 static void _EffectorSetActivity(MatrixEffector *effector, int activity);
@@ -186,7 +191,6 @@ static void _DestructDoubleEffector(MatrixEffector *effector)
 
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
-extern const char D_00A565F8[];
 extern int s_inSingleIdentifier;
 extern int s_inDoubleIdentifier;
 

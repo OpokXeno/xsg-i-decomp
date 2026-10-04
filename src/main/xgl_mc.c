@@ -2,7 +2,30 @@
 #include "shared.h"
 #include "xgl_mc.h"
 
-extern unsigned char D_0093E120[];
+/* The request routines zero and use this complete memory-card save workspace. */
+unsigned char SaveData[0x163B0] = { 0 };
+
+/* The state machine uses both a word and per-slot halfwords at offset 4. */
+typedef struct McRequestState {
+    unsigned char phase;
+    unsigned char unmodeled_01[3];
+    union {
+        int combined;
+        short slots[2];
+    } status;
+} McRequestState;
+
+/* Fields beyond this partial view remain in the complete retail workspace. */
+typedef union McRequestStorage {
+    McRequestState state;
+    unsigned char bytes[0x20];
+} McRequestStorage;
+static McRequestStorage mw;
+
+static unsigned char queue_top;
+static unsigned char queue_end;
+
+static unsigned char D_0093E120[17 * 2];
 
 int sceMcOpen(int port, int slot, const char *name, int mode);
 int sceMcClose(int fd);
@@ -13,20 +36,9 @@ int sceMcGetInfo(int port, int slot, int *type, int *free, int *format);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_mc", xglMcRequest);
 
-/*
- * The word xglMcGetState reports lives at mw+4; mw+0 is the byte the request
- * state machine of xglMcMain switches on (seven states, jump table at
- * 0x004D2560) and xglMcMain writes the halfwords of the same +4 window per
- * slot (`sh` through `mw + 4 + 2 * mw[8]`, 0x00220600..0x0022069C).  The rest
- * of the record is still assembly, so mw cannot become a struct without
- * inventing the bytes between its members (docs/naming.md); the one access
- * takes docs/style.md rule 2's named-offset fallback.
- */
-#define XGL_MC_STATE_OFFSET 4
-
 int xglMcGetState(void)
 {
-    return *(int *)(mw + XGL_MC_STATE_OFFSET);
+    return mw.state.status.combined;
 }
 
 void xglMcReset(void)
@@ -34,7 +46,7 @@ void xglMcReset(void)
     queue_top = 0;
     queue_end = 0;
     xglMcSetMapName(0, 0);
-    mw[0] = 0;
+    mw.state.phase = 0;
 }
 
 /*

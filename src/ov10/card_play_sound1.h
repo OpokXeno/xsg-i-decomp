@@ -32,16 +32,6 @@ typedef struct CardListWindow {
 } CardListWindow;
 
 
-extern s16 MenuNo_1;
-extern s16 SubNo_2;
-extern s16 SubMenu_3;
-extern s16 ModeExit_4;
-extern u8 CCtimer_5;
-extern s16 Message_6;
-extern s16 MessageCnt_7;
-extern s16 p0num_17;
-extern s16 p1num_18;
-extern s16 vol_19;
 /* Title menu models: a model, texture pair per menu entry. */
 extern void *TitleMdlLst[10];
 extern float CCColor[4][4];
@@ -59,7 +49,6 @@ extern char ModeEndMess2[];
 extern char ModeEndMess3[];
 extern char ModeContMess0[];
 extern char ModeContMess1[];
-extern char *CardErrorList[];
 extern char *CardPlayTMessList[];
 extern char ZenkakuListA[];
 /*
@@ -99,9 +88,16 @@ typedef struct CardFontCode8 {
     char text[8];
 } CardFontCode8;
 
-extern const CardFontCode5 D_00A4C780;
+/* The original eight-byte item contains a five-byte font code and its
+ * three zero tail bytes. */
+typedef struct CardFontCodeRecord {
+    CardFontCode5 code;
+    char trailing[3];
+} CardFontCodeRecord;
+
+extern const CardFontCodeRecord D_00A4C780;
 extern const CardFontCode8 D_00A4C7C8;
-extern const CardFontCode5 D_00A4C7D0;
+extern const CardFontCodeRecord D_00A4C7D0;
 extern char D_00A4C790[];
 extern char D_00A4C868[];
 extern char D_00A4C870[];

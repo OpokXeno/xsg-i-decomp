@@ -31,7 +31,6 @@ typedef struct TCamera TCamera;
  * reads $f12 (c.le.s at 0x0030c0d8). */
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 extern float SPL_getValue(void *spline, int index, float frame);
-extern const float D_004D849C;
 
 /*
  * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
@@ -46,18 +45,16 @@ TCamera *TCAMERA_get(int camera_id)
 }
 
 extern StudioCamera *xglStudioGetActiveCamera(void);
-extern const float D_004D8480;
-extern const float D_004D8484;
-extern const char D_004D1838[];
-extern const char D_004D1848[];
-extern const char D_004D1858[];
-extern const char D_004D1868[];
-extern const char D_004D1878[];
-extern const char D_004D1888[];
-extern const char D_004D1898[];
-extern const char D_004D18A8[];
-extern const char D_004D18B8[];
-extern const char D_004D18C8[];
+const char D_004D1838[] = "TX %7.3f";
+const char D_004D1848[] = "TY %7.3f";
+const char D_004D1858[] = "TZ %7.3f";
+const char D_004D1868[] = "IX %7.3f";
+const char D_004D1878[] = "IY %7.3f";
+const char D_004D1888[] = "IZ %7.3f";
+const char D_004D1898[] = "RX %7.3f";
+const char D_004D18A8[] = "RY %7.3f";
+const char D_004D18B8[] = "RZ %7.3f";
+const char D_004D18C8[] = "FOV%7.3f";
 extern void DB_incPos(int x, int y);
 extern void DB_println(const char *format, ...);
 typedef unsigned int CameraVectorStorage __attribute__((mode(TI)));
@@ -65,7 +62,7 @@ typedef union {
     Vector4 vector;
     CameraVectorStorage storage;
 } MpackInterest;
-extern MpackInterest mpack_interest;
+static MpackInterest mpack_interest;
 
 void TCAMERA_info(void)
 {
@@ -84,12 +81,12 @@ void TCAMERA_info(void)
         DB_println(D_004D1888, (double)interest->z);
         interest->w = 0.0f;
     } else {
-        DB_println(D_004D1898, (double)(rotation->x / D_004D8480 * 180.0f));
-        DB_println(D_004D18A8, (double)(rotation->y / D_004D8480 * 180.0f));
-        DB_println(D_004D18B8, (double)(rotation->z / D_004D8480 * 180.0f));
+        DB_println(D_004D1898, (double)(rotation->x / 3.141592741f * 180.0f));
+        DB_println(D_004D18A8, (double)(rotation->y / 3.141592741f * 180.0f));
+        DB_println(D_004D18B8, (double)(rotation->z / 3.141592741f * 180.0f));
     }
     DB_incPos(0, 6);
-    DB_println(D_004D18C8, (double)(TCAMERA_FOV(camera) / D_004D8484 * 180.0f));
+    DB_println(D_004D18C8, (double)(TCAMERA_FOV(camera) / 3.141592741f * 180.0f));
 }
 
 /*
@@ -114,9 +111,6 @@ void TCAMERA_info(void)
 
 extern void FCV_resetPack(void *pack, void *source);
 extern float FCV_getPackValue(void *pack, float frame);
-extern const float D_004D8488;
-extern const float D_004D848C;
-
 void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
 {
     Vector4 *translation = TCAMERA_TRANSLATION(camera);
@@ -128,7 +122,7 @@ void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
     float positionScale;
 
     FCV_resetPack(TCAMERA_MPACK_SCRATCH, source);
-    positionScale = D_004D8488;
+    positionScale = 0.1f;
     translation->x = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
     translation->y = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
     translation->z = FCV_getPackValue(TCAMERA_MPACK_SCRATCH, frame) * positionScale;
@@ -144,7 +138,7 @@ void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
         : "r"(interest), "r"(translation), "r"(&direction)
         : "memory");
     yaw = xglAtan2(direction.x, direction.z);
-    radiansPerDegree = D_004D848C;
+    radiansPerDegree = 3.141592741f;
     rotation->y = yaw;
     rotation->x = -xglAtan2(direction.y,
                              direction.x * xglSin(yaw) + direction.z * xglCos(rotation->y));
@@ -188,29 +182,23 @@ void TCAMERA_setTranslate(TCamera *camera, float x, float y, float z)
  * setter keeps its own copy, at its own .lit4 address, so each is referenced
  * through its own scaffold symbol rather than a shared one.
  */
-extern const float D_004D8490;
-extern const float D_004D8494;
-extern const float D_004D8498;
-extern const float D_004D84A0;
-extern const float D_004D84A4;
-
 void TCAMERA_setFov(TCamera *camera, float degrees)
 {
-    TCAMERA_FOV(camera) = degrees / 180.0f * D_004D8490;
+    TCAMERA_FOV(camera) = degrees / 180.0f * 3.141592741f;
 }
 
 void TCAMERA_setRoll(TCamera *camera, float degrees)
 {
-    TCAMERA_ROTATION(camera)->z = degrees / 180.0f * D_004D8494;
+    TCAMERA_ROTATION(camera)->z = degrees / 180.0f * 3.141592741f;
 }
 
 void TCAMERA_setRotate(TCamera *camera, float pitchDegrees, float yawDegrees, float rollDegrees)
 {
     Vector4 *rotation = TCAMERA_ROTATION(camera);
 
-    rotation->x = pitchDegrees / 180.0f * D_004D8498;
-    rotation->y = yawDegrees / 180.0f * D_004D8498;
-    rotation->z = rollDegrees / 180.0f * D_004D8498;
+    rotation->x = pitchDegrees / 180.0f * 3.141592741f;
+    rotation->y = yawDegrees / 180.0f * 3.141592741f;
+    rotation->z = rollDegrees / 180.0f * 3.141592741f;
 }
 
 /*
@@ -278,9 +266,9 @@ void TCAMERA_rotateSPL(TCamera *camera, void *spline, float frame)
     float angles[3];
 
     SPL_getValueXYZ(angles, spline, frame);
-    rotation->x = (angles[0] / 180.0f) * D_004D849C;
-    rotation->y = (angles[1] / 180.0f) * D_004D849C;
-    rotation->z = (angles[2] / 180.0f) * D_004D849C;
+    rotation->x = (angles[0] / 180.0f) * 3.141592741f;
+    rotation->y = (angles[1] / 180.0f) * 3.141592741f;
+    rotation->z = (angles[2] / 180.0f) * 3.141592741f;
 }
 
 void TCAMERA_viewSPL(TCamera *camera, void *spline, float frame)
@@ -400,12 +388,12 @@ void TCAMERA_rollSPL(TCamera *camera, void *spline, float frame)
 {
     Vector4 *rotation = TCAMERA_ROTATION(camera);
 
-    rotation->z = SPL_getValue(spline, 0, frame) / 180.0f * D_004D84A0;
+    rotation->z = SPL_getValue(spline, 0, frame) / 180.0f * 3.141592741f;
 }
 
 void TCAMERA_fovSPL(TCamera *camera, void *spline, float frame)
 {
-    TCAMERA_FOV(camera) = SPL_getValue(spline, 0, frame) / 180.0f * D_004D84A4;
+    TCAMERA_FOV(camera) = SPL_getValue(spline, 0, frame) / 180.0f * 3.141592741f;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/tcamera", TCAMERA_update);

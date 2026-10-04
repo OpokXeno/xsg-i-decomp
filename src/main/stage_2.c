@@ -1,6 +1,8 @@
 #include "common.h"
 #include "stage_2.h"
 
+const char D_004DC208[8] = "peer";
+
 INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_start__ILjava_lang_Object_);
 
 void Java_xeno_Stage_stop__(StageThread *thread, StageObjectCall *arguments,

@@ -53,12 +53,25 @@ extern struct SoundWork SoundWork;
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 extern void xglSoundLoadEffect(const char *name, int address, int bank);
 extern void xglMakeSePacket(int command, int handle, int volume, ...);
+extern const char D_004C9BF0[];
+extern const char D_004C9C08[];
+extern const char D_004C9C20[];
+extern const char D_004C9C38[];
+extern const char D_004C9C50[];
+/* EUC-JP circle, triangle and square font codes prefix these test labels. */
+extern const char D_004C9C68[];
+extern const char D_004C9C78[];
+extern const char D_004C9C88[];
+extern const char D_004C9CA0[];
 extern const char D_004C9D08[];
 extern const char D_004C9D18[];
 extern const char D_004C9D28[];
+/* EUC-JP sound-packet test label with the font's line-start control byte. */
 extern const char D_004C9D38[];
 extern const char D_004C9D50[];
 extern const char D_004C9D60[];
+/* Font control byte followed by the EUC-JP title 唐鎌. */
+extern const char D_004DB6A8[];
 extern const char D_004DB6B8[];
 extern int printf(const char *format, ...);
 extern CfClearEnvironment ClearEnv;
@@ -67,16 +80,6 @@ extern void xglRenderClearDepth(void);
 extern void CfTest(void);
 extern void SePacketTest(void);
 extern void TexTest(void);
-extern const char D_004C9BF0[];
-extern const char D_004C9C08[];
-extern const char D_004C9C20[];
-extern const char D_004C9C38[];
-extern const char D_004C9C50[];
-extern const char D_004C9C68[];
-extern const char D_004C9C78[];
-extern const char D_004C9C88[];
-extern const char D_004C9CA0[];
-extern const char D_004DB6A8[];
 typedef struct ScratchpadPrimitiveVertex {
     int x;
     int y;
@@ -96,10 +99,12 @@ typedef struct ScratchpadPrimitiveBuffer {
 } ScratchpadPrimitiveBuffer;
 
 extern int FrameCount;
-extern u64 rgba_0;
+static u64 rgba_0 = 0x0000FF00000000FFULL;
 extern float I2F(int value);
 extern void xglPrimAddGouraudStripN(void *buffer, int count);
-extern CfActor *tActor;
+static CfActor *tActor;
+signed char printflg = 0;
+signed char collflg = 0;
 extern CfGameLoopState GameLoopState;
 extern void xglLightSetDefault(StudioLight *light);
 extern void xglCdInitial(void);
@@ -120,7 +125,27 @@ extern void ACT_initMotion(CfActor *actor);
 extern void ACT_loadMotion(CfActor *actor, int motion_id, int category);
 extern void ACT_loadResource(CfActor *actor, int resource_id);
 extern void ACT_setMotion(CfActor *actor, int motion_id);
-extern u64 TestEnv_2_0036DE40[];
+typedef struct GifAdEntry {
+    u64 value;
+    u64 register_address;
+} GifAdEntry;
+
+typedef struct TexTestPacket {
+    u64 gif_control;
+    u64 register_descriptors;
+    GifAdEntry registers[4];
+} TexTestPacket;
+
+static TexTestPacket TestEnv_2_0036DE40 = {
+    0x4000000000008001ULL,
+    0x000000000000EEEEULL,
+    {
+        {0x0004380000000000ULL, 0x50},
+        {0, 0x51},
+        {0x0000010000000100ULL, 0x52},
+        {0, 0x53}
+    }
+};
 extern void FlushCache(int mode);
 extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
 
@@ -329,10 +354,29 @@ void TexTrans(TextureTransferHeader *texture)
     if (width < 0) {
         width_in_blocks += 63;
     }
-    TestEnv_2_0036DE40[6] = (u64)width | ((u64)height << 32);
-    TestEnv_2_0036DE40[2] = ((u64)(width_in_blocks >> 6) << 48) | ((u64)0xE000 << 30);
+    TestEnv_2_0036DE40.registers[2].value = (u64)width | ((u64)height << 32);
+    TestEnv_2_0036DE40.registers[0].value =
+        ((u64)(width_in_blocks >> 6) << 48) | ((u64)0xE000 << 30);
     FlushCache(0);
-    xglDmaDirectNormal(2, (u32)TestEnv_2_0036DE40, 5);
+    xglDmaDirectNormal(2, (u32)&TestEnv_2_0036DE40, 5);
     width *= height;
     xglDmaDirectNormal(2, (u32)texture->payload, width / 4 + 1);
 }
+
+const char D_004C9BF0[] = "sizeof(sSaveData):%d\n";
+const char D_004C9C08[] = "sizeof(sActor):%d\n";
+const char D_004C9C20[] = "sizeof(sMapUnit):%d\n";
+const char D_004C9C38[] = "sizeof(sEnepc):%d\n";
+const char D_004C9C50[] = "sizeof(sefScheduler)%d\n";
+const char D_004C9C68[16] = "\xA1\xFB CF Test";
+const char D_004C9C78[16] = "\xA2\xA4 Tex Test";
+const char D_004C9C88[24] = "\xA2\xA2 SePacket Test";
+const char D_004C9CA0[] = "\xA1\xDF return\0\0\0\0\0\0";
+const char D_004C9D08[] = "buffer:%08x\n";
+const char D_004C9D18[] = "REGISTCF";
+const char D_004C9D28[] = "SO_VOK05";
+const char D_004C9D38[24] = "\x0B\xA5\xB5\xA5\xA6\xA5\xF3\xA5\xC9\xA5\xD1\xA5\xB1\xA5\xC3\xA5\xC8\xA5\xC6\xA5\xB9\xA5\xC8";
+const char D_004C9D50[] = "\x0BSE=%8x\n";
+const char D_004C9D60[] = "\x0BID=%8x vol=%3d pan=%3d\n";
+const char D_004DB6A8[] = "\x0B\xC5\xE2\xB3\xF9";
+const char D_004DB6B8[] = "ENV_VOK";

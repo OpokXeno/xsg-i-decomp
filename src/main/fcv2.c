@@ -139,7 +139,7 @@ int FCV2_checkData(void *data)
     return 0;
 }
 
-extern f32 fcv2Step;
+static f32 fcv2Step = 0.03333333507f;
 
 void FCV2_setStep(f32 step)
 {

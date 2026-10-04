@@ -19,8 +19,8 @@ extern void XrgUnitMatrix(RgMatrix destination);
  * ov12:0x00a58720 contains the assertion expression "pDispModel != NIL".
  * ov12:0x00a58738 contains the source filename "../rg_dispmodel.euc.c".
  */
-extern const char D_00A58720[];
-extern const char D_00A58738[];
+const char D_00A58720[] = "pDispModel != NIL";
+const char D_00A58738[] = "../rg_dispmodel.euc.c";
 
 void InitRgDispModel(RgDispModel *pDispModel)
 {

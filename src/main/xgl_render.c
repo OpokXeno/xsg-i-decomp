@@ -6,7 +6,13 @@
 
 extern int sceGsSyncV(int mode);
 
-extern int s_nClearFrame;
+static int s_nGblFadeInit;
+static int s_nGblFade;
+static int s_nClearFrame;
+int FrameCount;
+volatile int VSyncCount;
+int ScanLineInterpolate;
+unsigned char DrawEnv[0x100] = { 0 };
 extern void xglRenderInit(void);
 static void xglRenderMove(void);
 extern void xglPadRead(void);
@@ -26,7 +32,6 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderVSyncCallback);
 extern void xglRenderVSyncCallback(void);
 extern void *sceGsSyncVCallback(void (*func)(void));
 extern signed char FLAG_FRAME_60;
-extern volatile int VSyncCount;
 
 static void xglRenderSyncInit(void)
 {
@@ -124,11 +129,6 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderInit);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_render", xglRenderFinalPacket);
 
-extern int s_nGblFadeInit;
-
-/* Forward: storage defined beside xglRenderGlobalFadeSet below. */
-extern int s_nGblFade;
-
 void xglRenderGlobalFadeInit(void)
 {
     s_nGblFadeInit = 1;
@@ -144,8 +144,6 @@ void xglRenderGlobalFadeInit(void)
  * above unpacks for ClearEnv's own color fields. Its storage belongs to
  * xglRenderGlobalFadeInit (still asm, this TU).
  */
-extern int s_nGblFade;
-
 void xglRenderGlobalFadeSet(float red, float green, float blue, float alpha)
 {
     if (red < 0.0f)
@@ -196,31 +194,75 @@ void xglRenderClearOff(void)
     s_nClearFrame = 0;
 }
 
-/*
- * The six-qword (0x60-byte, config/symbols/main.txt size) direct-mode clear
- * primitive xglRenderClear sends: only the copied colour words at +0x30/
- * +0x34/+0x38 and the fixed alpha word at +0x3C are evidenced (lw 0x20/
- * 0x24/0x28 from ClearEnv, sw 0x30/0x34/0x38/0x3C here); the GS-convention
- * full-scale alpha 0x80 matches xglRenderGlobalFadeSet's own alpha packing
- * above. Earlier bytes are the packet's DIRECT tag/header, built elsewhere.
- */
-typedef struct {
-    unsigned char unmodeled_00[0x30];
-    u32 color_r;  /* +0x30 */
-    u32 color_g;  /* +0x34 */
-    u32 color_b;  /* +0x38 */
-    u32 color_a;  /* +0x3C */
-    unsigned char unmodeled_40[0x20];
-} GsClearPacket;
+typedef union GifCommandData {
+    u64 value;
+    struct {
+        u32 low;
+        u32 high;
+    } words;
+} GifCommandData;
 
-extern GsClearPacket TestEnv_0_004A8E80;
+typedef struct GifTag {
+    u32 control_low;
+    u32 control_high;
+    u32 registers_low;
+    u32 registers_high;
+} GifTag;
+
+typedef struct GifAdCommand {
+    GifCommandData data;
+    u32 register_address;
+    u32 unused;
+} GifAdCommand;
+
+typedef struct GifRgbaq {
+    GifCommandData red_green;
+    u32 blue;
+    u32 alpha;
+} GifRgbaq;
+
+typedef struct GifXyz2 {
+    u16 x;
+    u16 unused_x;
+    u16 y;
+    u16 unused_y;
+    u32 z;
+    u32 unused;
+} GifXyz2;
+
+typedef struct TestEnvironmentPacket {
+    u64 dma_tag;
+    u32 vif_nop;
+    u32 vif_direct;
+    GifTag gif_tag;
+    GifAdCommand primitive;
+    GifRgbaq color;
+    GifXyz2 top_left;
+    GifXyz2 bottom_right;
+} TestEnvironmentPacket;
+
+/* VIF DIRECT sends one GIFtag, one A+D PRIM, one RGBAQ and two XYZ2 values. */
+static TestEnvironmentPacket TestEnv_0_004A8E80 = {
+    .dma_tag = 0,
+    .vif_nop = 0,
+    .vif_direct = 0x51000005,
+    .gif_tag = { 1 | (1 << 15), 0x40034000, 0x551E, 0 },
+    .primitive = { { .value = 0x0000000000071001ULL }, 0x47, 0 },
+    .color = { { .value = 0 }, 0, 0 },
+    .top_left = { 0x6FF8, 0, 0x71F7, 0, 0x40000000, 0 },
+    .bottom_right = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
+};
+
+GsDispEnv DispEnv = { 0 };
+GsClearEnv ClearEnv = { 0 };
+XglRenderState sRender = { 0 };
 
 static void xglRenderClear(void)
 {
-    TestEnv_0_004A8E80.color_r = ClearEnv.color_r;
-    TestEnv_0_004A8E80.color_g = ClearEnv.color_g;
-    TestEnv_0_004A8E80.color_b = ClearEnv.color_b;
-    TestEnv_0_004A8E80.color_a = 0x80;
+    TestEnv_0_004A8E80.color.red_green.words.low = ClearEnv.color_r;
+    TestEnv_0_004A8E80.color.red_green.words.high = ClearEnv.color_g;
+    TestEnv_0_004A8E80.color.blue = ClearEnv.color_b;
+    TestEnv_0_004A8E80.color.alpha = 0x80;
     sceVif1PkRef(xglPacketGetCurrent(), &TestEnv_0_004A8E80, 6, 0, 0, 0);
 }
 
@@ -237,3 +279,10 @@ void xglRenderEntry(void)
         xglSleep();
     }
 }
+
+static int s_nGblFadeInit = 0;
+static int s_nGblFade = 0;
+static int s_nClearFrame = 0;
+int FrameCount = 0;
+volatile int VSyncCount = 0;
+int ScanLineInterpolate = 0;

@@ -5,6 +5,12 @@
 #include "shared.h"
 #include "rg_game_collision.h"
 
+const char D_00A553C8[32] = "../rg_game_collision.euc.c";
+const char D_00A553E8[16] = "pSrc != NIL";
+const char D_00A553F8[40] = "pSrc->m_pGroup1 != pSrc->m_pGroup2";
+const char D_00A55420[16] = "pArg != NIL";
+const char D_00A55430[24] = "pGameColi != NIL";
+
 static RgGameColiArg *_CreateColiArg(RgGameColiArg *pSrc)
 {
     RgGameColiArg *pArg;

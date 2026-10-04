@@ -1,6 +1,17 @@
 #include "common.h"
 #include "init_vm.h"
 
+const char D_004CD0C0[16] = "<clinit>";
+const char D_004CD0D0[16] = "SourceFile";
+const char D_004CD0E0[16] = "InnerClasses";
+const char D_004CD0F0[16] = "Exceotions";
+const char D_004CD100[16] = "LineNumberTable";
+const char D_004CD110[16] = "ConstantValue";
+const char D_004CD120[32] = "LocalVariableTable";
+const char D_004DBFE0[8] = "<init>";
+const char D_004DBFE8[8] = "()V";
+const char D_004DBFF0[8] = "(I)V";
+const char D_004DBFF8[8] = "Code";
 /*
  * initBaseClasses and initPrimitiveTypes are file-local (LOCAL in the
  * original symbol table); initPrimitiveTypes stays asm, so both are
@@ -1355,6 +1366,11 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
     frame->nextPc = 0;
 }
 
+/* These class names follow virtualMachine's generated opcode dispatch tables. */
+const char D_004CD628[24] = "java/lang/Object";
+const char D_004CD640[24] = "java/lang/StringBuffer";
+const char D_004CD658[24] = "java/lang/String";
+
 static void initBaseClasses(void) {
     initPrimitiveTypes();
     loadStaticClass(&classObject, D_004CD628);
@@ -1370,18 +1386,17 @@ extern VMClass *classInt;
 extern VMClass *classLong;
 extern VMClass *classFloat;
 extern VMClass *classDouble;
+extern const char D_004DC000[];
+extern const char D_004DC008[];
+extern const char D_004DC010[];
+extern const char D_004DC018[];
+extern const char D_004DC020[];
+extern const char D_004DC028[];
+extern const char D_004DC030[];
+extern const char D_004DC038[];
 
 static void initWrapperClass(VMClass **class_slot, const char *name,
                               signed char type_code, int element_size);
-
-extern const char D_004DC000[]; /* "boolean" */
-extern const char D_004DC008[]; /* "byte" */
-extern const char D_004DC010[]; /* "char" */
-extern const char D_004DC018[]; /* "short" */
-extern const char D_004DC020[]; /* "int" */
-extern const char D_004DC028[]; /* "long" */
-extern const char D_004DC030[]; /* "float" */
-extern const char D_004DC038[]; /* "double" */
 
 static void initPrimitiveTypes(void) {
     initWrapperClass(&classBoolean, D_004DC000, 'Z', 1);
@@ -1419,3 +1434,50 @@ static void initWrapperClass(VMClass **class_slot, const char *name,
     stored_class->name = interned_name;
     (*class_slot)->element_size = element_size;
 }
+
+/* Keep these small-data definitions after their original external uses. */
+const char D_004DC000[8] = "boolean";
+const char D_004DC008[8] = "byte";
+const char D_004DC010[8] = "char";
+const char D_004DC018[8] = "short";
+const char D_004DC020[8] = "int";
+const char D_004DC028[8] = "long";
+const char D_004DC030[8] = "float";
+const char D_004DC038[8] = "double";
+
+/* Keep the pointer's original zero-initialized storage after its extern uses. */
+VMClass *classBoolean = 0;
+
+struct ClassEntry;
+extern struct ClassEntry _dummyClass;
+struct ClassEntry *classClass = &_dummyClass;
+
+/* Zero-initialized VM handles stored and initialized by this translation unit. */
+SceneString *ATTR_InnerClasses;
+SceneString *ATTR_LocalVariableTable;
+SceneString *ATTR_ConstantValue;
+SceneString *ATTR_LineNumberTable;
+unsigned short XTK_peerGroup[4];
+SceneClass *classStringBuffer;
+SceneString *TYPE_Chr_talk;
+SceneString *ATTR_SourceFile;
+SceneString *ATTR_Code;
+SceneString *TYPE_Void;
+SceneString *NAME_Constructor;
+SceneString *ATTR_Exceptions;
+SceneString *NAME_Init;
+SceneString *TYPE_Stage_entered;
+void *jthreadTop;
+VMClass *classByte;
+VMClass *classChar;
+VMClass *classShort;
+void (*jthreadResetFunc)(void);
+void *initVMThread;
+SceneClass *classObject;
+void *classEntryPool;
+VMClass *classFloat;
+VMClass *classDouble;
+VMClass *classLong;
+SceneClass *classString;
+VMClass *classInt;
+VMClass *primitiveClassTable[16];

@@ -2,6 +2,15 @@
 #include "shared.h"
 #include "xgl_menu.h"
 
+XglMenuEntry menutbl[MENU_TABLE_COUNT] = { 0 };
+
+const char D_004DC2B8[8] = "\f\x80\0\0%s";
+const char D_004DC2C0[8] = "\f000%s";
+const char D_004DC2C8[4] = "\v%s";
+const char D_004DC2D0[8] = "pfs0:";
+const char D_004DC2D8[8] = "pfs1:";
+const char D_004DC2E0[8] = "hdd:";
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_menu", xglMenuOpen);
 
 static void xglMenuDrawType0(XglMenuEntry *entry) {

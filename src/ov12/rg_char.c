@@ -23,8 +23,8 @@ extern void InitRgChar(RgChar *pChar, int type);
  * ov12:0x00a51808 contains the source filename "../rg_char.euc.c".
  * ov12:0x00a51820 contains the assertion expression "pChar != NIL".
  */
-extern const char D_00A51808[];
-extern const char D_00A51820[];
+const char D_00A51808[] = "../rg_char.euc.c";
+const char D_00A51820[] = "pChar != NIL";
 
 static void _nonControlMethod(RgChar *pChar)
 {

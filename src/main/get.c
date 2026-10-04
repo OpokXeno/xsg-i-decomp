@@ -3,18 +3,19 @@
 #include "main/xgl_2.h"
 #include "get.h"
 
+
 float Get_Decimal_Surplus_for_Radius(float angle)
 {
     if (angle <= 0.0f) {
-        float negative_pi = radius_neg_pi;
+        float negative_pi = -3.141592741f;
         if (angle < negative_pi) {
             do {
-                angle += radius_two_pi_a;
+                angle += 6.283185482f;
             } while (angle < negative_pi);
         }
     } else {
-        while (radius_pi <= angle) {
-            angle -= radius_two_pi_b;
+        while (3.141592741f <= angle) {
+            angle -= 6.283185482f;
         }
     }
     return angle;
@@ -138,10 +139,10 @@ float Get_Angle_Relative(const Point4 *first, const Point4 *second,
 {
     float relative = Get_Angle(first, second) - reference;
 
-    if (relative < k_negative_pi)
-        relative += kFullCircleAdd;
-    if (k_positive_pi < relative)
-        relative -= kFullCircleSub;
+    if (relative < -3.141592741f)
+        relative += 6.283185482f;
+    if (3.141592741f < relative)
+        relative -= 6.283185482f;
     return relative;
 }
 
@@ -176,7 +177,7 @@ int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
 
     if (!(radius < Get_Distance3D(origin, target))) {
         float angle = Get_Angle(origin, target);
-        float halfWidth = (fanWidthDegrees / 180.0f) * D_004D81C8 * 0.5f;
+        float halfWidth = (fanWidthDegrees / 180.0f) * 3.141592741f * 0.5f;
 
         inside = Check_Angle(angle, facing - halfWidth, facing + halfWidth) != 0;
     }
@@ -200,16 +201,16 @@ float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
     cursor = target - current;
     /* MARK: builtin form emits abs.s under -fno-builtin; a plain fabsf
        call would tail-call instead and break the match. */
-    if (__builtin_fabsf(cursor) < kAbsBoundPi)
+    if (__builtin_fabsf(cursor) < 3.141592741f)
         cursor = current + cursor / speed;
-    else if (cursor < kNegPi)
-        cursor = current + (cursor + kTwoPiAddend) / speed;
+    else if (cursor < -3.141592741f)
+        cursor = current + (cursor + 6.283185482f) / speed;
     else
-        cursor = current - (kTwoPiSubtrahend - cursor) / speed;
-    if (cursor <= kNegPiLimit)
-        cursor += kTwoPiWrapLo;
-    if (kPiLimit <= cursor)
-        cursor -= kTwoPiWrapHi;
+        cursor = current - (6.283185482f - cursor) / speed;
+    if (cursor <= -3.141592741f)
+        cursor += 6.283185482f;
+    if (3.141592741f <= cursor)
+        cursor -= 6.283185482f;
     return cursor;
 }
 

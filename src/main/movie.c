@@ -22,11 +22,6 @@ typedef struct MovieObjectCall {
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 
-/* The movie path and playback state are supplied by the TU's data scaffold. */
-extern char name_0_0043C1A0[];
-extern const char D_004DC120[];
-extern const char D_004D16C0[];
-extern const char D_004DC128[];
 extern short GameMovieFrame;
 extern unsigned char GameMovieTransparent;
 extern unsigned char GameMovieAlpha;
@@ -46,17 +41,19 @@ void Java_xeno_Movie_init__I(JThread *thread, int *arguments, unsigned int *resu
 void Java_xeno_Movie_start__I(JThread *thread, int *arguments,
                               unsigned int *result)
 {
+    /* Four decimal digits in the movie asset path are replaced at playback. */
+    static char name[] = "data\\movie\\full\\mv0000.ipu";
     int movie_id = arguments[1];
 
-    name_0_0043C1A0[21] = (char)(movie_id % 10 + '0');
+    name[21] = (char)(movie_id % 10 + '0');
     movie_id /= 10;
-    name_0_0043C1A0[20] = (char)(movie_id % 10 + '0');
+    name[20] = (char)(movie_id % 10 + '0');
     movie_id /= 10;
-    name_0_0043C1A0[19] = (char)(movie_id % 10 + '0');
+    name[19] = (char)(movie_id % 10 + '0');
     movie_id /= 10;
-    name_0_0043C1A0[18] = (char)(movie_id % 10 + '0');
+    name[18] = (char)(movie_id % 10 + '0');
 
-    GameMoviePlay(name_0_0043C1A0);
+    GameMoviePlay(name);
 }
 
 void Java_xeno_Movie_stop__(JThread *thread, void *arguments, unsigned int *result)
@@ -71,15 +68,15 @@ void Java_xeno_Movie_update__(JThread *thread, MovieObjectCall *arguments,
     unsigned char *object = arguments->object;
 
     field = lookupClassField(classJava_xeno_Movie,
-                             loadConstString(D_004DC120, -1), 0);
+                             loadConstString("frame", -1), 0);
     /* The runtime's JavaField supplies the object's dynamic field offset. */
     *(int *)(object + field->offset) = GameMovieFrame;
 
     field = lookupClassField(classJava_xeno_Movie,
-                             loadConstString(D_004D16C0, -1), 0);
+                             loadConstString("transparent", -1), 0);
     GameMovieTransparent = object[field->offset];
 
     field = lookupClassField(classJava_xeno_Movie,
-                             loadConstString(D_004DC128, -1), 0);
+                             loadConstString("alpha", -1), 0);
     GameMovieAlpha = object[field->offset];
 }

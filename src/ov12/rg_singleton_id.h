@@ -15,6 +15,9 @@ typedef struct RgSingletonManager {
     void (*destructors[15])(void *instance);
     unsigned int order[15];
     int count;
+    /* The global occupies 0xc0 bytes; these trailing bytes have no known
+     * semantic use in the recovered access set. */
+    unsigned char unmodeled_b8[8];
 } RgSingletonManager;
 
 #endif /* SRC_OV12_RG_SINGLETON_ID_H */

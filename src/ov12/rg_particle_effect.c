@@ -41,11 +41,13 @@ static void _InitEffect(RgParticleEffect *effect, RgParticleEffectEssence *essen
  * ov12:0x00a54378 contains the assertion expression "pData != NIL".
  * ov12:0x00a54398 contains the assertion expression "pChar != NIL".
  */
-extern const char D_00A542C8[];
-extern const char D_00A542D8[];
-extern const char D_00A542F8[];
-extern const char D_00A54378[];
-extern const char D_00A54398[];
+const char D_00A542C8[16] = "pEff != NIL";
+const char D_00A542D8[32] = "../rg_particle_effect.euc.c";
+const char D_00A542F8[16] = "aEss != NIL";
+const char D_00A54368[16] = "pEss != NIL";
+const char D_00A54378[16] = "pData != NIL";
+const char D_00A54388[16] = "pSrc != NIL";
+const char D_00A54398[16] = "pChar != NIL";
 
 static void _InitShoot(RgParticleShoot *shoot, RgParticleEffectEssence *essence)
 {
@@ -110,7 +112,6 @@ void DisposeRgParticleEffect(RgParticleEffect *effect)
 
 void InitRgParticleEffectEssence(RgParticleEffectEssence *essence)
 {
-    extern const char D_00A54368[];
     extern void XrgSetVectorXYZ(RgVector destination, float x, float y, float z);
 
     if (essence == 0) {
@@ -137,7 +138,6 @@ void InitRgParticleEffectEssence(RgParticleEffectEssence *essence)
 void RgParticleEffectEssenceSerialize(RgParticleEffectEssence *essence,
                                       RgParticleEffectEssence *destination)
 {
-    extern const char D_00A54368[];
 
     if (essence == 0) {
         assert_prog(D_00A54368, D_00A542D8, 365);
@@ -227,7 +227,6 @@ void InitRgParticleEffectControlData(RgParticleEffectControlData *pData)
  *
  * ov12:0x00a54388 contains the assertion expression "pSrc != NIL".
  */
-extern const char D_00A54388[];
 
 void RgParticleEffectSetControlData(RgParticleEffect *effect, RgParticleEffectControlData *pSrc)
 {

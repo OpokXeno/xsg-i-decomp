@@ -5,36 +5,36 @@
 
 float MMathMakeRandom(void)
 {
-    return (float)xglSRand() * D_004D8374;
+    return (float)xglSRand() * 3.051850945e-05f;
 }
 
 float MMathMakeRandom2PI(void)
 {
-    return (float)xglSRand() * random_two_pi_factor;
+    return (float)xglSRand() * 0.0001917534391f;
 }
 
 float MMathCalcRotNear(float first, float second)
 {
-    float difference = fmodf(second, near_two_pi) - fmodf(first, near_two_pi);
+    float difference = fmodf(second, 6.283185005f) - fmodf(first, 6.283185005f);
 
-    if (__builtin_fabsf(difference) > near_pi) {
+    if (__builtin_fabsf(difference) > 3.141592741f) {
         if (difference < 0.0f)
-            difference += near_two_pi;
+            difference += 6.283185005f;
         else
-            difference -= near_two_pi;
+            difference -= 6.283185005f;
     }
     return difference;
 }
 
 float MMathCalcRotFar(float first, float second)
 {
-    float difference = fmodf(second, far_two_pi) - fmodf(first, far_two_pi);
+    float difference = fmodf(second, 6.283185005f) - fmodf(first, 6.283185005f);
 
-    if (__builtin_fabsf(difference) < far_pi) {
+    if (__builtin_fabsf(difference) < 3.141592741f) {
         if (difference < 0.0f)
-            difference += far_two_pi;
+            difference += 6.283185005f;
         else
-            difference -= far_two_pi;
+            difference -= 6.283185005f;
     }
     return difference;
 }
@@ -151,7 +151,7 @@ void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_en
 void *MMathDeg2RadVector(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = degrees_to_radians;
+    register float scale asm("$f8") = 0.01745329238f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -169,7 +169,7 @@ void *MMathDeg2RadVector(void *destination, const Vector4 *source)
 void *MMathDeg2RadVectorI(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = degrees_to_radians_integer;
+    register float scale asm("$f8") = 0.01745329238f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -188,7 +188,7 @@ void *MMathDeg2RadVectorI(void *destination, const Vector4 *source)
 void *MMathRad2DegVector(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = radians_to_degrees;
+    register float scale asm("$f8") = 57.29578018f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -206,7 +206,7 @@ void *MMathRad2DegVector(void *destination, const Vector4 *source)
 void *MMathRad2DegVectorI(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = radians_to_degrees_integer;
+    register float scale asm("$f8") = 57.29578018f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"

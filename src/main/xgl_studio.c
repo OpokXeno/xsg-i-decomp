@@ -22,8 +22,8 @@ typedef struct Studio {
     StudioCamera cameras[8];
 } Studio;
 
-extern Studio asStudioSource[4];
-extern Studio *pCurrentStudio;
+static Studio asStudioSource[4];
+static Studio *pCurrentStudio;
 
 extern void xglStudioChange(int studio_index);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);

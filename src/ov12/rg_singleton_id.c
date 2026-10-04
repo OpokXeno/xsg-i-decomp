@@ -6,27 +6,11 @@
 #include "ov12/rg_singleton_id.h"
 #include "rg_singleton_id.h"
 
-/*
- * These are external file-backed witnesses, not candidate-emitted data.
- *
- * ov12:0x00a53008, 12 bytes, SHA-256
- * 0af24906f973437c43cba57232d069ee26beaf4b983824fe0f61727f74d8ee74
- * contains the assertion expression "pMgr != NIL".
- * ov12:0x00a53018, 25 bytes, SHA-256
- * 7337a7a7d9fd799db6b03292e71e8e7304fb41b1c04131c24e14bde7270d8d58
- * contains the source filename "../rg_singleton_id.euc.c".
- * ov12:0x00a53068, 29 bytes, SHA-256
- * 9a9bf18448e6f0547d21b210171dcdd394fa5bd943802154800e3e7ea5b65fc3
- * contains the range expression "0 <= eID && eID < RG_SID_MAX".
- */
+/* The assertion strings retain their original source expressions and file
+ * name; the compiler emits them as this TU's read-only data. */
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-extern const char rg_singleton_manager_nonnull_expression[];
-extern const char rg_singleton_id_source_file[];
-extern const char rg_singleton_id_range_expression[];
-extern const char D_00A53038[];
-extern const char D_00A53058[];
-extern RgSingletonManager s_inIDmgr;
+static RgSingletonManager s_inIDmgr;
 
 static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
                     void *instance, void (*destructor)(void *instance));
@@ -45,8 +29,7 @@ static void _Clear(RgSingletonManager *manager)
     int index;
 
     if (manager == 0) {
-        assert_prog(rg_singleton_manager_nonnull_expression,
-                    rg_singleton_id_source_file, 31);
+        assert_prog("pMgr != NIL", "../rg_singleton_id.euc.c", 31);
     }
 
     manager->count = 0;
@@ -62,8 +45,7 @@ static void _Destruct(RgSingletonManager *manager)
     unsigned int singleton_id;
 
     if (manager == 0) {
-        assert_prog(rg_singleton_manager_nonnull_expression,
-                    rg_singleton_id_source_file, 44);
+        assert_prog("pMgr != NIL", "../rg_singleton_id.euc.c", 44);
     }
 
     for (index = manager->count - 1; index >= 0; index--) {
@@ -86,18 +68,18 @@ static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
     int order_index;
 
     if (manager == 0) {
-        assert_prog(rg_singleton_manager_nonnull_expression,
-                    rg_singleton_id_source_file, 58);
+        assert_prog("pMgr != NIL", "../rg_singleton_id.euc.c", 58);
     }
     if (manager->instances[singleton_id] != 0) {
-        assert_prog(D_00A53038, rg_singleton_id_source_file, 59);
+        assert_prog("pMgr->m_apPtrTbl[eID] == NIL",
+                    "../rg_singleton_id.euc.c", 59);
     }
     if (instance == 0) {
-        assert_prog(D_00A53058, rg_singleton_id_source_file, 60);
+        assert_prog("pPtr != NIL", "../rg_singleton_id.euc.c", 60);
     }
     if (singleton_id >= 15) {
-        assert_prog(rg_singleton_id_range_expression,
-                    rg_singleton_id_source_file, 61);
+        assert_prog("0 <= eID && eID < RG_SID_MAX",
+                    "../rg_singleton_id.euc.c", 61);
     }
 
     count = &manager->count;
@@ -114,12 +96,11 @@ static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
 static void *_Get(RgSingletonManager *manager, unsigned int singleton_id)
 {
     if (manager == 0) {
-        assert_prog(rg_singleton_manager_nonnull_expression,
-                    rg_singleton_id_source_file, 70);
+        assert_prog("pMgr != NIL", "../rg_singleton_id.euc.c", 70);
     }
     if (singleton_id >= 15) {
-        assert_prog(rg_singleton_id_range_expression,
-                    rg_singleton_id_source_file, 71);
+        assert_prog("0 <= eID && eID < RG_SID_MAX",
+                    "../rg_singleton_id.euc.c", 71);
     }
     return manager->instances[singleton_id];
 }

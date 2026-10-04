@@ -51,11 +51,15 @@ extern unsigned int strlen(const char *string);
  * data_ownership window 0x00a53816..0x00a53cf0). ov12:0x00a53818 holds
  * "pDB != NIL", ov12:0x00a53828 holds "../rg_weapon_db.euc.c".
  */
-extern const char D_00A53818[];
-extern const char D_00A53828[];
-extern const char D_00A53870[];
-extern const char D_00A53888[];
-extern const char D_00A538A8[];
+const char D_00A53818[] = "pDB != NIL";
+const char D_00A53828[] = "../rg_weapon_db.euc.c";
+const char D_00A53840[] = "left";
+const char D_00A53848[] = "right";
+const char D_00A53850[] = "back";
+const char D_00A53858[] = "unknown equip type '%s'";
+const char D_00A53870[] = "'%c' is not 'o' or 'x'";
+const char D_00A53888[] = "'%s' is not '???-??-???'";
+const char D_00A538A8[] = "'%s' is not '???-??-???' format";
 
 extern void RgSimpleDBClear(RgSimpleDB *pDB);
 extern int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
@@ -121,11 +125,6 @@ extern int strcasecmp(const char *s1, const char *s2);
  * _ReadEquipType recognizes. 0x00a53858 holds "unknown equip type '%s'", the
  * RgError message it reports for anything else.
  */
-extern const char D_00A53840[];
-extern const char D_00A53848[];
-extern const char D_00A53850[];
-extern const char D_00A53858[];
-
 /*
  * The equip-slot indices the strings above are keyed to; "left" (index 0) is
  * the value _ReadEquipType falls through to below without a named constant.
@@ -288,8 +287,8 @@ struct RgWeaponEssence {
  * check every Read*Type function below reports; 0x00a53c30 holds "busy", the
  * key _ReadShotType recognizes for a shot type's cooldown.
  */
-extern const char D_00A53C20[];
-extern const char D_00A53C30[];
+const char D_00A53C20[] = "pReader != NIL";
+const char D_00A53C30[] = "busy";
 
 /*
  * The per-instance data _ReadShotType allocates. ov12/tu026's rg_weapon.h
@@ -341,8 +340,8 @@ static RgWeaponShotEssence *_ReadShotType(RgReadText *pReader)
  * Scaffold-owned data. ov12:0x00a53c38 holds "damage", 0x00a53c40 "hiteff":
  * the two keys _ReadAttackType and _ReadUnArmedType both recognize.
  */
-extern const char D_00A53C38[];
-extern const char D_00A53C40[];
+const char D_00A53C38[] = "damage";
+const char D_00A53C40[] = "hiteff";
 
 /*
  * The per-instance data _ReadAttackType allocates. ov12/tu026's rg_weapon.h
@@ -533,13 +532,13 @@ struct RgWeaponDBRecord {
     char displayName[0x30];
 };
 
-extern const char D_00A53C80[];
-extern const char D_00A53C98[];
-extern const char D_00A53CA8[];
-extern const char D_00A53CB0[];
-extern const char D_00A53CB8[];
-extern const char D_00A53CC0[];
-extern const char D_00A53CD0[];
+const char D_00A53C80[] = "pszDataBase != NIL";
+const char D_00A53C98[] = "shottype";
+const char D_00A53CA8[] = "atktype";
+const char D_00A53CB0[] = "sldtype";
+const char D_00A53CB8[] = "enetype";
+const char D_00A53CC0[] = "sudetype";
+const char D_00A53CD0[] = "%s : unknown keyword : %s";
 
 extern char *strcpy(char *destination, const char *source);
 extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat,

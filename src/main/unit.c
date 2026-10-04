@@ -2,6 +2,46 @@
 #include "shared.h"
 #include "unit.h"
 
+/* The original global actor table contains 64 records of 0xa70 bytes
+ * (symbol-table size 0x29c00). These are this TU's storage view: the known
+ * member extents come from the independent actor call sites documented in
+ * src/main/act_2.h; unnamed spans remain byte storage. */
+typedef struct UnitActorAnimSlot {
+    unsigned char unmodeled_00[0x14];
+    unsigned short currentDataId;
+} UnitActorAnimSlot;
+
+typedef struct UnitActorStorage {
+    u32 flags;
+    void (*update)(struct UnitActorStorage *actor);
+    void (*draw)(struct UnitActorStorage *actor);
+    u32 quadword_alignment_gap;
+    Vector4 position;
+    Vector4 previous_position;
+    Vector4 velocity;
+    Vector4 acceleration;
+    Vector4 rotation;
+    Vector4 scale;
+    unsigned char unmodeled_70[0x6f0 - 0x70];
+    UnitActorAnimSlot animSlot;
+    unsigned char unmodeled_706[0x71c - 0x706];
+    void *animData;
+    void *animUserData;
+    unsigned char unmodeled_724[0x7fc - 0x724];
+    int moveElementId;
+    unsigned char unmodeled_800[0x840 - 0x800];
+    unsigned char model[0x58];
+    unsigned char unmodeled_898[0x8d8 - 0x898];
+    void *move;
+    void *animPackTables[8];
+    unsigned char unmodeled_8fc[0xa70 - 0x8fc];
+} UnitActorStorage;
+
+UnitActorStorage actor[64] = { 0 };
+
+extern const char D_004DC1D0[];
+extern const char D_004DC1F8[];
+
 /*
  * The Java VM's per-thread execution context, already recovered as
  * `JThread` in src/main/chr.h (main's chr TU). This TU forwards a pointer
@@ -60,8 +100,6 @@ INCLUDE_ASM("asm/main/nonmatchings/unit", Java_xeno_Unit_getRotate__);
 
 /* The "peer" field name every lookupClassField(classJava_xeno_Unit, ...)
  * call below looks up. */
-extern const char D_004DC1D0[];
-
 void Java_xeno_Unit_getSignal__(JThread *thread, UnitObjectCall *arguments,
                                 u32 *failure_result)
 {
@@ -470,6 +508,7 @@ INCLUDE_ASM("asm/main/nonmatchings/unit", Java_xeno_Unit_setArgs__IIIII);
 void Java_xeno_Unit_getScale__(JThread *thread, UnitObjectCall *arguments,
                                UnitResultValue *result)
 {
+    static UnitScaleVector scale;
     JavaField *peer_field;
     u8 *object;
     UnitPeer *peer;
@@ -478,12 +517,12 @@ void Java_xeno_Unit_getScale__(JThread *thread, UnitObjectCall *arguments,
     peer_field = lookupClassField(classJava_xeno_Unit,
                                   loadConstString(D_004DC1D0, -1), 0);
     peer = *(UnitPeer **)(object + peer_field->offset);
-    scale_0_007C0A58.class_ref = classJava_xeno_util_Vector4f->instance_class_ref;
-    scale_0_007C0A58.x = peer->scale_x;
-    scale_0_007C0A58.y = peer->scale_y;
-    scale_0_007C0A58.z = peer->scale_z;
-    scale_0_007C0A58.w = peer->scale_w;
-    result->object = &scale_0_007C0A58;
+    scale.class_ref = classJava_xeno_util_Vector4f->instance_class_ref;
+    scale.x = peer->scale_x;
+    scale.y = peer->scale_y;
+    scale.z = peer->scale_z;
+    scale.w = peer->scale_w;
+    result->object = &scale;
 }
 
 /* Unconditional, like setCollision__Z above. */
@@ -854,3 +893,6 @@ void Java_xeno_Unit_setMonitorPrio__I(JThread *thread, UnitIntCall *arguments)
     }
     peer->monitor_priority = 0;
 }
+
+const char D_004DC1D0[8] = "peer";
+const char D_004DC1F8[8] = "py";

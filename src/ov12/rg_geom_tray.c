@@ -6,6 +6,9 @@
 #include "rg_geom_tray.h"
 #include "ov12/xrg_rand_int.h"
 
+extern const char D_00A55218[];
+extern const char D_00A55228[];
+
 #define RgGeomLocalMatricesAt(geom) \
     ((RgGeomLocalMatrices *)((unsigned char *)(geom) + 0x20))
 #define RgGeomLocalMatricesConstAt(geom) \
@@ -72,7 +75,8 @@ RgGeom *CreateRgGeomTray(void)
 {
     RgGeomTray *tray;
 
-    tray = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomTray), D_00A55228, 37);
+    tray = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgGeomTray),
+                       D_00A55228, 37);
     _InitRgGeomTray((RgGeom *)tray);
     return (RgGeom *)tray;
 }
@@ -162,8 +166,9 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
             XrgSetVectorXYZ(normals[hit_count], 0.0f, 0.0f, 1.0f);
             hit_count++;
             hit_axes |= 1;
-        }
     }
+}
+
     if ((hit_axes & 1) == 0 && current_position[2] < radius - height) {
         current_position[2] = radius - height;
         __asm__ __volatile__(
@@ -273,3 +278,6 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_tray", RgGeomTrayCheckBall);
+
+const char D_00A55218[16] = "pTray != NIL";
+const char D_00A55228[24] = "../rg_geom_tray.euc.c";

@@ -9,14 +9,9 @@
 
 int fadeEndChk(void);
 
-extern int fadeFlag;
-
-extern int cameraFlag;
-
 /* The battle entry sequencer's current phase, one of the entryPhaseNN
    functions of this TU, all shaped int (void). */
 typedef int (*EntryPhaseFunc)(void);
-extern EntryPhaseFunc battleSeq;
 
 /*
  * vramCopyObj's task-specific payload past the shared ObjectTask head

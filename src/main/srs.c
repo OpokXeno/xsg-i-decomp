@@ -47,7 +47,7 @@ typedef struct SrsChrEfTbl3Entry {
     unsigned char unmodeled_04[2];
 } SrsChrEfTbl3Entry;
 
-extern SrsChrEfTbl3Entry _srsChrEfTbl3[];
+static SrsChrEfTbl3Entry _srsChrEfTbl3[36];
 
 short srsGetBossWaitEftNo(int effectNo)
 {
@@ -65,9 +65,7 @@ short srsGetBossWaitEftNo(int effectNo)
 
 /*
  * The original srs prefix is retained; its historical expansion is not
- * established by the available evidence.  This partial translation unit
- * owns only the two GLOBAL accessors.  srsLoadMode remains the original
- * external .sdata word rather than a new definition here.
+ * established by the available evidence. The mode word is local to this TU.
  */
 void srsSetLoadMode(int load_mode)
 {
@@ -79,7 +77,7 @@ int srsGetLoadMode(void)
     return srsLoadMode;
 }
 
-extern unsigned char srsViewPath[];
+static unsigned char srsViewPath[256];
 extern unsigned char *strcpy(unsigned char *destination, const unsigned char *source);
 
 void srsSetViewPath(unsigned char *path)
@@ -123,9 +121,7 @@ char **srsGetComboData(int index)
     return (_loadComboData[index] != 0) ? &_loadComboData[index] : 0;
 }
 
-extern char msg_0_00795120[];
-extern char D_004CC6A8[]; /* "esd/%s%s" */
-extern char D_004DBB20[]; /* ".esd" */
+static char msg_0_00795120[128];
 
 char *srsGetEffectName(int effectNo)
 {
@@ -138,7 +134,7 @@ char *srsGetEffectName(int effectNo)
     if (*name == 0) {
         return 0;
     }
-    sprintf(msg_0_00795120, D_004CC6A8, name, D_004DBB20);
+    sprintf(msg_0_00795120, "esd/%s%s", name, ".esd");
     return msg_0_00795120;
 }
 
@@ -157,7 +153,7 @@ typedef struct WeaponTblEntry {
     unsigned char unmodeled_04[4];
 } WeaponTblEntry;
 
-extern WeaponTblEntry _weaponTbl[];
+static WeaponTblEntry _weaponTbl[45];
 
 short srsEftNoWeaponEffectID(void)
 {
@@ -199,9 +195,7 @@ short srsEftNo2WeaponID(void)
     return weaponID;
 }
 
-extern char msg_1_007951A0[];
-extern char D_004CC6B8[]; /* "esp/%s%s" */
-extern char D_004DBB28[]; /* ".esp" */
+static char msg_1_007951A0[128];
 
 char *srsGetEffectName2(int effectNo)
 {
@@ -211,11 +205,11 @@ char *srsGetEffectName2(int effectNo)
     if (name == 0) {
         return name;
     }
-    sprintf(msg_1_007951A0, D_004CC6B8, name, D_004DBB28);
+    sprintf(msg_1_007951A0, "esp/%s%s", name, ".esp");
     return msg_1_007951A0;
 }
 
-extern char msg_2_00795220[];
+static char msg_2_00795220[128];
 
 static char *srsGetComboName(int index)
 {
@@ -230,7 +224,7 @@ static char *srsGetComboName(int index)
     if (value == 0) {
         return 0;
     }
-    sprintf(msg_2_00795220, D_004CC6B8, value, D_004DBB28);
+    sprintf(msg_2_00795220, "esp/%s%s", value, ".esp");
     return msg_2_00795220;
 }
 
@@ -330,11 +324,10 @@ int srsLoadEffectData(void *buffer, int effectNo)
     return fileLoad(buffer, name, 1);
 }
 
-extern unsigned char _srsMemRes[];
 
 void sresInitMemoryRes(void)
 {
-    memset(_srsMemRes, 0, 0x1A0);
+    memset(&_srsMemRes, 0, sizeof(_srsMemRes));
 }
 
 /*
@@ -342,11 +335,6 @@ void sresInitMemoryRes(void)
  * image pointer sresFreeMemoryRes owns, plus the +0x3C reloader-buffer
  * pointer sresLoadCfMemory allocates and svAddImageMapper maps.
  */
-typedef struct SrsMemResEarly {
-    void *image; /* +0x00 */
-    unsigned char unmodeled_04[0x38];
-    void *cfImage; /* +0x3C */
-} SrsMemResEarly;
 
 extern void *smAlloc(int size);
 
@@ -355,21 +343,18 @@ extern void *smAlloc(int size);
  * from its first entry, which is the only one these two loaders fill.
  */
 extern void svAddImageMapper(int type, int width, void *chunk, int height);
-extern char D_004CC6F0[]; /* "esp/default.esp" */
-extern char D_004CC700[]; /* "seffect.esp" */
-extern char D_004CC710[]; /* "esp/cf_def.esp" */
 
 void sresLoadCommonMemory(void)
 {
-    SrsMemResEarly *memRes;
+    SrsMemRes *memRes;
     int size;
     void *chunk[8];
 
-    memRes = (SrsMemResEarly *) _srsMemRes;
+    memRes = &_srsMemRes;
     if (memRes->image == 0) {
         memRes->image = smAlloc(0x25800);
         if (memRes->image != 0) {
-            size = fileLoad(memRes->image, D_004CC6F0, 0);
+            size = fileLoad(memRes->image, "esp/default.esp", 0);
             if (size >= 0) {
                 if (size <= 0x25800) {
                     chunk[0] = memRes->image;
@@ -378,21 +363,21 @@ void sresLoadCommonMemory(void)
             }
         }
         memset(_loadEsdData, 0, 0xC800);
-        fileLoad(_loadEsdData, D_004CC700, 0);
+        fileLoad(_loadEsdData, "seffect.esp", 0);
     }
 }
 
 void sresLoadCfMemory(void)
 {
-    SrsMemResEarly *memRes;
+    SrsMemRes *memRes;
     int size;
     void *chunk[8];
 
-    memRes = (SrsMemResEarly *) _srsMemRes;
+    memRes = &_srsMemRes;
     if (memRes->cfImage == 0) {
         memRes->cfImage = smAlloc(0x3E000);
         if (memRes->cfImage != 0) {
-            size = fileLoad(memRes->cfImage, D_004CC710, 0);
+        size = fileLoad(memRes->cfImage, "esp/cf_def.esp", 0);
             if (size >= 0) {
                 chunk[0] = memRes->cfImage;
                 svAddImageMapper(15, 0, chunk, 3500);
@@ -415,46 +400,22 @@ extern void svDeleteImageMapper(int type);
  * the cf image 15 and the effect slots at +0x40 own 16 up.  A reloader slot
  * number below 3 names a weapon row and 3 or more a combo pointer.
  */
-typedef struct SrsMemResMap {
-    void *image; /* +0x000 */
-    void *effectImage; /* +0x004 */
-    void *weaponData[3][3]; /* +0x008 */
-    void *comboData[3]; /* +0x02C */
-    void *battleImage; /* +0x038 */
-    void *cfImage; /* +0x03C */
-    void *effectData[24]; /* +0x040 */
-    short imagePending; /* +0x0A0 */
-    short effectImagePending; /* +0x0A2 */
-    short weaponPending[3][3]; /* +0x0A4 */
-    short comboPending[3]; /* +0x0B6 */
-    short battleImagePending; /* +0x0BC */
-    short cfImagePending; /* +0x0BE */
-    short effectPending[24]; /* +0x0C0 */
-    short imageNo; /* +0x0F0 */
-    short effectImageNo; /* +0x0F2 */
-    short weaponNo[3][3]; /* +0x0F4 */
-    short comboNo[3]; /* +0x106 */
-    short battleImageNo; /* +0x10C */
-    short cfImageNo; /* +0x10E */
-    short effectNo[24]; /* +0x110 */
-    void *effectExtra[24]; /* +0x140 */
-} SrsMemResMap;
 
 void sresFreeReloaderMemoryNo(int no)
 {
     if (no < 3) {
-        if (((SrsMemResMap *) _srsMemRes)->weaponData[no][0] != 0) {
+        if (_srsMemRes.weaponData[no][0] != 0) {
             svDeleteImageMapper(no * 3 + 2);
-            smFree(((SrsMemResMap *) _srsMemRes)->weaponData[no][0]);
-            ((SrsMemResMap *) _srsMemRes)->weaponData[no][0] = 0;
-            ((SrsMemResMap *) _srsMemRes)->weaponData[no][1] = 0;
-            ((SrsMemResMap *) _srsMemRes)->weaponData[no][2] = 0;
+            smFree(_srsMemRes.weaponData[no][0]);
+            _srsMemRes.weaponData[no][0] = 0;
+            _srsMemRes.weaponData[no][1] = 0;
+            _srsMemRes.weaponData[no][2] = 0;
         }
     } else {
-        if (((SrsMemResMap *) _srsMemRes)->comboData[no - 3] != 0) {
+        if (_srsMemRes.comboData[no - 3] != 0) {
             svDeleteImageMapper(no + 8);
-            smFree(((SrsMemResMap *) _srsMemRes)->comboData[no - 3]);
-            ((SrsMemResMap *) _srsMemRes)->comboData[no - 3] = 0;
+            smFree(_srsMemRes.comboData[no - 3]);
+            _srsMemRes.comboData[no - 3] = 0;
         }
     }
 }
@@ -478,60 +439,51 @@ void sresFreeReloaderMemory(int freeCf)
     int i;
     int type;
 
-    if (((SrsMemResMap *) _srsMemRes)->battleImage != 0) {
+    if (_srsMemRes.battleImage != 0) {
         svDeleteImageMapper(14);
-        smFree(((SrsMemResMap *) _srsMemRes)->battleImage);
-        ((SrsMemResMap *) _srsMemRes)->battleImage = 0;
+        smFree(_srsMemRes.battleImage);
+        _srsMemRes.battleImage = 0;
     }
     for (i = 0; i < 3; i++) {
-        if (((SrsMemResMap *) _srsMemRes)->comboData[i] != 0) {
+        if (_srsMemRes.comboData[i] != 0) {
             svDeleteImageMapper(i + 11);
-            smFree(((SrsMemResMap *) _srsMemRes)->comboData[i]);
-            ((SrsMemResMap *) _srsMemRes)->comboData[i] = 0;
+            smFree(_srsMemRes.comboData[i]);
+            _srsMemRes.comboData[i] = 0;
         }
     }
     for (i = 0; i < 3; i++) {
-        if (((SrsMemResMap *) _srsMemRes)->weaponData[i][0] != 0) {
+        if (_srsMemRes.weaponData[i][0] != 0) {
             svDeleteImageMapper(i * 3 + 2);
             svDeleteImageMapper(i * 3 + 3);
             svDeleteImageMapper(i * 3 + 4);
-            smFree(((SrsMemResMap *) _srsMemRes)->weaponData[i][0]);
-            ((SrsMemResMap *) _srsMemRes)->weaponData[i][0] = 0;
-            ((SrsMemResMap *) _srsMemRes)->weaponData[i][1] = 0;
-            ((SrsMemResMap *) _srsMemRes)->weaponData[i][2] = 0;
-            ((SrsMemResMap *) _srsMemRes)->weaponNo[i][0] = -1;
-            ((SrsMemResMap *) _srsMemRes)->weaponNo[i][1] = -1;
-            ((SrsMemResMap *) _srsMemRes)->weaponNo[i][2] = -1;
+            smFree(_srsMemRes.weaponData[i][0]);
+            _srsMemRes.weaponData[i][0] = 0;
+            _srsMemRes.weaponData[i][1] = 0;
+            _srsMemRes.weaponData[i][2] = 0;
+            _srsMemRes.weaponNo[i][0] = -1;
+            _srsMemRes.weaponNo[i][1] = -1;
+            _srsMemRes.weaponNo[i][2] = -1;
         }
     }
     for (i = 0; i < 24; i++) {
         type = i + 16;
-        if (((SrsMemResMap *) _srsMemRes)->effectData[i] != 0) {
+        if (_srsMemRes.effectData[i] != 0) {
             svDeleteImageMapper(type);
-            smFree(((SrsMemResMap *) _srsMemRes)->effectData[i]);
-            ((SrsMemResMap *) _srsMemRes)->effectData[i] = 0;
-            ((SrsMemResMap *) _srsMemRes)->effectExtra[i] = 0;
-            ((SrsMemResMap *) _srsMemRes)->effectNo[i] = -1;
+            smFree(_srsMemRes.effectData[i]);
+            _srsMemRes.effectData[i] = 0;
+            _srsMemRes.effectExtra[i] = 0;
+            _srsMemRes.effectNo[i] = -1;
         }
     }
     if (freeCf != 0) {
-        if (((SrsMemResMap *) _srsMemRes)->cfImage != 0) {
+        if (_srsMemRes.cfImage != 0) {
             svDeleteImageMapper(15);
-            smFree(((SrsMemResMap *) _srsMemRes)->cfImage);
-            ((SrsMemResMap *) _srsMemRes)->cfImage = 0;
+            smFree(_srsMemRes.cfImage);
+            _srsMemRes.cfImage = 0;
         }
     }
 }
 
-/*
- * _srsMemRes's own additive view: only the leading pointer sresFreeMemoryRes
- * tests and clears is modeled, the rest of the 0x1A0-byte record (zeroed
- * whole by sresInitMemoryRes) stays an explicit unmodeled span.
- */
-typedef struct SrsMemRes {
-    void *image; /* +0x00 */
-    unsigned char unmodeled_04[0x19c];
-} SrsMemRes;
 
 extern void smFree(void *block);
 extern void sresFreeReloaderMemory(int reload_bgm);
@@ -542,7 +494,7 @@ void sresFreeMemoryRes(void)
     SrsMemRes *memRes;
 
     sresFreeReloaderMemory(1);
-    memRes = (SrsMemRes *) _srsMemRes;
+    memRes = &_srsMemRes;
     if (memRes->image != 0) {
         svDeleteImageMapper(0);
         smFree(memRes->image);
@@ -571,65 +523,65 @@ void sresDataMapping(void)
     int pending;
     int type;
 
-    if (((SrsMemResMap *) _srsMemRes)->image != 0) {
-        if (((SrsMemResMap *) _srsMemRes)->imagePending != 0) {
-            chunk[0] = ((SrsMemResMap *) _srsMemRes)->image;
+    if (_srsMemRes.image != 0) {
+        if (_srsMemRes.imagePending != 0) {
+            chunk[0] = _srsMemRes.image;
             svAddImageMapper(0, 0, chunk, 3000);
-            ((SrsMemResMap *) _srsMemRes)->imagePending = 0;
+            _srsMemRes.imagePending = 0;
         }
     }
-    if (((SrsMemResMap *) _srsMemRes)->effectImage != 0) {
-        if (((SrsMemResMap *) _srsMemRes)->effectImagePending != 0) {
-            chunk[0] = ((SrsMemResMap *) _srsMemRes)->effectImage;
+    if (_srsMemRes.effectImage != 0) {
+        if (_srsMemRes.effectImagePending != 0) {
+            chunk[0] = _srsMemRes.effectImage;
             svAddImageMapper(1, 0, chunk, 3100);
-            ((SrsMemResMap *) _srsMemRes)->effectImagePending = 0;
+            _srsMemRes.effectImagePending = 0;
         }
     }
     for (i = 0; i < 3; i++) {
         for (j = 0; j < 3; j++) {
-            if (((SrsMemResMap *) _srsMemRes)->weaponData[i][j] != 0) {
-                pending = ((SrsMemResMap *) _srsMemRes)->weaponPending[i][j];
+            if (_srsMemRes.weaponData[i][j] != 0) {
+                pending = _srsMemRes.weaponPending[i][j];
                 if (pending != 0) {
-                    chunk[0] = ((SrsMemResMap *) _srsMemRes)->weaponData[i][j];
+                    chunk[0] = _srsMemRes.weaponData[i][j];
                     svAddImageMapper(i * 3 + j + 2, pending, chunk, 2000);
-                    ((SrsMemResMap *) _srsMemRes)->weaponPending[i][j] = 0;
+                    _srsMemRes.weaponPending[i][j] = 0;
                 }
             }
         }
     }
     for (i = 0; i < 3; i++) {
         type = i + 11;
-        if (((SrsMemResMap *) _srsMemRes)->comboData[i] != 0) {
-            pending = ((SrsMemResMap *) _srsMemRes)->comboPending[i];
+        if (_srsMemRes.comboData[i] != 0) {
+            pending = _srsMemRes.comboPending[i];
             if (pending != 0) {
-                chunk[0] = ((SrsMemResMap *) _srsMemRes)->comboData[i];
+                chunk[0] = _srsMemRes.comboData[i];
                 svAddImageMapper(type, pending, chunk, 2100);
-                ((SrsMemResMap *) _srsMemRes)->comboPending[i] = 0;
+                _srsMemRes.comboPending[i] = 0;
             }
         }
     }
-    if (((SrsMemResMap *) _srsMemRes)->battleImage != 0) {
-        if (((SrsMemResMap *) _srsMemRes)->battleImagePending != 0) {
-            chunk[0] = ((SrsMemResMap *) _srsMemRes)->battleImage;
+    if (_srsMemRes.battleImage != 0) {
+        if (_srsMemRes.battleImagePending != 0) {
+            chunk[0] = _srsMemRes.battleImage;
             svAddImageMapper(14, 0, chunk, 3400);
-            ((SrsMemResMap *) _srsMemRes)->battleImagePending = 0;
+            _srsMemRes.battleImagePending = 0;
         }
     }
-    if (((SrsMemResMap *) _srsMemRes)->cfImage != 0) {
-        if (((SrsMemResMap *) _srsMemRes)->cfImagePending != 0) {
-            chunk[0] = ((SrsMemResMap *) _srsMemRes)->cfImage;
+    if (_srsMemRes.cfImage != 0) {
+        if (_srsMemRes.cfImagePending != 0) {
+            chunk[0] = _srsMemRes.cfImage;
             svAddImageMapper(15, 0, chunk, 3500);
-            ((SrsMemResMap *) _srsMemRes)->cfImagePending = 0;
+            _srsMemRes.cfImagePending = 0;
         }
     }
     for (i = 0; i < 24; i++) {
         type = i + 16;
-        if (((SrsMemResMap *) _srsMemRes)->effectData[i] != 0) {
-            pending = ((SrsMemResMap *) _srsMemRes)->effectPending[i];
+        if (_srsMemRes.effectData[i] != 0) {
+            pending = _srsMemRes.effectPending[i];
             if (pending != 0) {
-                chunk[0] = ((SrsMemResMap *) _srsMemRes)->effectData[i];
+                chunk[0] = _srsMemRes.effectData[i];
                 svAddImageMapper(type, pending, chunk, 3600);
-                ((SrsMemResMap *) _srsMemRes)->effectPending[i] = 0;
+                _srsMemRes.effectPending[i] = 0;
             }
         }
     }
@@ -664,3 +616,288 @@ int srsEffectNameToID(char *effectName)
     }
     return 0;
 }
+
+/* Initialized resource tables and the original zero-filled work storage. */
+static unsigned char srsViewPath[256] = {0};
+extern char D_004CBFC0[];
+extern char D_004CBFD0[];
+extern char D_004CBFE0[];
+extern char D_004CBFF0[];
+extern char D_004CC000[];
+extern char D_004CC010[];
+extern char D_004CC020[];
+extern char D_004CC030[];
+extern char D_004CC040[];
+extern char D_004CC050[];
+extern char D_004CC060[];
+extern char D_004CC070[];
+extern char D_004CC080[];
+extern char D_004CC090[];
+extern char D_004CC0A0[];
+extern char D_004CC0B0[];
+extern char D_004CC0C0[];
+extern char D_004CC0D0[];
+extern char D_004CC0E0[];
+extern char D_004CC0F0[];
+extern char D_004CC100[];
+extern char D_004CC110[];
+extern char D_004CC120[];
+extern char D_004CC130[];
+extern char D_004CC140[];
+extern char D_004CC150[];
+extern char D_004CC160[];
+extern char D_004CC170[];
+extern char D_004CC180[];
+extern char D_004CC190[];
+extern char D_004CC1A0[];
+extern char D_004CC1B0[];
+extern char D_004CC1C0[];
+extern char D_004CC1D0[];
+extern char D_004CC1E0[];
+extern char D_004CC1F0[];
+extern char D_004CC200[];
+extern char D_004CC210[];
+extern char D_004CC220[];
+extern char D_004CC230[];
+extern char D_004CC240[];
+extern char D_004CC250[];
+extern char D_004CC260[];
+extern char D_004CC270[];
+extern char D_004CC280[];
+extern char D_004CC290[];
+extern char D_004CC2A0[];
+extern char D_004CC2B0[];
+extern char D_004CC2C0[];
+extern char D_004CC2D0[];
+extern char D_004CC2E0[];
+extern char D_004CC2F0[];
+extern char D_004CC300[];
+extern char D_004CC310[];
+extern char D_004CC320[];
+extern char D_004CC330[];
+extern char D_004CC340[];
+extern char D_004CC350[];
+extern char D_004CC360[];
+extern char D_004CC370[];
+extern char D_004CC380[];
+extern char D_004CC390[];
+extern char D_004CC3A0[];
+extern char D_004CC3B0[];
+extern char D_004CC3C0[];
+extern char D_004CC3D0[];
+extern char D_004CC3E0[];
+extern char D_004CC3F0[];
+extern char D_004CC400[];
+extern char D_004CC410[];
+extern char D_004CC420[];
+extern char D_004CC430[];
+extern char D_004CC440[];
+extern char D_004CC450[];
+extern char D_004CC460[];
+extern char D_004CC470[];
+extern char D_004CC480[];
+extern char D_004CC490[];
+extern char D_004CC4A0[];
+extern char D_004CC4B0[];
+extern char D_004CC4C0[];
+extern char D_004CC4D0[];
+extern char D_004CC4E0[];
+extern char D_004CC4F0[];
+extern char D_004CC500[];
+extern char D_004CC510[];
+extern char D_004CC520[];
+extern char D_004CC530[];
+extern char D_004CC540[];
+extern char D_004CC550[];
+extern char D_004CC560[];
+extern char D_004CC570[];
+extern char D_004CC580[];
+extern char D_004CC590[];
+extern char D_004CC5A0[];
+extern char D_004CC5B0[];
+extern char D_004CC5C0[];
+extern char D_004CC5D0[];
+extern char D_004CC5E0[];
+extern char D_004CC5F0[];
+extern char D_004CC600[];
+extern char D_004CC610[];
+extern char D_004CC620[];
+extern char D_004CC630[];
+extern char D_004CC640[];
+extern char D_004CC650[];
+extern char D_004CC660[];
+extern char D_004CC670[];
+extern char D_004DBAA0[];
+extern char D_004DBAB8[];
+extern char D_004DBAC0[];
+extern char D_004DBAC8[];
+extern char D_004DBAD0[];
+extern char D_004DBAD8[];
+extern char D_004DBAE0[];
+extern char D_004DBAE8[];
+extern char D_004DBAF0[];
+extern char D_004DBAF8[];
+extern char D_004DBB00[];
+extern char D_004DBB08[];
+extern char D_004DBB10[];
+char *_loadComboData[195] = {
+    D_004DBAA0, D_004DBB10, D_004DBB08, D_004DBB00, D_004DBAF8,
+    D_004DBAF0, D_004DBAE8, D_004DBAE0, D_004DBAD8, D_004CC670,
+    D_004DBAD0, D_004DBAC8, D_004DBAC0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, D_004CC660, D_004CC660,
+    D_004CC650, D_004CC640, D_004CC630, D_004CC620, D_004CC610,
+    D_004CC600, D_004CC5F0, D_004CC5E0, D_004CC5D0, D_004CC5C0,
+    D_004CC5B0, D_004CC5A0, D_004CC590, D_004CC580, D_004CC570,
+    D_004CC560, D_004CC550, D_004CC540, D_004CC530, D_004CC520,
+    D_004CC510, D_004CC500, D_004CC4F0, D_004CC4E0, D_004CC660,
+    D_004CC650, D_004CC640, D_004CC4D0, D_004CC4C0, D_004CC4B0,
+    D_004CC4A0, D_004CC490, D_004CC480, D_004CC470, D_004CC460,
+    D_004CC450, D_004CC440, D_004CC430, D_004CC420, D_004CC410,
+    D_004CC400, D_004CC3F0, D_004CC3E0, D_004CC3D0, D_004CC3C0,
+    D_004CC3B0, D_004CC3A0, D_004CC390, D_004CC380, D_004CC370,
+    D_004CC360, D_004CC350, D_004CC340, D_004CC330, D_004CC320,
+    D_004CC310, D_004CC300, D_004CC2F0, D_004CC2E0, D_004CC2D0,
+    D_004CC2C0, D_004CC2B0, D_004CC2A0, D_004CC290, D_004CC280,
+    D_004CC270, D_004CC260, D_004CC250, D_004CC240, D_004CC230,
+    D_004CC220, D_004CC210, D_004CC200, D_004CC1F0, D_004CC1E0,
+    D_004CC1D0, D_004CC3D0, D_004CC3D0, D_004CC390, D_004CC610,
+    D_004CC4C0, D_004CC420, D_004CC410, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, D_004CC420, D_004CC420, D_004CC420, D_004CC420,
+    D_004CC420, D_004CC1C0, D_004CC1B0, D_004CC1A0, D_004CC190,
+    D_004CC180, D_004CC170, D_004CC160, D_004CC150, D_004CC140,
+    D_004CC130, D_004CC120, D_004CC110, D_004CC100, D_004CC0F0,
+    D_004CC0E0, D_004CC0D0, D_004CC0C0, D_004CC0B0, D_004CC0A0,
+    D_004CC090, D_004CC080, D_004CC070, D_004CC060, D_004CC050,
+    D_004CC040, D_004CC030, D_004CC020, D_004CC010, D_004CC000,
+    D_004CBFF0, D_004CBFE0, D_004CBFD0, D_004CBFC0, D_004CC1A0,
+    D_004CC190, D_004CC090, D_004DBAB8, D_004DBAB8, D_004DBAB8,
+    D_004DBAB8, D_004DBAB8, D_004DBAB8, D_004DBAB8, D_004DBAB8,
+};
+
+static SrsChrEfTbl3Entry _srsChrEfTbl3[36] = {
+    {151, 2681, {0x7B, 0x0A}},
+    {152, 2684, {0x7E, 0x0A}},
+    {153, 2687, {0x81, 0x0A}},
+    {154, 2690, {0x84, 0x0A}},
+    {155, 2693, {0x87, 0x0A}},
+    {156, 2696, {0x8A, 0x0A}},
+    {157, 2699, {0x8D, 0x0A}},
+    {158, 2702, {0x90, 0x0A}},
+    {159, 2705, {0x93, 0x0A}},
+    {160, 2708, {0x96, 0x0A}},
+    {161, 2711, {0x99, 0x0A}},
+    {162, 2714, {0x9C, 0x0A}},
+    {163, 2717, {0x9F, 0x0A}},
+    {164, 2720, {0xA2, 0x0A}},
+    {165, 2723, {0xA5, 0x0A}},
+    {166, 2726, {0xA8, 0x0A}},
+    {167, 2729, {0xAB, 0x0A}},
+    {168, 2732, {0xAE, 0x0A}},
+    {169, 2735, {0xB1, 0x0A}},
+    {170, 2738, {0xB4, 0x0A}},
+    {171, 2741, {0xB7, 0x0A}},
+    {172, 2744, {0xBA, 0x0A}},
+    {173, 2747, {0xBD, 0x0A}},
+    {174, 2750, {0xC0, 0x0A}},
+    {175, 2753, {0xC3, 0x0A}},
+    {176, 2756, {0xC6, 0x0A}},
+    {177, 2759, {0xC9, 0x0A}},
+    {178, 2762, {0xCC, 0x0A}},
+    {179, 2765, {0xCF, 0x0A}},
+    {180, 2768, {0xD2, 0x0A}},
+    {181, 2771, {0xD5, 0x0A}},
+    {182, 2774, {0xD8, 0x0A}},
+    {183, 2777, {0xDB, 0x0A}},
+    {184, 2687, {0x81, 0x0A}},
+    {185, 2690, {0x84, 0x0A}},
+    {186, 2738, {0xB4, 0x0A}},
+};
+
+static WeaponTblEntry _weaponTbl[45] = {
+    {70, 2801, {0xF2, 0x0A, 0xF1, 0x0A}},
+    {71, 2803, {0xF3, 0x0A, 0xF4, 0x0A}},
+    {72, 2805, {0xF6, 0x0A, 0xF7, 0x0A}},
+    {73, 2808, {0x2E, 0x0B, 0x2F, 0x0B}},
+    {74, 2809, {0xF9, 0x0A, 0xFA, 0x0A}},
+    {75, 2811, {0xFC, 0x0A, 0xFD, 0x0A}},
+    {76, 2814, {0x30, 0x0B, 0x31, 0x0B}},
+    {77, 2815, {0xFF, 0x0A, 0x00, 0x0B}},
+    {78, 2817, {0x01, 0x0B, 0x33, 0x0B}},
+    {79, 2818, {0x02, 0x0B, 0x02, 0x0B}},
+    {80, 2819, {0x03, 0x0B, 0x04, 0x0B}},
+    {81, 2821, {0x05, 0x0B, 0x32, 0x0B}},
+    {82, 2822, {0x06, 0x0B, 0x07, 0x0B}},
+    {83, 2824, {0x08, 0x0B, 0x2D, 0x0B}},
+    {84, 2825, {0x09, 0x0B, 0x09, 0x0B}},
+    {85, 2826, {0x0A, 0x0B, 0x0B, 0x0B}},
+    {86, 2828, {0x0C, 0x0B, 0x0D, 0x0B}},
+    {87, 2830, {0x0E, 0x0B, 0x0F, 0x0B}},
+    {88, 2832, {0x10, 0x0B, 0x10, 0x0B}},
+    {89, 2833, {0x11, 0x0B, 0x12, 0x0B}},
+    {90, 2835, {0x13, 0x0B, 0x14, 0x0B}},
+    {91, 2837, {0x15, 0x0B, 0x16, 0x0B}},
+    {112, 2837, {0x15, 0x0B, 0x16, 0x0B}},
+    {92, 2839, {0x17, 0x0B, 0x18, 0x0B}},
+    {113, 2839, {0x17, 0x0B, 0x18, 0x0B}},
+    {93, 2841, {0x19, 0x0B, 0x19, 0x0B}},
+    {94, 2842, {0x1A, 0x0B, 0x1A, 0x0B}},
+    {114, 2842, {0x1A, 0x0B, 0x1A, 0x0B}},
+    {95, 2843, {0x1B, 0x0B, 0x1B, 0x0B}},
+    {96, 2844, {0x1C, 0x0B, 0x1C, 0x0B}},
+    {97, 2845, {0x1D, 0x0B, 0x1D, 0x0B}},
+    {98, 2846, {0x1E, 0x0B, 0x1E, 0x0B}},
+    {99, 2847, {0x1F, 0x0B, 0x1F, 0x0B}},
+    {100, 2848, {0x20, 0x0B, 0x20, 0x0B}},
+    {101, 2849, {0x21, 0x0B, 0x21, 0x0B}},
+    {102, 2850, {0x22, 0x0B, 0x22, 0x0B}},
+    {103, 2851, {0x23, 0x0B, 0x23, 0x0B}},
+    {104, 2852, {0x24, 0x0B, 0x24, 0x0B}},
+    {105, 2853, {0x25, 0x0B, 0x25, 0x0B}},
+    {108, 2854, {0x26, 0x0B, 0x26, 0x0B}},
+    {110, 2855, {0x27, 0x0B, 0x27, 0x0B}},
+    {106, 2856, {0x28, 0x0B, 0x28, 0x0B}},
+    {107, 2857, {0x29, 0x0B, 0x29, 0x0B}},
+    {111, 2858, {0x2A, 0x0B, 0x2A, 0x0B}},
+    {109, 2859, {0x2B, 0x0B, 0x2C, 0x0B}},
+};
+
+SrsMemRes _srsMemRes = {0};
+char _loadEsdData[0xC800] = {0};
+
+
+
+char D_004DBAA0[8] = "default";
+
+char D_004DBAC0[8] = "shelley";
+
+char D_004DBAC8[8] = "mary";
+
+char D_004DBAD0[8] = "virgil";
+
+char D_004DBAD8[8] = "cecilia";
+
+char D_004DBAE0[8] = "jr";
+
+char D_004DBAE8[8] = "momo";
+
+char D_004DBAF0[8] = "ziggy";
+
+char D_004DBAF8[8] = "shitan";
+
+char D_004DBB00[8] = "shion";
+
+char D_004DBB08[8] = "kosmos";
+
+char D_004DBB10[8] = "chaos";
+
+
+
+char D_004DBAB8[8] = "";

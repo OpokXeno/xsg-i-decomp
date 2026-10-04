@@ -4,7 +4,7 @@
 #include "common.h"
 #include "shared.h"
 
-extern int s_nPadID;
+static int s_nPadID = 0;
 
 /*
  * PadData is a 0xd0-byte table of two 0x68-byte per-pad entries at

@@ -4,7 +4,7 @@
 #include "common.h"
 #include "rg_select_subcon.h"
 
-extern int s_bIgnoreEventFlag;
+static int s_bIgnoreEventFlag = 0;
 
 extern int XrgEventIsUsablePlayer(unsigned int index);
 extern int XrgEventIsUsableEnemy(unsigned int index);

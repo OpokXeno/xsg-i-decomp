@@ -236,11 +236,19 @@ typedef struct CharParaData {
 
 /* The menu's two parameter records: MenuCharParaSet always writes the
  * recalculated record to [1] and, unless previewOnly, copies it to [0] too. */
-extern CharParaData paraUnit[2];
+static CharParaData paraUnit[2];
 
 /* Weapon slot per party character (chrNo 1..7), indexing calcTotalParaMenu's
  * attack words. */
+typedef struct MenuParameterLookupTables {
+    unsigned char slot[8];
+    signed char point[8];
+} MenuParameterLookupTables;
+
+static MenuParameterLookupTables menuParameterLookups;
+/* The original array names alias the two contiguous C fields at link time. */
 extern unsigned char setSlotTbl[];
+extern signed char ParaPointTbl[];
 
 /* dataUnitOrgGet (ov01 VA 0x00a191c0), linked by the scaffold's
  * undefined_funcs_auto.txt placeholder name. */
@@ -545,9 +553,9 @@ typedef struct CharPasWork {
 extern CharPasWork *CharPas;
 
 /* The twelve normal-menu category captions ("Characters", "/Equip", ...). */
-extern const char *const msg_0_0036D8A8[12];
+static const char *const msg_0_0036D8A8[12];
 /* The three battle-formation category captions. */
-extern const char *const msg01_1[3];
+static const char *const msg01_1[3];
 
 /* MenuPasLengthGet (this TU, still assembler): the caption's pixel width. */
 int MenuPasLengthGet(const char *text);
@@ -896,9 +904,9 @@ typedef struct MenuTextRecord {
 
 /* The step one improvement adds to each parameter, and the character ids of
  * the party positions and of the reserve list. */
-extern unsigned short UpPara[8];
-extern unsigned short MenuCharParty[8];
-extern unsigned short MenuCharPartyReser[4];
+static unsigned short UpPara[8];
+static unsigned short MenuCharParty[8];
+static unsigned short MenuCharPartyReser[4];
 
 int MenuCharEquipCalcPointGet(int chrNo);
 void MenuInfoWindow(CharInfoWindow *window, CharInfoText *text);
@@ -1475,11 +1483,11 @@ extern const char D_004DADD0[];
  * "Draw\nSet\nCancel". The three bytes after the escape of the first entry are
  * the grey level the Equip row is drawn in.
  */
-extern char *msg00_2_0036D8E8[3];
+static char *msg00_2_0036D8E8[3];
 
 /* The confirmation window's list ("Yes\nNo") and the question above it
  * (" Is this okay?"). */
-extern const char *msg01_3[];
+static const char *msg01_3[];
 
 void MenuSelectWindow(CharMenuWindowDX *window, CharMenuList *list);
 
@@ -1666,7 +1674,7 @@ extern CharExWork *CharEx;
 
 /* The three row labels, scaffold .data at 0x0036D900 (three tag words, as
  * eTagFontSet takes them). */
-extern int msg00_4_0036D900[3];
+static int msg00_4_0036D900[3];
 
 /* The ribbon slides in from the right edge to this column while the screen is
  * open, and back out again when it is not. */
@@ -2492,7 +2500,7 @@ int MenuSortCheck(int listIndex);
 
 /* The two list windows of CharList the selection calls work on: the
  * weapon/accessory list (+0x504) and the parameter-up list (+0x1C3C). */
-extern CharListSPWindow *CharWinSP[2];
+static CharListSPWindow *CharWinSP[2];
 /*
  * CharParameter is the parameter window's work block. MenuCharactor carves it
  * out of the menu heap and CharParameterMain drives it: state 0 builds the
@@ -2590,7 +2598,7 @@ extern CharParameterWork *CharParameter;
 
 /* The tag word of each of the eight stat labels, in the order the window
  * lays them out. */
-extern int msg_5[8];
+static int msg_5[8];
 
 /* The digit count of each of the eight numbers (three digits for the halfword
  * stats, two for the byte ones), copied into the frame as one record. */
@@ -3390,7 +3398,7 @@ extern CharSwitchWork *CharSwitch;
 /* The character-switch prompt's text pointer (config/symbols/main.txt: msg_6,
  * size 4), whose stored address is the string "Set lead character"; the
  * pointer itself is still part of this TU's assembler data. */
-extern char *msg_6[];
+static char *msg_6[];
 
 /*
  * The switch-character arrow and its "press to confirm" prompt: state 0
@@ -3438,7 +3446,7 @@ void CharSwitchMain(void)
 extern const char D_004DAE58[];
 
 /* The two eTagFontSet values CharPointMain's title-row loop passes. */
-extern const int msg_7_0036D938[];
+static const int msg_7_0036D938[];
 
 /*
  * One title-row slot (eTagFontSet/eTagFontMain object): x/y (+0x04/+0x06)
@@ -3825,7 +3833,6 @@ extern const char D_004C67F0[];
 extern int MenuModelOut[];
 
 /* The points one level-up of a parameter adds. */
-extern signed char ParaPointTbl[];
 
 /* The id of the character with two weapon slots (both are equipped). */
 #define CHR_DUAL_WEAPON 7
@@ -4943,3 +4950,221 @@ void MenuCharactor(int partyMode)
     xglFontDebugHex(0, 0xD8, MenuWork.partyCount, 2);
     xglFontDebugHex(0x20, 0xB0, MenuWork.weaponChanged, 8);
 }
+
+/* Menu-local work storage and the original slot/point lookup tables. */
+static MenuParameterLookupTables menuParameterLookups = {
+    {0, 1, 0, 0, 1, 0, 0, 0},
+    {10, 2, 1, 1, 1, 1, 1, 1},
+};
+
+/* Font-script caption pointers; the strings keep their established owners. */
+extern const char D_004C5570[];
+extern const char D_004DAD60[];
+extern const char D_004C5560[];
+extern const char D_004DAD58[];
+extern const char D_004DAD50[];
+extern const char D_004DAD48[];
+extern const char D_004C5550[];
+extern const char D_004DAD40[];
+extern const char D_004DAD38[];
+extern const char D_004DAD30[];
+extern const char D_004DAD28[];
+extern const char D_004DAD20[];
+extern const char D_004C55A0[];
+extern const char D_004C5590[];
+extern const char D_004C5580[];
+extern const char D_004C6088[];
+extern const char D_004C6068[];
+extern const char D_004C6058[];
+extern const char D_004DADC0[];
+extern const char D_004C60A8[];
+extern const char D_004DADE8[];
+extern const char D_004DADE0[];
+extern const char D_004DADD8[];
+extern const char D_004DAE38[];
+extern const char D_004DAE30[];
+extern const char D_004DAE28[];
+extern const char D_004DAE20[];
+extern const char D_004DAE18[];
+extern const char D_004DAE10[];
+extern const char D_004DAE08[];
+extern const char D_004DAE00[];
+extern const char D_004C6550[];
+extern const char D_004C6568[];
+extern const char D_004DAE60[];
+static const char *const msg_0_0036D8A8[12] = {
+    D_004C5570, D_004DAD60, D_004C5560, D_004DAD58, D_004DAD50, D_004DAD48, D_004C5550, D_004DAD40, D_004DAD38, D_004DAD30, D_004DAD28, D_004DAD20
+};
+
+static const char *const msg01_1[3] = {
+    D_004C55A0, D_004C5590, D_004C5580
+};
+
+static char * msg00_2_0036D8E8[3] = {
+    (char *)D_004C6088, (char *)D_004C6068, (char *)D_004C6058
+};
+
+static const char * msg01_3[2] = {
+    D_004DADC0, D_004C60A8
+};
+
+static int msg00_4_0036D900[3] = {
+    (int)D_004DADE8, (int)D_004DADE0, (int)D_004DADD8
+};
+
+static int msg_5[8] = {
+    (int)D_004DAE38, (int)D_004DAE30, (int)D_004DAE28, (int)D_004DAE20, (int)D_004DAE18, (int)D_004DAE10, (int)D_004DAE08, (int)D_004DAE00
+};
+
+static char * msg_6[1] = {
+    (char *)D_004C6550
+};
+
+static const int msg_7_0036D938[2] = {
+    (int)D_004C6568, (int)D_004DAE60
+};
+
+/* Tables consumed through the existing partial views. */
+const CharCategoryIconIdTable D_004C6048 = {{0x0109, 0x010A, 0x0304, 0x0305, 0x0306}};
+const WeaponIconTable D_004C6398 = {{0x0307, 0x0308, 0x032C, 0, 0x0308, 0x0309, 0x030A}};
+const SpotLightTable D_004C6770 = {{
+    {1.0f, 0.0f, 0.6f, 1.0f},
+    {0.0f, 0.0f, 0.6f, 1.0f},
+    {-1.0f, 0.0f, 0.6f, 1.0f},
+    {1.0f, 0.0f, -0.6f, 1.0f},
+    {0.0f, 0.0f, -0.6f, 1.0f},
+    {-1.0f, 0.0f, -0.6f, 1.0f},
+}};
+const char D_004C67D0[32] = "data\\endou\\para\\paraup.bin";
+const char D_004C67F0[16] = "\013charactor";
+const float D_004D7E50 = 1.0f / 24.0f;
+const float D_004D7E54 = 0.4f;
+
+unsigned char D_004DADB0[8] = {0};
+const char D_004DADC8[8] = "Menu";
+const char D_004DADD0[8] = "Select";
+const L1R1SpriteIdPair D_004DADF0[2] = {{0x0112, 0x0110}, {0, 0}};
+const L1R1SlideStep D_004DADF8[4] = {{1, -1}, {0, 0}, {0, 0}, {0, 0}};
+ParaDigitCounts D_004DAE40[1] = {{{3, 3, 3, 3, 2, 2, 2, 3}}};
+const AccessoryIconTable D_004DAE48[1] = {{{0x032E, 0x032D, 0x030D}}};
+unsigned char D_004DAE50[8] = "List";
+const char D_004DAE58[8] = "T.Pts";
+unsigned short *ParaDataBuf = 0;
+CharPasWork *CharPas = 0;
+CharInfoWork *CharInfo = 0;
+CharCategoryWork *CharCategory = 0;
+CharMenuWork *CharMenu = 0;
+CharExWork *CharEx = 0;
+CharL1R1Work *CharL1R1 = 0;
+CharStatusWork *CharStatus = 0;
+CharParameterWork *CharParameter = 0;
+CharWeaponWork *CharWeapon = 0;
+CharListWork *CharList = 0;
+CharSwitchWork *CharSwitch = 0;
+CharPointWork *CharPoint = 0;
+
+
+
+const char D_004C5550[16] = "/Accessory";
+
+const char D_004C5560[16] = "/Unequip";
+
+const char D_004C5570[16] = "Characters";
+
+const char D_004C5580[16] = "/Replace";
+
+const char D_004C5590[16] = "/Formation";
+
+const char D_004C55A0[32] = "Battle Formation";
+
+const char D_004C6058[16] = "Draw\nSet\nCancel";
+
+const char D_004C6068[32] = "Formation\nReplace\nCancel";
+
+const char D_004C60A8[24] = " Is this okay\?";
+
+const char D_004C6550[24] = "\241\247Set lead character";
+
+const char D_004C6BC0[16] = "/Assign Pilot";
+
+const char D_004C6BD0[16] = "/Engine Unit";
+
+const char D_004C6BE0[16] = "/Accessory";
+
+const char D_004C6BF0[16] = "/L. Shoulder";
+
+const char D_004C6C00[16] = "/R. Shoulder";
+
+const char D_004C6C10[16] = "/Unequip";
+
+const char D_004C6C20[16] = "A.G.W.S.";
+
+const char D_004DAD20[8] = "/Set";
+
+const char D_004DAD28[8] = "/Draw";
+
+const char D_004DAD30[8] = "/Other";
+
+const char D_004DAD38[8] = "/Body";
+
+const char D_004DAD40[8] = "/Ammo";
+
+const char D_004DAD48[8] = "/Weapon";
+
+const char D_004DAD50[8] = "/List";
+
+const char D_004DAD58[8] = "/Skill";
+
+const char D_004DAD60[8] = "/Equip";
+
+const char D_004DADC0[8] = "Yes\nNo";
+
+const char D_004DAEB0[8] = "/Remove";
+
+const char D_004DAEB8[8] = "/Assign";
+
+const char D_004DAEC0[8] = "/Ammo";
+
+const char D_004DAEC8[8] = "/L. Alt";
+
+const char D_004DAED0[8] = "/R. Alt";
+
+const char D_004DAED8[8] = "/L. Arm";
+
+const char D_004DAEE0[8] = "/R. Arm";
+
+const char D_004DAEE8[8] = "/List";
+
+const char D_004DAEF0[8] = "/Pilot";
+
+const char D_004DAEF8[8] = "/Equip";
+
+
+
+const char D_004C6088[32] = "\014\200\200\200Equip\nUnequip\nUse T.Pts";
+
+const char D_004C6568[24] = "\001Current";
+
+const char D_004DADD8[8] = "\001S.Pts";
+
+const char D_004DADE0[8] = "\001E.Pts";
+
+const char D_004DADE8[8] = "\001T.Pts";
+
+const char D_004DAE00[8] = "\001Weight";
+
+const char D_004DAE08[8] = "\001Agl";
+
+const char D_004DAE10[8] = "\001Eva";
+
+const char D_004DAE18[8] = "\001Dex";
+
+const char D_004DAE20[8] = "\001Edef";
+
+const char D_004DAE28[8] = "\001Eatk";
+
+const char D_004DAE30[8] = "\001Vit";
+
+const char D_004DAE38[8] = "\001Str";
+
+const char D_004DAE60[8] = "\001Total";

@@ -146,15 +146,15 @@ extern void *classJava_xeno_Chr;
    D_004DC130 "id", D_004DC138 "args", D_004DC140 "peer", D_004DC148 "px",
    D_004DC150 "py", D_004DC158 "pz", D_004DC160 "rx", D_004DC168 "ry",
    D_004DC170 "rz". None has a config/symbols/main.txt name yet. */
-extern const char D_004DC130[];
-extern const char D_004DC138[];
-extern const char D_004DC140[];
-extern const char D_004DC148[];
-extern const char D_004DC150[];
-extern const char D_004DC158[];
-extern const char D_004DC160[];
-extern const char D_004DC168[];
-extern const char D_004DC170[];
+extern char D_004DC130[];
+extern char D_004DC138[];
+extern char D_004DC140[];
+extern char D_004DC148[];
+extern char D_004DC150[];
+extern char D_004DC158[];
+extern char D_004DC160[];
+extern char D_004DC168[];
+extern char D_004DC170[];
 
 /* Radian-to-degree conversion constant (value 3.14159274f, i.e. pi); no
    config/symbols/main.txt name yet. */

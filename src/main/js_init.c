@@ -37,17 +37,17 @@ struct JSClassRecord {
 
 extern void *RSRC_alloc(int heap, int size, int tag);
 
-extern int numClass;
-extern int numPrimitive;
-extern void *primitive;
-extern void *classes;
-extern JSPrimitive js_type_int;
-extern JSPrimitive js_type_float;
-extern JSPrimitive js_type_string;
-extern const char D_004DA590[];
-extern char *tokenCurrent;
-extern char *tokenLimit;
-extern int tokenType;
+JSPrimitive *primitive;
+int numClass;
+JSClassRecord *classes;
+int numPrimitive;
+static JSPrimitive js_type_int = {3, {0}, {0}};
+static JSPrimitive js_type_float = {4, {0}, {0}};
+static JSPrimitive js_type_string = {5, {0}, {0}};
+extern char D_004DA590[];
+static char *tokenCurrent;
+static char *tokenLimit;
+static int tokenType;
 
 extern int strcmp(const char *left, const char *right);
 extern char *strchr(const char *text, int character);
@@ -175,8 +175,6 @@ void JS_exec(char *source, char *limit) {
         }
     }
 }
-
-extern int tokenType;
 
 int STR_tokenGetType(void) {
     return tokenType;
@@ -350,3 +348,5 @@ static char *STR_trim2(char *text, int delimiter) {
     }
     return text;
 }
+
+char D_004DA590[8] = ".[](),";

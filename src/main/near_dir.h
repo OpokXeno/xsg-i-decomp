@@ -33,7 +33,7 @@ typedef struct {
  * +0x08 and +0x10 are between evidenced words and untouched by every
  * function in this TU, so they stay unmodeled gaps.
  */
-typedef struct {
+typedef struct SequenceState {
     u32 flags;
     u32 state_flags;
     u32 unmodeled_08;
@@ -42,6 +42,13 @@ typedef struct {
     u32 cleared_on_init_run[4];
     void *handler[4];
 } SequenceState;
+
+/* Each actor owns one 0x260-byte sequence record. The recovered head and
+ * byte storage share that allocation; the unmodeled tracks retain their extent. */
+typedef union ActSequenceEntry {
+    SequenceState state;
+    u8 bytes[0x260];
+} ActSequenceEntry;
 
 /*
  * The engine's actor record, recovered head.
@@ -220,13 +227,8 @@ typedef struct Actor {
     float filter_param_1;
 } Actor;
 
-/* actSequence is an external original witness at 0x0046f460 with witnessed
- * size 0x9800 (38912 bytes, see match.json references). The size annotation
- * only informs addressability; this declaration defines and emits no data.
- * The original materializes it with an absolute lui/addiu pair, never
- * gp-relative, so the size must stay visible instead of an unsized array. */
-extern u8 actSequence[0x9800];
-extern const float sequence_pi;
+/* The original array at 0x0046f460 has 64 records, totaling 0x9800 bytes. */
+extern ActSequenceEntry actSequence[64];
 
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 extern float xglAtan2(float x, float y);

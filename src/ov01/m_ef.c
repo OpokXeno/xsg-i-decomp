@@ -3,6 +3,19 @@
  */
 #include "common.h"
 #include "m_ef.h"
+const char D_00A512B0[64] =
+    "MEfCheckWorkSize: The size of %s has overflowed [%d > %d]";
+
+const char D_00A512F0[40] =
+    "MEfGetActorMatrix: actor is NULL";
+const char D_00A51318[40] =
+    "MEfGetActorMatrix: Invalid point (%d)";
+const char D_00A51340[48] =
+    "MEfGetActorMatrix: point is out of range (%d)";
+
+const MEfCornerAngles mefVertex2CornerTable = {
+    {0.0f, 1.5707964f, 4.712389f, 3.1415927f}
+};
 
 /*
  * Rejects and logs an effect work request whose size exceeds the fixed

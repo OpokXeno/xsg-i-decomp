@@ -41,10 +41,10 @@ static void _Disp(RgDispModel *pDisp, void *pStudio);
  * ov12:0x00a58780 contains the assertion expression "pXtxData != NIL".
  * ov12:0x00a58790 contains the assertion expression "pLexData != NIL".
  */
-extern const char D_00A58750[];
-extern const char D_00A58760[];
-extern const char D_00A58780[];
-extern const char D_00A58790[];
+const char D_00A58750[] = "pDisp != NIL";
+const char D_00A58760[] = "../xrg_dispmodel_impl.euc.c";
+const char D_00A58780[] = "pXtxData != NIL";
+const char D_00A58790[] = "pLexData != NIL";
 
 /*
  * The object CreateXrgDispModelImpl (ov12:0x00a453cc) allocates: 112 bytes

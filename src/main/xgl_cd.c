@@ -25,20 +25,15 @@ extern const char D_004DC2E0[];
  * walks it as a one-entry list, as xglCdStreamClose already does. */
 #define STR_LIST_LAST_INDEX 0
 
-/*
- * queue_next and xglCdControlThread share LW through this typed view.
- * LW is the shared, absolutely-addressed unsigned-byte array (hdd_error's
- * comment above), so the cast cannot move into LW's own declaration without
- * retyping it for every other user of this TU. A per-function local variable
- * initialized once from this cast was tried and measured to change cc1
- * 2.96's register allocation/scheduling for both functions below (fewer
- * callee-saved registers, reordered address arithmetic), so the cast stays
- * this one named, TU-local macro instead of a declared object.
- */
-#define CD_READ_CONTROL ((CdReadControl *)LW)
+/* Keep the direct state expression used by both queue loops. */
+#define CD_READ_CONTROL (&LW)
 
 /* Twelve month lengths followed by twelve cumulative month offsets. */
-extern unsigned short monthday[24];
+static unsigned short monthday[24] = {
+    31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
+};
+unsigned char system_cnf[80] = {0};
 
 static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sectors);
 static void StreamReadRingCoreNormal(CdStreamParam *stream);
@@ -90,6 +85,17 @@ typedef struct CdReadControl {
     CdRequestPartial requests[32];               /* +0x40..0x103f */
 } CdReadControl;
 
+static CdReadControl LW;
+/* Four 0x18-byte archive slots; the initialization helper models each prefix. */
+typedef union CdArchiveStorage {
+    CdArchiveEntry entry;
+    unsigned char bytes[0x18];
+} CdArchiveStorage;
+static CdArchiveStorage ArcHeader[4];
+static signed char ReadClockInterval;
+static unsigned char PresentTime[8];
+static CdStreamParam *StrList;
+
 extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
                              CdCompletionCallback *callback, int offset, int length);
 extern int sceDevctl(const char *device, int command, const void *input,
@@ -98,14 +104,9 @@ extern int sceCdPause(void);
 extern int sceCdPowerOff(u32 *result);
 extern u32 sceCdGetReadPos(void);
 
-/*
- * The descriptor word at LW+0 (hdd_error) is read through the shared
- * unsigned byte view of LW: that incomplete type keeps LW absolutely
- * addressed under this object's -G8, as in the original.
- */
 static void hdd_error(void)
 {
-    int *descriptor = (int *)LW;
+    int *descriptor = &LW.active_file_descriptor;
 
     sceClose(*descriptor);
     *descriptor = -1;
@@ -114,7 +115,7 @@ static void hdd_error(void)
 
 void xglCdPowerOffCB(void)
 {
-    LW[0x34] = 1;
+    LW.power_off_pending = 1;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", extract);
@@ -334,7 +335,7 @@ static void xglCdDummyCallback(int event, int value)
     (void)value;
 }
 
-extern CdCompletionCallback *callback;
+static CdCompletionCallback *callback;
 
 void xglCdReset(void)
 {
@@ -391,11 +392,7 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdReadCancel);
 
 int xglCdSync(void)
 {
-    /*
-     * Byte +0x30 is read signed (lb at 0x0021e404; config/header-canon.json
-     * LW byte_required io-main-0021e400); the shared LW is the unsigned view.
-     */
-    return (signed char)LW[0x30] != 0;
+    return LW.dispatch_state != 0;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdStreamOpen);
@@ -530,7 +527,7 @@ int xglCdStreamClose(CdStreamParam *stream)
         sceClose(stream->descriptor);
         break;
     }
-    LW[0x30] = 0;
+    LW.dispatch_state = 0;
     return 0;
 }
 
@@ -662,22 +659,11 @@ static unsigned char *xglCdArcInitSub2(unsigned char *archive_data)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdArcInit);
 
-/*
- * ArcHeader is a four-entry table of 0x18-byte archive records (xglCdInitial
- * clears the state byte of entry 0..3 at +0x00/+0x18/+0x30/+0x48).  Only the
- * first two words of entry 0 are evidenced here: +0x00 is the state byte
- * (xglCdArcInit stores 2 there, xglCdInitial -1) and +0x04 is the work-buffer
- * pointer xglCdArcInit read the archive into (`sw WorkEnd, 0x4($18)` at
- * 0x0021F85C).  The rest of the record is not recovered, so the entry cannot
- * become a struct without inventing the span between them.
- */
-#define ARC_HEADER_WORK_END_OFFSET 4
-
 void xglCdArcCheck(void)
 {
     u8 *saved_work_end = WorkEnd;
 
-    WorkEnd = *(u8 **)(ArcHeader + ARC_HEADER_WORK_END_OFFSET);
+    WorkEnd = ArcHeader[0].entry.destination;
     xglCdArcInit();
     WorkEnd = saved_work_end;
 }

@@ -34,55 +34,8 @@ static void _DoubleScreenStudio(RgDraw *pDraw);
 static void _DrawMain(RgDraw *pDraw);
 static void _DrawReqTerminate(RgDraw *pDraw);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a54af0 contains the source filename "../rg_draw.euc.c".
- * ov12:0x00a54b08 contains the assertion expression "pView != NIL".
- * ov12:0x00a54b18 contains the assertion expression "pParentStudio != NIL".
- * ov12:0x00a54b30 contains the assertion expression "pStudio != NIL".
- * ov12:0x00a54b40 contains the assertion expression "pStudio->m_pView != NIL".
- */
-extern const char D_00A54AF0[];
-extern const char D_00A54B08[];
-extern const char D_00A54B18[];
-extern const char D_00A54B30[];
-extern const char D_00A54B40[];
-
-/*
- * External file-backed witnesses of this allocation's own functions, not
- * candidate-emitted data (same window as the block above).
- *
- * ov12:0x00a54b58 contains the assertion expression "pDraw != NIL".
- * ov12:0x00a54b68 contains the error message "unknown studio id %d".
- * ov12:0x00a54b80 contains the assertion expression "pFog != NIL".
- */
-extern const char D_00A54B58[];
-extern const char D_00A54B68[];
-extern const char D_00A54B80[];
-extern const char D_00A54BC8[];
-extern const char D_00A54BE8[];
-extern const char D_00A54B90[];
-extern const char D_00A54BB0[];
-extern const char D_00A54C50[];
-
-/*
- * GNU EE native TI storage/copy type (docs/native-ti.md), used only to pass
- * the 16-byte GIF tag _openVifGif and _openVifGifAD build to
- * sceVif1PkOpenGifTag in the single 128-bit register the original loads
- * with one `lq`; no wide arithmetic is done on it.
- */
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
-/*
- * The 128-bit GIF tag _openVifGif and _openVifGifAD build for
- * sceVif1PkOpenGifTag: bit 15 is EOP, bit 46 is PRE, bits 47..57 are PRIM,
- * bits 60..63 are NREG, and the high 64 bits are the REGS descriptor. The
- * union lets the two halves be stored as ordinary 64-bit fields and the
- * whole 16 bytes be read back as the single register sceVif1PkOpenGifTag
- * takes.
- */
 typedef union GifTag {
     struct {
         u64 lo;
@@ -90,6 +43,26 @@ typedef union GifTag {
     } part;
     Quadword quad;
 } GifTag;
+
+const GifTag D_00A54AC0 = {
+    .part = {0x1000000000008000ULL, 0xE}
+};
+
+/* The assertion text, filename and error messages referenced by this TU. */
+const char D_00A54AD0[32] = "not exist xeno studio ID (%d)";
+const char D_00A54AF0[24] = "../rg_draw.euc.c";
+const char D_00A54B08[16] = "pView != NIL";
+const char D_00A54B18[24] = "pParentStudio != NIL";
+const char D_00A54B30[16] = "pStudio != NIL";
+const char D_00A54B40[24] = "pStudio->m_pView != NIL";
+const char D_00A54B58[16] = "pDraw != NIL";
+const char D_00A54B68[24] = "unknown studio id %d";
+const char D_00A54B80[16] = "pFog != NIL";
+const char D_00A54B90[32] = "global studio don't have view";
+const char D_00A54BB0[24] = "unknown studio ID %d";
+const char D_00A54BC8[32] = "pDraw->m_uReqNum < REQ_CAPA";
+const char D_00A54BE8[40] = "pObject != NIL && pHandler != NIL";
+const char D_00A54C50[24] = "unknown draw id %d";
 
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAlign(XglPacket *packet, int align, int size);
@@ -102,8 +75,6 @@ extern void sceVif1PkOpenGifTag(XglPacket *packet, Quadword tag);
  * address+data register code), the constant _openVifGifAD passes to
  * sceVif1PkOpenGifTag.
  */
-extern const GifTag D_00A54AC0;
-
 static void _openVifGif(XglPacket *packet, unsigned int prim,
                         unsigned int nreg, u64 regs)
 {
@@ -309,7 +280,7 @@ extern void nmlModelUseSubWindow(int window_index, int mode);
  * s_aView_0, size 0x10), the constant _FullScreenStudio passes to
  * xglCameraSetWindow for the single full-screen studio.
  */
-extern const RgRect s_aView_0;
+static RgRect s_aView_0 = {0, 0, 512, 448};
 
 static void _FullScreenStudio(RgDraw *pDraw)
 {
@@ -525,7 +496,6 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_draw", RgDrawViewInit);
  *
  * ov12:0x00a54ad0 contains the error message "not exist xeno studio ID (%d)".
  */
-extern const char D_00A54AD0[];
 
 void RgDrawViewSetPosition(RgDrawView *pView, const Vector4 *pPosition)
 {

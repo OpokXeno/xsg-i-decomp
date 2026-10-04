@@ -5,7 +5,6 @@
 #ifndef SRC_OV12_XRG_EVENT_H
 #define SRC_OV12_XRG_EVENT_H
 
-extern int s_bSetEventLevel;
 extern int s_eEventLevel;
 
 /* Defined in main/xgl_flags.c; reads back a single flag bit. */

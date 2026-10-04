@@ -13,19 +13,7 @@ The Sony SDK and public libraries do not need to be recovered.
 
 ## Progress
 
-<!-- coverage-report:begin -->
 Recovered 4,631 of 7,645 in-scope game function(s) (60.576%).
-
-- `exact_c` (pure C): 4,427 function(s)
-- `exact_c_with_asm`: 199 function(s)
-- `exact_asm`: 5 function(s)
-- `exact_vu_microcode`: not verifiable here (needs config/units and config/vu-build.json, untracked)
-- empty-body functions: not verifiable here (the 8-byte `jr ra; nop` bodies are a fact about the original, recorded in config/tu, untracked)
-- These counts come from the tracked object tables, the tracked symbol
-  tables and the published source. This tree cannot check that each
-  counted function matches its accepted record under its recorded
-  contract, independently reviewed: config/tu and config/units and config/vu-build.json are not tracked.
-<!-- coverage-report:end -->
 
 | Version | Target | Functions | Progress |
 | --- | --- | ---: | ---: |

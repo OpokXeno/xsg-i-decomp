@@ -5,16 +5,44 @@
 #include "shared.h"
 #include "card_play_sound1.h"
 
+/* CardMainProc's nine original local storage objects. */
+#define D_00A56F18 cld0
+#define D_00A57188 cld1
+#define D_00A573F8 cldtmp
+#define D_00A57668 lst11
+#define D_00A57728 win12
+#define D_00A57730 item13
+#define D_00A57740 lst14
+#define D_00A57744 win15
+#define D_00A57748 pack16
+
 struct CardSoundPath {
     char name[34];
 };
 
-extern const struct CardSoundPath D_00A4BBD0;
-extern const struct CardSoundPath D_00A4BBF8;
-extern const struct CardSoundPath D_00A4BC20;
-extern const struct CardSoundPath D_00A4BC48;
-extern const struct CardSoundPath D_00A4BC70;
-extern const struct CardSoundPath D_00A4BC98;
+union CardSoundPathStorage {
+    char bytes[40];
+    struct CardSoundPath path;
+};
+
+static s16 MenuNo_1;
+static s16 SubNo_2;
+static s16 SubMenu_3;
+static s16 ModeExit_4;
+static u8 CCtimer_5;
+static s16 Message_6;
+static s16 MessageCnt_7;
+static s16 p0num_17;
+static s16 p1num_18;
+static s16 vol_19;
+static char *CardErrorList[6];
+
+extern const union CardSoundPathStorage D_00A4BBD0;
+extern const union CardSoundPathStorage D_00A4BBF8;
+extern const union CardSoundPathStorage D_00A4BC20;
+extern const union CardSoundPathStorage D_00A4BC48;
+extern const union CardSoundPathStorage D_00A4BC70;
+extern const union CardSoundPathStorage D_00A4BC98;
 extern int SsdSpuDmaCompleted(int wait);
 extern int xglSoundSendSwd(void *swd, int bank);
 extern void xglSoundSendSmd2(void *smd, int bank);
@@ -27,8 +55,8 @@ extern char *strcat(char *destination, const char *source);
 
 void CardPlaySound1(void)
 {
-    struct CardSoundPath swdFile = D_00A4BBD0;
-    struct CardSoundPath smdFile = D_00A4BBF8;
+    struct CardSoundPath swdFile = D_00A4BBD0.path;
+    struct CardSoundPath smdFile = D_00A4BBF8.path;
 
     if (xglCdReadFile(swdFile.name, (void *) 0x01900000, 0, 0) > 0) {
         xglSoundSendSwd((void *) 0x01900000, -1);
@@ -44,7 +72,7 @@ void CardPlaySound1(void)
 
 void CardPlaySound3(void)
 {
-    struct CardSoundPath smdFile = D_00A4BC20;
+    struct CardSoundPath smdFile = D_00A4BC20.path;
 
     if (xglCdReadFile(smdFile.name, (void *) 0x01C60000, 0, 1) > 0)
         xglSoundSendSmd2((void *) 0x01C60000, 0);
@@ -54,8 +82,8 @@ void CardPlaySound3(void)
 
 void CardPlaySound2(void)
 {
-    struct CardSoundPath swdFile = D_00A4BC48;
-    struct CardSoundPath smdFile = D_00A4BC70;
+    struct CardSoundPath swdFile = D_00A4BC48.path;
+    struct CardSoundPath smdFile = D_00A4BC70.path;
 
     if (xglCdReadFile(swdFile.name, (void *) 0x01900000, 0, 0) > 0) {
         xglSoundSendSwd((void *) 0x01900000, -1);
@@ -71,7 +99,7 @@ void CardPlaySound2(void)
 
 void CardPlaySound4(void)
 {
-    struct CardSoundPath smdFile = D_00A4BC98;
+    struct CardSoundPath smdFile = D_00A4BC98.path;
 
     if (xglCdReadFile(smdFile.name, (void *) 0x01C60000, 0, 1) > 0)
         xglSoundSendSmd2((void *) 0x01C60000, 0);
@@ -167,6 +195,15 @@ static inline void CardLoadBattleWindows(void) {
 }
 
 s32 CardMainProc(CardGameWork *work) {
+    static CardListWindow cld0;
+    static CardListWindow cld1;
+    static CardListWindow cldtmp;
+    static int lst11[48];
+    static int win12;
+    static int item13[4];
+    static int lst14[1];
+    static int win15;
+    static int pack16;
     float matrix[4][4];
     float placement[4][4];
     float position[4];
@@ -349,7 +386,7 @@ s32 CardMainProc(CardGameWork *work) {
                 {
                     char menuColor[] = "\v\r\0\f\x10\x10\x10";
                     char cursorColor[] = "\f(((";
-                    CardFontCode5 selectColor = D_00A4C780;
+                    CardFontCode5 selectColor = D_00A4C780.code;
                     void *model;
                     void *texture;
 
@@ -419,7 +456,7 @@ s32 CardMainProc(CardGameWork *work) {
 
                     if (SubNo_2 >= 0) {
                         CardFontCode8 itemColor = D_00A4C7C8;
-                        CardFontCode5 itemSelectColor = D_00A4C7D0;
+                        CardFontCode5 itemSelectColor = D_00A4C7D0.code;
 
                         position[0] = 1.8374f;
                         if (MenuNo_1 == 0) {
@@ -2069,3 +2106,342 @@ s32 CardMainProc(CardGameWork *work) {
     }
     return 1;
 }
+
+/* Error messages are separate strings in the OV10 card-data image. */
+static char CardErrTxt01[32];
+static char CardErrTxt02[48];
+static char CardErrTxt03[48];
+static char CardErrTxt04[80];
+static char CardErrTxt05[96];
+extern char CardErrTxt06[];
+
+static char *CardErrorList[6] = {
+    CardErrTxt01, CardErrTxt01, CardErrTxt02,
+    CardErrTxt03, CardErrTxt04, CardErrTxt05
+};
+
+char P1DeckLoadStr[32] = "\x0b\x19\x03\x0d\0Load deck on 1P side";
+char P2DeckLoadStr[32] = "\x0b\x19\x03\x0d\0Load deck on 2P side";
+char ModeEndMess0[16] = "\x0b\x19\x03\x0d\0Finished?";
+char ModeEndMess1[48] =
+    "\x0d\x04\x0c\x80@@\xa1\xfb \x0b\x19\x03\x0d\0Exit\xa1\xa1"
+    "\x0d\x04\x0c@@\x80\xa1\xdf \x0b\x19\x03\x0d\0Continue";
+char ModeEndMess2[40] = "\x0b\x19\x03\x0d\0Do you wish to exit the game?";
+char ModeEndMess3[48] =
+    "\x0d\x04\x0c\x80@@\xa1\xfb \x0b\x19\x03\x0d\0Exit\xa1\xa1"
+    "\x0d\x04\x0c@@\x80\xa1\xdf \x0b\x19\x03\x0d\0Continue";
+char ModeContMess0[48] =
+    "\x0d\x04\x0c\x80@@\xa1\xfb \x0b\x19\x03\x0d\0Continue\xa1\xa1"
+    "\x0d\x04\x0c@@\x80\xa1\xdf \x0b\x19\x03\x0d\0Exit";
+char ModeContMess1[48] =
+    "\x0d\x04\x0c\x80@@\xa1\xfb \x0b\x19\x03\x0d\0Accept\xa1\xa1"
+    "\x0d\x04\x0c@@\x80\xa1\xdf \x0b\x19\x03\x0d\0Change";
+
+/* CardPlayTMessList follows the menu text objects in the original .data run.
+ * Repeated entries intentionally point at the same string label. */
+static char CardPlayTMessTxt00[16];
+static char CardPlayTMessTxt01[24];
+static char CardPlayTMessTxt02[24];
+static char CardPlayTMessTxt03[24];
+static char CardPlayTMessTxt04[24];
+static char CardPlayTMessTxt05[24];
+static char CardPlayTMessTxt06[24];
+static char CardPlayTMessTxt07[24];
+static char CardPlayTMessTxt08[24];
+static char CardPlayTMessTxt09[24];
+static char CardPlayTMessTxt10[24];
+static char CardPlayTMessTxt11[24];
+static char CardPlayTMessTxt12[24];
+static char CardPlayTMessTxt13[24];
+static char CardPlayTMessTxt14[24];
+static char CardPlayPMessTxt01[24];
+static char CardPlayPMessTxt02[24];
+static char CardPlayPMessTxt03[24];
+static char CardPlayDMessTxt01[40];
+static char CardPlayDMessTxt02[56];
+static char CardPlayDMessTxt03[56];
+static char CardPlayDMessTxt04[56];
+static char CardPlayDMessTxt05[80];
+static char CardPlayDMessTxt11[48];
+static char CardPlayDMessTxt12[40];
+static char CardPlayDMessTxt13[32];
+static char CardPlayDMessTxt14[40];
+static char CardMenuMessTxt00[184];
+static char CardMenuMessTxt01[48];
+static char CardMenuMessTxt02[128];
+static char CardMenuMessTxt03[16];
+static char CardMenuMessTxt10[32];
+static char CardMenuMessTxt11[64];
+static char CardMenuMessTxt12[40];
+static char CardMenuMessTxt20[48];
+static char CardMenuMessTxt21[32];
+static char CardMenuMessTxt22[24];
+static char CardMenuMessTxt23[24];
+static char CardMenuMessTxt24[24];
+static char CardMenuMessTxt30[32];
+static char CardMenuMessTxt31[104];
+static char CardExitMessTxt00[104];
+static char CardExitMessTxt01[88];
+static char CardExitMessTxt02[64];
+static char CardExitMessTxt03[16];
+static char CardExitMessTxt10[96];
+static char CardExitMessTxt11[96];
+static char CardExitMessTxt12[136];
+static char CardExitMessTxt13[104];
+
+char *CardPlayTMessList[79] = {
+    CardPlayTMessTxt00, CardPlayTMessTxt01, CardPlayTMessTxt02,
+    CardPlayTMessTxt04, CardPlayTMessTxt03, CardPlayTMessTxt05,
+    CardPlayTMessTxt06, CardPlayTMessTxt07, CardPlayTMessTxt08,
+    CardPlayTMessTxt09, CardPlayTMessTxt11, CardPlayTMessTxt10,
+    CardPlayTMessTxt12, CardPlayTMessTxt13, CardPlayTMessTxt14,
+    CardPlayTMessTxt00, CardPlayTMessTxt00, CardPlayTMessTxt00,
+    CardPlayTMessTxt00, CardPlayTMessTxt00, CardPlayPMessTxt01,
+    CardPlayPMessTxt02, CardPlayPMessTxt03, CardPlayTMessTxt00,
+    CardPlayTMessTxt00, CardPlayTMessTxt00, CardPlayTMessTxt00,
+    CardPlayTMessTxt00, CardPlayTMessTxt00, CardPlayTMessTxt00,
+    CardPlayDMessTxt01, CardPlayDMessTxt02, CardPlayDMessTxt03,
+    CardPlayDMessTxt04, CardPlayDMessTxt05, CardPlayTMessTxt00,
+    CardPlayTMessTxt00, CardPlayTMessTxt00, CardPlayTMessTxt00,
+    CardPlayTMessTxt00, CardPlayDMessTxt11, CardPlayDMessTxt12,
+    CardPlayDMessTxt13, CardPlayDMessTxt14, CardPlayTMessTxt00,
+    CardPlayDMessTxt11, CardPlayDMessTxt12, CardPlayDMessTxt13,
+    CardPlayTMessTxt00, CardPlayTMessTxt00, CardMenuMessTxt00,
+    CardMenuMessTxt01, CardMenuMessTxt02, CardMenuMessTxt03,
+    CardMenuMessTxt00, CardMenuMessTxt10, CardMenuMessTxt11,
+    CardMenuMessTxt12, CardMenuMessTxt23, CardMenuMessTxt24,
+    CardMenuMessTxt20, CardMenuMessTxt21, CardMenuMessTxt22,
+    CardMenuMessTxt00, CardMenuMessTxt00, CardMenuMessTxt30,
+    CardMenuMessTxt31, CardPlayTMessTxt00, CardPlayTMessTxt00,
+    CardMenuMessTxt00, CardExitMessTxt00, CardExitMessTxt01,
+    CardExitMessTxt02, CardExitMessTxt03, CardPlayTMessTxt00,
+    CardExitMessTxt10, CardExitMessTxt11, CardExitMessTxt12,
+    CardExitMessTxt13
+};
+
+float asDir[4][4] = {
+    { 0.0f, 0.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 0.0f, 0.0f },
+    { -0.017453294f, -0.017453294f, -0.017453294f, 0.0f },
+    { 0.0f, 0.0f, 0.0f, 0.0f }
+};
+float asColor[4][4] = {
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 1.5f, 1.5f, 1.5f, 1.0f }
+};
+float CCColor[4][4] = {
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 1.0f, 1.0f, 1.0f, 1.0f }
+};
+float KKColor[4][4] = {
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 1.0f, 1.0f, 1.0f, 1.0f }
+};
+
+char BGFileNameList[6][16] = {
+    "game\\BG1", "game\\BG2", "game\\BG3",
+    "game\\BG4", "game\\BG5", "game\\BG6"
+};
+void *TitleMdlLst[10] = {
+    (void *)0x01900000, (void *)0x01A10050,
+    (void *)0x01901000, (void *)0x01A200A0,
+    (void *)0x01902000, (void *)0x01A300E0,
+    0, 0, 0, 0
+};
+
+static s16 MenuNo_1 = 0;
+static s16 SubNo_2 = -1;
+static s16 SubMenu_3 = 0;
+static s16 ModeExit_4 = 0;
+static u8 CCtimer_5 = 0;
+static s16 Message_6 = 0;
+static s16 MessageCnt_7 = 0;
+static s16 p0num_17 = 0;
+static s16 p1num_18 = 0;
+static s16 vol_19 = 0;
+
+float CLP1Color[4][4] = {
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.5f, 0.5f, 1.5f, 1.0f }
+};
+float CLP2Color[4][4] = {
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.5f, 0.5f, 0.5f, 1.0f }
+};
+
+float HandPos1P[4][3] = {
+    { -2.516f, -1.839f, 0.002f },
+    { -2.1973f, -1.839f, 0.002f },
+    { -1.8786f, -1.839f, 0.002f },
+    { -1.26f, -1.839f, 0.002f }
+};
+float DisposePos1P[4][3] = {
+    { -2.514f, -0.2222f, 0.002f },
+    { -2.514f, -0.611f, 0.002f },
+    { -2.514f, -1.0f, 0.002f },
+    { -2.514f, -1.389f, 0.002f }
+};
+float OperationPos1P[4][3] = {
+    { 2.514f, -0.2222f, 0.002f },
+    { 2.514f, -0.611f, 0.002f },
+    { 2.514f, -1.0f, 0.002f },
+    { 2.514f, -1.389f, 0.002f }
+};
+float HandPos2P[4][3] = {
+    { 2.516f, 1.839f, 0.002f },
+    { 2.1973f, 1.839f, 0.002f },
+    { 1.8786f, 1.839f, 0.002f },
+    { 1.26f, 1.839f, 0.002f }
+};
+
+/* The font stores EUC-JP bytes. These controls delimit menu labels, and the
+ * fixed-width filename records include the original trailing zero bytes. */
+const union CardSoundPathStorage D_00A4BBD0 = { "data\\yamamoto\\snd\\smd\\BATTLE1.SWD" };
+const union CardSoundPathStorage D_00A4BBF8 = { "data\\yamamoto\\snd\\smd\\BATTLE1.SMD" };
+const union CardSoundPathStorage D_00A4BC20 = { "data\\yamamoto\\snd\\smd\\JINGLE1.SMD" };
+const union CardSoundPathStorage D_00A4BC48 = { "data\\yamamoto\\snd\\smd\\BATTLE2.SWD" };
+const union CardSoundPathStorage D_00A4BC70 = { "data\\yamamoto\\snd\\smd\\BATTLE2.SMD" };
+const union CardSoundPathStorage D_00A4BC98 = { "data\\yamamoto\\snd\\smd\\JINGLE2.SMD" };
+char D_00A4BD00[16] = "CARDGRAP.BIN";
+char D_00A4BDA0[8] = ".lex";
+char D_00A4BDA8[8] = ".xtx";
+char D_00A4C5A0[24] = "deckmake\\battlewin1.lex";
+char D_00A4C5B8[24] = "deckmake\\battlewin2.lex";
+char D_00A4C5D0[24] = "deckmake\\battlewin3.lex";
+char D_00A4C5E8[24] = "deckmake\\battlewin4.lex";
+char D_00A4C600[24] = "deckmake\\battlewin5.lex";
+char D_00A4C618[24] = "deckmake\\battlewin.bin";
+
+const CardFontCodeRecord D_00A4C780 = {
+    { "\x0c\x10\x10\x10" }, { 0, 0, 0 }
+};
+char D_00A4C788[8] = "\x19\x03";
+char D_00A4C790[8] = " Help";
+const CardFontCode8 D_00A4C7C8 = { "\x0b\x0d\0\x0c```" };
+const CardFontCodeRecord D_00A4C7D0 = {
+    { "\x0c\x80" }, { 0, 0, 0 }
+};
+char D_00A4C868[8] = "\x0b\x0d";
+char D_00A4C870[16] = "\x0b";
+
+
+
+static char CardPlayTMessTxt00[16] = "Text error";
+
+static char CardMenuMessTxt00[184] = "Play the card game. The three types of games are Exhibition, 2-Player Battle, and Tournament. You can access the help menu by pressing the SELECT Button anytime during the game.";
+
+static char CardMenuMessTxt01[48] = "Create decks, unseal cards, and view cards.";
+
+static char CardMenuMessTxt02[128] = "This is the tutorial and manual for the card game. Press the SELECT Button to look up any questions you have during the game.";
+
+static char CardMenuMessTxt03[16] = "Quit Xeno Card.";
+
+static char CardMenuMessTxt10[32] = "Play a single-player card game.";
+
+static char CardMenuMessTxt11[64] = "Play a single elimination tournament against five players.";
+
+static char CardMenuMessTxt12[40] = "Play a card game with two players.";
+
+static char CardMenuMessTxt20[48] = "Select the 40 cards you will use in the game.";
+
+static char CardMenuMessTxt21[32] = "Open card box or card pack.";
+
+static char CardMenuMessTxt22[24] = "View your cards.";
+
+static char CardMenuMessTxt23[24] = "Change the background.";
+
+static char CardMenuMessTxt24[24] = "Change the game mat.";
+
+static char CardMenuMessTxt30[32] = "This is the card game tutorial.";
+
+static char CardMenuMessTxt31[104] = "This is the card game manual. Look up any questions during the game by pressing the SELECT Button.";
+
+static char CardExitMessTxt00[104] = "Enters the help mode. You can view an explanation of the current phase by\npressing the SELECT Button.";
+
+static char CardExitMessTxt02[64] = "Ends the current phase. You can also press the \242\242 Button.";
+
+static char CardExitMessTxt03[16] = "Exit game.";
+
+static char CardExitMessTxt01[88] = "Phase progression\nManual: Shows you every step.\nAuto: Skip phases when you cannot move.";
+
+static char CardExitMessTxt10[96] = "Phase progression for P1\nManual: Shows you every step.\nAuto: Skip phases when you cannot move.";
+
+static char CardExitMessTxt11[96] = "Phase progression for P2\nManual: Shows you every step.\nAuto: Skip phases when you cannot move.";
+
+static char CardExitMessTxt12[136] = "Display options for turn indicator\nShow: Use this option if you are not used to the game.\nHide: This will hide the turn indicator.";
+
+static char CardExitMessTxt13[104] = "The game mat automatically turns to face the player currently in control during 2-Player Battle.";
+
+
+
+static char CardErrTxt01[32] = "\031\003You do not have enough cards.";
+
+static char CardErrTxt02[48] = "\031\003You do not have enough cards to make a deck.";
+
+static char CardErrTxt03[48] = "\031\003You can't add any more cards to the deck.";
+
+static char CardErrTxt04[80] = "\031\003This card can't be placed in the deck because the card has not been acquired.";
+
+static char CardErrTxt05[96] = "\031\003There are 3 of the same cards already in the deck. You can't add any more to the deck.";
+
+static char CardPlayTMessTxt01[24] = "\013\031\003\r\000\243\261P Draw Phase";
+
+static char CardPlayTMessTxt02[24] = "\013\031\003\r\000\243\261P Move Phase";
+
+static char CardPlayTMessTxt03[24] = "\013\031\003\r\000\243\261P Set Phase";
+
+static char CardPlayTMessTxt04[24] = "\013\031\003\r\000\243\261P Event Phase";
+
+static char CardPlayTMessTxt05[24] = "\013\031\003\r\000\243\261P Block Phase";
+
+static char CardPlayTMessTxt06[24] = "\013\031\003\r\000\243\261P Battle Phase";
+
+static char CardPlayTMessTxt07[24] = "\013\031\003\r\000\243\261P Adjust Phase";
+
+static char CardPlayTMessTxt08[24] = "\013\031\003\r\000\243\262P Draw Phase";
+
+static char CardPlayTMessTxt09[24] = "\013\031\003\r\000\243\262P Move Phase";
+
+static char CardPlayTMessTxt10[24] = "\013\031\003\r\000\243\262P Set Phase";
+
+static char CardPlayTMessTxt11[24] = "\013\031\003\r\000\243\262P Event Phase";
+
+static char CardPlayTMessTxt12[24] = "\013\031\003\r\000\243\262P Block Phase";
+
+static char CardPlayTMessTxt13[24] = "\013\031\003\r\000\243\262P Battle Phase";
+
+static char CardPlayTMessTxt14[24] = "\013\031\003\r\000\243\262P Adjust Phase";
+
+static char CardPlayPMessTxt01[24] = "\013\031\003\r\000Player 1 wins";
+
+static char CardPlayPMessTxt02[24] = "\013\031\003\r\000Player 2 wins";
+
+static char CardPlayPMessTxt03[24] = "\013\031\003\r\000Drawing card.";
+
+static char CardPlayDMessTxt01[40] = "\013\031\003\r\000You can't place any more cards.";
+
+static char CardPlayDMessTxt02[56] = "\013\031\003\r\000The requirements of the battlefield are not met.";
+
+static char CardPlayDMessTxt03[56] = "\\13\031\003\r\000The requirements of the field are not met.";
+
+static char CardPlayDMessTxt04[56] = "\013\031\003\r\000The requirement of the discarded card are not met.";
+
+static char CardPlayDMessTxt05[80] = "\013\031\003\r\000You can't place this card because the same card is already on the field.";
+
+static char CardPlayDMessTxt11[48] = "\013\031\003\r\000You can't play this card in this phase.";
+
+static char CardPlayDMessTxt12[40] = "\013\031\003\r\000You can't play in this phase.";
+
+static char CardPlayDMessTxt13[32] = "\013\031\003\r\000You have no cards to play.";
+
+static char CardPlayDMessTxt14[40] = "\031\003\r\000\014\200@@Too many cards in your hand.";

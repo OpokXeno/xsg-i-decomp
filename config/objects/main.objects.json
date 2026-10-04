@@ -33396,7 +33396,7 @@
       "in_scope": true,
       "kind": "data-only",
       "map_class": "game",
-      "mode": "asm",
+      "mode": "c",
       "name": "maptbl",
       "name_basis": "no .text; named after its static data (maptbl0000, maptbl0100, maptbl0200, maptbl0300)",
       "name_confidence": "low",
@@ -33449,7 +33449,19 @@
         "start": "0x00246918"
       },
       "toolchain_classification": "game",
-      "unit": "main"
+      "unit": "main",
+      "import": {
+        "mode": "c",
+        "source": {
+          "kind": "file",
+          "path": "src/main/maptbl.c",
+          "include_dirs": [
+            "include"
+          ]
+        },
+        "owners": {},
+        "note": "DATA-only C recovery: CfCameraDefine. Remaining map tables stay scaffold-owned."
+      }
     },
     {
       "accepted": {
@@ -55709,7 +55721,7 @@
       "unit": "main",
       "import": {
         "mode": "c",
-        "note": "init_map_trap (game, field): 1 of 3 functions accepted C (GivesEnemyDamage; task tu-slus-20469-412d448de315-main-tu185-init-map-trap-002c58d0-5649a69c454f-fn-002c6128, submission 06ebad3db1ebadbe25d5ac0ae4311f053e1cb53283eef57dd4104b4ed8aaeeed, user-authorized review waiver: A partir de ahora ya hemos tenido demasiadas reviews. NO más reviews. Si algo pasa el rework, se acepta para integración). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
+        "note": "init_map_trap (game, field): 1 of 3 functions accepted C (GivesEnemyDamage; task tu-slus-20469-412d448de315-main-tu185-init-map-trap-002c58d0-5649a69c454f-fn-002c6128, submission 06ebad3db1ebadbe25d5ac0ae4311f053e1cb53283eef57dd4104b4ed8aaeeed, user-authorized review waiver: A partir de ahora ya hemos tenido demasiadas reviews. NO m\u00e1s reviews. Si algo pasa el rework, se acepta para integraci\u00f3n). This TU's first published C source; the remaining functions stay INCLUDE_ASM.",
         "source": {
           "include_dirs": [
             "include"

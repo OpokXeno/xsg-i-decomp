@@ -3,8 +3,8 @@
  */
 #include "common.h"
 
-extern int batFlags;
-extern const char D_00A50EA8[];
+static int batFlags = 0;
+static const char D_00A50EA8[32] = "MBattleInit: Called to double";
 
 extern void MOutputDebugStringWarn(const char *format, ...);
 extern void MEfObjInit(void);

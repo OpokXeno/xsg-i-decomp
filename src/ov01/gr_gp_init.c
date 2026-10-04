@@ -29,6 +29,17 @@ typedef struct GrPacket {
     int count;   /* +0x4 */
 } GrPacket;
 
+static int f2Num;
+static GrPacket f2GpSave;
+static int f4Num;
+static GrPacket f4GpSave;
+static int ft4Num;
+static GrPacket ft4GpSave;
+static int ft4STQNum;
+static GrPacket ft4STQGpSave;
+static int sprNum;
+static GrPacket sprGpSave;
+
 /* GIF packet words are written as doubleword descriptors by the openers and
  * as 32-bit lanes by the vertex writers. Both are the same packet storage. */
 typedef union GrGifWord {
@@ -94,7 +105,7 @@ typedef struct GrRenderState {
 extern GrRenderState sRender;
 
 /* Framebuffer base addresses; grFBAdrGet indexes this table. */
-extern int fb[4];
+int fb[4] = {0x70, 0xe0, 0x150, 0xfffff};
 
 /* EE scratchpad RAM base. */
 #define SCRATCHPAD_BASE ((void *)0x70000000)
@@ -262,8 +273,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grVramCopy);
 
 void grOpenF2(GrPacket *packet)
 {
-    extern GrPacket f2GpSave;
-    extern int f2Num;
     GrGifOpenTag *tags;
     int *count;
     int tag_index;
@@ -290,17 +299,6 @@ typedef struct GrGifTag {
     long long control;             /* +0x00: NLOOP/EOP/PRE/PRIM/FLG/NREG */
     unsigned char unmodeled_08[8]; /* +0x08: REGS */
 } GrGifTag;
-
-extern GrPacket f2GpSave;
-extern int f2Num;
-extern GrPacket f4GpSave;
-extern int f4Num;
-extern GrPacket ft4GpSave;
-extern int ft4Num;
-extern GrPacket ft4STQGpSave;
-extern int ft4STQNum;
-extern GrPacket sprGpSave;
-extern int sprNum;
 
 void grCloseF2(void)
 {
@@ -572,3 +570,13 @@ void GS_REG_SET(GrPacket *packet, long long register_id, long long control)
     tags[tag_index].control.bits = control;
     *count = tag_index + 1;
 }
+
+const GrFrameBaseTable D_00A466E8 = {{0x0e00, 0x1c00, 0x2a00}};
+
+const GrVramCopyParams D_00A466F0 = {
+    0, 8, 0, 8,
+    0, 0, 0, 0,
+    0x0200, 0x01c0,
+};
+
+const char D_00A46708[40] = "** grVramCopyFBtoFB: err %d %d\n";

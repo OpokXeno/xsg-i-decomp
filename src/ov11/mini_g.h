@@ -6,10 +6,10 @@
 #ifndef SRC_OV11_MINI_G_H
 #define SRC_OV11_MINI_G_H
 
-/* Original ov11 local symbols.  SaveWork is a pointer to the work block;
- * Gwork remains an incomplete work-state view for this code-generation probe. */
+/* Gwork is the original 0x250-byte local work block. Its current consumers
+ * use a word-array view; the individual state fields remain partially modeled. */
 extern char *SaveWork;
 
-extern int Gwork[];
+static int Gwork[148];
 
 #endif /* SRC_OV11_MINI_G_H */

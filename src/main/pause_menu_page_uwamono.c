@@ -3,6 +3,9 @@
 
 extern float D_004D7F88;
 extern float D_004D7F8C;
+
+float D_004D7F88 = 0.3926990926f;
+float D_004D7F8C = 0.3926990926f;
 extern float xglSin(float angle);
 extern float xglCos(float angle);
 

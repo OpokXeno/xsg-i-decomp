@@ -9,6 +9,8 @@
 #include "main/data_buffer.h"
 
 typedef struct ClassDescriptor ClassDescriptor;
+typedef struct ConstString ConstString;
+extern ConstString **constStringTable;
 
 typedef u32 ConstantPoolWord;
 

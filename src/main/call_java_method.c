@@ -38,9 +38,9 @@ void Call_JavaMethod(void *actor, int method_id)
     game_loop_state = (CallJavaGameLoopStatePrefix *)GameLoopState;
     enemy_work = &((CallJavaEnemyWork *)enepc)[actor_record->number];
     if (game_loop_state->active_actor == actor_record) {
-        CallMethod_II(D_004CBAD0, 100, EventID);
+        CallMethod_II("KickEvent", 100, EventID);
     } else {
-        CallMethod_II(D_004CBAD0,
+        CallMethod_II("KickEvent",
                       enemy_work->kick_event_type,
                       EventID);
     }
@@ -391,3 +391,9 @@ int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
         return 0;
     }
 }
+
+/* Font-script labels for the locator debug modes. */
+const char D_004CBB18[16] = "\013\xCB\xA7\xC0\xEE\xA5\xC6\xA5\xB9\xA5\xC8";
+const char D_004CBB28[16] = "\013HairTest";
+const char D_004CBB38[16] = "\013WindTest";
+const char D_004CBB48[16] = "\013ColliTest";

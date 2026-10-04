@@ -4,25 +4,28 @@
 #include "common.h"
 #include "shared.h"
 
+static int s_aeModeStack[8] = {0};
+static unsigned int s_uStackTop = 1;
+
+const char mode_stack_depth_check[32] = "s_uStackTop < MODE_STACK_DEPTH";
+const char mode_source_file[32] = "../xrg_filesys_mode.euc.c";
+const char mode_stack_top_check[16] = "s_uStackTop > 1";
+const char file_sys_size_check[16] = "uSize > 0";
+const char unknown_filesys_mode[32] = "unknown filesys mode %d\n";
+const char allocate_error[16] = "allocate error";
+const char D_00A58F00[16] = "pBuf != NIL";
+
 #define MODE_STACK_DEPTH 8
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-extern int s_aeModeStack[MODE_STACK_DEPTH];
 extern unsigned int strlen(const char *string);
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int xglCdGetFileSize(const char *name);
 extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-extern unsigned int s_uStackTop;
 extern const char root_name_name_check[];
 extern const char root_name_source_file[];
 extern const char root_name_result_check[];
-extern const char mode_stack_depth_check[];
-extern const char mode_source_file[];
-extern const char mode_stack_top_check[];
-extern const char file_sys_size_check[];
-extern const char unknown_filesys_mode[];
-extern const char allocate_error[];
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
 extern void RgError(const char *message, const char *source_file, int line, ...);
@@ -31,8 +34,6 @@ extern RgHeap *InstanceOfRgHeap(void);
 extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
                        int line);
 extern int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr);
-/* Assertion text "pBuf != NIL"; scaffold-owned .rodata keeps its splat name. */
-extern const char D_00A58F00[];
 
 static void _PushMode(int eMode)
 {

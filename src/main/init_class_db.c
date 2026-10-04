@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "init_class_db.h"
 
+int classDB[8];
+
 extern void *xmalloc(int size, int type);
 typedef struct ClassFileMemberHeader {
     u16 access_flags;
@@ -29,6 +31,7 @@ typedef struct ClassFile {
 } ClassFile;
 
 extern const char D_004DBFD0[];
+extern ConstString **constStringTable;
 extern char *strncpy(char *dest, const char *src, unsigned int count);
 extern char *strcat(char *dest, const char *src);
 extern ClassFile *PDB_findFile(int volume, const char *name);
@@ -241,3 +244,6 @@ void setupClass(ClassDescriptor *class_info, u32 this_class_index,
         class_info->processing_state = 0;
     }
 }
+
+const char D_004DBFD0[] = ".class";
+ConstString **constStringTable = 0;

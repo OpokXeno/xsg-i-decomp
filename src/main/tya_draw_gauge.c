@@ -17,15 +17,27 @@ enum {
 };
 
 typedef struct TyaGaugePacket {
-    /* Three packet records precede the six vertex records written here. */
-    u8 unmodeled_00[0x30];
+    /* The upload starts with a VIF1 DIRECT command and the fixed GIF setup. */
+    u32 dma_vif_tag[4];
+    u32 vif_gif_setup[4];
+    u32 gif_control[4];
     u32 filled_color[4];
     u32 filled_vertices[2][TYA_GAUGE_VERTEX_WORD_COUNT];
     u32 unfilled_color[4];
     u32 unfilled_vertices[2][TYA_GAUGE_VERTEX_WORD_COUNT];
 } TyaGaugePacket;
 
-extern TyaGaugePacket TestEnv_0_0036AC70[];
+static TyaGaugePacket TestEnv_0_0036AC70[] = {
+    {
+        {0, 0, 0, 0x51000008},
+        {0x00008001, 0x70034000, 0x0551551E, 0},
+        {0x00070000, 0, 0x00000047, 0},
+        {0x00000080, 0x000000C0, 0x00000080, 0x00000080},
+        {{0, 0, 0xFFFFFFFF, 0}, {0, 0, 0xFFFFFFFF, 0}},
+        {0x40, 0x40, 0x40, 0x80},
+        {{0, 0, 0xFFFFFFFF, 0}, {0, 0, 0xFFFFFFFF, 0}},
+    }
+};
 extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
 void tyaDrawGauge(TyaGaugeArgs *gauge)

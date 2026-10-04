@@ -1,6 +1,9 @@
 #include "common.h"
 #include "layout.h"
 
+static int defaultLayout;
+int layoutManagerId;
+
 void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
 {
     LayoutHeader *header;
@@ -14,7 +17,7 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
         return;
 
     field = lookupClassField(classJava_xeno_Unit,
-                             loadConstString(layout_peer, -1), 0);
+                             loadConstString("peer", -1), 0);
     peer = *(u8 **)(layout + field->offset);
     position = (float *)(peer + 16);
     rotation = (float *)(peer + 32);
@@ -24,18 +27,18 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
     rotation[1] = header->components[3];
 
     field = lookupClassField(classJava_xeno_Unit,
-                             loadConstString(layout_px, -1), 0);
+                             loadConstString("px", -1), 0);
     *(float *)(layout + field->offset) = position[0];
     field = lookupClassField(classJava_xeno_Unit,
-                             loadConstString(layout_py, -1), 0);
+                             loadConstString("py", -1), 0);
     *(float *)(layout + field->offset) = position[1];
     field = lookupClassField(classJava_xeno_Unit,
-                             loadConstString(layout_pz, -1), 0);
+                             loadConstString("pz", -1), 0);
     *(float *)(layout + field->offset) = position[2];
     field = lookupClassField(classJava_xeno_Unit,
-                             loadConstString(layout_ry, -1), 0);
+                             loadConstString("ry", -1), 0);
     *(float *)(layout + field->offset) =
-        rotation[1] / layout_unit_pi * 180.0f;
+        rotation[1] / 3.141592741f * 180.0f;
 }
 
 void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
@@ -52,7 +55,7 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
         return;
 
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(layout_peer, -1), 0);
+                             loadConstString("peer", -1), 0);
     peer = *(u8 **)(layout + field->offset);
     position = (float *)(peer + 16);
     rotation = (float *)(peer + 80);
@@ -65,18 +68,18 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
     *(float *)(peer + 2532) = angle;
 
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(layout_px, -1), 0);
+                             loadConstString("px", -1), 0);
     *(float *)(layout + field->offset) = position[0];
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(layout_py, -1), 0);
+                             loadConstString("py", -1), 0);
     *(float *)(layout + field->offset) = position[1];
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(layout_pz, -1), 0);
+                             loadConstString("pz", -1), 0);
     *(float *)(layout + field->offset) = position[2];
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(layout_ry, -1), 0);
+                             loadConstString("ry", -1), 0);
     *(float *)(layout + field->offset) =
-        rotation[1] / layout_chr_pi * 180.0f;
+        rotation[1] / 3.141592741f * 180.0f;
 }
 
 void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
@@ -90,7 +93,7 @@ void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
         return;
 
     field = lookupClassField(classJava_xeno_Effect,
-                             loadConstString(layout_peer, -1), 0);
+                             loadConstString("peer", -1), 0);
     peer = *(LayoutEffectPeer **)(layout + field->offset);
     if (peer != 0) {
         peer->position[0] = header->components[0];
@@ -100,18 +103,18 @@ void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
     }
 
     field = lookupClassField(classJava_xeno_Effect,
-                             loadConstString(layout_px, -1), 0);
+                             loadConstString("px", -1), 0);
     *(float *)(layout + field->offset) = header->components[0];
     field = lookupClassField(classJava_xeno_Effect,
-                             loadConstString(layout_py, -1), 0);
+                             loadConstString("py", -1), 0);
     *(float *)(layout + field->offset) = header->components[1];
     field = lookupClassField(classJava_xeno_Effect,
-                             loadConstString(layout_pz, -1), 0);
+                             loadConstString("pz", -1), 0);
     *(float *)(layout + field->offset) = header->components[2];
     field = lookupClassField(classJava_xeno_Effect,
-                             loadConstString(layout_ry, -1), 0);
+                             loadConstString("ry", -1), 0);
     *(float *)(layout + field->offset) =
-        header->components[3] / D_004D83A4 * 180.0f;
+        header->components[3] / 3.141592741f * 180.0f;
 }
 
 void Java_xeno_util_Layout_set__Ljava_lang_Object_I(JThread *thread,
@@ -145,6 +148,6 @@ void Java_xeno_util_Layout_getManager__I(JThread *thread, int *id,
     int *manager = &defaultLayout;
 
     *manager = *(int *)((u8 *)classJava_xeno_util_Layout + 0x18);
-    D_004DC6B4 = *id;
+    layoutManagerId = *id;
     *result = manager;
 }

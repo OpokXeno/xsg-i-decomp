@@ -8,11 +8,10 @@ typedef unsigned char u8;
 typedef signed short s16;
 extern int xglCdGetFileSize(const char *name);
 extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-extern u8 *buffer;
-extern s16 base_tbl[];
-extern char db_fileno_path[];
+static u8 *buffer;
+static s16 base_tbl[0x140];
 
-extern s16 *tbl;
+static s16 *tbl;
 extern void tyaUmlDispInit2(u8 *work_buffer);
 
 typedef struct TyaUmlDispParam {
@@ -50,7 +49,15 @@ extern void tyaUmlDispType3Sub0(void *context, void *argument);
 extern void xglFontPrintExtFunc(unsigned int flags,
                                 void (*draw)(void *context, void *argument),
                                 void *argument);
-extern const char D_00A13380[];
+/* Font control stream consumed by xglFontPrint; individual opcodes remain
+ * unmodeled, but all 24 original bytes and the call-site type are known. */
+static const char D_00A13380[24] = {
+    0x0D, 0x00, 0x15, 0x02, 0x01, 0x0C, 0x0C, 0x80,
+    0x80, 0x80, 0x15, 0x02, 0x02, 0x04, 0x19, 0x03,
+    0x15, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+/* Original 24-byte database path owner at the immediately following address. */
+const char db_fileno_path[24] = "data\\umn\\db_fileno.txt";
 
 /*
  * The parser cursor mark() and tail() read from: only the two columns they
@@ -109,7 +116,10 @@ extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
  * each transfer) is touched here, so the remaining template bytes are
  * supplied by the reference image, not generated here.
  */
-extern u64 TestEnv_1_00A108B0[12];
+static u64 TestEnv_1_00A108B0[12] = {
+    0, 0x5100000500000000ULL, 0x1000000000000004ULL, 14,
+    0x0208380000000000ULL, 0x50, 0, 0x51, 0, 0x52, 0, 0x53,
+};
 
 /*
  * One 0x10-byte entry of the eight-slot texture table tyaUmlDispInit2
@@ -272,7 +282,7 @@ int tyaUmlDispParamReset(TyaUmlDispParam *parameter)
     return 0;
 }
 
-extern TyaUmlImage image[8];
+TyaUmlImage image[8] = {{0}};
 
 void tyaUmlDispInit2(u8 *work_buffer)
 {

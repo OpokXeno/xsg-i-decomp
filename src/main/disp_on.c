@@ -163,3 +163,5 @@ void setEventTimerTaskEntry(const char *method_reference, int countdown)
     task->countdown = countdown;
     task->method_reference = method_reference;
 }
+
+const char event_suffix[8] = ".evt";

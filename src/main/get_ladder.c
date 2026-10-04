@@ -8,8 +8,16 @@ struct ArrivalAttributeTable {
     int attributes[4];
 };
 
-extern const struct LadderAttributeTable D_004CAC20;
-extern const struct ArrivalAttributeTable D_004CAC60;
+const struct LadderAttributeTable D_004CAC20 = {{
+    0x00100000, 0x00110000, 0x00120000, 0x00130000,
+    0x00140000, 0x00150000, 0x00160000, 0x00170000,
+    0x00180000, 0x00190000, 0x001A0000, 0x001B0000,
+    0x001C0000, 0x001D0000, 0x001E0000, 0x001F0000
+}};
+const struct ArrivalAttributeTable D_004CAC60 = {{
+    0x00200000, 0x00210000, 0x00220000, 0x00230000
+}};
+short PhCunt = 0;
 
 short Get_Ladder(int attribute)
 {

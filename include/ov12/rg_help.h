@@ -68,4 +68,14 @@ struct RgHelp {
     float countdown;
 };
 
+extern const char D_00A57700[], D_00A57708[], D_00A57718[], D_00A57728[];
+
+extern const char D_00A57738[], D_00A57748[], D_00A57758[], D_00A57768[];
+
+extern const char D_00A57778[], D_00A57788[], D_00A57798[], D_00A577A8[];
+
+extern const char D_00A577B8[], D_00A577C8[], D_00A577D8[], D_00A577E8[];
+
+extern const char D_00A577F8[], D_00A57808[], D_00A57818[], D_00A57828[];
+
 #endif /* INCLUDE_OV12_RG_HELP_H */

@@ -13,7 +13,9 @@ typedef struct LightVectorCall {
 extern void *classJava_xeno_Light;
 extern const char D_004DC180[];
 extern const char D_004DC188[];
-extern float D_004D83EC;
+/* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */
+#define PI_F (3.141592741f)
+#define D_004D83EC PI_F
 
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
@@ -163,3 +165,6 @@ void Java_xeno_Light_setGlobalPointLightReset__(void)
 {
     nmlModelSetGlobalPointLightReset();
 }
+
+const char D_004DC180[8] = "id";
+const char D_004DC188[8] = "peer";

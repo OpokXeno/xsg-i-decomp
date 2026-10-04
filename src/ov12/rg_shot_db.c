@@ -480,13 +480,6 @@ static RgShotDbFireEssence *_ReadFire(RgReadText *pReader)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBRead);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a535d8 contains the assertion expression "pDB != NIL".
- * ov12:0x00a53470 contains the source filename "../rg_shot_db.euc.c".
- */
 extern const char D_00A535D8[];
 extern const char D_00A53470[];
 
@@ -498,3 +491,34 @@ void RgShotDBClear(RgSimpleDB *database)
     RgSimpleDBClear(database);
     _EntryTemporariesShotDB(database);
 }
+
+const char D_00A53450[8] = "shot";
+const char D_00A53458[24] = "ignored 'shot %s'";
+const char D_00A53470[24] = "../rg_shot_db.euc.c";
+const char D_00A53488[8] = "model";
+const char D_00A53490[8] = "ptcl";
+const char D_00A53498[8] = "puttex";
+const char D_00A534A0[16] = "break-ptcl";
+const char D_00A534B0[16] = "damage-ptcl";
+const char D_00A534C0[16] = "puttex-all";
+const char D_00A534D0[8] = "damage";
+const char D_00A534D8[8] = "life";
+const char D_00A534E0[16] = "not-dam-limit";
+const char D_00A534F0[16] = "not-dam-time";
+const char D_00A53500[16] = "slow-time";
+const char D_00A53510[16] = "slow-rate";
+const char D_00A53520[16] = "pReader != NIL";
+const char D_00A53530[8] = "spd";
+const char D_00A53538[16] = "pEss != NIL";
+const char D_00A53548[8] = "aim";
+const char D_00A53550[16] = "accuracy";
+const char D_00A53560[8] = "wait";
+const char D_00A53568[16] = "bom-size";
+const char D_00A53578[16] = "bom-time";
+const char D_00A53588[16] = "bom-dist";
+const char D_00A53598[8] = "chaff";
+const char D_00A535A0[16] = "attach-time";
+const char D_00A535B0[8] = "length";
+const char D_00A535B8[16] = "imm-dead";
+const char D_00A535C8[16] = "once-hit";
+const char D_00A535D8[16] = "pDB != NIL";

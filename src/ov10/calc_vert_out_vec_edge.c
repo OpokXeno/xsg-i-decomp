@@ -5,11 +5,11 @@
 #include "shared.h"
 #include "ov10/cgp.h"
 
-extern int s_nDebMode;
-extern int s_nMode;
-extern CardGameWork D_00A4FA10;
-extern char D_00A4BBA0[];
-extern char D_00A4BBB0[];
+static int s_nDebMode = 0;
+static int s_nMode = 0;
+static CardGameWork D_00A4FA10;
+const char D_00A4BBA0[] = "Minicard";
+const char D_00A4BBB0[] = "Card Inisialize ERROR!!!\n";
 extern void xglRenderClearFrame(void);
 extern void xglRenderGlobalFadeInit(void);
 extern void xglSleep(void);

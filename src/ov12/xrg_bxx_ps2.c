@@ -4,12 +4,12 @@
 #include "common.h"
 #include "shared.h"
 
+const char D_00A58D10[16] = "log2 error %d";
+const char D_00A58D20[24] = "../xrg_bxx_ps2.euc.c";
+
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
 
-/* These data labels are still supplied by the TU's generated data object. */
-extern const char D_00A58D10[];
-extern const char D_00A58D20[];
 
 static int _Log2(u32 bucket_count)
 {

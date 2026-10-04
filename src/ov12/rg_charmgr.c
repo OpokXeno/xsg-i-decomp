@@ -37,15 +37,11 @@ typedef struct RgChar RgChar;
  * ov12:0x00a53108 contains the assertion expression "pChar != NIL".
  * ov12:0x00a53138 contains the assertion expression "pMgr != NIL".
  */
-extern const char D_00A530B8[];
-extern const char D_00A53108[];
-extern const char D_00A53138[];
 
 /*
  * Same window: ov12:0x00a53118 contains the assertion expression
  * "pMgr != NIL && pChar != NIL", RgCharMgrFree's own guard.
  */
-extern const char D_00A53118[];
 
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
@@ -83,16 +79,6 @@ struct RgCharMgr {
     unsigned int count; /* +0x400 */
 };
 
-extern const char D_00A53088[];
-extern const char D_00A530D0[];
-extern const char D_00A530E8[];
-extern const char D_00A530F8[];
-extern const char D_00A53148[];
-extern const char D_00A53158[];
-extern const char D_00A53178[];
-extern const char D_00A531A8[];
-extern const char D_00A531C0[];
-extern const char D_00A531D0[];
 extern int RgCharGetType(RgChar *pChar);
 extern void XrgLog(const char *format, const char *source_file, int line, ...);
 void InitRgCharMgr(RgCharMgr *manager);
@@ -117,13 +103,13 @@ static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
     RgChar **characters = manager->chars;
 
     if (_FindPtr(manager->chars, count, pChar) >= 0) {
-        assert_prog(D_00A53088, D_00A530B8, 32);
+        assert_prog("_FindPtr(apPtrTbl, nTblSize, pEntry) < 0", "../rg_charmgr.euc.c", 32);
     }
     if (count >= 0x100) {
-        assert_prog(D_00A530D0, D_00A530B8, 33);
+        assert_prog("nTblSize < RG_CHAR_MAX", "../rg_charmgr.euc.c", 33);
     }
     if (pChar == 0) {
-        assert_prog(D_00A530E8, D_00A530B8, 34);
+        assert_prog("pEntry != NIL", "../rg_charmgr.euc.c", 34);
     }
     characters[count] = pChar;
     return count + 1;
@@ -138,7 +124,7 @@ static unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
 
     found_index = _FindPtr(manager->chars, count, pChar);
     if (found_index < 0) {
-        assert_prog(D_00A530F8, D_00A530B8, 46);
+        assert_prog("nFindIndex >= 0", "../rg_charmgr.euc.c", 46);
     }
     index = found_index;
     new_count = count - 1;
@@ -151,7 +137,7 @@ static unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
 RgChar *RgCharMgrEntry(RgCharMgr *manager, RgChar *pChar)
 {
     if (pChar == 0) {
-        assert_prog(D_00A53108, D_00A530B8, 58);
+        assert_prog("pChar != NIL", "../rg_charmgr.euc.c", 58);
     }
     manager->count = _EntryPtr(manager, manager->count, pChar);
     return pChar;
@@ -162,7 +148,7 @@ void RgCharMgrFree(RgCharMgr *manager, RgChar *pChar)
     unsigned int count;
 
     if ((manager == 0) || (pChar == 0)) {
-        assert_prog(D_00A53118, D_00A530B8, 66);
+        assert_prog("pMgr != NIL && pChar != NIL", "../rg_charmgr.euc.c", 66);
     }
     count = _DeletePtr(manager, manager->count, pChar);
     pChar->mgr = 0;
@@ -176,7 +162,7 @@ RgChar *RgCharMgrSearch(RgCharMgr *manager, int type)
     RgChar *pChar;
 
     if (manager == 0) {
-        assert_prog(D_00A53138, D_00A530B8, 81);
+        assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 81);
     }
     for (index = 0; index < manager->count; index++) {
         pChar = manager->chars[index];
@@ -190,7 +176,7 @@ RgChar *RgCharMgrSearch(RgCharMgr *manager, int type)
 int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
 {
     if (manager == 0) {
-        assert_prog(D_00A53138, D_00A530B8, 93);
+        assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 93);
     }
     if (manager->count + count < 0x100) {
         return 0;
@@ -205,7 +191,7 @@ void RgCharMgrGC(RgCharMgr *manager)
     int index;
 
     if (manager == 0) {
-        assert_prog(D_00A53148, D_00A530B8, 107);
+        assert_prog("pMgr != 0", "../rg_charmgr.euc.c", 107);
     }
     deleted_count = 0;
     for (index = 0; index < manager->count; index++) {
@@ -233,7 +219,7 @@ void _RgCharMgrCallControl(RgCharMgr *manager)
     unsigned int i;
 
     if (manager == 0) {
-        assert_prog(D_00A53138, D_00A530B8, 132);
+        assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 132);
     }
     count = manager->count;
     for (i = 0; i < count; i++) {
@@ -258,7 +244,7 @@ void _RgCharMgrCallDisp(RgCharMgr *manager)
     unsigned int i;
 
     if (manager == 0) {
-        assert_prog(D_00A53138, D_00A530B8, 162);
+        assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 162);
     }
     count = manager->count;
     for (i = 0; i < count; i++) {
@@ -283,7 +269,7 @@ void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime)
     unsigned int i;
 
     if (manager == 0) {
-        assert_prog(D_00A53138, D_00A530B8, 182);
+        assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 182);
     }
     count = manager->count;
     for (i = 0; i < count; i++) {
@@ -324,7 +310,7 @@ static void _DestructCharMgr(RgCharMgr *manager)
     }
     RgCharMgrGC(manager);
     if (manager->count != 0) {
-        assert_prog(D_00A53158, D_00A530B8, 237);
+        assert_prog("pMgr->m_nCharTblSiz <= 0", "../rg_charmgr.euc.c", 237);
     }
     InitRgCharMgr(manager);
 }
@@ -332,13 +318,13 @@ static void _DestructCharMgr(RgCharMgr *manager)
 static void _DisposeCharMgr(RgCharMgr *manager)
 {
     _DestructCharMgr(manager);
-    RgHeapFree(InstanceOfRgHeap(), manager, D_00A530B8, 246);
+    RgHeapFree(InstanceOfRgHeap(), manager, "../rg_charmgr.euc.c", 246);
 }
 
 void InitRgCharMgr(RgCharMgr *manager)
 {
     if (manager == 0) {
-        assert_prog(D_00A53138, D_00A530B8, 253);
+        assert_prog("pMgr != NIL", "../rg_charmgr.euc.c", 253);
     }
     manager->count = 0;
 }
@@ -349,7 +335,7 @@ RgCharMgr *InstanceOfRgCharMgr(void)
 
     manager = RgSingletonIDGet(0);
     if (manager == 0) {
-        manager = RgHeapAlloc(InstanceOfRgHeap(), 0x404, D_00A530B8, 277);
+        manager = RgHeapAlloc(InstanceOfRgHeap(), 0x404, "../rg_charmgr.euc.c", 277);
         InitRgCharMgr(manager);
         RgSingletonIDEntry(0, (RgSimpleDB *) manager,
                            (void (*)(RgSimpleDB *)) _DisposeCharMgr);
@@ -370,12 +356,12 @@ void RgCharMgrDump(RgCharMgr *manager)
     unsigned int index;
     RgChar *pChar;
 
-    XrgLog(D_00A53178, D_00A530B8, 297, manager->count);
+    XrgLog("------------ character manager dump (cnt=%d)\n", "../rg_charmgr.euc.c", 297, manager->count);
     for (index = 0; index < manager->count; index++) {
         pChar = manager->chars[index];
-        XrgLog(D_00A531A8, D_00A530B8, 300, pChar);
-        XrgLog(D_00A531C0, D_00A530B8, 301, RgCharGetType(pChar));
-        XrgLog(D_00A531D0, D_00A530B8, 302, pChar->controlMethod,
+        XrgLog("---- character (%p)\n", "../rg_charmgr.euc.c", 300, pChar);
+        XrgLog("  type = %d\n", "../rg_charmgr.euc.c", 301, RgCharGetType(pChar));
+        XrgLog("  method(C:%p,D:%p,P:%p)\n", "../rg_charmgr.euc.c", 302, pChar->controlMethod,
                pChar->dispMethod, pChar->passTimeMethod);
     }
 }

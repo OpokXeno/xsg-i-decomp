@@ -107,28 +107,28 @@ extern void *classJava_xeno_util_Window;
 extern void *classJava_xeno_vm_System;
 
 /* The fully-qualified class names JNI_loadNativeClass resolves. */
-extern u8 D_004CCA70[]; /* "xeno/vm/System" */
-extern u8 D_004CCA80[]; /* "xeno/util/Format" */
-extern u8 D_004CCA98[]; /* "xeno/util/Menu" */
-extern u8 D_004CCAA8[]; /* "xeno/util/Window" */
-extern u8 D_004CCAC0[]; /* "xeno/util/Input" */
-extern u8 D_004CCAD0[]; /* "xeno/util/Layout" */
-extern u8 D_004CCAE8[]; /* "xeno/util/Runtime" */
-extern u8 D_004CCB00[]; /* "xeno/util/Toolkit" */
-extern u8 D_004CCB18[]; /* "xeno/util/TCHParams" */
-extern u8 D_004CCB30[]; /* "xeno/util/Spline" */
-extern u8 D_004CCB48[]; /* "xeno/util/Vector4f" */
-extern u8 D_004CCB60[]; /* "xeno/Camera" */
-extern u8 D_004CCB70[]; /* "xeno/Effect" */
-extern u8 D_004CCB80[]; /* "xeno/Light" */
-extern u8 D_004CCB90[]; /* "xeno/Chr" */
-extern u8 D_004CCBA0[]; /* "xeno/Enepc" */
-extern u8 D_004CCBB0[]; /* "xeno/Unit" */
-extern u8 D_004CCBC0[]; /* "xeno/Uwamono" */
-extern u8 D_004CCBD0[]; /* "xeno/Stage" */
-extern u8 D_004CCBE0[]; /* "xeno/Scene" */
-extern u8 D_004CCBF0[]; /* "xeno/PlayControl" */
-extern u8 D_004CCC08[]; /* "xeno/Movie" */
+extern const u8 D_004CCA70[16]; /* "xeno/vm/System" */
+extern const u8 D_004CCA80[24]; /* "xeno/util/Format" */
+extern const u8 D_004CCA98[16]; /* "xeno/util/Menu" */
+extern const u8 D_004CCAA8[24]; /* "xeno/util/Window" */
+extern const u8 D_004CCAC0[16]; /* "xeno/util/Input" */
+extern const u8 D_004CCAD0[24]; /* "xeno/util/Layout" */
+extern const u8 D_004CCAE8[24]; /* "xeno/util/Runtime" */
+extern const u8 D_004CCB00[24]; /* "xeno/util/Toolkit" */
+extern const u8 D_004CCB18[24]; /* "xeno/util/TCHParams" */
+extern const u8 D_004CCB30[24]; /* "xeno/util/Spline" */
+extern const u8 D_004CCB48[24]; /* "xeno/util/Vector4f" */
+extern const u8 D_004CCB60[16]; /* "xeno/Camera" */
+extern const u8 D_004CCB70[16]; /* "xeno/Effect" */
+extern const u8 D_004CCB80[16]; /* "xeno/Light" */
+extern const u8 D_004CCB90[16]; /* "xeno/Chr" */
+extern const u8 D_004CCBA0[16]; /* "xeno/Enepc" */
+extern const u8 D_004CCBB0[16]; /* "xeno/Unit" */
+extern const u8 D_004CCBC0[16]; /* "xeno/Uwamono" */
+extern const u8 D_004CCBD0[16]; /* "xeno/Stage" */
+extern const u8 D_004CCBE0[16]; /* "xeno/Scene" */
+extern const u8 D_004CCBF0[24]; /* "xeno/PlayControl" */
+extern const u8 D_004CCC08[24]; /* "xeno/Movie" */
 
 /*
  * A loaded PDB class-search group: entry_count many PdbClassEntry records

@@ -1,6 +1,8 @@
 #ifndef INCLUDE_OV01_DATA_UNIT_ORG_GET_H
 #define INCLUDE_OV01_DATA_UNIT_ORG_GET_H
 
+#include "ov01/calc.h"
+
 /* dataUnitInitGet selects 0x34-byte records. MCamGetAtkRange and
  * MCamGetDefRange read signed halfwords at +0x10 and +0x12, respectively;
  * both ranges are stored in hundredths. Other fields remain unmodeled. */

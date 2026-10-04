@@ -1,6 +1,13 @@
 #include "common.h"
 #include "shared.h"
 #include "sef.h"
+#include "main/srs.h"
+
+/* Original-backed literal aliases; keep the accepted function bodies intact. */
+#define circle_angle_scale_literal (0.01745329238474369f)
+#define effect_scale_literal_0_1 (0.10000000149011612f)
+#define D_004D8318 (0.01745329238474369f)
+#define lit4_004d8354 (0.01745329238474369f)
 
 typedef struct SefActor {
     unsigned int flags;
@@ -27,7 +34,7 @@ typedef struct SefBattleActorTbl {
     int count;
     unsigned char unmodeled_d94[0x0c];
 } SefBattleActorTbl;
-extern SefBattleActorTbl _battleActor[];
+static SefBattleActorTbl _battleActor[1];
 
 #define SEF_LINE_DATA_RECORD_SIZE 0x820
 #define SEF_LINE_DATA_COUNT 0x80
@@ -67,20 +74,48 @@ typedef struct SefProgressState {
 float MMathCalcLength(float *vec);
 
 /*
- * The original routine keeps each literal-pool access as a distinct volatile
- * read across its quadrant branches; the pool addresses and load order are
- * evidenced by the function's original instructions.
+ * These constants are backed by the original literal-pool bytes. Repeated
+ * values stay repeated at separate use sites where the compiler emits them.
  */
-extern volatile const float D_004D82B4;
-extern volatile const float D_004D82B8;
-extern volatile const float D_004D82BC;
-extern volatile const float D_004D82C0;
-extern volatile const float D_004D82C4;
-extern volatile const float D_004D82C8;
-extern volatile const float D_004D82CC;
-extern volatile const float D_004D82D0;
-extern volatile const float D_004D82D4;
-extern float *atanTbl_0;
+/* Forward declarations for the TU-local atan2 constants below. */
+static volatile const float D_004D82B4;
+static volatile const float D_004D82B8;
+static volatile const float D_004D82BC;
+static volatile const float D_004D82C0;
+static volatile const float D_004D82C4;
+static volatile const float D_004D82C8;
+static volatile const float D_004D82CC;
+static volatile const float D_004D82D0;
+static volatile const float D_004D82D4;
+/* Original TU-local scheduler parent index (small-data word, initialized -1). */
+static int _parentLine = -1;
+
+/* Original local floating-point tuning values used by the scheduler assembly. */
+static float _gravity = 0.0f;
+static float _colision = 0.0f;
+static float _height = 0.0f;
+
+/* Original local direction flag. */
+static short _revDirZ = 0;
+
+/* The original TU-local zero flag is present as a two-byte small-data object. */
+static short _initialize = 0;
+
+/* Original global signal flags shared with the scheduler assembly in this TU. */
+short _hitFlag = 0;
+short _hitSignal = 0;
+short _seSignal = 0;
+
+/* Original global battle-mode flag; the current C callers set and clear it. */
+short _sefBattleMode = 0;
+
+/* The original local pointer stores the KSEG0 alias of the named table
+ * sefAtanTbl at 0x0040FAC0 (main symbol map: 0x0040FAC0, size 0x1004). */
+static float *atanTbl_0;
+
+/* Original TU-local scheduler-local index and effect-load queue. */
+static int _nowParentLocal;
+static int _sefLoadEftQue;
 
 float srsAtan2(float x, float y)
 {
@@ -261,8 +296,8 @@ void sefSearchMapperIndex(int effect_id) {
     sefSearchMapperIndex2(effect_id, number, category);
 }
 
-extern unsigned char _battleData[];
-extern unsigned char _ptAlloc[];
+static unsigned char _battleData[0x230];
+static unsigned char _ptAlloc[0xA0810];
 
 /*
  * sevInitPtAllocator (main:0x002e1580): clears the whole _ptAlloc particle
@@ -488,8 +523,10 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetWeaponPosition);
 
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefGetPoint);
 
-extern void sefGetPoint(Vector4 *position, unsigned char *source);
-extern unsigned char _zeroPos_004CBF00[];
+extern void sefGetPoint(Vector4 *position, const unsigned char *source);
+static const unsigned char _zeroPos_004CBF00[16] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80, 0x3f
+};
 
 /*
  * sefGetPosition (main:0x002e2240): fills `position`'s XYZ via sefGetPoint
@@ -497,7 +534,7 @@ extern unsigned char _zeroPos_004CBF00[];
  * then forces the resulting vector's W lane to 1.0f.
  */
 void sefGetPosition(Vector4 *position, unsigned char *source) {
-    unsigned char *point = source;
+    const unsigned char *point = source;
 
     if (point == 0) {
         point = _zeroPos_004CBF00;
@@ -713,10 +750,7 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefMoveParticle);
 #define SEF_LOCAL_OFFSET_Z       0x0f8
 #define SEF_PARENT_DIR_MATRIX    0x120
 
-extern unsigned char _battleData[];
 extern int _parentLine;
-extern int _nowParentLocal;
-extern unsigned char _ptAlloc[];
 /* _battleData + 0x200, still owned by the scaffold, so it keeps the original
  * object's own name for the address (docs/naming.md). The two callees below
  * materialise the same address differently, which is why both spellings are
@@ -1209,7 +1243,7 @@ int sefCreateScheduler(int effect_no, int value2, int value3, int value4, int va
     return sefCreateScheduler2(effect_no, value2, value3, value4, 0, value5);
 }
 
-extern int offset_2[];
+static const int offset_2[5] = {0, 0, 1, 2, 2};
 
 /*
  * sefGetSizeOffset (main:0x002e5920): returns the size-offset table entry at
@@ -1245,7 +1279,7 @@ int sefIsDeadSchduler(unsigned int scheduler_index)
 }
 
 extern short _revDirZ;
-extern int revEft_3[10];
+static int revEft_3[10] = {0x0b03, 0x0b04, 0x0afd, 0x0b07, 0x0b05, 0x0b32, 0x0b31, 0x0afb, 0x0afe, 0x0b06};
 
 /*
  * sefSetReverseDir (main:0x002e6380): when `category` falls in [0x18,0x20)
@@ -1403,10 +1437,8 @@ extern void scInitScript(void);
 extern void sdvInitSpecialWork(void);
 extern void sdvInitAmbient(void);
 extern void sresLoadCommonMemory(void);
-extern unsigned char _eftBuffer[];
-extern unsigned char _battlePrm[];
-extern int _sefLoadEftQue;
-extern short _initialize;
+static unsigned char _eftBuffer[0xD4800];
+static unsigned char _battlePrm[0x34];
 
 /*
  * sefInitEffect (main:0x002e6b60): the effect subsystem's one-time
@@ -1441,14 +1473,7 @@ typedef struct {
     void (*cfDrawCallback)(void);                    /* +0x38 */
 } SefRenderState;
 extern SefRenderState sRender;
-typedef struct {
-    unsigned char unmodeled_00[0x38];
-    int allocSize;                          /* +0x38 */
-    unsigned char unmodeled_3c[0x10c - 0x3c];
-    short pendingHandle;                      /* +0x10c */
-} SefMemRes;
-extern SefMemRes _srsMemRes;
-extern short _sefBattleMode;
+extern SrsMemRes _srsMemRes;
 extern void sdvInitAlters(void);
 extern void sefDestroyEffect(void);
 extern void sefDestroyEffectCf(void);
@@ -1470,9 +1495,9 @@ void sefInitEffectBattle(void)
 
     sRender.battleDrawCallback = sefDrawEffect2D;
     sRender.cfDrawCallback = 0;
-    if (_srsMemRes.allocSize == 0) {
-        _srsMemRes.pendingHandle = -1;
-        _srsMemRes.allocSize = (int)smAlloc(0x40000);
+    if (_srsMemRes.battleImage == 0) {
+        _srsMemRes.battleImageNo = -1;
+        _srsMemRes.battleImage = smAlloc(0x40000);
     }
 }
 
@@ -1499,7 +1524,6 @@ INCLUDE_ASM("asm/main/nonmatchings/sef", sefSetupEnemy);
 INCLUDE_ASM("asm/main/nonmatchings/sef", sefReleaseID);
 
 extern void sresLoadBattleData(unsigned char *battle_prm);
-extern unsigned char _battlePrm[];
 
 /*
  * sefSetupEffect (main:0x002e6fe0): loads battle effect resources into
@@ -1528,8 +1552,6 @@ extern void scDestroyScriptAll(void);
 extern void sdvDestroyAlters(void);
 extern void sdvInitAmbient(void);
 extern void sresFreeReloaderMemory(int reload_bgm);
-extern SefBattleActorTbl _battleActor[];
-extern int _sefLoadEftQue;
 void sefKillEffect(int effect_no);
 
 /*
@@ -1605,7 +1627,6 @@ void sefLoadEffect(int effect_no, int character_id)
 }
 
 extern int srsLeaveCdRead(void);
-extern int _sefLoadEftQue;
 
 int sefCheckLoad(void)
 {
@@ -1650,7 +1671,7 @@ void sefProgressEffect(int frame_count)
     }
 }
 
-extern Matrix4 _invView;
+Matrix4 _invView = {0};
 extern void svDrawScheduler(void);
 
 /*
@@ -1671,7 +1692,6 @@ void sefDrawEffect(void)
 }
 
 extern void svDrawScheduler3D(int flags);
-extern short _initialize;
 
 /*
  * sefDrawEffect3D (main:0x002e7220): while `_initialize` is set and
@@ -2156,3 +2176,234 @@ void sefLerpIVectorB(void *first, Vector4 *dest, float factor)
         : "$8", "$9", "$10", "$11", "memory"
     );
 }
+
+/* These values remain mutable objects so the recovered callers use storage. */
+static float *atanTbl_0 = (float *)0x2040FAC0u;
+
+static volatile const float D_004D82B4 = 1.5707963705062866f;
+static volatile const float D_004D82B8 = -1.5707963705062866f;
+static volatile const float D_004D82BC = 3.1415927410125732f;
+static volatile const float D_004D82C0 = 3.1415927410125732f;
+static volatile const float D_004D82C4 = 3.1415927410125732f;
+static volatile const float D_004D82C8 = 1.5707963705062866f;
+static volatile const float D_004D82CC = 1.5707963705062866f;
+static volatile const float D_004D82D0 = 1.5707963705062866f;
+static volatile const float D_004D82D4 = 4.71238899230957f;
+
+
+
+const char D_004CBFC0[16] = "boss_033";
+
+const char D_004CBFD0[16] = "boss_032";
+
+const char D_004CBFE0[16] = "boss_031";
+
+const char D_004CBFF0[16] = "boss_030";
+
+const char D_004CC000[16] = "boss_029";
+
+const char D_004CC010[16] = "boss_028";
+
+const char D_004CC020[16] = "boss_027";
+
+const char D_004CC030[16] = "boss_026";
+
+const char D_004CC040[16] = "boss_025";
+
+const char D_004CC050[16] = "boss_024";
+
+const char D_004CC060[16] = "boss_023";
+
+const char D_004CC070[16] = "boss_022";
+
+const char D_004CC080[16] = "boss_021";
+
+const char D_004CC090[16] = "boss_020";
+
+const char D_004CC0A0[16] = "boss_019";
+
+const char D_004CC0B0[16] = "boss_018";
+
+const char D_004CC0C0[16] = "boss_017";
+
+const char D_004CC0D0[16] = "boss_016";
+
+const char D_004CC0E0[16] = "boss_015";
+
+const char D_004CC0F0[16] = "boss_014";
+
+const char D_004CC100[16] = "boss_013";
+
+const char D_004CC110[16] = "boss_012";
+
+const char D_004CC120[16] = "boss_011";
+
+const char D_004CC130[16] = "boss_010";
+
+const char D_004CC140[16] = "boss_009";
+
+const char D_004CC150[16] = "boss_008";
+
+const char D_004CC160[16] = "boss_007";
+
+const char D_004CC170[16] = "boss_006";
+
+const char D_004CC180[16] = "boss_005";
+
+const char D_004CC190[16] = "boss_004";
+
+const char D_004CC1A0[16] = "boss_003";
+
+const char D_004CC1B0[16] = "boss_002";
+
+const char D_004CC1C0[16] = "boss_001";
+
+const char D_004CC1D0[16] = "utso_007";
+
+const char D_004CC1E0[16] = "utso_006";
+
+const char D_004CC1F0[16] = "utso_005";
+
+const char D_004CC200[16] = "utso_004";
+
+const char D_004CC210[16] = "utso_003";
+
+const char D_004CC220[16] = "utso_002";
+
+const char D_004CC230[16] = "utso_001";
+
+const char D_004CC240[16] = "utro_007";
+
+const char D_004CC250[16] = "utro_006";
+
+const char D_004CC260[16] = "utro_005";
+
+const char D_004CC270[16] = "utro_004";
+
+const char D_004CC280[16] = "utro_003";
+
+const char D_004CC290[16] = "utro_002";
+
+const char D_004CC2A0[16] = "utro_001";
+
+const char D_004CC2B0[16] = "utre_006";
+
+const char D_004CC2C0[16] = "utre_005";
+
+const char D_004CC2D0[16] = "utre_004";
+
+const char D_004CC2E0[16] = "utre_003";
+
+const char D_004CC2F0[16] = "utre_002";
+
+const char D_004CC300[16] = "utre_001";
+
+const char D_004CC310[16] = "utma_014";
+
+const char D_004CC320[16] = "utma_013";
+
+const char D_004CC330[16] = "utma_012";
+
+const char D_004CC340[16] = "utma_011";
+
+const char D_004CC350[16] = "utma_010";
+
+const char D_004CC360[16] = "utma_009";
+
+const char D_004CC370[16] = "utma_008";
+
+const char D_004CC380[16] = "utma_007";
+
+const char D_004CC390[16] = "utma_006";
+
+const char D_004CC3A0[16] = "utma_005";
+
+const char D_004CC3B0[16] = "utma_004";
+
+const char D_004CC3C0[16] = "utma_003";
+
+const char D_004CC3D0[16] = "utma_002";
+
+const char D_004CC3E0[16] = "utma_001";
+
+const char D_004CC3F0[16] = "feso_004";
+
+const char D_004CC400[16] = "feso_003";
+
+const char D_004CC410[16] = "feso_002";
+
+const char D_004CC420[16] = "feso_001";
+
+const char D_004CC430[16] = "fero_001";
+
+const char D_004CC440[16] = "fere_003";
+
+const char D_004CC450[16] = "fere_002";
+
+const char D_004CC460[16] = "fere_001";
+
+const char D_004CC470[16] = "fema_006";
+
+const char D_004CC480[16] = "fema_005";
+
+const char D_004CC490[16] = "fema_004";
+
+const char D_004CC4A0[16] = "fema_003";
+
+const char D_004CC4B0[16] = "fema_002";
+
+const char D_004CC4C0[16] = "fema_001";
+
+const char D_004CC4D0[16] = "guno_114";
+
+const char D_004CC4E0[16] = "guno_025";
+
+const char D_004CC4F0[16] = "guno_024";
+
+const char D_004CC500[16] = "guno_023";
+
+const char D_004CC510[16] = "guno_022";
+
+const char D_004CC520[16] = "guno_021";
+
+const char D_004CC530[16] = "guno_020";
+
+const char D_004CC540[16] = "guno_019";
+
+const char D_004CC550[16] = "guno_018";
+
+const char D_004CC560[16] = "guno_017";
+
+const char D_004CC570[16] = "guno_016";
+
+const char D_004CC580[16] = "guno_015";
+
+const char D_004CC590[16] = "guno_014";
+
+const char D_004CC5A0[16] = "guno_013";
+
+const char D_004CC5B0[16] = "guno_012";
+
+const char D_004CC5C0[16] = "guno_011";
+
+const char D_004CC5D0[16] = "guno_010";
+
+const char D_004CC5E0[16] = "guno_009";
+
+const char D_004CC5F0[16] = "guno_008";
+
+const char D_004CC600[16] = "guno_007";
+
+const char D_004CC610[16] = "guno_006";
+
+const char D_004CC620[16] = "guno_005";
+
+const char D_004CC630[16] = "guno_004";
+
+const char D_004CC640[16] = "guno_003";
+
+const char D_004CC650[16] = "guno_002";
+
+const char D_004CC660[16] = "guno_001";
+
+const char D_004CC670[16] = "catherin";

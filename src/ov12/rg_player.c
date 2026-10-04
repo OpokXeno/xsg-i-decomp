@@ -23,10 +23,10 @@ extern void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
  */
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-extern const char D_00A52740[];
-extern const char D_00A52708[];
-extern const char D_00A526F8[];
-extern const char D_00A52720[];
+const char D_00A526F8[16] = "pDat != NIL";
+const char D_00A52708[24] = "../rg_player.euc.c";
+const char D_00A52720[32] = "pPlayer != NIL && pDat != NIL";
+const char D_00A52740[16] = "pPlayer != NIL";
 
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);

@@ -16,6 +16,36 @@ extern CmdTecparaValue *cmdTecparaSub(int tec, short category, short *valueType)
 
 extern void unitCmdListSet(ObjectTask *unit, int *count);
 
+/* Sixteen 0x24-byte process records, as walked by the execution loops. */
+static ThinkProcess processBuf[16];
+static unsigned char context[0x1D0];
+static int pDataTop;
+static int pContext;
+static int pThinkTop;
+static MonsTblEntry *pMonsSetTop;
+static ObjectTask *pThinkUnit;
+static CamTopEntry *pCamTop;
+static short *pCamSetTop;
+static short camTblIdx;
+static int cmdPutFlag;
+static int camMode;
+static int persMode;
+static int bankMode;
+MessageTask *pMsgObj = 0;
+
+const char D_00A46068[32] = "thinkProcessExecSub: err -> %d\n";
+const char D_00A460A0[24] = "** camInit ** %X\n";
+const char D_00A46148[24] = "** thinkInit ** %X\n";
+const char D_00A46160[32] = "** thinkTurnStart ** %X\n";
+const char D_00A46180[24] = "** thinkTurnEnd ** %X\n";
+const char D_00A46198[32] = "** think Atk (%d) ** %X\n";
+const char D_00A461B8[32] = "** think Dmg (%d) ** %X\n";
+const char D_00A461E8[16] = "** reg err %d\n";
+extern const char D_00A46300[];
+extern const char D_00A46308[];
+extern const char D_00A46468[];
+extern const char D_00A46578[];
+
 void thinkSysInit(void)
 {
     memset(processBuf, 0, sizeof(processBuf));
@@ -61,13 +91,13 @@ int thinkProcessChk(int slot)
     if ((unsigned int)(slot - 1) >= 16) {
         return 0;
     }
-    proc = (ThinkProcess *)(processBuf + (slot - 1) * 0x24);
+    proc = &processBuf[slot - 1];
     return proc->dataTop != 0;
 }
 
 int thinkProcessKindChk(int kind)
 {
-    ThinkProcess *proc = (ThinkProcess *)processBuf;
+    ThinkProcess *proc = processBuf;
     int count = 0;
     int i;
 
@@ -75,7 +105,7 @@ int thinkProcessKindChk(int kind)
         if (proc->dataTop != 0 && proc->kind == kind) {
             count++;
         }
-        proc = (ThinkProcess *)((unsigned char *)proc + 0x24);
+        proc++;
     }
     return count;
 }
@@ -88,12 +118,12 @@ int thinkProcessExec(void)
     int i;
 
     dataVPadSet(0);
-    proc = (ThinkProcess *)processBuf;
+    proc = processBuf;
     for (i = 0; i < 16; i++) {
         if (proc->dataTop != 0) {
             thinkProcessExecSub(proc);
         }
-        proc = (ThinkProcess *)((unsigned char *)proc + 0x24);
+        proc++;
     }
     return 1;
 }
@@ -142,7 +172,7 @@ int thinkMonsTblGet(int monsSetNo)
     return thinkAdrGet(pMonsSetTop[monsSetNo].script_offset);
 }
 
-extern short *pCamSetTop;
+static short *pCamSetTop;
 
 int thinkCamTblNumGet(void)
 {
@@ -161,7 +191,9 @@ int thinkCamTblNumGet(void)
 extern int camExec(short scriptOffset);
 extern int cameraFlagGet(void);
 extern const char D_00A460A0[];
-extern unsigned char D_00A59AF8;
+/* The original symbol is only passed as an opaque context address here; its
+ * storage extent and source type are not established by the available use. */
+extern unsigned char D_00A59AF8[];
 
 int camInitExec(void)
 {
@@ -446,6 +478,11 @@ int cmdBra(ThinkProcess *proc)
     }
     return 0;
 }
+
+const char D_00A46300[8] = "@";
+const char D_00A46308[16] = "R%02d = %d\n";
+const char D_00A46468[32] = "** COUNTER BOOST CHR=%d\n";
+const char D_00A46578[24] = "** unit No err -> %d\n";
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdOngo);
 
@@ -875,8 +912,8 @@ int cmdLightDir(ThinkProcess *proc)
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", mcamPtrGet);
 
 struct MpersParams;
-extern struct MpersParams mcamPers;
-extern struct MpersParams mcamPersMove;
+static struct MpersParams mcamPers;
+static struct MpersParams mcamPersMove;
 
 struct MpersParams *mpersPtrGet(void)
 {
@@ -884,8 +921,8 @@ struct MpersParams *mpersPtrGet(void)
 }
 
 struct MbankParams;
-extern struct MbankParams mcamBank;
-extern struct MbankParams mcamBankMove;
+static struct MbankParams mcamBank;
+static struct MbankParams mcamBankMove;
 
 struct MbankParams *mbankPtrGet(void)
 {
@@ -1028,7 +1065,11 @@ INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamCoordGet);
 typedef struct MbankParams {
     unsigned char unmodeled_0[0xA0];
     float angle;                      /* +0xA0: bank angle in radians */
+    unsigned char unmodeled_a4[0x0C];
 } MbankParams;
+
+static MbankParams mcamBank;
+static MbankParams mcamBankMove;
 
 extern MbankParams *mbankPtrGet(void);
 
@@ -1053,7 +1094,11 @@ int cmdCamBank(ThinkProcess *proc)
 typedef struct MpersParams {
     unsigned char unmodeled_0[0xA4];
     float value;                      /* +0xA4: tenths-scaled perspective value */
+    unsigned char unmodeled_a8[0x08];
 } MpersParams;
+
+static MpersParams mcamPers;
+static MpersParams mcamPersMove;
 
 extern MpersParams *mpersPtrGet(void);
 

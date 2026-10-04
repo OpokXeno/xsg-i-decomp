@@ -39,15 +39,20 @@ int MEfCreate_SOLB(MEfObjRecord *work)
 }
 
 extern void MEfGetActorMatrix(Matrix4 *matrix, u32 actor, u32 coord);
-extern Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, Vector4 *vector);
+extern Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector);
 extern Matrix4 *MMathRotateMatrixX(Matrix4 *out, Matrix4 *matrix, float angle);
 extern Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle);
 extern Matrix4 *MMathRotateMatrixZ(Matrix4 *out, Matrix4 *matrix, float angle);
 extern float srsAtan2(float deltaX, float deltaZ);
-extern Vector4 offset_0[SOLB_CONTROL_POINTS];
-
+static const int timetbl[4] = { 5, 6, 12, 23 };
 static void makePath(void *work)
 {
+    static const Vector4 offset[SOLB_CONTROL_POINTS] = {
+        { 0.0f, 0.0f, 0.0f, 1.0f },
+        { 1.7f, 0.0f, 0.5f, 1.0f },
+        { 2.0f, 0.0f, 3.6f, 1.0f },
+        { 2.0f, 0.0f, 20.0f, 1.0f }
+    };
     SolbState *state = (SolbState *)work;
     Vector4 direction;
     Matrix4 matrix;
@@ -95,7 +100,7 @@ static void makePath(void *work)
     MMathRotateMatrixZ(&headingMatrix, (Matrix4 *)0, heading);
 
     for (i = 0; i < SOLB_CONTROL_POINTS; i++) {
-        MMathApplyMatrix(&direction, &headingMatrix, &offset_0[i]);
+        MMathApplyMatrix(&direction, &headingMatrix, &offset[i]);
         MMathApplyMatrix(&direction, &pitchMatrix, &direction);
         MMathApplyMatrix(&direction, &yawMatrix, &direction);
         __asm__ __volatile__("lqc2 $vf1, 0(%0)" : : "r"(&direction) : "memory");

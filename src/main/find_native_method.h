@@ -30,6 +30,7 @@ typedef struct ClassEntry {
     u16 staticFieldCount; /* +0x32: zeroed for a class newClass has just made */
     u8 unmodeled_34[0x4];
     int instanceSize;    /* +0x38: xmalloc size for a new instance of this class */
+    u8 unmodeled_3c[4]; /* Remaining bytes of the 0x40-byte class allocation. */
 } ClassEntry;
 
 /*

@@ -5,6 +5,39 @@
 #include "shared.h"
 #include "umn_event_text_symbol_check.h"
 
+const char D_00A13620[] = "data\\endou\\umn\\histree.bin";
+const char D_00A13640[] = "data\\umn\\header.lst";
+static unsigned char umn_attach_tbl[0x45] = {
+    1, 1, 1, 1, 2, 1, 1, 3, 1, 2, 2, 5,
+    2, 6, 5, 2, 10, 5, 4, 4, 1, 4, 6, 1,
+    2, 23, 2, 3, 20, 1, 4, 4, 1, 4, 8, 1,
+    1, 4, 1, 4, 72, 1, 4, 48, 1, 4, 24, 1,
+    4, 60, 1, 4, 40, 1, 1, 5, 1, 3, 22, 1,
+    4, 10, 2, 4, 20, 2, 3, 21, 1
+};
+static unsigned char event_tbl[18] = {
+    0x00, 0x09, 0x06, 0x05, 0x11, 0x16, 0x1d, 0x29, 0x2c,
+    0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x43, 0x44, 0x47, 0x4d
+};
+static EventEndMail event_end_mail = { 0x1d, 0x1e };
+static unsigned char kosmos_special_tbl[4][4] = {
+    { 0x29, 0x37, 0x00, 0x00 },
+    { 0x42, 0x38, 0x00, 0x00 },
+    { 0x46, 0x39, 0x3a, 0x00 },
+    { 0x4a, 0x3b, 0x00, 0x00 }
+};
+static signed char compulsion_down_load_tbl[13] = {
+    0x09, 0x11, 0x26, 0x27, 0x2d, 0x2e, 0x35,
+    0x36, 0x37, 0x39, 0x3a, 0x44, 0x4d
+};
+int UmnEventTextMakeWork = 0;
+char *uet_text_buf = 0;
+int uet_flag = 0;
+int uet_file_end = 0;
+int *UmnHistoryTreeBuf = 0;
+UmnMailHeader *UmnMailHeaderBuf = 0;
+char *umn_text = 0;
+
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextSymbolCheck);
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_event_text_symbol_check", UmnEventTextCharCheck);
@@ -310,14 +343,15 @@ char *UmnPluginTextGet(unsigned int plugin_id)
 
 int UmnTextLoad(int work, int mode)
 {
+    static char f_name[] = "data\\endou\\umn\\umntxt.bin";
     int aligned = (work + 0xF) & ~0xF;
     int next = aligned + 0x800;
 
     umn_text = (char *)aligned;
     if (mode == 0) {
-        xglCdReadFile(f_name_0, (void *)aligned, 0, 1);
+        xglCdReadFile(f_name, (void *)aligned, 0, 1);
     } else {
-        MenuLoadFile(f_name_0, (void *)aligned);
+        MenuLoadFile(f_name, (void *)aligned);
     }
     return next;
 }

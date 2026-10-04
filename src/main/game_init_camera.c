@@ -2,10 +2,11 @@
 #include "shared.h"
 #include "main/xgl_studio.h"
 
-extern int dbCX;
-extern int dbCY;
-extern int dbCH;
-extern int dbMODE;
+static int dbCX = 0;
+static int dbCY = 0;
+static int dbCZ = 0x00FFFFFF;
+static int dbCH = 24;
+static int dbMODE = 0;
 
 extern void xglLightSetDefault(StudioLight *light);
 
@@ -83,8 +84,6 @@ void DB_incPos(int x, int y)
     dbCX += x;
     dbCY += y;
 }
-
-extern int dbCZ;
 
 extern int xglFontGetFlags(void);
 

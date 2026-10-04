@@ -6,25 +6,32 @@
 #include "xrg_actor.h"
 #include "ov12/rg_draw.h"
 
+const char D_00A587B0[48] = "_ActJntToAccID_sub joint=%d error(%s:%d)";
+const char D_00A587E0[24] = "../xrg_actor.euc.c";
+const char D_00A587F8[16] = "pXenoAct != NIL";
+const char D_00A58978[40] = "joint id error (jnt:%d elm:%d)\nat %s %d";
+const char D_00A589A0[24] = "pJnt->numElement > 1";
+/* The two diagnostics share a 48-byte pool, with the second starting at +16. */
+const struct {
+    char actorNotNil[16];
+    char parentMatrixList[32];
+} D_00A589C8 = {
+    "pActor != NIL",
+    "parent mat list nul (char %d)"
+};
+const char D_00A58A30[32] = "pActor != NIL && pChild != NIL";
+const char D_00A58A50[72] = "RG_ACTOR_JNT_LEFT_HAND <= (eJntID) && (eJntID) < RG_ACTOR_JNT_MAX";
+const char D_00A58AC8[24] = "pSrcActor != NIL";
+const char D_00A58AE0[32] = "pActor->m_pXenoAct != NIL";
+const char D_00A58B00[16] = "pEss != NIL";
+const char D_00A58B40[16] = "pDup != NIL";
+const char D_00A58B50[24] = "pNewParent != NIL";
+const char D_00A58BC0[32] = "cannot delete %p from %p\n";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-/*
- * These are external file-backed witnesses, not candidate-emitted data; the
- * scaffold's rodata owns this window (config/tu/ov12/tu080.json), so each
- * keeps its splat name.
- *
- * ov12:0x00a589c8 "pActor != NIL"
- * ov12:0x00a587f8 "pXenoAct != NIL"
- * ov12:0x00a587e0 "../xrg_actor.euc.c"
- * ov12:0x00a58b40 "pDup != NIL"
- * ov12:0x00a58b50 "pNewParent != NIL"
- */
-extern const char D_00A589C8[];
-extern const char D_00A587F8[];
-extern const char D_00A587E0[];
-extern const char D_00A58B40[];
-extern const char D_00A58B50[];
+/* Assertion and source-file strings retain their scaffold names. */
 
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
@@ -46,8 +53,10 @@ extern int RgBattleCommonDataGetWeaponMot(void *battleCommonData);
 
 /* The 21-entry table _ActJntToAccID_sub indexes; s_aJntIDToAccID_0
  * (config/symbols/ov12.txt) is 0x54 bytes, i.e. 21 ints. */
-extern const int s_aJntIDToAccID_0[21];
-extern const char D_00A587B0[]; /* "_ActJntToAccID_sub joint=%d error(%s:%d)" */
+static int s_aJntIDToAccID_0[21] = {
+    0x18, 0x20, 0x19, 0x21, 0x1A, 0x22, 0x1B, 0x23,
+    0, 1, 2, 3, 4, 5, 6, 7, 0x11, 0x12, 0x0F, 0x10, 0x17
+};
 extern void RgError(const char *message, const char *source_file, int line, ...);
 
 int _ActJntToAccID_sub(int jntID, const char *sourceFile, int line)
@@ -113,8 +122,6 @@ typedef struct SkeMani {
 extern void RgWarn(const char *format, const char *source_file, int line, ...);
 extern void _SkeManiGet(SkeMani *mani, RgMatrix matrix);
 extern void _SkeManiSet(SkeMani *mani, RgMatrix matrix);
-extern const char D_00A58978[]; /* "joint id error (jnt:%d elm:%d)\nat %s %d" */
-extern const char D_00A589A0[]; /* "pJnt->numElement > 1" */
 
 int _InitSkeMani(SkeMani *pMani, XenoAct *pXenoAct, int elmID,
                  const char *sourceFile, int line)
@@ -199,7 +206,7 @@ extern RgDebugFlags *InstanceOfRgDebugFlags(void);
 extern void nmlModelSetFogCol(float *);
 extern void nmlModelSetFogDist(float, float, float, float);
 extern void nmlModelSetRenderLevel(int);
-extern RgFog *s_pUseFog;
+RgFog *s_pUseFog = 0;
 
 void _ActorDrawFunction(XenoAct *pXenoAct)
 {
@@ -221,7 +228,7 @@ void _ActorDrawFunction(XenoAct *pXenoAct)
     }
 }
 
-extern RgFog *s_pUseFog; /* ov12.txt size 0x4: the fog block _ActorDrawFunction reads back */
+/* The initial current-fog block is an explicitly initialized null pointer. */
 extern int ACT_modelDraw(XenoAct *pXenoAct);
 
 void _DrawActor(XrgActor *pActor, void *pStudio)
@@ -229,7 +236,7 @@ void _DrawActor(XrgActor *pActor, void *pStudio)
     RgDrawStudio *pDrawStudio;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 527);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 527);
     }
     pDrawStudio = pStudio;
     s_pUseFog = pDrawStudio->m_pFog;
@@ -253,7 +260,6 @@ extern void ACT_allocMatrix(XenoAct *pXenoAct, int flags);
 extern void ACT_setArms(XenoAct *pChildXenoAct, XenoAct *pParentXenoAct,
                         int accID, int flags);
 extern void ACT_setModelWrapper(XenoAct *pXenoAct, int flags);
-extern const char D_00A58A30[]; /* "pActor != NIL && pChild != NIL" */
 
 /*
  * The joint-ID bounds RG_ACTOR_JNT_LEFT_HAND/RG_ACTOR_JNT_MAX, also used by
@@ -262,7 +268,6 @@ extern const char D_00A58A30[]; /* "pActor != NIL && pChild != NIL" */
 #define RG_ACTOR_JNT_LEFT_HAND 0
 #define RG_ACTOR_JNT_MAX 21
 
-extern const char D_00A58A50[]; /* "RG_ACTOR_JNT_LEFT_HAND <= (eJntID) && (eJntID) < RG_ACTOR_JNT_MAX" */
 
 void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
@@ -317,7 +322,6 @@ extern RgFileSysData *RgFileSysDup(RgFileSys *pSys, const char *pszName,
                                    const char *pszRoot);
 extern RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
                                     const char *pszRoot);
-extern const char D_00A58AC8[]; /* "pSrcActor != NIL" */
 
 void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
 {
@@ -330,7 +334,7 @@ void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
     pAuxFile = 0;
     pJointFile = 0;
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 718);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 718);
     }
     if (pSrcActor == 0) {
         assert_prog(D_00A58AC8, D_00A587E0, 719);
@@ -378,7 +382,7 @@ void _SetBattleCommonWepMotion(XrgActor *pActor)
 
     weaponMotion = RgBattleCommonDataGetWeaponMot(InstanceOfRgBattleCommonData());
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 776);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 776);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
@@ -391,14 +395,13 @@ void _SetBattleCommonWepMotion(XrgActor *pActor)
 }
 
 extern void xglLightSetDefault(StudioLight *light);
-extern const char D_00A58AE0[]; /* "pActor->m_pXenoAct != NIL" */
 
 void _InitAfterLoadXenoActor(XrgActor *pActor)
 {
     XenoAct *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 790);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 790);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct == 0) {
@@ -427,7 +430,7 @@ void XrgActorSetLightCost(XrgActor *pActor)
     XenoAct *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 841);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 841);
     }
     pXenoAct = pActor->pXenoAct;
     pXenoAct->lightCost[0] = 9;
@@ -441,7 +444,7 @@ void XrgActorSetDropWeapon(XrgActor *pActor)
     XenoAct *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 859);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 859);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
@@ -452,7 +455,7 @@ void XrgActorSetDropWeapon(XrgActor *pActor)
 void XrgActorSetPlayMotionComaStep(XrgActor *pActor, int step)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 872);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 872);
     }
     pActor->motionComaStep = step;
     pActor->motionComaStepAccum = 0.0f;
@@ -468,7 +471,7 @@ XrgActor *CreateXrgActor(int actorID)
 
     pActor = RgHeapAlloc(InstanceOfRgHeap(), XRG_ACTOR_SIZE, D_00A587E0, 957);
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 958);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 958);
     }
     _LoadXenoActor(pActor, actorID);
     return pActor;
@@ -497,7 +500,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", DisposeXrgActor);
 void XrgActorSetLocal(XrgActor *pActor, const RgMatrix matrix)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 999);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 999);
     }
     XrgCopyMatrix(pActor->local, matrix);
 }
@@ -507,7 +510,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorSetLight);
 void XrgActorSetMotion(XrgActor *pActor, int motion)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1030);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1030);
     }
     if (motion != -1) {
         _SetMotUseXenoActor(pActor, motion);
@@ -517,7 +520,7 @@ void XrgActorSetMotion(XrgActor *pActor, int motion)
 void XrgActorSetSmoothPlay(XrgActor *pActor, int smoothPlay)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1042);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1042);
     }
     pActor->smoothPlay = smoothPlay;
 }
@@ -525,7 +528,7 @@ void XrgActorSetSmoothPlay(XrgActor *pActor, int smoothPlay)
 void XrgActorSetLoopPlay(XrgActor *pActor, int loopPlay)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1050);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1050);
     }
     pActor->loopPlay = loopPlay;
 }
@@ -533,7 +536,7 @@ void XrgActorSetLoopPlay(XrgActor *pActor, int loopPlay)
 void XrgActorDeriveMotion(XrgActor *pActor, XrgActor *pSrcActor)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1059);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1059);
     }
     if (pSrcActor == 0) {
         assert_prog(D_00A58AC8, D_00A587E0, 1060);
@@ -549,7 +552,7 @@ void XrgActorDeriveMotion(XrgActor *pActor, XrgActor *pSrcActor)
 void XrgActorSetMotionFrame(XrgActor *pActor, float frame)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1072);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1072);
     }
     if ((pActor->pXenoAct != 0) && (pActor->motionID != -1)) {
         if (pActor->parent == 0) {
@@ -564,7 +567,7 @@ void XrgActorSetDraw(XrgActor *pActor, int draw)
     XenoAct *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1084);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1084);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
@@ -582,7 +585,7 @@ void XrgActorSetTransparent(XrgActor *pActor, float transparency)
     XenoAct *pXenoAct;
 
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1100);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1100);
     }
     pXenoAct = pActor->pXenoAct;
     if (pXenoAct != 0) {
@@ -596,7 +599,7 @@ void XrgActorSetTransparent(XrgActor *pActor, float transparency)
 int XrgActorIsEndOfMotion(XrgActor *pActor)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1118);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1118);
     }
     return _IsEndOfMotUseXenoActor(pActor);
 }
@@ -608,7 +611,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorGetPlayingMotTime);
 void XrgActorGetLocal(XrgActor *pActor, RgMatrix matrix)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1149);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1149);
     }
     XrgCopyMatrix(matrix, pActor->local);
 }
@@ -618,7 +621,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorGetJointLocal);
 int XrgActorGetAttachedJoint(XrgActor *pActor)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1208);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1208);
     }
     if (pActor->parent == 0) {
         return -1;
@@ -633,7 +636,7 @@ extern void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild,
 void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
     if (pParent == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1222);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1222);
     }
     if (!(RG_ACTOR_JNT_LEFT_HAND <= eJntID && eJntID < RG_ACTOR_JNT_MAX)) {
         assert_prog(D_00A58A50, D_00A587E0, 1223);
@@ -651,13 +654,12 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorCheckPakaPaka);
 extern int RgVectorRemove(void *vector, void *element, const char *source_file,
                           int line);
 extern void RgWarn(const char *format, const char *source_file, int line, ...);
-extern const char D_00A58BC0[];
 extern void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild);
 
 void XrgActorDettachChild(XrgActor *pParent, XrgActor *pChild)
 {
     if (pParent == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1259);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1259);
     }
     if (pChild != 0) {
         if (RgVectorRemove(pParent->children, pChild, D_00A587E0, 1261) == 0) {
@@ -686,12 +688,11 @@ static void _PassTime_00A45D30(XrgActor *pActor, float dt);
 void XrgActorPassTime(XrgActor *pActor, float dt)
 {
     if (pActor == 0) {
-        assert_prog(D_00A589C8, D_00A587E0, 1285);
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1285);
     }
     _PassTime_00A45D30(pActor, dt);
 }
 
-extern const char D_00A58B00[];
 
 void InitXrgActorEssence(XrgActorEssence *pEss, int actorID)
 {
@@ -705,12 +706,34 @@ void InitXrgActorEssence(XrgActorEssence *pEss, int actorID)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorEssenceGetFileName);
 
-extern RawJntData s_aRawJntData[12];
+/* Each record begins with its actor/joint key, followed by the original
+ * signed joint-remapping payload. The payload uses -1 as its list terminator.
+ */
+typedef struct XrgRawJntData {
+    int id;
+    int jntID;
+    int jointMap[34];
+} XrgRawJntData;
 
-RawJntData *_FindRawJntData(int id, int jntID)
+XrgRawJntData s_aRawJntData[12] = {
+    {0, 0, {53, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 80, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53, 53}},
+    {0, 1, {67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 83, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 67, 67}},
+    {1, 0, {128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 138, 138}},
+    {1, 1, {139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 149}},
+    {3, 0, {73, 76, 119, 120, 121, 122, 123, 124, 125, 126, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126, 126}},
+    {3, 1, {87, 90, 127, 128, 129, 130, 131, 132, 133, 134, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 134, 134}},
+    {2, 0, {50, 53, 54, 55, 56, 57, 58, 59, 77, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 49, 77}},
+    {2, 1, {65, 68, 69, 70, 71, 72, 73, 74, 80, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 80}},
+    {4, 0, {40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 40, 40}},
+    {4, 1, {59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 59, 59}},
+    {5, 0, {118, 119, 120, 121, 122, 123, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 119, 119}},
+    {5, 1, {125, 126, 127, 128, 129, 130, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126, 126}}
+};
+
+XrgRawJntData *_FindRawJntData(int id, int jntID)
 {
     unsigned int i;
-    RawJntData *entry;
+    XrgRawJntData *entry;
 
     entry = s_aRawJntData;
     for (i = 0; i < 12; i++, entry++) {

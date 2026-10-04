@@ -6,29 +6,15 @@
 #include "ov01/data_unit_org_get.h"
 
 extern void MOutputDebugStringWarn(const char *format, ...);
-extern const char zero_duration_message[];
-extern const char invalid_interpolation_message[];
-extern const char D_00A50EF0[];
-extern const char D_00A51000[];
-extern const char D_00A51028[];
+/* The message body after the ASCII prefix is encoded in EUC-JP. */
+const char D_00A50EF0[48] =
+    "MCamReleaseControl: \xA5\xAB\xA5\xE1\xA5\xE9\xA4\xCF\xC0\xA9\xB8\xE6\xC3\xE6\xA4\xC7\xA4\xCF\xA4\xCA\xA4\xA4";
+const char D_00A51000[40] = "MCamGetAtkRange: Invalid ID (%d)";
+const char D_00A51028[40] = "MCamGetDefRange: Invalid ID (%d)";
+const char zero_duration_message[40] = "MCamMoveProc_CalcRatio: d == 0 (IP:%d)";
+const char invalid_interpolation_message[40] = "MCamMoveProc_CalcRatio: Invalid IPTYPE";
 
 extern void bcopy(const void *source, void *destination, unsigned int count);
-/*
- * .bss for this TU is still scaffold-owned (config/tu-build.json
- * data_ownership); the scaffold defines it under the original ELF's own
- * local symbol names, imported through config/symbols/ov01.txt.
- */
-extern void *sysCam;
-extern unsigned char sysCamBuff[0x5F0];
-extern int camFlags;
-extern unsigned char camParams[0x5B0];
-extern float D_00A5B220;
-extern float D_00A5B224;
-
-#define CAM_FLAG_ACTIVE 0x1
-#define CAM_FLAG_DUMP_DISABLED 0x10
-#define CAM_SHAKE_BIT 12
-
 /*
  * Linear interpolation state shared by the per-parameter MoveProc callbacks
  * (mode/duration/elapsed feed MCamMoveProc_CalcRatio; start/end/current hold
@@ -42,6 +28,37 @@ typedef struct MCamMoveState {
     float end;
     float current;
 } MCamMoveState;
+
+/*
+ * MCamInit clears this complete 0x5B0-byte camera-parameter store. The
+ * recovered float and perspective-move views are interior fields; the other
+ * bytes remain part of the live store but their individual meanings are not
+ * recovered yet.
+ */
+typedef struct MCamParameterStorage {
+    unsigned char unmodeled_000[0x1A0];
+    float actorLength[2];
+    unsigned char unmodeled_1A8[0x4C];
+    float perspectiveStart;
+    unsigned char unmodeled_1F8[0x380];
+    MCamMoveState perspectiveMove;
+    unsigned char unmodeled_590[0x20];
+} MCamParameterStorage;
+
+static void *sysCam;
+/* MCamTakeControl saves the StudioCamera returned by xglStudioGetCamera2. */
+static StudioCamera sysCamBuff;
+static int camFlags;
+static MCamParameterStorage camParams;
+
+/* Original local labels are interior views in camParams, not extra storage. */
+#define D_00A5B220 (camParams.actorLength[0])
+#define D_00A5B224 (camParams.actorLength[1])
+#define D_00A5B5F8 (camParams.perspectiveMove)
+
+#define CAM_FLAG_ACTIVE 0x1
+#define CAM_FLAG_DUMP_DISABLED 0x10
+#define CAM_SHAKE_BIT 12
 
 void *MCamGetSysCam(void)
 {
@@ -74,7 +91,7 @@ float MCamGetLengthActor(int selector)
 void MCamInit(void)
 {
     camFlags = 0;
-    memset(camParams, 0, sizeof(camParams));
+    memset(&camParams, 0, sizeof(camParams));
 }
 
 static void MCamExec_Control(void);
@@ -108,7 +125,7 @@ int MCamReleaseControl(void)
         return 0;
     }
 
-    bcopy(sysCamBuff, sysCam, sizeof(sysCamBuff));
+    bcopy(&sysCamBuff, sysCam, sizeof(sysCamBuff));
     camFlags &= ~CAM_FLAG_ACTIVE;
     return 1;
 }
@@ -178,21 +195,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Coord);
 INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMove_Bank);
 
 /*
- * MCamMoveProc_Pers (below) steps this move state every frame; this
- * function's own lui/addiu is the TU's only relocation into it, so it is
- * typed as MCamMoveState here instead of left as bytes.
- */
-extern MCamMoveState D_00A5B5F8;
-
-/*
- * The float 0x384 bytes before D_00A5B5F8: the compiled form reuses
- * D_00A5B5F8's own base register with a negative immediate rather than a
- * second relocation, so nothing here names a symbol for it or claims a
- * struct spanning the two; MCamMove_Pers seeds its own `start` from it.
- */
-#define MCAM_PREV_PERS_START_OFFSET (-0x384)
-
-/*
  * The caller's own move-request object (its definer is outside this
  * allocation, called through MCamMove, also outside this allocation): only
  * the three fields MCamMove_Pers reads are evidenced.
@@ -209,16 +211,15 @@ static void MCamMove_Pers(MCamMoveRequest *request)
 {
     MCamMoveState *state = &D_00A5B5F8;
     int mode;
-    float start;
     int duration;
     float angle;
     float angleRad;
     float savedStart;
 
     mode = request->mode;
-    start = *(float *)((unsigned char *) state + MCAM_PREV_PERS_START_OFFSET);
     duration = request->duration;
-    state->start = start;
+    /* MCamMove_Pers's start value is the float at state - 0x384. */
+    state->start = camParams.perspectiveStart;
     state->mode = mode;
     angle = request->angle;
     state->duration = duration;

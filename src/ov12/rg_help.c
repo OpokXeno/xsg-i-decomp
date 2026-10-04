@@ -5,6 +5,34 @@
 #include "shared.h"
 #include "rg_help.h"
 
+const char D_00A57AC8[] = "pHelp != NIL";
+const char D_00A57AD8[] = "../rg_help.euc.c";
+const char D_00A57AF0[] = "i < LOAD_CAPA";
+const char D_00A57B00[] = "'%s' pic is not exist in '%s'";
+const char D_00A57B20[] = "'%s' bxx is not loaded";
+static int s_aColor[4] = {128, 128, 128, 128};
+extern const char D_00A57550[], D_00A57560[], D_00A57578[], D_00A57590[];
+extern const char D_00A575A8[], D_00A575C0[], D_00A575D0[], D_00A575E0[];
+extern const char D_00A575F8[], D_00A57610[], D_00A57628[], D_00A57640[];
+extern const char D_00A57658[], D_00A57670[], D_00A57688[], D_00A576A0[];
+extern const char D_00A576B8[], D_00A576D0[], D_00A576E0[], D_00A576F0[];
+extern const char D_00A57700[], D_00A57708[], D_00A57718[], D_00A57728[];
+extern const char D_00A57738[], D_00A57748[], D_00A57758[], D_00A57768[];
+extern const char D_00A57778[], D_00A57788[], D_00A57798[], D_00A577A8[];
+extern const char D_00A577B8[], D_00A577C8[], D_00A577D8[], D_00A577E8[];
+extern const char D_00A577F8[], D_00A57808[], D_00A57818[], D_00A57828[];
+extern const char D_00A57838[], D_00A57848[], D_00A57858[], D_00A57868[];
+extern const char D_00A57878[], D_00A57888[], D_00A57898[], D_00A578A8[];
+extern const char D_00A578B8[], D_00A578C8[], D_00A578D8[], D_00A578E8[];
+extern const char D_00A578F8[], D_00A57908[], D_00A57918[], D_00A57928[];
+extern const char D_00A57938[], D_00A57948[], D_00A57958[], D_00A57968[];
+extern const char D_00A57978[], D_00A57988[], D_00A57998[], D_00A579A8[];
+extern const char D_00A579B8[], D_00A579C8[], D_00A579D8[], D_00A579E8[];
+extern const char D_00A579F8[], D_00A57A08[], D_00A57A18[], D_00A57A28[];
+extern const char D_00A57A38[], D_00A57A48[], D_00A57A58[], D_00A57A68[];
+extern const char D_00A57A78[], D_00A57A88[], D_00A57A98[], D_00A57AA8[];
+extern const char D_00A57AB8[];
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgHeap *InstanceOfRgHeap(void);
@@ -24,16 +52,13 @@ extern void RgWarn(const char *format, const char *source_file, int line, ...);
 extern const char D_00A57AF0[];
 extern const char D_00A57B00[];
 extern const char D_00A57B20[];
-extern const char *s_apszFileTbl_0[19];
-extern const char *s_ainPicNameTbl_1[62][2];
 extern void DisposeXrgPaint2D_sub(void *paintContext, const char *source_file,
                                   int line);
 extern void DisposeRgBxx_sub(RgBxx *archive, const char *source_file, int line);
-extern int s_aColor[4];
 extern void XrgPaint2DColor(void *paintContext, const int *color);
 
-extern const char D_00A57AC8[]; /* "pHelp != NIL" */
-extern const char D_00A57AD8[]; /* "../rg_help.euc.c" */
+extern const char D_00A57AC8[];
+extern const char D_00A57AD8[];
 
 static void _set_global_blight(float blight)
 {
@@ -58,6 +83,45 @@ static void _set_global_blight(float blight)
 
 static void _InitHelp(RgHelp *pHelp)
 {
+    static const char *s_apszFileTbl[19] = {
+        D_00A576E0, D_00A576D0, D_00A576B8, D_00A576A0, D_00A57688,
+        D_00A57670, D_00A57658, D_00A57640, D_00A57628, D_00A57610,
+        D_00A575F8, D_00A575E0, D_00A575D0, D_00A575C0, D_00A575A8,
+        D_00A57590, D_00A57578, D_00A57560, D_00A57550
+    };
+    static const char *s_ainPicNameTbl[62][2] = {
+        {D_00A576E0, D_00A57AB8}, {D_00A576E0, D_00A57AA8},
+        {D_00A576D0, D_00A57A98}, {D_00A576D0, D_00A57A88},
+        {D_00A576A0, D_00A57A78}, {D_00A576A0, D_00A57A68},
+        {D_00A576A0, D_00A57A58}, {D_00A576A0, D_00A57A48},
+        {D_00A576A0, D_00A57A38}, {D_00A576B8, D_00A57A28},
+        {D_00A576B8, D_00A57A18}, {D_00A576B8, D_00A57A08},
+        {D_00A576B8, D_00A579F8}, {D_00A57688, D_00A579E8},
+        {D_00A57688, D_00A579D8}, {D_00A57688, D_00A579C8},
+        {D_00A57688, D_00A579B8}, {D_00A57670, D_00A579A8},
+        {D_00A57670, D_00A57998}, {D_00A57670, D_00A57988},
+        {D_00A57670, D_00A57978}, {D_00A57670, D_00A57968},
+        {D_00A57658, D_00A57958}, {D_00A57658, D_00A57948},
+        {D_00A57658, D_00A57938}, {D_00A57640, D_00A57928},
+        {D_00A57640, D_00A57918}, {D_00A57640, D_00A57908},
+        {D_00A57640, D_00A578F8}, {D_00A57628, D_00A578E8},
+        {D_00A57628, D_00A578D8}, {D_00A57628, D_00A578C8},
+        {D_00A57628, D_00A578B8}, {D_00A57610, D_00A578A8},
+        {D_00A575F8, D_00A57898}, {D_00A575F8, D_00A57888},
+        {D_00A575F8, D_00A57878}, {D_00A575F8, D_00A57868},
+        {D_00A575F8, D_00A57858}, {D_00A575F8, D_00A57848},
+        {D_00A575E0, D_00A57838}, {D_00A575E0, D_00A57828},
+        {D_00A575D0, D_00A57818}, {D_00A575D0, D_00A57808},
+        {D_00A575D0, D_00A577F8}, {D_00A575D0, D_00A577E8},
+        {D_00A575C0, D_00A577D8}, {D_00A575A8, D_00A577C8},
+        {D_00A575A8, D_00A577B8}, {D_00A575A8, D_00A577A8},
+        {D_00A575A8, D_00A57798}, {D_00A575A8, D_00A57788},
+        {D_00A575A8, D_00A57778}, {D_00A575A8, D_00A57768},
+        {D_00A575A8, D_00A57758}, {D_00A57590, D_00A57748},
+        {D_00A57590, D_00A57738}, {D_00A57590, D_00A57728},
+        {D_00A57578, D_00A57718}, {D_00A57578, D_00A57708},
+        {D_00A57560, D_00A57700}, {D_00A57550, D_00A576F0}
+    };
     unsigned int archive_index;
     unsigned int entry_index;
     const char *archive_name;
@@ -76,7 +140,7 @@ static void _InitHelp(RgHelp *pHelp)
     pHelp->bxxCount = 0;
 
     for (archive_index = 0; archive_index < 19; archive_index++) {
-        file_name = s_apszFileTbl_0[archive_index];
+        file_name = s_apszFileTbl[archive_index];
         if (archive_index >= 20) {
             assert_prog(D_00A57AF0, D_00A57AD8, 121);
         }
@@ -88,8 +152,8 @@ static void _InitHelp(RgHelp *pHelp)
     }
 
     for (archive_index = 0; archive_index < 62; archive_index++) {
-        archive_name = s_ainPicNameTbl_1[archive_index][0];
-        picture_name = s_ainPicNameTbl_1[archive_index][1];
+        archive_name = s_ainPicNameTbl[archive_index][0];
+        picture_name = s_ainPicNameTbl[archive_index][1];
         archive = 0;
         picture = 0;
 
@@ -245,7 +309,6 @@ typedef struct RgHelpMoveEntry {
     int right;
 } RgHelpMoveEntry;
 
-extern const RgHelpMoveEntry s_anMoveTbl_2[16];
 extern int XrgPadIsUp(void);
 extern int XrgPadIsDown(void);
 extern int XrgPadIsLeft(void);
@@ -255,6 +318,13 @@ extern void XrgSoundSystemCursor(void);
 
 static void _control_mode_left(RgHelp *pHelp)
 {
+    static RgHelpMoveEntry s_anMoveTbl[16] = {
+        {-1, 4, -1, 1}, {-1, 5, 0, 2}, {-1, 6, 1, 3}, {-1, 7, 2, 4},
+        {0, 8, 3, 5}, {1, 8, 4, 6}, {2, 9, 5, 7}, {3, 9, 6, 8},
+        {4, 10, 7, 9}, {7, 12, 8, 10}, {8, 13, 9, 11}, {8, 14, 10, 12},
+        {9, 15, 11, 13}, {10, -1, 12, 14}, {11, -1, 13, 15},
+        {12, -1, 14, -1}
+    };
     int cursor;
     int next;
 
@@ -262,16 +332,16 @@ static void _control_mode_left(RgHelp *pHelp)
     cursor = pHelp->cursor;
     XrgPadSetID(0);
     if (XrgPadIsUp()) {
-        next = s_anMoveTbl_2[cursor].up;
+        next = s_anMoveTbl[cursor].up;
     }
     if (XrgPadIsDown()) {
-        next = s_anMoveTbl_2[cursor].down;
+        next = s_anMoveTbl[cursor].down;
     }
     if (XrgPadIsLeft()) {
-        next = s_anMoveTbl_2[cursor].left;
+        next = s_anMoveTbl[cursor].left;
     }
     if (XrgPadIsRight() || XrgPadIsMaru()) {
-        next = s_anMoveTbl_2[cursor].right;
+        next = s_anMoveTbl[cursor].right;
     }
     if (next >= 0) {
         if ((unsigned int) next >= 0x10) {
@@ -342,7 +412,7 @@ typedef union RgHelpColor {
     int channels[4];
 } RgHelpColor;
 
-extern const RgHelpColor D_00A57B40;
+const RgHelpColor D_00A57B40 = {.channels = {128, 128, 128, 127}};
 
 static void _paint_b(void *paintContext, RgBxxPic *pic, int blendMode, int x,
                      int y, int factor)
@@ -438,8 +508,8 @@ typedef union RgHelpAlignedUvRect {
     long long halves[2];
 } RgHelpAlignedUvRect;
 
-extern const RgHelpAlignedUvRect D_00A57B50;
-extern const RgHelpAlignedUvRect D_00A57B60;
+const RgHelpAlignedUvRect D_00A57B50 = {{0, 0, 432, 160}};
+const RgHelpAlignedUvRect D_00A57B60 = {{80, 0, 432, 160}};
 
 static void _paint_mode_left(RgHelp *pHelp)
 {
@@ -611,3 +681,167 @@ static void _paint_mode_right(RgHelp *pHelp)
     _paint_lin(paintContext, pictures[1], 0, 0);
     _paint_lin(paintContext, pictures[45], 0, 360);
 }
+
+
+
+const char D_00A57550[16] = "help_bg_pad.bxx";
+
+const char D_00A57560[24] = "help_bg_grad.bxx";
+
+const char D_00A57578[24] = "help_03_03_low.bxx";
+
+const char D_00A57590[24] = "help_03_03_high2.bxx";
+
+const char D_00A575A8[24] = "help_03_03_high.bxx";
+
+const char D_00A575C0[16] = "help_03_02.bxx";
+
+const char D_00A575D0[16] = "help_03_01.bxx";
+
+const char D_00A575E0[24] = "help_02_03_mid2.bxx";
+
+const char D_00A575F8[24] = "help_02_03_mid.bxx";
+
+const char D_00A57610[24] = "help_02_03_09.bxx";
+
+const char D_00A57628[24] = "help_02_03_low2.bxx";
+
+const char D_00A57640[24] = "help_02_03_low.bxx";
+
+const char D_00A57658[24] = "help_02_03_high.bxx";
+
+const char D_00A57670[24] = "help_01_03_mid.bxx";
+
+const char D_00A57688[24] = "help_01_03_low.bxx";
+
+const char D_00A576A0[24] = "help_01_03_high.bxx";
+
+const char D_00A576B8[24] = "help_01_03_high2.bxx";
+
+const char D_00A576D0[16] = "help_01_02.bxx";
+
+const char D_00A576E0[16] = "help_01_01.bxx";
+
+const char D_00A576F0[16] = "bg_ctrlr";
+
+const char D_00A57700[8] = "bg_grad";
+
+const char D_00A57708[16] = "03_03_09";
+
+const char D_00A57718[16] = "03_03_01";
+
+const char D_00A57728[16] = "03_03_22";
+
+const char D_00A57738[16] = "03_03_21";
+
+const char D_00A57748[16] = "03_03_20";
+
+const char D_00A57758[16] = "03_03_17";
+
+const char D_00A57768[16] = "03_03_16";
+
+const char D_00A57778[16] = "03_03_15";
+
+const char D_00A57788[16] = "03_03_14";
+
+const char D_00A57798[16] = "03_03_13";
+
+const char D_00A577A8[16] = "03_03_12";
+
+const char D_00A577B8[16] = "03_03_11";
+
+const char D_00A577C8[16] = "03_03_10";
+
+const char D_00A577D8[16] = "03_02_01";
+
+const char D_00A577E8[16] = "03_01_04";
+
+const char D_00A577F8[16] = "03_01_03";
+
+const char D_00A57808[16] = "03_01_02";
+
+const char D_00A57818[16] = "03_01_01";
+
+const char D_00A57828[16] = "02_03_17";
+
+const char D_00A57838[16] = "02_03_16";
+
+const char D_00A57848[16] = "02_03_15";
+
+const char D_00A57858[16] = "02_03_14";
+
+const char D_00A57868[16] = "02_03_13";
+
+const char D_00A57878[16] = "02_03_12";
+
+const char D_00A57888[16] = "02_03_11";
+
+const char D_00A57898[16] = "02_03_10";
+
+const char D_00A578A8[16] = "02_03_09_";
+
+const char D_00A578B8[16] = "02_03_08";
+
+const char D_00A578C8[16] = "02_03_07";
+
+const char D_00A578D8[16] = "02_03_06";
+
+const char D_00A578E8[16] = "02_03_05";
+
+const char D_00A578F8[16] = "02_03_04";
+
+const char D_00A57908[16] = "02_03_03";
+
+const char D_00A57918[16] = "02_03_02";
+
+const char D_00A57928[16] = "02_03_01";
+
+const char D_00A57938[16] = "02_03_22";
+
+const char D_00A57948[16] = "02_03_21";
+
+const char D_00A57958[16] = "02_03_20";
+
+const char D_00A57968[16] = "01_03_09";
+
+const char D_00A57978[16] = "01_03_08";
+
+const char D_00A57988[16] = "01_03_07";
+
+const char D_00A57998[16] = "01_03_06";
+
+const char D_00A579A8[16] = "01_03_05";
+
+const char D_00A579B8[16] = "01_03_04";
+
+const char D_00A579C8[16] = "01_03_03";
+
+const char D_00A579D8[16] = "01_03_02";
+
+const char D_00A579E8[16] = "01_03_01";
+
+const char D_00A579F8[16] = "01_03_22";
+
+const char D_00A57A08[16] = "01_03_21";
+
+const char D_00A57A18[16] = "01_03_20";
+
+const char D_00A57A28[16] = "01_03_19";
+
+const char D_00A57A38[16] = "01_03_18";
+
+const char D_00A57A48[16] = "01_03_16";
+
+const char D_00A57A58[16] = "01_03_14";
+
+const char D_00A57A68[16] = "01_03_12";
+
+const char D_00A57A78[16] = "01_03_11";
+
+const char D_00A57A88[16] = "01_02_02";
+
+const char D_00A57A98[16] = "01_02_01";
+
+const char D_00A57AA8[16] = "01_01_02";
+
+const char D_00A57AB8[16] = "01_01_01";

@@ -5,6 +5,8 @@
 #include "shared.h"
 #include "rg_robot_spec.h"
 
+static int s_nAnaAutoHomingID = 0;
+
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot_spec", InitRgRobotSpec);
 
 static void _ResetAnaAutoHoming(void)

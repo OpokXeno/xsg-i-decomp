@@ -1,6 +1,6 @@
 #include "common.h"
 
-extern unsigned short MenuTopCommandLock;
+static unsigned short MenuTopCommandLock;
 
 int MenuTopCommandCheck(int commandId)
 {

@@ -41,9 +41,4 @@ extern ActorHead actor[ACTOR_COUNT];
 
 void GameResourceDump(int dump);
 
-/* Debug-print format string, part of this TU's un-recovered .sdata cluster
- * (scaffold-owned, main VA 0x004d9ef8). PauseMenuPage0 references it as
- * "%4x". */
-extern const char D_004D9EF8[];
-
 #endif /* SRC_MAIN_GAME_DEBUG_MENU_H */

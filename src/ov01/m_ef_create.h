@@ -59,14 +59,4 @@ int MEfCreate_MSP02(MEfObjRecord *self);
 int MEfCreate_GAMERA(MEfObjRecord *self);
 int MEfCreate_DORA(MEfObjRecord *self);
 
-#include "ov01/m_ef_create_bp_00.h"
-#include "ov01/m_ef_create_eac_00.h"
-#include "ov01/m_ef_create_amp_02.h"
-#include "ov01/m_ef_create_solb.h"
-#include "ov01/m_ef_create_ecm_01.h"
-#include "ov01/m_ef_create_ecm_02.h"
-#include "ov01/m_ef_create_ead_00.h"
-#include "ov01/m_ef_create_so_14.h"
-#include "ov01/m_ef_create_kosbw_02.h"
-
 #endif /* SRC_OV01_M_EF_CREATE_H */

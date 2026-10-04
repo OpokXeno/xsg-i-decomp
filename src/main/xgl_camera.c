@@ -118,11 +118,8 @@ void xglCameraSetWindow(CameraWindowData *camera, int left, int top, int right, 
     screen->window.w = (float)bottom;
 }
 
-extern const float D_004D88D0;
-extern const float D_004D88D4;
-
 void xglCameraClipRangeDefault(StudioCamera *camera)
 {
-    camera->nearClip = D_004D88D0;
-    camera->farClip = D_004D88D4;
+    camera->nearClip = 0.01f;
+    camera->farClip = 99000.0f;
 }

@@ -67,7 +67,7 @@ typedef struct UmnDataBaseInfoWork {
     UmnDataBaseInfoWindow window;       /* +0x0C */
     UmnDataBaseInfoText info;           /* +0x1A0 */
 } UmnDataBaseInfoWork;
-extern char *msg00_1_00A10700[3];
+static char *msg00_1_00A10700[3];
 void MenuInfoWindow(UmnDataBaseInfoWindow *window, UmnDataBaseInfoText *text);
 void WindowDXSet(UmnDataBaseInfoWindow *window);
 void WindowDXMain(UmnDataBaseInfoWindow *window);
@@ -316,9 +316,9 @@ typedef struct UmnDataBaseArrowSprites {
 typedef struct UmnDataBaseArrowSteps {
     int step[2];
 } UmnDataBaseArrowSteps;
-extern const UmnDataBaseArrowSprites D_00A13138;
-extern const UmnDataBaseArrowSteps D_00A13140;
-extern char *text_3_00A10720[5];
+static const UmnDataBaseArrowSprites D_00A13138 = {{0x0112, 0x0110}};
+static const UmnDataBaseArrowSteps D_00A13140 = {{1, -1}};
+static char *text_3_00A10720[5];
 void eMessageSet(void *message, const char *text);
 void eMessageModeChange(UmnDataBaseExWinMessage *message, int mode);
 void eMessageMain(void *message);
@@ -505,13 +505,13 @@ typedef struct UmnDataBaseKeyWordWork {
     UmnKeyWordMessage message;              /* +0x96C */
 } UmnDataBaseKeyWordWork;
 #define UMN_KEYWORD_HIDDEN_X (-272)
-extern char D_00A13148[];
-extern char msg00_4[];
+static const char D_00A13148[5] = "\x01Num";
+static char msg00_4[16];
 int tyaUmlDispParamReset(UmnDataBaseDispParam *disp, int mode);
 int tyaUmlDatabaseMain(UmnDataBaseDispParam *disp);
 void eRibbonSet(UmnKeyWordRibbon *ribbon, int mode);
 void eRibbonMain(UmnKeyWordRibbon *ribbon);
-void eTagFontSet(UmnKeyWordTagFont *tag, char *text);
+void eTagFontSet(UmnKeyWordTagFont *tag, const char *text);
 void eTagFontMain(UmnKeyWordTagFont *tag);
 void eNumberSet(UmnKeyWordNumber *number, int mode);
 void eNumberMain(UmnKeyWordNumber *number);
@@ -716,3 +716,40 @@ void UmnDataBaseModel(UmnDataBaseModelWork *work)
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov02/umn_guno_data_base_get", UmnDataBase);
+
+extern char D_00A12EE0[];
+extern char D_00A12EB0[];
+extern char D_00A12EA8[];
+extern char D_00A13128[];
+extern char D_00A13118[];
+extern char D_00A13108[];
+extern char D_00A130F0[];
+extern char D_00A130D8[];
+
+static char *msg00_1_00A10700[3] = {
+    D_00A12EE0, D_00A12EB0, D_00A12EA8,
+};
+static char *text_3_00A10720[5] = {
+    D_00A13128, D_00A13118, D_00A13108, D_00A130F0, D_00A130D8,
+};
+static char msg00_4[16] = "\x1E\0Index Search:";
+
+
+
+char D_00A12EA8[8] = "Cancel.";
+
+char D_00A12EB0[48] = "View keywords that you have come across.";
+
+char D_00A12EE0[56] = "View data of all the Gnosis you have encountered.";
+
+
+
+char D_00A130D8[24] = "\036\001\241\247Analysis info";
+
+char D_00A130F0[24] = "\036\000\241\247Turn menu off";
+
+char D_00A13108[16] = "\0364\241\247Rotate";
+
+char D_00A13118[16] = "\0365\241\247Zoom in";
+
+char D_00A13128[16] = "\0366\241\247Zoom out";

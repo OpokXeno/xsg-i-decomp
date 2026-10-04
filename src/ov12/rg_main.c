@@ -51,11 +51,11 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_main", _GetStageData);
  * enemy (%d)"; ov12:0x00a51450 contains the source filename
  * "../rg_main.euc.c".
  */
-extern const char D_00A514D8[];
-extern const char D_00A51450[];
+const char D_00A51450[] = "../rg_main.euc.c";
+const char D_00A514D8[] = "over stage-serial ID for enemy (%d)";
 
 /* Stage id per serial, indexed 0..3 (ov12:0x00a4f4c8, size 0x10). */
-extern int s_aeBgTbl_0[4];
+static int s_aeBgTbl_0[4] = {0, 1, 2, 3};
 
 static void _GetStageData(int stageId, void *data);
 
@@ -79,9 +79,8 @@ static void _GetStageHardDataBySerial(int serial, void *data)
     _GetStageData(3, data);
 }
 
-extern const char D_00A51450[];
 extern const char D_00A514D8[];
-extern int s_anEnemyLevel_1[4];
+static int s_anEnemyLevel_1[4] = {0x1000, 0x0B15, 0x05FE, 0x1DEF};
 
 static int _GetEnemyLevelBySerial(u32 serial)
 {
@@ -97,10 +96,10 @@ static int _GetEnemyLevelBySerial(u32 serial)
 }
 
 /* ov12:0x00a51500 contains "over stage-serial ID for (hard) enemy (%d)". */
-extern const char D_00A51500[];
+const char D_00A51500[] = "over stage-serial ID for (hard) enemy (%d)";
 
 /* Enemy level per serial for hard mode, indexed 0..3 (ov12:0x00a4f4e8, size 0x10). */
-extern int s_anEnemyLevel_2[4];
+static int s_anEnemyLevel_2[4] = {0x1DEF, 0x1DEF, 0x1DEF, 0x1DEF};
 
 static int _GetEnemyHardLevelBySerial(u32 serial)
 {
@@ -133,7 +132,8 @@ typedef struct RgBattleInit {
     int enemyLevel;
 } RgBattleInit;
 extern int sRender[];
-extern int s_stack[];
+int abInit_3[2] = {0, 0};
+int s_stack[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 extern void assert_prog(const char *expression, const char *file, int line);
 typedef struct RgNamedWeaponEssence {
     RgWeaponEssence common;
@@ -162,23 +162,23 @@ static void _GetEnemyChar(RgBattleNames *names, int player)
     strcpy(names[player].characterName, RgActorCharIDToName(charId));
 }
 
-extern const unsigned long long D_00A51530[];
-extern const unsigned long long D_00A51538[];
-extern const unsigned long long D_00A51540[];
-extern const unsigned long long D_00A51548[];
-extern const unsigned long long D_00A51558[];
-extern const unsigned long long D_00A51560[];
-extern const unsigned long long D_00A51568[];
-extern const unsigned long long D_00A51570[];
-extern const unsigned long long D_00A51578[];
-extern const unsigned long long D_00A51580[];
-extern const unsigned long long D_00A51588[];
-extern const unsigned long long D_00A51590[];
-extern const unsigned long long D_00A51598[];
-extern const unsigned long long D_00A515A0[];
-extern const unsigned long long D_00A515B0[];
-extern const unsigned long long D_00A515B8[];
-extern const unsigned long long D_00A515C0[];
+const char D_00A51530[] = "SMG32VX";
+const char D_00A51538[] = "BA15VX";
+const char D_00A51540[] = "SMP53AG";
+const char D_00A51548[] = "DLC02AG4";
+const char D_00A51558[] = "UNARMED";
+const char D_00A51560[] = "CB85VX";
+const char D_00A51568[] = "HMP-AG5";
+const char D_00A51570[] = "HGG-AG5";
+const char D_00A51578[] = "BMP-AG5";
+const char D_00A51580[] = "HG75VX";
+const char D_00A51588[] = "ECM1-VX";
+const char D_00A51590[] = "LG10AG";
+const char D_00A51598[] = "BSW13AG";
+const char D_00A515A0[] = "AIRD-AG2";
+const char D_00A515B0[] = "FLM64AG";
+const char D_00A515B8[] = "LG24VX";
+const char D_00A515C0[] = "BMP45VX";
 
 static int _GetHardEnemyChar(RgBattleNames *names, int player, unsigned int stage)
 {
@@ -225,9 +225,9 @@ static int _GetHardEnemyChar(RgBattleNames *names, int player, unsigned int stag
     }
 }
 
-extern const char D_00A515C8[];
-extern const char D_00A515E0[];
-extern const char D_00A515F0[];
+const char D_00A515C8[] = "rg_robot_spec.info";
+const char D_00A515E0[] = "rg_shot.info";
+const char D_00A515F0[] = "rg_weapon.info";
 
 static void _InitDataBase(void)
 {
@@ -261,7 +261,7 @@ static int _Title(int mode)
     int result;
 
     result = 0;
-    RgFileSysPrepareFile(InstanceOfRgFileSys(), D_00A51600, D_00A51610);
+    RgFileSysPrepareFile(InstanceOfRgFileSys(), "title.npr", "data\\nisimori\\");
     title = CreateRgTitle(mode);
     while (!_IsEndOfMode() && result == 0) {
         RgTitlePassTime(title, RgGetFrameTime());
@@ -279,9 +279,7 @@ typedef struct RgSelectState {
     int availableCharacters;
     unsigned char unmodeled_08[0x240];
 } RgSelectState;
-extern RgSelectState D_00A59490[2];
-extern int abInit_3[2];
-extern const char D_00A51620[];
+static RgSelectState D_00A59490[2];
 extern const char D_00A51630[];
 extern void InitRgSelectAGWSData(RgSelectState *state);
 extern int RgSelectGetPlayerChars(void);
@@ -306,7 +304,7 @@ static int _SelectOneChar(RgBattleInit *init, int player)
 
     result = 0;
     if (init == 0) {
-        assert_prog(D_00A51620, D_00A51450, 473);
+        assert_prog("pInfo != NIL", D_00A51450, 473);
     }
     XrgSleep();
     if (abInit_3[player] == 0) {
@@ -356,6 +354,8 @@ static int _SelectOneChar(RgBattleInit *init, int player)
 }
 
 /* RgAnnounce is defined by its owner, ov12/tu077 rg_announce.c. */
+const char D_00A51630[16] = {0};
+
 typedef struct RgAnnounce RgAnnounce;
 void RgAnnounceDispInit(RgAnnounce *pAnn, int kind);
 
@@ -531,10 +531,10 @@ void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y, int width,
                         int height);
 
 /* ov12:0x00a51640 (0x5a,0x5a,0x5a,0x7f): the pause banner's blend color. */
-extern const XrgColorQuad D_00A51640;
+const XrgColorQuad D_00A51640 = {0x0000005A0000005AULL, 0x0000007F0000005AULL};
 
 /* ov12:0x00a51650 contains "PAUSE". */
-extern const char D_00A51650[];
+const char D_00A51650[] = "PAUSE";
 
 static void _DispPause(void)
 {
@@ -556,7 +556,7 @@ static void _DispPause(void)
     }
 }
 
-extern const char D_00A51658[];
+const char D_00A51658[] = "HARD MODE";
 
 static void _disp_hardmode(void)
 {
@@ -597,19 +597,19 @@ static int _OneGame(RgBattleInit *init, RgGameInfo *info, int difficulty)
 }
 
 static int _SelectOneChar(RgBattleInit *init, int player);
-extern const char D_00A516A8[];
-extern const char D_00A516C8[];
-extern const char D_00A51700[];
-extern const char D_00A51718[];
-extern const char D_00A51728[];
-extern const char D_00A51738[];
-extern const char D_00A51740[];
-extern const char D_00A51750[];
-extern const char D_00A51760[];
-extern const char D_00A51770[];
-extern const char D_00A51788[];
-extern const char D_00A517A0[];
-extern const char D_00A517B8[];
+const char D_00A516A8[] = "This game is 'HARD' mode";
+const char D_00A516C8[] = "--------------------------------------------------\n";
+const char D_00A51700[] = "stage %s : level %d\n";
+const char D_00A51718[] = "mode %x\n";
+const char D_00A51728[] = "enemy lev %x\n";
+const char D_00A51738[] = "\n";
+const char D_00A51740[] = "player 1 '%s'\n";
+const char D_00A51750[] = "pos %f %f %f\n";
+const char D_00A51760[] = "dir %f %f %f\n";
+const char D_00A51770[] = "weapon left  '%s'\n";
+const char D_00A51788[] = "weapon right '%s'\n";
+const char D_00A517A0[] = "weapon back  '%s'\n";
+const char D_00A517B8[] = "player 2 '%s'\n";
 extern void XrgLog(const char *format, const char *file, int line, ...);
 extern double fptodp(float value);
 extern void InitRgBattleInit(RgBattleInit *init);
@@ -721,7 +721,9 @@ extern void DisposeRgHelp(RgHelp *help);
 extern void RgHelpPassTime(RgHelp *help, float deltaTime);
 extern void RgHelpDisp(RgHelp *help);
 extern int RgHelpIsEnd(RgHelp *help);
-extern const char D_00A517C8[];
+/* OV12 TU001 file/path labels retained as local C data. */
+const char D_00A517C8[16] = "help.npr";
+const char D_00A517D8[24] = "unknown title status";
 
 static void _Help(void)
 {
@@ -729,7 +731,7 @@ static void _Help(void)
     int done;
 
     done = 0;
-    RgFileSysPrepareFile(InstanceOfRgFileSys(), D_00A517C8, D_00A51610);
+    RgFileSysPrepareFile(InstanceOfRgFileSys(), D_00A517C8, "data\\nisimori\\");
     help = CreateRgHelp();
     while (!done && !_IsEndOfMode()) {
         RgHelpPassTime(help, RgGetFrameTime());
@@ -775,7 +777,6 @@ extern void DisposeXrgSoundSystem(void);
 extern void RgDrawCreateDrawStudioFullScreen(RgDraw *draw);
 extern void RgFileSysClear(RgFileSys *fileSys);
 extern void RgError(const char *message, const char *file, int line, ...);
-extern const char D_00A517D8[];
 
 void RobotGameMain(void)
 {

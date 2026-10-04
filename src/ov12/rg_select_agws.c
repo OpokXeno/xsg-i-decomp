@@ -7,6 +7,61 @@
 #include "ov12/rg_piclist.h"
 #include "ov12/rg_draw.h"
 #include "rg_select_agws.h"
+#include "rg_font.h"
+
+/* Referenced original data recovered from this translation unit. */
+const char D_00A56650[16] = "pSelChar != NIL";
+const char D_00A56660[24] = "../rg_select_agws.euc.c";
+const char D_00A56698[16] = "pSelWep != NIL";
+const char D_00A566A8[16] = "uSize > 0";
+const char D_00A566B8[24] = "uSize <= WEP_MAX";
+const char D_00A566D0[24] = "pSelWep->m_uSize > 0";
+const char D_00A566E8[40] = "0 <= nCur && nCur < pSelWep->m_uSize";
+const char D_00A56720[32] = "unknown type select ID %d";
+
+
+extern const char D_00A56758[];
+extern const char D_00A56768[];
+extern const char D_00A56798[];
+extern const char D_00A56838[];
+extern const char D_00A568C0[];
+extern const char D_00A568E0[];
+extern const char D_00A568F0[];
+extern const char D_00A56928[];
+extern const char D_00A56968[];
+extern const char D_00A56978[];
+extern const char D_00A56988[];
+extern const char D_00A56998[];
+extern const char D_00A569A8[];
+extern const char D_00A569B8[];
+extern const char D_00A569C8[];
+extern const char D_00A569D8[];
+extern const char D_00A569F0[];
+extern const char D_00A56A08[];
+extern const char D_00A56A18[];
+extern const char D_00A56A28[];
+extern const char D_00A56A48[];
+extern const char D_00A56A68[];
+extern const char D_00A56A88[];
+extern const char D_00A56AA8[];
+extern const char D_00A56AC8[];
+extern const char D_00A56AE8[];
+extern const char D_00A56B08[];
+extern const char D_00A56B28[];
+extern const char D_00A56B48[];
+extern const char D_00A56B68[];
+extern const char D_00A56BB0[];
+extern const char D_00A56BC8[];
+extern const char D_00A56C48[];
+extern const char D_00A56C90[];
+extern const char D_00A56CA8[];
+extern const char D_00A56CB8[];
+extern const char D_00A56CC8[];
+extern const char D_00A56CE0[];
+extern const char D_00A56CF0[];
+extern const char D_00A56D00[];
+extern const char D_00A56D10[];
+extern const char D_00A56D20[];
 
 /*
  * The 2D paint context (defined by ov12/tu086 xrg_paint2d.c); this TU only
@@ -43,18 +98,61 @@ static void _disp_pic(XrgPaint2D *paint, void *pic, int x, int y)
  * entries, indexed here without completing that type.
  */
 extern void XrgPaint2DColor(XrgPaint2D *paint, const void *color);
-extern unsigned char s_aPlayerCol[2][0x10];
+typedef struct XrgPlayerColor { int r; int g; int b; int a; } XrgPlayerColor;
+static XrgPlayerColor s_aPlayerCol[2] = {{51, 124, 62, 127}, {123, 90, 64, 127}};
 
 static void _disp_pic_pl(XrgPaint2D *paint, void *pic, int x, int y,
                          int playerIndex)
 {
     XrgPaint2DUseTexture(paint, pic);
     XrgPaint2DAlpha(paint, XRG_PAINT2D_BLEND_LINEAR);
-    XrgPaint2DColor(paint, s_aPlayerCol[playerIndex]);
+    XrgPaint2DColor(paint, &s_aPlayerCol[playerIndex]);
     XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_USE_PIC_SIZE, x, y, 0, 0);
 }
 
-extern unsigned char s_aFontTbl_0[];
+static RgFontGlyph s_aFontTbl_0[0x29] = {
+    {' ', 0, 0, 0, {0, 0}, 0, 4},
+    {'A', 0, 1, 1, {13, 14}, 0, -3},
+    {'B', 0, 15, 1, {12, 14}, 0, -3},
+    {'C', 0, 28, 1, {12, 14}, 0, -3},
+    {'D', 0, 41, 1, {13, 14}, 0, -3},
+    {'E', 0, 55, 1, {12, 14}, 0, -3},
+    {'F', 0, 68, 1, {11, 14}, 0, -3},
+    {'G', 0, 80, 1, {13, 14}, 0, -3},
+    {'H', 0, 94, 1, {13, 14}, 0, -3},
+    {'I', 0, 108, 1, {10, 14}, 0, -3},
+    {'J', 0, 119, 1, {10, 14}, 0, -3},
+    {'K', 0, 130, 1, {13, 14}, 0, -3},
+    {'L', 0, 144, 1, {11, 14}, 0, -3},
+    {'M', 0, 156, 1, {15, 14}, 0, -3},
+    {'N', 0, 172, 1, {13, 14}, 0, -3},
+    {'O', 0, 186, 1, {14, 14}, 0, -3},
+    {'P', 0, 201, 1, {12, 14}, 0, -3},
+    {'Q', 0, 214, 1, {14, 14}, 0, -3},
+    {'R', 0, 229, 1, {13, 14}, 0, -3},
+    {'S', 0, 243, 1, {12, 14}, 0, -3},
+    {'T', 0, 256, 1, {12, 14}, 0, -3},
+    {'U', 0, 269, 1, {13, 14}, 0, -3},
+    {'V', 0, 283, 1, {12, 14}, 0, -3},
+    {'W', 0, 296, 1, {17, 14}, 0, -3},
+    {'X', 0, 314, 1, {12, 14}, 0, -3},
+    {'Y', 0, 327, 1, {12, 14}, 0, -3},
+    {'Z', 0, 340, 1, {12, 14}, 0, -3},
+    {'0', 0, 1, 17, {12, 14}, 0, -3},
+    {'1', 0, 14, 17, {12, 14}, 0, -3},
+    {'2', 0, 27, 17, {12, 14}, 0, -3},
+    {'3', 0, 40, 17, {12, 14}, 0, -3},
+    {'4', 0, 53, 17, {12, 14}, 0, -3},
+    {'5', 0, 66, 17, {12, 14}, 0, -3},
+    {'6', 0, 79, 17, {12, 14}, 0, -3},
+    {'7', 0, 92, 17, {12, 14}, 0, -3},
+    {'8', 0, 105, 17, {12, 14}, 0, -3},
+    {'9', 0, 118, 17, {12, 14}, 0, -3},
+    {'-', 0, 131, 17, {9, 14}, 0, -3},
+    {'?', 0, 141, 17, {11, 14}, 0, -3},
+    {'!', 0, 153, 17, {16, 14}, 0, -3},
+    {'@', 0, 170, 17, {16, 14}, 0, -3},
+};
 
 extern int CreateRgFont(void *table, int glyphCount, int pic);
 
@@ -62,6 +160,8 @@ static int _CreateSelectWepFont(int pic)
 {
     return CreateRgFont(s_aFontTbl_0, 0x29, pic);
 }
+
+static float s_fSinRad = 0.0f;
 
 static void _SinInit(void)
 {
@@ -104,7 +204,7 @@ static int _CheckEquipWeps(int *essences, int slot)
     return RgEquipCheckConfrict(equipData, slot);
 }
 
-extern int s_aeCharTbl[6];
+static int s_aeCharTbl[6] = {0, 4, 2, 5, 3, 1};
 
 static int _CharCursorToCharID(int charCursor)
 {
@@ -366,6 +466,49 @@ static int _EquipCurIDToEquipType(int curID)
     }
     return eType;
 }
+
+const char D_00A56758[16] = "pSelType != NIL";
+const char D_00A56768[32] = "eType != RG_EQUIP_TYPE_INVALID";
+const char D_00A56798[16] = "pDisp != NIL";
+const char D_00A56838[16] = "pSelDat != NIL";
+const char D_00A568C0[16] = "pData != NIL";
+const char D_00A568E0[16] = "pSel != NIL";
+const char D_00A568F0[56] = "_GetSelectChar(&pSel->m_inChar) != RG_ACTOR_CHAR_NOP";
+const char D_00A56928[16] = "pBxx != NIL";
+const char D_00A56968[16] = "frm11on_ul.bmp";
+const char D_00A56978[16] = "frm11on_ur.bmp";
+const char D_00A56988[16] = "frm11on_bl.bmp";
+const char D_00A56998[16] = "frm11on_br.bmp";
+const char D_00A569A8[16] = "frm11on_cl.bmp";
+const char D_00A569B8[16] = "frm11on_cr.bmp";
+const char D_00A569C8[16] = "frm11on_cc.bmp";
+const char D_00A569D8[24] = "icon_leftarrow.bmp";
+const char D_00A569F0[24] = "icon_rightarrow.bmp";
+const char D_00A56A08[16] = "say_yes.bmp";
+const char D_00A56A18[16] = "say_no.bmp";
+const char D_00A56A28[32] = "pWinInfo->m_pTop[0] != NIL";
+const char D_00A56A48[32] = "pWinInfo->m_pTop[1] != NIL";
+const char D_00A56A68[32] = "pWinInfo->m_pBtm[0] != NIL";
+const char D_00A56A88[32] = "pWinInfo->m_pBtm[1] != NIL";
+const char D_00A56AA8[32] = "pWinInfo->m_pSide[0] != NIL";
+const char D_00A56AC8[32] = "pWinInfo->m_pSide[1] != NIL";
+const char D_00A56AE8[32] = "pWinInfo->m_pInner != NIL";
+const char D_00A56B08[32] = "pWinInfo->m_pLeft != NIL";
+const char D_00A56B28[32] = "pWinInfo->m_pRight != NIL";
+const char D_00A56B48[32] = "pWinInfo->m_pMaru != NIL";
+const char D_00A56B68[32] = "pWinInfo->m_pBatu != NIL";
+const char D_00A56BB0[24] = "pDat->m_apPic[0] != NIL";
+const char D_00A56BC8[24] = "pDat->m_apPic[1] != NIL";
+const char D_00A56C48[16] = "pView != NIL";
+const char D_00A56C90[24] = "pszFileName != NIL";
+const char D_00A56CA8[16] = "data\\nisimori\\";
+const char D_00A56CB8[16] = "select.bxx";
+const char D_00A56CC8[24] = "cannot load select.bxx";
+const char D_00A56CE0[16] = "agwsseltop.r2d";
+const char D_00A56CF0[16] = "agwssel.r2d";
+const char D_00A56D00[16] = "wepseltop.r2d";
+const char D_00A56D10[16] = "wepsel.r2d";
+const char D_00A56D20[24] = "apCollects != NIL";
 
 extern const char D_00A56758[]; /* "pSelType != NIL" */
 

@@ -548,7 +548,7 @@ INCLUDE_ASM("asm/main/nonmatchings/jnt", JNT_computeMatrix);
  * `lb $2,flagSmoothHair` (VA 0x00314B14) to decide whether to apply the
  * interpolated hair matrix; this pair only sets/clears it.
  */
-extern signed char flagSmoothHair;
+static signed char flagSmoothHair = 0;
 
 void JNT_onSmoothHair(void)
 {

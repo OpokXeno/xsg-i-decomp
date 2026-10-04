@@ -213,11 +213,40 @@ extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int xglCdGetFileSize(const char *name);
 extern int printf(const char *format, ...);
-extern char fileName[];
-extern char *sndSeNameBase;
-extern char *sndSeNameExt;
-extern const char D_00A4E6A8[];
-extern const char D_00A4E6D0[];
+static char fileName[0x100];
+static char *sndSeNameBase = "data\\yamamoto\\snd\\sed\\";
+static char *sndSeNameExt = ".bin";
+static char *sndMuNameBase = "data\\yamamoto\\snd\\smd\\";
+static char *sndMuNameExt1 = ".SMD";
+static char *sndMuNameExt2 = ".SWD";
+static char *muName[3] = { "BATTLE1", "BATTLE2", "BATTLE3" };
+static char *mu2Name[3] = { "JINGLE1", "JINGLE2", 0 };
+
+/* Readable C spellings for literal data used by the translated functions. */
+#define SND_SE_LOAD_SUB_ERROR_FORMAT "** dataSndSeLoadSub: err -> (%d) %d\n"
+#define SND_SE_LOAD_SUB_SIZE_FORMAT "** SND read Size = %d\n"
+#define SND_SE_REG_LOAD_SKIP_FORMAT "** dataSndSeRegLoad: skip %d\n"
+#define SND_SE_PLAY_FORMAT "<< SE Play bank=%d id=%d no=%d %d >>\n"
+#define SND_SE_STOP_FORMAT "<< SE Stop pack=%d >>\n"
+
+typedef struct {
+    int key;
+    int value;
+} SndConvRegPair;
+typedef struct {
+    SndConvRegPair pair[7];
+} SndConvRegTable;
+#define SND_MU_PLAY_FORMAT "<< MU Play no=%d >>\n"
+#define SND_CONV_REG_TABLE \
+    ((SndConvRegTable){{{1, 0}, {2, 1}, {3, 2}, {4, 3}, {5, 4}, {0x17, 4}, {0, 0}}})
+
+#define D_00A4E6A8 SND_SE_LOAD_SUB_ERROR_FORMAT
+#define D_00A4E6D0 SND_SE_LOAD_SUB_SIZE_FORMAT
+#define D_00A4E708 SND_SE_REG_LOAD_SKIP_FORMAT
+#define D_00A4E7E8 SND_SE_PLAY_FORMAT
+#define D_00A4E810 SND_SE_STOP_FORMAT
+#define D_00A4E828 SND_CONV_REG_TABLE
+#define D_00A4E860 SND_MU_PLAY_FORMAT
 
 int dataSndSeLoadSub(ObjectTask *unit, int seType, SndSeLoadWork *work)
 {
@@ -252,8 +281,6 @@ int dataSndSeLoadSub(ObjectTask *unit, int seType, SndSeLoadWork *work)
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeLoad);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/snd", dataSndSeLoad2);
-
-extern const char D_00A4E708[];
 
 /*
  * ov01:0x00a2d6a0. Claims a unit sound registration, loads its base bank,
@@ -316,8 +343,6 @@ int sndSysSePlay(int soundId)
 extern int ctrlId;
 extern int dmgBankOffs[3];
 extern void xglSoundEffectNormalID(int soundId, int ctrlId);
-extern const char D_00A4E7E8[];
-
 /*
  * ov01:0x00a2dab0. Starts sound-effect id on the unit's bank. sndBankGet
  * resolves that bank from the unit the sound belongs to, which reaches
@@ -352,7 +377,6 @@ int sndSePlay(int unit, int id, int no)
 
 extern int sndBankGet(void);
 extern void xglSoundEffectStopID(int sound_id, int flags);
-extern const char D_00A4E810[];
 
 int sndSeStop(int unused, int pack)
 {
@@ -365,15 +389,6 @@ int sndSeStop(int unused, int pack)
     }
     return stopped;
 }
-
-typedef struct {
-    int key;   /* +0x00 */
-    int value; /* +0x04 */
-} SndConvRegPair;
-typedef struct {
-    SndConvRegPair pair[7];
-} SndConvRegTable;
-extern const SndConvRegTable D_00A4E828;
 
 /*
  * ov01:0x00a2dbc8. Searches a sentinel-terminated sound conversion pair
@@ -542,11 +557,11 @@ void sndSeTransPlayObj(SndSePlayTask *task)
     objRemovePure(&task->base);
 }
 
-extern char *sndMuNameBase;
-extern char *sndMuNameExt1;
-extern char *sndMuNameExt2;
-extern char *muName[3];
-extern char *mu2Name[3];
+static char *sndMuNameBase;
+static char *sndMuNameExt1;
+static char *sndMuNameExt2;
+static char *muName[3];
+static char *mu2Name[3];
 
 /*
  * ov01:0x00a2e160. Loads the three sound files of music set mode into
@@ -617,6 +632,17 @@ int dataSndMuLoad(int mode)
     return 1;
 }
 
+/* These initialized data objects occupy .data in the overlay even though
+ * their original file bytes are all zero. Their types and extents follow the
+ * existing field accesses and exact original symbol sizes. */
+SndSeRegDat sndSeRegDat[6] = { 0 };
+unsigned char sndSeDat[0x68] = { 0 };
+SndMuData sndMuDat = { 0 };
+int ctrlId = 0;
+int dmgBankOffs[3] = { 0 };
+int dmgBankStat[3] = { 0 };
+
+
 int sndMuTrans(int mode)
 {
     if (mode == 0) {
@@ -645,7 +671,6 @@ void sndMuFadeIn(void)
     xglSoundSequenceNormal3(0, SND_MU_VOLUME_MAX, SND_MU_FADE_TIME);
 }
 
-extern const char D_00A4E860[];
 void sndMuTransPlayObj(ObjectTask *task);
 
 void sndMuTransPlay(int mode)

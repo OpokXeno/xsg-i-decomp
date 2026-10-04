@@ -20,10 +20,10 @@ extern void XrgExit(int status);
  * ov12:0x00a554a8 contains the format string
  *      "\n\nerror in %s at %d\n".
  */
-extern const char D_00A55478[];
-extern const char D_00A55448[];
-extern const char D_00A55490[];
-extern const char D_00A554A8[];
+const char D_00A55448[] = "------------------------------------------\n";
+const char D_00A55478[] = "../rg_error.euc.c";
+const char D_00A55490[] = "RG : FATAL-ERROR\n";
+const char D_00A554A8[] = "\n\nerror in %s at %d\n";
 
 void RgError(const char *format, const char *source_file, int line, ...)
 {
@@ -57,10 +57,8 @@ extern void XrgVLog(const char *format, const char *source_file, int line,
  * ov12:0x00a554d0 contains the format string
  *      "\n\nwarning in %s at %d\n".
  */
-extern const char D_00A55478[];
-extern const char D_00A55448[];
-extern const char D_00A554C0[];
-extern const char D_00A554D0[];
+const char D_00A554C0[] = "RG : WARNING!\n";
+const char D_00A554D0[] = "\n\nwarning in %s at %d\n";
 
 void RgWarn(const char *format, const char *source_file, int line, ...)
 {

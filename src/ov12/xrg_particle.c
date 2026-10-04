@@ -53,7 +53,17 @@ static void _openVifGif(XglPacket *packet, unsigned int prim,
  * address+data register code), the constant _openVifGifAD passes to
  * sceVif1PkOpenGifTag.
  */
-extern const XrgParticleGifTag D_00A58F10;
+const XrgParticleGifTag D_00A58F10 = {
+    .part = { 0x1000000000008000ULL, 0x000000000000000EULL }
+};
+const char D_00A58F20[] = "pDrv != NIL";
+const char D_00A58F30[] = "../xrg_particle.euc.c";
+const char D_00A58F78[] = "pDrv->m_uReqCalcNum < REQ_CALC_MAX";
+const char D_00A58FA0[] = "pPoints != NIL";
+const char D_00A58FB0[] = "pDrv->m_uReqDispNum < REQ_DISP_MAX";
+const char D_00A58FD8[] = "pPic != NIL";
+const char D_00A59008[] = "p != NIL";
+const char D_00A59018[] = "pArray != NIL";
 
 static void _openVifGifAD(XglPacket *packet)
 {
@@ -166,14 +176,6 @@ void XrgParticleDriverSet(XrgParticleDriver *driver, int params0, int params1)
     driver->params1 = params1;
 }
 
-/*
- * ov12:0x00a58f78 ("pDrv->m_uReqCalcNum < REQ_CALC_MAX") and ov12:0x00a58fa0
- * ("pPoints != NIL") are further scaffold-owned assertion strings of this
- * allocation (same ownership as D_00A58F20/D_00A58F30 above).
- */
-extern const char D_00A58F78[];
-extern const char D_00A58FA0[];
-
 #define REQ_CALC_MAX 16
 
 void XrgParticleDriverPassTimeReq(XrgParticleDriver *driver, struct XrgParticle *pPoints,
@@ -195,14 +197,6 @@ void XrgParticleDriverPassTimeReq(XrgParticleDriver *driver, struct XrgParticle 
     driver->calcReq[idx].count = count;
     driver->calcReq[idx].rate = rate;
 }
-
-/*
- * ov12:0x00a58fb0 ("pDrv->m_uReqDispNum < REQ_DISP_MAX") and ov12:0x00a58fd8
- * ("pPic != NIL") are further scaffold-owned assertion strings of this
- * allocation.
- */
-extern const char D_00A58FB0[];
-extern const char D_00A58FD8[];
 
 #define REQ_DISP_MAX 1024
 
@@ -262,7 +256,6 @@ extern void RgDrawReq(RgDraw *pDraw, XrgParticleDriver *driver,
                       void (*drawFunc)(XrgParticleDriver *driver, void *pStudio),
                       void (*clearFunc)(XrgParticleDriver *driver, void *pStudio),
                       int prio, int drawID);
-extern const char D_00A59008[];
 void _DrawDriver(XrgParticleDriver *driver, void *pStudio);
 
 void XrgParticleDriverDisp(XrgParticleDriver *driver)

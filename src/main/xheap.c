@@ -3,6 +3,12 @@
 #include "main/string_utf_get_hash.h"
 #include "xheap.h"
 
+static xheap_block *heap_top;
+static int heap_size;
+static xheap_frame *frame_stack;
+static xheap_block *freeBlock;
+void *jthreadCurrent;
+
 extern void reloadClassEntry(void *heap_boundary);
 
 static void xmemchk() {

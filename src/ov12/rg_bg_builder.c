@@ -6,6 +6,45 @@
 #include "ov12/rg_simple_db.h"
 #include "rg_bg_builder.h"
 
+const char D_00A55738[16] = "pDB != NIL";
+const char D_00A55748[24] = "../rg_bg_builder.euc.c";
+const char D_00A55760[16] = "pszName != NIL";
+const char D_00A55770[16] = "pDat != NIL";
+const char D_00A55780[24] = "already entried '%s'";
+const char D_00A55798[16] = "pBuilder != NIL";
+const char D_00A557A8[16] = "pGroup != NIL";
+const char D_00A557B8[8] = "file";
+const char D_00A557C0[32] = "duplicate specified 'file %s'";
+const char D_00A557E0[16] = "data\\nisimori\\";
+const char D_00A557F0[32] = "cannot load BG data file '%s'\n";
+const char D_00A55810[8] = "tray";
+const char D_00A55818[24] = "not specified 'file'";
+const char D_00A55830[8] = "box";
+const char D_00A55838[8] = "posbox";
+const char D_00A55840[32] = "unknown BG keyword '%s'\n";
+const char D_00A55860[40] = "pObj != NIL && pszKeyWord != NIL";
+const char D_00A55888[16] = "pReader != NIL";
+const char D_00A55898[8] = "BG";
+const char D_00A558A0[24] = "not exist BG '%s'\n";
+const char D_00A558B8[8] = "DATA";
+const char D_00A558C0[8] = "False";
+const char D_00A558C8[8] = "nofog";
+const char D_00A558D0[8] = "nohide";
+const char D_00A558D8[8] = "hitbody";
+const char D_00A558E0[24] = "unknown option '%s'";
+const char D_00A558F8[8] = "put";
+const char D_00A55900[8] = "pos";
+const char D_00A55908[8] = "grid";
+const char D_00A55910[8] = "rand";
+const char D_00A55918[8] = "light";
+const char D_00A55920[24] = "unknown light-code '%c'";
+const char D_00A55938[8] = "amb";
+const char D_00A55940[8] = "fog";
+const char D_00A55948[8] = "fogcol";
+const char D_00A55950[24] = "unknown key word '%s'";
+const char D_00A55968[16] = "complete BG %s\n";
+const char D_00A55978[16] = "pGetBuf != NIL";
+
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 extern RgHeap *InstanceOfRgHeap(void);

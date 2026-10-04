@@ -93,6 +93,8 @@ struct ScriptTask {
     short missile_reset1;             /* +0x68 */
     unsigned char unmodeled_6A[6];    /* +0x6A */
     int missile_adr;                  /* +0x70 */
+    /* Script-slot stride is 0x80 (seven low bits select a task slot). */
+    unsigned char unmodeled_74[0x0C]; /* +0x74..+0x7F */
 };
 
 extern int scWaitParseScript(ScriptTask *task);
@@ -105,8 +107,6 @@ typedef unsigned short ScSchedulerWord;
 
 typedef unsigned int ScSchedulerWord32;
 
-extern unsigned char _scriptWork[];
-
 typedef struct ScriptRecord ScriptRecord;
 
 /*
@@ -117,9 +117,16 @@ typedef struct ScriptRecord ScriptRecord;
  * only that field is evidenced here.
  */
 struct ScriptRecord {
-    unsigned char unmodeled_0[0x400];
+    ScriptTask tasks[8]; /* eight 0x80-byte task slots */
     int *dataTable; /* +0x400 */
+    int registers[16]; /* +0x404, register selectors 0..15 */
+    unsigned short unmodeled_444;
+    short eventValue; /* +0x446: returned by scREVEScript */
+    unsigned short unmodeled_448;
+    unsigned char unmodeled_44A[6];
 };
+
+extern ScriptRecord _scriptWork[16];
 
 static int scONGOSUB(ScriptTask *task);
 

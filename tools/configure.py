@@ -200,8 +200,11 @@ def configure_main(root, build, logs, tc, verbose):
     check(run([sys.executable, "-B", TOOLS / "post_split.py", "--root", root,
                "--unit-dir", unit_dir], root, log, 300), "post_split.py", log)
     stage_headers(root, unit_dir)
+    # Refresh the published headers before Ninja enumerates its dependencies.
+    stage_shared_headers(root, unit_dir)
     check(run([sys.executable, "-B", TOOLS / "ninja_main.py", "--root", root,
-               "--unit-dir", unit_dir], root, log, 120, env=tool_env(tc)),
+               "--unit-dir", unit_dir, "--carve-registry", root / "config/objects/data-carves.json"],
+              root, log, 120, env=tool_env(tc)),
           "ninja_main.py", log)
     stage_headers(root, unit_dir)          # ninja_main writes its own copies too
     stage_shared_headers(root, unit_dir)   # include/shared.h, include/<unit>/<tu>.h
@@ -249,8 +252,12 @@ def finish_overlays(root, build, overlays, logs, tc, verbose):
     for unit in overlays:
         unit_dir = build / unit
         stage_headers(root, unit_dir)      # after the dialect pass rewrote labels.inc
+        # A published build uses the committed storage-owner records. Private
+        # campaign sidecars under gates/ can retain older source/object pins.
+        registry = root / "config/objects/data-carves.json"
         check(run([sys.executable, "-B", TOOLS / "ninja_ovl.py", unit_dir, unit,
-                   "--root", root, "--manifest", unit_dir / "compile-manifest.json"],
+                   "--root", root, "--manifest", unit_dir / "compile-manifest.json",
+                   "--bss-record", registry, "--carve-registry", registry],
                   root, log, 120, env=tool_env(tc)), f"ninja_ovl.py {unit}", log)
         if verbose:
             print(f"{unit}: unit build directory ready")

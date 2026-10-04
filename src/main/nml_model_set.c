@@ -2,11 +2,76 @@
 #include "shared.h"
 #include "nml_model_set.h"
 
-extern int s_nClip;
-extern int s_nMapShadowParts;
-extern Vector4 s_inGblPos;
+int g_aSubWindow[4] = { 0 };
+LayoutStore s_inLayout = { 0 };
 
-extern unsigned char s_inMapHandle[];
+static void *s_pMapLast = 0;
+static int s_nParentBuf = 0;
+static int s_nToumeiNum = 0;
+static unsigned int s_nShadowVec = 0;
+static int s_nMapShadowParts = 0;
+static float s_fSortOffsetEntry = 0.0f;
+static int s_nParent = 0;
+static int s_nClip = 0;
+static int s_nShapeNum = 0;
+static int s_nMapClip = 0;
+static int s_nPacketSignal = 0;
+static int s_nUseZwrite = 0;
+static int s_nUseBackBuffer = 0;
+static int s_nEffectWrite = 1;
+static int s_nMapLast = 0;
+static int s_nFadeDoit = 0;
+static int s_nPause = 0;
+static int s_nMenu = 0;
+static int s_nFrameLockOff = 0;
+static int s_nRenderCancelOld = 0;
+int g_nGsEntry = 0;
+
+static int s_nAlphaGroup;
+static int s_nNonAlphaGroup;
+static int s_aToumeiId[16];
+static float s_aToumei[16];
+static int s_aShapeId[32];
+static float s_aShapeWeight[32];
+static int s_aMapLast[12];
+static Vector4 s_inShadowVec;
+static Vector4 s_inGblPos;
+/*
+ * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
+ * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
+ * Keep its definition between s_inGblPos and s_inProReal, matching the
+ * original local-storage order. set_circle_shadow_ratio writes entries 0-7
+ * and 16-23.
+ */
+static int D_00956940[256];
+/*
+ * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
+ * with count 0x1e, so the copied extent is established.  ProjectMap and
+ * ProjectCircle access the listed float slots; nmlModelClear clears the word
+ * at +0x1c0.  Other bytes remain unnamed because their roles are not shown
+ * by this TU's C callers.
+ */
+typedef struct NmlProRealState {
+    unsigned char unmodeled_000[0x190];
+    float unmodeled_190[4];
+    float value_1a0;
+    float value_1a4;
+    float value_1a8;
+    float unmodeled_1ac;
+    float unmodeled_1b0;
+    float unmodeled_1b4;
+    float value_1b8;
+    float unmodeled_1bc;
+    int projection_entry;
+    unsigned char unmodeled_1c4[0x1e0 - 0x1c4];
+} NmlProRealState;
+static NmlProRealState s_inProReal[1];
+static int s_inBackBuffer[10];
+static int s_inMapHandle[4];
+static FadeControl s_inFadeOut;
+static FadeControl s_inFadeIn;
+static FadeControl s_inActiveFadeOut;
+static FadeControl s_inActiveFadeIn;
 
 #define NML_RENDER_MAP_ENTRY 0x10000u
 
@@ -140,7 +205,7 @@ static void FLUSH_ALPHA_GROUP(void)
 
 /*
  * The only word this TU's CLEAR_PROREAL evidences within its caller's
- * "proreal" render block (nmlModelClear passes &s_inProReal, main
+ * "proreal" render block (nmlModelClear passes s_inProReal as the array base, main
  * 0x0095b940, further modeled in part by src/main/nml_packet_add.h's
  * NmlProRealParam at its own +0x11c field): nothing else in this
  * allocation reads or writes byte offset 0x1c0, so it stays a named
@@ -727,7 +792,6 @@ void nmlModelSetRenderStatus(int status)
 
 void nmlModelSetShapeId(int shapeId, float weight)
 {
-    extern int s_nShapeNum;
     extern int s_aShapeId[];
     extern float s_aShapeWeight[];
 
@@ -739,7 +803,6 @@ void nmlModelSetShapeId(int shapeId, float weight)
 
 void nmlModelSetToumeiParts(int partId, float alpha)
 {
-    extern int s_nToumeiNum;
     extern int s_aToumeiId[];
     extern float s_aToumei[];
 
@@ -917,7 +980,7 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelInitPartsVisible);
 
 void nmlModelSetMapEntry(void)
 {
-    int *mapHandle = (int *)s_inMapHandle;
+    int *mapHandle = s_inMapHandle;
 
     s_inLayout.fields.render_status |= NML_RENDER_MAP_ENTRY;
     mapHandle[0] = 1;
@@ -1044,8 +1107,6 @@ void nmlModelDirectSendXtx(int modelId, void *data)
     }
 }
 
-extern int s_nUseZwrite;
-
 static void set_group_status(LayoutStore *layout, u32 *status)
 {
     *status = 0;
@@ -1103,15 +1164,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", is_block_last_entry);
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", parent_buf_entry);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", parent_buf_search);
-
-/*
- * D_00956940 is the .bss circle-shadow ratio table: set_circle_shadow_ratio
- * below only ever writes indices 0-7 and 16-23 (two 8-entry blocks 0x40
- * bytes apart); indices 8-15 are written elsewhere (CONSTRUCT_CIRCLR_SHADOW/
- * nmlModelRenderCircle/nmlModelRenderDropCircle, all still INCLUDE_ASM in
- * this TU), so it stays an unsized array rather than a guessed full extent.
- */
-extern int D_00956940[];
 
 static void set_circle_shadow_ratio(int scale)
 {
@@ -1215,7 +1267,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFlushSub);
  */
 static void CONSTRUCT_CIRCLR_SHADOW(void);
 void nmlModelClear(void);
-extern unsigned char s_inMapHandle[];
 
 void nmlModelConstruct(void)
 {
@@ -1224,7 +1275,7 @@ void nmlModelConstruct(void)
     CONSTRUCT_BACK_BUFFER();
     CONSTRUCT_ALPHA_GROUP();
     CONSTRUCT_PARENT_BUF();
-    CONSTRUCT_MAP_HANDLE((int *)s_inMapHandle);
+    CONSTRUCT_MAP_HANDLE(s_inMapHandle);
     CONSTRUCT_FADE_CONTROL(&s_inFadeIn);
     CONSTRUCT_FADE_CONTROL(&s_inFadeOut);
     CONSTRUCT_FADE_CONTROL(&s_inActiveFadeIn);
@@ -1240,13 +1291,11 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelInit);
  * declaration. */
 static void CLEAR_LAYOUT_MODEL(LayoutStore *);
 static void CLEAR_MODEL_ENTRY(void);
-extern unsigned char s_inMapHandle[];
-extern unsigned char s_inProReal[];
 
 void nmlModelClear(void) {
     CLEAR_LAYOUT_MODEL(&s_inLayout);
     CLEAR_PROREAL((int *) s_inProReal);
-    CLEAR_MAP_HANDLE((int *) s_inMapHandle);
+    CLEAR_MAP_HANDLE(s_inMapHandle);
     CLEAR_MODEL_ENTRY();
 }
 
@@ -1259,7 +1308,7 @@ static void FLUSH_MODELSYSTEM(void);
 void nmlModelFlushClear(void) {
     FLUSH_MODELSYSTEM();
     FLUSH_ALPHA_GROUP();
-    FLUSH_MAP_HANDLE((int *) s_inMapHandle);
+    FLUSH_MAP_HANDLE(s_inMapHandle);
     FLUSH_PARENT_BUF();
     FLUSH_BACK_BUFFER();
     nmlModelClear();

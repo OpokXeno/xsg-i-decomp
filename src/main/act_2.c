@@ -17,6 +17,52 @@ extern int JNT_getMoveElement(void *move);
  */
 extern int FCV2_checkData(void *data);
 
+/* One of the eight Java camera records embedded at `tcamera + n * 0x12c0`.
+ * TCAMERA_update establishes the four 0x4a0 channel strides and TCAMERA_init
+ * establishes the 0x12c0 record stride. The channel union names the fields
+ * proved by the channel callers; the rest stays explicitly unmodeled storage
+ * until another access gives it meaning. */
+typedef struct CameraChannelSpline {
+    unsigned char unmodeled_00[4];
+    unsigned short weight_mode;
+    unsigned short first_key;
+    unsigned short last_key;
+    unsigned short sample_count;
+    unsigned int component_count;
+    const float *samples;
+} CameraChannelSpline;
+
+typedef union CameraChannelData {
+    CameraChannelSpline spline;
+    struct {
+        Vector4 offset;
+        int mode;
+        float **constraint;
+    } constant;
+    struct {
+        unsigned char unmodeled_00[0x18];
+        unsigned char unmodeled_18[0x4a0 - 0x18];
+    } unmodeled;
+} CameraChannelData;
+
+typedef struct CameraRecord {
+    unsigned int class_header;       /* +0x00, passed to Java as the object */
+    int camera_id;                   /* +0x04, selects the studio camera */
+    unsigned int unmodeled_08;
+    int mode[4];                     /* +0x0c, TCAMERA_update dispatch */
+    int frame[4];                    /* +0x1c, per-channel frame counters */
+    float debug_cursor;              /* +0x2c, edited by the camera cursor */
+    CameraChannelData translate;     /* +0x30 */
+    CameraChannelData view;          /* +0x4d0 */
+    CameraChannelData roll;          /* +0x970 */
+    CameraChannelData fov;           /* +0xe10 */
+    SceneObject peer;                /* +0x12b0, seeded by Camera_start */
+    float initial_fov;               /* +0x12b4, seeded by Camera_create */
+    unsigned char unmodeled_12b8[8]; /* +0x12b8 to the established 0x12c0 stride */
+} CameraRecord;
+
+CameraRecord tcamera[8] = {0};
+
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_resetMatrix);
 
 INCLUDE_ASM("asm/main/nonmatchings/act_2", ACT_resetParent);

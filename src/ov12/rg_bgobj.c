@@ -9,18 +9,11 @@
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a529b0 contains the assertion expression "pObj != NIL".
- * ov12:0x00a529c0 contains the source filename "../rg_bgobj.euc.c".
- */
-extern const char D_00A529B0[];
-extern const char D_00A529C0[];
+/* Assertion strings and the source filename passed to the assertion helper. */
+const char D_00A529B0[16] = "pObj != NIL";
+const char D_00A529C0[24] = "../rg_bgobj.euc.c";
 
-/* Scaffold-owned .data (ov12:0x00a4f638). */
-extern float s_fBgObjBlight;
+static float s_fBgObjBlight = 1.0f;
 
 /* The RgChar type tag CreateRgBgObj passes to RgCharAlloc for a background object. */
 #define RG_CHAR_TYPE_BGOBJ 2
@@ -78,7 +71,7 @@ extern RgDebugFlags *InstanceOfRgDebugFlags(void);
 extern void XrgUnitMatrix(RgMatrix destination);
 extern void CreateRgHitEffectPos(RgVector position, const char *effectFile,
                                  const char *defaultEffectFile);
-extern unsigned char D_00A529D8[];
+const unsigned char D_00A529D8[16] = "eff12.ptcl";
 
 static void _InitRgBgObj(RgBgObj *pObj, void *dispModel, RgGeom *geomTray)
 {

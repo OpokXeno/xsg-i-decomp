@@ -5,6 +5,10 @@
 #include "shared.h"
 #include "ov12/xrg_rand_int.h"
 
+/* Referenced original data recovered from this translation unit. */
+const char D_00A552F8[32] = "../rg_geom_collision.euc.c";
+const char D_00A55328[16] = "pArg != NIL";
+
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _BallVsBall);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_geom_collision", _BallVsPoly);

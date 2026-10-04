@@ -62,7 +62,7 @@ extern ActorHead actor[ACTOR_COUNT];
  * (0x200 for the actor array here, 0x300 for MapUnit below) plus the slot
  * index, so only the one actor or map unit the current capture pass wants
  * is drawn. */
-extern u16 layer;
+static u16 layer;
 
 /* Defined in src/main/act_3.c (main/tu265), not yet published in
  * include/main/act_3.h. */

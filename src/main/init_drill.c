@@ -170,17 +170,19 @@ typedef struct DrillItemUnit {
     unsigned char unmodeled_1a6[0x15a];
 } DrillItemUnit;
 
-extern unsigned char D_004CA960[];
-extern unsigned char D_004CAA40[];
-extern unsigned char D_004CAA50[];
-extern unsigned char D_004CAA60[];
-extern unsigned char D_004CAA70[];
-extern unsigned char D_004CAAB0[];
+const char D_004CA960[] = "SetContainer\n";
+const char D_004CAA40[] = "DRILL ZMOVE";
+const char D_004CAA50[] = "DRILL ZSTANDBY";
+const char D_004CAA60[] = "DRILL XMOVE";
+const char D_004CAA70[] = "DRILL CRASH %2d";
+const char D_004CAA80[] = "DRILL RETURN";
+const char D_004CAA90[] = "drill_stanby";
+const char D_004CAAA0[] = "drill_end";
+const char D_004CAAB0[] = "CAMERA CONTROL";
 
 INCLUDE_ASM("asm/main/nonmatchings/init_drill", InitDrill);
 
 int CreateContainer(int, int);
-extern unsigned char D_004CA960[];
 int printf(const char *, ...);
 void DrillClearContainer(void);
 
@@ -547,9 +549,9 @@ typedef struct DrillGameLoopState {
 } DrillGameLoopState;
 
 extern DrillGameLoopState GameLoopState;
-extern unsigned char D_004CAA80[];
-extern unsigned char D_004CAA90[];
-extern unsigned char D_004CAAA0[];
+extern const char D_004CAA80[];
+extern const char D_004CAA90[];
+extern const char D_004CAAA0[];
 extern void CallMethod(const char *method);
 
 /* DrillReturnFunc's submitted body uses flat Vector4 expressions and a partial effect view.
