@@ -671,7 +671,16 @@ ManWork *manWorkGet(void)
     return &manWk;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", menuChk);
+extern int menuOpenChkBat(void);
+extern int menuFlag;
+
+int menuChk(void)
+{
+    if (menuOpenChkBat() != 0) {
+        return 1;
+    }
+    return menuFlag == 1;
+}
 
 BatCtrl *batCtrlGet(void)
 {
