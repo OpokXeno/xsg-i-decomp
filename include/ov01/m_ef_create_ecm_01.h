@@ -1,0 +1,6 @@
+#ifndef INCLUDE_OV01_M_EF_CREATE_ECM_01_H
+#define INCLUDE_OV01_M_EF_CREATE_ECM_01_H
+
+int MEfCreate_ECM01(MEfObjRecord *self);
+
+#endif /* INCLUDE_OV01_M_EF_CREATE_ECM_01_H */

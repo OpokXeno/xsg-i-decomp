@@ -13,12 +13,24 @@ The Sony SDK and public libraries do not need to be recovered.
 
 ## Progress
 
-Recovered 4,620 of 7,645 in-scope game function(s) (60.432%).
+<!-- coverage-report:begin -->
+Recovered 4,631 of 7,645 in-scope game function(s) (60.576%).
+
+- `exact_c` (pure C): 4,427 function(s)
+- `exact_c_with_asm`: 199 function(s)
+- `exact_asm`: 5 function(s)
+- `exact_vu_microcode`: not verifiable here (needs config/units and config/vu-build.json, untracked)
+- empty-body functions: not verifiable here (the 8-byte `jr ra; nop` bodies are a fact about the original, recorded in config/tu, untracked)
+- These counts come from the tracked object tables, the tracked symbol
+  tables and the published source. This tree cannot check that each
+  counted function matches its accepted record under its recorded
+  contract, independently reviewed: config/tu and config/units and config/vu-build.json are not tracked.
+<!-- coverage-report:end -->
 
 | Version | Target | Functions | Progress |
 | --- | --- | ---: | ---: |
 | NTSC-U | `SLUS_204.69` | 2,216 / 3,671 | 60.365% |
-| NTSC-U | `OV01.OVL` | 611 / 1,081 | 56.522% |
+| NTSC-U | `OV01.OVL` | 622 / 1,081 | 57.539% |
 | NTSC-U | `OV02.OVL` | 53 / 110 | 48.182% |
 | NTSC-U | `OV10.OVL` | 155 / 361 | 42.936% |
 | NTSC-U | `OV11.OVL` | 60 / 139 | 43.165% |
@@ -29,6 +41,11 @@ Recovered 4,620 of 7,645 in-scope game function(s) (60.432%).
 [![Progress map](https://decomp.dev/OpokXeno/xsg-i-decomp.svg?w=950&h=475)](https://decomp.dev/OpokXeno/xsg-i-decomp)
 
 ## Building
+
+The historical compilers are 32-bit Linux executables. On 64-bit Ubuntu,
+install `libc6-i386` and `python3-venv`. On Windows, use WSL and keep the
+checkout and build on a Linux filesystem: the old compilers cannot read some
+Windows filesystem metadata and report `Value too large for defined data type`.
 
 You need three things the repository does not contain: your own copy of the
 game, the original toolchain, and a Python environment for the disassembler.
@@ -108,6 +125,11 @@ ninja gate          # + per-unit status and the whole-file SHA-256 gate
 
 `ninja gate` writes `build/gate.json`. `"result": "pass"` means every one of the
 six files came out byte for byte identical to your original.
+
+Public builds use `config/objects/data-carves.json` to place constants and jump
+tables emitted by the recovered C functions. Terminal object padding is verified
+from the published object ranges and original ELF symbols when the private
+`config/tu-build.json` is absent. Neither requires private acceptance records.
 
 ## Contributing
 

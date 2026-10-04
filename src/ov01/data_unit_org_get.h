@@ -8,6 +8,51 @@
 #include "shared.h"
 #include "ov01/calc.h"
 
+/* dataUnitInitGet selects 0x34-byte records. MCamGetAtkRange and
+ * MCamGetDefRange read signed halfwords at +0x10 and +0x12, respectively;
+ * both ranges are stored in hundredths. Other fields remain unmodeled. */
+typedef struct UnitInitData {
+    unsigned char unmodeled_00[0x10];
+    short atkRange;
+    short defRange;
+    unsigned char unmodeled_14[0x34 - 0x14];
+} UnitInitData;
+
+UnitInitData *dataUnitInitGet(int entry);
+
+/* Rendered and equipment actors extend the same head with model storage.
+ * The calc-only scratch actor stops at the head and must not acquire this
+ * larger extent (calc.c's 0x110-byte temporary allocation). */
+typedef struct BattleModelActor {
+    BattleActor state;
+    unsigned char unmodeled_88[0x8D0 - 0x88];
+    void *modelAdr; /* +0x8D0 */
+    void *animationAdr; /* +0x8D4 */
+    void *textureAdr; /* +0x8D8 */
+    /* dataUnitFileLoadMotSp2 indexes from +0x8DC; the extent is not yet
+     * recovered. The overlapping motionAdr word is entry 1 at +0x8E0. */
+    union {
+        int slot[2];
+        struct {
+            int unmodeled_8dc;
+            int motionAdr;
+        } weapon;
+    } motion;
+} BattleModelActor;
+
+#define BATTLE_ACTOR_FLAG_ENEMY 0x40
+#define CALC_UNIT_FLAG_AGWS 0x40
+/* unitLoad uses this same range to skip the ordinary sound setup. */
+#define SPECIAL_MODEL_CHARACTER_ID_BEGIN 0xBB
+#define SPECIAL_MODEL_CHARACTER_ID_END 0xC3
+
+
+#define PL_CHARACTER_ID_END 0x21
+#define PL_LEARNING_CHARACTER_ID_END 0x11
+#define PL_SPECIAL_SLOT_COUNT 8
+
+int dataFileLoadNB(const char *filename, void *destination);
+
 void dataCdSyncClear(void);
 
 extern int cdReqNum;
@@ -46,16 +91,24 @@ typedef struct PlSpecialSlot {
 } PlSpecialSlot;
 
 /*
- * The player character record dataPlChaGet (this TU, still asm) returns for
- * a character id in 0..0x10. dataSpecLearnSet below is the only claimed
- * accessor and reaches only the special-technique table at +0x48; the
- * record's own layout before that offset is not established by any function
- * this TU claims. The table is indexed by specialId - dataSpecBaseGet(cid)
- * with no bound this TU claims, so it keeps a one-slot declared length.
+ * dataPlChaGet indexes plChaData in 0xA8-byte strides using cid - 1.
+ * It rejects cid >= 0x21; the learning helpers separately reject cid >=
+ * 0x11. The original functions do not check a lower bound.
+ *
+ * dataEtherLearnGet/Set access the signed-byte bitmap at +0x28, and
+ * dataSkillLearnGet/Set access the one at +0x38. Each bitmap occupies the
+ * 0x10-byte span before the next field; technique ids select byte and bit
+ * with (id - 1) / 8 and (id - 1) % 8.
+ *
+ * dataSpecDataGet searches eight 0xC-byte special-technique slots from
+ * +0x48, establishing the rest of the 0xA8-byte record. dataSpecLearnSet
+ * indexes these slots by specialId - dataSpecBaseGet(cid).
  */
 typedef struct PlCharacter {
-    unsigned char unmodeled_0[0x48];
-    PlSpecialSlot special[1]; /* +0x48, indexed dynamically */
+    unsigned char unmodeled_0[0x28];
+    signed char learnedEther[0x10]; /* +0x28 */
+    signed char learnedSkill[0x10]; /* +0x38 */
+    PlSpecialSlot special[PL_SPECIAL_SLOT_COUNT]; /* +0x48 */
 } PlCharacter;
 
 extern PlCharacter *dataPlChaGet(int cid);
@@ -67,38 +120,55 @@ extern int dataSpecBaseGet(int cid);
 extern int printf(const char *format, ...);
 extern const char D_00A457B0[];
 
-/* The six unit-file records are selected by dataUnitFileGet. */
+/*
+ * The six 0x130-byte unit-file records are selected by dataUnitFileGet.
+ * dataUnitFileLoadMdl reads the cached character id, model/animation/texture
+ * addresses and CD-sector-rounded sizes, and clears the face cache at +0x10C.
+ */
 typedef struct UnitFileInfo {
     int charaId;
-    unsigned char unmodeled_4[0x12c];
+    int modelCharaId; /* +0x04 */
+    void *modelAdr; /* +0x08 */
+    int modelSize; /* +0x0C */
+    unsigned char unmodeled_10[4];
+    void *animationAdr; /* +0x14 */
+    int animationSize; /* +0x18 */
+    unsigned char unmodeled_1c[4];
+    void *textureAdr; /* +0x20 */
+    int textureSize; /* +0x24 */
+    unsigned char unmodeled_28[0x10C - 0x28];
+    int faceCharaId; /* +0x10C */
+    unsigned char unmodeled_110[0x20];
 } UnitFileInfo;
 
 extern UnitFileInfo unitFileInfo[6];
 
 extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
-/* Partial motion and actor records used by the allocated load helpers. */
-typedef struct MotionAdrTable {
-    unsigned char unmodeled_0[0x8dc];
-    int slot[1];
-} MotionAdrTable;
-
-typedef struct EquipActor {
-    unsigned char unmodeled_0[0x8d0];
-    /* dataPackWpnMdl2 rebases these three packed weapon-model pointers in
-       place; its callers skip the call when wpnMdl[1] is already non-zero. */
-    unsigned char *wpnMdl[3]; /* +0x8d0 */
-    unsigned char unmodeled_8dc[0x8e0 - 0x8dc];
-    int motionAdr;
-} EquipActor;
-
+/* UnitRecord in unit_cmd.h evidences the same task prefix, separate
+ * motion actor (+0x14) and four equipment actors (+0x1C). */
 typedef struct UnitEquipInfo {
-    unsigned char unmodeled_00[0x14];
-    MotionAdrTable *motionTable;
+    /* Generic scheduler helpers use ObjectTask; battle code knows the
+     * work allocation is a BattleActor. Both views have the same prefix. */
+    union {
+        ObjectTask object;
+        struct {
+            XglTaskPrefix scheduler;
+            BattleActor *work;
+        } battle;
+    } task;
+    BattleModelActor *motionActor;
     unsigned char unmodeled_18[4];
-    EquipActor *equipActor[4];
+    BattleModelActor *equipActor[4];
 } UnitEquipInfo;
 
-extern void dataMotAdrSet(MotionAdrTable *table, int motionId);
+extern void dataMotAdrSet(BattleModelActor *actor, int motionId);
+
+typedef struct WpnFileInfo {
+    unsigned char unmodeled_00[0xA0];
+    int weaponId; /* +0xA0: dataWpnLRChk */
+} WpnFileInfo;
+
+int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo);
 
 #endif /* SRC_OV01_DATA_UNIT_ORG_GET_H */

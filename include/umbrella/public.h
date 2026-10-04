@@ -1,6 +1,8 @@
 #ifndef INCLUDE_UMBRELLA_PUBLIC_H
 #define INCLUDE_UMBRELLA_PUBLIC_H
 
+int MEfObjDestroy(void *object);
+
 float *MMathCalcHermite(float *destination, float parameter,
                          HermiteVector *tangent_first, HermiteVector *tangent_second,
                          HermiteVector *endpoint_first, HermiteVector *endpoint_second);
@@ -49,8 +51,6 @@ void objRemovePure(ObjectTask *task);
 void resultProcInit(void);
 
 char *RgFileSysDataGetName(RgFileSysData *pFile);
-
-void RgGeomRobotSetDir(RgGeom *geom, RgVector direction);
 
 void RgRobotSetWeapon(RgStatus *pRobot, int eSide, int weaponID);
 void RgRobotSetSpareWeapon(RgStatus *pRobot, int eSide, int weaponID);

@@ -2,6 +2,7 @@
  * OV01 original TU 28: 0x00a360e0..0x00a36be8 (6 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 extern float MMathCalcRotNear(float first, float second);
@@ -373,7 +374,6 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DP000);
 
 /* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
  * still asm in their defining TU; declared locally until published there. */
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /* Same frame gating as MSP00's fnMSP00_PO000 (see m_ef_create_msp_00.c),

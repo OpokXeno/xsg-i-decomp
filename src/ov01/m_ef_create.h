@@ -17,52 +17,56 @@ extern void MOutputDebugStringWarn(const char *format, ...);
 
 /*
  * MEfObjCreate / MEfObjDestroy (main:0x002f01b8 / main:0x002f0250): defined
- * in src/main/m_ef_obj.c, still INCLUDE_ASM there; declared TU-locally the
- * same way every m_ef_create_*.c TU already declares MEfObjDestroy until
- * main's own TU claims them.
+ * in src/main/m_ef_obj.c. Its recovered definitions return an allocated
+ * object pointer and an integer destroy result, respectively.
  */
 extern void *MEfObjCreate(void);
-extern void MEfObjDestroy(void *self);
+extern int MEfObjDestroy(void *self);
 
-/*
- * MEfCreateParam: the per-effect creation request MEfCreate copies wholesale
- * (0x70 bytes) into the new object's work area with a straight ld/sd
- * assignment; type selects the ntbl_1/func_0 entry below and is the only
- * field this TU reads individually. The remaining bytes are opaque per-type
- * parameters interpreted by each type's own constructor (e.g. GameraState in
- * src/ov01/m_ef_create_gamera.c, whose work pointer is this same block);
- * unmodeled_08's u64 element type is evidenced size/alignment only, needed
- * for the assignment to compile to ld/sd instead of ldl/ldr/sdl/sdr.
- */
-typedef struct MEfCreateParam {
-    int type;             /* +0x00 */
-    u8 unmodeled_04[4];    /* +0x04 */
-    u64 unmodeled_08[13];  /* +0x08 */
+/* MEfCreate copies a complete 0x70-byte request using aligned ld/sd.
+ * Only type is interpreted here; effect-specific payload fields are unknown.
+ * The union gives the opaque copy storage natural eight-byte alignment
+ * without claiming semantic 64-bit fields or using a GNU attribute. */
+typedef union MEfCreateParam {
+    struct {
+        int type;
+        u8 opaque[0x70 - 4];
+    } fields;
+    u64 opaqueStorage[0x70 / sizeof(u64)];
 } MEfCreateParam;
 
-/*
- * MEfObjRecord: partial view of the pooled object MEfObjCreate returns
- * (main/m_ef_obj.c's MEfObj, still INCLUDE_ASM/unpublished there); only the
- * work area MEfCreate writes is named here, at the same +0x20 offset
- * src/ov01/m_ef_create_gamera.c's GameraState is cast onto.
- */
-typedef struct MEfObjRecord {
+/* MEfObjCreate supplies a pooled object with work at +0x20. Its original
+ * pool stride is 0x420 and base is 16-byte aligned (main/m_ef_obj.c).
+ * This bounded prefix includes the creation request, not the complete
+ * constructor-specific work allocation. */
+typedef struct MEfObjRecord MEfObjRecord;
+
+struct MEfObjRecord {
     u8 unmodeled_00[0x20];
     MEfCreateParam work;
-} MEfObjRecord;
+};
 
 #define MEF_TYPE_COUNT 14
 
-typedef int (*MEfObjCtor)(void *self);
+typedef int (*MEfObjCtor)(MEfObjRecord *self);
 
-/*
- * func_0 / ntbl_1: OV01 rodata still asm-owned by this TU
- * (config/symbols/ov01.txt "func_0 = 0x00A43728; // size:0x38", "ntbl_1 =
- * 0x00A43760; // size:0x1C"), each indexed by MEfCreateParam::type: func_0
- * is every type's constructor (nonzero return means success), ntbl_1 the
- * instance count MEfCreate allocates for that type.
- */
-extern MEfObjCtor func_0[MEF_TYPE_COUNT];
-extern short ntbl_1[MEF_TYPE_COUNT];
+/* C constructor declarations come from their defining TU headers.
+ * The remaining five entries are still assembly-owned; this factory is
+ * their only C caller, so their common prototypes remain TU-local. */
+int MEfCreate_MSP00(MEfObjRecord *self);
+int MEfCreate_SMP01(MEfObjRecord *self);
+int MEfCreate_MSP02(MEfObjRecord *self);
+int MEfCreate_GAMERA(MEfObjRecord *self);
+int MEfCreate_DORA(MEfObjRecord *self);
+
+#include "ov01/m_ef_create_bp_00.h"
+#include "ov01/m_ef_create_eac_00.h"
+#include "ov01/m_ef_create_amp_02.h"
+#include "ov01/m_ef_create_solb.h"
+#include "ov01/m_ef_create_ecm_01.h"
+#include "ov01/m_ef_create_ecm_02.h"
+#include "ov01/m_ef_create_ead_00.h"
+#include "ov01/m_ef_create_so_14.h"
+#include "ov01/m_ef_create_kosbw_02.h"
 
 #endif /* SRC_OV01_M_EF_CREATE_H */

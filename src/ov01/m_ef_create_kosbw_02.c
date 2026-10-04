@@ -2,6 +2,7 @@
  * OV01 original TU 36: 0x00a3a090..0x00a3aac8 (5 functions)
  */
 #include "common.h"
+#include "ov01/m_ef_create.h"
 #include "shared.h"
 
 typedef struct Kosbw02DrawWork {
@@ -98,9 +99,9 @@ extern Vector4 *MMathRotateMatrixYXZ(Vector4 *destination,
                                      const Vector4 *angles);
 extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
 
-int MEfCreate_KOSBW02(void *storage)
+int MEfCreate_KOSBW02(MEfObjRecord *storage)
 {
-    Kosbw02Allocation *allocation = storage;
+    Kosbw02Allocation *allocation = (Kosbw02Allocation *)storage;
     Kosbw02CreateState *state = &allocation->state;
     Kosbw02GsParameter parameter;
     Vector4 angle_vector;
@@ -274,7 +275,6 @@ static void fnKOSBW02_DM000(void *task, Kosbw02DrawWork *work)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_kosbw_02", fnKOSBW02_DP000);
 
-extern void MEfObjDestroy(void *self);
 extern void sefHitEffect(void);
 
 /*
