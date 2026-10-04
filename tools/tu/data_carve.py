@@ -1056,29 +1056,16 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True):
     for sec, linker_name in (('.sbss', 'linker/scommon'), ('.bss', 'linker/common')):
         rows = []
         for row in registry.get('common_tail', {}).get(sec, []):
-            if not row.get('c_input_span') or row.get('tu') not in by_id:
+            if not row.get('c_input_span'):
                 continue
-            # COMMON symbols remain linker allocated at the tail. Substitute
-            # only an actual section-defined object whose exact section/value
-            # and extent match the declared tail owner.
-            owner = row.get('storage_owner') or {}
-            tu = by_id[row['tu']]
-            obj_path = Path(unit_dir) / 'build/c' / f'{tu["name"]}.o'
-            if not obj_path.is_file() or not owner.get('name'):
-                continue
-            obj_elf = Elf(obj_path.read_bytes())
-            part = row['c_input_span']
-            input_section = part.get('section', sec)
-            allowed_input = {sec} if sec == '.bss' else {'.sbss', '.scommon'}
-            if input_section not in allowed_input:
-                continue
-            sec_index = next((s.index for s in obj_elf.sections if s.name == input_section), None)
-            sym = [s for s in obj_elf.symbols if s.name == owner['name'] and s.shndx == sec_index]
-            obj_range = part.get('object_range') or []
-            if (sec_index is None or len(sym) != 1 or len(obj_range) != 2
-                    or sym[0].value != int(obj_range[0])
-                    or sym[0].size != int(owner.get('size', -1))):
-                continue
+            tu = by_id.get(row.get('tu'))
+            if tu is None or tu.get('mode') != 'c':
+                raise CarveError(f'{row.get("tu")} {sec}: common-tail owner has no compiled C TU')
+            # Configure runs before compilation in a clean checkout. Plan the
+            # substitution from tracked ownership, never from cached objects.
+            # The carvesplit edge validates each fresh object's NOBITS section,
+            # owner symbol, offset and extent in split_plans() before linking;
+            # mapcheck and the whole-file comparison remain required afterward.
             rows.append(row)
         if not rows:
             continue
@@ -1091,8 +1078,12 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True):
             lo, hi = map(hx, row['range'])
             part = row['c_input_span']
             obj_range = part.get('object_range')
+            owner = row.get('storage_owner') or {}
             allowed_input = {sec} if sec == '.bss' else {'.sbss', '.scommon'}
             if (part.get('section') not in allowed_input or obj_range is None or len(obj_range) != 2
+                    or not owner.get('name') or hx(owner.get('address', '-1')) != lo
+                    or int(owner.get('size', -1)) != hi - lo
+                    or int(obj_range[0]) < 0
                     or int(obj_range[1]) - int(obj_range[0]) != hi - lo
                     or not (hx(tail['start']) <= lo < hi <= hx(tail['end']))):
                 raise CarveError(f'{row.get("tu")} {sec}: common-tail input span is not an exact in-bounds NOBITS owner')
