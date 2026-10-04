@@ -1,12 +1,14 @@
 """Prepare ELF object pairs for objdiff, without calculating report scores.
 
-Targets contain original assembly scaffolds and original TU data. Bases are fresh C
+Targets contain original disassembly and original TU data. Bases are fresh C
 compilations with SKIP_ASM: neither fallback nor standalone assembly earns C
 credit. IOP originals have no base. All binary inputs remain local.
 """
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+import re
+import struct
 import subprocess
 
 import coverage_report as cov
@@ -46,6 +48,98 @@ def functions(path):
             if s.type == 2 and s.shndx not in (0, 0xfff1) and s.size}
 
 
+def original_text(reference, original_path, start, end, destination, cwd, obj, assembler, flags):
+    """Keep original GP operands where the retail ELF has no relocation type.
+
+    Turning a literal load into an external symbol invents GPREL16, whereas
+    cc1 may emit LITERAL for the same final instruction. The retail binary
+    cannot establish either type. Disassemble these operands as their actual
+    numeric GP offsets instead; native objdiff report defaults handle an
+    unrelocated reference against either compiler representation. Keep ordinary
+    symbolic branches so objdiff still resolves object-relative jump targets.
+    This local report assembly never replaces build scaffolding or C source.
+    """
+    original = Elf(original_path.read_bytes())
+    scaffold = Elf(reference.read_bytes())
+    text = scaffold.section('.text')
+    padded_end = (end + text.align - 1) // text.align * text.align
+    verification.require(start + text.size <= padded_end,
+                         f'{obj["id"]}: reference exceeds TU text alignment')
+    section = next((s for s in original.sections if s.type != 8 and s.flags & 2
+                    and s.addr <= start and start + text.size <= s.addr + s.size), None)
+    verification.require(section is not None, f'{obj["id"]}: missing original text extent')
+    labels = {s.name: s for s in scaffold.symbols if s.shndx == text.index and s.type == 2 and s.size}
+    for name, va, size in obj['functions']:
+        target = verification.original_symbol(original, name, size, va)
+        label = labels.get(name) or labels.get(target.name)
+        verification.require(label is not None and label.value == va - start and label.size == size,
+                             f'{obj["id"]}/{name}: reference function boundary differs from original')
+    offset = section.offset + start - section.addr
+    if start + text.size > end:
+        verification.require(not any(original.data[offset + end - start:offset + text.size]) and
+                             not any(s.size and end <= s.value < start + text.size
+                                     for s in original.symbols if s.shndx == section.index),
+                             f'{obj["id"]}: reference tail is not original alignment padding')
+    literal_sections = [s for s in original.sections if s.name in ('.lit4', '.lit8')]
+    if not original.gp or not literal_sections:
+        return reference
+    assembly = destination.with_suffix('.s')
+    body = Path(str(reference) + '.s').read_text()
+    expected = bytearray(scaffold.section_bytes(text))
+    changes = []
+    instruction = re.compile(r'^(\s*/\*\s+\S+\s+([0-9A-Fa-f]{8})\s+'
+                             r'([0-9A-Fa-f]{8})\s+\*/\s*)(lwc1|ldc1)\s+(\$f\d+),.*$', re.M)
+
+    def include(match):
+        path = cwd / match[1]
+        def operand(line):
+            va = int(line[2], 16)
+            verification.require(start <= va <= start + text.size - 4,
+                                 f'{obj["id"]}: disassembly instruction outside original TU')
+            data = original.data[offset + va - start:offset + va - start + 4]
+            verification.require(data.hex().lower() == line[3].lower(), 'stale original disassembly bytes')
+            word = int.from_bytes(data, 'little')
+            immediate = (word & 0xffff) - (0x10000 if word & 0x8000 else 0)
+            address = original.gp + immediate
+            if (word >> 21) & 31 != 28 or not any(s.addr <= address < s.addr + s.size
+                                                 for s in literal_sections):
+                return line[0]
+            verification.require(word >> 26 == {'lwc1': 0x31, 'ldc1': 0x35}[line[4]] and
+                                 (word >> 16) & 31 == int(line[5][2:]),
+                                 'literal load mnemonic/register differs from original bytes')
+            changes.append(va - start)
+            expected[va - start:va - start + 4] = data
+            return f'{line[1]}{line[4]} {line[5]}, {immediate}($gp)'
+        old = path.read_text()
+        new = instruction.sub(operand, old)
+        if new == old:
+            return match[0]
+        local = destination.parent / 'original-asm' / path.name
+        local.parent.mkdir(exist_ok=True)
+        local.write_text(new)
+        return f'.include {json.dumps(str(local))}'
+
+    body = re.sub(r'\.include\s+"(asm/[^\"]+\.s)"', include, body)
+    if not changes:
+        return reference
+    assembly.write_text(body)
+    gflag = next(flag for flag in flags if flag.startswith('-G'))
+    run([assembler, '-EL', '-m5900', '-mabi=eabi', gflag, '-I.', '-Iinclude',
+         '-o', destination, assembly], cwd)
+    extracted = Elf(destination.read_bytes())
+    verification.require(extracted.section_bytes(extracted.section('.text')) == expected and
+                         functions(destination) == functions(reference),
+                         f'{obj["id"]}: literal disassembly changed other instructions or function scope')
+    # No synthesized relocation may survive on a numeric original GP operand.
+    for rel in extracted.sections:
+        if rel.type == 9 and rel.info == extracted.section('.text').index:
+            relocated = {struct.unpack_from('<I', extracted.data, rel.offset + i)[0]
+                         for i in range(0, rel.size, rel.entsize)}
+            verification.require(not relocated.intersection(changes),
+                                 f'{obj["id"]}: original literal operand received an invented relocation')
+    return destination
+
+
 def strip_debug(prefix, source, destination, cwd, iop_reference=False):
     # Old GCC emits ECOFF debug records that objdiff's MIPS reader cannot parse
     # reliably. Remove debug records only; verify every allocated section and
@@ -82,6 +176,7 @@ def prepare(root, evidence):
     main_tus = {t['name']: t for t in main['tus']}
     overlays = {unit: verification.read(build / unit / 'compile-manifest.json')
                 for unit in cov.OVERLAY_UNITS}
+    originals = verification.read(root / cov.ORIGINALS)['units']
     expected = {}
 
     def prepare_object(obj):
@@ -119,6 +214,12 @@ def prepare(root, evidence):
             else:
                 target_text = build_target(unit_dir, stem, unit)
         data = []
+        if checked['functions']:
+            start, end = ([int(tu['text'][k], 16) for k in ('start', 'end')] if unit == 'main'
+                          else [int(v, 16) for v in tu['text']])
+            reference = destination / 'original.text.o'
+            target_text = original_text(target_text, unit_dir / 'orig' / originals[unit]['file'],
+                                        start, end, reference, unit_dir, obj, assembler, flags)
         for source in data_sources:
             output = destination / (source.stem + '.o')
             run([str(prefix) + 'as', '-EL', '-march=r5900', '-mabi=eabi', '-mgp64',

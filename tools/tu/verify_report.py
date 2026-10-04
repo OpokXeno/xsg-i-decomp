@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools'))
 import coverage_report as cov
 from tu.elfinfo import Elf
+from tu.mapcheck import parse as parse_link_map
 
 
 class VerificationError(ValueError):
@@ -126,10 +127,6 @@ def build_object(root, build, obj):
 
 def data_sizes(root, objects):
     """Original TU data remains in the denominator even when it is scaffolding.
-
-    Data recovery is not inferred from a successful scaffold link. Until data
-    ownership is independently verified, it earns no matched/linked credit.
-    A TU with original data consequently cannot be marked complete here.
     """
     sizes = {}
     main = read(root / cov.MAIN_OBJECTS)
@@ -143,6 +140,52 @@ def data_sizes(root, objects):
     return {o['id']: sizes.get(o['id'], sizes.get(
         f'{o["unit"]}/{Path(o["source"]).stem}' if o['source'] else '', 0))
         for o in objects}
+
+
+def linked_object_complete(root, build, obj, placed, derived, fills, original):
+    """Objdiff's complete flag means the entire original object is recompiled.
+
+    Check actual linker inputs, including initialized data and BSS. Partial
+    data carves do not complete a TU while any original storage comes from an
+    assembly input. Linker alignment fill is not an unrecovered data object.
+    """
+    unit, stem = obj['unit'], Path(obj['source']).stem
+    compiled, _ = build_object(root, build, obj)
+    owned = {str(compiled.relative_to(build / unit))}
+    while True:
+        additions = {output for output, input_path in derived.items() if input_path in owned}
+        if additions <= owned:
+            break
+        owned.update(additions)
+    if unit == 'main':
+        manifest = read(build / unit / 'tu-manifest.carved.json')
+        tu = next(t for t in manifest['tus'] if t['name'] == stem)
+        spans = [(int(p['start'], 16), int(p['end'], 16))
+                 for section in tu['sections'].values() for p in section.get('pieces', [])]
+    else:
+        layout = read(root / 'config/objects' / f'{unit}.layout.json')
+        spans = [(int(lo, 16), int(hi, 16)) for rows in layout['families'].values()
+                 for name, lo, hi in rows if name == f'{unit}/{stem}']
+    for lo, hi in spans:
+        covered = []
+        for (input_path, section), (start, size) in placed.items():
+            if start < hi and lo < start + size:
+                if input_path not in owned:
+                    return False
+                covered.append((max(lo, start), min(hi, start + size)))
+        for start, end in fills:
+            a, b = max(lo, start), min(hi, end)
+            if a < b and not any(s.type == 1 and s.size and s.value < b
+                                 and a < s.value + s.size for s in original.symbols):
+                covered.append((a, b))
+        cursor = lo
+        for start, end in sorted(covered):
+            if start > cursor:
+                return False
+            cursor = max(cursor, end)
+        if cursor < hi:
+            return False
+    return True
 
 
 def finish(root, build, snapshot):
@@ -172,6 +215,21 @@ def finish(root, build, snapshot):
         require(status.get('result') == 'pass', f'{unit}: unit checks failed')
         original = Elf(original_path.read_bytes())
         linked = Elf(linked_path.read_bytes())
+        map_path = unit_dir / 'build' / f'{unit}.rom.elf.map'
+        ninja_path = unit_dir / 'build.ninja'
+        map_text = map_path.read_text()
+        placed, _ = parse_link_map(map_text)
+        fills = [(int(a, 16), int(a, 16) + int(n, 16)) for a, n in
+                 re.findall(r'^ \*fill\*\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\b', map_text, re.M)]
+        # These existing build transformations only place/split compiler data;
+        # they never import original storage into a compiled object.
+        derived = dict(re.findall(r'^build (\S+): (?:carvesplit|allocate_bss) (\S+)(?:\s|$)',
+                                  ninja_path.read_text(), re.M))
+        artifacts[str(map_path.relative_to(root))] = fresh(map_path)
+        artifacts[str(ninja_path.relative_to(root))] = digest(ninja_path)
+        if unit == 'main':
+            path = unit_dir / 'tu-manifest.carved.json'
+            artifacts[str(path.relative_to(root))] = digest(path)
         artifacts[str(original_path.relative_to(root))] = digest(original_path)
         for path in (image_path, linked_path, unit_dir / 'status.json'):
             artifacts[str(path.relative_to(root))] = fresh(path)
@@ -204,19 +262,20 @@ def finish(root, build, snapshot):
                     verified.append(dict(name=name, original_symbol=target.name,
                                          va=va, size=size, category=category,
                                          sha256=hashlib.sha256(b).hexdigest()))
-            results[obj['id']] = dict(functions=verified)
+            complete = (bool(obj['functions']) and len(verified) == len(obj['functions'])
+                        and linked_object_complete(root, build, obj, placed, derived, fills, original))
+            results[obj['id']] = dict(functions=verified, complete=complete)
     require(not problems, f'source/object scope inconsistencies: {problems[:3]}')
     sizes = data_sizes(root, objects)
     for obj in objects:
         entry = results[obj['id']]
         entry['total_data'] = sizes[obj['id']]
-        entry['complete'] = (bool(obj['functions']) and not entry['total_data']
-                             and len(entry['functions']) == len(obj['functions']))
     same_inputs(root, snapshot)
     artifacts[str((build / 'gate.json').relative_to(root))] = digest(build / 'gate.json')
     return dict(schema='verified-progress/1', inputs=snapshot, artifacts=artifacts,
-                objects=results, note='IOP has no build and earns zero credit. Original TU data '
-                'and standalone ASM earn no C matching or complete credit.')
+                objects=results, note='IOP has no build and earns zero credit. Complete means '
+                'all original TU code and storage are recompiled and linked from C; '
+                'assembly scaffolding never completes a TU.')
 
 
 def load_verified(root, build):
