@@ -2207,15 +2207,17 @@ def original_character_fields(root, unit, ctx, orig, sym, address, record):
     """Prove original OBJECT identities for contiguous C character-array fields.
 
     The native object must have the complete struct extent and the same binding
-    as every original field. Source declarations, field lengths and addresses
-    are pinned; the ordinary raw-byte and whole-file comparisons still apply.
-    This admits no padding, casts, assembler storage or anonymous byte blobs.
+    as every original field. Field names, lengths and addresses are pinned and
+    re-read from the current source declaration; the ordinary raw-byte and
+    whole-file comparisons still apply. The record's source_sha256 is
+    provenance only, so editing an unrelated function in the TU keeps the
+    proof valid. This admits no padding, casts, assembler storage or anonymous
+    byte blobs.
     """
     if not record or sym.bind != 0:
         return False
     source = Path(root) / 'src' / unit / (ctx['name'] + '.c')
-    if (not source.is_file() or
-            hashlib.sha256(source.read_bytes()).hexdigest() != record.get('source_sha256')):
+    if not source.is_file():
         return False
     text = source.read_text()
     typename = record.get('type', '')
@@ -2355,117 +2357,11 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                     if p['symbols'] and (set(p['symbols']) != uncredited or set(p['symbols']) & c_owned):
                         raise CarveError(f'{tu_id} {input_sec}: uncredited named span must be isolated from credited names')
                     if not p['symbols']:
-                        target_run = secs[p['target_section']][p['run_index']]
-                        scaffold_ranges = target_run.get('uncredited_scaffold_ranges') or []
-                        evidence = next((r for r in scaffold_ranges
-                                         if hx(r['range'][0]) == p['lo'] and hx(r['range'][1]) == p['hi']), None)
-                        if evidence is None:
-                            raise CarveError(
-                                f'{tu_id} {input_sec}: anonymous uncredited span lacks an exact scaffold disposition')
-                        def resolve_evidence_path(value):
-                            path = Path(value)
-                            if path.is_absolute():
-                                return path
-                            bases = [Path.cwd(), *Path(root).resolve().parents]
-                            for base in bases:
-                                candidate = base / path
-                                if candidate.is_file():
-                                    return candidate
-                            return path
-
-                        evidence_path = resolve_evidence_path(evidence.get('evidence_path', ''))
-                        if not evidence_path.is_file():
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency evidence file is missing')
-                        evidence_bytes = evidence_path.read_bytes()
-                        evidence_sha = hashlib.sha256(evidence_bytes).hexdigest()
-                        if evidence_sha != evidence.get('evidence_sha256'):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency evidence hash changed')
-                        sidecar = json.loads(evidence_bytes)
-                        if sidecar.get('schema') != 'anonymous-literal-routing-evidence/1' or \
-                                sidecar.get('tu') != tu_id or sidecar.get('credit') != \
-                                'none; routing only, preserve the original scaffold\'s following 8-byte tail':
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency sidecar identity/credit differs')
-
-                        def file_sha(path):
-                            h = hashlib.sha256()
-                            with Path(path).open('rb') as stream:
-                                for block in iter(lambda: stream.read(1024 * 1024), b''):
-                                    h.update(block)
-                            return h.hexdigest()
-
-                        source_pin = sidecar.get('source') or {}
-                        object_pin = sidecar.get('raw_object') or {}
-                        allocated_pin = sidecar.get('allocated_object') or {}
-                        asm_pin = sidecar.get('cc1_assembly') or {}
-                        original_pin = sidecar.get('original_ovl') or {}
-                        if (not source_pin.get('path') or file_sha(resolve_evidence_path(source_pin['path'])) != source_pin.get('sha256')
-                                or not asm_pin.get('path') or file_sha(resolve_evidence_path(asm_pin['path'])) != asm_pin.get('sha256')
-                                or not object_pin.get('path') or file_sha(resolve_evidence_path(object_pin['path'])) != object_pin.get('sha256')
-                                or not allocated_pin.get('path')
-                                or file_sha(resolve_evidence_path(allocated_pin['path'])) != allocated_pin.get('sha256')
-                                or hashlib.sha256(obj_elf.data).hexdigest() not in
-                                   (object_pin.get('sha256'), allocated_pin.get('sha256'))
-                                or not original_pin.get('path') or file_sha(resolve_evidence_path(original_pin['path'])) != original_pin.get('sha256')
-                                or original_pin.get('sha256') != file_sha(ctx['orig'])):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency source/object/assembly/original pins differ')
-                        obj_range = [hx(v) for v in object_pin.get('object_range', [])]
-                        raw_elf = Elf(resolve_evidence_path(object_pin['path']).read_bytes())
-                        raw_sections = [s for s in raw_elf.sections if s.name == input_sec]
-                        raw_csec = raw_sections[0] if len(raw_sections) == 1 else None
-                        if (raw_csec is None or raw_csec.type == 8 or csec.type == 8
-                                or object_pin.get('section') != input_sec
-                                or obj_range != [p['offset'], p['end']]
-                                or p['end'] > raw_csec.size or p['end'] > csec.size):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency raw/allocated section range differs')
-                        raw_bytes = raw_elf.section_bytes(raw_csec)
-                        allocated_bytes = obj_elf.section_bytes(csec)
-                        if (hashlib.sha256(raw_bytes[p['offset']:p['end']]).hexdigest() != object_pin.get('range_sha256')
-                                or raw_bytes[p['offset']:p['end']] != allocated_bytes[p['offset']:p['end']]):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency raw input range/hash differs')
-
-                        def relocation_rows(elf, section, lo, hi):
-                            rows = []
-                            for off, typ, symi in read_relocations(elf).get(section.index, []):
-                                if not lo <= off < hi:
-                                    continue
-                                if symi >= len(elf.symbols):
-                                    return None
-                                sym = elf.symbols[symi]
-                                target_section = (elf.sections[sym.shndx].name
-                                                  if 0 <= sym.shndx < len(elf.sections) else f'SHN_{sym.shndx}')
-                                # ld -r may materialize an unnamed section symbol
-                                # as a named one; compare its resolved section identity.
-                                target_name = target_section if sym.type == 3 else sym.name
-                                rows.append((off, typ, target_name, sym.type, sym.bind, sym.value,
-                                             sym.size, target_section))
-                            return sorted(rows)
-
-                        raw_relocation_rows = relocation_rows(raw_elf, raw_csec, p['offset'], p['end'])
-                        allocated_relocation_rows = relocation_rows(obj_elf, csec, p['offset'], p['end'])
-                        if (raw_relocation_rows is None or allocated_relocation_rows is None
-                                or raw_relocation_rows != allocated_relocation_rows):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency relocations changed in allocated input')
-                        original_range = original_pin.get('range') or []
-                        original_bytes = va_bytes(orig, p['lo'], p['hi'] - p['lo'])
-                        if (original_pin.get('target_section') != p['target_section']
-                                or [hx(v) for v in original_range] != [p['lo'], p['hi']]
-                                or original_bytes is None
-                                or hashlib.sha256(original_bytes).hexdigest() != original_pin.get('range_sha256')):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency target bytes/range differ')
-                        assembly_text = resolve_evidence_path(asm_pin['path']).read_text(errors='replace')
-                        labels = set(re.findall(r'^\s*(\$LC\d+):', assembly_text, re.M))
-                        if len(labels) != 73 or '.rdata' not in assembly_text:
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous literal pool lacks exact cc1 label evidence')
-                        text_section = next((s for s in raw_elf.sections if s.name == '.text'), None)
-                        dep_relocs = [(off, typ, raw_elf.symbols[symi])
-                                      for off, typ, symi in read_relocations(raw_elf).get(raw_csec.index, [])
-                                      if p['offset'] <= off < p['end']]
-                        if (len(dep_relocs) != 96 or any(typ != 2 or sym.type != 3 or
-                                sym.shndx != (text_section.index if text_section else -1)
-                                or off + 4 > p['end'] for off, typ, sym in dep_relocs)
-                                or min((off for off, _, _ in dep_relocs), default=-1) != 0x640
-                                or max((off for off, _, _ in dep_relocs), default=-1) != 0x7f4):
-                            raise CarveError(f'{tu_id} {input_sec}: anonymous dependency relocations differ from pinned proof')
+                        # An anonymous uncredited span has no symbol to prove
+                        # it by, and no registry declares one; such a span
+                        # needs a structural proof before it can be admitted.
+                        raise CarveError(
+                            f'{tu_id} {input_sec}: anonymous uncredited span lacks an exact scaffold disposition')
                 named_symbols = []
                 for name in p['symbols']:
                     matches = [s for s in obj_elf.symbols if s.name == name and s.shndx == csec.index
