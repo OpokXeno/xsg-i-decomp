@@ -223,7 +223,8 @@ def finish(root, build, snapshot):
                  re.findall(r'^ \*fill\*\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\b', map_text, re.M)]
         # These existing build transformations only place/split compiler data;
         # they never import original storage into a compiled object.
-        derived = dict(re.findall(r'^build (\S+): (?:carvesplit|allocate_bss) (\S+)(?:\s|$)',
+        # An edge may list implicit outputs (`build X | X.report.json: ...`).
+        derived = dict(re.findall(r'^build (\S+)(?: \| [^:]+)?: (?:carvesplit|allocate_bss) (\S+)(?:\s|$)',
                                   ninja_path.read_text(), re.M))
         artifacts[str(map_path.relative_to(root))] = fresh(map_path)
         artifacts[str(ninja_path.relative_to(root))] = digest(ninja_path)

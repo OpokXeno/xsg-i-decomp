@@ -49,7 +49,7 @@ def functions(path):
 
 
 def original_text(reference, original_path, start, end, destination, cwd, obj, assembler, flags):
-    """Keep original GP operands where the retail ELF has no relocation type.
+    """Keep original numeric operands where the retail ELF has no relocation.
 
     Turning a literal load into an external symbol invents GPREL16, whereas
     cc1 may emit LITERAL for the same final instruction. The retail binary
@@ -57,6 +57,12 @@ def original_text(reference, original_path, start, end, destination, cwd, obj, a
     numeric GP offsets instead; native objdiff report defaults handle an
     unrelocated reference against either compiler representation. Keep ordinary
     symbolic branches so objdiff still resolves object-relative jump targets.
+
+    The disassembler also names some plain constants as symbols: `lui $3,
+    %hi(D_FFFF)` / `addiu $3, $3, %lo(D_FFFF)` loads 65535, not an address. A
+    `D_<address>` operand outside every loaded section of the original and below
+    the lowest program address is such a constant; it keeps its original
+    immediate, so the reference carries no relocation the C object cannot have.
     This local report assembly never replaces build scaffolding or C source.
     """
     original = Elf(original_path.read_bytes())
@@ -81,18 +87,43 @@ def original_text(reference, original_path, start, end, destination, cwd, obj, a
                                      for s in original.symbols if s.shndx == section.index),
                              f'{obj["id"]}: reference tail is not original alignment padding')
     literal_sections = [s for s in original.sections if s.name in ('.lit4', '.lit8')]
-    if not original.gp or not literal_sections:
-        return reference
+    literal_operands = bool(original.gp and literal_sections)
+    loaded = [s for s in original.sections if s.flags & 2 and s.size]
     assembly = destination.with_suffix('.s')
     body = Path(str(reference) + '.s').read_text()
     expected = bytearray(scaffold.section_bytes(text))
     changes = []
     instruction = re.compile(r'^(\s*/\*\s+\S+\s+([0-9A-Fa-f]{8})\s+'
                              r'([0-9A-Fa-f]{8})\s+\*/\s*)(lwc1|ldc1)\s+(\$f\d+),.*$', re.M)
+    constant = re.compile(r'^(\s*/\*\s+\S+\s+([0-9A-Fa-f]{8})\s+([0-9A-Fa-f]{8})\s+\*/\s*)'
+                          r'(\S+)(\s.*?)%(hi|lo)\((D_([0-9A-Fa-f]+))\)(.*)$', re.M)
 
     def include(match):
         path = cwd / match[1]
+        def original_word(line):
+            va = int(line[2], 16)
+            verification.require(start <= va <= start + text.size - 4,
+                                 f'{obj["id"]}: disassembly instruction outside original TU')
+            data = original.data[offset + va - start:offset + va - start + 4]
+            verification.require(data.hex().lower() == line[3].lower(), 'stale original disassembly bytes')
+            return va, data, int.from_bytes(data, 'little')
+
+        def numeric_constant(line):
+            value = int(line[8], 16)
+            if value >= 0x100000 or any(s.addr <= value < s.addr + s.size for s in loaded):
+                return line[0]
+            va, data, word = original_word(line)
+            if word >> 26 in (0x0c, 0x0d, 0x0e, 0x0f):          # andi, ori, xori, lui
+                immediate = f'0x{word & 0xffff:X}'
+            else:
+                immediate = str((word & 0xffff) - (0x10000 if word & 0x8000 else 0))
+            changes.append(va - start)
+            expected[va - start:va - start + 4] = data
+            return f'{line[1]}{line[4]}{line[5]}{immediate}{line[9]}'
+
         def operand(line):
+            if not literal_operands:
+                return line[0]
             va = int(line[2], 16)
             verification.require(start <= va <= start + text.size - 4,
                                  f'{obj["id"]}: disassembly instruction outside original TU')
@@ -111,7 +142,7 @@ def original_text(reference, original_path, start, end, destination, cwd, obj, a
             expected[va - start:va - start + 4] = data
             return f'{line[1]}{line[4]} {line[5]}, {immediate}($gp)'
         old = path.read_text()
-        new = instruction.sub(operand, old)
+        new = constant.sub(numeric_constant, instruction.sub(operand, old))
         if new == old:
             return match[0]
         local = destination.parent / 'original-asm' / path.name
@@ -129,14 +160,14 @@ def original_text(reference, original_path, start, end, destination, cwd, obj, a
     extracted = Elf(destination.read_bytes())
     verification.require(extracted.section_bytes(extracted.section('.text')) == expected and
                          functions(destination) == functions(reference),
-                         f'{obj["id"]}: literal disassembly changed other instructions or function scope')
-    # No synthesized relocation may survive on a numeric original GP operand.
+                         f'{obj["id"]}: numeric disassembly changed other instructions or function scope')
+    # No synthesized relocation may survive on a numeric original operand.
     for rel in extracted.sections:
         if rel.type == 9 and rel.info == extracted.section('.text').index:
             relocated = {struct.unpack_from('<I', extracted.data, rel.offset + i)[0]
                          for i in range(0, rel.size, rel.entsize)}
             verification.require(not relocated.intersection(changes),
-                                 f'{obj["id"]}: original literal operand received an invented relocation')
+                                 f'{obj["id"]}: original numeric operand received an invented relocation')
     return destination
 
 
@@ -248,11 +279,23 @@ def prepare(root, evidence):
             stripped_base = destination / 'base.nodebug.o'
             strip_debug(prefix, base, stripped_base, unit_dir)
             unit_config['base_path'] = str(stripped_base)
+            # The target keeps the map name (e.g. `_WrapperDestruct_00A0DB58`,
+            # which tells same-named original locals apart) while the C object
+            # defines the original symbol. Pair them with objdiff's own manual
+            # mapping (target name -> base name) instead of leaving them unmatched.
+            mappings = {f['name']: f['original_symbol'] for f in checked['functions']
+                        if f['name'] != f['original_symbol']}
+            if mappings:
+                unit_config['symbol_mappings'] = mappings
         target_functions = functions(target)
         verification.require(len(target_functions) == len(obj['functions']) and
                              sum(target_functions.values()) == sum(f[2] for f in obj['functions']),
                              f'{name}: target function scope differs from tracked TU')
-        return unit_config, dict(functions=target_functions, allowed=allowed,
+        # The native report names a function by its target symbol, which is the
+        # map name or the original name depending on how the target was built.
+        credited = {name: f['size'] for f in checked['functions']
+                    for name in (f['name'], f['original_symbol'])}
+        return unit_config, dict(functions=target_functions, allowed=credited,
                                  complete=checked['complete'])
 
     with ThreadPoolExecutor(max_workers=4) as pool:
