@@ -396,7 +396,7 @@ typedef struct ToolkitPeerGroupCall {
     volatile int value;
 } ToolkitPeerGroupCall;
 
-extern unsigned short XTK_peerGroup[];
+extern unsigned short XTK_peerGroup[4];
 
 void Java_xeno_util_Toolkit_peerSetGroup__II(JThread *thread,
                                               ToolkitPeerGroupCall *arguments)
