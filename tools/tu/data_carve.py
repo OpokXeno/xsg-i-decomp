@@ -676,6 +676,91 @@ def declared_runs(tu_id, sec, runs, several=True):
     return out
 
 
+PAD_MARK = 'Automatically generated and unreferenced pad'
+ZERO_DIRECTIVE = re.compile(r'\*/\s*\.(byte|short|half|2byte|word|4byte|space|zero)\s+(.+?)\s*$')
+
+
+def is_alignment_pad(item):
+    """True for a spimdisasm alignment pad: marked unreferenced, zero bytes only.
+
+    spimdisasm emits the zero bytes between two data items as an item of its
+    own. The compiler that emitted the neighbouring items emits the same bytes
+    as alignment, so such an item is not data of its own."""
+    lines = item['block']['lines']
+    if not any(PAD_MARK in line for line in lines) or len(item.get('labels') or []) > 1:
+        return False
+    for line in lines:
+        if not ADDR.match(line):
+            continue
+        directive = ZERO_DIRECTIVE.search(line)
+        if not directive:
+            return False
+        if directive.group(1) not in ('space', 'zero'):
+            try:
+                if any(int(value.strip(), 0) for value in directive.group(2).split(',')):
+                    return False
+            except ValueError:
+                return False
+    return True
+
+
+def absorb_padding(tu_id, sec, runs, items):
+    """The runs to build, each extended over the spimdisasm alignment pads after it.
+
+    The registry declares the C-owned items; the pads that follow them stay
+    outside every declared run, so the build links them as scaffold pieces and
+    a TU whose data is all C still takes bytes from assembly. Each run here takes
+    the pads that run from its end to the next run of the section, or to the end
+    of the TU's section, when they are shorter than the alignment of that end.
+    Runs are never merged: every run keeps its own input
+    section pinned at its original address, so a C layout whose alignment differs
+    from the original moves nothing. The pad bytes then come from the C object's
+    own alignment when its slice reaches them, or else from linker fill (the pin
+    of the next run or input, see ninja_main.py); mapcheck bounds that gap by the
+    alignment of the run end, and the whole-file comparison stays the verdict.
+
+    Runs with explicit input routing or uncredited spans, NOBITS sections and a
+    section without readable items are returned unchanged. An extended run
+    records its pads in `absorbed_padding` ([lo, hi]); the last run of the
+    section also in `padding_tail`."""
+    if (not runs or items is None or sec in ('.bss', '.sbss') or
+            any(r.get('c_input_spans') or r.get('uncredited_scaffold_ranges') or
+                r.get('uncredited_c_symbols') for r in runs)):
+        return runs
+    items = sorted(items, key=lambda it: it['start'])
+    if not items:
+        return runs
+    runs = sorted((copy.deepcopy(r) for r in runs), key=lambda r: hx(r['range'][0]))
+    limits = [hx(r['range'][0]) for r in runs[1:]] + [items[-1]['end']]
+    for k, (run, limit) in enumerate(zip(runs, limits)):
+        hi = hx(run['range'][1])
+        pads = []
+        for it in items:
+            if it['start'] < hi:
+                continue
+            if it['start'] != (pads[-1]['end'] if pads else hi) or it['end'] > limit \
+                    or not is_alignment_pad(it):
+                break
+            pads.append(it)
+        if not pads:
+            continue
+        # Pads that stop short of the next run (a scaffold item follows)
+        # stay scaffold: only a run directly followed by C or the TU end grows.
+        if pads[-1]['end'] != limit:
+            continue
+        # Only alignment: zero bytes shorter than the alignment of their end
+        # (the bound mapcheck applies to a C piece gap). A longer zero span may
+        # be an unreferenced zero-filled object and stays scaffold.
+        if limit - hi >= min(limit & -limit, 16):
+            continue
+        span = [run['range'][1], h8(limit)]
+        run['range'] = [run['range'][0], h8(limit)]
+        run['absorbed_padding'] = [span]
+        if k == len(runs) - 1:
+            run['padding_tail'] = span
+    return runs
+
+
 def check_one_run(tu_id, sec, runs):
     """(lo, hi) of a section with exactly one declared run (the overlay rule)."""
     return declared_runs(tu_id, sec, runs, several=False)[0]
@@ -719,6 +804,22 @@ def split_sections(runs_by_section):
 
 def main_piece_file(unit_dir, piece, sec):
     return Path(unit_dir) / (piece.get('file') or f'asm/main/data/{piece["name"]}.{sec[1:]}.s')
+
+
+def main_section_items(unit_dir, t, sec):
+    """[item] of one MAIN TU section from its manifest pieces, or None without one."""
+    ts = (t.get('sections') or {}).get(sec)
+    if ts is None:
+        return None
+    pieces = ts.get('pieces') or [dict(name=t['name'], start=ts['start'], end=ts['end'])]
+    items = []
+    for p in pieces:
+        p = dict(p, start=hx(p['start']), end=hx(p['end']))
+        try:
+            items += piece_items(main_piece_file(unit_dir, p, sec), p['start'], p['end'])[1]
+        except (OSError, CarveError):
+            return None
+    return items
 
 
 def apply_main(root, unit_dir, manifest, registry=None, write=True):
@@ -832,6 +933,8 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True):
         t = by_id.get(tu_id)
         if t is None:
             raise CarveError(f'{REGISTRY}: {tu_id} is not a TU of the MAIN manifest')
+        secs = {sec: absorb_padding(tu_id, sec, runs, main_section_items(unit_dir, t, sec))
+                for sec, runs in secs.items()}
         split = split_sections(secs)
         if split:
             # several runs in a section: the TU links its split object (`split`)
@@ -872,6 +975,9 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True):
             for p in new:
                 entry = dict(c_split=p['c_split'], end=f'0x{p["end"]:08X}', name=p['name'],
                              start=f'0x{p["start"]:08X}')
+                if p['c_split'] and runs[p['run']].get('padding_tail'):
+                    # the next input is pinned: these pad bytes are linker fill
+                    entry['padding_tail'] = runs[p['run']]['padding_tail']
                 if p['c_split'] and sec in split and sec not in ('.sbss', '.bss'):
                     run = runs[p['run']]
                     input_spans = run.get('c_input_spans') or []
@@ -1041,7 +1147,8 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True):
                          **({'c_input_spans': p['c_input_spans']} if p.get('c_input_spans') else {}),
                          **({'c_owned_symbols': p['c_owned_symbols']} if p.get('c_owned_symbols') else {}),
                          **({'c_storage_aliases': p['c_storage_aliases']}
-                            if p.get('c_storage_aliases') else {}))
+                            if p.get('c_storage_aliases') else {}),
+                         **({'padding_tail': p['padding_tail']} if p.get('padding_tail') else {}))
                     for p in out_pieces]
             order[idx[0]:idx[-1] + 1] = repl
             report.append(dict(tu=tu_id, section=sec, run=[h8(spans[0][0]), h8(spans[-1][1])],
@@ -1198,6 +1305,19 @@ def ovl_piece(unit_dir, unit, name, sec='.rodata'):
                 file=f'asm/data/{unit}/{name}{sec}.s')
 
 
+def overlay_section_items(unit_dir, unit, name, sec):
+    """[item] of one overlay TU section from its layout piece, or None without one."""
+    if sec not in OVERLAY_SECTIONS:
+        return None
+    p = ovl_piece(unit_dir, unit, name, sec)
+    if p is None:
+        return None
+    try:
+        return piece_items(Path(unit_dir) / p['file'], p['start'], p['end'])[1]
+    except (OSError, CarveError):
+        return None
+
+
 def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True,
                   c_object_overrides=None):
     """(linker script, report) with every declared run of this overlay carved.
@@ -1251,6 +1371,8 @@ def apply_overlay(root, unit_dir, unit, ld_text, registry=None, write=True,
         if not text_line and not allocated_line:
             raise CarveError(f'{tu_id}: {unit}.ld links no C object for {name} (is the TU C?)')
         c_obj = text_line.group(2) if text_line else allocated_line.group(2)
+        secs = {sec: absorb_padding(tu_id, sec, runs, overlay_section_items(unit_dir, unit, name, sec))
+                for sec, runs in secs.items()}
         # Every section of this TU must use the same object. A preceding
         # multi-run carve may already have replaced the .text object below.
         allocated_obj = c_object_overrides.get(c_obj, c_obj)
@@ -1626,8 +1748,12 @@ def run_specs(items, spans, run_records=None):
         if not its or its[0]['start'] != lo:
             raise CarveError(f'the run {h8(lo)}-{h8(hi)} does not start at an item')
         record = records_by_lo.get(lo) or {}
+        # Alignment pads a run absorbed (absorb_padding) are not items the C
+        # object must reach; its slice may end where they begin.
+        padding = [(hx(a), hx(b)) for a, b in record.get('absorbed_padding') or []]
+        its = [it for it in its if not any(a <= it['start'] < b for a, b in padding)] or its
         out.append(dict(lo=lo, hi=hi, last=its[-1]['start'], first_end=its[0]['end'],
-                        first_name=its[0]['name'],
+                        content_hi=its[-1]['end'], first_name=its[0]['name'],
                         c_owned_symbols=record.get('c_owned_symbols') or [],
                         items=[(it['start'], it['end']) for it in its]))
     return out
@@ -1935,7 +2061,7 @@ def plan_split(elf, csec, specs, want, check_items=False):
         first_name = run.get('first_name')
         if not first_name or first_name not in names:
             return None
-        extent = run['hi'] - run['lo']
+        extent = run.get('content_hi', run['hi']) - run['lo']   # without absorbed padding
         matches = [s for s in own if s.name == first_name and s.type == 1 and s.size == extent]
         if len(matches) != 1:
             return None
@@ -2252,6 +2378,18 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
     """{section: plan} for the sections a TU declares with several runs."""
     registry = load_registry(root) if registry is None else registry
     secs = registry['tus'].get(tu_id) or {}
+    if any(len(runs or []) > 1 for runs in secs.values()):
+        # the same runs apply_main/apply_overlay laid out (absorb_padding)
+        pad_ctx = tu_context(root, unit, unit_dir, tu_id)
+
+        def pad_items(sec):
+            if sec not in pad_ctx['pieces']:
+                return None
+            try:
+                return section_items(pad_ctx, sec)
+            except (OSError, CarveError):
+                return None
+        secs = {sec: absorb_padding(tu_id, sec, runs, pad_items(sec)) for sec, runs in secs.items()}
     split = split_sections(secs)
     common_rows = [row for rows in (registry.get('common_tail') or {}).values()
                    for row in rows if row.get('tu') == tu_id and

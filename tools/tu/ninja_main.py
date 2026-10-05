@@ -495,7 +495,7 @@ def main(argv=None):
     def contents(sec, carve):
         if sec == ".text":
             return text_contents(main_tus, S[".text"].addr, carve)
-        out, prev_c = [], False
+        out, prev_c, after_padding = [], False, False
         # The all-scaffold diagnostic must use the original unsplit inputs.
         # C-owned fragments can start inside an alignment phase; they are
         # compiler-input plans, not standalone replacements for that scaffold.
@@ -512,6 +512,11 @@ def main(argv=None):
             own = "c" if (t["mode"] == "c" and not carve
                           and (owner == "c" or (owner == "split" and p["c_split"])
                                or explicit_c_piece)) else "asm"
+            if own == "c" and after_padding and not p.get("c_section") and not p.get("c_input_spans"):
+                # The previous C run absorbed the alignment pads before this
+                # input (data_carve.absorb_padding): pin it so they become fill.
+                out.append(f". = 0x{int(p['start'], 16) - S[sec].addr:X}; /* pin: {p['piece']} after absorbed padding */")
+            after_padding = own == "c" and bool(p.get("padding_tail"))
             if own == "c":
                 storage = p.get("c_input_spans")
                 if storage:

@@ -170,6 +170,17 @@ def main():
                                                        range=[piece['start'], piece['end']],
                                                        symbols=[piece['name']])])
 
+    def linked_up_to_padding(link, span):
+        """The linked C section fills its owned span, up to original zero alignment.
+
+        A C run that absorbed the alignment pads after it (data_carve.absorb_padding)
+        ends where its C content ends; the rest of the span is zero fill in the
+        original, shorter than the alignment of the span end (the C piece gap rule)."""
+        sec, lo, hi = span
+        link_end = link[0] + link[1]
+        gap = hi - link_end
+        return gap == 0 or (0 < gap < align_of(hi, 16) and original_zero_fill(orig, sec, link_end, hi))
+
     def check(objname, sec, start, end, exact, label, scaffold_alignment=False):
         got = placed.get((objname, sec))
         if got is None:
@@ -576,7 +587,8 @@ def main():
                                 and owner_span[0] == sec and owner_span[1] <= owner_va
                                 and owner_va + owner_size <= owner_span[2]
                                 and owner_link and owner_link[0] == owner_span[1]
-                                and owner_link[1] == owner_span[2] - owner_span[1]):
+                                and owner_va + owner_size <= owner_link[0] + owner_link[1]
+                                and linked_up_to_padding(owner_link, owner_span)):
                             proven_aliases.add(s.name)
                             source_sha256 = (hashlib.sha256(source_path.read_bytes()).hexdigest()
                                              if source_path.is_file() else None)
