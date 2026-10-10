@@ -1,0 +1,187 @@
+{
+  "schema": "gnu-nested-functions/1",
+  "policy": "Project-wide GNU C nested-function admission authorized by the user on 2026-09-21, where original-binary evidence establishes lexical ownership and the captured-context/static-chain ABI. This registry records discovered groups, not accepted recovery or an exclusive eligibility list.",
+  "tus": {
+    "main/tu167": {
+      "functions": {
+        "tskFileSelect": {
+          "reason": "Original GNU nested-function group established by the 2026-09-19 admission; original LOCAL helper uses the enclosing frame through the EE GCC static chain in v0.",
+          "binary_sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2",
+          "nested_functions": [
+            {
+              "source_name": "ListColorChage",
+              "original_name": "ListColorChage.3",
+              "parent": "tskFileSelect",
+              "binding": "LOCAL",
+              "type": "FUNC",
+              "va": "0x002863a0",
+              "size": 144
+            }
+          ]
+        }
+      }
+    },
+    "main/tu173": {
+      "functions": {
+        "MenuShopCore": {
+          "reason": "Original direct calls pass the enclosing frame in v0 to two LOCAL nested helpers. Discovery and original instruction witnesses are retained in .work/bulk/nested-discovery-v1/nested-discovery.json; these are grouped recovery identities, not acceptance.",
+          "binary_sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2",
+          "nested_functions": [
+            {
+              "source_name": "subMenuShopNumerInc",
+              "original_name": "subMenuShopNumerInc.11",
+              "parent": "MenuShopCore",
+              "binding": "LOCAL",
+              "type": "FUNC",
+              "va": "0x002a8018",
+              "size": 148,
+              "static_chain_evidence": {
+                "setup_va": "0x002a8870",
+                "call_va": "0x002a886c",
+                "callee_read_va": "0x002a8024",
+                "callee_dereference_va": "0x002a8030",
+                "note": "The static-chain setup is in the ordinary call's delay slot."
+              }
+            },
+            {
+              "source_name": "subMenuShopNumerDec",
+              "original_name": "subMenuShopNumerDec.12",
+              "parent": "MenuShopCore",
+              "binding": "LOCAL",
+              "type": "FUNC",
+              "va": "0x002a80b0",
+              "size": 92,
+              "static_chain_evidence": {
+                "setup_va": "0x002a8858",
+                "call_va": "0x002a8854",
+                "callee_read_va": "0x002a80bc",
+                "callee_dereference_va": "0x002a80c8",
+                "note": "The static-chain setup is in the ordinary call's delay slot."
+              }
+            }
+          ]
+        },
+        "MenuShopSelect": {
+          "reason": "MenuShopSelect passes sp as the static chain in v0 at 0x002a3198 before its call to ListMake.3 at 0x002a31a8. The nested helper preserves incoming v0 in s2 at 0x002a2fac and dereferences its captured context at 0x002a2fc8. Both originals must be allocated together.",
+          "binary_sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2",
+          "nested_functions": [
+            {
+              "source_name": "ListMake",
+              "original_name": "ListMake.3",
+              "parent": "MenuShopSelect",
+              "binding": "LOCAL",
+              "type": "FUNC",
+              "va": "0x002a2f88",
+              "size": 280
+            }
+          ]
+        }
+      }
+    },
+    "main/tu175": {
+      "functions": {
+        "MenuTecListMain2": {
+          "binary_sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2",
+          "nested_functions": [
+            {
+              "binding": "LOCAL",
+              "original_name": "subMenuTecListChange.6",
+              "parent": "MenuTecListMain2",
+              "size": 676,
+              "source_name": "subMenuTecListChange",
+              "static_chain_evidence": [
+                {
+                  "call_va": "0x002b1ea0",
+                  "call_word": "0c0ac57a",
+                  "dereference_va": "0x002b162c",
+                  "parent_va": "0x002b1890",
+                  "read_va": "0x002b15f8",
+                  "setup_va": "0x002b1e94",
+                  "setup_word": "03a0102d"
+                },
+                {
+                  "call_va": "0x002b1f54",
+                  "call_word": "0c0ac57a",
+                  "dereference_va": "0x002b162c",
+                  "parent_va": "0x002b1890",
+                  "read_va": "0x002b15f8",
+                  "setup_va": "0x002b1f40",
+                  "setup_word": "03a0102d"
+                }
+              ],
+              "type": "FUNC",
+              "va": "0x002b15e8"
+            }
+          ],
+          "reason": "Original direct call supplies sp in v0; the LOCAL dotted helper consumes that captured context. Discovery and original instruction witnesses are retained in .work/bulk/nested-discovery-v2/nested-discovery.json; grouped recovery identities, not acceptance."
+        },
+        "MenuTecSetWinMain": {
+          "binary_sha256": "412d448de31505c03ad474cc63d500b3b4f8c48d49d32bd24c89fe5b21af0fb2",
+          "nested_functions": [
+            {
+              "binding": "LOCAL",
+              "original_name": "subListChange.11",
+              "parent": "MenuTecSetWinMain",
+              "size": 732,
+              "source_name": "subListChange",
+              "static_chain_evidence": [
+                {
+                  "call_va": "0x002b2b30",
+                  "call_word": "0c0ac950",
+                  "dereference_va": "0x002b256c",
+                  "parent_va": "0x002b2820",
+                  "read_va": "0x002b254c",
+                  "setup_va": "0x002b2b34",
+                  "setup_word": "03a0102d"
+                },
+                {
+                  "call_va": "0x002b2bb0",
+                  "call_word": "0c0ac950",
+                  "dereference_va": "0x002b256c",
+                  "parent_va": "0x002b2820",
+                  "read_va": "0x002b254c",
+                  "setup_va": "0x002b2bb4",
+                  "setup_word": "03a0102d"
+                }
+              ],
+              "type": "FUNC",
+              "va": "0x002b2540"
+            }
+          ],
+          "reason": "Original direct call supplies sp in v0; the LOCAL dotted helper consumes that captured context. Discovery and original instruction witnesses are retained in .work/bulk/nested-discovery-v2/nested-discovery.json; grouped recovery identities, not acceptance."
+        }
+      }
+    },
+    "ov02/tu009": {
+      "functions": {
+        "UmnMailFolderSet": {
+          "binary_sha256": "7d55893ed02212ca5b4c4a92a2bdbeecbba3c1abfeadb2d6f004f54349ee6f4e",
+          "nested_functions": [
+            {
+              "binding": "LOCAL",
+              "original_name": "SisoSiso.6",
+              "parent": "UmnMailFolderSet",
+              "size": 156,
+              "source_name": "SisoSiso",
+              "static_chain_evidence": [
+                {
+                  "call_va": "0x00a0881c",
+                  "call_word": "0c2821c0",
+                  "forwarded_call_va": "0x00a08760",
+                  "forwarded_to": "SisoSiso.6",
+                  "parent_va": "0x00a087a0",
+                  "read_va": "0x00a08714",
+                  "setup_va": "0x00a08820",
+                  "setup_word": "03a0102d"
+                }
+              ],
+              "type": "FUNC",
+              "va": "0x00a08700"
+            }
+          ],
+          "reason": "Original direct call supplies sp in v0; the LOCAL dotted helper consumes that captured context. Discovery and original instruction witnesses are retained in .work/bulk/nested-discovery-v2/nested-discovery.json; grouped recovery identities, not acceptance."
+        }
+      }
+    }
+  }
+}

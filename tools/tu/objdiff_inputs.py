@@ -48,6 +48,28 @@ def functions(path):
             if s.type == 2 and s.shndx not in (0, 0xfff1) and s.size}
 
 
+def nested_base_names(root, tu_id, allowed, actual):
+    """Original symbol -> C object name for registered GNU nested functions cc1 renumbered.
+
+    cc1 numbers a nested function `name.N` by the private names emitted before
+    it, so the C object can call it `name.M`. Only the registered mapping
+    (tools/tu_edit.gnu_nested_specs, as tools/tu/mapcheck.py and
+    tools/tu/verify_report.py use it) qualifies, with exactly one candidate.
+    """
+    import tu_edit
+    found = {}
+    for spec in tu_edit.gnu_nested_specs(root, tu_id).values():
+        for item in spec.get('nested_functions') or []:
+            original = item.get('original_name')
+            if original not in allowed or original in actual:
+                continue
+            pattern = re.escape(item['source_name']) + r'\.[0-9]+'
+            names = [n for n in actual if re.fullmatch(pattern, n) and n not in allowed]
+            if len(names) == 1:
+                found[original] = names[0]
+    return found
+
+
 def original_text(reference, original_path, start, end, destination, cwd, obj, assembler, flags):
     """Keep original numeric operands where the retail ELF has no relocation.
 
@@ -271,10 +293,12 @@ def prepare(root, evidence):
                                       ccdir, assembler, flags, skip_asm=True)
             emitted = verification.compiler_functions(assembly.read_text())
             actual = functions(base)
+            nested = nested_base_names(root, obj['id'], allowed, actual)
             # Removing inline scaffold blocks can change scheduling/alignment.
             # Native objdiff measures that difference; the unmodified published
             # build remains the authority for exact linked sizes and bytes.
-            verification.require(set(actual) == set(allowed) and set(actual) <= emitted,
+            verification.require(set(actual) == {nested.get(n, n) for n in allowed}
+                                 and set(actual) <= emitted,
                                  f'{name}: SKIP_ASM emission differs from verified C scope')
             stripped_base = destination / 'base.nodebug.o'
             strip_debug(prefix, base, stripped_base, unit_dir)
@@ -283,8 +307,9 @@ def prepare(root, evidence):
             # which tells same-named original locals apart) while the C object
             # defines the original symbol. Pair them with objdiff's own manual
             # mapping (target name -> base name) instead of leaving them unmatched.
-            mappings = {f['name']: f['original_symbol'] for f in checked['functions']
-                        if f['name'] != f['original_symbol']}
+            mappings = {f['name']: nested.get(f['original_symbol'], f['original_symbol'])
+                        for f in checked['functions']
+                        if f['name'] != nested.get(f['original_symbol'], f['original_symbol'])}
             if mappings:
                 unit_config['symbol_mappings'] = mappings
         target_functions = functions(target)

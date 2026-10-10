@@ -99,6 +99,35 @@ def original_symbol(elf, label, size, va):
     return found[0]
 
 
+def emitted_name(root, tu_id, target, size, emitted, compiled):
+    """The compiler's name for an original function, allowing registered nested renumbering.
+
+    cc1 names a GNU nested function `name.N` by its count of private names
+    emitted before it, so while earlier owners are still INCLUDE_ASM the C
+    object numbers it differently from the original. Only a function the
+    registered nested-function mapping names (tools/tu_edit.gnu_nested_specs,
+    as tools/tu/mapcheck.py uses it) qualifies, and exactly one LOCAL FUNC
+    `source_name.M` of the original size must have been emitted.
+    """
+    if target.name in emitted:
+        return target.name
+    import tu_edit
+    for spec in tu_edit.gnu_nested_specs(root, tu_id).values():
+        for item in spec.get('nested_functions') or []:
+            if (item.get('original_name') != target.name
+                    or int(item.get('va', '0'), 16) != target.value
+                    or item.get('size') != size or item.get('binding') != 'LOCAL'
+                    or item.get('type') != 'FUNC'):
+                continue
+            pattern = re.escape(item['source_name']) + r'\.[0-9]+'
+            found = [s.name for s in compiled.symbols
+                     if s.name in emitted and re.fullmatch(pattern, s.name)
+                     and s.type == 2 and s.bind == 0 and s.size == size]
+            if len(found) == 1:
+                return found[0]
+    return None
+
+
 def function_bytes(elf, sym):
     section = elf.sections[sym.shndx]
     offset = section.offset + sym.value - section.addr
@@ -252,10 +281,11 @@ def finish(root, build, snapshot):
                     if category == 'exact_asm':
                         continue
                     target = original_symbol(original, name, size, va)
-                    require(target.name in emitted,
+                    c_name = emitted_name(root, obj['id'], target, size, emitted, compiled)
+                    require(c_name is not None,
                             f'{obj["id"]}/{name}: no compiler-emitted C function')
-                    current = symbol(linked, target.name, size, va)
-                    compiled_sym = symbol(compiled, target.name, size)
+                    current = symbol(linked, c_name, size, va)
+                    compiled_sym = symbol(compiled, c_name, size)
                     require(target.bind == current.bind == compiled_sym.bind,
                             f'{obj["id"]}/{name}: symbol binding differs')
                     a, b = function_bytes(original, target), function_bytes(linked, current)

@@ -36,6 +36,7 @@
 !/config/split/
 !/config/symbols/
 !/config/objects/
+!/config/gnu-nested-functions.json
 
 
 /config/toolchain-local.json
