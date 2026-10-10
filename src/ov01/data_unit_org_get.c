@@ -1002,9 +1002,6 @@ void *dataMapCameraAdrGet(int mapNo)
     return (unsigned char *)map + map->cameraOffset;
 }
 
-extern char *strcpy(char *destination, const char *source);
-extern char *strcat(char *destination, const char *source);
-extern int sprintf(char *buffer, const char *format, ...);
 static char *mapNameBase;
 static char *mapName;
 static char *mapNameExt;

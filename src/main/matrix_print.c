@@ -1,15 +1,35 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "matrix_print.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", MATRIX_print);
+extern int printf(const char *format, ...);
 
-/*
- * The MATRIX initializer pair writes a four-by-four float storage block in
- * row-major order.  MATRIX_identity4s uses the fourth value of each of the
- * first three rows as a basis scale; its name's historical suffix is not
- * established by the available ELF evidence.
- */
+const char D_004C23D8[] = "\t%8.3f %8.3f %8.3f %8.3f\n";
+
+void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);
+
+static void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation);
+
+void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation);
+
+int MATRIX_print(const float matrix[4][4])
+{
+    int result;
+    int rowsRemaining;
+    const float *rowValues;
+
+    rowsRemaining = 3;
+    rowValues = &matrix[0][0];
+    do {
+        rowsRemaining--;
+        result = printf(D_004C23D8, rowValues[0], rowValues[1],
+                        rowValues[2], rowValues[3]);
+        rowValues += 4;
+    } while (rowsRemaining >= 0);
+    return result;
+}
 
 void MATRIX_identity(float destination[4][4])
 {
@@ -100,15 +120,6 @@ void MATRIX_convert4s(Matrix4 destination, const Matrix4 source)
     destination[3][3] = source[3][3];
 }
 
-/*
- * MATRIX_convert4MulMatrix (ee-vu-cop2, docs/ps2-capabilities.md): rescales
- * `matrix`'s first three rows by their own W lane and zeroes that lane (the
- * same per-row transform MATRIX_convert4 performs in plain C, here run on the
- * VU0 macro pipeline and written back into `matrix` itself), then multiplies
- * `other` by the converted `matrix` into `destination`: each destination row
- * is one of `other`'s rows transformed by `matrix`'s (converted) basis, the
- * same row/lane pattern as xglMatrixMul (src/main/xgl_2.c).
- */
 void MATRIX_convert4MulMatrix(Matrix4 destination, Matrix4 matrix, Matrix4 other)
 {
     __asm__ __volatile__(
@@ -156,16 +167,6 @@ void MATRIX_convert4MulMatrix(Matrix4 destination, Matrix4 matrix, Matrix4 other
     );
 }
 
-/*
- * MATRIX_convert4MulMatrixRev (ee-vu-cop2, docs/ps2-capabilities.md): the
- * mirror of MATRIX_convert4MulMatrix with `matrix` and `other` trading
- * places -- `matrix` gets the same convert4-style rescale-by-W/zero-W prep
- * as `matrix` does in MATRIX_convert4MulMatrix, in place, then each
- * destination row is one of the (converted) `matrix`'s rows transformed by
- * `other`'s basis (vf2-vf5, loaded from `other`, supply the ACC chain;
- * vf27-vf30, loaded from `matrix`, are the rows being transformed and are
- * overwritten in place with the result).
- */
 void MATRIX_convert4MulMatrixRev(Matrix4 destination, Matrix4 matrix, Matrix4 other)
 {
     __asm__ __volatile__(
@@ -209,15 +210,79 @@ void MATRIX_convert4MulMatrixRev(Matrix4 destination, Matrix4 matrix, Matrix4 ot
     );
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", MATRIX_mul3x4);
+static void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation)
+{
+    int column;
+    float zero;
+    float one;
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", MATRIX_mul4sx3);
+    for (column = 0; column < 3; column++) {
+        float sourceValues[4];
 
-/*
- * Exchanges rows and columns: destination[row][col] = source[col][row] for
- * every element, so the fourth row/column (the translation/W terms) is
- * transposed the same as the 3x3 basis.
- */
+        sourceValues[0] = source[0][column];
+        sourceValues[1] = source[1][column];
+        sourceValues[2] = source[2][column];
+        sourceValues[3] = source[3][column];
+
+        destination[0][column] = sourceValues[0] * rotation[0][0] +
+                                sourceValues[1] * rotation[0][1] +
+                                sourceValues[2] * rotation[0][2];
+        destination[1][column] = sourceValues[0] * rotation[1][0] +
+                                sourceValues[1] * rotation[1][1] +
+                                sourceValues[2] * rotation[1][2];
+        destination[2][column] = sourceValues[0] * rotation[2][0] +
+                                sourceValues[1] * rotation[2][1] +
+                                sourceValues[2] * rotation[2][2];
+        destination[3][column] = sourceValues[0] * rotation[3][0] +
+                                 sourceValues[1] * rotation[3][1] +
+                                 sourceValues[2] * rotation[3][2] + sourceValues[3];
+    }
+    zero = 0.0f;
+    one = 1.0f;
+    destination[2][3] = zero;
+    destination[3][3] = one;
+    destination[1][3] = zero;
+    destination[0][3] = zero;
+}
+
+void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation)
+{
+    float (*scaleRows)[4] = source;
+    float (*destinationRows)[4] = destination;
+    float (*sourceRows)[4] = source;
+    int column = 0;
+
+    for (column = 0; column < 3; column++) {
+        float sourceValues[4];
+        float scale;
+
+        sourceValues[0] = sourceRows[0][column];
+        sourceValues[1] = sourceRows[1][column];
+        sourceValues[2] = sourceRows[2][column];
+        sourceValues[3] = sourceRows[3][column];
+        destinationRows[0][column] = sourceValues[0] * rotation[0][0] +
+                                sourceValues[1] * rotation[0][1] +
+                                sourceValues[2] * rotation[0][2];
+        destinationRows[1][column] = sourceValues[0] * rotation[1][0] +
+                                sourceValues[1] * rotation[1][1] +
+                                sourceValues[2] * rotation[1][2];
+        destinationRows[2][column] = sourceValues[0] * rotation[2][0] +
+                                sourceValues[1] * rotation[2][1] +
+                                sourceValues[2] * rotation[2][2];
+        scale = scaleRows[column][3];
+        sourceValues[0] *= scale;
+        sourceValues[1] *= scale;
+        sourceValues[2] *= scale;
+        destinationRows[3][column] = sourceValues[0] * rotation[3][0] +
+                                 sourceValues[1] * rotation[3][1] +
+                                 sourceValues[2] * rotation[3][2] + sourceValues[3];
+    }
+    destination[0][3] = source[0][3];
+    destination[1][3] = source[1][3];
+    destination[2][3] = source[2][3];
+    destination[3][3] = 1.0f;
+}
+
 void MATRIX_transpose4(Matrix4 destination, const Matrix4 source)
 {
     destination[0][0] = source[0][0];
@@ -238,10 +303,6 @@ void MATRIX_transpose4(Matrix4 destination, const Matrix4 source)
     destination[3][3] = source[3][3];
 }
 
-/*
- * Swaps the three off-diagonal pairs of the 3x3 basis in place, transposing
- * it; row/column 3 (the translation/W terms) is left untouched.
- */
 void MATRIX_transpose3(Matrix4 matrix)
 {
     float upper01 = matrix[1][0];
@@ -269,20 +330,6 @@ void MATRIX_rotZYX(void)
 {
 }
 
-/*
- * MATRIX_rotate4, MATRIX_mul3x4 and MATRIX_mul4sx3 are original functions of
- * this same TU (INCLUDE_ASM below, not allocated to this attempt); these
- * declarations only give the compiler their signature for the calls made
- * here.
- */
-void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);
-void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation);
-void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation);
-
-/*
- * MATRIX_rotX4/Y4/Z4: build a rotation matrix about the named axis and
- * concatenate it onto `matrix` in place via MATRIX_mul3x4.
- */
 void MATRIX_rotX4(Matrix4 matrix, float angle)
 {
     Matrix4 rotation;
@@ -307,10 +354,6 @@ void MATRIX_rotZ4(Matrix4 matrix, float angle)
     MATRIX_mul3x4(matrix, matrix, rotation);
 }
 
-/*
- * MATRIX_rotX4s/Y4s/Z4s: the "4s" (row-scale-carrying) counterpart of
- * MATRIX_rotX4/Y4/Z4, concatenating through MATRIX_mul4sx3 instead.
- */
 void MATRIX_rotX4s(Matrix4 matrix, float angle)
 {
     Matrix4 rotation;
@@ -335,10 +378,6 @@ void MATRIX_rotZ4s(Matrix4 matrix, float angle)
     MATRIX_mul4sx3(matrix, matrix, rotation);
 }
 
-/*
- * Transforms the XYZ displacement by the matrix's current basis rows and
- * accumulates it into every column of the translation row (row 3).
- */
 void MATRIX_translate4(Matrix4 matrix, float x, float y, float z)
 {
     matrix[3][0] = matrix[0][0] * x + matrix[1][0] * y + matrix[2][0] * z + matrix[3][0];
@@ -347,10 +386,6 @@ void MATRIX_translate4(Matrix4 matrix, float x, float y, float z)
     matrix[3][3] = matrix[0][3] * x + matrix[1][3] * y + matrix[2][3] * z + matrix[3][3];
 }
 
-/*
- * Scales the basis columns 0-2 in place by x, y and z; column 3
- * (the translation/W column) is left untouched.
- */
 void MATRIX_scale4(Matrix4 matrix, float x, float y, float z)
 {
     matrix[0][0] *= x;
@@ -367,13 +402,6 @@ void MATRIX_scale4(Matrix4 matrix, float x, float y, float z)
     matrix[3][2] *= z;
 }
 
-/*
- * Like MATRIX_translate4, but each basis row is first scaled by the value
- * MATRIX_scale4s stashed in that row's own W column (rowScale0..2) before
- * being weighted by the XYZ displacement and accumulated into the
- * translation row's first three columns; the translation row's own W
- * (column 3) is left untouched.
- */
 void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z)
 {
     float rowScale0 = matrix[0][3];
@@ -385,10 +413,6 @@ void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z)
     matrix[3][2] = matrix[0][2] * rowScale0 * x + matrix[1][2] * rowScale1 * y + matrix[2][2] * rowScale2 * z + matrix[3][2];
 }
 
-/*
- * Scales the W column of basis rows 0-2 in place by x, y and z; this is the
- * per-row scale MATRIX_translate4s later reads back as rowScale0..2.
- */
 void MATRIX_scale4s(Matrix4 matrix, float x, float y, float z)
 {
     matrix[0][3] *= x;
@@ -396,13 +420,118 @@ void MATRIX_scale4s(Matrix4 matrix, float x, float y, float z)
     matrix[2][3] *= z;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", MATRIX_toQuat4);
+void MATRIX_toQuat4(const float matrix[16], float quaternion[4])
+{
+    float components[4];
+    int D_004C23F8[3] = { 1, 2, 0 };
+    float trace = matrix[0 * 5] + matrix[1 * 5] + matrix[2 * 5];
+    float root;
+    int dominantAxis;
+    int nextAxis;
+    int lastAxis;
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", QUAT_toAxis);
+    if (trace > 0.0f) {
+        root = __builtin_sqrtf(trace + 1.0f);
+        quaternion[3] = root * 0.5f;
+        root = 0.5f / root;
+        quaternion[0] = (matrix[1 * 4 + 2] - matrix[2 * 4 + 1]) * root;
+        quaternion[1] = (matrix[2 * 4 + 0] - matrix[0 * 4 + 2]) * root;
+        quaternion[2] = (matrix[0 * 4 + 1] - matrix[1 * 4 + 0]) * root;
+        return;
+    }
+    dominantAxis = 0;
+    if (matrix[0 * 5] < matrix[1 * 5]) {
+        dominantAxis = 1;
+    }
+    if (matrix[dominantAxis * 5] < matrix[2 * 5]) {
+        dominantAxis = 2;
+    }
+    nextAxis = D_004C23F8[dominantAxis];
+    lastAxis = D_004C23F8[nextAxis];
+    root = __builtin_sqrtf(matrix[dominantAxis * 5] -
+                           (matrix[nextAxis * 5] + matrix[lastAxis * 5]) + 1.0f);
+    components[dominantAxis] = root * 0.5f;
+    if (root != 0.0f) {
+        root = 0.5f / root;
+    }
+    components[3] = (matrix[nextAxis * 4 + lastAxis] - matrix[lastAxis * 4 + nextAxis]) * root;
+    components[nextAxis] = (matrix[dominantAxis * 4 + nextAxis] + matrix[nextAxis * 4 + dominantAxis]) * root;
+    components[lastAxis] = (matrix[dominantAxis * 4 + lastAxis] + matrix[lastAxis * 4 + dominantAxis]) * root;
+    quaternion[0] = components[0];
+    quaternion[1] = components[1];
+    quaternion[2] = components[2];
+    quaternion[3] = components[3];
+}
+
+void QUAT_toAxis(const float quaternion[4], float axisAngle[4])
+{
+    extern unsigned long long acos(double value);
+    extern double fptodp(float value);
+    extern float dptofp(unsigned long long value);
+    const float D_004D7D28 = 0.000001f;
+    double cosine = fptodp(quaternion[3]);
+    unsigned long long angleDouble = acos(cosine);
+    float angle = dptofp(angleDouble);
+    float sine;
+
+    axisAngle[3] = angle * -2.0f;
+    sine = sinf(angle);
+    if (D_004D7D28 < __builtin_fabsf(sine)) {
+        axisAngle[0] = quaternion[0] / sine;
+        axisAngle[1] = quaternion[1] / sine;
+        axisAngle[2] = quaternion[2] / sine;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/matrix_print", QUAT_toMatrix4);
 
-INCLUDE_ASM("asm/main/nonmatchings/matrix_print", QUAT_interpS);
+void QUAT_interpS(float firstWeight, float secondWeight,
+                  Vector4 *destination, const Vector4 *first,
+                  const Vector4 *second)
+{
+    extern unsigned long long acos(unsigned long long value);
+    extern unsigned long long fptodp(float value);
+    extern float dptofp(unsigned long long value);
+    const float D_004D7D2C = 0.000001f;
+    float firstX = first->x;
+    float dot = firstX * second->x + first->y * second->y
+              + first->z * second->z + first->w * second->w;
+    Vector4 adjusted;
+    float interpolationThreshold;
+
+    if (dot < 0.0f) {
+        adjusted.x = -second->x;
+        adjusted.y = -second->y;
+        adjusted.z = -second->z;
+        adjusted.w = -second->w;
+    } else {
+        adjusted.x = second->x;
+        adjusted.y = second->y;
+        adjusted.z = second->z;
+        adjusted.w = second->w;
+    }
+    interpolationThreshold = 1.0f - dot;
+    if (D_004D7D2C < interpolationThreshold) {
+        double promotedDot = dot;
+        unsigned long long encodedDot;
+        float angle;
+        float sine;
+
+        __builtin_memcpy(&encodedDot, &promotedDot, sizeof(encodedDot));
+        angle = dptofp(acos(encodedDot));
+        sine = sinf(angle);
+
+        firstWeight = sinf(firstWeight * angle);
+        firstWeight = firstWeight / sine;
+        secondWeight = sinf(secondWeight * angle);
+        firstX = first->x;
+        secondWeight = secondWeight / sine;
+    }
+    destination->x = firstWeight * firstX + secondWeight * adjusted.x;
+    destination->y = firstWeight * first->y + secondWeight * adjusted.y;
+    destination->z = firstWeight * first->z + secondWeight * adjusted.z;
+    destination->w = firstWeight * first->w + secondWeight * adjusted.w;
+}
 
 void QUAT_interpL(float destination[4], const float first[4], const float second[4],
                   float first_weight, float second_weight)
@@ -432,14 +561,6 @@ void QUAT_interpL(float destination[4], const float first[4], const float second
     destination[3] = first_weight * first[3] + second_weight * adjusted[3];
 }
 
-/*
- * CUR_MATRIX_Unit (ee-vu-cop2, docs/ps2-capabilities.md): resets the
- * persistent VU0 "current matrix" basis (vf27-vf29) and translation (vf30)
- * to VF00's architectural identity (x=0, y=0, z=0, w=1): vf30 is set outright
- * from vf0, then vf29/vf28/vf27 are each rotated in from the previous
- * register by vmr32 (xyzw -> yzwx), leaving vf29=(0,0,1,0), vf28=(0,1,0,0)
- * and vf27=(1,0,0,0) -- the four rows of the identity matrix.
- */
 void CUR_MATRIX_Unit(void)
 {
     __asm__ __volatile__(
@@ -453,12 +574,6 @@ void CUR_MATRIX_Unit(void)
     );
 }
 
-/*
- * CUR_MATRIX_Unit4s (ee-vu-cop2, docs/ps2-capabilities.md): the "4s"
- * (row-scale-carrying) counterpart of CUR_MATRIX_Unit -- the same identity
- * basis/translation reset, with basis rows 0-2's own W lane (their per-row
- * scale) additionally set to VF00's 1.0, the identity scale.
- */
 void CUR_MATRIX_Unit4s(void)
 {
     __asm__ __volatile__(
@@ -475,11 +590,6 @@ void CUR_MATRIX_Unit4s(void)
     );
 }
 
-/*
- * CUR_MATRIX_Set (ee-vu-cop2, docs/ps2-capabilities.md): loads `matrix`'s
- * four rows into the persistent VU0 "current matrix" basis (vf27-vf29) and
- * translation (vf30), replacing whatever state was resident there.
- */
 void CUR_MATRIX_Set(Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -493,11 +603,6 @@ void CUR_MATRIX_Set(Matrix4 matrix)
     );
 }
 
-/*
- * CUR_MATRIX_Get (ee-vu-cop2, docs/ps2-capabilities.md): stores the
- * persistent VU0 "current matrix" basis (vf27-vf29) and translation (vf30)
- * into `matrix`'s four rows, the mirror of CUR_MATRIX_Set.
- */
 void CUR_MATRIX_Get(Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -511,13 +616,6 @@ void CUR_MATRIX_Get(Matrix4 matrix)
     );
 }
 
-/*
- * CUR_MATRIX_GetT (ee-vu-cop2, docs/ps2-capabilities.md): copies the
- * persistent VU0 "current matrix" translation row's XYZ lanes (vf30) into
- * scratch vf20, forces its own W lane to VF00's architectural 1.0
- * (discarding whatever per-row "4s" scale is currently in vf30's own W),
- * and stores the result into `translation`.
- */
 void CUR_MATRIX_GetT(Vector4 *translation)
 {
     __asm__ __volatile__(
@@ -530,12 +628,6 @@ void CUR_MATRIX_GetT(Vector4 *translation)
     );
 }
 
-/*
- * CUR_MATRIX_SetT (ee-vu-cop2, docs/ps2-capabilities.md): loads
- * `translation` into vf1 and copies its XYZ lanes into the persistent VU0
- * "current matrix" translation row (vf30), leaving vf30's own W lane (its
- * per-row "4s" scale) untouched.
- */
 void CUR_MATRIX_SetT(const Vector4 *translation)
 {
     __asm__ __volatile__(
@@ -547,13 +639,6 @@ void CUR_MATRIX_SetT(const Vector4 *translation)
     );
 }
 
-/*
- * CUR_MATRIX_SetR (ee-vu-cop2, docs/ps2-capabilities.md): loads
- * `rotation`'s three rows into vf20-vf22 and copies their XYZ lanes into
- * the persistent VU0 "current matrix" basis (vf27-vf29), leaving each
- * basis row's own W lane (its per-row "4s" scale) untouched; the
- * translation row (vf30) is not read or written.
- */
 void CUR_MATRIX_SetR(Matrix4 rotation)
 {
     __asm__ __volatile__(
@@ -569,19 +654,6 @@ void CUR_MATRIX_SetR(Matrix4 rotation)
     );
 }
 
-/*
- * CUR_MATRIX_4s3 (ee-vu-cop2, docs/ps2-capabilities.md): concatenates `local`
- * (a "4s"-format matrix: the W lane of rows 0-2 carries a per-row scale) onto
- * the persistent VU0 "current matrix" basis (vf27-vf29) and translation
- * (vf30), the resident state the CUR_MATRIX_* family reads and updates
- * across calls (CUR_MATRIX_Set/Get, above, transfer it to/from memory; this
- * routine only transforms it and leaves no store of its own -- the caller
- * reads it back with CUR_MATRIX_Get/GetT). `local`'s rows 0-2 are first
- * rotated/scaled by the current basis (vf20-vf22), row 3 (the translation)
- * is transformed by the basis scaled by its own W lane (vf24-vf26) and
- * accumulated onto vf30 (whose W lane is set to VF00's 1.0 first), and the
- * rotated rows then replace the basis.
- */
 void CUR_MATRIX_4s3(Matrix4 local)
 {
     __asm__ __volatile__(
@@ -615,15 +687,6 @@ void CUR_MATRIX_4s3(Matrix4 local)
     );
 }
 
-/*
- * CUR_MATRIX_Txyz4s (ee-vu-cop2, docs/ps2-capabilities.md): the persistent
- * VU0 "current matrix" analogue of MATRIX_translate4s (this TU, plain C) --
- * `displacement`'s XYZ lanes are each first multiplied by their matching
- * basis row's own W lane (vf27/vf28/vf29's per-row "4s" scale) into scratch
- * vf20-vf22, the three weighted rows are accumulated through one VU0 ACC
- * chain, and the total is added onto the translation row (vf30, whose own W
- * lane is left untouched by vmaddw.xyz's lane mask).
- */
 void CUR_MATRIX_Txyz4s(const Vector4 *displacement)
 {
     __asm__ __volatile__(
@@ -641,19 +704,6 @@ void CUR_MATRIX_Txyz4s(const Vector4 *displacement)
     );
 }
 
-/*
- * CUR_MATRIX_Rx4s/Ry4s/Rz4s (ee-vu-cop2, docs/ps2-capabilities.md): rotate
- * the persistent VU0 "current matrix" basis (vf27-vf29) about the named axis
- * by the angle (radians) at `*angle`, in place. The compiled access to
- * `*angle` is a plain `lw`, not a COP1 load, so `angle` is typed as a raw
- * bit-pattern word here rather than `float *`; the bit pattern is sent to
- * the resident VU0 trigonometric microprogram: qmtc2.ni carries it into vf4,
- * vcallms 0xE8 (the microprogram entry Vu0CallCos,
- * config/symbols/main.vu0-symbols.ld) launches it and leaves the cosine in
- * vf1.x, and a second launch at 0x20 (Vu0CallSin) leaves the sine in vf1.x;
- * the two axis rows are then combined cos +/- sin through one VU0 ACC chain
- * and written back into the basis.
- */
 void CUR_MATRIX_Rx4s(const int *angle)
 {
     int bits = *angle;
@@ -720,18 +770,6 @@ void CUR_MATRIX_Rz4s(const int *angle)
     );
 }
 
-/*
- * CUR_MATRIX_Rzyx4s (ee-vu-cop2, docs/ps2-capabilities.md): rotates the
- * persistent VU0 "current matrix" basis by angles[2] (Z), then angles[1]
- * (Y), then angles[0] (X), in that order (the composite Z*Y*X rotation the
- * name records; angles[0..2] are a Vector4's x/y/z memory layout, its w not
- * read), combining all three into one VU0 ACC chain instead of three
- * separate calls to CUR_MATRIX_Rz4s/Ry4s/Rx4s. As in CUR_MATRIX_Rx4s, the
- * compiled access to each angle is a plain `lw`, so `angles` is typed as raw
- * bit-pattern words rather than `float *`/`Vector4 *`; each is sent to the
- * resident trigonometric microprogram exactly as in CUR_MATRIX_Rx4s
- * (qmtc2.ni/vcallms 0xE8 for cosine, vcallms 0x20 for sine).
- */
 void CUR_MATRIX_Rzyx4s(const int *angles)
 {
     int bits;
@@ -790,13 +828,6 @@ void CUR_MATRIX_Rzyx4s(const int *angles)
     );
 }
 
-/*
- * CUR_MATRIX_Sxyz4s (ee-vu-cop2, docs/ps2-capabilities.md): the persistent
- * VU0 "current matrix" analogue of MATRIX_scale4s (this TU, plain C) --
- * scales each basis row's own W lane (vf27/vf28/vf29's per-row "4s" scale)
- * in place by the matching component of `scale`; the translation row
- * (vf30) is not read or written.
- */
 void CUR_MATRIX_Sxyz4s(const Vector4 *scale)
 {
     __asm__ __volatile__(

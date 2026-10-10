@@ -476,7 +476,7 @@ int CardEnemyAnswerCardxx(int side, CardGameWork *work, s16 cardId) {
 INCLUDE_ASM("asm/nonmatchings/ov10/card_enemy", CGPEnemyExecCommand);
 
 /* Reports the operation card the AI plays; defined in ov10/cgp.c. */
-extern void CGPSetErrorMessPlus(s8 code, CardGameWork *work, u8 reason, s16 value);
+
 
 /* Board effect request; still assembler (ov10/cgp.c declares the same
  * prototype). */
@@ -575,7 +575,7 @@ void CardEnemyComm(int side, CardGameWork *work) {
 }
 
 /* The draw pile's non-negative entries (ov10/card_fread.c). */
-extern int CardPlayYamaCnt(CardPlaySide *side);
+
 
 /* Compacts the draw pile after a card leaves it; still assembler (ov10/card_fread.c). */
 extern void CardPlayCleanYama(CardPlaySide *side);
@@ -609,7 +609,7 @@ void CardEnemyAnswerSionSearch(int side, CardGameWork *work) {
 extern int CC_Kara_EndFase(int side, CardGameWork *work);
 
 /* Advances the card game turn; defined in ov10/tu008 (still assembler). */
-extern void CGPNextTurnSub(CardGameWork *work);
+
 
 void CardEnemyEnd(int side, CardGameWork *work) {
     int endFaseResult = 1;

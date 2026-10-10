@@ -7,6 +7,8 @@
 
 #include "shared.h"
 
+typedef struct MdlPart MdlPart;
+
 /*
  * Accessed prefix of the model draw record passed by ACT_modelDrawSub
  * (actor + 0x840, main:0x00307984/0x003079b0). The fields below are the
@@ -22,7 +24,7 @@ typedef struct MdlHandle {
     int partCount;                     /* +0x40: MDL_partsSetVisible reads one word */
     unsigned char unmodeled_44[0x10];  /* +0x44..+0x53 */
     const char *texture;               /* +0x54: MDL_draw passes to nmlModelSetTexture */
-    void *parts;                       /* +0x58: MDL_create clears this word */
+    MdlPart *parts;                    /* +0x58: MDL_create clears this part-table pointer */
     unsigned char unmodeled_5c[4];     /* +0x5c..+0x5f */
     Vector4 copiedData[4];             /* +0x60..+0x9f: four slots; MDL_create writes three */
 } MdlHandle;
@@ -30,6 +32,17 @@ typedef struct MdlHandle {
 /* MDL_create and MDL_partsSetVisible access these same evidenced offsets
  * through the resource pointer stored in MdlHandle::entry. */
 typedef MdlHandle MdlResource;
+
+/*
+ * One 0x40-byte part-table entry. The selected visibility functions read the
+ * group word at +0x30 and the two name words at +0x38 and +0x3c.
+ */
+struct MdlPart {
+    unsigned char unmodeled_00[0x30];
+    int group;
+    unsigned char unmodeled_34[4];
+    int name[2];
+};
 
 /*
  * MDL_partsSetVisible: sibling of this TU, still INCLUDE_ASM scaffolding

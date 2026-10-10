@@ -6,8 +6,195 @@
  * carry RssdWork's type yet, so that
  * header is included directly.
  */
-#include "ssd_init.h"
+
+typedef struct RssdRpcResponse {
+    short error_code;              /* +0x00: negative -> per-command error */
+    short result;                  /* +0x02: nonzero -> error status (-1) */
+    int _unmodeled_04;             /* +0x04: 32-bit word, meaning not recovered */
+    int value;                     /* +0x08: command result value */
+    int _unmodeled_0c[5];          /* +0x0c..0x1f: 32-bit words, not read here */
+} RssdRpcResponse;
+
+/* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
+/*
+ * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
+ * ELF symbol size 0x200 bytes. The accepted RssdWorkFlags in
+ * xeno/core/types.h (from RssdBackgroundNextWave, main:0x0023ff28) only
+ * carries the leading `flags` word; this function evidences more of the same
+ * object, so the type is extended here under the same tag and leading field
+ * Only the evidenced members are modeled here. Bytes this TU does not access
+ * stay explicit unmodeled spans.
+ */
+struct SsdMemoryBlock;
+
+typedef struct RssdWorkFlags {
+    int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
+    unsigned char _unmodeled_004[4];      /* +0x004..0x007 */
+    int request_parameter;                /* +0x008: copied by RssdBusy from its request */
+    unsigned char _unmodeled_00c[4];      /* +0x00c..0x00f */
+    unsigned short sample_rate;           /* +0x010: samples per second used by SsdGetTimeCode */
+    short request_channel_count;          /* +0x012: copied by RssdBusy from its request */
+    int request_size;                     /* +0x014: copied by RssdBusy from its request */
+    unsigned char _unmodeled_018[0x08];   /* +0x018..0x01f */
+    /*
+     * Stored verbatim by SsdSetServerCallback (main:0x002403b0)
+     * `sw $5,36($2)` / `sw $4,32($2)`, $2 = &RssdWork. No recovered function
+     * reads them back, so their call signature is not evidenced and they
+     * stay untyped pointers named after the store site.
+     */
+    void *server_callback;                /* +0x020: SsdSetServerCallback arg0 */
+    void *server_callback_arg;            /* +0x024: SsdSetServerCallback arg1 */
+    void (*complete_callback)(int status, RssdRpcResponse *response,
+                              void *arg); /* +0x028: one-shot, cleared after use */
+    void *callback_arg;                   /* +0x02c: third complete_callback argument */
+    unsigned char _unmodeled_030[0x04];   /* +0x030..0x033 */
+    RssdRpcResponse *response_source;     /* +0x034: SIF RPC receive buffer */
+    unsigned char _unmodeled_038[0x48];   /* +0x038..0x07f */
+    RssdRpcResponse response;             /* +0x080..0x09f: copy of *response_source */
+    unsigned char _unmodeled_0a0[0xa8];   /* +0x0a0..0x147 */
+    /*
+     * The SCE SDK RPC server registration record: RssdInitIop
+     * (main:0x0023fbb8, still asm) passes its address as the `sd` argument of
+     * sceSifRegisterRpc (`addiu $4,$17,0x148`), and SsdQuit (main:0x0023fb08)
+     * passes the same address to sceSifRemoveRpc to unregister it on the way
+     * out. Its internal layout belongs to the SIF RPC middleware, not this
+     * TU, so the reserved extent runs to the next evidenced field at +0x18c.
+     */
+    unsigned char rpc_server[0x44];       /* +0x148..0x18b: sceSifRpcServerData_t */
+    /*
+     * The SIF RPC receive queue RSsdSifRpcThread (main:0x0023fb90) hands to
+     * sceSifRpcLoop after RssdInitIop returns (`addiu a0,v0,-24052` off
+     * `lui v0,0x4b`, v0 = &RssdWork, i.e. &RssdWork + 0x18c). Its internal
+     * layout belongs to the SIF RPC middleware, not this TU, and is not
+     * evidenced by any recovered function; the reserved extent runs to the
+     * next evidenced field at +0x1a4.
+     */
+    unsigned char rpc_queue[0x18];        /* +0x18c..0x1a3: sceSifRpcLoop queue */
+    /*
+     * The two service threads SsdInit (main:0x0023f960) creates, each stored
+     * as the (thread id, stack) pair the create/start idiom produces
+     * ($20 = &RssdWork throughout that function):
+     * - +0x1a4/+0x1a8: RSsdSifRpcThread, `sw $2,0x1a4($20)` in the delay slot
+     *   of `jal StartThread` at 0x0023fa88 and `sw $5,0x1a8($20)` at
+     *   0x0023fa74 with $5 = MYthreadStack;
+     * - +0x1ac/+0x1b0: RssdBackNextWaveThread, `sw $2,0x1ac($20)` in the
+     *   delay slot of `jal StartThread` at 0x0023facc and `sw $3,0x1b0($20)`
+     *   in the delay slot of its `jal CreateThread` at 0x0023fabc with
+     *   $3 = MYwaveTransThStack.
+     * Both ids are confirmed by a second, independent reader: SsdQuit
+     * (main:0x0023fb08) passes +0x1a4 to TerminateThread and DeleteThread
+     * (0x0023fb5c/0x0023fb64) and +0x1ac to the same pair
+     * (0x0023fb6c/0x0023fb74), next to its DeleteSema of +0x1b4.
+     * RssdBackgroundNextWave wakes +0x1ac, which is that same thread.
+     */
+    int rpc_thread_id;                    /* +0x1a4: RSsdSifRpcThread */
+    void *rpc_thread_stack;               /* +0x1a8: MYthreadStack */
+    int next_wave_thread_id;              /* +0x1ac: RssdBackNextWaveThread */
+    void *next_wave_thread_stack;         /* +0x1b0: MYwaveTransThStack */
+    int sema_id;                          /* +0x1b4: signalled when the RPC completes */
+    int busy_sema_id;                     /* +0x1b8: signalled by RssdBusy */
+    unsigned char _unmodeled_1bc[4];      /* +0x1bc..0x1bf */
+    struct SsdMemoryBlock *first_block;   /* +0x1c0: first allocator-list node */
+    int memory_end;                       /* +0x1c4: allocator arena end */
+    unsigned char _unmodeled_1c8[4];     /* +0x1c8..0x1cb */
+    int spu_bytes_remaining;              /* +0x1cc: drained by RssdBackNextWaveThread */
+    /*
+     * Running destination pointer for streamed sample data. RssdSpuRead
+     * (main:0x0023feb8) copies each request's payload here with
+     * SsdCopyMemory and advances it by the copied byte count; SsdSpuDirectRead
+     * (main:0x00240690, still asm) sets it from its own destination argument.
+     */
+    unsigned char *spu_write_ptr;         /* +0x1d0: streamed sample write position */
+    int wave_id;                          /* +0x1d4: active wave id */
+    unsigned char _unmodeled_1d8[4];
+    unsigned short wave_chunk_index;     /* +0x1dc: streamed chunk index */
+    unsigned char _unmodeled_1de[0x0a];   /* +0x1de..0x1e7 */
+    /*
+     * Two (callback, argument) pairs stored verbatim by main/tu112:
+     * SsdSetSampleDmaCallback (main:0x002410a0) `sw $4,488($2)` /
+     * `sw $5,492($2)` and SsdSetSampleKeyoffCallback (main:0x002410b8)
+     * `sw $4,496($2)` / `sw $5,500($2)`, $2 = &RssdWork. No recovered
+     * function reads them back, so their call signature is not evidenced
+     * and they stay untyped pointers named after the store site.
+     */
+    void *sample_dma_callback;            /* +0x1e8: SsdSetSampleDmaCallback arg0 */
+    void *sample_dma_callback_arg;        /* +0x1ec: SsdSetSampleDmaCallback arg1 */
+    void *sample_keyoff_callback;         /* +0x1f0: SsdSetSampleKeyoffCallback arg0 */
+    void *sample_keyoff_callback_arg;     /* +0x1f4: SsdSetSampleKeyoffCallback arg1 */
+    /*
+     * Stored verbatim by SsdSetStreamEndCallback (main:0x002403e0)
+     * `sw $5,508($2)` / `sw $4,504($2)`, $2 = &RssdWork. No recovered
+     * function reads them back, so their call signature is not evidenced
+     * and they stay untyped pointers named after the store site.
+     */
+    void *stream_end_callback;            /* +0x1f8: SsdSetStreamEndCallback arg0 */
+    void *stream_end_callback_arg;        /* +0x1fc: SsdSetStreamEndCallback arg1 */
+} RssdWorkFlags;
+
+/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
+#define RSSD_FLAG_SUCCESS 0x20
+
+
+extern RssdWorkFlags RssdWork;
+
+/*
+ * One argument word of an RSSD request. Most commands pass plain integers;
+ * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence
+ * data wrappers of main/tu113 pass a buffer address in the same slot, so the
+ * word is a union of the two views (both are 32-bit on the EE).
+ */
+typedef union RssdRequestWord {
+    int value;
+    void *pointer;
+    struct {
+        unsigned short sample_rate;
+        short request_channel_count;
+    } rate_channel;
+} RssdRequestWord;
+
+/*
+ * The 32-byte RSSD RPC request record.
+ *
+ * RssdCallFunc (main:0x0023fff0, still INCLUDE_ASM) copies all 32 bytes of a
+ * non-null request into the SIF RPC buffer RssdWork.response_source with
+ * four unaligned ldl/ldr -> sdl/sdr pairs (0x00240050..0x0024008c), then
+ * writes two fields of that copy from its own arguments: the +0x00 halfword
+ * (`sh $21,0($17)`, command) and the +0x0c word (`sw $16,12($17)`, size).
+ * No caller writes header[0..3] (+0x00..+0x0f), but every wrapper reserves
+ * the whole record on its stack (all of them have a 0x30-byte frame, however
+ * many argument words the command uses).
+ * arg[0..3] (+0x10..+0x1f) are the command's own argument words.
+ */
+typedef struct RssdRequest {
+    int header[4];
+    RssdRequestWord arg[4];
+} RssdRequest;
+
+/*
+ * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
+ * `request` may be null, otherwise it is copied as above, and `size` bytes
+ * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
+ * Returns -1 when the rounded payload exceeds the buffer, otherwise the
+ * sceSifCallRpc result.
+ */
+int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
+
+/*
+ * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
+ * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
+ * result, else flag bit 5) through the registered one-shot completion
+ * callback, then signals the waiting thread's semaphore.
+ *
+ * It runs from the SIF RPC interrupt context, so it ends with the
+ * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
+ * orders every earlier load/store, including the iSignalSema effects, before
+ * `ei` re-enables interrupts on the way out.
+ */
+
+
+
 extern void *sceSifGetNextRequest(void *queue);
+
 extern void sceSifExecRequest(void *request);
 
 typedef struct RssdEffectData {
@@ -55,9 +242,44 @@ enum {
 };
 
 /*
+ * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
+ * it clears (main:0x002409b0). Same prototype as src/main/xgl_sound.c and
+ * src/ov01/snd.h.
+ */
+
+extern int SsdSpuDmaCompleted(int wait);
+
+/*
+ * Waits for the previous SPU DMA transfer to complete (SsdSpuDmaCompleted,
+ * wait = 1), then sends size bytes of data as the next chunk of streaming
+ * wave data for wave. Always returns 0.
+ */
+
+/* Forwards value (an SPU memory size or address) unchanged; no further evidenced use in this function. */
+
+enum { RSSD_CMD_STOP_ALL_EFFECT = 0x78 };
+
+extern int printf(const char *format, ...);
+
+/*
  * Sends count 32-byte packets read from packets over SIF RPC; count << 5 is
  * the RssdCallFunc payload size, sizeof(RssdRequest). No-op when count is 0.
  */
+
+typedef struct SsdWaveHeader {
+    unsigned int tag;
+    unsigned char unmodeled_04[4];
+    int size;
+    unsigned char unmodeled_0c[6];
+    unsigned short id;
+} SsdWaveHeader;
+
+#define SSD_WAVE_TAG 0x6d647773
+
+enum {
+    RSSD_CMD_ADD_WAVE_DATA = 0x20
+};
+
 void SsdSendFuncPacket(void *packets, int count)
 {
     RssdRequest request;
@@ -70,22 +292,67 @@ void SsdSendFuncPacket(void *packets, int count)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdSpuDirectRead);
+int SsdSpuDirectRead(unsigned char *spuPtr, int transSize, int size)
+{
+    RssdRequest request;
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_1", SsdAddWaveData);
+    SsdSpuDmaCompleted(1);
+    RssdWork.spu_write_ptr = spuPtr;
+    RssdWork.spu_bytes_remaining = size;
+    RssdWork.flags = (RssdWork.flags | 4) & ~RSSD_FLAG_SUCCESS;
+    RssdWork.wave_chunk_index = 0;
+    request.arg[0].value = transSize;
+    request.arg[1].value = size;
+    if (RssdCallFunc(0x1b, &request, 0, 0) < 0) {
+        RssdWork.flags &= ~4;
+        printf("Raad spu direct read error !\n");
+    }
+    return printf("Ssd spu read  SpuPtr=0x%08x  TransSize=0x%0x\n", transSize, size);
+}
 
-/*
- * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
- * it clears (main:0x002409b0). Same prototype as src/main/xgl_sound.c and
- * src/ov01/snd.h.
- */
-extern int SsdSpuDmaCompleted(int wait);
+int SsdAddWaveData(SsdWaveHeader *data, int size, int wave)
+{
+    /*
+     * The request record with plain int argument words: the original's stores
+     * do not alias the wave header's id halfword, which RssdRequestWord's
+     * halfword view would make them do.
+     */
+    typedef struct RssdAddWaveRequest {
+        int header[4];
+        int arg[4];
+    } RssdAddWaveRequest;
+    RssdAddWaveRequest request;
+    int chunk;
+    int id;
 
-/*
- * Waits for the previous SPU DMA transfer to complete (SsdSpuDmaCompleted,
- * wait = 1), then sends size bytes of data as the next chunk of streaming
- * wave data for wave. Always returns 0.
- */
+    SsdSpuDmaCompleted(1);
+    if (data->tag != SSD_WAVE_TAG) {
+        printf("Rssd add wave data  data error !\n");
+        return -1;
+    }
+    if (size <= 0) {
+        size = data->size;
+    } else {
+        size = data->size < size ? data->size : size;
+    }
+    id = data->id;
+    chunk = size > 0x10000 ? 0x10000 : size;
+    request.arg[0] = (int)data;
+    request.arg[2] = wave;
+    RssdWork.spu_bytes_remaining = size - chunk;
+    RssdWork.spu_write_ptr = (unsigned char *)data + chunk;
+    RssdWork.flags |= RSSD_FLAG_SUCCESS | 4;
+    RssdWork.wave_id = id;
+    request.arg[1] = chunk;
+    RssdWork.wave_chunk_index = 0;
+    if (RssdCallFunc(RSSD_CMD_ADD_WAVE_DATA, (RssdRequest *)&request, data, chunk) < 0) {
+        RssdWork.flags &= ~4;
+        printf("Raad add wave data !\n");
+        return -1;
+    }
+    return id;
+}
+
 int SsdNextWaveData(void *data, int size, int wave)
 {
     RssdRequest request;
@@ -156,7 +423,6 @@ int SsdSpuDmaCompleted(int wait)
     return busy;
 }
 
-/* Forwards value (an SPU memory size or address) unchanged; no further evidenced use in this function. */
 void SsdCheckSpuMemory(int value)
 {
     RssdRequest request;
@@ -247,8 +513,6 @@ void SsdSetEffectParam(int effect_id, int source_id, int volume, int pan)
     RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
     RssdCallFunc(RSSD_CMD_SET_EFFECT_PARAM, &request, 0, 0);
 }
-
-enum { RSSD_CMD_STOP_ALL_EFFECT = 0x78 };
 
 void SsdStopAllEffect(void)
 {
@@ -368,17 +632,6 @@ int SsdCheckPlayEffectFileID(int file_id)
     return 0;
 }
 
-/*
- * voiceCount, workValue and workSize forward to IOP SSD.IRX SsdInitSampling
- * (0x000050b0): voiceCount is bound-checked against 5 (`slti v0,s2,5` at
- * 0x50c4) before being forwarded to SsdAllocSamplingVoice/
- * SsdInitSamplingVoice (0x5150/0x5158); workSize is passed as the size
- * argument to AllocSysMemory (0x511c) and also stored into the sampling
- * work area at +0xce (0x5104); workValue is stored into that same work
- * area at +0xca (0x5100) with no further evidenced use in this function,
- * so it keeps a neutral name describing the store rather than an invented
- * role (docs/naming.md).
- */
 void SsdInitSampling(int voiceCount, int workValue, int workSize)
 {
     RssdRequest request;
@@ -398,7 +651,6 @@ void SsdDisposeSampling(void)
     RssdCallFunc(RSSD_CMD_DISPOSE_SAMPLING, &request, 0, 0);
 }
 
-/* Stores the caller-supplied callback and its argument verbatim; see RssdWorkFlags (main/ssd_init.h). */
 void SsdSetSampleDmaCallback(void *callback, void *arg)
 {
     RssdWork.sample_dma_callback = callback;
@@ -411,14 +663,6 @@ void SsdSetSampleKeyoffCallback(void *callback, void *arg)
     RssdWork.sample_keyoff_callback_arg = arg;
 }
 
-/*
- * voice, data and size forward to IOP SSD.IRX SsdTransferSampling
- * (0x00005238): voice indexes the per-voice sampling table (the same
- * *3*16-byte-stride table SsdPlaySampling/SsdSetSamplingParam index);
- * data and size are forwarded unchanged as RssdCallFunc's own `data`/`size`
- * SIF RPC payload arguments and size is added to a running transfer offset
- * (0x529c) after the DMA write (SsdSpuDmaWrite, 0x5290).
- */
 void SsdTransferSampling(int voice, void *data, int size)
 {
     RssdRequest request;
@@ -430,14 +674,6 @@ void SsdTransferSampling(int voice, void *data, int size)
     RssdCallFunc(RSSD_CMD_TRANSFER_SAMPLING, &request, data, size);
 }
 
-/*
- * data and size forward to IOP SSD.IRX SsdTransferSamplingNext
- * (0x000052b8), the same shape as SsdTransferSampling minus the voice
- * index (it continues the current voice's transfer): both are forwarded
- * unchanged as RssdCallFunc's `data`/`size` SIF RPC payload arguments and
- * size is added to the running transfer offset (0x52fc) after the DMA
- * write (SsdSpuDmaWrite, 0x52f4).
- */
 void SsdTransferSamplingNext(void *data, int size)
 {
     RssdRequest request;
@@ -448,16 +684,6 @@ void SsdTransferSamplingNext(void *data, int size)
     RssdCallFunc(RSSD_CMD_TRANSFER_SAMPLING_NEXT, &request, data, size);
 }
 
-/*
- * voice, pitch, volume and pan forward to IOP SSD.IRX SsdPlaySampling
- * (0x0000531c): voice indexes the per-voice sampling table; pitch is
- * stored as a halfword at the voice's +0x14 (0x53a8); volume and pan are
- * stored at the voice's +0xc/+0x1c (0x5394/0x5398) and forwarded as-is to
- * SsdCalcDirectVoiceVolume (0x53a4) as its second and third argument.
- * Beyond "the voice's own volume-calculation inputs", pitch/volume/pan are
- * not confirmed by a further reader in this file (naming.md: do not invent
- * unsupported terminology beyond what the call site evidences).
- */
 void SsdPlaySampling(int voice, int pitch, int volume, int pan)
 {
     RssdRequest request;
@@ -479,12 +705,6 @@ void SsdStopSampling(int voice)
     RssdCallFunc(RSSD_CMD_STOP_SAMPLING, &request, 0, 0);
 }
 
-/*
- * Same (voice, pitch, volume, pan) shape as SsdPlaySampling: IOP SSD.IRX
- * SsdSetSamplingParam (0x00005468) writes the identical per-voice table
- * fields (+0xc/+0x1c word stores at 0x5490/0x5494, +0x14 halfword store at
- * 0x549c) and forwards the same pair to SsdCalcDirectVoiceVolume (0x54a4).
- */
 void SsdSetSamplingParam(int voice, int pitch, int volume, int pan)
 {
     RssdRequest request;
@@ -497,16 +717,6 @@ void SsdSetSamplingParam(int voice, int pitch, int volume, int pan)
     RssdCallFunc(RSSD_CMD_SET_SAMPLING_PARAM, &request, 0, 0);
 }
 
-/*
- * voice, effectFlag1 and effectFlag2 forward to IOP SSD.IRX
- * SsdSetSamplingEffect (0x000054cc): each flag is tested for zero/nonzero
- * (0x54d0/0x54e0) and independently contributes a bit to a byte stored at
- * the voice table entry's +0x2c and its nested pointer's +6
- * (effectFlag1 -> 0x8, effectFlag2 -> 0x4, both at 0x5508/0x5510), and a
- * word OR'd into that nested pointer's +4 (effectFlag2 takes priority over
- * effectFlag1 there: 0x4000 vs 0x8000, 0x551c). Their domain meaning
- * (which sampling effect each bit selects) is not evidenced further.
- */
 void SsdSetSamplingEffect(int voice, int effectFlag1, int effectFlag2)
 {
     RssdRequest request;

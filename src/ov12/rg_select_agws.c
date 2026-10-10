@@ -531,7 +531,7 @@ static void _ResumeSelTypeOldCursor(SelType *pSelType)
     pSelType->cursor = pSelType->oldCursor;
 }
 
-extern const char D_00A56758[]; /* "pSelType != NIL" */
+ /* "pSelType != NIL" */
 
 static int _GetCursorSelType(SelType *pSelType)
 {
@@ -969,7 +969,7 @@ static void _SaveToBaseData(SelDat *pSel)
     _SaveCharSelectData(pSel, pData);
 }
 
-extern const char D_00A568E0[]; /* "pSel != NIL" */
+ /* "pSel != NIL" */
 
 static void _TransitToOffSelect(SelDat *pSel)
 {
@@ -1195,8 +1195,7 @@ static void _SetPlayerModeSelectData(SelDat *pSelDat, int mode);
 extern RgHeap *InstanceOfRgHeap(void);
 extern void *RgHeapAlloc(void *heap, unsigned int size,
                          const char *source_file, int line);
-extern void RgHeapFree(void *heap, void *ptr, const char *source_file,
-                       int line);
+
 
 extern void RgDrawViewInit(RgDrawView *pView);
 
@@ -1229,7 +1228,7 @@ static void _set_camera(RgDrawView *pView)
     RgDrawViewSetRotateZ(pView, 0.0f);
 }
 
-extern const char D_00A568E0[]; /* "pSel != NIL" */
+ /* "pSel != NIL" */
 
 extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
                                   int line);
@@ -1398,7 +1397,7 @@ void _InitSelect(RgSelectAGWS *pSel) {
     _SinInit();
 }
 
-extern const char D_00A568C0[]; /* "pData != NIL" */
+ /* "pData != NIL" */
 
 /*
  * The per-character weapon-name record within pData's caller-owned buffer:
@@ -1452,8 +1451,8 @@ void RgSelectAGWSSetSelectData(RgSelectAGWS *pSel, void *pData)
  */
 static void _GetBaseSelectData(SelDat *pSelDat, void *pData);
 
-extern const char D_00A568E0[]; /* "pSel != NIL" */
-extern const char D_00A568C0[]; /* "pData != NIL" */
+ /* "pSel != NIL" */
+ /* "pData != NIL" */
 
 void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel, void *pData)
 {
@@ -1489,7 +1488,7 @@ void RgSelectAGWSSetMode(RgSelectAGWS *pSel, int mode)
     _SetPlayerModeSelectData(pSel->pSelDat, mode);
 }
 
-extern const char D_00A568E0[]; /* "pSel != NIL" */
+ /* "pSel != NIL" */
 
 int RgSelectAGWSIsEnd(RgSelectAGWS *pSel)
 {

@@ -1,4 +1,5 @@
 #include "common.h"
+
 #include "shared.h"
 
 static int s_nIgnoreCulling = 0;
@@ -12,11 +13,18 @@ typedef int s32;
  * check_occlusion read back. position.w and scale.w are set to 1.0f by both
  * writers; rotation.w is never written.
  */
+
 typedef struct CullingVolume {
     Vector4 position;
     Vector4 rotation;
     Vector4 scale;
-    u8 unmodeled_030[304];
+    Vector4 normalizedDirection;
+    Matrix4 transform;
+    Matrix4 inverseTransform;
+    Vector4 cullingCorners[4];
+    Vector4 occlusionPlanes[5];
+    float occlusionDepth;
+    u8 unmodeled_154[12];
 } CullingVolume;
 
 /*
@@ -28,6 +36,7 @@ typedef struct CullingVolume {
  * volume) and an evidenced source value at 0xDE4 (set from a caller
  * argument by xglCullingMapSet and read back by xglCullingMapLastCheck).
  */
+
 typedef struct CullingMap {
     u8 active;
     u8 unmodeled_001[31];
@@ -38,12 +47,7 @@ typedef struct CullingMap {
 
 static CullingMap s_inCulling;
 
-INCLUDE_ASM("asm/main/nonmatchings/face_point", culling_matrix);
-
 /* Empty in this build: the original body is a bare return. */
-static void culling_cell_disp(void)
-{
-}
 
 /*
  * Line-plane intersection. lineStart/lineEnd are the two points of the
@@ -56,52 +60,6 @@ static void culling_cell_disp(void)
  * vf15; destination->w keeps whatever is in vf15's w lane going into that
  * sqc2, unrelated to lineStart/lineEnd/planePoint's own w.
  */
-void _FacePoint(Vector4 *destination, const Vector4 *lineStart, const Vector4 *lineEnd,
-                const Vector4 *normal, const Vector4 *planePoint) {
-    __asm__ __volatile__(
-        "lqc2 vf22, 0(%0)\n\t"
-        "lqc2 vf20, 0(%1)\n\t"
-        "lqc2 vf21, 0(%2)\n\t"
-        "lqc2 vf23, 0(%3)\n\t"
-        "vmulw.xyz vf14, vf22, vf22w\n\t"
-        "vmulw.xyz vf14, vf14, vf20w\n\t"
-        "vadd.xyz vf23, vf23, vf14\n\t"
-        "vaddx.x vf10, vf0, vf22x\n\t"
-        "vaddy.x vf11, vf0, vf22y\n\t"
-        "vaddz.x vf12, vf0, vf22z\n\t"
-        "vsub.xyz vf19, vf21, vf20\n\t"
-        "vmulax.x ACC, vf10, vf21x\n\t"
-        "vmadday.x ACC, vf11, vf21y\n\t"
-        "vmaddz.x vf17, vf12, vf21z\n\t"
-        "vmulax.x ACC, vf10, vf19x\n\t"
-        "vmadday.x ACC, vf11, vf19y\n\t"
-        "vmaddz.x vf18, vf12, vf19z\n\t"
-        "vmulax.x ACC, vf10, vf23x\n\t"
-        "vmadday.x ACC, vf11, vf23y\n\t"
-        "vmaddz.x vf16, vf12, vf23z\n\t"
-        "vdiv Q, vf0w, vf18x\n\t"
-        "vsub.x vf16, vf17, vf16\n\t"
-        "vwaitq\n\t"
-        "vmulq.x vf16, vf16, Q\n\t"
-        "vmulx.xyz vf15, vf19, vf16x\n\t"
-        "vsub.xyz vf15, vf21, vf15\n\t"
-        "sqc2 vf15, 0(%4)\n\t"
-        "nop\n\t"
-        :
-        : "r"(normal), "r"(lineStart), "r"(lineEnd), "r"(planePoint), "r"(destination)
-        : "memory"
-    );
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", _CheckLine);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", plane_from_points);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", setup_occlusion);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", check_occlusion);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheck);
 
 void setup_occlusion(CullingVolume *volume, s32 camera);
 
@@ -110,16 +68,6 @@ void setup_occlusion(CullingVolume *volume, s32 camera);
  * that the xglCullingCheckSeparate calls that follow only have to test
  * model against them. xglCullingCheck does both steps per volume instead.
  */
-void xglCullingCheckSeparateInit(s32 camera)
-{
-    s32 i;
-
-    for (i = 0; i < s_inCulling.count; i++) {
-        setup_occlusion(&s_inCulling.volumes[i], camera);
-    }
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheckSeparate);
 
 /*
  * Declared as an incomplete array, not a scalar: cc1 -G8 would otherwise
@@ -128,23 +76,11 @@ INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheckSeparate);
  * instructions; an incomplete-extent declaration keeps the target's
  * unknown size ineligible for that optimization.
  */
+
 extern s32 D_00969760[];
 
-s32 xglCullingExist(void) {
-    return D_00969760[0];
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapLastCheck);
-
-void xglCullingMapInit(void)
-{
-    s_nIgnoreCulling = 0;
-    s_inCulling.count = 0;
-    s_inCulling.active = 0;
-    s_inCulling.source = 0;
-}
-
 /* The map table stores pointers to separately scaffolded volume and index data. */
+
 typedef struct CullingMapEntry {
     const char *name;
     /* The unchanged loop tests these pointer fields only for nullness. */
@@ -153,80 +89,153 @@ typedef struct CullingMapEntry {
     u8 unmodeled_00C[4];
 } CullingMapEntry;
 
-static const float s_aMapCullingKou01[18];
-static const float s_aMapCullingPro02[18];
-static const float s_aMapCullingVok03[18];
-static const float s_aMapCullingVok04[27];
-static const float s_aMapCullingVok07[27];
-static const float s_aMapCullingVok10[27];
-static const float s_aMapCullingVok11[27];
-static const float s_aMapCullingVok12[36];
-static const s32 s_aMapLastDyu04[12];
-static const s32 s_aMapLastDyu07[12];
-static const s32 s_aMapLastDyu10[12];
-static const s32 s_aMapLastDyu12[12];
-static const s32 s_aMapLastDyu13[12];
-static const s32 s_aMapLastDyu15[12];
-static const s32 s_aMapLastDyu16[12];
-static const s32 s_aMapLastEls01[12];
-static const s32 s_aMapLastEls02[12];
-static const s32 s_aMapLastEls02b[12];
-static const s32 s_aMapLastEls03[12];
-static const s32 s_aMapLastEls04[12];
-static const s32 s_aMapLastEls04b[12];
-static const s32 s_aMapLastEls09[12];
-static const s32 s_aMapLastEls10[12];
-static const s32 s_aMapLastGnk02[12];
-static const s32 s_aMapLastGnk04[12];
-static const s32 s_aMapLastGnk09[12];
-static const s32 s_aMapLastGnk10[12];
-static const s32 s_aMapLastGnk11[12];
-static const s32 s_aMapLastGnk12[12];
-static const s32 s_aMapLastGnk13[12];
-static const s32 s_aMapLastGnk14[12];
-static const s32 s_aMapLastGnk15[12];
-static const s32 s_aMapLastGnk18[12];
-static const s32 s_aMapLastGnk20[12];
-static const s32 s_aMapLastGnk21[12];
-static const s32 s_aMapLastGnu01[12];
-static const s32 s_aMapLastGnu02[12];
-static const s32 s_aMapLastGnu03[12];
-static const s32 s_aMapLastGnu04[12];
-static const s32 s_aMapLastGnu05[12];
-static const s32 s_aMapLastGnu06[12];
-static const s32 s_aMapLastKas04[12];
-static const s32 s_aMapLastKas12[12];
-static const s32 s_aMapLastKas13[12];
-static const s32 s_aMapLastKas18[12];
-static const s32 s_aMapLastKas19[12];
-static const s32 s_aMapLastKas20[12];
-static const s32 s_aMapLastKas31[12];
-static const s32 s_aMapLastKou01[12];
-static const s32 s_aMapLastKou04[12];
-static const s32 s_aMapLastKou05[12];
-static const s32 s_aMapLastKuk02[12];
-static const s32 s_aMapLastKuk11[12];
-static const s32 s_aMapLastKuk12[12];
-static const s32 s_aMapLastKuk16[12];
-static const s32 s_aMapLastUta03[12];
-static const s32 s_aMapLastUta04[12];
-static const s32 s_aMapLastUta05[12];
-static const s32 s_aMapLastUta06[12];
-static const s32 s_aMapLastUta07[12];
-static const s32 s_aMapLastUta08[12];
-static const s32 s_aMapLastUta13[12];
-static const s32 s_aMapLastUta17[12];
-static const s32 s_aMapLastUtk04[12];
-static const s32 s_aMapLastUtk05[12];
-static const s32 s_aMapLastVok03[12];
-static const s32 s_aMapLastVok04[12];
-static const s32 s_aMapLastVok07[12];
-static const s32 s_aMapLastVok10[12];
-static const s32 s_aMapLastVok12[12];
-static const s32 s_aMapLastVok12b[12];
-static const s32 s_aMapLastVok13[12];
-static const s32 s_aMapLastVok13b[12];
-static const s32 s_aMapLastVok24[12];
+static const float s_aMapCullingKou01[18] = { 10.2f, -1.6f, -2.6f, 0.0f, -0.6632251f, 0.0f, 5.6f, 4.3f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingPro02[18] = { -28.9f, -0.0f, 1.0f, 0.0f, 1.5707964f, 0.0f, 1.0f, 3.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok03[18] = { 0.0f, -0.2f, 25.5f, -1.5184364f, 0.0f, 0.0f, 18.9f, 11.6f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok04[27] = { -10.6f, 2.1f, 25.5f, 0.0f, 0.0f, 0.0f, 17.9f, 12.1f, 1.0f, -10.3f, 2.4f, 15.0f, 0.0f, 0.0f, 0.0f, 17.2f, 10.4f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok07[27] = { -18.2f, 3.0f, 22.0f, 0.0f, 0.0f, 0.0f, 7.2f, 10.0f, 1.0f, 0.0f, 2.9f, 21.8f, 0.0f, 0.0f, 0.0f, 6.9f, 10.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok10[27] = { 9.4f, 0.4f, -9.1f, 0.0f, 0.13962635f, 0.0f, 20.6f, 10.7f, 1.0f, -26.0f, 0.0f, -9.0f, 0.0f, -0.296706f, 0.0f, 9.8f, 9.9f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok11[27] = { 0.0f, 0.4f, 9.5f, -1.3613569f, 0.0f, 0.0f, 2.1f, 4.6f, 1.0f, 0.0f, 0.0f, 6.6f, -0.45378563f, 0.0f, 0.0f, 1.0f, 2.1f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const float s_aMapCullingVok12[36] = { -2.2f, 2.4f, 7.2f, 0.0f, 0.0f, 0.0f, 19.16f, 10.0f, 1.0f, 16.6f, 2.7f, 0.2f, 0.0f, 1.5707964f, 0.0f, 11.3f, 10.0f, 1.0f, -3.7f, 2.6f, -8.3f, 0.0f, 0.0f, 0.0f, 20.73f, 10.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
+
+static const s32 s_aMapLastDyu04[12] = { 274, 273, 272, 255, 252, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu07[12] = { 58, 59, 62, 63, 68, 69, 66, 67, 26, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu10[12] = { 98, 78, 17, 325, 67, 66, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu12[12] = { 18, 195, 196, 74, 75, 66, 65, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu13[12] = { 22, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu15[12] = { 156, 157, 155, 158, 136, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastDyu16[12] = { 32, 30, 62, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls01[12] = { 63, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls02[12] = { 57, 58, 84, 85, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls02b[12] = { 56, 57, 59, 60, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls03[12] = { 102, 105, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls04[12] = { 70, 71, 74, 75, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls04b[12] = { 75, 74, 70, 71, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls09[12] = { 117, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastEls10[12] = { 93, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk02[12] = { 33, 34, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk04[12] = { 19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk09[12] = { 24, 23, 22, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk10[12] = { 80, 81, 82, 83, 51, 96, 97, 95, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk11[12] = { 79, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk12[12] = { 70, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk13[12] = { 83, 84, 85, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk14[12] = { 36, 33, 32, 35, 34, 65, 68, 26, 27, 30, -1, -1 };
+
+static const s32 s_aMapLastGnk15[12] = { 76, 67, 68, 66, 65, 69, 61, 56, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk18[12] = { 26, 30, 29, 43, 35, 28, 27, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk20[12] = { 90, 103, 104, 49, 88, 81, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnk21[12] = { 80, 81, 64, 65, 79, 78, 77, 76, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu01[12] = { 50, 49, 48, 47, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu02[12] = { 26, 24, 25, 22, 21, 20, 19, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu03[12] = { 32, 33, 51, 52, 53, 54, 155, 61, 60, 63, 116, 129 };
+
+static const s32 s_aMapLastGnu04[12] = { 32, 34, 26, 31, 33, 48, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastGnu05[12] = { 36, 37, 42, 43, 44, 45, 46, 47, 55, 56, -1, -1 };
+
+static const s32 s_aMapLastGnu06[12] = { 236, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas04[12] = { 125, 123, 120, 122, 121, 134, 132, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas12[12] = { 71, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas13[12] = { 38, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas18[12] = { 38, 37, 29, 30, 35, 34, 33, 31, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas19[12] = { 103, 100, 104, 101, 102, 99, 106, 17, 112, 113, -1, -1 };
+
+static const s32 s_aMapLastKas20[12] = { 101, 44, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKas31[12] = { 48, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKou01[12] = { 214, 215, 216, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKou04[12] = { 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKou05[12] = { 61, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk02[12] = { 113, 114, 115, 116, 117, 118, 119, 93, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk11[12] = { 158, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk12[12] = { 70, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastKuk16[12] = { 90, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta03[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta04[12] = { 60, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta05[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta06[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta07[12] = { 63, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta08[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUta13[12] = { 115, 116, 61, 111, 84, 85, 113, 112, 17, -1, -1, -1 };
+
+static const s32 s_aMapLastUta17[12] = { 36, 34, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUtk04[12] = { 54, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastUtk05[12] = { 23, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok03[12] = { 118, 119, 114, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok04[12] = { 124, 123, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok07[12] = { 102, 105, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok10[12] = { 172, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok12[12] = { 164, 165, 163, 162, 167, 138, 147, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok12b[12] = { 163, 87, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok13[12] = { 136, 127, 91, 122, 113, 104, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok13b[12] = { 104, 113, 122, 91, 127, 136, -1, -1, -1, -1, -1, -1 };
+
+static const s32 s_aMapLastVok24[12] = { 59, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
 static const CullingMapEntry s_aCullingMap[70] = {
     { ((const char *)0x004D49D8), s_aMapCullingVok03, s_aMapLastVok03, {0, 0, 0, 0} },
@@ -308,39 +317,8 @@ int strcmp(const char *, const char *);
  * index or minus one. The table ends at the first row with entryCount and
  * source both zero.
  */
-s32 check_culling_map(const char *name) {
-    s32 result = -1;
-    s32 i;
-
-    for (i = 0; s_aCullingMap[i].entryCount != 0 || s_aCullingMap[i].source != 0; i++) {
-        if (strcmp(s_aCullingMap[i].name, name) == 0) {
-            result = i;
-            break;
-        }
-    }
-    return result;
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapSet);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapCreate);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapDisp);
-
-void xglCullingIgnore(void)
-{
-    s_nIgnoreCulling = 1;
-}
-
-void xglCullingIgnoreOff(void)
-{
-    s_nIgnoreCulling = 0;
-}
 
 /* Empty in this build: the original body is a bare return. */
-void xglCullingMapDebug(void)
-{
-}
 
 /*
  * _ModelCalcClipInit: load the pair of 4x4 clip matrices into VU0 macro-mode
@@ -381,439 +359,20 @@ void xglCullingMapDebug(void)
  * SLUS_204.69 keep `jr $31; nop`), so the nop restores the original extent
  * and instruction order
  */
-static void _ModelCalcClipInit(const Matrix4 clip[2])
-{
-    __asm__ __volatile__("lqc2 vf12, 0(%0)"   :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf13, 16(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf14, 32(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf15, 48(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf16, 64(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf17, 80(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf18, 96(%0)"  :: "r"(clip) : "memory");
-    __asm__ __volatile__("lqc2 vf19, 112(%0)\n\t"
-                         "nop"                 :: "r"(clip) : "memory");
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClipMat2);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClipMat1);
-
-INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClip);
 
 s32 xglStudioGetActiveCamera(void);
+
 s32 _ModelCalcClip(s32 model);
-s32 xglCullingCheck(s32 camera, s32 model);
-
-/*
- * Tests model bounds against the active camera's combined view volume and
- * returns its clipping mask: the frustum clip mask _ModelCalcClip computes,
- * combined with xglCullingCheck's registered-volume mask for the same
- * camera/model pair.
- */
-s32 nmlModelCalcClip(s32 model) {
-    s32 clip;
-    s32 camera = xglStudioGetActiveCamera();
-
-    if (camera != 0) {
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        clip = _ModelCalcClip(model);
-        clip |= xglCullingCheck(camera, model);
-        return clip;
-    }
-    return camera;
-}
-
-s32 xglStudioGetActiveCamera(void);
-s32 _ModelCalcClip(s32 model);
-
-/*
- * Tests model against the active camera's clip state directly, without
- * consulting the registered culling-map volumes xglCullingCheck reads.
- */
-s32 nmlModelCalcClipNoCulling(s32 model) {
-    s32 camera = xglStudioGetActiveCamera();
-
-    if (camera != 0) {
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        return _ModelCalcClip(model);
-    }
-    return camera;
-}
-
-/*
- * Transforms model's bounds by matrix (the same row-by-row point transform
- * as _ApplyMatrix) into a stack-local Vector4, then passes its address in
- * place of a model handle to _ModelCalcClip and xglCullingCheck: model is
- * itself the address of a per-model bounding Vector4 (dereferenced here via
- * lqc2, the same handle-as-address convention nmlModelCalcClipCam's
- * camera + 0x4F0 cast already evidences), and the transformed copy is
- * tested against the active camera's combined view volume the same way
- * nmlModelCalcClip tests the untransformed one.
- */
-s32 nmlModelCalcClipMat1(s32 model, s32 matrix) {
-    Vector4 bounds;
-    s32 clip;
-    s32 camera = xglStudioGetActiveCamera();
-
-    if (camera != 0) {
-        __asm__ __volatile__(
-            "lqc2 vf31, 0(%0)\n\t"
-            "lqc2 vf27, 0(%1)\n\t"
-            "lqc2 vf28, 16(%1)\n\t"
-            "lqc2 vf29, 32(%1)\n\t"
-            "lqc2 vf30, 48(%1)\n\t"
-            "vmulax.xyz ACC, vf27, vf31x\n\t"
-            "vmadday.xyz ACC, vf28, vf31y\n\t"
-            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-            "vmaddw.xyz vf31, vf30, vf0w\n\t"
-            "sqc2 vf31, 0(%2)\n\t"
-            :
-            : "r"(model), "r"(matrix), "r"(&bounds)
-            : "memory"
-        );
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        clip = _ModelCalcClip((s32) &bounds);
-        clip |= xglCullingCheck(camera, (s32) &bounds);
-        return clip;
-    }
-    return camera;
-}
 
 s32 xglCullingCheck(s32 camera, s32 model);
-
-/*
- * Transforms model's bounds through matrix1 and then matrix2 (the same
- * two-pass point transform as _ApplyMatrix2Mat) into a stack-local Vector4,
- * then tests that transformed copy against the active camera's combined
- * view volume the way nmlModelCalcClip tests the untransformed one: model
- * is itself the address of a per-model bounding Vector4.
- */
-s32 nmlModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2) {
-    Vector4 bounds;
-    s32 clip;
-    s32 camera = xglStudioGetActiveCamera();
-
-    if (camera != 0) {
-        __asm__ __volatile__(
-            "lqc2 vf31, 0(%0)\n\t"
-            "lqc2 vf27, 0(%1)\n\t"
-            "lqc2 vf28, 16(%1)\n\t"
-            "lqc2 vf29, 32(%1)\n\t"
-            "lqc2 vf30, 48(%1)\n\t"
-            "vmulax.xyz ACC, vf27, vf31x\n\t"
-            "vmadday.xyz ACC, vf28, vf31y\n\t"
-            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-            "vmaddw.xyz vf31, vf30, vf0w\n\t"
-            "lqc2 vf27, 0(%2)\n\t"
-            "lqc2 vf28, 16(%2)\n\t"
-            "lqc2 vf29, 32(%2)\n\t"
-            "lqc2 vf30, 48(%2)\n\t"
-            "vmulax.xyz ACC, vf27, vf31x\n\t"
-            "vmadday.xyz ACC, vf28, vf31y\n\t"
-            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-            "vmaddw.xyz vf31, vf30, vf0w\n\t"
-            "sqc2 vf31, 0(%3)\n\t"
-            :
-            : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
-            : "memory"
-        );
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        clip = _ModelCalcClip((s32) &bounds);
-        clip |= xglCullingCheck(camera, (s32) &bounds);
-        return clip;
-    }
-    return camera;
-}
-
-s32 _ModelCalcClip(s32 model);
-
-/*
- * camera + 0x4F0 is the pair of 4x4 clip matrices _ModelCalcClipInit reads
- * (see its own comment): each nmlModelCalcClip*Cam wrapper loads camera's
- * clip state, then tail-calls the matching _ModelCalcClip* worker on model.
- */
-void nmlModelCalcClipCam(s32 model, s32 camera) {
-    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-    _ModelCalcClip(model);
-}
 
 s32 _ModelCalcClipMat1(s32 model, s32 matrix);
 
-void nmlModelCalcClipMat1Cam(s32 model, s32 matrix, s32 camera) {
-    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-    _ModelCalcClipMat1(model, matrix);
-}
-
 s32 _ModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2);
 
-void nmlModelCalcClipMat2Cam(s32 model, s32 matrix1, s32 matrix2, s32 camera) {
-    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-    _ModelCalcClipMat2(model, matrix1, matrix2);
-}
-
-s32 xglCullingCheck(s32 camera, s32 model);
 s32 xglStudioSelectGetActiveCamera(s32 cameraIndex);
 
-/*
- * Selects the studio camera identified by cameraIndex, then combines
- * _ModelCalcClip's frustum clip mask for model with xglCullingCheck's
- * registered-volume mask for the same camera/model pair.
- */
-s32 nmlModelCalcClipStudio(s32 model, s32 cameraIndex) {
-    s32 clip = 0;
-    s32 camera = xglStudioSelectGetActiveCamera(cameraIndex);
-
-    if (camera != 0) {
-        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-        clip = _ModelCalcClip(model);
-        clip |= xglCullingCheck(camera, model);
-    }
-    return clip;
-}
-
 extern int g_aSubWindow[4];
-
-/*
- * Transforms model's bounds by matrix and tests them in every enabled
- * sub-window's camera: the model is clipped away (1) only when every
- * enabled sub-window clips it, and the first sub-window that keeps it
- * answers 0. A sub-window without a selectable camera ends the sweep.
- */
-s32 nmlModelCalcClipMat1AllCam(s32 model, s32 matrix)
-{
-    Vector4 bounds;
-    s32 clipped = 1;
-    s32 camera;
-    s32 clip;
-    s32 i;
-
-    for (i = 0; i < 4; i++) {
-        camera = xglStudioSelectGetActiveCamera(i);
-        if (camera == 0) {
-            return camera;
-        }
-        if (g_aSubWindow[i] != 0) {
-            __asm__ __volatile__(
-                "lqc2 vf31, 0(%0)\n\t"
-                "lqc2 vf27, 0(%1)\n\t"
-                "lqc2 vf28, 16(%1)\n\t"
-                "lqc2 vf29, 32(%1)\n\t"
-                "lqc2 vf30, 48(%1)\n\t"
-                "vmulax.xyz ACC, vf27, vf31x\n\t"
-                "vmadday.xyz ACC, vf28, vf31y\n\t"
-                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-                "vmaddw.xyz vf31, vf30, vf0w\n\t"
-                "sqc2 vf31, 0(%2)\n\t"
-                :
-                : "r"(model), "r"(matrix), "r"(&bounds)
-                : "memory"
-            );
-            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-            clip = _ModelCalcClip((s32) &bounds);
-            clip |= xglCullingCheck(camera, (s32) &bounds);
-            if (clip == 0) {
-                clipped = 0;
-                break;
-            }
-        }
-    }
-    return clipped;
-}
-
-/*
- * Transforms model's bounds through matrix1 and matrix2 and collects the
- * frustum clip mask of every enabled sub-window: each tested sub-window
- * contributes its mask shifted to its own bit, and bit 7 is added when
- * every tested sub-window reported the same single clip bit. Only the
- * first three sub-windows are swept, and a sub-window without a selectable
- * camera answers 0.
- */
-s32 nmlModelCalcClipMat2AllCam(s32 model, s32 matrix1, s32 matrix2)
-{
-    Vector4 bounds;
-    s32 clipMask = 0;
-    s32 tested = 0;
-    s32 total = 0;
-    s32 camera;
-    s32 clip;
-    s32 i;
-
-    for (i = 0; i < 3; i++) {
-        if (g_aSubWindow[i] != 0) {
-            camera = xglStudioSelectGetActiveCamera(i);
-            if (camera == 0) {
-                return camera;
-            }
-            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
-            __asm__ __volatile__(
-                "lqc2 vf31, 0(%0)\n\t"
-                "lqc2 vf27, 0(%1)\n\t"
-                "lqc2 vf28, 16(%1)\n\t"
-                "lqc2 vf29, 32(%1)\n\t"
-                "lqc2 vf30, 48(%1)\n\t"
-                "vmulax.xyz ACC, vf27, vf31x\n\t"
-                "vmadday.xyz ACC, vf28, vf31y\n\t"
-                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-                "vmaddw.xyz vf31, vf30, vf0w\n\t"
-                "lqc2 vf27, 0(%2)\n\t"
-                "lqc2 vf28, 16(%2)\n\t"
-                "lqc2 vf29, 32(%2)\n\t"
-                "lqc2 vf30, 48(%2)\n\t"
-                "vmulax.xyz ACC, vf27, vf31x\n\t"
-                "vmadday.xyz ACC, vf28, vf31y\n\t"
-                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-                "vmaddw.xyz vf31, vf30, vf0w\n\t"
-                "sqc2 vf31, 0(%3)\n\t"
-                :
-                : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
-                : "memory"
-            );
-            clip = _ModelCalcClip((s32) &bounds);
-            tested++;
-            clipMask |= clip << i;
-            total += clip;
-        }
-    }
-    if (tested != 0) {
-        if (total == tested) {
-            clipMask |= 0x80;
-        }
-    }
-    return clipMask;
-}
-
-/*
- * ACC accumulates matrix * vector row by row: row 0 times x, row 1 times y,
- * and vmaddz folds row 2 times z directly into vf31 without a separate ACC
- * step. Row 3 (the translation row) is loaded into vf30 but never used --
- * this applies only the 3x3 rotation part of matrix. vmaddz writes only
- * vf31's xyz lanes, so destination->w keeps whatever the first lqc2 loaded
- * from vector->w.
- */
-void _ApplyMatrix33(Vector4 *destination, const Matrix4 matrix, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddz.xyz vf31, vf29, vf31z\n\t"
-        "sqc2 vf31, 0(%2)\n\t"
-        "nop\n\t"
-        :
-        : "r"(vector), "r"(matrix), "r"(destination)
-        : "memory"
-    );
-}
-
-/*
- * Same row-by-row accumulation as _ApplyMatrix33, extended with the
- * translation row: vmaddw folds row 3 (times vf0's constant w lane, 1.0)
- * into vf31's xyz lanes, so vector is transformed as a point. Only xyz
- * lanes are ever written to vf31, so destination->w again keeps whatever
- * the first lqc2 loaded from vector->w.
- */
-void _ApplyMatrix(Vector4 *destination, const Matrix4 matrix, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%2)\n\t"
-        "nop\n\t"
-        :
-        : "r"(vector), "r"(matrix), "r"(destination)
-        : "memory"
-    );
-}
-
-/*
- * Applies matrix1 then matrix2 to vector in sequence (matrix2 * (matrix1 *
- * vector)) instead of pre-combining the two matrices first: each pass is
- * the same row-by-row accumulation as _ApplyMatrix, translation row
- * included (vmaddw times vf0's constant w lane, 1.0). Only xyz lanes are
- * ever written to vf31, so destination->w keeps whatever the first lqc2
- * loaded from vector->w.
- */
-void _ApplyMatrix2Mat(Vector4 *destination, const Matrix4 matrix1, const Matrix4 matrix2, const Vector4 *vector) {
-    __asm__ __volatile__(
-        "lqc2 vf31, 0(%0)\n\t"
-        "lqc2 vf27, 0(%1)\n\t"
-        "lqc2 vf28, 16(%1)\n\t"
-        "lqc2 vf29, 32(%1)\n\t"
-        "lqc2 vf30, 48(%1)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "lqc2 vf27, 0(%2)\n\t"
-        "lqc2 vf28, 16(%2)\n\t"
-        "lqc2 vf29, 32(%2)\n\t"
-        "lqc2 vf30, 48(%2)\n\t"
-        "vmulax.xyz ACC, vf27, vf31x\n\t"
-        "vmadday.xyz ACC, vf28, vf31y\n\t"
-        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
-        "vmaddw.xyz vf31, vf30, vf0w\n\t"
-        "sqc2 vf31, 0(%3)\n\t"
-        "nop\n\t"
-        :
-        : "r"(vector), "r"(matrix1), "r"(matrix2), "r"(destination)
-        : "memory"
-    );
-}
-
-
-
-static const float s_aMapCullingVok03[18] = { 0.0f, -0.20000000298023224f, 25.5f, -1.5184364318847656f, 0.0f, 0.0f, 18.899999618530273f, 11.600000381469727f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const float s_aMapCullingVok04[27] = { -10.600000381469727f, 2.0999999046325684f, 25.5f, 0.0f, 0.0f, 0.0f, 17.899999618530273f, 12.100000381469727f, 1.0f, -10.300000190734863f, 2.4000000953674316f, 15.0f, 0.0f, 0.0f, 0.0f, 17.200000762939453f, 10.399999618530273f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const float s_aMapCullingVok07[27] = { -18.200000762939453f, 3.0f, 22.0f, 0.0f, 0.0f, 0.0f, 7.1999998092651367f, 10.0f, 1.0f, 0.0f, 2.9000000953674316f, 21.799999237060547f, 0.0f, 0.0f, 0.0f, 6.9000000953674316f, 10.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const float s_aMapCullingVok10[27] = { 9.3999996185302734f, 0.40000000596046448f, -9.1000003814697266f, 0.0f, 0.13962635397911072f, 0.0f, 20.600000381469727f, 10.699999809265137f, 1.0f, -26.0f, 0.0f, -9.0f, 0.0f, -0.29670599102973938f, 0.0f, 9.8000001907348633f, 9.8999996185302734f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const float s_aMapCullingVok11[27] = { 0.0f, 0.40000000596046448f, 9.5f, -1.3613568544387817f, 0.0f, 0.0f, 2.0999999046325684f, 4.5999999046325684f, 1.0f, 0.0f, 0.0f, 6.5999999046325684f, -0.45378562808036804f, 0.0f, 0.0f, 1.0f, 2.0999999046325684f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const float s_aMapCullingVok12[36] = { -2.2000000476837158f, 2.4000000953674316f, 7.1999998092651367f, 0.0f, 0.0f, 0.0f, 19.159999847412109f, 10.0f, 1.0f, 16.600000381469727f, 2.7000000476837158f, 0.20000000298023224f, 0.0f, 1.5707963705062866f, 0.0f, 11.300000190734863f, 10.0f, 1.0f, -3.7000000476837158f, 2.5999999046325684f, -8.3000001907348633f, 0.0f, 0.0f, 0.0f, 20.729999542236328f, 10.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const float s_aMapCullingKou01[18] = { 10.199999809265137f, -1.6000000238418579f, -2.5999999046325684f, 0.0f, -0.66322511434555054f, 0.0f, 5.5999999046325684f, 4.3000001907348633f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const s32 s_aMapLastVok13[12] = { 136, 127, 91, 122, 113, 104, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastKou01[12] = { 214, 215, 216, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastKou04[12] = { 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastGnu06[12] = { 236, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastKuk11[12] = { 158, 21, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastDyu04[12] = { 274, 273, 272, 255, 252, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastDyu12[12] = { 18, 195, 196, 74, 75, 66, 65, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastDyu13[12] = { 22, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastDyu15[12] = { 156, 157, 155, 158, 136, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastVok10[12] = { 172, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastVok12[12] = { 164, 165, 163, 162, 167, 138, 147, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastVok12b[12] = { 163, 87, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastGnk09[12] = { 24, 23, 22, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastGnk04[12] = { 19, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastUtk05[12] = { 23, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
 const char D_004D4598[16] = "MC_UTK05";
 
@@ -954,109 +513,703 @@ const char D_004D49C8[16] = "mc_vok04";
 const char D_004D49D8[16] = "MC_VOK03";
 
 
+#include "main/xgl_2.h"
 
-static const s32 s_aMapLastVok13b[12] = { 104, 113, 122, 91, 127, 136, -1, -1, -1, -1, -1, -1 };
+void xglVectorOuter(Vector4 *out, const Vector4 *a, const Vector4 *b);
 
-static const s32 s_aMapLastKou05[12] = { 61, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+extern const u64 D_004D4A10[2];
 
-static const s32 s_aMapLastGnu01[12] = { 50, 49, 48, 47, -1, -1, -1, -1, -1, -1, -1, -1 };
+extern const u64 D_004D4A20[2];
 
-static const s32 s_aMapLastGnu02[12] = { 26, 24, 25, 22, 21, 20, 19, -1, -1, -1, -1, -1 };
+extern const u64 D_004D4A30[2];
 
-static const s32 s_aMapLastGnu05[12] = { 36, 37, 42, 43, 44, 45, 46, 47, 55, 56, -1, -1 };
+extern const u64 D_004D4A40[2];
 
-static const s32 s_aMapLastKuk16[12] = { 90, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+extern const u64 D_004D4A50[2];
 
-static const s32 s_aMapLastKuk12[12] = { 70, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+extern void xglMatrixStackInverse(void);
 
-static const s32 s_aMapLastKuk02[12] = { 113, 114, 115, 116, 117, 118, 119, 93, -1, -1, -1, -1 };
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 
-static const s32 s_aMapLastDyu07[12] = { 58, 59, 62, 63, 68, 69, 66, 67, 26, -1, -1, -1 };
+extern void xglVectorScaleXYZ(float scale, Vector4 *destination,
+                              const Vector4 *source);
 
-static const s32 s_aMapLastDyu10[12] = { 98, 78, 17, 325, 67, 66, -1, -1, -1, -1, -1, -1 };
+typedef struct CullingMapNameSource {
+    u8 unmodeled_000[0x10];
+    char name_with_prefix[32];
+} CullingMapNameSource;
 
-static const s32 s_aMapLastVok24[12] = { 59, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+typedef struct CullingCameraView {
+    u8 unmodeled_000[0x1B0];
+    Matrix4 occlusionTransform;
+} CullingCameraView;
 
-static const s32 s_aMapLastVok03[12] = { 118, 119, 114, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+static void culling_matrix(CullingVolume *volume)
+{
+    u64 axis[2];
+    u64 corners[4][2];
 
-static const s32 s_aMapLastVok04[12] = { 124, 123, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    xglMatrixStackUnit();
+    xglMatrixStackTrans(&volume->position.x);
+    xglMatrixStackRotY(volume->rotation.y);
+    xglMatrixStackRotX(volume->rotation.x);
+    xglMatrixStackRotZ(volume->rotation.z);
+    xglMatrixStackScale(&volume->scale.x);
+    xglMatrixStackSave(volume->transform);
+    xglMatrixStackInverse();
+    xglMatrixStackSave(volume->inverseTransform);
 
-static const s32 s_aMapLastVok07[12] = { 102, 105, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    axis[0] = D_004D4A10[0];
+    axis[1] = D_004D4A10[1];
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%0)\n\t"
+        "lqc2 vf27, 0(%1)\n\t"
+        "lqc2 vf28, 16(%1)\n\t"
+        "lqc2 vf29, 32(%1)\n\t"
+        "lqc2 vf30, 48(%1)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddz.xyz vf31, vf29, vf31z\n\t"
+        "sqc2 vf31, 0(%2)\n\t"
+        :
+        : "r"(&axis[0]), "r"(volume->transform), "r"(&volume->normalizedDirection)
+        : "memory");
+    xglVectorNormal(&volume->normalizedDirection, &volume->normalizedDirection);
 
-static const s32 s_aMapLastEls03[12] = { 102, 105, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    corners[0][0] = D_004D4A20[0];
+    corners[0][1] = D_004D4A20[1];
+    corners[1][0] = D_004D4A30[0];
+    corners[1][1] = D_004D4A30[1];
+    corners[2][0] = D_004D4A40[0];
+    corners[2][1] = D_004D4A40[1];
+    corners[3][0] = D_004D4A50[0];
+    corners[3][1] = D_004D4A50[1];
 
-static const s32 s_aMapLastEls02[12] = { 57, 58, 84, 85, -1, -1, -1, -1, -1, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%1)\n\t"
+        "lqc2 vf27, 0(%2)\n\t"
+        "lqc2 vf28, 16(%2)\n\t"
+        "lqc2 vf29, 32(%2)\n\t"
+        "lqc2 vf30, 48(%2)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%0)\n\t"
+        :
+        : "r"(&volume->cullingCorners[0]), "r"(&corners[0][0]),
+          "r"(volume->transform)
+        : "memory");
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%1)\n\t"
+        "lqc2 vf27, 0(%2)\n\t"
+        "lqc2 vf28, 16(%2)\n\t"
+        "lqc2 vf29, 32(%2)\n\t"
+        "lqc2 vf30, 48(%2)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%0)\n\t"
+        :
+        : "r"(&volume->cullingCorners[1]), "r"(&corners[1][0]),
+          "r"(volume->transform)
+        : "memory");
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%1)\n\t"
+        "lqc2 vf27, 0(%2)\n\t"
+        "lqc2 vf28, 16(%2)\n\t"
+        "lqc2 vf29, 32(%2)\n\t"
+        "lqc2 vf30, 48(%2)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%0)\n\t"
+        :
+        : "r"(&volume->cullingCorners[2]), "r"(&corners[2][0]),
+          "r"(volume->transform)
+        : "memory");
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%1)\n\t"
+        "lqc2 vf27, 0(%2)\n\t"
+        "lqc2 vf28, 16(%2)\n\t"
+        "lqc2 vf29, 32(%2)\n\t"
+        "lqc2 vf30, 48(%2)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%0)\n\t"
+        :
+        : "r"(&volume->cullingCorners[3]), "r"(&corners[3][0]),
+          "r"(volume->transform)
+        : "memory");
+}
 
-static const s32 s_aMapLastEls02b[12] = { 56, 57, 59, 60, -1, -1, -1, -1, -1, -1, -1, -1 };
+/* An empty per-volume debug display hook; the caller still passes the volume. */
+static void culling_cell_disp(CullingVolume *volume)
+{
+}
 
-static const s32 s_aMapLastEls09[12] = { 117, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+void _FacePoint(Vector4 *destination, const Vector4 *lineStart, const Vector4 *lineEnd,
+                const Vector4 *normal, const Vector4 *planePoint) {
+    __asm__ __volatile__(
+        "lqc2 vf22, 0(%0)\n\t"
+        "lqc2 vf20, 0(%1)\n\t"
+        "lqc2 vf21, 0(%2)\n\t"
+        "lqc2 vf23, 0(%3)\n\t"
+        "vmulw.xyz vf14, vf22, vf22w\n\t"
+        "vmulw.xyz vf14, vf14, vf20w\n\t"
+        "vadd.xyz vf23, vf23, vf14\n\t"
+        "vaddx.x vf10, vf0, vf22x\n\t"
+        "vaddy.x vf11, vf0, vf22y\n\t"
+        "vaddz.x vf12, vf0, vf22z\n\t"
+        "vsub.xyz vf19, vf21, vf20\n\t"
+        "vmulax.x ACC, vf10, vf21x\n\t"
+        "vmadday.x ACC, vf11, vf21y\n\t"
+        "vmaddz.x vf17, vf12, vf21z\n\t"
+        "vmulax.x ACC, vf10, vf19x\n\t"
+        "vmadday.x ACC, vf11, vf19y\n\t"
+        "vmaddz.x vf18, vf12, vf19z\n\t"
+        "vmulax.x ACC, vf10, vf23x\n\t"
+        "vmadday.x ACC, vf11, vf23y\n\t"
+        "vmaddz.x vf16, vf12, vf23z\n\t"
+        "vdiv Q, vf0w, vf18x\n\t"
+        "vsub.x vf16, vf17, vf16\n\t"
+        "vwaitq\n\t"
+        "vmulq.x vf16, vf16, Q\n\t"
+        "vmulx.xyz vf15, vf19, vf16x\n\t"
+        "vsub.xyz vf15, vf21, vf15\n\t"
+        "sqc2 vf15, 0(%4)\n\t"
+        "nop\n\t"
+        :
+        : "r"(normal), "r"(lineStart), "r"(lineEnd), "r"(planePoint), "r"(destination)
+        : "memory"
+    );
+}
 
-static const s32 s_aMapLastEls10[12] = { 93, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+float _CheckLine(const Vector4 *offsetStart, const Vector4 *offsetEnd,
+                 const Vector4 *endpointStart, const Vector4 *endpointEnd,
+                 const Vector4 *planePoint, const Vector4 *planeNormal)
+{
+    Vector4 adjustedStart;
+    Vector4 adjustedEnd;
+    Vector4 endpointDelta;
+    Vector4 pointFromStart;
+    Vector4 normalOffset;
 
-static const s32 s_aMapLastEls04[12] = { 70, 71, 74, 75, -1, -1, -1, -1, -1, -1, -1, -1 };
+    xglVectorScaleXYZ(planeNormal->w * planePoint->w * 0.5f,
+                      &normalOffset, planeNormal);
+    xglVectorScaleXYZ(planePoint->w * 0.5f, &adjustedStart, offsetStart);
+    xglVectorScaleXYZ(planePoint->w * 0.5f, &adjustedEnd, offsetEnd);
 
-static const s32 s_aMapLastEls04b[12] = { 75, 74, 70, 71, -1, -1, -1, -1, -1, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)\n\t"
+        :
+        : "r"(&adjustedStart), "r"(endpointStart)
+        : "memory");
 
-static const s32 s_aMapLastEls01[12] = { 63, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)\n\t"
+        :
+        : "r"(&adjustedEnd), "r"(endpointEnd)
+        : "memory");
 
-static const s32 s_aMapLastGnk21[12] = { 80, 81, 64, 65, 79, 78, 77, 76, -1, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%1)\n\t"
+        "lqc2 vf2, 0(%0)\n\t"
+        "vadd.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)\n\t"
+        :
+        : "r"(&adjustedStart), "r"(&normalOffset)
+        : "memory");
 
-static const s32 s_aMapLastGnk20[12] = { 90, 103, 104, 49, 88, 81, -1, -1, -1, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%1)\n\t"
+        "lqc2 vf2, 0(%0)\n\t"
+        "vadd.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%0)\n\t"
+        :
+        : "r"(&adjustedEnd), "r"(&normalOffset)
+        : "memory");
 
-static const s32 s_aMapLastGnk15[12] = { 76, 67, 68, 66, 65, 69, 61, 56, -1, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%2)\n\t"
+        :
+        : "r"(&adjustedStart), "r"(&adjustedEnd),
+          "r"(&endpointDelta)
+        : "memory");
 
-static const s32 s_aMapLastGnk14[12] = { 36, 33, 32, 35, 34, 65, 68, 26, 27, 30, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf3, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "vsub.xyz vf2, vf2, vf3\n\t"
+        "sqc2 vf2, 0(%2)\n\t"
+        :
+        : "r"(&adjustedStart), "r"(planePoint),
+          "r"(&pointFromStart)
+        : "memory");
 
-static const s32 s_aMapLastGnk13[12] = { 83, 84, 85, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    return endpointDelta.x * pointFromStart.x +
+           endpointDelta.y * pointFromStart.y +
+           endpointDelta.z * pointFromStart.z;
+}
 
-static const s32 s_aMapLastGnk12[12] = { 70, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+static void plane_from_points(const Vector4 *point0, const Vector4 *point1,
+                              const Vector4 *point2, Vector4 *plane)
+{
+    Vector4 edge0;
+    Vector4 edge1;
+    Vector4 normal;
 
-static const s32 s_aMapLastGnk11[12] = { 79, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    edge0.x = point1->x - point0->x;
+    edge0.y = point1->y - point0->y;
+    edge0.z = point1->z - point0->z;
+    edge1.x = point2->x - point0->x;
+    edge1.y = point2->y - point0->y;
+    edge1.z = point2->z - point0->z;
+    xglVectorOuter(&normal, &edge0, &edge1);
+    xglVectorNormal(&normal, &normal);
+    plane->x = normal.x;
+    plane->y = normal.y;
+    plane->z = normal.z;
+    plane->w = -(normal.x * point0->x + normal.y * point0->y + normal.z * point0->z);
+}
 
-static const s32 s_aMapLastGnk10[12] = { 80, 81, 82, 83, 51, 96, 97, 95, -1, -1, -1, -1 };
+INCLUDE_ASM("asm/main/nonmatchings/face_point", setup_occlusion);
 
-static const s32 s_aMapLastUta17[12] = { 36, 34, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+s32 check_occlusion(CullingVolume *volume, s32 camera, s32 model)
+{
+    const CullingCameraView *cameraView = (const CullingCameraView *) camera;
+    const Matrix4 *cameraTransform = &cameraView->occlusionTransform;
+    const Vector4 *modelBounds = (const Vector4 *) model;
+    Vector4 viewPoint;
+    float negativeZ;
+    float negativeW;
+    s32 result;
 
-static const s32 s_aMapLastUta13[12] = { 115, 116, 61, 111, 84, 85, 113, 112, 17, -1, -1, -1 };
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%0)\n\t"
+        "lqc2 vf27, 0(%1)\n\t"
+        "lqc2 vf28, 16(%1)\n\t"
+        "lqc2 vf29, 32(%1)\n\t"
+        "lqc2 vf30, 48(%1)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%2)"
+        :
+        : "r"(modelBounds), "r"(cameraTransform), "r"(&viewPoint)
+        : "memory");
 
-static const s32 s_aMapLastUta08[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    result = 0;
+    negativeZ = -viewPoint.z;
+    viewPoint.z = negativeZ;
+    if (!((negativeZ - viewPoint.w) < volume->occlusionDepth)) {
+        negativeW = -viewPoint.w;
+        if (!(negativeW < viewPoint.x * volume->occlusionPlanes[0].x +
+                          viewPoint.y * volume->occlusionPlanes[0].y +
+                          viewPoint.z * volume->occlusionPlanes[0].z +
+                          volume->occlusionPlanes[0].w) &&
+            !(negativeW < viewPoint.x * volume->occlusionPlanes[1].x +
+                          viewPoint.y * volume->occlusionPlanes[1].y +
+                          viewPoint.z * volume->occlusionPlanes[1].z +
+                          volume->occlusionPlanes[1].w) &&
+            !(negativeW < viewPoint.x * volume->occlusionPlanes[2].x +
+                          viewPoint.y * volume->occlusionPlanes[2].y +
+                          viewPoint.z * volume->occlusionPlanes[2].z +
+                          volume->occlusionPlanes[2].w) &&
+            !(negativeW < viewPoint.x * volume->occlusionPlanes[3].x +
+                          viewPoint.y * volume->occlusionPlanes[3].y +
+                          viewPoint.z * volume->occlusionPlanes[3].z +
+                          volume->occlusionPlanes[3].w) &&
+            !(negativeW < viewPoint.x * volume->occlusionPlanes[4].x +
+                          viewPoint.y * volume->occlusionPlanes[4].y +
+                          viewPoint.z * volume->occlusionPlanes[4].z +
+                          volume->occlusionPlanes[4].w)) {
+            result = 1;
+        }
+    }
+    return result;
+}
 
-static const s32 s_aMapLastUta07[12] = { 63, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheck);
 
-static const s32 s_aMapLastUta06[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+void xglCullingCheckSeparateInit(s32 camera)
+{
+    s32 i;
 
-static const s32 s_aMapLastUta05[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    for (i = 0; i < s_inCulling.count; i++) {
+        setup_occlusion(&s_inCulling.volumes[i], camera);
+    }
+}
 
-static const s32 s_aMapLastUta04[12] = { 60, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingCheckSeparate);
 
-static const s32 s_aMapLastUta03[12] = { 57, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+s32 xglCullingExist(void) {
+    return D_00969760[0];
+}
 
-static const s32 s_aMapLastKas20[12] = { 101, 44, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapLastCheck);
 
-static const s32 s_aMapLastKas19[12] = { 103, 100, 104, 101, 102, 99, 106, 17, 112, 113, -1, -1 };
+void xglCullingMapInit(void)
+{
+    s_nIgnoreCulling = 0;
+    s_inCulling.count = 0;
+    s_inCulling.active = 0;
+    s_inCulling.source = 0;
+}
 
-static const s32 s_aMapLastKas13[12] = { 38, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+s32 check_culling_map(const char *name) {
+    s32 result = -1;
+    s32 i;
 
-static const s32 s_aMapLastKas12[12] = { 71, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    for (i = 0; s_aCullingMap[i].entryCount != 0 || s_aCullingMap[i].source != 0; i++) {
+        if (strcmp(s_aCullingMap[i].name, name) == 0) {
+            result = i;
+            break;
+        }
+    }
+    return result;
+}
 
-static const s32 s_aMapLastKas04[12] = { 125, 123, 120, 122, 121, 134, 132, -1, -1, -1, -1, -1 };
+INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapSet);
 
-static const s32 s_aMapLastKas31[12] = { 48, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+INCLUDE_ASM("asm/main/nonmatchings/face_point", xglCullingMapCreate);
 
-static const s32 s_aMapLastUtk04[12] = { 54, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+void xglCullingMapDisp(void)
+{
+    s32 remaining;
+    CullingVolume *volume;
+
+    if (s_inCulling.count > 0) {
+        volume = s_inCulling.volumes;
+        remaining = s_inCulling.count;
+        do {
+            remaining--;
+            culling_cell_disp(volume);
+            volume++;
+        } while (remaining != 0);
+    }
+}
+
+void xglCullingIgnore(void)
+{
+    s_nIgnoreCulling = 1;
+}
+
+void xglCullingIgnoreOff(void)
+{
+    s_nIgnoreCulling = 0;
+}
+
+void xglCullingMapDebug(void)
+{
+}
+
+static void _ModelCalcClipInit(const Matrix4 clip[2])
+{
+    __asm__ __volatile__("lqc2 vf12, 0(%0)"   :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf13, 16(%0)"  :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf14, 32(%0)"  :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf15, 48(%0)"  :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf16, 64(%0)"  :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf17, 80(%0)"  :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf18, 96(%0)"  :: "r"(clip) : "memory");
+    __asm__ __volatile__("lqc2 vf19, 112(%0)\n\t"
+                         "nop"                 :: "r"(clip) : "memory");
+}
+
+INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClipMat2);
+
+INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClipMat1);
+
+INCLUDE_ASM("asm/main/nonmatchings/face_point", _ModelCalcClip);
+
+s32 nmlModelCalcClip(s32 model) {
+    s32 clip;
+    s32 camera = xglStudioGetActiveCamera();
+
+    if (camera != 0) {
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip(model);
+        clip |= xglCullingCheck(camera, model);
+        return clip;
+    }
+    return camera;
+}
+
+s32 nmlModelCalcClipNoCulling(s32 model) {
+    s32 camera = xglStudioGetActiveCamera();
+
+    if (camera != 0) {
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        return _ModelCalcClip(model);
+    }
+    return camera;
+}
+
+s32 nmlModelCalcClipMat1(s32 model, s32 matrix) {
+    Vector4 bounds;
+    s32 clip;
+    s32 camera = xglStudioGetActiveCamera();
+
+    if (camera != 0) {
+        __asm__ __volatile__(
+            "lqc2 vf31, 0(%0)\n\t"
+            "lqc2 vf27, 0(%1)\n\t"
+            "lqc2 vf28, 16(%1)\n\t"
+            "lqc2 vf29, 32(%1)\n\t"
+            "lqc2 vf30, 48(%1)\n\t"
+            "vmulax.xyz ACC, vf27, vf31x\n\t"
+            "vmadday.xyz ACC, vf28, vf31y\n\t"
+            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+            "vmaddw.xyz vf31, vf30, vf0w\n\t"
+            "sqc2 vf31, 0(%2)\n\t"
+            :
+            : "r"(model), "r"(matrix), "r"(&bounds)
+            : "memory"
+        );
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip((s32) &bounds);
+        clip |= xglCullingCheck(camera, (s32) &bounds);
+        return clip;
+    }
+    return camera;
+}
+
+s32 nmlModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2) {
+    Vector4 bounds;
+    s32 clip;
+    s32 camera = xglStudioGetActiveCamera();
+
+    if (camera != 0) {
+        __asm__ __volatile__(
+            "lqc2 vf31, 0(%0)\n\t"
+            "lqc2 vf27, 0(%1)\n\t"
+            "lqc2 vf28, 16(%1)\n\t"
+            "lqc2 vf29, 32(%1)\n\t"
+            "lqc2 vf30, 48(%1)\n\t"
+            "vmulax.xyz ACC, vf27, vf31x\n\t"
+            "vmadday.xyz ACC, vf28, vf31y\n\t"
+            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+            "vmaddw.xyz vf31, vf30, vf0w\n\t"
+            "lqc2 vf27, 0(%2)\n\t"
+            "lqc2 vf28, 16(%2)\n\t"
+            "lqc2 vf29, 32(%2)\n\t"
+            "lqc2 vf30, 48(%2)\n\t"
+            "vmulax.xyz ACC, vf27, vf31x\n\t"
+            "vmadday.xyz ACC, vf28, vf31y\n\t"
+            "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+            "vmaddw.xyz vf31, vf30, vf0w\n\t"
+            "sqc2 vf31, 0(%3)\n\t"
+            :
+            : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
+            : "memory"
+        );
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip((s32) &bounds);
+        clip |= xglCullingCheck(camera, (s32) &bounds);
+        return clip;
+    }
+    return camera;
+}
+
+void nmlModelCalcClipCam(s32 model, s32 camera) {
+    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+    _ModelCalcClip(model);
+}
+
+void nmlModelCalcClipMat1Cam(s32 model, s32 matrix, s32 camera) {
+    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+    _ModelCalcClipMat1(model, matrix);
+}
+
+void nmlModelCalcClipMat2Cam(s32 model, s32 matrix1, s32 matrix2, s32 camera) {
+    _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+    _ModelCalcClipMat2(model, matrix1, matrix2);
+}
+
+s32 nmlModelCalcClipStudio(s32 model, s32 cameraIndex) {
+    s32 clip = 0;
+    s32 camera = xglStudioSelectGetActiveCamera(cameraIndex);
+
+    if (camera != 0) {
+        _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+        clip = _ModelCalcClip(model);
+        clip |= xglCullingCheck(camera, model);
+    }
+    return clip;
+}
+
+s32 nmlModelCalcClipMat1AllCam(s32 model, s32 matrix)
+{
+    Vector4 bounds;
+    s32 clipped = 1;
+    s32 camera;
+    s32 clip;
+    s32 i;
+
+    for (i = 0; i < 4; i++) {
+        camera = xglStudioSelectGetActiveCamera(i);
+        if (camera == 0) {
+            return camera;
+        }
+        if (g_aSubWindow[i] != 0) {
+            __asm__ __volatile__(
+                "lqc2 vf31, 0(%0)\n\t"
+                "lqc2 vf27, 0(%1)\n\t"
+                "lqc2 vf28, 16(%1)\n\t"
+                "lqc2 vf29, 32(%1)\n\t"
+                "lqc2 vf30, 48(%1)\n\t"
+                "vmulax.xyz ACC, vf27, vf31x\n\t"
+                "vmadday.xyz ACC, vf28, vf31y\n\t"
+                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+                "vmaddw.xyz vf31, vf30, vf0w\n\t"
+                "sqc2 vf31, 0(%2)\n\t"
+                :
+                : "r"(model), "r"(matrix), "r"(&bounds)
+                : "memory"
+            );
+            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+            clip = _ModelCalcClip((s32) &bounds);
+            clip |= xglCullingCheck(camera, (s32) &bounds);
+            if (clip == 0) {
+                clipped = 0;
+                break;
+            }
+        }
+    }
+    return clipped;
+}
+
+s32 nmlModelCalcClipMat2AllCam(s32 model, s32 matrix1, s32 matrix2)
+{
+    Vector4 bounds;
+    s32 clipMask = 0;
+    s32 tested = 0;
+    s32 total = 0;
+    s32 camera;
+    s32 clip;
+    s32 i;
+
+    for (i = 0; i < 3; i++) {
+        if (g_aSubWindow[i] != 0) {
+            camera = xglStudioSelectGetActiveCamera(i);
+            if (camera == 0) {
+                return camera;
+            }
+            _ModelCalcClipInit((const Matrix4 *) (camera + 0x4F0));
+            __asm__ __volatile__(
+                "lqc2 vf31, 0(%0)\n\t"
+                "lqc2 vf27, 0(%1)\n\t"
+                "lqc2 vf28, 16(%1)\n\t"
+                "lqc2 vf29, 32(%1)\n\t"
+                "lqc2 vf30, 48(%1)\n\t"
+                "vmulax.xyz ACC, vf27, vf31x\n\t"
+                "vmadday.xyz ACC, vf28, vf31y\n\t"
+                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+                "vmaddw.xyz vf31, vf30, vf0w\n\t"
+                "lqc2 vf27, 0(%2)\n\t"
+                "lqc2 vf28, 16(%2)\n\t"
+                "lqc2 vf29, 32(%2)\n\t"
+                "lqc2 vf30, 48(%2)\n\t"
+                "vmulax.xyz ACC, vf27, vf31x\n\t"
+                "vmadday.xyz ACC, vf28, vf31y\n\t"
+                "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+                "vmaddw.xyz vf31, vf30, vf0w\n\t"
+                "sqc2 vf31, 0(%3)\n\t"
+                :
+                : "r"(model), "r"(matrix1), "r"(matrix2), "r"(&bounds)
+                : "memory"
+            );
+            clip = _ModelCalcClip((s32) &bounds);
+            tested++;
+            clipMask |= clip << i;
+            total += clip;
+        }
+    }
+    if (tested != 0) {
+        if (total == tested) {
+            clipMask |= 0x80;
+        }
+    }
+    return clipMask;
+}
+
+void _ApplyMatrix33(Vector4 *destination, const Matrix4 matrix, const Vector4 *vector) {
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%0)\n\t"
+        "lqc2 vf27, 0(%1)\n\t"
+        "lqc2 vf28, 16(%1)\n\t"
+        "lqc2 vf29, 32(%1)\n\t"
+        "lqc2 vf30, 48(%1)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddz.xyz vf31, vf29, vf31z\n\t"
+        "sqc2 vf31, 0(%2)\n\t"
+        "nop\n\t"
+        :
+        : "r"(vector), "r"(matrix), "r"(destination)
+        : "memory"
+    );
+}
+
+void _ApplyMatrix(Vector4 *destination, const Matrix4 matrix, const Vector4 *vector) {
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%0)\n\t"
+        "lqc2 vf27, 0(%1)\n\t"
+        "lqc2 vf28, 16(%1)\n\t"
+        "lqc2 vf29, 32(%1)\n\t"
+        "lqc2 vf30, 48(%1)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%2)\n\t"
+        "nop\n\t"
+        :
+        : "r"(vector), "r"(matrix), "r"(destination)
+        : "memory"
+    );
+}
+
+void _ApplyMatrix2Mat(Vector4 *destination, const Matrix4 matrix1, const Matrix4 matrix2, const Vector4 *vector) {
+    __asm__ __volatile__(
+        "lqc2 vf31, 0(%0)\n\t"
+        "lqc2 vf27, 0(%1)\n\t"
+        "lqc2 vf28, 16(%1)\n\t"
+        "lqc2 vf29, 32(%1)\n\t"
+        "lqc2 vf30, 48(%1)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "lqc2 vf27, 0(%2)\n\t"
+        "lqc2 vf28, 16(%2)\n\t"
+        "lqc2 vf29, 32(%2)\n\t"
+        "lqc2 vf30, 48(%2)\n\t"
+        "vmulax.xyz ACC, vf27, vf31x\n\t"
+        "vmadday.xyz ACC, vf28, vf31y\n\t"
+        "vmaddaz.xyz ACC, vf29, vf31z\n\t"
+        "vmaddw.xyz vf31, vf30, vf0w\n\t"
+        "sqc2 vf31, 0(%3)\n\t"
+        "nop\n\t"
+        :
+        : "r"(vector), "r"(matrix1), "r"(matrix2), "r"(destination)
+        : "memory"
+    );
+}
 
 
-
-static const float s_aMapCullingPro02[18] = { -28.899999618530273f, -0.0f, 1.0f, 0.0f, 1.5707963705062866f, 0.0f, 1.0f, 3.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
-
-static const s32 s_aMapLastGnu03[12] = { 32, 33, 51, 52, 53, 54, 155, 61, 60, 63, 116, 129 };
-
-static const s32 s_aMapLastGnu04[12] = { 32, 34, 26, 31, 33, 48, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastDyu16[12] = { 32, 30, 62, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastGnk02[12] = { 33, 34, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastGnk18[12] = { 26, 30, 29, 43, 35, 28, 27, -1, -1, -1, -1, -1 };
-
-static const s32 s_aMapLastKas18[12] = { 38, 37, 29, 30, 35, 34, 33, 31, -1, -1, -1, -1 };

@@ -1,95 +1,146 @@
 #include "common.h"
+
 #include "shared.h"
+#include "main/jni.h"
+
 #include "script.h"
 
 extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                        int (*callback)(XglTaskPrefix *task),
                                        XglTaskPrefix *entry);
+
 extern int xglTaskRemove(XglTaskPrefix *task);
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
 extern SceneString *loadConstString(const char *bytes, int length);
+
 extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
                                void *signature_or_type);
+
 extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
                            SceneObject *arguments, int *output);
+
 extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
+
 extern void JNI_initThread(SceneVm *vm);
+
 extern void JNI_catchException(void);
+
 extern int getScriptFlag(SceneObject object);
+
 extern void XTK_setWindowOwner(int owner);
+
 extern void talkCancel(ScriptObserverTask *task);
+
 extern void actTalkAfter(SceneObject object);
+
 extern void initVM(void);
+
 SceneThread *defaultVM;
+
 extern SceneThread *JNI_createThread(int kind, int stack_words,
                                      int frame_words);
+
 extern void JNI_pushFrame(void);
+
 extern void JNI_loadNativeClass(void);
+
 int UseVMFlag;
+
 SceneThread *stageVM;
+
 SceneThread *evtVM[2];
-extern SceneClass *classJava_xeno_Stage;
-extern SceneClass *classJava_xeno_Chr;
+
 extern void createTalkTask(void *actor, const char *method_name);
+
 const char D_004C1D50[] = "setColor";
+
 const char D_004C1D60[] = "setDirection2";
+
 #define call_method_signature_void sig_2
+
 #define call_method_signature_int sig_3
+
 #define call_method_signature_int_int sig_4
+
 /* EUC-JP text: イベント実行中 ("event in progress"). */
+
 const char func_observer_debug_text[16] =
     "\xa5\xa4\xa5\xd9\xa5\xf3\xa5\xc8\xbc\xc2\xb9\xd4\xc3\xe6";
+
 extern void funcObserver(ScriptObserverTask *task);
+
 int getEmptyVM(ScriptObserverTask *observer);
-extern PadPrefix PadData;
+
+extern ScriptPadRecord PadData[2];
 
 static unsigned int s_nScriptFadeOutTime = 30;
+
 static unsigned int s_nScriptFadeRequest = 0;
+
 static unsigned char s_nScriptChangeTime = 0;
+
 static unsigned int s_nScriptSequenceReset = 0;
+
 static unsigned int s_nScriptFrameLockEntry = 0;
+
 static unsigned int s_nScriptCfTime = 0;
+
 static unsigned int s_nScriptEventFin = 0;
+
 static unsigned int s_nScriptEventActive = 0;
+
 static unsigned int s_nScriptTalkLock = 0;
+
 extern const char D_004DA460[];
+const char D_004DA460[8] = "light";
+
 static const char sig_2[4] = "()V";
+
 static const char sig_3[5] = "(I)V";
+
 static const char sig_4[6] = "(II)V";
+
 static int windowOwner = 0;
 
 typedef void (*JSNativeMethod)(void);
+
 extern void JS_init(int state, int class_capacity, int method_capacity);
+
 extern int JS_loadClass(const char *class_name);
+
 extern void JS_classSetup(int class_id, JSNativeMethod get_peer);
+
 extern void JS_classAddMethod(int class_id, const char *name,
                               JSNativeMethod method);
+
 extern void JS_classLight_getPeer(void);
+
 extern void JS_classLight_setColor(void);
+
 extern void JS_classLight_setDirection2(void);
 
 /* Only the halfword at GameLoopState+0xC is evidenced by
  * SCRIPT_sendMovieSkipSignal; the rest of the game-state record remains
  * scaffold-owned. */
+
 typedef struct GameLoopMovieStatePrefix {
     u8 unmodeled_00[0xC];
     unsigned short movie_state;
 } GameLoopMovieStatePrefix;
 
 static int currentScriptDB;
+
 static int resourceID;
 
-/* TU-local declarations for the main-00261860 observer/CallMethod allocation
- * (talktoObserver, CallMethod, CallMethod_I, CallMethod_II, funcObserver).
- * New-shared-name proposals are marked below; the integrator reconciles them
- * with config/header-canon.json on promotion.
- */
+/* TU-local observer and CallMethod declarations. */
 
 /* Proposal: the script table indexed by currentScriptDB. Only the two fields
  * this allocation touches are modeled; scriptDB's element stride (0x1C bytes,
  * evidenced by *7*4 in every CallMethod family function) is fixed by that
  * indexing arithmetic, not invented. */
+
 typedef struct ScriptDbEntry {
     u8 unmodeled_00[8];
     void *pdb;            /* +0x8: event data used for resource lookup */
@@ -97,13 +148,14 @@ typedef struct ScriptDbEntry {
     SceneThread *thread; /* +0x10: the script's VM thread; its own object is at +0x10 */
     u8 unmodeled_14[0x1C - 0x14];
 } ScriptDbEntry;
-static ScriptDbEntry scriptDB[2];
 
+static ScriptDbEntry scriptDB[2];
 
 typedef struct ScriptPdbFile {
     u8 unmodeled_00[8];
     int data;
 } ScriptPdbFile;
+
 extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
 
 /*
@@ -114,12 +166,10 @@ extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
  * below; every other byte of the record is untouched by this allocation and
  * stays an unmodeled span.
  *
- *   +0x4c0 script_object      the same byte talktoObserver already reaches
- *                             through ACTOR_SCRIPT_OBJECT_OFFSET (this
- *                             allocation's own two call sites name it as a
- *                             member instead, so as not to add more
- *                             offset-cast findings than that one already
- *                             accepted use).
+ *   +0x4c0 script_object      the native actor peer passed to the talk
+ *                             method as its first actor argument; the
+ *                             talk and touch entry points check its
+ *                             xeno/Chr class before queuing a task.
  *   +0x9f4 talk_method_name   the JNI method name of the actor's talk
  *                             script method, null when it has none. Both
  *                             entry points gate on it before queuing a talk
@@ -132,6 +182,7 @@ extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
  *   +0x9f8 touch_method_name  the method SCRIPT_execTouchto passes instead,
  *                             once the same +0x9f4 gate lets it through.
  */
+
 typedef struct ScriptActorMethods {
     u8 unmodeled_00[0x4c0];
     SceneObject script_object;      /* +0x4c0 */
@@ -142,16 +193,19 @@ typedef struct ScriptActorMethods {
 
 /* Reused TU-local declaration (src/core/main-0025a9c0/private.h and every
  * other GameLoopState-family accepted source in this unit). */
-extern GameLoopStateAddressView GameLoopState;
+
+extern ScriptGameLoopState GameLoopState;
 
 /* Proposal: per-function JNI method-signature literals. Each is a duplicate
  * function-local `static const char sig[]`, so the assembler disambiguates
  * with the original ELF's own dup-static suffixing: "sig.2"/"sig.3"/"sig.4". */
-                /* "(II)V"  @ 0x004da478, ELF name "sig.4" */
+
+/* "(II)V"  @ 0x004da478, ELF name "sig.4" */
 
 /* PadData (0x00490d90, 0xd0 bytes) read as one doubleword at +0x28, the
  * shared half_28/half_2a pair (original: lui 0x49; ld 3512). */
-#define PAD_DATA_DOUBLEWORD_AT_28 (*(u64 *)&PadData.half_28)
+
+#define PAD_DATA_DOUBLEWORD_AT_28 (PadData[0].packed_input)
 
 /*
  * Drop the task from the scheduler and leave the task body. The usual
@@ -162,11 +216,26 @@ extern GameLoopStateAddressView GameLoopState;
  * release the claimed VM slot spell the removal out: the macro there too
  * moves their blocks (attempt-5684d45333e0 form 04, 85%).
  */
+
 #define REMOVE_TASK_AND_RETURN(task) \
     do {                             \
         xglTaskRemove(&(task)->task); \
         return;                      \
     } while (0)
+
+extern int loadScriptCD(ScriptDbEntry *entry, const char *path);
+
+extern int loadScriptCD2(ScriptDbEntry *entry, const char *path);
+
+extern char *strcpy(char *destination, const char *source);
+
+extern unsigned int strlen(const char *string);
+
+static char *getStrIndex(char *string, unsigned int length, int ch);
+
+extern void TWIN_dispose(TComponent *window);
+
+extern void attrObserver(ScriptObserverTask *task);
 
 static void initJS(int state)
 {
@@ -230,7 +299,7 @@ void SCRIPT_sceneChangeTimeDec(void)
 
 void SCRIPT_sendMovieSkipSignal(void)
 {
-    GameLoopMovieStatePrefix *game_state = (GameLoopMovieStatePrefix *)GameLoopState;
+    GameLoopMovieStatePrefix *game_state = (GameLoopMovieStatePrefix *)&GameLoopState;
 
     if (game_state->movie_state == 3)
         s_nScriptEventFin = 1;
@@ -301,7 +370,6 @@ void SCRIPT_frameLock2Battle(void)
     s_nScriptFrameLockEntry = 1;
 }
 
-/* Rebuild the default, stage, and two event VMs after a script runtime jump. */
 void SCRIPT_reset(void)
 {
     SceneThread **event_vm;
@@ -325,11 +393,6 @@ void SCRIPT_reset(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_init);
 
-/*
- * Queue the actor's talk task when it has a talk method, its owning script
- * is active, no other talk is in progress, the actor is a xeno/Chr instance
- * and the current script's VM thread is running on a Stage object.
- */
 void SCRIPT_execTalkto(void *actor)
 {
     ScriptActorMethods *methods = (ScriptActorMethods *)actor;
@@ -337,25 +400,15 @@ void SCRIPT_execTalkto(void *actor)
 
     if (methods->talk_method_name != 0 && entry->active != 0 &&
         s_nScriptTalkLock == 0 &&
-        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0 &&
-        JNI_isInstanceOf(entry->thread->object, classJava_xeno_Stage) != 0) {
-        /*
-         * The original calls createTalkTask with jal and returns through
-         * the shared epilogue instead of a sibling jump. Under this TU's
-         * compiler the call stays out of tail position only inside a loop
-         * construct, which is the shape a do/while (0) statement macro
-         * gives it.
-         */
+        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0) {
         do {
+            if (!JNI_isInstanceOf(entry->thread->object, classJava_xeno_Stage))
+                break;
             createTalkTask(actor, methods->talk_method_name);
         } while (0);
     }
 }
 
-/*
- * Queue the actor's touch task under the same gate as SCRIPT_execTalkto,
- * but call the actor's touch method instead of its talk method.
- */
 void SCRIPT_execTouchto(void *actor)
 {
     ScriptActorMethods *methods = (ScriptActorMethods *)actor;
@@ -363,13 +416,10 @@ void SCRIPT_execTouchto(void *actor)
 
     if (methods->talk_method_name != 0 && entry->active != 0 &&
         s_nScriptTalkLock == 0 &&
-        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0 &&
-        JNI_isInstanceOf(entry->thread->object, classJava_xeno_Stage) != 0) {
-        /*
-         * Same shape as SCRIPT_execTalkto: the original keeps a real jal
-         * to createTalkTask, which only a loop construct reproduces here.
-         */
+        JNI_isInstanceOf(methods->script_object, classJava_xeno_Chr) != 0) {
         do {
+            if (!JNI_isInstanceOf(entry->thread->object, classJava_xeno_Stage))
+                break;
             createTalkTask(actor, methods->touch_method_name);
         } while (0);
     }
@@ -377,11 +427,6 @@ void SCRIPT_execTouchto(void *actor)
 
 INCLUDE_ASM("asm/main/nonmatchings/script", createTalkTask);
 
-/*
- * Task body queued by createTalkTask: resolve the talk method on the
- * receiver object and run it on the Stage VM, cancelling the talk when the
- * event VMs are busy or the pad state forbids it.
- */
 void talktoObserver(ScriptObserverTask *task)
 {
     unsigned int owner_flags = task->owner->flags;
@@ -433,29 +478,65 @@ void talktoObserver(ScriptObserverTask *task)
      */
     method = task->method;
     arguments[0] = receiver;
-    arguments[1] = *(SceneObject *)((SceneByte *)object + ACTOR_SCRIPT_OBJECT_OFFSET);
+    arguments[1] = ((ScriptActorMethods *)object)->script_object;
     if (task->argument2 != 0)
         arguments[2] = (SceneObject)task->argument2;
     JNI_callMethod(stageVM, method, arguments, 0);
     if (stageVM->flags & SCENE_THREAD_CALL_PENDING) {
         XTK_setWindowOwner(0);
         actTalkAfter(object);
-        ((GameLoopFlagsPrefix *)GameLoopState)->flags &= ~0x1000;
-        ((GameLoopFlagsPrefix *)GameLoopState)->flags &= ~0x8000;
-        ((GameLoopFlagsPrefix *)GameLoopState)->flags &= ~0x10000;
+        GameLoopState.flags &= ~0x1000;
+        GameLoopState.flags &= ~0x8000;
+        GameLoopState.flags &= ~0x10000;
         xglTaskRemove(&task->task);
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/script", talkCancel);
+void talkCancel(ScriptObserverTask *task)
+{
+    TComponent *window;
+    ScriptGameLoopState *game_state;
 
-INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_execEntered);
+    actTalkAfter(task->object);
+    window = (TComponent *)task->argument2;
+    game_state = &GameLoopState;
+    window->flags |= 0x80;
+    window->flags &= ~2;
+    game_state->flags &= ~0x1000;
+    game_state->flags &= ~0x8000;
+    game_state->flags &= ~0x10000;
+    if (window != 0)
+        window->state = 2;
+    TWIN_dispose(window);
+    xglTaskRemove(&task->task);
+}
 
-/*
- * Queue a funcObserver task that invokes the no-argument script method
- * `method_name` ("()V") on the current Stage object, then run it once.
- * Every caller ignores $v0, so the entry point returns nothing.
- */
+void SCRIPT_execEntered(int attribute)
+{
+    ScriptDbEntry *entry = &scriptDB[currentScriptDB];
+
+    if (entry->active != 0) {
+        SceneObject object = entry->thread->object;
+
+        if (!(GameLoopState.flags & 0x400) &&
+            JNI_isInstanceOf(object, classJava_xeno_Stage)) {
+            XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
+            ScriptObserverTask *task = (ScriptObserverTask *)xglTaskEntryNext(
+                scheduler, (int (*)(XglTaskPrefix *))attrObserver,
+                scheduler != 0 ? scheduler->active_tail : 0);
+
+            if (task != 0) {
+                task->owner = &GameLoopState;
+                task->state_flags = 0;
+                task->object = 0;
+            }
+            task->object = object;
+            task->argument1 = attribute;
+            GameLoopState.flags |= 0x100000;
+        }
+    }
+}
+
 void CallMethod(const char *method_name)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
@@ -464,35 +545,30 @@ void CallMethod(const char *method_name)
         SceneObject object = entry->thread->object;
 
         if (JNI_isInstanceOf(object, classJava_xeno_Stage) != 0) {
-            XglTaskScheduler *scheduler = GameLoopState[2];
+            XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
             ScriptObserverTask *task = (ScriptObserverTask *)xglTaskEntryNext(
                 scheduler, (int (*)(XglTaskPrefix *))funcObserver,
                 scheduler != 0 ? scheduler->active_tail : 0);
             unsigned char started;
 
             if (task != 0) {
-                task->owner = (GameLoopFlagsPrefix *)GameLoopState;
+                task->owner = &GameLoopState;
                 task->state_flags = 0;
                 task->object = 0;
             }
             task->object = object;
             task->method_name = method_name;
             task->method_signature = call_method_signature_void;
-            task->unmodeled_39 = 0;
+            task->invocation_state = 0;
             funcObserver(task);
             /* separate load keeps the funcObserver call out of tail position:
              * without it (form 11) GCC emits a sibling `j funcObserver` */
-            started = task->unmodeled_39;
+            started = task->invocation_state;
         }
     }
 }
 
-/*
- * Queue a funcObserver task that invokes the one-int-argument script method
- * `method_name` ("(I)V") on the current Stage object, then run it once.
- * Every caller ignores $v0, so the entry point returns nothing.
- */
-void CallMethod_I(const char *method_name, int arg1)
+void CallMethod_I(const char *method_name, int argument1)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
 
@@ -500,36 +576,31 @@ void CallMethod_I(const char *method_name, int arg1)
         SceneObject object = entry->thread->object;
 
         if (JNI_isInstanceOf(object, classJava_xeno_Stage) != 0) {
-            XglTaskScheduler *scheduler = GameLoopState[2];
+            XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
             ScriptObserverTask *task = (ScriptObserverTask *)xglTaskEntryNext(
                 scheduler, (int (*)(XglTaskPrefix *))funcObserver,
                 scheduler != 0 ? scheduler->active_tail : 0);
             unsigned char started;
 
             if (task != 0) {
-                task->owner = (GameLoopFlagsPrefix *)GameLoopState;
+                task->owner = &GameLoopState;
                 task->state_flags = 0;
                 task->object = 0;
             }
             task->object = object;
             task->method_name = method_name;
             task->method_signature = call_method_signature_int;
-            task->argument1 = arg1;
-            task->unmodeled_39 = 0;
+            task->argument1 = argument1;
+            task->invocation_state = 0;
             funcObserver(task);
             /* separate load keeps the funcObserver call out of tail position:
              * without it (form 11) GCC emits a sibling `j funcObserver` */
-            started = task->unmodeled_39;
+            started = task->invocation_state;
         }
     }
 }
 
-/*
- * Queue a funcObserver task that invokes the two-int-argument script method
- * `method_name` ("(II)V") on the current Stage object, then run it once.
- * Every caller ignores $v0, so the entry point returns nothing.
- */
-void CallMethod_II(const char *method_name, int arg1, int arg2)
+void CallMethod_II(const char *method_name, int argument1, int argument2)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
 
@@ -537,39 +608,31 @@ void CallMethod_II(const char *method_name, int arg1, int arg2)
         SceneObject object = entry->thread->object;
 
         if (JNI_isInstanceOf(object, classJava_xeno_Stage) != 0) {
-            XglTaskScheduler *scheduler = GameLoopState[2];
+            XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
             ScriptObserverTask *task = (ScriptObserverTask *)xglTaskEntryNext(
                 scheduler, (int (*)(XglTaskPrefix *))funcObserver,
                 scheduler != 0 ? scheduler->active_tail : 0);
             unsigned char started;
 
             if (task != 0) {
-                task->owner = (GameLoopFlagsPrefix *)GameLoopState;
+                task->owner = &GameLoopState;
                 task->state_flags = 0;
                 task->object = 0;
             }
             task->object = object;
             task->method_name = method_name;
             task->method_signature = call_method_signature_int_int;
-            task->argument1 = arg1;
-            task->argument2 = arg2;
-            task->unmodeled_39 = 0;
+            task->argument1 = argument1;
+            task->argument2 = argument2;
+            task->invocation_state = 0;
             funcObserver(task);
             /* separate load keeps the funcObserver call out of tail position:
              * without it (form 11) GCC emits a sibling `j funcObserver` */
-            started = task->unmodeled_39;
+            started = task->invocation_state;
         }
     }
 }
 
-/*
- * Task body queued by CallMethod/CallMethod_I/CallMethod_II: claim a free
- * event VM, resolve the named method on the Stage object that queued it and
- * invoke it with up to two int arguments. The task is dropped when the
- * owner flags forbid it, no VM is free, the Stage object changed, the
- * method is missing or the call left an exception pending; after a
- * successful call it stays queued and GameLoopState flag 0x200000 is set.
- */
 void funcObserver(ScriptObserverTask *task)
 {
     unsigned int owner_flags;
@@ -626,7 +689,7 @@ void funcObserver(ScriptObserverTask *task)
             return;
         }
     }
-    ((GameLoopFlagsPrefix *)GameLoopState)->flags |= 0x200000;
+    GameLoopState.flags |= 0x200000;
 }
 
 int getEmptyVM(ScriptObserverTask *observer)
@@ -646,14 +709,10 @@ int getEmptyVM(ScriptObserverTask *observer)
     return observer->vm_slot != -1;
 }
 
-extern int loadScriptCD(ScriptDbEntry *entry, const char *path);
-
 int SCRIPT_load(const char *path)
 {
     return loadScriptCD(&scriptDB[(currentScriptDB + 1) & 1], path);
 }
-
-extern int loadScriptCD2(ScriptDbEntry *entry, const char *path);
 
 int SCRIPT_load2(const char *path)
 {
@@ -664,17 +723,6 @@ INCLUDE_ASM("asm/main/nonmatchings/script", SCRIPT_load_DBG);
 
 INCLUDE_ASM("asm/main/nonmatchings/script", getStrIndex_00262160);
 
-extern char *strcpy(char *destination, const char *source);
-extern unsigned int strlen(const char *string);
-static char *getStrIndex(char *string, unsigned int length, int ch);
-
-/*
- * loadScriptCD/loadScriptCD2/loadScript all capture this call's return
- * value ($v0 into $s0, e.g. build/main/asm/main/nonmatchings/script/
- * loadScriptCD.s "jal replacePathExt" / "daddu $16, $2, $0"): the tail
- * call to strcpy leaves its return (the extension write position) in v0,
- * and the caller reads it, so this returns that pointer instead of void.
- */
 static char *replacePathExt(char *path, const char *ext)
 {
     return strcpy(getStrIndex(path, strlen(path), '.'), ext);
@@ -745,5 +793,3 @@ int XTK_findFile(const char *path)
         return file->data;
     return 0;
 }
-
-const char D_004DA460[8] = "light";

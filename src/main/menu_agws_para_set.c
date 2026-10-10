@@ -1,73 +1,58 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "menu_agws_para_set.h"
 
 /* These labels are the original menu strings referenced by the message table. */
+
 extern const char D_004C6C10[];
+
 extern const char D_004C6C20[];
+
 extern const char D_004C6C00[];
+
 extern const char D_004C6BF0[];
+
 extern const char D_004C6BE0[];
+
 extern const char D_004C6BD0[];
+
 extern const char D_004C6BC0[];
-extern const char D_004C6C30[];
-extern const char D_004C6CC8[];
-extern const char D_004C6C98[];
-extern const char D_004C6C78[];
-extern const char D_004C6C48[];
-extern const char D_004C6CF8[];
-extern const char D_004C6CE8[];
-extern const char D_004C6D60[];
-extern const char D_004C6D48[];
-extern const char D_004C6D28[];
-extern const char D_004C6D08[];
-extern const char D_004C6DC0[];
-extern const char D_004C6DA8[];
-extern const char D_004C6D98[];
-extern const char D_004C6D80[];
-extern const char D_004C6E00[];
-extern const char D_004C6DE0[];
-extern const char D_004C6F08[];
-extern const char D_004C6EF0[];
-extern const char D_004C6ED0[];
-extern const char D_004C6EC0[];
-extern const char D_004C6E70[];
-extern const char D_004C6E60[];
-extern const char D_004C6E48[];
-extern const char D_004C6E38[];
-extern const char D_004C6E28[];
-extern const char D_004C6E18[];
+
 extern const char D_004DAEF8[];
+
 extern const char D_004DAEF0[];
+
 extern const char D_004DAEE8[];
+
 extern const char D_004DAEE0[];
+
 extern const char D_004DAED8[];
+
 extern const char D_004DAED0[];
+
 extern const char D_004DAEC8[];
+
 extern const char D_004DAEC0[];
+
 extern const char D_004DAEB8[];
+
 extern const char D_004DAEB0[];
-extern const char D_004DAF18[];
-extern const char D_004DAF10[];
-extern const char D_004DAF08[];
-extern const char D_004DAF00[];
-extern const char D_004DAF20[];
-extern const char D_004DAF38[];
-extern const char D_004DAF30[];
-extern const char D_004DAF28[];
-extern const char D_004DAF70[];
-extern const char D_004DAF68[];
-extern const char D_004DAF60[];
-extern const char D_004DAF58[];
-extern const char D_004DAF50[];
-extern const char D_004DAF78[];
-extern const char D_004DAFC8[];
-extern const char D_004DAFC0[];
-extern const char D_004DAFB8[];
-extern const char D_004DAFB0[];
-extern const char D_004DAFA8[];
-extern const char D_004DAFA0[];
-extern const char D_004DAF98[];
+
+const char D_004DAFC8[8] = "\001FHP";
+
+const char D_004DAFC0[8] = "\001DPOW";
+
+const char D_004DAFB8[8] = "\001PARM";
+
+const char D_004DAFB0[8] = "\001EARM";
+
+const char D_004DAFA8[8] = "\001AGL";
+
+const char D_004DAFA0[8] = "\001WAGL";
+
+const char D_004DAF98[8] = "\001Weight";
 
 static const char *msg00_0_0036D940[17] = {
     D_004C6C20, D_004DAEF8, D_004C6C10, D_004DAEF0, D_004DAEE8,
@@ -76,24 +61,28 @@ static const char *msg00_0_0036D940[17] = {
     D_004C6BD0, D_004C6BC0,
 };
 
-static int msg_10[7] = {
-    (int)D_004DAFC8, (int)D_004DAFC0, (int)D_004DAFB8,
-    (int)D_004DAFB0, (int)D_004DAFA8, (int)D_004DAFA0,
-    (int)D_004DAF98,
+static const char *msg_10[7] = {
+    D_004DAFC8, D_004DAFC0, D_004DAFB8,
+    D_004DAFB0, D_004DAFA8, D_004DAFA0,
+    D_004DAF98,
 };
 
 AgwsParaDisplay MenuAgwsPara = {{0}};
+
 AgwsParaDisplay MenuAgwsPara2 = {{0}};
 
 const unsigned char D_004C6F38[24] = "Menu         Party";
+
 const AgwsCameraPreset D_004C7190 = {{
     { 0.5f, 2.8f, 4.5f, 1.0f },
     { 0.0f, 0.0f, 0.0f, 1.0f },
 }};
+
 const AgwsCameraTargets D_004C71B0 = {{
     { 0.5f, 2.8f, 4.5f, 1.0f },
     { -1.5f, 2.0f, 8.0f, 1.0f },
 }};
+
 const AgwsModelPositions D_004C71D0 = {{
     { 0.0f, 0.0f, 0.0f, 0.0f },
     { 0.0f, 1.04719758f, 0.0f, 0.0f },
@@ -103,11 +92,35 @@ const AgwsModelPositions D_004C71D0 = {{
     { 0.3926991f, 2.0943952f, 0.0f, 0.0f },
     { 0.3926991f, -2.0943952f, 0.0f, 0.0f },
 }};
-const AgwsModelVector D_004C7240 = {{ 1.0f, 1.0f, 1.0f, 1.0f }};
-extern AgwsSwitchSlideStep D_004DAFE8[4];
 
-/* Sums the WAGL rating of every nonzero mounted weapon of para's three
- * equipped weapon slots. */
+const AgwsModelVector D_004C7240 = {{ 1.0f, 1.0f, 1.0f, 1.0f }};
+
+AgwsSwitchSlideStep D_004DAFE8[4] = {
+    { { 1, -1 } }, { { 0, 0 } }, { { 0, 0 } }, { { 0, 0 } },
+};
+
+AgwsPasWork *AgwsPas = 0;
+
+AgwsListWork *AgwsList = 0;
+
+AgwsStatusWork *AgwsStatus = 0;
+
+AgwsFaceWork *AgwsFace = 0;
+
+AgwsSwitchWork *AgwsSwitch = 0;
+
+extern const char D_004DAF48[];
+
+void WindowSPSet(AgwsListSPWindow *window);
+
+void WindowSPMain(AgwsListSPWindow *window);
+
+int PartyAttackerCheck(int chrNo);
+
+char *MenuTagTextGet(int index);
+
+int MenuAgwsPilotCheck(int chrNo);
+
 static short WaglGet(AgwsCharPara *para)
 {
     short total;
@@ -124,8 +137,6 @@ static short WaglGet(AgwsCharPara *para)
     return total;
 }
 
-/* Fills one parameter list record from the recalculated parameters and the
- * attack and defence buffers calcTotalParaMenu filled beside them. */
 static void ParaSet(AgwsCharPara *para, AgwsParaDisplay *dest, int *attack, int *defense)
 {
     dest->value[AGWS_PARA_MAX_HP] = para->maxHp;
@@ -137,12 +148,6 @@ static void ParaSet(AgwsCharPara *para, AgwsParaDisplay *dest, int *attack, int 
     dest->value[AGWS_PARA_STAT9] = para->stat9;
 }
 
-/*
- * States 0 and 10 of the AGWS screens fill the shown record too; every other
- * state only refreshes the preview. calcTotalParaMenu writes the current hp
- * of its recalculation back into the origin record, so state 10 restores the
- * hp it found there.
- */
 void MenuAgwsParaSet(int chrNo, int state)
 {
     int attack[4];
@@ -166,13 +171,6 @@ void MenuAgwsParaSet(int chrNo, int state)
     }
 }
 
-/*
- * The tab strip at the top of the AGWS menu. MenuWork.state selects which
- * sub-screen currently owns the display; AgwsPasMain hides the whole strip
- * unless MenuWork.state is one of its own, and slides in the root tab, the
- * command tab under the cursor and the sub-tab it opens, pushing the ones
- * before them out to the left by their own width.
- */
 void AgwsPasMain(void)
 {
     AgwsPasWork *pas = AgwsPas;
@@ -284,8 +282,6 @@ INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsInfoMain);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsSelectMain);
 
-/* The weapon list of the AGWS mount position under the cursor: each row is
- * flagged when the weapon cannot go on that position. */
 void MenuAgwsListMake_Wpn(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -317,8 +313,6 @@ void MenuAgwsListMake_Wpn(void)
     WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.weaponSlot[MenuWork.selectedIndex] * 5 - 5]);
 }
 
-/* The ammunition list: each row is flagged when its ammunition does not fit
- * the weapon under the cursor. */
 void MenuAgwsListMake_Gun(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -348,8 +342,6 @@ void MenuAgwsListMake_Gun(void)
     WindowSPSetSelect(window, &MenuKeepSelect[30]);
 }
 
-/* The accessory list: each row is flagged when the accessory may not go into
- * the slot under the cursor. */
 void MenuAgwsListMake_Acc(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -379,8 +371,6 @@ void MenuAgwsListMake_Acc(void)
     WindowSPSetSelect(window, &MenuKeepSelect[35]);
 }
 
-/* The pilot list: a row is flagged when the character already rides another
- * AGWS, and marked as equipped when the AGWS the screen shows is his. */
 void MenuAgwsListMake_Pilot(void)
 {
     AgwsListRow *entries = MenuListGet(0);
@@ -417,7 +407,142 @@ void MenuAgwsListMake_Pilot(void)
     WindowSPSetSelect(window, &MenuKeepSelect[40]);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsListMain);
+void AgwsListMain(void)
+{
+    AgwsListWork *list = AgwsList;
+    short targetX;
+    int i;
+    int count;
+    AgwsListRow *rows;
+
+    switch (list->state) {
+    case 0:
+        list->color = 0x00FFF000;
+        list->window.x = 528;
+        list->window.color = list->color;
+        list->window.flags = (int)D_004DAF48;
+        list->window.y = 64;
+        list->window.rowCount = 7;
+        list->window.rows = 11;
+        list->window.height = 270;
+        list->window.state = 0;
+        list->window.items = 0;
+        WindowSPSet(&list->window);
+        list->visible = 1;
+        list->state = 2;
+        list->selectedRow = 0;
+        /* fall through */
+    case 2:
+        list->visible = 0;
+        switch (MenuWork.state) {
+        case 0x44: list->state = 10; break;
+        case 0x46: list->state = 20; break;
+        case 0x62: list->state = 30; break;
+        case 0xC2: list->state = 40; break;
+        }
+        break;
+    case 10:
+    case 20:
+    case 30:
+    case 40:
+        if (list->state == 40) {
+            list->window.x = 528;
+            list->window.y = 128;
+            MenuAgwsListMake_Pilot();
+            list->visible = 2;
+            list->state = 41;
+        } else {
+            list->window.x = -244;
+            if (list->state == 30) {
+                list->window.y = 126;
+            } else {
+                list->window.y = 104;
+            }
+            list->visible = 1;
+            if (list->state == 20) {
+                list->state = 21;
+            } else {
+                list->state = 11;
+            }
+            switch (list->state) {
+            case 10: MenuAgwsListMake_Wpn(); break;
+            case 20: MenuAgwsListMake_Gun(); break;
+            case 30: MenuAgwsListMake_Acc(); break;
+            }
+        }
+        list->window.state = 17;
+        /* fall through */
+    case 11:
+    case 13:
+    case 21:
+    case 41:
+    case 43:
+        targetX = 16;
+        switch (list->state) {
+        case 41: targetX = 288; break;
+        case 13: targetX = -244; break;
+        case 43: targetX = 528; break;
+        }
+        MoveSlide(&list->window.x, &targetX, 3.0f);
+        if (list->window.x == targetX) {
+            switch (list->state) {
+            case 21: list->state = 22; break;
+            case 11:
+            case 41: list->state = 12; break;
+            case 13:
+            case 43: list->state = 2; break;
+            }
+        }
+        break;
+    case 12:
+    case 22:
+        switch (MenuWork.state) {
+        case 0x42: list->state = 13; break;
+        case 0x22: list->state = 43; break;
+        case 0x40: list->state = 13; break;
+        case 0x46:
+            if (list->state != 12) break;
+            list->state = 20;
+            break;
+        }
+        break;
+    }
+    if (list->visible != 0) {
+        WindowSPMain(&list->window);
+        if (list->visible == 2 && MenuWork.listSelect >= 0) {
+            count = MenuSortCheck(0);
+            rows = MenuListGet(0);
+            for (i = 0; i < count; i++) {
+                short chrNo = MenuSortGet(0, i);
+                if (PartyAttackerCheck(chrNo)) {
+                    eTagFontSet(&list->tag[i], MenuTagTextGet(1));
+                } else {
+                    eTagFontSet(&list->tag[i], MenuTagTextGet(2));
+                }
+                if ((signed char)rows[i].flag == 1) {
+                    list->tag[i].green = 64;
+                    list->tag[i].blue = 64;
+                    list->tag[i].red = 64;
+                } else {
+                    list->tag[i].green = 128;
+                    list->tag[i].blue = 128;
+                    list->tag[i].red = 128;
+                }
+                list->tag[i].x = list->window.x + 107;
+                list->tag[i].depth = list->window.color + 2;
+                list->tag[i].y = list->window.y + i * 24 + 7;
+                eTagFontMain(&list->tag[i]);
+                if (chrNo == MenuAgwsPilotCheck(MenuWork.chrNo)) {
+                    eSpriteSet(&list->cursor, 0x60A);
+                    list->cursor.x = list->window.x + list->window.width - 24;
+                    list->cursor.y = list->window.y + i * 24 + 3;
+                    list->cursor.depth = list->window.color + 2;
+                    eSpriteMain(&list->cursor);
+                }
+            }
+        }
+    }
+}
 
 void AgwsStatusMain(void)
 {
@@ -525,22 +650,10 @@ void AgwsStatusMain(void)
     }
 }
 
-/* Keep the switch-slide offsets after AgwsStatusMain's generated small data. */
-AgwsSwitchSlideStep D_004DAFE8[4] = {
-    { { 1, -1 } }, { { 0, 0 } }, { { 0, 0 } }, { { 0, 0 } },
-};
-AgwsPasWork *AgwsPas = 0;
-AgwsListWork *AgwsList = 0;
-AgwsStatusWork *AgwsStatus = 0;
-AgwsFaceWork *AgwsFace = 0;
-AgwsSwitchWork *AgwsSwitch = 0;
-
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsWeapon2Main);
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", AgwsNameMain);
 
-/* The pilot face the AGWS pilot list shows: the window slides in while the
- * list is open and carries the face sprite of the row under the cursor. */
 void AgwsFaceMain(void)
 {
     AgwsFaceWork *self = AgwsFace;
@@ -593,8 +706,6 @@ void AgwsFaceMain(void)
     }
 }
 
-/* The L1/R1 page hints of the AGWS screens: both sprites sit just off screen
- * unless the screen is on the page that lets the pad page through. */
 void AgwsSwitchMain(void)
 {
     AgwsSwitchWork *self = AgwsSwitch;
@@ -654,7 +765,6 @@ void AgwsSwitchMain(void)
     }
 }
 
-/* Places the AGWS model camera at its preset position and rotation. */
 void MenuAgwsCameraSet(void)
 {
     AgwsCameraPreset preset = D_004C7190;
@@ -667,7 +777,6 @@ void MenuAgwsCameraSet(void)
     camera->rotation = preset.vectors[1];
 }
 
-/* Eases the menu camera towards the position the AGWS screen state asks for. */
 void MenuAgwsCameraMove(void)
 {
     Vector4 *position = &xglStudioGetCamera2(0)->position;
@@ -689,8 +798,6 @@ void MenuAgwsCameraMove(void)
     position->z += (targets.value[target][2] - position->z) * 0.1f;
 }
 
-/* The AGWS model task: it eases the model into the pose the screen state asks
- * for and drives the open, weapon-preview and close states of its unit. */
 void MenuAgwsModelMain(AgwsModelUnit *self)
 {
     AgwsModelActor *actor = self->actor;
@@ -785,19 +892,3 @@ void MenuAgwsModelMain(AgwsModelUnit *self)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/menu_agws_para_set", MenuAgws);
-
-
-
-const char D_004DAF98[8] = "\001Weight";
-
-const char D_004DAFA0[8] = "\001WAGL";
-
-const char D_004DAFA8[8] = "\001AGL";
-
-const char D_004DAFB0[8] = "\001EARM";
-
-const char D_004DAFB8[8] = "\001PARM";
-
-const char D_004DAFC0[8] = "\001DPOW";
-
-const char D_004DAFC8[8] = "\001FHP";

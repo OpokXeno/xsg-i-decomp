@@ -39,15 +39,46 @@ typedef struct SequenceState {
     u32 unmodeled_08;
     u32 cleared_on_init;
     u32 unmodeled_10;
-    u32 cleared_on_init_run[4];
+    void *cleared_on_init_run[4];
     void *handler[4];
 } SequenceState;
 
 /* Each actor owns one 0x260-byte sequence record. The recovered head and
  * byte storage share that allocation; the unmodeled tracks retain their extent. */
-typedef union ActSequenceEntry {
+struct Actor;
+
+typedef struct MoveTrack {
+    struct Actor *target_actor;
+    int frames;
+    u8 unmodeled_08[0x10 - 0x08];
+    Vector4 start;
+    Vector4 target;
+} MoveTrack;
+
+typedef struct MotionTrack {
+    float time;
+    u8 unmodeled_04[0x08 - 0x04];
+    u32 motion;
+    u8 unmodeled_0c[0x10 - 0x0c];
+    short loop_start;
+    short loop_end;
+    u8 blend;
+    u8 unmodeled_15[0x18 - 0x15];
+    u32 flags;
+    float speed;
+} MotionTrack;
+
+typedef struct ActSequenceEntry {
     SequenceState state;
-    u8 bytes[0x260];
+    u32 frame_counter;
+    MoveTrack move;
+    u8 unmodeled_68[0x138 - 0x68];
+    MotionTrack motion;
+    u8 unmodeled_158[0x238 - 0x158];
+    u32 unmodeled_238;
+    u32 unmodeled_23c;
+    Vector4 anchor;
+    u8 unmodeled_250[0x260 - 0x250];
 } ActSequenceEntry;
 
 /*
@@ -208,17 +239,27 @@ typedef struct Actor {
     Vector4 scale;
     u8 unmodeled_70[0x80 - 0x70];
     u8 number;
-    u8 unmodeled_81[0x84 - 0x81];
+    u8 signal;
+    u8 unmodeled_82[0x84 - 0x82];
     short cleared_on_scene_init;                /* +0x84 */
     short state_flags;                          /* +0x86 */
-    u8 unmodeled_88[0x90 - 0x88];
+    short cleared_on_create_half;
+    u8 unmodeled_8a[0x90 - 0x8a];
     u8 shadow_kind;                              /* +0x90 */
     u8 shadow_size;                              /* +0x91 */
-    u8 unmodeled_92[0x4c8 - 0x92];
+    u8 unmodeled_92[0x4c0 - 0x92];
+    void *java_object_ref;
+    u8 unmodeled_4c4[0x4c8 - 0x4c4];
     u32 undulation;
-    u8 unmodeled_4cc[0x6f4 - 0x4cc];
+    u8 unmodeled_4cc[0x6f0 - 0x4cc];
+    u32 move_flags;
     float motion_time;
-    u8 unmodeled_6f8[0x824 - 0x6f8];
+    float motion_speed;
+    float motion_loop_start;
+    float motion_loop_end;
+    u8 unmodeled_704[0x714 - 0x704];
+    float motion_blend;
+    u8 unmodeled_718[0x824 - 0x718];
     struct Actor *linked_actor;
     u8 unmodeled_828[0x9c0 - 0x828];
     float transparency;

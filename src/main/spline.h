@@ -3,11 +3,7 @@
 #define SRC_MAIN_SPLINE_H
 
 #include "shared.h"
-
-typedef struct SplineClassEntry {
-    u8 unmodeled_00[0x18];
-    void *class_pointer;
-} SplineClassEntry;
+#include "main/jni.h"
 
 typedef struct Spline {
     void *class_pointer;
@@ -20,7 +16,5 @@ typedef struct Spline {
 } Spline;
 
 extern void *xmalloc(int size, int type);
-
-extern SplineClassEntry *classJava_xeno_util_Spline;
 
 #endif /* SRC_MAIN_SPLINE_H */

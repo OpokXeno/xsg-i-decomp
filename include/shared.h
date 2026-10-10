@@ -45,6 +45,13 @@ typedef unsigned char SceneByte;
 
 typedef struct SceneClass SceneClass;
 
+/*
+ * The full 0x40-byte layout of the same VM class record, with the member
+ * types the class loader itself uses; its body is private to
+ * main/tu227 (src/main/find_native_method.c).
+ */
+typedef struct JavaClass JavaClass;
+
 typedef struct SceneString SceneString;
 
 /* Object references begin with a pointer to an object header whose first word is its class. */
@@ -202,6 +209,9 @@ struct SceneClass {
     unsigned char unmodeled_20[16];
     unsigned short field_count;
     unsigned short static_field_count;
+    unsigned char unmodeled_34[4];
+    int instance_size; /* +0x38: newObject's xmalloc size for an instance */
+    unsigned char unmodeled_3c[4]; /* end of the 0x40-byte class record */
 };
 
 typedef struct SceneObjectHeader {
@@ -276,6 +286,8 @@ typedef struct {
     float z;
     float w;
 } HomogeneousVector;
+
+typedef float f32;
 
 typedef void *NmlPacket;
 

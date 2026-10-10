@@ -14,6 +14,7 @@ typedef struct ItemGetWindow {
 } ItemGetWindow;
 
 typedef struct EventItemTask EventItemTask;
+struct ItemMapUnit;
 
 /*
  * The scheduler places this task in a 0x80-byte pool node whose first 16 bytes
@@ -30,22 +31,26 @@ typedef struct EventItemTask EventItemTask;
  * `window_created` as a signed byte (lb 0x30 at 0x002c63b0) and `category` as a
  * signed byte (lb 0x24 at 0x002c6460, 0x002c646c).
  *
- * The spans between them are left unmodelled on purpose.  taskItemGet writes
- * more of the record than this unit's C reads -- a halfword at +0x26, bytes at
- * +0x28 and +0x29, a word at +0x2c -- but only from the ItemBoxTbl row it
- * copies, which does not establish what those members mean, and the two words
- * at +0x10/+0x14 are only ever cleared.  So they stay byte ranges rather than
- * invented members (docs/naming.md).
+ * taskItemGet reads the +0x26 halfword to select an ItemBoxTbl row, then
+ * copies its count, option and money into +0x28, +0x29 and +0x2c. Its
+ * completion path dereferences the owning MapUnit pointer at +0x1c.
+ * The two words at +0x10/+0x14 are only cleared; untouched spans remain
+ * unmodeled storage.
  */
 struct EventItemTask {
     XglTaskPrefix task;              /* +0x00 */
     unsigned int zero_word_10;       /* +0x10: cleared by CreateEvtItemGetTask */
     unsigned int zero_word_14;       /* +0x14: cleared by CreateEvtItemGetTask */
     const char *item_name;           /* +0x18 */
-    unsigned char unmodeled_1c[4];   /* +0x1c */
+    struct ItemMapUnit *owner_unit;  /* +0x1c */
     ItemGetWindow *window;           /* +0x20 */
     signed char category;            /* +0x24 */
-    unsigned char unmodeled_25[11];  /* +0x25 */
+    unsigned char unmodeled_25;      /* +0x25 */
+    short item_no;                   /* +0x26 */
+    signed char count;               /* +0x28 */
+    unsigned char option;            /* +0x29 */
+    unsigned char unmodeled_2a[2];   /* +0x2a */
+    int money;                       /* +0x2c */
     signed char window_created;      /* +0x30 */
 };
 

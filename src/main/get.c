@@ -1,21 +1,89 @@
 #include "common.h"
-#include "shared.h"
-#include "main/xgl_2.h"
-#include "get.h"
 
+#include "shared.h"
+
+#include "main/xgl_2.h"
+
+/* Query layout and floating return follow the original UnduCheck accesses. */
+typedef struct Vector3 { float x, y, z; } Vector3;
+typedef struct Point4 { float x, y, z, w; } Point4;
+typedef struct ParabolaVec { float x, y, z, w; } ParabolaVec;
+typedef struct LayoutHeader LayoutHeader;
+typedef unsigned int GameLoopStateWords[];
+extern GameLoopStateWords GameLoopState;
+typedef struct PlayerActorHeaderView {
+    unsigned char unmodeled_000[0x4e0];
+    LayoutHeader *data_header;
+} PlayerActorHeaderView;
+typedef struct UnduParam {
+    int queryFlags;
+    unsigned char unmodeled_04[4];
+    short attrMask;
+    unsigned char unmodeled_0a[0x0e];
+    LayoutHeader *header;
+    unsigned char unmodeled_1c[4];
+    long long attribute;
+    unsigned char unmodeled_28[8];
+    long long excluded_units; /* Check_Undu stores the excluded mask at +0x30. */
+    long long query_mode;     /* Check_Undu stores the included mask at +0x38. */
+} UnduParam;
+extern void UnduParamInit(UnduParam *param);
+extern float UnduCheck(const Point4 *position, void *exclude, UnduParam *param);
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+extern UnduParam UnduTest;
+extern UnduParam UnduTemp;
+extern const float D_004D81F0;
+extern unsigned short *DataSpline;
+extern float cosf(float angle);
+extern float atan2f(float y, float x);
+extern float Get_Distance(const Point4 *first, const Point4 *second);
+
+
+/* MARK: provisional extern block. The four words are _gp-relative .sdata
+   witnesses at 0x004d81a8..0x004d81b4, not proven original declarations.
+   Names below record roles observed in this function only. */
+
+extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
+                          const Vector4 *point);
+
+/* Check_Angle: defined below in this file, still assembler. */
+
+extern int Check_Angle(float angle, float rangeStart, float rangeEnd);
+
+extern const float D_004D81B8;
+
+extern const float D_004D81BC;
+
+extern const float D_004D81C0;
+
+extern const float D_004D81C4;
+
+extern int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
+                      Point4 *destination, int query_mode,
+                      int excluded_units, int flags);
+
+extern int CrossPointUwamono(const Point4 *start, const Point4 *end,
+                             Point4 *intersection, float radius);
+
+/* MARK: provisional extern block. All eight words are _gp-relative .sdata
+   witnesses at 0x004d81cc..0x004d81e8. They are not proven original
+   declarations; names below record roles observed in this function only. */
+
+/* Role name for TwoPiD:
+   subtracted to wrap the cursor down at/above the high clamp. */
 
 float Get_Decimal_Surplus_for_Radius(float angle)
 {
     if (angle <= 0.0f) {
-        float negative_pi = -3.141592741f;
+        float negative_pi = -3.1415927f;
         if (angle < negative_pi) {
             do {
-                angle += 6.283185482f;
+                angle += 6.2831855f;
             } while (angle < negative_pi);
         }
     } else {
-        while (3.141592741f <= angle) {
-            angle -= 6.283185482f;
+        while (3.1415927f <= angle) {
+            angle -= 6.2831855f;
         }
     }
     return angle;
@@ -102,7 +170,43 @@ void Get_One_Step(float length, const Point4 *source,
 
 INCLUDE_ASM("asm/main/nonmatchings/get", Check_Straight);
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Check_Straight_ID);
+int Check_Straight_ID(const Point4 *start, const Point4 *end,
+                      short count, Point4 *destination, int map_index)
+{
+    Point4 current;
+    Point4 previous;
+    short checked = 0;
+    int signed_count = count;
+
+    UnduTemp.header = UnduDataGetHeader(map_index, 0x8000);
+    previous.x = start->x;
+    previous.y = start->y;
+    previous.z = start->z;
+    if (signed_count >= 0) {
+        float count_as_float = (float)signed_count;
+        do {
+            float step = (float)checked;
+            current.x = start->x + (end->x - start->x) * step / count_as_float;
+            current.y = start->y + (end->y - start->y) * step / count_as_float;
+            current.z = start->z + (end->z - start->z) * step / count_as_float;
+            if (UnduCheck(&current, 0, &UnduTemp) == -1000.0f
+                || HitCheckMapUnitPos(&current) != -1) {
+                destination->x = previous.x;
+                destination->y = previous.y;
+                destination->z = previous.z;
+                return (short)(checked - 1);
+            }
+            checked++;
+            previous.x = current.x;
+            previous.y = current.y;
+            previous.z = current.z;
+        } while (checked <= signed_count);
+    }
+    destination->x = end->x;
+    destination->y = end->y;
+    destination->z = end->z;
+    return signed_count;
+}
 
 float Get_Distance(const Point4 *first, const Point4 *second)
 {
@@ -131,23 +235,17 @@ float Get_Angle(const Point4 *first, const Point4 *second)
 
 INCLUDE_ASM("asm/main/nonmatchings/get", Check_Angle);
 
-/* MARK: provisional extern block. The four words are _gp-relative .sdata
-   witnesses at 0x004d81a8..0x004d81b4, not proven original declarations.
-   Names below record roles observed in this function only. */
 float Get_Angle_Relative(const Point4 *first, const Point4 *second,
                          float reference)
 {
     float relative = Get_Angle(first, second) - reference;
 
-    if (relative < -3.141592741f)
-        relative += 6.283185482f;
-    if (3.141592741f < relative)
-        relative -= 6.283185482f;
+    if (relative < -3.1415927f)
+        relative += 6.2831855f;
+    if (3.1415927f < relative)
+        relative -= 6.2831855f;
     return relative;
 }
-
-extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
-                          const Vector4 *point);
 
 int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
                        const Vector4 *second_start, const Vector4 *second_end)
@@ -165,10 +263,39 @@ int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Check_InsideFan);
+int Check_InsideFan(float facing, float radius, float fan_width_degrees,
+                    float crossing_radius, const Point4 *origin,
+                    const Point4 *target, int map_index)
+{
+    Point4 intersection;
+    float angle;
+    float half_width;
 
-/* Check_Angle: defined below in this file, still assembler. */
-extern int Check_Angle(float angle, float rangeStart, float rangeEnd);
+    if (radius < Get_Distance3D(origin, target)) {
+        return 0;
+    }
+    angle = Get_Angle(origin, target);
+    half_width = fan_width_degrees / 180.0f * D_004D81B8 * 0.5f;
+    if (Check_Angle(angle, facing - half_width, facing + half_width) == 0) {
+        return 0;
+    }
+    if (map_index == -1) {
+        return 1;
+    }
+    if (Check_Undu(origin, target, map_index, &intersection, 1, 0, 0x400) == 0) {
+        return 0;
+    }
+    if (D_004D81BC <= Get_Distance(target, &intersection)) {
+        return 0;
+    }
+    if (D_004D81C0 <= __builtin_fabsf(target->y - intersection.y)) {
+        return 0;
+    }
+    if (D_004D81C4 < __builtin_fabsf(origin->y - target->y)) {
+        return 0;
+    }
+    return CrossPointUwamono(origin, target, &intersection, crossing_radius) != 1;
+}
 
 int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
                          float facing, float radius, float fanWidthDegrees)
@@ -177,18 +304,13 @@ int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
 
     if (!(radius < Get_Distance3D(origin, target))) {
         float angle = Get_Angle(origin, target);
-        float halfWidth = (fanWidthDegrees / 180.0f) * 3.141592741f * 0.5f;
+        float halfWidth = (fanWidthDegrees / 180.0f) * 3.1415927f * 0.5f;
 
         inside = Check_Angle(angle, facing - halfWidth, facing + halfWidth) != 0;
     }
     return inside;
 }
 
-/* MARK: provisional extern block. All eight words are _gp-relative .sdata
-   witnesses at 0x004d81cc..0x004d81e8. They are not proven original
-   declarations; names below record roles observed in this function only. */
-        /* Role name for TwoPiD:
-   subtracted to wrap the cursor down at/above the high clamp. */
 float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
                                             float speed)
 {
@@ -201,20 +323,62 @@ float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
     cursor = target - current;
     /* MARK: builtin form emits abs.s under -fno-builtin; a plain fabsf
        call would tail-call instead and break the match. */
-    if (__builtin_fabsf(cursor) < 3.141592741f)
+    if (__builtin_fabsf(cursor) < 3.1415927f)
         cursor = current + cursor / speed;
-    else if (cursor < -3.141592741f)
-        cursor = current + (cursor + 6.283185482f) / speed;
+    else if (cursor < -3.1415927f)
+        cursor = current + (cursor + 6.2831855f) / speed;
     else
-        cursor = current - (6.283185482f - cursor) / speed;
-    if (cursor <= -3.141592741f)
-        cursor += 6.283185482f;
-    if (3.141592741f <= cursor)
-        cursor -= 6.283185482f;
+        cursor = current - (6.2831855f - cursor) / speed;
+    if (cursor <= -3.1415927f)
+        cursor += 6.2831855f;
+    if (3.1415927f <= cursor)
+        cursor -= 6.2831855f;
     return cursor;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Get_EnemyIDPos);
+void Get_EnemyIDPos(const Point4 *origin, Point4 *destination)
+{
+    Point4 sample;
+    Point4 checked;
+    Point4 intersection;
+    short index = 0;
+    float nearest = 1000.0f;
+    int debugColor[4]; /* RGBA; written but never read in the release build */
+
+    *destination = *origin;
+    UnduParamInit(&UnduTemp);
+    UnduTemp.queryFlags = 0;
+    UnduTemp.attrMask = 3;
+    debugColor[0] = 255;
+    debugColor[1] = 127;
+    debugColor[2] = 0;
+    debugColor[3] = 128;
+    UnduTemp.header = UnduDataGetHeader(772, 32768);
+    if (UnduCheck(origin, 0, &UnduTemp) != -1000.0f) {
+        destination->x = origin->x;
+        destination->y = origin->y;
+        destination->z = origin->z;
+    } else {
+        for (; index < 8; index++) {
+            float angle = (float)index * 6.2831855f * 0.125f;
+            float distance;
+            sample.x = origin->x + 2.0f * sinf(angle);
+            sample.y = origin->y;
+            sample.z = origin->z + 2.0f * cosf(angle);
+            sample.w = 1.0f;
+            Check_Undu(&sample, origin, 772, &checked, 1, 0, 0);
+            CrossPointUwamono(&sample, origin, &intersection, 1.0f);
+            distance = Get_Distance(origin, &checked);
+            if (distance != 0.0f && distance < nearest) {
+                nearest = distance;
+                destination->x = checked.x;
+                destination->y = checked.y;
+                destination->z = checked.z;
+            }
+        }
+    }
+    destination->w = 1.0f;
+}
 
 float Get_Multi_Max_Under(float value, float step, float maximum)
 {
@@ -285,7 +449,30 @@ int Get_Attr_NU(const Point4 *position, int mapIndex, int attrMask)
     return (int)UnduTest.attribute;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", Check_Undu);
+int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
+                Point4 *destination, int query_mode, int excluded_units,
+                int flags)
+{
+    Point4 delta;
+
+    UnduParamInit(&UnduTest);
+    UnduTest.queryFlags = 0;
+    UnduTest.attrMask = (short)(flags | 0x813);
+    if (map_index == 0) {
+        UnduTest.header = ((PlayerActorHeaderView *)GameLoopState[1])->data_header;
+    } else {
+        UnduTest.header = UnduDataGetHeader(map_index, 0x8000);
+    }
+    delta.x = end->x - start->x;
+    delta.y = end->y - start->y;
+    delta.z = end->z - start->z;
+    delta.w = 1.0f;
+    *destination = *start;
+    UnduTest.query_mode = query_mode;
+    UnduTest.excluded_units = excluded_units;
+    UnduCheck(destination, &delta, &UnduTest);
+    return Get_Distance3D(end, destination) <= D_004D81F0;
+}
 
 int Get_Rnd(int min, int max)
 {
@@ -316,6 +503,29 @@ void BSpline_Add(short frame, short count, short period,
     destination[index].w = 1.0f;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/get", GetBSplineLoop);
+void GetBSplineLoop(short frame, short count, int period_value,
+                    Vector4 *points, Vector4 *destination)
+{
+    short period = period_value;
+    unsigned short index = (frame / period) % count;
+    unsigned short phase = (frame % period) * (2048 / period);
+    float first_weight = DataSpline[(phase + 4304) / 2];
+    float second_weight = DataSpline[(phase + 4306) / 2];
+    float third_weight = DataSpline[(phase + 4308) / 2];
+    float fourth_weight = DataSpline[(phase + 4310) / 2];
+    unsigned short second_index = (index + 1) % count;
+    unsigned short third_index = (index + 2) % count;
+    unsigned short fourth_index = (index + 3) % count;
+
+    destination->x = (first_weight * points[index].x + second_weight * points[second_index].x
+                      + third_weight * points[third_index].x + fourth_weight * points[fourth_index].x)
+                     / 24576.0f;
+    destination->y = (first_weight * points[index].y + second_weight * points[second_index].y
+                      + third_weight * points[third_index].y + fourth_weight * points[fourth_index].y)
+                     / 24576.0f;
+    destination->z = (first_weight * points[index].z + second_weight * points[second_index].z
+                      + third_weight * points[third_index].z + fourth_weight * points[fourth_index].z)
+                     / 24576.0f;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/get", GetBSplineLoopDummy);

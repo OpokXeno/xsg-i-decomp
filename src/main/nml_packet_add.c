@@ -1,27 +1,53 @@
 #include "common.h"
-#include "shared.h"
-#include "main/xgl_2.h"
-#include "nml_packet_add.h"
-#include "main/xgl_packet.h"
-#include "ssd_init.h"
 
-static XglPacket *s_pPacket = 0;
+#include "shared.h"
+
+#include "main/xgl_2.h"
+
+#include "nml_packet_add.h"
+
+#include "main/xgl_packet.h"
+
+#include "main/ssd_init.h"
+
+typedef struct NmlAttributePacket NmlAttributePacket;
+
+/* One current packet is shared by the SDK writer and attribute allocator. */
+typedef union NmlCurrentPacket {
+    XglPacket *sdk;
+    NmlAttributePacket *attributes;
+} NmlCurrentPacket;
+
+static NmlCurrentPacket s_pPacket = { 0 };
+
 static void *s_pCacheTexture = 0;
+
 static void *s_pMatrixCache = 0;
+
 static void *s_pModelCache = 0;
+
 static void *s_pModelLayout = 0;
+
 static void *s_pLightLayout = 0;
+
 static int s_nProgType = -1;
+
 static int s_nReflRotType = -1;
+
 static float s_inReflRotX = 0.0f;
+
 static float s_inReflRotY = 0.0f;
+
 const char eye_name[8] = "eye";
+
 const char lenz_name[8] = "lenz";
 
 /* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
+
 #define VIF_CODE_MSCAL 0x14000000
 
 /* VIF command FLUSH: wait for the VU1 microprogram to finish. */
+
 #define VIF_CODE_FLUSH 0x11000000
 
 /*
@@ -29,36 +55,62 @@ const char lenz_name[8] = "lenz";
  * programs[type - 1] lists the VU1 program byte addresses of microcode family
  * `type`, indexed by the material's variant slot.
  */
+
 typedef struct UcodeTableRow {
     u32 *programs[7];
 } UcodeTableRow;
 
-static u32 s_aUcodeEnvAdrZbuf[12];
-static u32 s_aUcodeAdrZbuf[6];
-static u32 s_aUcodeProSkipAdr[7];
-static u32 s_aUcodeAddEnvAdrZbuf[12];
-static u32 s_aUcodeAddAdrZbuf[5];
-static u32 s_aUcodeTexEnvNull[5];
-static u32 s_aUcodeDropNull[5];
-static u32 s_aUcodeEnvFaceAdr[12];
-static u32 s_aUcodeFaceAdr[6];
-static u32 s_aUcodeProFaceAdr[6];
-static u32 s_aUcodeAddEnvFaceAdr[12];
-static u32 s_aUcodeAddFaceAdr[5];
-static u32 s_aUcodeTexEnv[5];
-static u32 s_aUcodeDrop[5];
-static u32 s_aUcodeEnvBackAdr[12];
-static u32 s_aUcodeBackAdr[6];
-static u32 s_aUcodeProBackAdr[6];
-static u32 s_aUcodeAddEnvBackAdr[12];
-static u32 s_aUcodeAddBackAdr[5];
-static u32 s_aUcodeEnvAdr[12];
-static u32 s_aUcodeAdr[6];
-static u32 s_aUcodeProAdr[6];
-static u32 s_aUcodeAddEnvAdr[12];
-static u32 s_aUcodeAddAdr[5];
-static u32 s_aUcodeEnvNullAdr[12];
-static u32 s_aUcodeAddEnvNullAdr[12];
+static u32 s_aUcodeEnvAdrZbuf[12] = { 1456U, 1456U, 1456U, 1456U, 6032U, 6032U, 6032U, 6032U, 10320U, 10320U, 10320U, 10320U };
+
+static u32 s_aUcodeAdrZbuf[6] = { 3032U, 3552U, 5144U, 5144U, 5144U, 5144U };
+
+static u32 s_aUcodeProSkipAdr[7] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeAddEnvAdrZbuf[12] = { 1784U, 1784U, 1784U, 1784U, 6488U, 6488U, 6488U, 6488U, 10904U, 10904U, 10904U, 10904U };
+
+static u32 s_aUcodeAddAdrZbuf[5] = { 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeTexEnvNull[5] = { 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeDropNull[5] = { 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeEnvFaceAdr[12] = { 2160U, 3312U, 4536U, 5920U, 6680U, 7760U, 8904U, 10208U, 11128U, 12264U, 13472U, 14840U };
+
+static u32 s_aUcodeFaceAdr[6] = { 3984U, 4576U, 5704U, 6744U, 7856U, 9128U };
+
+static u32 s_aUcodeProFaceAdr[6] = { 2216U, 3000U, 3704U, 4584U, 5272U, 6200U };
+
+static u32 s_aUcodeAddEnvFaceAdr[12] = { 2520U, 3704U, 4960U, 6376U, 7168U, 8280U, 9456U, 10792U, 11744U, 12912U, 14152U, 15552U };
+
+static u32 s_aUcodeAddFaceAdr[5] = { 3808U, 8008U, 8304U, 8600U, 9272U };
+
+static u32 s_aUcodeTexEnv[5] = { 3432U, 0U, 1776U, 2224U, 2744U };
+
+static u32 s_aUcodeDrop[5] = { 3200U, 0U, 1776U, 2296U, 2712U };
+
+static u32 s_aUcodeEnvBackAdr[12] = { 2216U, 3368U, 4592U, 5976U, 6736U, 7816U, 8960U, 10264U, 11184U, 12320U, 13528U, 14896U };
+
+static u32 s_aUcodeBackAdr[6] = { 4824U, 4896U, 5792U, 5792U, 5792U, 5792U };
+
+static u32 s_aUcodeProBackAdr[6] = { 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeAddEnvBackAdr[12] = { 2576U, 3760U, 5016U, 6432U, 7224U, 8336U, 9512U, 10848U, 11800U, 12968U, 14208U, 15608U };
+
+static u32 s_aUcodeAddBackAdr[5] = { 4392U, 9760U, 9760U, 9760U, 9760U };
+
+static u32 s_aUcodeEnvAdr[12] = { 1456U, 2272U, 3424U, 4648U, 6032U, 6792U, 7872U, 9016U, 10320U, 11240U, 12376U, 13584U };
+
+static u32 s_aUcodeAdr[6] = { 3032U, 3552U, 5144U, 5880U, 6920U, 8032U };
+
+static u32 s_aUcodeProAdr[6] = { 2216U, 3000U, 3704U, 4584U, 5272U, 6200U };
+
+static u32 s_aUcodeAddEnvAdr[12] = { 1784U, 2632U, 3816U, 5072U, 6488U, 7280U, 8392U, 9568U, 10904U, 11856U, 13024U, 14264U };
+
+static u32 s_aUcodeAddAdr[5] = { 3232U, 4464U, 5048U, 5912U, 6880U };
+
+static u32 s_aUcodeEnvNullAdr[12] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+
+static u32 s_aUcodeAddEnvNullAdr[12] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 
 static UcodeTableRow s_aUcodeTbl[6] = {
     {{s_aUcodeEnvAdrZbuf, s_aUcodeAdrZbuf, s_aUcodeProSkipAdr,
@@ -81,14 +133,41 @@ static UcodeTableRow s_aUcodeTbl[6] = {
       s_aUcodeDrop}}
 };
 
-u64 g_aGsTag[162] = {0};
+/*
+ * The GS packet buffer, 0x510 bytes of 8-byte slots: the GIF tag occupies the
+ * first two slots, then each queued register write takes two slots, its data
+ * at [2 * count + 2] and its register address at [2 * count + 3]. Some writers
+ * store the data as two 32-bit words.
+ */
+typedef union GsTag {
+    u64 value;
+    u32 words[2];
+} GsTag;
+
+GsTag g_aGsTag[162] = {{0}};
+
 RssdWorkFlags RssdWork = {0};
+
 char RssdStrWork[32] = {0};
 
 extern int g_aSubWindow[4];
 
 /* One VIF unpack value passed to sceVif1PkAddUpkData128 by value. */
+
 typedef unsigned int Quadword __attribute__((mode(TI)));
+
+/* The allocation cursor addresses byte payloads and aligned quadword
+ * payloads in the same packet buffer. Both views are used below. */
+typedef union NmlAttributeCursor {
+    u8 *bytes;
+    Quadword *quadwords;
+} NmlAttributeCursor;
+
+struct NmlAttributePacket {
+    unsigned char unmodeled_00[0x20];
+    u32 limit;
+    NmlAttributeCursor cursor;
+};
 
 typedef union NmlPacketData128 {
     u32 words[4];
@@ -97,20 +176,35 @@ typedef union NmlPacketData128 {
 
 extern void sceVif1PkAddUpkData128(NmlPacket packet, Quadword data);
 
-/*
- * Every case ends with its own "queue the program or clear result" tail.  The
- * compiler cross-jumps the seven copies back into the single tail seen in the
- * original, but before that each copy is a reference to result, which is what
- * keeps result in a callee-saved register (s4).  Written once after the switch result is spilled to
- * the stack and the program pointers take s4..s8 instead.
- */
+extern void *memcpy(void *destination, const void *source, unsigned int count);
 
-/*
- * _CurMatrixSet loads a 4x4 matrix into vf27..vf30, the VU0 macro-mode
- * registers this TU's packet builder keeps as its persistent "current
- * matrix" across _CurMatrixMul and _CurApplyMatrix (main VA 0x00236448,
- * ee-vu-cop2, docs/ps2-capabilities.md).
- */
+
+extern int g_nGsEntry;
+
+const char D_004DC4D0[4] = "";
+
+typedef struct NmlPixelTestPacket {
+    u32 loops;
+    u32 format;
+    u32 registers;
+    u32 register_high;
+    u64 first_value;
+    u64 first_address;
+    u64 second_value;
+    u64 second_address;
+} NmlPixelTestPacket;
+
+#define VIF_CODE_MSCNT 0x17000000
+
+extern int sceVif1PkSize(XglPacket *packet);
+
+typedef struct NmlZbufRenderState {
+    unsigned char unmodeled_00[8];
+    u16 depth_buffer_base;
+} NmlZbufRenderState;
+
+extern NmlZbufRenderState sRender;
+
 static void _CurMatrixSet(const Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -125,11 +219,6 @@ static void _CurMatrixSet(const Matrix4 matrix)
     );
 }
 
-/*
- * _CurMatrixGet stores the VU0 macro-mode "current matrix" vf27..vf30
- * _CurMatrixSet/_CurSetMatrix left live back into the caller's 4x4 matrix
- * (main VA 0x00236460, ee-vu-cop2, docs/ps2-capabilities.md).
- */
 static void _CurMatrixGet(Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -144,12 +233,6 @@ static void _CurMatrixGet(Matrix4 matrix)
     );
 }
 
-/*
- * _CurMatrixMul loads a 4x4 matrix and concatenates it onto the VU0
- * macro-mode "current matrix" _CurMatrixSet left in vf27..vf30, writing the
- * product's three scaled rows back into vf27..vf29 (main VA 0x00236478,
- * ee-vu-cop2, docs/ps2-capabilities.md).
- */
 static void _CurMatrixMul(const Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -183,12 +266,6 @@ static void _CurMatrixMul(const Matrix4 matrix)
     );
 }
 
-/*
- * _CurApplyMatrix transforms one vector by the VU0 macro-mode "current
- * matrix" (vf27..vf30) a prior _CurMatrixSet/_CurMatrixMul left live,
- * storing the result to destination (main VA 0x002364e0, ee-vu-cop2,
- * docs/ps2-capabilities.md).
- */
 static void _CurApplyMatrix(Vector4 *destination, const Vector4 *source)
 {
     __asm__ __volatile__(
@@ -205,13 +282,6 @@ static void _CurApplyMatrix(Vector4 *destination, const Vector4 *source)
     );
 }
 
-/*
- * _CurMatrixMul33norm transforms the caller's three-row orientation matrix
- * by the VU0 macro-mode "current matrix" vf27..vf29 a prior _CurMatrixSet/
- * _CurMatrixMul left live, normalizes each transformed row to unit length
- * and stores the three rows to destination (main VA 0x00236500,
- * ee-vu-cop2, docs/ps2-capabilities.md).
- */
 static void _CurMatrixMul33norm(Vector4 *destination, const Vector4 *source)
 {
     __asm__ __volatile__(
@@ -268,13 +338,6 @@ static void _CurMatrixMul33norm(Vector4 *destination, const Vector4 *source)
     );
 }
 
-/*
- * _CurSetViewScaleTrans loads the view-scale vector into the VU0 macro-mode
- * register vf25 and the view-translation vector into vf26, the same
- * persistent "current matrix" state family the _CurMatrixSet/_CurMatrixMul/
- * _CurApplyMatrix group reads (main VA 0x002365c0, ee-vu-cop2,
- * docs/ps2-capabilities.md).
- */
 static void _CurSetViewScaleTrans(const Vector4 *view_scale, const Vector4 *view_translation)
 {
     __asm__ __volatile__(
@@ -287,13 +350,53 @@ static void _CurSetViewScaleTrans(const Vector4 *view_scale, const Vector4 *view
     );
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", _CurRotTransPersClip_002365D0);
+static int _CurRotTransPersClip(
+    Vector4 *projectedPosition,
+    Vector4 *perspectiveCoordinates,
+    const Vector4 *position,
+    const Vector4 *coordinates)
+{
+    register int clipFlags asm("$2");
+    /* The SQC2 destination is an EE32 address in GPR4. After that
+     * hardware use ends, the same word carries the masked clip flags. */
+    register unsigned int destinationOrFlags asm("$4") = (unsigned int)projectedPosition;
 
-/*
- * _CurSetMatrix loads a 4x4 matrix into the VU0 macro-mode "current matrix"
- * registers vf27..vf30, the same persistent state _CurMatrixSet writes (main
- * VA 0x00236640, ee-vu-cop2, docs/ps2-capabilities.md).
- */
+    __asm__ __volatile__(
+        "ctc2 $0,$vi18\n\t"
+        "lqc2 $vf31,0(%3)\n\t"
+        "lqc2 $vf20,0(%4)\n\t"
+        "vmulax.xyzw ACC,vf27xyzw,vf31x\n\t"
+        "vmadday.xyzw ACC,vf28xyzw,vf31y\n\t"
+        "vmaddaz.xyzw ACC,vf29xyzw,vf31z\n\t"
+        "vmaddw.xyzw vf31xyzw,vf30xyzw,vf0w\n\t"
+        "vnop\n\t"
+        "vnop\n\t"
+        "vnop\n\t"
+        "vclipw.xyz vf31xyz,vf31w\n\t"
+        "vdiv Q,vf0w,vf31w\n\t"
+        "vwaitq\n\t"
+        "vmulq.xyzw vf31xyzw,vf31xyzw,Q\n\t"
+        "vmulq.xyzw vf20xyzw,vf20xyzw,Q\n\t"
+        "vmulaw.xyzw ACC,vf26xyzw,vf0w\n\t"
+        "vmadd.xyzw vf31xyzw,vf31xyzw,vf25xyzw\n\t"
+        "vftoi4.xyw vf23xyw,vf31xyw\n\t"
+        "vftoi0.z vf23z,vf31z\n\t"
+        "vsub.w vf23w,vf23w,vf23w\n\t"
+        "sqc2 $vf23,0(%1)\n\t"
+        "sqc2 $vf20,0(%2)\n\t"
+        "cfc2 %0,$vi18\n\t"
+        "nop"
+        : "=r"(clipFlags)
+        : "r"(destinationOrFlags), "r"(perspectiveCoordinates),
+          "r"(position), "r"(coordinates)
+        : "memory"
+    );
+    clipFlags &= 0x3f;
+    destinationOrFlags = clipFlags;
+    __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
+    return destinationOrFlags;
+}
+
 static void _CurSetMatrix(const Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -320,13 +423,49 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddTransMicrocode);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddScreen);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddPixelTestPacket);
+void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
+                               u64 first_test, int second_address,
+                               u64 second_value, u64 second_test)
+{
+    NmlPixelTestPacket packet;
+    NmlCurrentPacket selected;
+    selected.sdk = xglPacketGetCurrent();
+    s_pPacket = selected;
+    sceVif1PkCnt(selected.sdk, 0);
+    packet.first_value = first_test;
+    packet.second_value = second_test;
+    packet.first_address = first_address;
+    packet.second_address = second_address;
+    packet.loops = 0x8002;
+    packet.format = 0x10000000;
+    packet.registers = 14;
+    packet.register_high = 0;
+    selected = s_pPacket;
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3fa, 0x6c, 1, 1);
+    selected = s_pPacket;
+    sceVif1PkAddUpkData128N(selected.sdk, &packet, 3);
+    selected = s_pPacket;
+    sceVif1PkCloseUpkCode(selected.sdk);
+    packet.first_address = first_address;
+    packet.first_value = first_value;
+    packet.second_address = second_address;
+    packet.second_value = second_value;
+    selected = s_pPacket;
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3fd, 0x6c, 1, 1);
+    selected = s_pPacket;
+    sceVif1PkAddUpkData128N(selected.sdk, &packet, 3);
+    selected = s_pPacket;
+    sceVif1PkCloseUpkCode(selected.sdk);
+}
 
 void nmlPacketAddWaitMicrocode(void)
 {
-    s_pPacket = xglPacketGetCurrent();
-    sceVif1PkCnt(s_pPacket, 0);
-    sceVif1PkAddCode(s_pPacket, VIF_CODE_FLUSH);
+    NmlCurrentPacket selected;
+    selected.sdk = xglPacketGetCurrent();
+    s_pPacket = selected;
+    sceVif1PkCnt(selected.sdk, 0);
+    selected = s_pPacket;
+    sceVif1PkAddCode(selected.sdk, VIF_CODE_FLUSH);
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddBlockMaterial);
@@ -337,18 +476,10 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSendCircleTexture);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketTextureTrans);
 
-/* The cached texture built by the (still asm) texture cache builder;
- * cleared to invalidate it, like s_pMatrixCache/s_pModelCache/
- * s_pModelLayout/s_pLightLayout below. */
-
 void nmlPacketClrTextureCache(void)
 {
     s_pCacheTexture = 0;
 }
-
-/* The cached VU1 upload state a model was last sent with: matrix data,
- * model geometry and the light/model attribute layouts. Cleared together
- * to force the next nmlPacket* draw call to resend all four. */
 
 void nmlPacketClrModelCache(void)
 {
@@ -397,8 +528,8 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
          strstr(material->name, eye_name) != 0))
         eye_material = 1;
 
-    s_pPacket = xglPacketGetCurrent();
-    sceVif1PkCnt(s_pPacket, 0);
+    s_pPacket.sdk = xglPacketGetCurrent();
+    sceVif1PkCnt(s_pPacket.sdk, 0);
 
     switch (s_nProgType) {
     case 7: {
@@ -415,7 +546,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
         }
         program = type7_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -437,7 +568,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
             slot = 0;
         program = type6_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -462,7 +593,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
         }
         program = type5_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -490,7 +621,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
         }
         program = type4_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -516,7 +647,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
             slot = 5;
         program = type3_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -544,7 +675,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
         }
         program = type1_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -573,7 +704,7 @@ static int add_exec_prog(NmlMaterialRenderState *material, NmlModelRenderState *
             slot = 0;
         program = type2_programs[slot];
         if (program != 0)
-            sceVif1PkAddCode(s_pPacket, (program >> 3) | VIF_CODE_MSCAL);
+            sceVif1PkAddCode(s_pPacket.sdk, (program >> 3) | VIF_CODE_MSCAL);
         else
             result = 0;
         break;
@@ -648,46 +779,94 @@ void nmlPacketAddExecProg(NmlMaterialRenderState *material,
     nmlPacketAddTransData(material);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddTransData);
-
-extern void *memcpy(void *destination, const void *source, unsigned int count);
-
-/*
- * Both allocators here (and nmlPacketSetAttributeData16N/64/64N, still
- * INCLUDE_ASM in this TU) share one pattern: fetch the current packet,
- * decrement its cursor (main/xgl_packet.h, "+0x24: the write cursor") by the
- * requested size, and hand back the new cursor as the reserved storage's
- * address. A plain `packet->cursor` read after the subtraction lets gcc 2.96
- * -O2 prove the earlier write cannot alias it and cache the value across the
- * memcpy call, dropping the reload the original object performs; reading
- * through a cast on the field's own address defeats that alias proof.
- */
-u8 *nmlPacketSetAttributeData(const void *data, u32 size)
+void nmlPacketAddTransData(NmlMaterialRenderState *material)
 {
-    XglPacket *packet;
+    typedef struct NmlMaterialTransPrefix {
+        char name[0x20];
+        u32 render_flags;
+        int data_offset;
+        int data_size;
+    } NmlMaterialTransPrefix;
+    NmlMaterialTransPrefix *transfer = (void *)material;
+    NmlCurrentPacket selected;
 
-    packet = xglPacketGetCurrent();
-    s_pPacket = packet;
-    *(u8 **)&packet->cursor -= size;
-    memcpy(*(u8 **)&s_pPacket->cursor, data, size);
-    return *(u8 **)&s_pPacket->cursor;
+    selected.sdk = xglPacketGetCurrent();
+    s_pPacket = selected;
+    /* The span starts data_offset bytes into the material (32-bit EE addresses). */
+    sceVif1PkRef(selected.sdk, (void *)(transfer->data_offset + (u32)material),
+                 transfer->data_size / 16, 0, 0, 0);
+    nmlPacketAddWaitMicrocode();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData64);
+u8 *nmlPacketSetAttributeData(const void *data, u32 size)
+{
+    NmlCurrentPacket selected;
+    NmlAttributePacket *packet;
+    NmlAttributePacket *current;
+
+    packet = (void *)xglPacketGetCurrent();
+    selected.sdk = (void *)packet;
+    s_pPacket = selected;
+    packet->cursor.bytes -= size;
+    selected = s_pPacket;
+    current = selected.attributes;
+    memcpy(current->cursor.bytes, data, size);
+    {
+        NmlCurrentPacket finished = s_pPacket;
+        return finished.attributes->cursor.bytes;
+    }
+}
+
+u8 *nmlPacketSetAttributeData64(const void *data)
+{
+    NmlAttributePacket *packet;
+    NmlCurrentPacket selected = { xglPacketGetCurrent() };
+
+    s_pPacket = selected;
+    packet = selected.attributes;
+    packet->cursor.bytes -= 64;
+    {
+        NmlCurrentPacket allocated = s_pPacket;
+        Quadword *destination = allocated.attributes->cursor.quadwords;
+        const Quadword *source = data;
+        /* The original SDK-style transfers at 0x00238e8c-0x00238ea8
+         * reuse GPR2 for all four aligned quadwords. Address calculation
+         * and allocation remain C; the block owns only these transfers. */
+        __asm__ __volatile__(
+            "lq $2, 0(%1)\n\t"
+            "sq $2, 0(%0)\n\t"
+            "lq $2, 16(%1)\n\t"
+            "sq $2, 16(%0)\n\t"
+            "lq $2, 32(%1)\n\t"
+            "sq $2, 32(%0)\n\t"
+            "lq $2, 48(%1)\n\t"
+            "sq $2, 48(%0)"
+            :
+            : "r"(destination), "r"(source)
+            : "$2", "memory");
+    }
+    {
+        NmlCurrentPacket finished = s_pPacket;
+        return finished.attributes->cursor.bytes;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData64N);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketSetAttributeData16N);
 
-/* Same aliasing proof as nmlPacketSetAttributeData above (main 0x00238e00). */
 u8 *nmlPacketSetAttributeAlloc16N(u32 count)
 {
-    XglPacket *packet;
+    NmlCurrentPacket selected;
+    NmlAttributePacket *packet;
+    NmlAttributePacket *current;
 
-    packet = xglPacketGetCurrent();
-    s_pPacket = packet;
-    *(u8 **)&packet->cursor -= count * 0x10;
-    return *(u8 **)&s_pPacket->cursor;
+    packet = (void *)xglPacketGetCurrent();
+    selected.sdk = (void *)packet;
+    s_pPacket = selected;
+    packet->cursor.bytes -= count * 0x10;
+    current = s_pPacket.attributes;
+    return current->cursor.bytes;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGifTag);
@@ -695,42 +874,57 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGifTag);
 void nmlPacketAddGifTagStandard(int eop, int count)
 {
     NmlPacketData128 gif_tag;
+    NmlCurrentPacket selected;
 
-    s_pPacket = xglPacketGetCurrent();
-    sceVif1PkCnt(s_pPacket, 0);
+    selected.sdk = xglPacketGetCurrent();
+    s_pPacket = selected;
+    sceVif1PkCnt(selected.sdk, 0);
 
     gif_tag.words[0] = 0x8000;
     gif_tag.words[1] = ((u32)eop << 0x13) | ((u32)count << 0x15) | 0x30064000;
     gif_tag.words[2] = 0x412;
     gif_tag.words[3] = 0;
-    sceVif1PkOpenUpkCode(s_pPacket, 0x3f3, 0x6c, 1, 1);
-    sceVif1PkAddUpkData128(s_pPacket, gif_tag.quad);
-    sceVif1PkCloseUpkCode(s_pPacket);
+    selected = s_pPacket;
+    sceVif1PkOpenUpkCode(selected.sdk, 0x3f3, 0x6c, 1, 1);
+    selected = s_pPacket;
+    sceVif1PkAddUpkData128(selected.sdk, gif_tag.quad);
+    selected = s_pPacket;
+    sceVif1PkCloseUpkCode(selected.sdk);
 }
 
 void nmlPacketAddFog(NmlModelRenderState *model, int viewport_index)
 {
-    s_pPacket = xglPacketGetCurrent();
-    sceVif1PkCnt(s_pPacket, 0);
+    s_pPacket.sdk = xglPacketGetCurrent();
+    sceVif1PkCnt(s_pPacket.sdk, 0);
 
     if (g_aSubWindow[viewport_index] != 0)
         model->fog_color[3] = ((int)(model->fog_intensity[viewport_index] * 255.0f)) << 4;
 
-    sceVif1PkOpenUpkCode(s_pPacket, 998, 108, 1, 1);
-    sceVif1PkAddUpkData128N(s_pPacket, model->fog_color, 1);
-    sceVif1PkCloseUpkCode(s_pPacket);
-    sceVif1PkOpenUpkCode(s_pPacket, 1007, 108, 1, 1);
-    sceVif1PkAddUpkData128N(s_pPacket, model->fog_parameters, 1);
-    sceVif1PkCloseUpkCode(s_pPacket);
+    sceVif1PkOpenUpkCode(s_pPacket.sdk, 998, 108, 1, 1);
+    sceVif1PkAddUpkData128N(s_pPacket.sdk, model->fog_color, 1);
+    sceVif1PkCloseUpkCode(s_pPacket.sdk);
+    sceVif1PkOpenUpkCode(s_pPacket.sdk, 1007, 108, 1, 1);
+    sceVif1PkAddUpkData128N(s_pPacket.sdk, model->fog_parameters, 1);
+    sceVif1PkCloseUpkCode(s_pPacket.sdk);
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddPixelControl);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketDirectData);
+int nmlPacketDirectData(const void *data, int size)
+{
+    s_pPacket.sdk = xglPacketGetCurrent();
+    if (sceVif1PkSize(s_pPacket.sdk) * 0x10u +
+            (s_pPacket.sdk->limit - (u32)s_pPacket.sdk->cursor) + 0x10000u >
+        0x200000u)
+        return 1;
+
+    sceVif1PkRef(s_pPacket.sdk, data, size, 0, 0, 0);
+    return 0;
+}
 
 void nmlPacketSetCurrent(void)
 {
-    s_pPacket = xglPacketGetCurrent();
+    s_pPacket.sdk = xglPacketGetCurrent();
 }
 
 void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
@@ -738,11 +932,13 @@ void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
 {
     float matrix[4][4];
     int type = 1;
+    NmlCurrentPacket selected;
 
     if ((material->material_flags & 0x2000u) != 0)
         type = 2;
 
-    s_pPacket = xglPacketGetCurrent();
+    selected.sdk = xglPacketGetCurrent();
+    s_pPacket = selected;
 
     if (type != 1) {
         if (type != 2)
@@ -759,16 +955,18 @@ void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
         xglMatrixUnit(matrix);
     }
 
-    sceVif1PkCnt(s_pPacket, 0);
-    sceVif1PkOpenUpkCode(s_pPacket, 1004, 108, 1, 1);
-    sceVif1PkAddUpkData128N(s_pPacket, matrix, 3);
-    sceVif1PkCloseUpkCode(s_pPacket);
+    selected = s_pPacket;
+    sceVif1PkCnt(selected.sdk, 0);
+    selected = s_pPacket;
+    sceVif1PkOpenUpkCode(selected.sdk, 1004, 108, 1, 1);
+    selected = s_pPacket;
+    sceVif1PkAddUpkData128N(selected.sdk, matrix, 3);
+    selected = s_pPacket;
+    sceVif1PkCloseUpkCode(selected.sdk);
     s_nReflRotType = type;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddScreenClear);
-
-extern int g_nGsEntry;
 
 void nmlPacketGsInit(void)
 {
@@ -777,52 +975,94 @@ void nmlPacketGsInit(void)
 
 void nmlPacketAddGsClamp(u64 clamp)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = clamp;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 8;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = clamp;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 8;
     g_nGsEntry++;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPixeltest);
+void nmlPacketAddGsPixeltest(u32 pixeltest)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].words[0] = pixeltest;
+    g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 71;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPixeltest1);
+void nmlPacketAddGsPixeltest1(u32 pixeltest)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].words[0] = pixeltest;
+    g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 72;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsZbuf);
+void nmlPacketAddGsZbuf(u32 zbuf)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].value =
+        sRender.depth_buffer_base | ((u64)zbuf << 32) | 0x1000000;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 78;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsZbuf1);
+void nmlPacketAddGsZbuf1(u32 zbuf)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].value =
+        sRender.depth_buffer_base | ((u64)zbuf << 32) | 0x1000000;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 79;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsTexture);
+void nmlPacketAddGsTexture(void)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].words[0] = 0;
+    g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 63;
+    g_nGsEntry++;
+}
 
 void nmlPacketAddGsAlpha(u64 alpha)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = alpha;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 66;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = alpha;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 66;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsAlpha1(u64 alpha)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = alpha;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 67;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = alpha;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 67;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsScissor(u64 scissor)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = scissor;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 64;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = scissor;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 64;
     g_nGsEntry++;
 }
 
 void nmlPacketAddGsScissor1(u64 scissor)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = scissor;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 65;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = scissor;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 65;
     g_nGsEntry++;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFBA);
+void nmlPacketAddGsFBA(u32 fba)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].words[0] = fba != 0;
+    g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 74;
+    g_nGsEntry++;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFBA1);
+void nmlPacketAddGsFBA1(u32 fba)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].words[0] = fba != 0;
+    g_aGsTag[g_nGsEntry * 2 + 2].words[1] = 0;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 75;
+    g_nGsEntry++;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFogCol);
 
@@ -832,85 +1072,48 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsFrame1);
 
 void nmlPacketAddGsPAbe(u64 pabe)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = pabe;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 73;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = pabe;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 73;
     g_nGsEntry++;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", nmlPacketAddGsPrmode);
+void nmlPacketAddGsPrmode(NmlMaterialRenderState *material)
+{
+    u64 mode;
+
+    mode = 72;
+    if (material->material_flags & 1)
+        mode = 88;
+    else if (material->material_flags & 2)
+        mode = 72;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = mode;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 27;
+    g_nGsEntry++;
+}
 
 void nmlPacketAddGsPrmodecont(u64 prmode_control)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = prmode_control;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 26;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = prmode_control;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 26;
     g_nGsEntry++;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", packet_gs_entry32);
+void packet_gs_entry32(u32 reg, u32 high, u32 low)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].words[0] = low;
+    g_aGsTag[g_nGsEntry * 2 + 2].words[1] = high;
+    g_aGsTag[g_nGsEntry++ * 2 + 3].value = reg;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_packet_add", packet_gs_entry64);
+void packet_gs_entry64(u32 reg, const u64 *value)
+{
+    g_aGsTag[g_nGsEntry * 2 + 2].value = *value;
+    g_aGsTag[g_nGsEntry++ * 2 + 3].value = reg;
+}
 
 void nmlPacketAddGsFba(u64 fba)
 {
-    g_aGsTag[g_nGsEntry * 2 + 2] = fba;
-    g_aGsTag[g_nGsEntry * 2 + 3] = 74;
+    g_aGsTag[g_nGsEntry * 2 + 2].value = fba;
+    g_aGsTag[g_nGsEntry * 2 + 3].value = 74;
     g_nGsEntry++;
 }
-
-
-
-static u32 s_aUcodeDropNull[5] = { 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeDrop[5] = { 3200U, 0U, 1776U, 2296U, 2712U };
-
-static u32 s_aUcodeTexEnvNull[5] = { 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeTexEnv[5] = { 3432U, 0U, 1776U, 2224U, 2744U };
-
-static u32 s_aUcodeAddAdr[5] = { 3232U, 4464U, 5048U, 5912U, 6880U };
-
-static u32 s_aUcodeAddAdrZbuf[5] = { 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeAddFaceAdr[5] = { 3808U, 8008U, 8304U, 8600U, 9272U };
-
-static u32 s_aUcodeAddBackAdr[5] = { 4392U, 9760U, 9760U, 9760U, 9760U };
-
-static u32 s_aUcodeAddEnvAdr[12] = { 1784U, 2632U, 3816U, 5072U, 6488U, 7280U, 8392U, 9568U, 10904U, 11856U, 13024U, 14264U };
-
-static u32 s_aUcodeAddEnvAdrZbuf[12] = { 1784U, 1784U, 1784U, 1784U, 6488U, 6488U, 6488U, 6488U, 10904U, 10904U, 10904U, 10904U };
-
-static u32 s_aUcodeAddEnvNullAdr[12] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeAddEnvFaceAdr[12] = { 2520U, 3704U, 4960U, 6376U, 7168U, 8280U, 9456U, 10792U, 11744U, 12912U, 14152U, 15552U };
-
-static u32 s_aUcodeAddEnvBackAdr[12] = { 2576U, 3760U, 5016U, 6432U, 7224U, 8336U, 9512U, 10848U, 11800U, 12968U, 14208U, 15608U };
-
-static u32 s_aUcodeProAdr[6] = { 2216U, 3000U, 3704U, 4584U, 5272U, 6200U };
-
-static u32 s_aUcodeProSkipAdr[7] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeProFaceAdr[6] = { 2216U, 3000U, 3704U, 4584U, 5272U, 6200U };
-
-static u32 s_aUcodeProBackAdr[6] = { 0U, 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeEnvAdr[12] = { 1456U, 2272U, 3424U, 4648U, 6032U, 6792U, 7872U, 9016U, 10320U, 11240U, 12376U, 13584U };
-
-static u32 s_aUcodeEnvAdrZbuf[12] = { 1456U, 1456U, 1456U, 1456U, 6032U, 6032U, 6032U, 6032U, 10320U, 10320U, 10320U, 10320U };
-
-static u32 s_aUcodeEnvFaceAdr[12] = { 2160U, 3312U, 4536U, 5920U, 6680U, 7760U, 8904U, 10208U, 11128U, 12264U, 13472U, 14840U };
-
-static u32 s_aUcodeEnvBackAdr[12] = { 2216U, 3368U, 4592U, 5976U, 6736U, 7816U, 8960U, 10264U, 11184U, 12320U, 13528U, 14896U };
-
-static u32 s_aUcodeEnvNullAdr[12] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
-
-static u32 s_aUcodeAdr[6] = { 3032U, 3552U, 5144U, 5880U, 6920U, 8032U };
-
-static u32 s_aUcodeAdrZbuf[6] = { 3032U, 3552U, 5144U, 5144U, 5144U, 5144U };
-
-static u32 s_aUcodeFaceAdr[6] = { 3984U, 4576U, 5704U, 6744U, 7856U, 9128U };
-
-static u32 s_aUcodeBackAdr[6] = { 4824U, 4896U, 5792U, 5792U, 5792U, 5792U };
-
-
-
-const char D_004DC4D0[4] = "";

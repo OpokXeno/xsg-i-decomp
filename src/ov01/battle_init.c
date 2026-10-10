@@ -366,18 +366,11 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", unitCmdListSet);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cmdListCansel);
 
-/*
- * Menu map-height toggle (ov01/tu009 src/ov01/menu.c, not yet published;
- * forward-declared here until that TU's header exists).
- */
+/* Menu map-height toggle, defined by ov01/tu009 (src/ov01/menu.c). */
 extern void menuMapHSet(int enable);
 
-/*
- * Enemy AI attack-selection entry point (ov01/tu006 src/ov01/cmd.c, still
- * asm there; forward-declared here until that TU publishes its header).
- * cmd.c's thinkUnitAtkExec passes its argument straight to calcUPGet, whose
- * published prototype (src/ov01/unit_cmd.h) takes ObjectTask *.
- */
+/* Enemy AI attack-selection entry point, defined by ov01/tu006.
+ * thinkUnitAtkExec forwards this argument to calcUPGet as ObjectTask *. */
 extern void thinkUnitAtkExec(ObjectTask *unit);
 
 int battleCtrlThink(ObjectTask *unit)
@@ -489,10 +482,8 @@ int actUnitTblMake(int side, BattleUnit **actUnits)
     return made;
 }
 
-/*
- * Defined in ov01/tu004 src/ov01/calc.c; not yet published there.
- */
-extern int rnd(int max);
+/* Defined by ov01/tu004 (src/ov01/calc.c). */
+
 
 BattleUnit *tgtUnitPick(BattleUnit **table, int count)
 {

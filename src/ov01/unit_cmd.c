@@ -153,9 +153,7 @@ ObjectTask *unitPlCreate(s16 *pl)
  * TU; forward-declared for the calls it makes before their definitions
  * appear later in the file.
  */
-extern ObjectTask *unitCreate(s16 *pl, int side, ObjectTaskCallback func);
-extern void unitTblSet(int side, ObjectTask *unit);
-void unitLoad(ObjectTask *unit, int mode);
+
 void unitEnFunc(ObjectTask *unit);
 
 ObjectTask *unitEnCreate(s16 *pl)

@@ -68,6 +68,7 @@ Python 3 standard library only.
     python3 -B tools/coverage_report.py --legacy       # the previous unit-record report
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -88,6 +89,7 @@ MAIN_OBJECTS = 'config/objects/main.objects.json'
 OVERLAY_OBJECTS = 'config/objects/overlays.compile.json'
 IOP_OBJECTS = 'config/objects/iop.json'
 SYMBOLS_DIR = 'config/symbols'
+SOURCE_LINEAGE = 'config/source-zero-credit-lineage.json'
 BUILD_DIR = 'build'
 README = 'README.md'
 
@@ -734,7 +736,78 @@ def cross_check(claims, counted, problems):
         if claim['category'] != category:
             problems.append(dict(unit=unit, tu=claim['tu'], function=name,
                                  reason=(f'the source carries {name} as {category}, '
-                                         f'the ledger claims {claim["category"]}')))
+                                     f'the ledger claims {claim["category"]}')))
+
+
+def exclude_zero_credit_lineage(root, objects, counted, claims, tu_edit, problems):
+    """Exclude only pinned pre-existing, unaccepted definitions; grant no credit.
+
+    A changed pin, identity or unknown new definition remains a disagreement.
+    An ordinary accepted ledger claim supersedes the lineage exclusion.
+    """
+    path = Path(root) / SOURCE_LINEAGE
+    if not path.is_file():
+        return []
+    doc, error = read_json(path)
+    if (error or not isinstance(doc, dict)
+            or doc.get('schema') != 'source-zero-credit-lineage/1'
+            or not isinstance(doc.get('functions'), list)):
+        problems.append(dict(record=SOURCE_LINEAGE,
+                             reason=f'invalid zero-credit lineage: {error or "schema"}'))
+        return []
+    originals = load_required(root, ORIGINALS, 'original identities')
+    if doc.get('revision') != originals.get('revision'):
+        problems.append(dict(record=SOURCE_LINEAGE, reason='lineage revision differs'))
+        return []
+    identities = {(obj['unit'], va): (obj, name, size)
+                  for obj in objects for name, va, size in obj['functions']}
+    parsed, seen, excluded = {}, set(), []
+    for entry in doc.get('functions', []):
+        if not isinstance(entry, dict):
+            problems.append(dict(record=SOURCE_LINEAGE,
+                                 reason='invalid zero-credit lineage function entry'))
+            continue
+        where = dict(record=SOURCE_LINEAGE, unit=entry.get('unit'),
+                     tu=entry.get('tu'), function=entry.get('name'))
+        try:
+            key = (entry['unit'], int(entry['va'], 16))
+            if key in seen:
+                raise ValueError('duplicate lineage identity')
+            seen.add(key)
+            obj, name, size = identities[key]
+            if (name != entry['name'] or size != entry['size']
+                    or obj['source'] != entry['source']
+                    or obj['id'].split('_', 1)[0] != entry['tu']
+                    or originals['units'][entry['unit']]['sha256']
+                    != entry['original_sha256']
+                    or entry.get('credit') != 0):
+                raise ValueError('lineage original/source identity differs')
+            if key in claims:
+                continue
+            source = entry['source']
+            if source not in parsed:
+                text = (Path(root) / source).read_text(encoding='utf-8')
+                tu = tu_edit.parse(text, path=str(Path(root) / source),
+                                   functions=[n for n, _, _ in obj['functions']],
+                                   unit_dir=str(Path(root)))
+                parsed[source] = (text, {b.key: b for b in tu.blocks
+                                        if b.role == 'function'})
+            text, blocks = parsed[source]
+            block = blocks[entry['name']]
+            digest = hashlib.sha256(text[block.core_start:block.core_end]
+                                    .encode('utf-8')).hexdigest()
+            if (block.state != 'c' or block.conditional or block.covers
+                    or digest != entry['source_block_sha256']
+                    or key not in counted):
+                raise ValueError('pinned unaccepted source definition changed or disappeared')
+            counted.pop(key)
+            excluded.append(dict(where, va=entry['va'], source=source,
+                                 source_block_sha256=digest, credit=0,
+                                 reason='pre-existing source has no accepted ledger claim; '
+                                        'pinned lineage excluded from all recovery credit'))
+        except (KeyError, TypeError, ValueError, OSError, tu_edit.ParseError) as exc:
+            problems.append(dict(where, reason=f'zero-credit lineage refused: {exc}'))
+    return excluded
 
 
 def out_of_scope_source(root, claims, counted):
@@ -828,8 +901,13 @@ def evaluate(root, build_dir, ledger_dir, records_dir, tu_edit):
             f'{gate_state[unit]["reason"]}')))
     counted = {key: value for key, value in counted.items() if key[0] not in withdrawn}
 
+    zero_credit_lineage = exclude_zero_credit_lineage(
+        root, objects, counted, claims, tu_edit, problems)
     if have_ledger:
         cross_check(claims, counted, problems)
+        # Source presence is no acceptance: disagreements never earn credit.
+        counted = {key: value for key, value in counted.items()
+                   if key in claims and claims[key]['category'] == value[1]}
 
     # Aggregate.
     done_functions = dict.fromkeys(UNITS, 0)
@@ -904,6 +982,7 @@ def evaluate(root, build_dir, ledger_dir, records_dir, tu_edit):
         objects=sum(object_total.values()),
         gates=gate_state,
         tier_b=tier_b,
+        zero_credit_lineage=zero_credit_lineage,
         disagreements=problems)
 
 
@@ -1192,6 +1271,9 @@ def print_report(result):
 
 def report_problems(result):
     """Print the disagreements; return True when there is any."""
+    for item in result.get('zero_credit_lineage', []):
+        print(f'coverage_report: zero credit {item["unit"]}/{item["function"]} '
+              f'at {item["va"]}: {item["reason"]}', file=sys.stderr)
     if not result['disagreements']:
         return False
     print(f'coverage_report: {len(result["disagreements"])} disagreement(s) between the '

@@ -39,7 +39,7 @@ typedef struct RssdRpcResponse {
  * xeno/core/types.h (from RssdBackgroundNextWave, main:0x0023ff28) only
  * carries the leading `flags` word; this function evidences more of the same
  * object, so the type is extended here under the same tag and leading field
- * (see result.json header_divergence). Bytes this allocation does not access
+ * Only the evidenced members are modeled here. Bytes this TU does not access
  * stay explicit unmodeled spans.
  */
 struct SsdMemoryBlock;
@@ -109,7 +109,8 @@ typedef struct RssdWorkFlags {
     int next_wave_thread_id;              /* +0x1ac: RssdBackNextWaveThread */
     void *next_wave_thread_stack;         /* +0x1b0: MYwaveTransThStack */
     int sema_id;                          /* +0x1b4: signalled when the RPC completes */
-    unsigned char _unmodeled_1b8[8];      /* +0x1b8..0x1bf */
+    int busy_sema_id;                     /* +0x1b8: signalled by RssdBusy */
+    unsigned char _unmodeled_1bc[4];      /* +0x1bc..0x1bf */
     struct SsdMemoryBlock *first_block;   /* +0x1c0: first allocator-list node */
     unsigned char _unmodeled_1c4[8];     /* +0x1c4..0x1cb */
     int spu_bytes_remaining;              /* +0x1cc: drained by RssdBackNextWaveThread */
@@ -159,6 +160,10 @@ extern RssdWorkFlags RssdWork;
 typedef union RssdRequestWord {
     int value;
     void *pointer;
+    struct {
+        unsigned short sample_rate;
+        short request_channel_count;
+    } rate_channel;
 } RssdRequestWord;
 
 /*

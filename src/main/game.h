@@ -17,16 +17,7 @@ typedef void (*GameModeCameraCallback)(void);
  * +0x2c halfword is not accessed here. Neutral debug_buttons name: only the
  * 0x100 debug-menu exit test is evidenced.
  *
- * header_divergence (recorded, allowed): this spelling of PadData's layout
- * (PadDataDebugLayout, reaching +0x2e) differs from the shared
- * include/xeno/core/types.h PadDataLayout (accepted from
- * src/core/main-00244d20/private.h, evidenced only to +0x2c). Declared
- * locally, not through the shared header, because header_harvest.py cannot
- * regenerate/promote this native-TI unit yet (no native-TI promote backend;
- * review core-cc-20260911-b11, GameModeDebugMenu section): harvesting this
- * type into the shared header while this file also included it produced a
- * redefinition. Kept TU-local (like main-00244d20's own partial views)
- * until the infra gap is closed and a canon decision merges the two views.
+ * This TU uses the partial PadDataDebugLayout view through +0x2e.
  */
 typedef struct PadDataDebugLayout {
     u8 _unmodeled_00[0x28];
@@ -37,5 +28,26 @@ typedef struct PadDataDebugLayout {
 } PadDataDebugLayout;
 
 int getScriptFlag(SceneObject object);
+
+int xglSoundSendSwd(void *swd, int bank);
+/* The original leaves the sequence result word in v0, including 0xffff
+ * when no sequence data is supplied. */
+int xglSoundSendSmd2(void *smd, int bank);
+int SsdResetSegmentAllocMode(int segment);
+int SsdSetSegmentAllocMode(int segment, int mode);
+void xglSoundLoadEffect(const char *name, void *segment, int bank);
+extern const char D_004BE2B0[9];
+extern struct SoundWork SoundWork;
+int SsdGetSeqPlayStatus(int sequence);
+int SsdGetResultValue(int *value);
+void xglSoundSequenceStop2(int channel);
+void EnemySound_StopAll(int mode);
+extern unsigned char GameCFSoundMenuPurgeFlag;
+void *GameResourceGetFreeAddr(void);
+const char *RES_GetEnemySeName(int index);
+void RES_GetMapEnvSeName(char *name);
+void xglSoundSequenceNormal2(int channel, int volume);
+extern int UmnSimulationNo;
+extern int MenuDrillCall;
 
 #endif /* SRC_MAIN_GAME_H */

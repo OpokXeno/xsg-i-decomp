@@ -79,5 +79,5 @@ void ppSetPos(PpParticle *particle, float x, float y, float z)
     particle->position.vector.z = z;
 }
 
-const float D_004D8290 = -0.05000000075f;
-const float D_004D8294 = 0.8000000119f;
+const float D_004D8290 = -0.05f;
+const float D_004D8294 = 0.8f;

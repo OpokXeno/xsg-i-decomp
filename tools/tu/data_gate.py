@@ -6,12 +6,16 @@ and the existing TU source/function audit remain required alongside it.
 """
 import argparse
 import ast
+import bisect
 import hashlib
 import importlib
 import json
 from pathlib import Path
 import re
 import struct
+import subprocess
+import os
+import signal
 import sys
 
 CANONICAL=Path('/home/pc/xenosaga1-port/xenosaga-i-decomp')
@@ -437,6 +441,372 @@ def cc1_functions(text):
     return out
 
 
+def source_storage_array_extent(text, owner_name, owner_size):
+    """Corroborate an exact compiler extent with one local, fixed-size array.
+
+    This does not establish an original extent. Callers must independently
+    prove the complete original scaffold span and compiler storage definition.
+    """
+    if len(text) > 1024 * 1024 or type(owner_size) is not int or owner_size <= 0:
+        return None
+    clean = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
+    c_type = r'((?:unsigned|signed)\s+(?:char|short(?:\s+int)?|int)|[A-Za-z_]\w*)'
+    declarations = re.findall(r'\bstatic\s+' + c_type + r'\s+' +
+                              re.escape(owner_name) + r'\s*\[([^\]]+)\]\s*;', clean)
+    if len(declarations) != 1:
+        return None
+    typename, expression = declarations[0]
+    try:
+        node = ast.parse(expression.strip(), mode='eval').body
+    except (SyntaxError, ValueError):
+        return None
+    if not isinstance(node, ast.Constant) or type(node.value) is not int:
+        return None
+    count = node.value
+    if not 1 < count <= 1024 * 1024 or owner_size % count:
+        return None
+    return dict(kind='local_fixed_array_compiler_extent', owner_name=owner_name,
+                owner_type=typename, owner_size=owner_size, element_count=count,
+                element_stride=owner_size // count)
+
+
+def source_storage_layout_text(root, source_path):
+    """Collect bounded quoted-header text needed to resolve local C layouts.
+
+    This is only a declaration lookup for the closed layout parser below; it
+    does not preprocess macros or establish compiler/original storage. The
+    source, compiler object, original map and linked image remain the callers'
+    independent authorities. Missing or oversized headers are simply omitted,
+    which leaves unknown types unsupported.
+    """
+    root = Path(root).resolve()
+    source_path = Path(source_path).resolve()
+    try:
+        source_path.relative_to(root)
+    except ValueError:
+        return source_path.read_text(errors='surrogateescape')
+    queue = [source_path]
+    seen = set()
+    queued = {source_path}
+    chunks = []
+    total_size = 0
+    include_re = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
+    while queue and len(seen) < 64 and total_size <= 4 * 1024 * 1024:
+        path = queue.pop(0).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        if path.stat().st_size > 1024 * 1024:
+            continue
+        text = path.read_text(errors='surrogateescape')
+        total_size += len(text)
+        if total_size > 4 * 1024 * 1024:
+            break
+        lines = text.splitlines(keepends=True)
+        directives = [(index, re.match(r'\s*#\s*(ifndef|define|endif)\b\s*([A-Za-z_]\w*)?', line))
+                      for index, line in enumerate(lines)]
+        directives = [(index, match) for index, match in directives if match]
+        if len(directives) >= 3:
+            first_index, first = directives[0]
+            second_index, second = directives[1]
+            last_index, last = directives[-1]
+            if (first.group(1) == 'ifndef' and second.group(1) == 'define' and
+                    first.group(2) == second.group(2) and last.group(1) == 'endif' and
+                    not ''.join(lines[last_index + 1:]).strip()):
+                lines[first_index] = '\n' if lines[first_index].endswith('\n') else ''
+                lines[second_index] = '\n' if lines[second_index].endswith('\n') else ''
+                lines[last_index] = '\n' if lines[last_index].endswith('\n') else ''
+                text = ''.join(lines)
+        chunks.append(text)
+        for include in include_re.findall(text):
+            candidates = (path.parent / include, root / 'include' / include,
+                          root / 'src' / include, root / 'src' / path.parent.name / include,
+                          root / include)
+            for candidate in candidates:
+                if not candidate.is_file():
+                    continue
+                resolved = candidate.resolve()
+                try:
+                    resolved.relative_to(root)
+                except ValueError:
+                    continue
+                if resolved not in seen and resolved not in queued and len(queue) < 128:
+                    queue.append(resolved)
+                    queued.add(resolved)
+                break
+    return '\n'.join(chunks)
+
+
+def source_storage_member_extent(text, owner_name, owner_size, offset):
+    """Closed 32-bit C layout proof for an exact member of a plain struct.
+
+    Unsupported declarations return no proof. This never infers an extent
+    from the next alias or from the remainder of an enclosing storage object.
+    Primitive member arrays are supported at their start and aligned element
+    starts. Nested plain structs are laid out recursively, but aliases inside
+    nested aggregates are not inferred. Fixed multidimensional owner arrays
+    use their bounded dimension product and the same exact element stride.
+    The caller independently binds the
+    complete owner object to cc1 and the link.
+    """
+    if (len(text) > 4 * 1024 * 1024 or type(owner_size) is not int or owner_size <= 0 or
+            type(offset) is not int or offset < 0):
+        return None
+    clean = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
+    declarations = re.findall(r'\b(?:(static|extern)\s+)?((?!return\b)[A-Za-z_]\w*)\s+' +
+                              re.escape(owner_name) + r'\s*((?:\[[^\]]+\]\s*)*)\s*;', clean)
+    definitions = [row for row in declarations if row[0] != 'extern']
+    if len(definitions) != 1:
+        return None
+    _, typename, array_dimensions = definitions[0]
+    conditional_depth = []
+    depth = 0
+    for line in clean.splitlines(keepends=True):
+        conditional_depth.append(depth)
+        directive = re.match(r'\s*#\s*(if|ifdef|ifndef|endif)\b', line)
+        if directive:
+            if directive.group(1) == 'endif':
+                depth = max(0, depth - 1)
+            else:
+                depth += 1
+    line_starts = [0]
+    line_starts.extend(m.end() for m in re.finditer('\n', clean))
+
+    def is_unconditional(position):
+        line_index = max(0, bisect.bisect_right(line_starts, position) - 1)
+        return line_index < len(conditional_depth) and conditional_depth[line_index] == 0
+
+    definitions = {}
+    structure_re = re.compile(
+        r'\btypedef\s+struct(?:\s+([A-Za-z_]\w*))?\s*\{([^{}]*)\}\s*([A-Za-z_]\w*)\s*;', re.S)
+    for match in structure_re.finditer(clean):
+        if not is_unconditional(match.start()):
+            continue
+        tag, body, alias = match.groups()
+        aliases = [alias] + ([tag] if tag else [])
+        for name in aliases:
+            definitions.setdefault(name, set()).add(body)
+    if any(len(bodies) != 1 for bodies in definitions.values()):
+        return None
+    definitions = {name: next(iter(bodies)) for name, bodies in definitions.items()}
+    array_typedefs = {}
+    array_typedef_re = re.compile(
+        r'\btypedef\s+([^;{}]+?)\s+([A-Za-z_]\w*)\s*((?:\s*\[[^\]]+\])+)[ \t]*;', re.S)
+    for match in array_typedef_re.finditer(clean):
+        if not is_unconditional(match.start()):
+            continue
+        base_type, alias, dimensions = match.groups()
+        dimensions = re.findall(r'\[([^\]]+)\]', dimensions)
+        if dimensions:
+            array_typedefs.setdefault(alias, set()).add((base_type.strip(), tuple(dimensions)))
+    if any(len(rows) != 1 for rows in array_typedefs.values()):
+        return None
+    array_typedefs = {name: next(iter(rows)) for name, rows in array_typedefs.items()}
+
+    def constant(expression):
+        try:
+            node = ast.parse(expression.strip(), mode='eval').body
+        except (SyntaxError, ValueError):
+            return None
+        def value(node):
+            if isinstance(node, ast.Constant) and type(node.value) is int:
+                return node.value
+            if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+                a, b = value(node.left), value(node.right)
+                if a is not None and b is not None:
+                    return a + b if isinstance(node.op, ast.Add) else a - b
+            return None
+        result = value(node)
+        return result if result is not None and 0 < result <= 1024 * 1024 else None
+
+    scalar_sizes = {'char': 1, 'signed char': 1, 'unsigned char': 1, 'u8': 1, 's8': 1,
+                    'short': 2, 'short int': 2, 'signed short': 2,
+                    'signed short int': 2, 'unsigned short': 2,
+                    'unsigned short int': 2, 'u16': 2, 's16': 2,
+                    'int': 4, 'signed': 4, 'unsigned': 4,
+                    'unsigned int': 4, 'signed int': 4, 'float': 4,
+                    'u32': 4, 's32': 4}
+    active = set()
+
+    def structure_layout(type_name):
+        type_name = ' '.join(type_name.split())
+        type_name = re.sub(r'^(?:(?:const|volatile)\s+)+', '', type_name)
+        if type_name in scalar_sizes:
+            return scalar_sizes[type_name], scalar_sizes[type_name], None
+        if re.fullmatch(r'(?:const\s+|volatile\s+)*(?:struct\s+)?[A-Za-z_]\w*\s*\*', type_name):
+            return 4, 4, None
+        alias_name = type_name[7:].strip() if type_name.startswith('struct ') else type_name
+        if alias_name in definitions and alias_name in array_typedefs:
+            return None
+        array_alias = array_typedefs.get(alias_name)
+        if array_alias is not None:
+            if alias_name in active:
+                return None
+            active.add(alias_name)
+            base_type, dimensions = array_alias
+            layout = structure_layout(base_type)
+            count = 1
+            for dimension in dimensions:
+                value = constant(dimension)
+                if value is None or count * value > 1024 * 1024:
+                    active.remove(alias_name)
+                    return None
+                count *= value
+            active.remove(alias_name)
+            if layout is None:
+                return None
+            item_size, item_alignment, _ = layout
+            return item_size * count, item_alignment, None
+        name = type_name[7:].strip() if type_name.startswith('struct ') else type_name
+        body = definitions.get(name)
+        if body is None or name in active:
+            return None
+        active.add(name)
+        fields = []
+        cursor = 0
+        alignment = 1
+        declarations = body.strip()
+        if not declarations.endswith(';'):
+            active.remove(name)
+            return None
+        for declaration in declarations[:-1].split(';'):
+            match = re.fullmatch(r'\s*(.*?)\s*\b([A-Za-z_]\w*)\s*(?:\[([^\]]+)\])?\s*',
+                                 declaration, re.S)
+            if not match:
+                active.remove(name)
+                return None
+            field_type, member_name, count_expr = match.groups()
+            field_type = ' '.join(field_type.split())
+            layout = structure_layout(field_type)
+            if layout is None:
+                active.remove(name)
+                return None
+            item_size, item_alignment, nested_fields = layout
+            count = constant(count_expr) if count_expr else 1
+            if count is None or (count_expr and field_type.endswith('*')):
+                active.remove(name)
+                return None
+            plain_type = re.sub(r'^(?:(?:const|volatile)\s+)+', '', field_type)
+            cursor = (cursor + item_alignment - 1) // item_alignment * item_alignment
+            fields.append(dict(member=member_name, offset=cursor,
+                               size=item_size * count, type=field_type,
+                               scalar=count_expr is None, array=count_expr is not None,
+                               element_size=item_size, element_count=count,
+                               primitive=plain_type in scalar_sizes,
+                               pointer=bool(re.fullmatch(
+                                   r'(?:const\s+|volatile\s+)*(?:struct\s+)?[A-Za-z_]\w*\s*\*',
+                                   field_type)),
+                               nested=nested_fields is not None))
+            cursor += item_size * count
+            alignment = max(alignment, item_alignment)
+        active.remove(name)
+        stride = (cursor + alignment - 1) // alignment * alignment
+        return (stride, alignment, fields)
+
+    layout = structure_layout(typename)
+    if layout is None:
+        return None
+    stride, _, fields = layout
+    count = 1
+    for expression in re.findall(r'\[([^\]]+)\]', array_dimensions):
+        dimension = constant(expression)
+        if dimension is None or count * dimension > 1024 * 1024:
+            return None
+        count *= dimension
+    if not stride or stride * count != owner_size or not 0 <= offset < owner_size:
+        return None
+    member_offset = offset % stride
+    nested_layout_proof = ({'layout_text_sha256': hashlib.sha256(
+        text.encode('utf-8', 'surrogateescape')).hexdigest()}
+        if any(field['nested'] for field in fields) else {})
+    matches = []
+    for field in fields:
+        relative = member_offset - field['offset']
+        if relative < 0 or relative >= field['size']:
+            continue
+        if relative == 0 and (not field['array'] or field['primitive']):
+            matches.append(dict(field, member_element_index=None))
+        elif field['array'] and field['primitive'] and relative % field['element_size'] == 0:
+            matches.append(dict(field, size=field['element_size'],
+                                member_element_index=relative // field['element_size']))
+    if len(matches) != 1:
+        return None
+    field = matches[0]
+    if field['scalar'] and (field['primitive'] or field['pointer']):
+        return dict(kind='plain_32bit_struct_scalar_field', owner_name=owner_name,
+                    owner_type=typename, owner_size=owner_size, element_stride=stride,
+                    element_count=count, element_index=offset // stride,
+                    owner_offset=offset, member=field['member'], offset=field['offset'],
+                    size=field['size'], type=field['type'], scalar=True,
+                    **nested_layout_proof)
+    if field['array']:
+        return dict(kind='plain_32bit_struct_array_member', owner_name=owner_name,
+                    owner_type=typename, owner_size=owner_size, element_stride=stride,
+                    element_count=count, element_index=offset // stride,
+                    owner_offset=offset, member=field['member'], offset=field['offset'],
+                    size=field['size'], type=field['type'], scalar=False,
+                    member_element_count=field['element_count'],
+                    member_element_index=field['member_element_index'],
+                    **nested_layout_proof)
+    return dict(kind='plain_32bit_struct_nested_member', owner_name=owner_name,
+                owner_type=typename, owner_size=owner_size, element_stride=stride,
+                element_count=count, element_index=offset // stride,
+                owner_offset=offset, member=field['member'], offset=field['offset'],
+                size=field['size'], type=field['type'], scalar=False,
+                **nested_layout_proof)
+
+
+def registered_common_storage_locations(root, tu_id, original_elf, compiler_elf, assembly_text):
+    """Current compiler COMMON owners already mapped in the native MAIN tail."""
+    emitted = emitted_storage(assembly_text)
+    rows = []
+    for section, entries in data_carve.load_registry(root).get('common_tail', {}).items():
+        for entry in entries:
+            if entry.get('tu') != tu_id or not entry.get('c_input_span'):
+                continue
+            owner = entry.get('storage_owner') or {}
+            name = owner.get('name')
+            symbols = [s for s in compiler_elf.symbols if s.name == name and s.shndx != 0]
+            require(symbols, tu_id + '/' + str(name) + ': registered COMMON owner is absent from compiler definitions')
+            lo, hi = map(data_carve.hx, entry['range'])
+            alignment = owner.get('alignment')
+            original = [s for s in original_elf.symbols if s.name == name and s.value == lo and
+                        0 < s.shndx < len(original_elf.sections) and
+                        original_elf.sections[s.shndx].name == section]
+            definition = emitted.get(name) or {}
+            require(tu_id.startswith('main/') and section in ('.bss', '.sbss') and
+                    len(symbols) == len(original) == 1 and
+                    (original[0].bind, original[0].type, original[0].size) == (1, 1, hi-lo) and
+                    (symbols[0].bind, symbols[0].type, symbols[0].size) == (1, 1, hi-lo) and
+                    symbols[0].shndx in (0xfff2, 0xff03) and
+                    type(alignment) is int and alignment > 0 and not alignment & (alignment-1) and
+                    symbols[0].value == alignment and lo % alignment == 0 and
+                    definition.get('section') == 'COMMON' and definition.get('size') == hi-lo and
+                    definition.get('alignment') == alignment and
+                    owner.get('linkage') == 'global' and owner.get('size') == hi-lo and
+                    data_carve.hx(owner.get('address', '-1')) == lo and
+                    entry.get('symbols') == [name] and entry.get('c_input_span'),
+                    tu_id + '/' + str(name) + ': registered COMMON identity, extent or alignment differs')
+            rows.append(dict(unit='main', section=section, address=f'0x{lo:08X}', names=[name],
+                             storage_owner=dict(name=name, address=f'0x{lo:08X}', size=hi-lo),
+                             original_symbol_size=hi-lo))
+    return rows
+
+
+def require_registered_common_claims(tu_id, expected, record):
+    """Every active registered owner must remain in the current proof request."""
+    locations = record.get('recovered_location_candidates') or []
+    for owner in expected:
+        matches = [row for row in locations if all(row.get(key) == owner[key]
+                   for key in ('unit', 'section', 'address', 'names', 'storage_owner'))]
+        require(len(matches) == 1,
+                tu_id + '/' + owner['names'][0] + ': registered COMMON owner is omitted or changed in candidate locations')
+
+
 def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, assembly_text,
                          linked_elf, original_elf, original_section_ranges,
                          object_path, linked_path, packet_path, source_path, assembly_path):
@@ -473,6 +843,18 @@ def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, ass
         owner_map_name = owner.get('map_name', owner_name)
         owner_va = int(owner_address, 16) if isinstance(owner_address, str) else int(owner_address)
         loc_va = int(address, 16)
+        if loc_va != owner_va and loc.get('storage_owner') and not any(
+                s.value == loc_va and s.type not in (3, 4) and
+                0 < s.shndx < len(original_elf.sections) and
+                original_elf.sections[s.shndx].name == section for s in original_elf.symbols):
+            # A map-only child is not another recovered storage identity.
+            # Its exact enclosing owner is proved by the owner's own location;
+            # the declared alias is checked separately as an uncredited linker
+            # dependency, including its source/member and consumer offset.
+            require(any(x.get('section') == section and int(x.get('address', '0'), 16) == owner_va
+                        and owner['name'] in (x.get('names') or []) for x in storage_locations),
+                    entry['tu'] + '/' + names[0] + ': map-only alias has no claimed parent storage location')
+            continue
         owner_map = [item for item in original_items if item.get('section') == section
                      and int(item.get('address', '0'), 16) == owner_va
                      and owner_map_name in item.get('names', [])]
@@ -507,7 +889,8 @@ def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, ass
             if asm['section'] == 'COMMON':
                 # The private allocation link uses ld -r -d: compiler COMMON
                 # symbols become allocated .bss/.sbss/.scommon objects here.
-                if record.get('unit') == 'main' and section_obj.name.startswith(section + '.carve.'):
+                if (record.get('unit') == 'main' and object_path.name.endswith('.carved.o') and
+                        (section_obj.name == section or section_obj.name.startswith(section + '.carve.'))):
                     proof_size = owner.get('size', symbol.size or asm.get('size', 0))
                     proof_size = int(proof_size, 0) if isinstance(proof_size, str) else int(proof_size)
                     carve_allocation = allocated_carve_mapping(
@@ -557,6 +940,19 @@ def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, ass
                 entry['tu'] + '/' + owner_name + ': original label lies outside the C storage owner')
         owner_end = owner_va + size
         mapped_range = original_section_ranges.get(section)
+        if not (mapped_range and mapped_range[0] <= owner_va < owner_end <= mapped_range[1]):
+            compiler_path = Path((record.get('compiler_object') or {}).get('path', '/nonexistent'))
+            require(compiler_path.is_file() and
+                    sha(compiler_path) == (record.get('compiler_object') or {}).get('sha256'),
+                    entry['tu'] + '/' + owner_name + ': common-tail compiler pin differs')
+            common_locations = registered_common_storage_locations(
+                root, entry['tu'], original_elf, Elf(compiler_path.read_bytes()), assembly_text)
+            exact = [row for row in common_locations if row['section'] == section and
+                     int(row['address'], 16) == owner_va and row['names'] == [owner_name] and
+                     row['storage_owner']['size'] == size]
+            require(len(exact) == 1 and carve_allocation is not None,
+                    entry['tu'] + '/' + owner_name + ': out-of-TU storage lacks a registered native COMMON carve')
+            mapped_range = (owner_va, owner_end)
         require(mapped_range and mapped_range[0] <= owner_va < owner_end <= mapped_range[1],
                 entry['tu'] + '/' + owner_name + ': C storage extent is outside the original TU section map')
         original_identities = [s for s in original_elf.symbols
@@ -625,8 +1021,22 @@ def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, ass
         if loc_va != owner_va and loc.get('storage_owner'):
             alias_extent = loc.get('alias_extent', item_size)
             alias_extent = int(alias_extent, 0) if isinstance(alias_extent, str) else alias_extent
+            field_proof = None
+            if not alias_extent or loc.get('alias_field'):
+                field_proof = source_storage_member_extent(
+                    source_storage_layout_text(root, source_path), owner_name, size, offset)
+                require(field_proof is not None,
+                        entry['tu'] + '/' + names[0] + ': interior storage alias has no exact source field extent')
+                require(not alias_extent or alias_extent == field_proof['size'],
+                        entry['tu'] + '/' + names[0] + ': frozen alias extent differs from current source field')
+                require(not loc.get('alias_field') or loc['alias_field'] == field_proof,
+                        entry['tu'] + '/' + names[0] + ': frozen alias field differs from current source layout')
+                alias_extent = field_proof['size']
             require(alias_extent and alias_extent > 0 and loc_va + alias_extent <= owner_end,
                     entry['tu'] + '/' + names[0] + ': interior storage alias lacks a bounded exact extent')
+            if original.get('mapped_extent') is not None:
+                require(alias_extent <= int(original['mapped_extent']),
+                        entry['tu'] + '/' + names[0] + ': source field exceeds its exact original mapped item')
             if item_size:
                 require(alias_extent <= int(item_size),
                         entry['tu'] + '/' + names[0] + ': interior alias exceeds its original packet item extent')
@@ -665,14 +1075,17 @@ def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, ass
                                               packet_sha256=sha(packet_path),
                                               source_sha256=sha(source_path),
                                               assembly_sha256=sha(assembly_path),
+                                              **({'source_field':field_proof} if field_proof else {}),
                                               linked=link_verified, relocation_count=len(refs),
                                               relocation_status=relocation_status))
         key = (owner_name, owner_va, size)
         # Preserve an exact same-address packet-label-to-C-owner identity for
         # the TU audit consumer. Interior aliases are already represented by
         # their storage_owner span and are not misreported as ELF symbols.
-        if loc_va == owner_va and owner_name not in names:
+        if loc_va == owner_va:
             for scaffold_name in names:
+                if scaffold_name == owner_name:
+                    continue
                 aliases.append(dict(section=section,scaffold_name=scaffold_name,
                                     object_symbol=owner_name,address=f'0x{loc_va:08X}',
                                     size=size,binding=('LOCAL' if symbol.bind==0 else
@@ -718,7 +1131,26 @@ def allocation_packet(root, task, allocation_root=None):
     return packet, path
 
 
-def current_allocation_scope(control_path, task, entry, record, ctx, original_elf):
+def owner_corrected_items(root, unit, ctx, tu_id, section, address):
+    """Original map items of a verified owner-corrected run that holds `address`.
+
+    A verified owner correction (config/tu/data-carves.json basis.owner_correction)
+    moves an original item from its provisional map TU to this source TU. Its
+    mapped identity then lives in the map TU's pieces; only items wholly inside
+    the corrected run are returned (main/tu091 menutbl, 2026-10-06)."""
+    out = []
+    for run in (data_carve.load_registry(root)['tus'].get(tu_id) or {}).get(section, []):
+        correction = (run.get('basis') or {}).get('owner_correction') or {}
+        lo, hi = (data_carve.hx(v) for v in run['range'])
+        if not correction.get('map_tu') or not lo <= address < hi:
+            continue
+        map_ctx = data_carve.tu_context(root, unit, Path(ctx['orig']).parents[1], correction['map_tu'])
+        out += [item for item in data_carve.section_items(map_ctx, section)
+                if lo <= item['start'] and item['end'] <= hi]
+    return out
+
+
+def current_allocation_scope(control_path, task, entry, record, ctx, original_elf, root=None):
     """Validate a current takeover allocation without inventing a worker packet.
 
     The coordinator's data-recovery-allocation/1 control file is the authority
@@ -772,15 +1204,49 @@ def current_allocation_scope(control_path, task, entry, record, ctx, original_el
                 entry['tu'] + ': current allocation identity has ambiguous original ELF symbols')
         if matching_symbols:
             original_size = matching_symbols[0].size
+        map_items = [item for item in data_carve.section_items(ctx, section)
+                     if item['start'] == address and
+                     set(names).intersection(item.get('labels', [item.get('name')]))]
+        if (not map_items and root is not None and len(matching_symbols) == 1 and
+                matching_symbols[0].bind == 0 and matching_symbols[0].type == 1 and matching_symbols[0].size > 0):
+            registered = data_carve.registered_object_items(
+                root, unit, original_elf, matching_symbols[0],
+                {section: data_carve.section_items(ctx, section)})
+            registered = [row for row in registered if row[1]['start'] == address]
+            if (len(registered) == 1 and candidate.get('original_map_aliases') == registered[0][2]):
+                map_items = [registered[0][1]]
+        if not map_items and root is not None and section not in ('.bss', '.sbss'):
+            # A verified owner correction (config/tu/data-carves.json) moves an
+            # original item from its provisional map TU to this source TU; the
+            # mapped identity is then found in the map TU's pieces, and only
+            # inside the corrected run (main/tu091 menutbl, 2026-10-06).
+            for run in (data_carve.load_registry(root)['tus'].get(entry['tu']) or {}).get(section, []):
+                correction = (run.get('basis') or {}).get('owner_correction') or {}
+                lo, hi = (data_carve.hx(v) for v in run['range'])
+                if not correction.get('map_tu') or not lo <= address < hi:
+                    continue
+                map_ctx = data_carve.tu_context(root, unit, Path(ctx['orig']).parents[1], correction['map_tu'])
+                corrected = [item for item in data_carve.section_items(map_ctx, section)
+                             if item['start'] == address and item['end'] <= hi and
+                             set(names).intersection(item.get('labels', [item.get('name')]))]
+                if len(corrected) == 1:
+                    map_items = corrected
         if section not in ('.bss', '.sbss'):
-            map_items = [item for item in data_carve.section_items(ctx, section)
-                         if item['start'] == address and
-                         set(names).intersection(item.get('labels', [item.get('name')]))]
             require(len(map_items) == 1,
                     entry['tu'] + ': current allocation identity is not one exact original mapped item')
+        else:
+            require(len(map_items) <= 1 and (matching_symbols or map_items),
+                    entry['tu'] + ': storage identity has no unique original symbol or mapped item')
+            original_names = {symbol.name for symbol in original_elf.symbols
+                              if symbol.value == address and 0 < symbol.shndx < len(original_elf.sections)
+                              and original_elf.sections[symbol.shndx].name == section}
+            mapped_names = set(map_items[0].get('labels', [])) if map_items else set()
+            require(set(names) <= original_names | mapped_names,
+                    entry['tu'] + ': storage names contain an unproven original alias')
         data.append(dict(unit=identity['unit'], address=identity['address'],
                          section=section, names=names,
                          owner_tu=entry['tu'], original_symbol_size=original_size,
+                         **({'mapped_extent':map_items[0]['end']-map_items[0]['start']} if map_items else {}),
                          allocation_classification=identity.get('classification')))
     return dict(id=entry['tu'], unit=unit, data=data), control_path, control
 
@@ -1160,8 +1626,10 @@ def direct_initialized_symbol_span(entry, location, record, packet_tu, ctx,
     original_bytes=data_carve.va_bytes(original_elf,va,sym.size)
     require(data[sym.value:sym.value+sym.size]==original_bytes,
             entry['tu']+'/'+sym.name+': carved C object bytes differ from exact original item')
-    ld_path=unit_dir/(record['unit']+'.ld')
-    require(ld_path.is_file(),entry['tu']+': no current overlay linker script for carved object')
+    # MAIN's scaffold script is main.ld; the candidate ROM link selects its
+    # compiler/carved inputs through main.rom.ld. Overlays use <unit>.ld.
+    ld_path=unit_dir/('main.rom.ld' if record['unit']=='main' else record['unit']+'.ld')
+    require(ld_path.is_file(),entry['tu']+': no current candidate linker script for carved object')
     # Unlike scaffold-layout derivation, this proof checks the current private
     # link script's explicit data-carve selections.  `ovl_restore` rewrites
     # those entries back to the original scaffold inputs, which is useful for
@@ -1643,12 +2111,20 @@ def compiler_switch_word_dependencies(entry, record, unit_dir, source,
     if not switch_runs:
         return []
     items = data_carve.section_items(ctx, section)
-    spans = data_carve.declared_runs(entry['tu'], section, switch_runs)
-    plan = data_carve.plan_split(object_elf, csec, data_carve.run_specs(items, spans),
-                                 lambda va, n: data_carve.va_bytes(original_elf, va, n))
     claimed = {(loc.get('section'), int(loc.get('address', '0'), 16), name)
                for loc in record.get('recovered_location_candidates', [])
                for name in (loc.get('names') or [])}
+    # Recovered tables already passed the current compiler/carve/link proof.
+    # This helper has no dependency to establish for those tables; unrelated
+    # scaffold .text relocations must not create a second claim obligation.
+    if not any(item['name'].startswith('jtbl_') and
+               (section,item['start'],item['name']) not in claimed and
+               any(int(run['range'][0],16) <= item['start'] < item['end'] <= int(run['range'][1],16)
+                   for run in switch_runs) for item in items):
+        return []
+    spans = data_carve.declared_runs(entry['tu'], section, switch_runs)
+    plan = data_carve.plan_split(object_elf, csec, data_carve.run_specs(items, spans),
+                                 lambda va, n: data_carve.va_bytes(original_elf, va, n))
     linked_script = (unit_dir / 'main.elf.ld' if record['unit'] == 'main'
                      else unit_dir / (record['unit'] + '.ld'))
     if not linked_script.is_file():
@@ -2180,12 +2656,257 @@ def uncredited_inline_asm_data_dependency(entry, record, section, span, items,
 _REPRODUCED_CARVES = {}
 
 
+def original_string_item_tail(ctx, data_carve, section, lo, cut, hi,
+                              raw_elf, raw_section, offset, original_elf):
+    """Prove an uncredited zero tail inside one original string item.
+
+    This closed route accepts an exact terminated string followed only by
+    unlabelled empty-string/alignment directives. Arbitrary zero data is not
+    padding evidence and cannot enter this route.
+    """
+    if not (lo < cut < hi and hi-cut < raw_section.align and hi % raw_section.align == 0):
+        return None
+    items = [item for item in data_carve.section_items(ctx, section)
+             if item['start'] == lo and item['end'] == hi]
+    if len(items) != 1 or len(items[0].get('labels') or []) != 1:
+        return None
+    item = items[0]
+    directives = data_carve._data_directives(item)
+    if len(directives) < 2 or directives[0][0] != lo or directives[1][0] != cut:
+        return None
+    lines = item['block']['lines']
+    literals = []
+    for address, _, index in directives:
+        match = re.search(r'\*/\s*\.asciz\s+("(?:[^"\\]|\\.)*")\s*$', lines[index])
+        if not match:
+            return None
+        try:
+            literal = ast.literal_eval(match[1]).encode('latin1') + b'\0'
+        except (SyntaxError, ValueError, UnicodeEncodeError, AttributeError):
+            return None
+        if address == lo:
+            if address+len(literal) != cut:
+                return None
+        elif address < cut or literal != b'\0':
+            return None
+        literals.append(literal)
+    prefix = raw_elf.section_bytes(raw_section)[offset:offset+cut-lo]
+    if (prefix != literals[0] or data_carve.va_bytes(original_elf, lo, cut-lo) != prefix or
+            data_carve.va_bytes(original_elf, cut, hi-cut) != bytes(hi-cut)):
+        return None
+    if any(cut <= s.value < hi and s.type not in (3, 4) and
+           0 < s.shndx < len(original_elf.sections) and
+           original_elf.sections[s.shndx].name == section for s in original_elf.symbols):
+        return None
+    raw_lo, raw_hi = offset+cut-lo, offset+hi-lo
+    if any(s.shndx == raw_section.index and s.type not in (3, 4) and
+           raw_lo <= s.value < raw_hi for s in raw_elf.symbols):
+        return None
+    if any(raw_lo < at+4 and at < raw_hi
+           for at, _, _ in data_carve.read_relocations(raw_elf).get(raw_section.index, [])):
+        return None
+    for target in raw_elf.symbols:
+        if target.shndx != raw_section.index or target.type != 3:
+            continue
+        if any(raw_lo <= target.value+ref['addend'] < raw_hi
+               for ref in storage_relocations(raw_elf, target.index, None)):
+            return None
+    return dict(disposition='uncredited_original_item_tail', credited=False,
+                kind='original_string_item_tail', section=section,
+                scaffold_name=item['name'], original_item_range=[lo, hi],
+                range=[cut, hi], compiler_range=[lo, cut],
+                input_section=raw_section.name, input_offset=offset,
+                input_alignment=raw_section.align,
+                original_directive_boundaries=[address for address, _, _ in directives]+[hi],
+                original_elf_sha256=sha(ctx['orig']),
+                compiler_prefix_sha256=hashlib.sha256(prefix).hexdigest())
+
+
+def exact_native_section_plan(entry, section, spans, unit_dir, raw_path,
+                              selected_path, raw_elf, linked_elf, original_elf,
+                              ctx, data_carve, source_section, preserved_carve_input=None):
+    """Prove a complete named initialized section selected without splitting."""
+    unit = entry['tu'].split('/')[0]
+    require(unit == 'main' and source_section == section and len(spans) == 1 and
+            (raw_path.resolve() == selected_path.resolve() or preserved_carve_input is not None) and
+            linked_elf is not None,
+            entry['tu'] + ': native unsplit plan is not the exact MAIN raw selected section')
+    record_path = Path(entry['record'])
+    require(sha(record_path) == entry['sha256'], entry['tu'] + ': native source record changed')
+    record = json.loads(record_path.read_text())
+    raw = record.get('compiler_object') or record.get('object') or {}
+    require(Path(raw.get('path', '')).resolve() == raw_path.resolve() and
+            raw.get('sha256') == sha(raw_path), entry['tu'] + ': native compiler object pin differs')
+    assembly = Path(record['assembly']['path'])
+    require(assembly.is_file() and sha(assembly) == record['assembly']['sha256'],
+            entry['tu'] + ': native cc1 assembly pin differs')
+    root = unit_dir.parents[1]
+    derive_path = raw_path
+    preserved = None
+    if preserved_carve_input is not None:
+        derive_path = preserved_carve_input
+        native = record.get('object') or {}
+        sidecar = Path(str(selected_path) + '.json')
+        cache_key = (str(selected_path.resolve()), sha(raw_path), sha(derive_path), sha(selected_path))
+        plans = _REPRODUCED_CARVES.get(cache_key)
+        facts = next((t for t in json.loads((root / 'config/tu-build.json').read_text())['tus']
+                      if t['id'] == entry['tu']), None)
+        mapping = json.loads(sidecar.read_text()) if sidecar.is_file() else {}
+        require(facts and facts.get('in_scope') and facts['unit'] == unit and
+                facts['name'] == ctx['name'] and facts['path'] == f'src/{unit}/{ctx["name"]}.c' and
+                Path(native.get('path', '')).resolve() == derive_path.resolve() and
+                native.get('sha256') == sha(derive_path) and
+                derive_path.relative_to(unit_dir).as_posix() == f'build/c/{ctx["name"]}.o' and
+                selected_path.relative_to(unit_dir).as_posix() == f'build/c/{ctx["name"]}.carved.o' and
+                mapping.get('object') == derive_path.relative_to(unit_dir).as_posix() and
+                mapping.get('out') == selected_path.relative_to(unit_dir).as_posix() and
+                mapping.get('tu') == entry['tu'] and plans and section not in plans and
+                set(mapping.get('sections', {})) == set(plans) and section not in mapping['sections'],
+                entry['tu'] + ': preserved initialized section lacks the complete native allocation/carve chain')
+        def identity(elf, sec):
+            symbols = sorted((s.name, s.value, s.size, s.bind, s.type, s.other)
+                             for s in elf.symbols if s.shndx == sec.index and s.type not in (3, 4))
+            relocations = []
+            for rel in elf.sections:
+                if rel.type not in (4, 9) or rel.info != sec.index:
+                    continue
+                stride = 12 if rel.type == 4 else 8
+                require(rel.entsize == stride and rel.size % stride == 0,
+                        entry['tu'] + ': preserved initialized relocation layout differs')
+                for off in range(0, rel.size, stride):
+                    position, info = struct.unpack_from('<II', elf.data, rel.offset + off)
+                    require((info >> 8) < len(elf.symbols),
+                            entry['tu'] + ': preserved initialized relocation has no symbol identity')
+                    symbol = elf.symbols[info >> 8]
+                    target = elf.sections[symbol.shndx].name if 0 < symbol.shndx < len(elf.sections) else symbol.shndx
+                    addend = struct.unpack_from('<i', elf.data, rel.offset + off + 8)[0] if stride == 12 else None
+                    relocations.append((rel.type, position, info & 255, addend, symbol.name,
+                                        symbol.value, symbol.size, symbol.bind, symbol.type, symbol.other, target))
+            return ((sec.name, sec.type, sec.flags, sec.addr, sec.size, sec.link, sec.info, sec.align, sec.entsize),
+                    elf.section_bytes(sec), symbols, sorted(relocations))
+        identities = []
+        for path in (raw_path, derive_path, selected_path):
+            elf = Elf(path.read_bytes())
+            matches = [s for s in elf.sections if s.name == section]
+            require(len(matches) == 1 and matches[0].type == 1 and matches[0].size > 0,
+                    entry['tu'] + ': preserved sibling is not a unique initialized section')
+            identities.append(identity(elf, matches[0]))
+        require(identities[0] == identities[1] == identities[2],
+                entry['tu'] + ': preserved initialized bytes, metadata, symbols or relocations changed')
+        preserved = dict(schema='preserved-initialized-carve-section/1',
+                         raw_object_sha256=sha(raw_path), native_object_sha256=sha(derive_path),
+                         selected_object_sha256=sha(selected_path), sidecar_sha256=sha(sidecar),
+                         complete_deterministic_carve=True)
+    sources = [p for p in record['files'] if p.endswith('.c')]
+    require(len(sources) == 1 and sources[0] == f'src/{unit}/{ctx["name"]}.c' and
+            (preserved is not None or
+             selected_path.relative_to(unit_dir).as_posix() == f'build/c/{ctx["name"]}.o') and
+            sha(root / sources[0]) == record['files'][sources[0]]['sha256'],
+            entry['tu'] + ': native source pin differs')
+    raw_elf = Elf(raw_path.read_bytes())
+    rawsec = next((s for s in raw_elf.sections if s.name == section), None)
+    lo, hi = spans[0]
+    require(rawsec is not None and rawsec.type == 1 and 0 < rawsec.size <= hi-lo and
+            rawsec.size > 0 and any(p['start'] <= lo < hi <= p['end']
+                                  for p in ctx['pieces'].get(section, [])),
+            entry['tu'] + ': native plan does not cover exactly the original/raw initialized section')
+    owners = sorted((s for s in raw_elf.symbols if s.shndx == rawsec.index and s.type not in (3, 4)),
+                    key=lambda s: s.value)
+    emitted = emitted_data(assembly.read_text(errors='surrogateescape'))
+    cursor = 0
+    for owner in owners:
+        require(owner.type == 1 and owner.size > 0 and owner.value == cursor and owner.name in emitted,
+                entry['tu'] + ': native initialized owners do not tile cc1 storage')
+        if preserved is not None:
+            originals = [s for s in original_elf.symbols if
+                         (s.name, s.value, s.size, s.bind, s.type, s.other) ==
+                         (owner.name, lo+owner.value, owner.size, owner.bind, owner.type, owner.other) and
+                         0 < s.shndx < len(original_elf.sections) and
+                         original_elf.sections[s.shndx].name == section]
+            require(len(originals) == 1,
+                    entry['tu'] + ': preserved initialized owner lacks exact original named storage')
+        cursor += owner.size
+    require(cursor == rawsec.size and owners,
+            entry['tu'] + ': native initialized section has anonymous, padding or unowned bytes')
+    # This is the same raw-emission classification used by the caller; actual
+    # linker placement must not hide the compiler's declarations from derive.
+    previous = data_carve.tu_context
+    def emission_context(*args, **kwargs):
+        context = previous(*args, **kwargs)
+        context['placed'] = set()
+        return context
+    data_carve.tu_context = emission_context
+    try:
+        derived = data_carve.derive(root, unit, unit_dir, entry['tu'], root / sources[0], derive_path)
+    finally:
+        data_carve.tu_context = previous
+    declared = data_carve.load_registry(root)['tus'].get(entry['tu'], {}).get(section, [])
+    padding = []
+    physical = data_carve.absorb_padding(entry['tu'], section, declared,
+                                         data_carve.section_items(ctx, section))
+    require(len(declared) == 1 and tuple(map(data_carve.hx, declared[0]['range'])) ==
+            (lo, lo+rawsec.size) and tuple(map(data_carve.hx, physical[0]['range'])) == (lo, hi),
+            entry['tu'] + ': native logical/physical spans differ from the original guarded partition')
+    if rawsec.size < hi-lo:
+        padding = physical[0].get('absorbed_padding') or []
+        require(padding == [[data_carve.h8(lo+rawsec.size), data_carve.h8(hi)]] and
+                data_carve.va_bytes(original_elf, lo+rawsec.size, hi-lo-rawsec.size) ==
+                bytes(hi-lo-rawsec.size) and not any(
+                    lo+rawsec.size <= s.value < hi and s.type not in (3, 4) and
+                    0 < s.shndx < len(original_elf.sections) and
+                    original_elf.sections[s.shndx].name == section for s in original_elf.symbols),
+                entry['tu'] + ': native tail lacks exact uncredited original alignment-padding proof')
+    require(not [p for p in derived['problems'] if not is_nobits_derivation_problem(p)] and
+            data_carve.normalize_runs({section: derived['runs'].get(section)}) ==
+            data_carve.normalize_runs({section: declared}) and
+            (derived['sections'].get(section, {}).get('bytes') or {}).get('checked') is True and
+            (derived['sections'].get(section, {}).get('bytes') or {}).get('equal') is True and
+            section not in data_carve.split_plans(root, unit, unit_dir, entry['tu'], Elf(derive_path.read_bytes())),
+            entry['tu'] + ': native data differs from the complete guarded raw run')
+    ld_path = unit_dir / 'main.rom.ld'
+    selected_rel = selected_path.relative_to(unit_dir).as_posix()
+    selector = re.escape(selected_rel) + r'\(' + re.escape(section) + r'\);'
+    ldtext = ld_path.read_text()
+    placements = re.findall(r'\.\s*=\s*(0x[0-9a-fA-F]+);\s*' + selector, ldtext)
+    marker = '__c_' + ctx['name'] + '_' + section.lstrip('.').replace('.', '_')
+    native_marker = re.findall(re.escape(marker) + r'\s*=\s*\.;\s*' + selector, ldtext)
+    linked_markers = [s for s in linked_elf.symbols if s.name == marker and s.value == lo and s.type == 0]
+    require((len(placements) == 1 and int(placements[0], 16) == lo) or
+            (len(native_marker) == 1 and len(linked_markers) == 1),
+            entry['tu'] + ': native linker selection/address is not exact')
+    for owner in owners:
+        matches = [s for s in linked_elf.symbols if
+                   (s.name, s.value, s.size, s.bind, s.type) ==
+                   (owner.name, lo+owner.value, owner.size, owner.bind, owner.type) and
+                   0 < s.shndx < len(linked_elf.sections) and
+                   linked_elf.sections[s.shndx].name == section]
+        require(len(matches) == 1, entry['tu'] + ': native named compiler object was not selected exactly')
+    require(data_carve.va_bytes(original_elf, lo, hi-lo) ==
+            data_carve.va_bytes(linked_elf, lo, hi-lo),
+            entry['tu'] + ': native initialized final bytes differ from original')
+    return dict(pieces=[dict(lo=lo, hi=hi, offset=0, length=rawsec.size,
+                            input_section=section, selected_section=section, selected_offset=0)],
+                native_unsplit=dict(schema='native-unsplit-initialized-section/1',
+                    input_section=section, logical_range=[lo, lo+rawsec.size], physical_range=[lo, hi],
+                    credited_bytes=rawsec.size, uncredited_padding=padding,
+                    object_sha256=sha(raw_path), assembly_sha256=sha(assembly),
+                    source_sha256=sha(root / sources[0]), linker_sha256=sha(ld_path),
+                    original_elf_sha256=hashlib.sha256(original_elf.data).hexdigest(),
+                    linked_elf_sha256=hashlib.sha256(linked_elf.data).hexdigest(),
+                    **({'preserved_carve': preserved} if preserved is not None else {})))
+
+
 def exact_carved_section_plan(entry, section, spans, unit_dir, raw_path,
                               selected_path, raw_elf, selected_elf,
                               linked_elf, original_elf, linked_path,
-                              ctx, data_carve, source_section=None):
+                              ctx, data_carve, source_section=None,
+                              compiler_allocation_proof=None):
     """Translate raw section runs through the exact current allocator/carve map."""
     sidecar=Path(str(selected_path)+'.json')
+    if not sidecar.is_file() and raw_path.resolve() == selected_path.resolve():
+        return exact_native_section_plan(entry, section, spans, unit_dir, raw_path,
+                                         selected_path, raw_elf, linked_elf, original_elf,
+                                         ctx, data_carve, source_section or section)
     require(sidecar.is_file(),entry['tu']+': raw/carved fallback lacks carve sidecar for '+str(selected_path))
     carve=json.loads(sidecar.read_text())
     input_section=source_section or section
@@ -2197,19 +2918,37 @@ def exact_carved_section_plan(entry, section, spans, unit_dir, raw_path,
     if direct_raw_carve:
         raw_rel=carve.get('object')
         current_raw_path=unit_dir/raw_rel if isinstance(raw_rel,str) else Path('/__missing_raw_carve_object__')
-        require(current_raw_path.is_file() and sha(current_raw_path)==sha(raw_path),
-                entry['tu']+': direct carve sidecar does not bind the packet-pinned raw compiler object')
+        require(current_raw_path.is_file(),entry['tu']+': direct carve input is absent')
+        if current_raw_path.resolve()!=raw_path.resolve():
+            proof=compiler_allocation_proof or {}
+            verification=Path(proof.get('verification_path','/__missing_allocation_verification__'))
+            require(entry['tu'].startswith('main/') and
+                    Path(proof.get('raw_object_path','/__missing_raw__')).resolve()==raw_path.resolve() and
+                    proof.get('raw_object_sha256')==sha(raw_path) and
+                    Path(proof.get('allocated_object_path','/__missing_allocated__')).resolve()==current_raw_path.resolve() and
+                    proof.get('allocated_object_sha256')==sha(current_raw_path) and
+                    verification.is_file() and proof.get('verification_sha256')==sha(verification)==sha(current_raw_path),
+                    entry['tu']+': direct carve input lacks exact current compiler-to-COMMON allocation proof')
+        else:
+            require(sha(current_raw_path)==sha(raw_path),
+                    entry['tu']+': direct carve sidecar does not bind the packet-pinned raw compiler object')
+        carve_input_elf=Elf(current_raw_path.read_bytes())
         unit=entry['tu'].split('/')[0]
         private_root=unit_dir.parents[1]
-        cache_key=(str(selected_path.resolve()),sha(current_raw_path),sha(selected_path))
+        cache_key=(str(selected_path.resolve()),sha(raw_path),sha(current_raw_path),sha(selected_path))
         if cache_key not in _REPRODUCED_CARVES:
-            plans=data_carve.split_plans(private_root,unit,unit_dir,entry['tu'],raw_elf)
+            plans=data_carve.split_plans(private_root,unit,unit_dir,entry['tu'],carve_input_elf)
             expected=data_carve.split_object(current_raw_path.read_bytes(),
                                              {sec:plan['pieces'] for sec,plan in plans.items()})
             require(selected_path.read_bytes()==expected,
                     entry['tu']+': direct carve object differs from deterministic raw-section split (including relocations)')
             _REPRODUCED_CARVES[cache_key]=plans
         plans=_REPRODUCED_CARVES[cache_key]
+        if input_section not in plans:
+            return exact_native_section_plan(entry, section, spans, unit_dir, raw_path,
+                                             selected_path, raw_elf, linked_elf, original_elf,
+                                             ctx, data_carve, input_section,
+                                             preserved_carve_input=current_raw_path)
         require(input_section in plans,entry['tu']+': direct carve has no guarded split plan for '+input_section)
         expected_pieces=[dict(section=data_carve.split_section_name(input_section,index),
                               offset=hex(piece['offset']),length=hex(piece['length']),
@@ -2230,14 +2969,22 @@ def exact_carved_section_plan(entry, section, spans, unit_dir, raw_path,
                 carve.get('object')==allocated.relative_to(unit_dir).as_posix(),
                 entry['tu']+': allocator/carve chain does not bind current raw object')
     rawsec=next((s for s in raw_elf.sections if s.name==input_section and s.size),None)
-    alloc_elf=Elf(selected_path.read_bytes()) if direct_raw_carve else Elf(allocated.read_bytes())
+    alloc_elf=carve_input_elf if direct_raw_carve else Elf(allocated.read_bytes())
     allocsec=next((s for s in alloc_elf.sections if s.name==input_section),None)
     require(rawsec is not None and allocsec is not None,
             entry['tu']+': raw or allocated initialized section is absent')
     rawbytes=raw_elf.section_bytes(rawsec)
     allocbytes=alloc_elf.section_bytes(allocsec)
+    require(rawbytes==allocbytes and rawsec.size==allocsec.size and
+            rawsec.type==allocsec.type and rawsec.flags==allocsec.flags and rawsec.align==allocsec.align,
+            entry['tu']+': allocator changed initialized section bytes or identity')
+    if direct_raw_carve and current_raw_path.resolve()!=raw_path.resolve():
+        def section_symbols(elf, sec):
+            return sorted((s.name,s.value,s.size,s.bind,s.type) for s in elf.symbols
+                          if s.shndx==sec.index and s.name and s.type not in (3,4))
+        require(section_symbols(raw_elf,rawsec)==section_symbols(alloc_elf,allocsec),
+                entry['tu']+': COMMON allocation changed initialized symbol identities/offsets')
     if not direct_raw_carve:
-        require(rawbytes==allocbytes,entry['tu']+': allocator changed initialized section bytes')
         cache_key=(str(selected_path.resolve()),sha(allocated),sha(selected_path))
         if cache_key not in _REPRODUCED_CARVES:
             plans=data_carve.split_plans(unit_dir.parents[1],entry['tu'].split('/')[0],unit_dir,entry['tu'],alloc_elf)
@@ -2253,7 +3000,13 @@ def exact_carved_section_plan(entry, section, spans, unit_dir, raw_path,
     ldtext=ld_path.read_text()
     selected_rel=selected_path.relative_to(unit_dir).as_posix()
     declared_runs=data_carve.load_registry(unit_dir.parents[1]).get('tus',{}).get(entry['tu'],{}).get(section,[])
+    if direct_raw_carve:
+        # The split uses physical runs extended over original alignment pads.
+        # Reproduce that extension; registry/generated extents remain C-only.
+        declared_runs=data_carve.absorb_padding(entry['tu'],section,declared_runs,
+                                                data_carve.section_items(ctx,section))
     for lo,hi in spans:
+        item_tail = None
         matches=[p for p in pieces if int(p['va'],0)==lo and int(p['run_end'],0)==hi]
         require(len(matches)==1,entry['tu']+': carve sidecar has no unique run-to-VA mapping')
         p=matches[0]
@@ -2267,6 +3020,14 @@ def exact_carved_section_plan(entry, section, spans, unit_dir, raw_path,
             if generated:
                 require(data_carve.hx(generated[0])==lo and data_carve.hx(generated[1])==lo+size,
                         entry['tu']+': direct carve extent differs from the pinned compiler-generated byte range')
+                if size<hi-lo:
+                    padding=[tuple(map(data_carve.hx,span)) for span in run.get('absorbed_padding') or []]
+                    if padding != [(lo+size,hi)]:
+                        item_tail = original_string_item_tail(
+                            ctx,data_carve,section,lo,lo+size,hi,raw_elf,rawsec,off,original_elf)
+                    require((padding==[(lo+size,hi)] or item_tail is not None) and
+                            data_carve.va_bytes(original_elf,lo+size,hi-lo-size)==bytes(hi-lo-size),
+                            entry['tu']+': direct carve gap lacks exact original alignment-padding proof')
             else:
                 require(size==hi-lo,
                         entry['tu']+': direct carve leaves bytes outside a pinned generated extent')
@@ -2284,15 +3045,16 @@ def exact_carved_section_plan(entry, section, spans, unit_dir, raw_path,
                 entry['tu']+': carved fallback section differs from original/final linked bytes')
         result.append(dict(lo=lo,hi=hi,offset=off,length=size,
                            input_section=input_section,
-                           selected_section=p['section'],selected_offset=0))
+                           selected_section=p['section'],selected_offset=0,
+                           **({'uncredited_original_item_tail':item_tail} if item_tail else {})))
     return dict(pieces=result)
 
 
-def uncredited_linker_map_alias(entry, alias_section, alias, owner,
+def uncredited_linker_map_alias(root, entry, alias_section, alias, owner,
                                 packet_tu, storage_rows, original_elf,
                                 linked_elf, original_section_ranges, ctx,
                                 data_carve, source, asm_path, linked_path,
-                                allocation_path):
+                                allocation_path, object_elf=None):
     """Validate a map-only linker name as a zero-credit dependency of C storage."""
     name=alias['original_name']
     va=int(alias['address'],16)
@@ -2375,6 +3137,43 @@ def uncredited_linker_map_alias(entry, alias_section, alias, owner,
     meaningful=[s for s in original_at if s.type==1 and s.size>0]
     require(not meaningful,
             entry['tu']+'/'+name+': map-only dependency overlaps meaningful original OBJECT identity')
+    source_member = None
+    consumer_relocations = []
+    if alias_section in ('.bss', '.sbss') and va > owner_va:
+        text = source.read_text(errors='surrogateescape')
+        array = source_storage_array_extent(text, owner['name'], owner_size)
+        field = source_storage_member_extent(
+            source_storage_layout_text(root, source), owner['name'], owner_size, va-owner_va)
+        if array and (va-owner_va) % array['element_stride'] == 0:
+            source_member = dict(array, kind='local_fixed_array_element',
+                                 element_index=(va-owner_va)//array['element_stride'],
+                                 owner_offset=va-owner_va, size=array['element_stride'])
+        elif field:
+            source_member = field
+        require(source_member and source_member['size'] <= extent,
+                entry['tu']+'/'+name+': map-only interior alias lacks a bounded source array/member witness')
+        require(object_elf is not None,
+                entry['tu']+'/'+name+': map-only interior alias lacks a current compiler object')
+        original_references = data_carve.identifiers(
+            path for folder in ctx['fdirs'] if folder.is_dir() for path in sorted(folder.glob('*.s')))
+        owner_symbols = [s for s in object_elf.symbols if s.name == owner['name'] and
+                         0 < s.shndx < len(object_elf.sections)]
+        require(len(owner_symbols) == 1,
+                entry['tu']+'/'+name+': map-only interior alias lacks a unique compiler owner')
+        owner_symbol = owner_symbols[0]
+        targets = [owner_symbol] + [s for s in object_elf.symbols
+                                   if s.shndx == owner_symbol.shndx and s.type == 3]
+        for target in targets:
+            consumer_relocations.extend(dict(ref, owner_offset=ref['addend']+target.value-owner_symbol.value)
+                                        for ref in storage_relocations(object_elf, target.index, None)
+                                        if ref['addend']+target.value-owner_symbol.value == va-owner_va)
+        for target in object_elf.symbols:
+            if target.name == name and target.shndx == 0:
+                consumer_relocations.extend(dict(ref, owner_offset=va-owner_va+ref['addend'], map_alias=name)
+                                            for ref in storage_relocations(object_elf, target.index, None)
+                                            if ref['addend'] == 0)
+        require(name not in original_references or consumer_relocations,
+                entry['tu']+'/'+name+': original alias consumer has no current relocation at the exact owner offset')
     linked_names=[s for s in linked_elf.symbols if s.name==name]
     if linked_names:
         require(len(linked_names)==1 and linked_names[0].value==va,
@@ -2423,6 +3222,8 @@ def uncredited_linker_map_alias(entry, alias_section, alias, owner,
                 scaffold_path=str(scaffold_path) if scaffold_path else None,
                 scaffold_sha256=scaffold_sha256,
                 alias_identity_source=alias_identity_source,
+                **({'source_member': source_member} if source_member else {}),
+                **({'consumer_relocations': consumer_relocations} if consumer_relocations else {}),
                 original_elf_sha256=sha(ctx['orig']),
                 linked_identity=linked_identity,linked_alias_status=alias_link_status,
                 source_sha256=sha(source),assembly_sha256=sha(asm_path),
@@ -2631,6 +3432,7 @@ def main():
     input_only = args.input_only
     storage_only = args.storage_only or input_only
     output=dict(schema='compiler-c-data-input-audit/1' if input_only else 'linked-c-data-audit/2',
+                data_required=False, grants_function_acceptance=False,
                 manifest_sha256=sha(args.manifest),
                 scope='compiler_storage_input_only' if input_only else
                       'storage_only' if storage_only else 'initialized_and_storage',
@@ -2776,7 +3578,7 @@ def main():
                         entry['tu'] + ': candidate lacks its coordinator task identity')
                 packet_tu, allocation_path, allocation = current_allocation_scope(
                     args.allocation_control, record['allocation_task'], entry, record,
-                    ctx, original_elf)
+                    ctx, original_elf, root)
             else:
                 allocation, allocation_path = allocation_packet(
                     root, record.get('allocation_task'),args.allocation_root)
@@ -2849,11 +3651,71 @@ def main():
             # raw section-to-map relation and can erase otherwise exact run
             # facts. The selected linked object remains the authority for
             # allocation and final placement checks above.
-            raw_object_info=record.get('object') or {}
+            raw_object_info=record.get('compiler_object') or record.get('object') or {}
             derive_obj=Path(raw_object_info.get('path',''))
             require(derive_obj.is_file() and raw_object_info.get('sha256')==sha(derive_obj),
                     entry['tu']+': missing or stale record-pinned raw compiler object for derivation')
+            require_registered_common_claims(entry['tu'], registered_common_storage_locations(
+                root, entry['tu'], original_elf, Elf(derive_obj.read_bytes()),
+                asm_path.read_text(errors='surrogateescape')), record)
+            compiler_allocation_proof=None
+            if record.get('compiler_object'):
+                compiler_assembly=Path(str(derive_obj)+'.s')
+                require(compiler_assembly.is_file() and sha(compiler_assembly)==sha(asm_path) and
+                        record['assembly'].get('sha256')==sha(compiler_assembly),
+                        entry['tu']+': compiler cc1 assembly pin differs')
+                allocation_input=Path(record['object']['path'])
+                require(allocation_input.is_file() and sha(allocation_input)==record['object'].get('sha256'),
+                        entry['tu']+': allocated carve input pin differs')
+                if allocation_input.resolve()!=derive_obj.resolve():
+                    require(unit=='main',entry['tu']+': separate compiler input is MAIN-only')
+                    recipe=tu_audit.build_assembly_recipe(unit_dir,allocation_input)
+                    common=(recipe or {}).get('common_allocation') or {}
+                    require(Path(common.get('raw_object','/nonexistent')).resolve()==derive_obj.resolve() and
+                            Path(common.get('output_object','/nonexistent')).resolve()==allocation_input.resolve(),
+                            entry['tu']+': allocation recipe does not connect exact compiler/carve inputs')
+                    linker=Path(common['linker']).resolve()
+                    require(sha(linker)==common['linker_sha256'],entry['tu']+': allocation linker pin differs')
+                    check_path=args.output.parent/(entry['tu'].replace('/','-')+'.verified-alloc.o')
+                    require(not check_path.exists(),entry['tu']+': allocation verification output already exists')
+                    argv=[str(linker),'-r','-d','-EL','-m','elf32lr5900','-o',str(check_path),str(derive_obj)]
+                    process=subprocess.Popen(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+                    try:
+                        stdout,stderr=process.communicate(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid,signal.SIGKILL)
+                        process.communicate()
+                        raise ValueError(entry['tu']+': exact COMMON-allocation verification timed out')
+                    require(process.returncode==0 and check_path.is_file() and
+                            sha(check_path)==sha(allocation_input),
+                            entry['tu']+': exact current COMMON-allocation bytes differ: '+stderr.decode(errors='replace')[:300])
+                    compiler_allocation_proof=dict(raw_object_path=str(derive_obj),raw_object_sha256=sha(derive_obj),
+                        allocated_object_path=str(allocation_input),allocated_object_sha256=sha(allocation_input),
+                        verification_path=str(check_path),verification_sha256=sha(check_path),
+                        linker_path=str(linker),linker_sha256=sha(linker),argv=argv)
             raw_object_elf=Elf(derive_obj.read_bytes())
+            derivation_obj=Path(compiler_allocation_proof['allocated_object_path']) if compiler_allocation_proof else derive_obj
+            if compiler_allocation_proof:
+                allocated_elf=Elf(derivation_obj.read_bytes())
+                # The verified native ld step supplies COMMON storage for
+                # NOBITS planning. Every initialized section still has the
+                # compiler's exact bytes, metadata and named-symbol offsets.
+                for raw_section in raw_object_elf.sections:
+                    if raw_section.name not in data_carve.SECTIONS or raw_section.type==8 or not raw_section.size:
+                        continue
+                    allocated_sections=[s for s in allocated_elf.sections if s.name==raw_section.name]
+                    require(len(allocated_sections)==1,entry['tu']+': COMMON allocation lost an initialized section')
+                    allocated_section=allocated_sections[0]
+                    require((raw_section.type,raw_section.flags,raw_section.align,raw_section.size)==
+                            (allocated_section.type,allocated_section.flags,allocated_section.align,allocated_section.size) and
+                            raw_object_elf.section_bytes(raw_section)==allocated_elf.section_bytes(allocated_section),
+                            entry['tu']+': COMMON allocation changed initialized compiler bytes/metadata')
+                    raw_symbols=sorted((s.name,s.value,s.size,s.bind,s.type) for s in raw_object_elf.symbols
+                                       if s.shndx==raw_section.index and s.name and s.type not in (3,4))
+                    allocated_symbols=sorted((s.name,s.value,s.size,s.bind,s.type) for s in allocated_elf.symbols
+                                             if s.shndx==allocated_section.index and s.name and s.type not in (3,4))
+                    require(raw_symbols==allocated_symbols,
+                            entry['tu']+': COMMON allocation changed initialized compiler symbol identities')
             # `tu_context()` marks sections as `placed` when the current
             # linker script selects the TU's entire compiler section. That is
             # a link-layout fact, not an emission fact: for this raw-object
@@ -2869,7 +3731,7 @@ def main():
                 return context
             data_carve.tu_context=raw_emission_context
             try:
-                derived=data_carve.derive(root,unit,unit_dir,entry['tu'],source,derive_obj)
+                derived=data_carve.derive(root,unit,unit_dir,entry['tu'],source,derivation_obj)
             finally:
                 data_carve.tu_context=original_tu_context
             initialized_problems=[p for p in derived['problems'] if not is_nobits_derivation_problem(p)]
@@ -2969,6 +3831,8 @@ def main():
             symbol_aliases=[]
             original_object_identities=[]
             storage_owner_aliases=[]
+            original_item_tails=[]
+            native_unsplit_sections=[]
             for section,runs in derived['runs'].items():
                 if storage_only and section not in ('.bss','.sbss'):
                     unclaimed_scaffold_runs.extend(dict(section=section,range=[lo,hi])
@@ -2999,6 +3863,7 @@ def main():
                 # example a literal label emitted by preserved inline asm), so
                 # keep it as an exact placement anchor but prove it separately
                 # through the allocator/carve chain without crediting it.
+                claimed_piece_spans=set(claimed_spans)
                 if claimed_spans:
                     explicit_runs=[run for run in runs if
                                    tuple(map(data_carve.hx,run['range'])) in claimed_spans]
@@ -3010,20 +3875,47 @@ def main():
                                 proof=exact_carved_section_plan(
                                     entry,section,[part_span],unit_dir,derive_obj,obj_path,
                                     raw_object_elf,obj,linked,original_elf,linked_path,ctx,data_carve,
-                                    source_section=part['section'])
+                                    source_section=part['section'],
+                                    compiler_allocation_proof=compiler_allocation_proof)
                                 plan['pieces'].extend(proof['pieces'])
+                                # A logical original run may be assembled from
+                                # several noncontiguous compiler input slices.
+                                # Each slice has just passed the exact current
+                                # raw/allocation/carve/link proof; process its
+                                # own original span rather than silently
+                                # dropping it because it is smaller than the
+                                # enclosing logical run.
+                                if part.get('credit','verified')=='verified':
+                                    claimed_piece_spans.add(part_span)
                     else:
                         csec=next(s for s in raw_object_elf.sections if s.name==section and s.size)
-                        try:
-                            plan=data_carve.plan_split(raw_object_elf,csec,
-                                data_carve.run_specs(items,claimed_spans),
-                                lambda va,n:data_carve.va_bytes(original_elf,va,n))
-                        except data_carve.CarveError:
+                        physical_runs=data_carve.absorb_padding(entry['tu'],section,runs,items)
+                        physical_spans=[tuple(map(data_carve.hx,physical['range']))
+                                        for logical,physical in zip(runs,physical_runs)
+                                        if tuple(map(data_carve.hx,logical['range'])) in claimed_spans]
+                        if physical_spans != claimed_spans:
+                            # Alignment pads are physical carve bytes, never
+                            # additional named definitions. Prove the complete
+                            # current guarded split and exact selected input.
                             plan=exact_carved_section_plan(
-                                entry,section,claimed_spans,unit_dir,derive_obj,obj_path,
-                                raw_object_elf,obj,linked,original_elf,linked_path,ctx,data_carve)
+                                entry,section,physical_spans,unit_dir,derive_obj,obj_path,
+                                raw_object_elf,obj,linked,original_elf,linked_path,ctx,data_carve,
+                                compiler_allocation_proof=compiler_allocation_proof)
+                            claimed_piece_spans.update(physical_spans)
+                        else:
+                            try:
+                                plan=data_carve.plan_split(raw_object_elf,csec,
+                                    data_carve.run_specs(items,claimed_spans),
+                                    lambda va,n:data_carve.va_bytes(original_elf,va,n))
+                            except data_carve.CarveError:
+                                plan=exact_carved_section_plan(
+                                    entry,section,claimed_spans,unit_dir,derive_obj,obj_path,
+                                    raw_object_elf,obj,linked,original_elf,linked_path,ctx,data_carve,
+                                    compiler_allocation_proof=compiler_allocation_proof)
                 else:
                     plan={'pieces': []}
+                if plan.get('native_unsplit'):
+                    native_unsplit_sections.append(plan['native_unsplit'])
                 for lo,hi in unclaimed_spans:
                     try:
                         dependency=uncredited_inline_asm_data_dependency(
@@ -3035,8 +3927,10 @@ def main():
                     if dependency is not None:
                         dependencies.append(dependency)
                 for piece in plan['pieces']:
-                    if not any(lo == piece['lo'] and hi == piece['hi'] for lo,hi in claimed_spans):
+                    if (piece['lo'],piece['hi']) not in claimed_piece_spans:
                         continue
+                    if piece.get('uncredited_original_item_tail'):
+                        original_item_tails.append(piece['uncredited_original_item_tail'])
                     csec=next(s for s in raw_object_elf.sections
                               if s.name==piece.get('input_section',section) and s.size)
                     own=[s for s in raw_object_elf.symbols if s.shndx==csec.index and s.type not in (3,4) and s.name]
@@ -3144,6 +4038,11 @@ def main():
                         owners=[item for item in items if item['start']<=va<item['end']
                                 and (names.intersection(item.get('labels') or []) or
                                      (item['start']==va and named_original_at_va))]
+                        if not owners:
+                            # owner-corrected run: the item is mapped in its map TU
+                            owners=[item for item in owner_corrected_items(root,unit,ctx,entry['tu'],section,va)
+                                    if item['start']<=va<item['end'] and
+                                    names.intersection(item.get('labels') or [])]
                         require(len(owners)==1,entry['tu']+'/'+location['address']+
                                 ': no unique original scaffold item bounds the verified location')
                         item=owners[0]
@@ -3166,8 +4065,8 @@ def main():
                         object_offset=piece['offset']+va-piece['lo']
                         exact_object_symbols=[s.name for s in own if s.value==object_offset]
                         owner_proof=validate_initialized_storage_owner(
-                            entry,location,section,piece,own,obj,linked,original_elf,
-                            original_section_ranges,emitted,obj_path,linked_path,
+                            entry,location,section,piece,own,raw_object_elf,linked,original_elf,
+                            original_section_ranges,emitted,derive_obj,linked_path,
                             sha(allocation_path),sha(source),sha(asm_path))
                         owner_va=(int(owner_proof['address'],16) if owner_proof else None)
                         if owner_proof:
@@ -3356,6 +4255,14 @@ def main():
             storage_owner_aliases.extend(bss_owner_aliases)
             for location in record['recovered_location_candidates']:
                 if location.get('section') in ('.bss','.sbss'):
+                    owner = location.get('storage_owner') or {}
+                    va = int(location.get('address', '0'), 16)
+                    if owner and va != int(owner.get('address', '0'), 16) and not any(
+                            s.value == va and s.type not in (3, 4) and
+                            0 < s.shndx < len(original_elf.sections) and
+                            original_elf.sections[s.shndx].name == location['section']
+                            for s in original_elf.symbols):
+                        continue
                     aliases_at_location=[alias['object_symbol'] for alias in storage_aliases
                                          if alias['section']==location.get('section') and
                                          alias['address']==f"0x{int(location.get('address','0'),16):08X}" and
@@ -3410,11 +4317,35 @@ def main():
                                            x['owner_address'] == owner_address and
                                            x['owner_size'] == owner_size and x.get('linked_elf_sha256')
                                            for x in storage_owner_aliases)
-                            if not (direct or interior):
+                            # An initialized owner can be recorded as an alias
+                            # of itself by the linker carrier. Bind that row to
+                            # its existing complete OBJECT proof, not to the
+                            # NOBITS-only storage collection below.
+                            initialized_direct = (alias_name == owner['name'] and
+                                alias_address == owner_address and any(
+                                    proof and span['section'] == alias_section and
+                                    alias_name in span['names'] and
+                                    span['range'] == [owner_va, owner_va + owner_size] and
+                                    proof['name'] == owner['name'] and
+                                    proof['address'] == owner_address and proof['size'] == owner_size and
+                                    proof['section'] == alias_section and proof['type'] == 'OBJECT' and
+                                    proof['object_sha256'] == sha(derive_obj) and
+                                    proof['linked_elf_sha256'] == sha(linked_path) and
+                                    proof['packet_sha256'] == sha(allocation_path) and
+                                    proof['source_sha256'] == sha(source) and
+                                    proof['assembly_sha256'] == sha(asm_path) and any(
+                                        identity['name'] == alias_name and
+                                        identity['address'] == alias_address and
+                                        identity['binding'] == proof['binding'] and
+                                        identity['type'] == 'OBJECT' and identity['size'] == owner_size
+                                        for identity in span['original_identities'])
+                                    for span in verified_location_spans
+                                    for proof in [span.get('storage_owner')]))
+                            if not (direct or interior or initialized_direct):
                                 linker_dependencies.append(uncredited_linker_map_alias(
-                                    entry,alias_section,alias,owner,packet_tu,storage,
+                                    root,entry,alias_section,alias,owner,packet_tu,storage,
                                     original_elf,linked,original_section_ranges,ctx,
-                                    data_carve,source,asm_path,linked_path,allocation_path))
+                                    data_carve,source,asm_path,linked_path,allocation_path,obj))
                 for alias in symbol_aliases:
                     require(any(loc.get('section') == alias['section'] and
                                 int(loc.get('address', '0'), 16) == int(alias['address'], 16) and
@@ -3441,6 +4372,9 @@ def main():
                                           # derivative as the compiler output.
                                           object_sha256=sha(derive_obj),
                                           compiler_raw_object_path=str(derive_obj),
+                                          derivation_input_path=str(derivation_obj),
+                                          derivation_input_sha256=sha(derivation_obj),
+                                          compiler_allocation_proof=compiler_allocation_proof,
                                           linked_data_object_sha256=sha(obj_path),
                                           linked_data_object_path=str(obj_path),
                                           assembly_sha256=sha(asm_path),
@@ -3448,6 +4382,8 @@ def main():
                                           verified_locations=verified,compiler_owned_ranges=proven_ranges,
                                           verified_location_spans=verified_location_spans,
                                           storage_owner_aliases=storage_owner_aliases,
+                                          uncredited_original_item_tails=original_item_tails,
+                                          native_unsplit_sections=native_unsplit_sections,
                                           original_object_identities=original_object_identities,
                                           anonymous_constants=anonymous,unclaimed_scaffold_runs=unclaimed_scaffold_runs,
                                           derived_nobits=derived_nobits,
@@ -3477,6 +4413,7 @@ def main():
         except (ValueError,OSError,KeyError,StopIteration) as error:
             output['problems'].append(dict(tu=entry['tu'],reason=str(error)))
     output['result']='fail' if output['problems'] else 'pass'
+    output['grants_data_recovery'] = not input_only and output['result'] == 'pass'
     output['verified_tus']=len(output['objects'])
     output['verified_locations']=sum(len(o['verified_locations']) for o in output['objects'])
     output['verified_storage_objects']=sum(len(o.get('verified_storage',[])) for o in output['objects'])

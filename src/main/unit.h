@@ -120,7 +120,8 @@ typedef struct UnitPeer {
     int shadow_x;                                     /* +0x234 */
     int shadow_y;                                     /* +0x238 */
     float shadow_clip_scale;                          /* +0x23c */
-    unsigned char model[0x2e0 - 0x240];               /* +0x240 */
+    unsigned char model[0x2d0 - 0x240];               /* +0x240 */
+    unsigned short shadow_map_ids[8];                 /* +0x2d0 */
     int shadow_map_count;                             /* +0x2e0 */
     int render_command;                               /* +0x2e4 */
     int filter_mode;                                  /* +0x2e8 */

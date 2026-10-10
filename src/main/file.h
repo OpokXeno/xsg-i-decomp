@@ -42,7 +42,9 @@ int xglTaskWaitRemove(XglTaskPrefix *task);
  * the menu work area, clears them and stores the pointer in FileWork.
  */
 typedef struct FileWorkBlock {
-    unsigned char unmodeled_00[0x03];
+    unsigned char input_flags; /* bit 0 enables the explanatory text */
+    unsigned char unmodeled_01;
+    unsigned char text_index;
     unsigned char state; /* 0xff ends the file menu */
     unsigned char unmodeled_04[0x80 - 0x04];
 } FileWorkBlock;

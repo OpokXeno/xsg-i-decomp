@@ -1,16 +1,93 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_studio.h"
 
+#include "game_init_camera.h"
+
 static int dbCX = 0;
+
 static int dbCY = 0;
+
 static int dbCZ = 0x00FFFFFF;
+
 static int dbCH = 24;
+
 static int dbMODE = 0;
 
 extern void xglLightSetDefault(StudioLight *light);
 
-INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", GAME_initCamera);
+extern unsigned int strlen(const char *string);
+
+extern char *strchr(const char *string, int character);
+
+extern char *strncpy(char *destination, const char *source, unsigned int count);
+
+typedef struct PADControllerState {
+    u8 unmodeled_00[0x28];
+    u16 held;
+    u16 pressed;
+    u16 repeat;
+    u16 other_buttons;
+    u8 unmodeled_30[0x38];
+} PADControllerState;
+
+typedef struct PADKeyResult {
+    u16 held;
+    u16 pressed;
+    u16 repeat;
+    u16 other_buttons;
+    u8 flags[8];
+} PADKeyResult;
+
+extern PADControllerState PadData[];
+
+extern int xglFontGetFlags(void);
+
+typedef char *va_list;
+
+#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
+
+#define va_end(ap) ((void)0)
+
+extern int vsprintf(char *buffer, const char *format, va_list args);
+
+#define NULL ((void *)0)
+
+extern char *strrchr(const char *s, int c);
+
+void GAME_initCamera(void)
+{
+    StudioCamera *studio_camera;
+    float translation_z;
+    float translation_y;
+    float view_height;
+
+    TCAMERA_init();
+    translation_z = 4.0f;
+    translation_y = 2.0f;
+    view_height = 1.4f;
+    tcamera[0].view_offset.y = view_height;
+    tcamera[0].translation_offset.z = translation_z;
+    tcamera[0].translation_offset.y = translation_y;
+    tcamera[0].channel_mode[0] = 0x14;
+    tcamera[0].channel_mode[1] = 0x14;
+    tcamera[0].translation_constraint = &actor;
+    tcamera[0].view_constraint = &actor;
+    tcamera[0].view_offset.x = 0.0f;
+    tcamera[0].view_offset.z = 0.0f;
+    tcamera[0].translation_offset.x = 0.0f;
+
+    xglStudioGetCamera(&studio_camera, 0);
+    studio_camera->active = 1;
+    xglStudioGetCamera(&studio_camera, 1);
+    studio_camera->active = 0;
+    xglStudioGetCamera(&studio_camera, 2);
+    studio_camera->active = 0;
+    xglStudioGetCamera(&studio_camera, 3);
+    studio_camera->active = 0;
+}
 
 void GAME_initLight(void)
 {
@@ -21,26 +98,6 @@ void GAME_initLight(void)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/game_init_camera", STR_indexReverse);
-
-extern unsigned int strlen(const char *string);
-extern char *strchr(const char *string, int character);
-extern char *strncpy(char *destination, const char *source, unsigned int count);
-typedef struct PADControllerState {
-    u8 unmodeled_00[0x28];
-    u16 held;
-    u16 pressed;
-    u16 repeat;
-    u16 other_buttons;
-    u8 unmodeled_30[0x38];
-} PADControllerState;
-typedef struct PADKeyResult {
-    u16 held;
-    u16 pressed;
-    u16 repeat;
-    u16 other_buttons;
-    u8 flags[8];
-} PADKeyResult;
-extern PADControllerState PadData[];
 
 void PAD_getKey(PADKeyResult *result, int pad_index, unsigned int button_mask)
 {
@@ -85,20 +142,12 @@ void DB_incPos(int x, int y)
     dbCY += y;
 }
 
-extern int xglFontGetFlags(void);
-
 void DB_params(const char *text)
 {
     if ((xglFontGetFlags() & 3) == 3) {
         xglFontPrint(dbCX, dbCY, dbCZ, text);
     }
 }
-
-typedef char *va_list;
-#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
-#define va_end(ap) ((void)0)
-
-extern int vsprintf(char *buffer, const char *format, va_list args);
 
 void DB_println(const char *format, ...)
 {
@@ -155,10 +204,6 @@ void DB_pathGetShortPath(char *destination, const char *path, int max_width)
         sprintf(destination, "%s\n", path);
     }
 }
-
-#define NULL ((void *)0)
-
-extern char *strrchr(const char *s, int c);
 
 char *DB_pathFindName(char *path)
 {

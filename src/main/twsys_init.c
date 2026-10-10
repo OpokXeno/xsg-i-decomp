@@ -16,6 +16,7 @@
  * The 0x5B0 stride between slots is TWSYS_init/TWSYS_update/TWSYS_draw's own
  * loop increment.
  */
+
 typedef struct TComponent {
     unsigned char unmodeled_00[0x10];
     unsigned int flags;                /* +0x10 */
@@ -29,16 +30,161 @@ typedef struct TComponent {
     unsigned char unmodeled_34[0x54 - 0x34];
     int ewHandle;                      /* +0x54 */
     unsigned char unmodeled_58[0x9C - 0x58];
-    int msgBuffer[2];                  /* +0x9C */
+    int *msgBuffer[2];                 /* +0x9C */
     unsigned char unmodeled_a4[0x5B0 - 0xA4];
 } TComponent;
 
 static TComponent tcomponent[4];
+
 static unsigned char groupStatus[3];
+
 static unsigned char D_004DC593;
 
 void EW_init(unsigned char *freeSpace);
+
 void MBUF_init(void);
+
+void TMENU_updateDefault(TComponent *component);
+
+void TSLIDER_updateDefault(TComponent *component);
+
+void TWIN_update2(TComponent *component);
+
+void EW_draw(void);
+
+void TMENU_drawDefault(TComponent *component);
+
+void TSLIDER_drawDefault(TComponent *component);
+
+void TWIN_draw2(TComponent *component);
+
+void TWIN_drawScene2(TComponent *component);
+
+extern const char D_004DA420[];
+const char D_004DA420[8] = "\x0b";
+
+/* Defined by xgl_font.c; `text` is a font control-code string. */
+
+extern void xglFontPrintDirectOT(int ot, const char *text);
+
+/*
+ * The font control strings TWSYS_draw emits before a component's own drawing
+ * code: the same setup for every window-like kind, and a variant for the
+ * scene window, differing only in the two counts at offsets 1 and 4.
+ */
+
+#define TWSYS_DRAW_WINDOW_FONT "\x0d\x02\x0e\x02\x03\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
+
+#define TWSYS_DRAW_SCENE_FONT  "\x0d\x03\x0e\x02\x02\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
+
+/*
+ * The text-window record TWSYS_createComponent hands back (still assembler
+ * in this TU). Only the fields this allocation and its evidenced siblings
+ * touch are modeled:
+ *  - +0xC/+0xE width/height: TW_setPos (0x0025d660) reads both as unsigned
+ *    halfwords for its on-screen centering math.
+ *  - +0xA6 line_pitch: TWIN_drawScene2 (0x0025ec24, still assembler)
+ *    multiplies the current line index (+0x185) by this halfword to place
+ *    each text line, so it is the per-line vertical advance.
+ *  - +0x186 layout_offset: set here and by TWIN_create2's own default
+ *    (still assembler); no function recovered so far in this TU reads it
+ *    back, so only that it is a byte is proven.
+ *  - +0x187 line_count: TWIN_update2 and TWIN_popCF/TWIN_popScene (still
+ *    assembler) loop up to this byte over the +0x17C line-pointer array.
+ */
+
+typedef struct TWindow {
+    unsigned char unmodeled_00[0xC];
+    unsigned short width;          /* +0xC */
+    unsigned short height;         /* +0xE */
+    unsigned int flags;            /* +0x10 */
+    unsigned short state;          /* +0x14 */
+    unsigned short kindAndGroup;   /* +0x16 */
+    unsigned char unmodeled_18[0x32 - 0x18];
+    unsigned short closeState;     /* +0x32 */
+    unsigned char unmodeled_34[0xA4 - 0x34];
+    short currentPage;             /* +0xA4 */
+    short line_pitch;              /* +0xA6 */
+    char *textOutput;              /* +0xA8 */
+    unsigned char unmodeled_ac[0xF0 - 0xAC];
+    unsigned int initializationWord0; /* +0xF0 */
+    unsigned char unmodeled_f4[0x108 - 0xF4];
+    unsigned int initializationWord1; /* +0x108 */
+    unsigned char unmodeled_10c[0x17C - 0x10C];
+    char **lineBufferPointers;     /* +0x17C */
+    char *textScratchBuffer;       /* +0x180 */
+    unsigned char lineCharacterOffset; /* +0x184 */
+    unsigned char currentLineIndex; /* +0x185 */
+    unsigned char layout_offset;   /* +0x186 */
+    unsigned char line_count;      /* +0x187 */
+    char *lineData[1];             /* +0x188; inline pointer and character buffers follow */
+} TWindow;
+
+/* Configures a field-conversation text window's line pitch, layout offset,
+ * line count and on-screen size. */
+
+/* Configures a scene-message text window's line pitch, layout offset, line
+ * count and on-screen size. */
+
+void EW_dispose(int handle);
+
+void MBUF_dispose(int *mbuf);
+
+TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup);
+
+void TMENU_init(TComponent *component);
+
+/*
+ * The menu-kind component TMENU_create hands back (still assembler in this
+ * TU). Only the fields this allocation touches are modeled:
+ *  - +0x10 flags: TMENU_dispose clears bits 0x11 when it releases the menu.
+ *  - +0x60/+0x64 msgBuffer: TMENU_dispose passes each non-zero entry to
+ *    MBUF_dispose.
+ *  - +0xD8 queryQueue: TMENU_addQuery pushes a converted message onto it
+ *    (an opaque handle: the address is passed on, never dereferenced here).
+ *  - +0xFC ewHandle: TMENU_dispose passes it to EW_dispose.
+ *  - +0x148 activeQueryId: TMENU_addQuery leaves it alone once it holds a
+ *    query.
+ *  - +0x154 nextQueryId: copied into activeQueryId when that one is empty.
+ */
+
+typedef struct TMenu {
+    unsigned char unmodeled_00[0x0C];
+    short width;                   /* +0x0C */
+    short height;                  /* +0x0E */
+    unsigned int flags;                /* +0x10 */
+    unsigned char unmodeled_14[0x56 - 0x14];
+    unsigned char itemCount;       /* +0x56 */
+    unsigned char unmodeled_57[0x5A - 0x57];
+    short visibleLineCount;        /* +0x5A */
+    unsigned char unmodeled_5c[0x60 - 0x5C];
+    int *msgBuffer[2];                 /* +0x60 */
+    unsigned char unmodeled_68[0xD8 - 0x68];
+    unsigned char queryQueue;          /* +0xD8 */
+    unsigned char unmodeled_d9[0xFC - 0xD9];
+    int ewHandle;                      /* +0xFC */
+    unsigned char unmodeled_100[0x140 - 0x100];
+    unsigned char itemCapacity;    /* +0x140 */
+    unsigned char unmodeled_141[0x148 - 0x141];
+    int activeQueryId;                 /* +0x148 */
+    const char **itemTexts;       /* +0x14C */
+    unsigned char unmodeled_150[0x154 - 0x150];
+    int nextQueryId;                   /* +0x154 */
+} TMenu;
+
+void MSG_convert(int *destination, int destinationSize, int messageId, int encoding);
+
+int MSG_queuePush(int queue, int *message, int messageSize, int encoding);
+
+extern unsigned char radixTenUnits[100];
+
+extern unsigned char radixTenTenths[100];
+
+extern unsigned char digits[16];
+
+extern void *memcpy(void *destination, const void *source, unsigned int size);
+
+extern int MSG_copyln(char **destination, const char **source, int flags);
 
 void TWSYS_init(void)
 {
@@ -77,10 +223,6 @@ unsigned char TWSYS_getGRPStatus(int group)
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWSYS_createComponent);
 
-void TMENU_updateDefault(TComponent *component);
-void TSLIDER_updateDefault(TComponent *component);
-void TWIN_update2(TComponent *component);
-
 void TWSYS_update(void)
 {
     TComponent *component;
@@ -116,24 +258,6 @@ void TWSYS_update(void)
         component++;
     } while (slotIndex < 4);
 }
-
-void EW_draw(void);
-void TMENU_drawDefault(TComponent *component);
-void TSLIDER_drawDefault(TComponent *component);
-void TWIN_draw2(TComponent *component);
-void TWIN_drawScene2(TComponent *component);
-extern const char D_004DA420[];
-
-/* Defined by xgl_font.c; `text` is a font control-code string. */
-extern void xglFontPrintDirectOT(int ot, const char *text);
-
-/*
- * The font control strings TWSYS_draw emits before a component's own drawing
- * code: the same setup for every window-like kind, and a variant for the
- * scene window, differing only in the two counts at offsets 1 and 4.
- */
-#define TWSYS_DRAW_WINDOW_FONT "\x0d\x02\x0e\x02\x03\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
-#define TWSYS_DRAW_SCENE_FONT  "\x0d\x03\x0e\x02\x02\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
 
 void TWSYS_draw(void)
 {
@@ -179,7 +303,47 @@ void TWSYS_draw(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", PARSE_int);
 
-INCLUDE_ASM("asm/main/nonmatchings/twsys_init", STRING_int);
+unsigned char *STRING_int(unsigned char *destination, int value)
+{
+    unsigned char buffer[16];
+    unsigned char *cursor;
+    unsigned int valueBits;
+    int magnitude;
+    int pair;
+    int radix;
+    int negative;
+    int start;
+
+    magnitude = value;
+    valueBits = (unsigned int)magnitude;
+    negative = valueBits >> 31;
+    if (negative) {
+        magnitude = -magnitude;
+    }
+    radix = 100;
+    cursor = &buffer[12];
+    start = 12;
+    do {
+        pair = magnitude % radix;
+        cursor--;
+        start--;
+        *cursor = radixTenUnits[pair];
+        cursor--;
+        start--;
+        *cursor = radixTenTenths[pair];
+        magnitude /= radix;
+    } while (magnitude != 0);
+
+    if (*cursor == '0') {
+        start++;
+    }
+    if (negative) {
+        start--;
+        buffer[start] = '-';
+    }
+    memcpy(destination, &buffer[start], 12 - start);
+    return destination - start + 12;
+}
 
 void STRING_h2zEUC(char *destination, const char *source)
 {
@@ -206,40 +370,22 @@ void STRING_h2zEUC(char *destination, const char *source)
     *destination = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/twsys_init", STRING_toUInt);
+void STRING_toUInt(void *unused, int value, int bitsPerDigit)
+{
+    char buffer[32];
+    unsigned int digitMask;
+    int position;
 
-const char D_004DA420[8] = "\x0b";
+    digitMask = (1u << bitsPerDigit) - 1;
+    position = 32;
+    do {
+        buffer[--position] = digits[value & digitMask];
+        value >>= bitsPerDigit;
+    } while (value != 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TW_setPos);
 
-/*
- * The text-window record TWSYS_createComponent hands back (still assembler
- * in this TU). Only the fields this allocation and its evidenced siblings
- * touch are modeled:
- *  - +0xC/+0xE width/height: TW_setPos (0x0025d660) reads both as unsigned
- *    halfwords for its on-screen centering math.
- *  - +0xA6 line_pitch: TWIN_drawScene2 (0x0025ec24, still assembler)
- *    multiplies the current line index (+0x185) by this halfword to place
- *    each text line, so it is the per-line vertical advance.
- *  - +0x186 layout_offset: set here and by TWIN_create2's own default
- *    (still assembler); no function recovered so far in this TU reads it
- *    back, so only that it is a byte is proven.
- *  - +0x187 line_count: TWIN_update2 and TWIN_popCF/TWIN_popScene (still
- *    assembler) loop up to this byte over the +0x17C line-pointer array.
- */
-typedef struct TWindow {
-    unsigned char unmodeled_00[0xC];
-    unsigned short width;          /* +0xC */
-    unsigned short height;         /* +0xE */
-    unsigned char unmodeled_10[0xA6 - 0x10];
-    short line_pitch;              /* +0xA6 */
-    unsigned char unmodeled_a8[0x186 - 0xA8];
-    unsigned char layout_offset;   /* +0x186 */
-    unsigned char line_count;      /* +0x187 */
-} TWindow;
-
-/* Configures a field-conversation text window's line pitch, layout offset,
- * line count and on-screen size. */
 void WIN_initCF(TWindow *window)
 {
     window->line_pitch = 0x18;
@@ -249,8 +395,6 @@ void WIN_initCF(TWindow *window)
     window->height = 0x50;
 }
 
-/* Configures a scene-message text window's line pitch, layout offset, line
- * count and on-screen size. */
 void WIN_initScene(TWindow *window)
 {
     window->line_pitch = 0x1A;
@@ -260,7 +404,48 @@ void WIN_initScene(TWindow *window)
     window->height = 0x56;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWIN_init2);
+void TWIN_init2(TWindow *window)
+{
+    unsigned int kind;
+    unsigned int flagsValue;
+    unsigned int stateValue;
+    char *lineBuffer;
+    int lineIndex;
+
+    window->initializationWord1 = 0;
+    window->currentLineIndex = 0;
+    kind = window->kindAndGroup & 0xF;
+    window->lineCharacterOffset = 0;
+    window->currentPage = 0;
+    switch (kind) {
+    case 3:
+    default:
+        WIN_initCF(window);
+        break;
+    case 4:
+        WIN_initScene(window);
+        break;
+    }
+
+    lineBuffer = (char *)window->lineData;
+    window->lineBufferPointers = (char **)lineBuffer;
+    lineBuffer += window->line_count * sizeof(*window->lineBufferPointers);
+    for (lineIndex = 0; lineIndex < window->line_count; lineIndex++) {
+        window->lineBufferPointers[lineIndex] = lineBuffer;
+        *lineBuffer = 0;
+        lineBuffer += 0xC0;
+    }
+    window->textOutput = lineBuffer;
+    flagsValue = 0x54;
+    *lineBuffer = 0;
+    lineBuffer += 0x80;
+    stateValue = 1;
+    window->textScratchBuffer = lineBuffer;
+    window->state = (unsigned short)stateValue;
+    window->flags = flagsValue;
+    window->closeState = 0;
+    window->initializationWord0 = 0;
+}
 
 int WIN_checkActiveWindow(void)
 {
@@ -282,9 +467,6 @@ int WIN_checkActiveWindow(void)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWIN_create2);
-
-void EW_dispose(int handle);
-void MBUF_dispose(int handle);
 
 void TWIN_dispose(TComponent *window)
 {
@@ -310,9 +492,6 @@ INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TWIN_drawScene2);
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TMENU_init);
 
-TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup);
-void TMENU_init(TComponent *component);
-
 TComponent *TMENU_create(int slotIndex)
 {
     TComponent *component;
@@ -328,34 +507,6 @@ TComponent *TMENU_create(int slotIndex)
     return component;
 }
 
-/*
- * The menu-kind component TMENU_create hands back (still assembler in this
- * TU). Only the fields this allocation touches are modeled:
- *  - +0x10 flags: TMENU_dispose clears bits 0x11 when it releases the menu.
- *  - +0x60/+0x64 msgBuffer: TMENU_dispose passes each non-zero entry to
- *    MBUF_dispose.
- *  - +0xD8 queryQueue: TMENU_addQuery pushes a converted message onto it
- *    (an opaque handle: the address is passed on, never dereferenced here).
- *  - +0xFC ewHandle: TMENU_dispose passes it to EW_dispose.
- *  - +0x148 activeQueryId: TMENU_addQuery leaves it alone once it holds a
- *    query.
- *  - +0x154 nextQueryId: copied into activeQueryId when that one is empty.
- */
-typedef struct TMenu {
-    unsigned char unmodeled_00[0x10];
-    unsigned int flags;                /* +0x10 */
-    unsigned char unmodeled_14[0x60 - 0x14];
-    int msgBuffer[2];                  /* +0x60 */
-    unsigned char unmodeled_68[0xD8 - 0x68];
-    unsigned char queryQueue;          /* +0xD8 */
-    unsigned char unmodeled_d9[0xFC - 0xD9];
-    int ewHandle;                      /* +0xFC */
-    unsigned char unmodeled_100[0x148 - 0x100];
-    int activeQueryId;                 /* +0x148 */
-    unsigned char unmodeled_14c[0x154 - 0x14C];
-    int nextQueryId;                   /* +0x154 */
-} TMenu;
-
 void TMENU_dispose(TMenu *menu)
 {
     menu->flags &= ~0x11;
@@ -368,9 +519,6 @@ void TMENU_dispose(TMenu *menu)
     }
 }
 
-void MSG_convert(int *destination, int destinationSize, int messageId, int encoding);
-int MSG_queuePush(int queue, int *message, int messageSize, int encoding);
-
 void TMENU_addQuery(TMenu *menu, int messageId)
 {
     int message[0x100];
@@ -382,7 +530,37 @@ void TMENU_addQuery(TMenu *menu, int messageId)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TMENU_setItem);
+void TMENU_setItem(TMenu *menu, int itemIndex, const char *text)
+{
+    char output[0x400];
+    char *outputCursor;
+    const char *inputCursor;
+    int candidateIndex;
+    int lineWidth;
+    unsigned char itemCapacity;
+
+    itemCapacity = menu->itemCapacity;
+    if (itemIndex < 0) {
+        for (candidateIndex = 0; candidateIndex < itemCapacity; candidateIndex++) {
+            if (menu->itemTexts[candidateIndex] == 0) {
+                itemIndex = candidateIndex;
+                break;
+            }
+        }
+        if (itemIndex < 0)
+            return;
+        menu->itemCount++;
+    }
+
+    menu->itemTexts[itemIndex] = text;
+    outputCursor = output;
+    inputCursor = text;
+    lineWidth = MSG_copyln(&outputCursor, &inputCursor, 0);
+    menu->height = menu->visibleLineCount * 24 + 4;
+    if (menu->width < lineWidth + 56) {
+        menu->width = lineWidth + 56;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/twsys_init", TMENU_addItem);
 

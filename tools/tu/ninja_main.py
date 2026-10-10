@@ -562,7 +562,11 @@ def main(argv=None):
                 if prev_c:
                     out.append(f". = 0x{int(tail['start'], 16) - S[sec].addr:X}; /* pin: common tail after a C-owned piece */")
                 out.append(f"{dobj(tail['name'], sec)}({sec});")
-            out.append("*(.scommon);" if sec == ".sbss" else "*(COMMON);")
+            # Original COMMON-tail symbols a C TU defines are the explicit
+            # native_common_pieces above. Any other C tentative definition is
+            # caught by stray_common_guard, never allocated here.
+            out.append("EXCLUDE_FILE(build/c/*) *(.scommon);" if sec == ".sbss"
+                       else "EXCLUDE_FILE(build/c/*) *(COMMON);")
         # Expected/hand-assembly objects remain visible to the map checker.
         # Unowned C sections are explicitly discarded by the final /DISCARD/
         # rules instead of being silently appended to the original data layout.
@@ -580,6 +584,31 @@ def main(argv=None):
     # without the fragment an EE caller that references one fails the link
     # ("defined in discarded section").
     VU0_LD = f"INCLUDE {ROOT}/config/symbols/main.vu0-symbols.ld"
+
+    c_tu_by_object = {c_link(t["name"]): t for t in tus if t["mode"] == "c"}
+
+    def stray_common_guard(lines, map_name):
+        """Fail the link on any C tentative definition (common) without an explicit place.
+
+        A C TU's commons reach the image only through an explicit placement
+        above (a C storage span or a native COMMON-tail piece). Every other
+        `build/c/*` COMMON/.scommon input lands in an empty-by-assertion output
+        section: one per linked C object, so the error names the TU and the
+        link map names each symbol, then one for any other C input. Nothing is
+        emitted when there is none (datacarve-tools-20261010, proposal 3)."""
+        named = sorted({o for o in re.findall(r"(build/c/[\w/.\-]+\.o)\(", "\n".join(lines))
+                        if o in c_tu_by_object})
+        out = []
+        for o in named:
+            t = c_tu_by_object[o]
+            name = ".stray_common." + re.sub(r"\W", "_", t["name"])
+            out += [f"  {name} (NOLOAD) : {{ {o}(.scommon) {o}(COMMON) }}",
+                    f"  ASSERT(SIZEOF({name}) == 0, \"{t['id']} {t['name']}: C tentative definition (common) "
+                    f"without an explicit original placement; {map_name} lists it under {name}\")"]
+        out += ["  .stray_common (NOLOAD) : { build/c/*(.scommon) build/c/*(COMMON) }",
+                f"  ASSERT(SIZEOF(.stray_common) == 0, \"C tentative definition (common) without an explicit "
+                f"original placement; {map_name} lists it under .stray_common\")"]
+        return out
 
     def rom_script(carve):
         L = [VU0_LD,
@@ -618,6 +647,7 @@ def main(argv=None):
             if mm and mm[2] not in ("elf_header", "pad_before_ov02"):
                 offv = int(mm[1], 16)
                 L += [f"  .blob_{mm[2]} 0x{0x10000000 + offv:X} : AT(0x{offv:X}) {{ build/assets/{mm[2]}.o(.data); }}"]
+        L += stray_common_guard(L, "build/carve/main.rom.elf.map" if carve else "build/main.rom.elf.map")
         L += ["  /DISCARD/ : { " + " ".join(DISCARD) + " }", "}", ""]
         return "\n".join(L)
 
@@ -651,6 +681,7 @@ def main(argv=None):
             L += ["    " + x for x in body.get(s.name, [". = .;  /* keep the empty original section */"])]
             order = [loads[0]] + [i for i in segs if i != loads[0]]
             L.append("  } " + " ".join(f":seg{i}" for i in order))
+        L += stray_common_guard(L, "build/main.elf.map")
         L += ["  /DISCARD/ : { " + " ".join(DISCARD) + " }", "}", ""]
         return "\n".join(L)
 

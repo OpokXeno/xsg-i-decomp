@@ -2113,7 +2113,7 @@ static char CardErrTxt02[48];
 static char CardErrTxt03[48];
 static char CardErrTxt04[80];
 static char CardErrTxt05[96];
-extern char CardErrTxt06[];
+
 
 static char *CardErrorList[6] = {
     CardErrTxt01, CardErrTxt01, CardErrTxt02,

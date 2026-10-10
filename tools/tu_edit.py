@@ -2107,6 +2107,7 @@ def apply_reviewed_owner_proposals(repo_root, manifest_path, project_root, targe
             # A consumer TU's private mirror carries the defining TU source as
             # a read-only copy. The reviewed owner edit is still confined to
             # this attempt's src tree, so unlock only that copy before writing.
+            _guard_canonical_write(target)
             target.chmod(0o644)
             target.write_text(proposed_text, encoding='utf-8', errors='surrogateescape')
             current_text = proposed_text
@@ -2188,6 +2189,7 @@ def apply_reviewed_owner_proposals(repo_root, manifest_path, project_root, targe
             # `worker.py init` deliberately stages published headers read-only.
             # This is a private generated-header overlay, so make only this
             # sandbox copy writable before applying the reviewed export.
+            _guard_canonical_write(header)
             header.chmod(0o644)
             header.write_text(header_text, encoding='utf-8', errors='surrogateescape')
         # MAIN's compile edges include the copied build/main/include tree.
@@ -2197,6 +2199,7 @@ def apply_reviewed_owner_proposals(repo_root, manifest_path, project_root, targe
         build_header = project_root / 'build' / 'main' / 'include' / Path(*header_rel.parts[1:])
         build_header_sha = None
         if build_header.is_file():
+            _guard_canonical_write(build_header)
             build_header.chmod(0o644)
             build_header.write_bytes(header.read_bytes())
             build_header_sha = hashlib.sha256(build_header.read_bytes()).hexdigest()
@@ -2258,6 +2261,7 @@ def apply_reviewed_owner_proposals(repo_root, manifest_path, project_root, targe
             legacy_bytes = legacy_header.read_bytes()
             current_sha256 = hashlib.sha256(legacy_bytes).hexdigest()
             if current_sha256 == before_sha256:
+                _guard_canonical_write(legacy_header)
                 legacy_header.chmod(0o644)
                 legacy_header.write_text(expected_after_text, encoding='utf-8', errors='surrogateescape')
                 current_sha256 = after_sha256
@@ -2778,6 +2782,7 @@ def _merge_comment_edits(base, ours, theirs):
             paths = []
             for name, text in (('ours', ours), ('base', base), ('theirs', theirs)):
                 path = Path(tmp) / name
+                _guard_canonical_write(path)
                 path.write_bytes(text.encode('utf-8', 'surrogateescape'))
                 paths.append(str(path))
             proc = subprocess.run([git, 'merge-file', '-p', '-q', *paths], stdout=subprocess.PIPE,
@@ -2987,6 +2992,163 @@ def _merge_regions(head, base, rb, ro, rt, names, allowed, comments, merge_comme
 # Patches
 # ---------------------------------------------------------------------------
 
+def merge_candidate(base, ours, theirs, names=None, allowed=None):
+    """Carry exact authored file-scope text, with mapped function ownership.
+
+    Declarations, storage and nonemitted static inline support are judged by
+    the ordinary compiler, gate, data audit and independent source review.
+    Their position before an unallocated function does not give that function
+    ownership of the preceding text. Concurrent edits still fail closed.
+    """
+    originals = list(names if names is not None else
+                     (base.function_list or [b.key for b in base.functions()]))
+    result = dict(schema=SCHEMA_MERGE, conflicts=[], notes=[], applied=[], text=None,
+                  base_sha256=sha256_text(base.text), ours_sha256=sha256_text(ours.text),
+                  theirs_sha256=sha256_text(theirs.text), transport='tu-authored-source/1')
+    if len(originals) != len(set(originals)) or not originals:
+        raise EditError('candidate transport needs a unique original function list')
+    allocated = originals if allowed is None else list(allowed)
+    if len(allocated) != len(set(allocated)) or any(
+            not any(same_function(n, f) for f in originals) for n in allocated):
+        raise EditError('candidate allocation names a duplicate or non-original function')
+    if any(not any(same_function(b.key, n) for n in originals)
+           for t in (base, ours) for b in t.functions()):
+        raise EditError('candidate original list omits a baseline or current mapped function')
+    try:
+        bound = [TU(t.text, t.path, originals, t.unit_dir) for t in (base, ours, theirs)]
+        introduced = {child: parent for child, parent in bound[2].covered.items()
+                      if child not in bound[0].covered}
+        if introduced:
+            # Recovery moves an original standalone scaffold helper into its
+            # evidenced lexical parent. Merge the pair as one source region,
+            # while retaining both original identities in claims and audits.
+            # Removing its obsolete INCLUDE_ASM is permitted only with both
+            # identities allocated; accepted standalone source is never erased.
+            for child, parent in introduced.items():
+                if not all(any(same_function(name, selected) for selected in allocated)
+                           for name in (child, parent)):
+                    raise ParseError(f'nested group needs both allocated identities: {parent}/{child}')
+                old = bound[0].block(child)
+                if old.state != 'asm' or child in bound[0].covered:
+                    raise ParseError(f'nested transition cannot remove accepted standalone source: {child}')
+                if child in bound[1].covered:
+                    if bound[1].covered[child] != parent:
+                        raise ParseError(f'concurrent nested parent differs for {child}')
+                elif bound[1].block_text(bound[1].block(child)) != bound[0].block_text(old):
+                    raise ParseError(f'concurrent standalone helper changed: {child}')
+            for index in (0, 1):
+                parsed = bound[index]
+                cuts = [parsed.block(child) for child in introduced if child not in parsed.covered]
+                text = parsed.text
+                for block in sorted(cuts, key=lambda b: b.core_start, reverse=True):
+                    text = text[:block.core_start] + text[block.core_end:]
+                reduced = [name for name in originals if name not in introduced]
+                bound[index] = TU(text, parsed.path, reduced, parsed.unit_dir)
+            result['notes'].append(dict(kind='nested_group_transport', groups=introduced,
+                                        detail='obsolete standalone scaffold regions are grouped with allocated lexical parents; original identities and ordinary audits remain required'))
+        sequence = [n for n in originals if n not in bound[0].covered]
+        sequence = [n for n in sequence if n not in introduced]
+        rb, ro, rt = [Regions(t, sequence, label) for t, label in
+                      zip(bound, ('base', 'ours', 'theirs'))]
+    except (ParseError, _Structural) as exc:
+        result['conflicts'].append(dict(kind='structure', detail=str(exc)))
+        return result
+    baseline_helpers = {b.name: b for b in bound[0].blocks if b.role == 'helper'}
+    for block in bound[2].blocks:
+        if block.role != 'helper':
+            continue
+        old = baseline_helpers.get(block.name)
+        if old is not None and bound[0].block_text(old) == bound[2].block_text(block):
+            continue
+        head = lexical(theirs.text[block.core_start:theirs.text.index('{', block.core_start)])
+        if old is not None or not (block.static and re.search(r'\b(?:inline|__inline|__inline__)\b', head)):
+            result['conflicts'].append(dict(kind='unallocated_support_function', function=block.name,
+                detail='only new unmapped static inline C support is carried; ordinary audits must '
+                       'confirm it emits no extra function, code or data'))
+        else:
+            result['notes'].append(dict(kind='inline_support', function=block.name, credit=False,
+                detail='ordinary compiler emission, source eligibility, gate and data audit remain '
+                       'mandatory; this helper is not a mapped recovery claim'))
+    for name in baseline_helpers:
+        if not any(b.name == name and b.role == 'helper' for b in bound[2].blocks):
+            result['conflicts'].append(dict(kind='removed_support_function', function=name))
+
+    def merge_region(before, current, authored, **where):
+        text, status = _three(before, current, authored, norm=lambda value: value)
+        if status == 'conflict':
+            result['conflicts'].append(dict(kind='candidate_both_changed', **where))
+            return current
+        if status in ('theirs', 'both_same') and authored != before:
+            result['applied'].append(where)
+        return text
+
+    prelude = merge_region(rb.prelude, ro.prelude, rt.prelude, prelude=True)
+    pre, blocks = {}, {}
+    for n in sequence:
+        selected = any(same_function(n, name) for name in allocated)
+        bb, tb = bound[0].block(n), bound[2].block(n)
+        bcore = bound[0].text[bb.core_start:bb.core_end]
+        tcore = bound[2].text[tb.core_start:tb.core_end]
+        if not selected and (bb.state != tb.state or bcore != tcore):
+            result['conflicts'].append(dict(kind='outside_allocation', function=n,
+                detail='authored source changes an unallocated mapped function identity or body'))
+        if selected and bb.state == 'c' and tb.state != 'c':
+            result['conflicts'].append(dict(kind='removes_accepted_c', function=n))
+        if selected and bb.state == 'accepted_asm' and tb.state == 'asm':
+            result['conflicts'].append(dict(kind='removes_accepted_asm', function=n))
+        blocks[n] = merge_region(rb.block[n], ro.block[n], rt.block[n], function=n)
+        pre[n] = merge_region(rb.pre[n], ro.pre[n], rt.pre[n], interstitial_before=n)
+    epilogue = merge_region(rb.epilogue, ro.epilogue, rt.epilogue, epilogue=True)
+    if result['conflicts']:
+        return result
+    text = rb.emit(prelude=prelude, pre=pre, block=blocks, epilogue=epilogue)
+    merged = TU(text, None, originals, base.unit_dir)
+    Regions(merged, sequence, 'merged')
+    result.update(text=text, sha256=sha256_text(text),
+                  functions={b.key: b.state for b in merged.functions()})
+    return result
+
+
+def make_candidate_patch(base, theirs, names=None, allowed=None, tu_path=None):
+    """Pin exact candidate source for the serial merge used at publication."""
+    names = list(names if names is not None else
+                 (base.function_list or [b.key for b in base.functions()]))
+    allowed = names if allowed is None else list(allowed)
+    replay = merge_candidate(base, base, theirs, names, allowed)
+    if replay.get('text') != theirs.text:
+        raise EditError('candidate source is not an exact owned merge: ' +
+                        json.dumps(replay.get('conflicts') or []))
+    return dict(schema=SCHEMA_PATCH, tu=tu_path, base_sha256=sha256_text(base.text),
+                prelude=dict(add=[], remove=[]), functions={}, interstitial={},
+                candidate_source=dict(schema='tu-authored-source/1', functions=names,
+                                      allocated=allowed, text=theirs.text,
+                                      sha256=sha256_text(theirs.text)))
+
+
+def _candidate_patch_source(base, patch):
+    carrier = patch.get('candidate_source')
+    required = {'schema', 'functions', 'allocated', 'text', 'sha256'}
+    if (not isinstance(carrier, dict) or set(carrier) != required or
+            carrier.get('schema') != 'tu-authored-source/1' or
+            not isinstance(carrier.get('text'), str) or
+            not isinstance(carrier.get('functions'), list) or
+            not isinstance(carrier.get('allocated'), list) or
+            any(not isinstance(n, str) for n in carrier['functions'] + carrier['allocated']) or
+            sha256_text(carrier['text']) != carrier.get('sha256') or
+            patch.get('base_sha256') != sha256_text(base.text) or
+            patch.get('prelude') != {'add': [], 'remove': []} or
+            patch.get('functions') != {} or patch.get('interstitial') != {} or
+            set(patch) - {'schema', 'tu', 'base_sha256', 'prelude', 'functions', 'interstitial',
+                          'candidate_source'}):
+        raise EditError('candidate source carrier has invalid exact source, base or allocation pins')
+    authored = TU(carrier['text'], None, carrier['functions'], base.unit_dir)
+    replay = merge_candidate(base, base, authored, carrier['functions'], carrier['allocated'])
+    if replay.get('text') != authored.text:
+        raise EditError('candidate source carrier changes an unallocated mapped function: ' +
+                        json.dumps(replay.get('conflicts') or []))
+    return authored
+
+
 def make_patch(base, theirs, names=None, tu_path=None):
     """Function-level patch that turns base into theirs."""
     names = [b.key for b in base.functions()] if names is None else [n for n in names if n not in base.covered]
@@ -3035,6 +3197,8 @@ def patch_to_theirs(base, patch, names=None):
         raise EditError(f'unsupported patch schema {patch.get("schema")!r}')
     if patch.get('base_sha256') not in (None, sha256_text(base.text)):
         raise EditError('patch base_sha256 does not match the base file')
+    if 'candidate_source' in patch:
+        return _candidate_patch_source(base, patch)
     names = [b.key for b in base.functions()] if names is None else [n for n in names if n not in base.covered]
     rb = Regions(base, names, 'base')
     items, tail = prelude_items(rb.prelude)
@@ -3093,6 +3257,15 @@ def patch_to_theirs(base, patch, names=None):
 
 def apply_patch(base, target, patch, names=None, allowed=None, comments='strict', interstitial_allowed=None):
     theirs = patch_to_theirs(base, patch, names)
+    if 'candidate_source' in patch:
+        carrier = patch['candidate_source']
+        allocated = carrier['allocated']
+        if allowed is not None and any(not any(same_function(n, a) for a in allowed)
+                                       for n in allocated):
+            raise EditError('candidate source carrier allocation exceeds the caller allocation')
+        if names is not None and list(names) != carrier['functions']:
+            raise EditError('candidate source carrier original function list differs from the caller')
+        return merge_candidate(base, target, theirs, carrier['functions'], allocated)
     return merge3(base, target, theirs, names, allowed, comments, interstitial_allowed)
 
 
@@ -3100,11 +3273,37 @@ def apply_patch(base, target, patch, names=None, allowed=None, comments='strict'
 # CLI
 # ---------------------------------------------------------------------------
 
+def _guard_canonical_write(path):
+    """TU editing writes private copies; the publisher owns the production tree."""
+    target = Path(path).absolute()
+    published = None
+    candidates = (Path.cwd(), *Path.cwd().parents, Path(__file__).resolve().parent,
+                  *Path(__file__).resolve().parents)
+    for candidate in dict.fromkeys(candidates):
+        queue = candidate / '.work/queue.sqlite3'
+        if queue.is_file():
+            production = queue.resolve().parent.parent
+            if (production / 'config/tu-build.json').is_file():
+                published = production
+                break
+    if published is None:
+        raise EditError('cannot resolve the production queue; refusing a TU file write')
+    resolved = target.resolve()
+    for tree in ('src', 'include'):
+        protected = published / tree
+        if target.is_relative_to(protected) or resolved.is_relative_to(protected.resolve()):
+            raise EditError(f'refusing tu_edit write to published {tree}: {target}; '
+                            'edit a private attempt copy; normal publication uses tu_publish')
+    if target.is_file() and target.stat().st_nlink != 1:
+        raise EditError(f'refusing tu_edit write to a hardlinked destination: {target}')
+    return target
+
+
 def _write(path, text, in_place_of=None):
     if path in (None, '-'):
         sys.stdout.write(text)
         return
-    path = Path(path)
+    path = _guard_canonical_write(path)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix='.' + path.name + '.')
     with os.fdopen(fd, 'w', encoding='utf-8', errors='surrogateescape', newline='') as fh:
         fh.write(text)
@@ -3240,9 +3439,27 @@ def main(argv=None):
     p.add_argument('--interstitial-allowed', action='append')
     p.add_argument('--comments', choices=('strict', 'ours'), default='strict')
     common(p, out=True)
+    p = sub.add_parser('owner-correction-manifest',
+                       help='bind existing independently submitted owner receipts without rewriting them')
+    p.add_argument('--repo', required=True)
+    p.add_argument('--proposal', required=True)
+    p.add_argument('--author-task', required=True)
+    p.add_argument('--author-submission', required=True)
+    p.add_argument('--review', required=True)
+    p.add_argument('--review-task', required=True)
+    p.add_argument('--review-submission', required=True)
+    p.add_argument('--base-copy', help='immutable original owner header for a source-postimage proposal')
+    p.add_argument('--consumer', action='append', required=True)
+    p.add_argument('-o', '--output', required=True)
     args = ap.parse_args(argv)
 
     try:
+        if args.cmd == 'owner-correction-manifest':
+            manifest = owner_correction_manifest(Path(args.repo), args.proposal,
+                args.author_task, args.author_submission, args.review, args.review_task,
+                args.review_submission, args.consumer, args.base_copy)
+            _write(args.output, json.dumps(manifest, indent=2) + '\n')
+            return 0
         skeleton = load(args.skeleton) if getattr(args, 'skeleton', None) else None
         names = _names(getattr(args, 'functions', None)) or skeleton_functions(skeleton)
         unit_dir = getattr(args, 'unit_dir', None)
@@ -3410,9 +3627,6 @@ def main(argv=None):
     return 2
 
 
-if __name__ == '__main__':
-    sys.exit(main())
-
 # Hash-bound, zero-credit reviewed source corrections.
 import sqlite3
 import time
@@ -3499,7 +3713,21 @@ def _verify_submission(db_path: Path, task: str, submission_id: str, artifact: s
         detail = json.loads(audit[0])
     except ValueError as exc:
         raise CorrectionError('proposal submit event has invalid JSON') from exc
-    if detail.get('submission_id') != submission_id or detail.get('artifact') != artifact:
+    if detail.get('submission_id') != submission_id:
+        raise CorrectionError('proposal task does not have the exact cited latest submission')
+    repo = db_path.resolve().parent.parent
+    paths = []
+    for value in (detail.get('artifact'), artifact):
+        if not isinstance(value, str) or not value:
+            raise CorrectionError('proposal submission has no exact artifact path')
+        path = Path(value)
+        path = (path if path.is_absolute() else repo / path).resolve()
+        try:
+            path.relative_to(repo)
+        except ValueError as exc:
+            raise CorrectionError('proposal submission artifact escapes repository') from exc
+        paths.append(path)
+    if paths[0] != paths[1]:
         raise CorrectionError('proposal task does not have the exact cited latest submission')
 
 
@@ -3518,19 +3746,175 @@ def _correction_row(row: dict) -> tuple[dict, dict]:
     return flattened, correction
 
 
-def validate_correction(repo: Path, row: dict) -> dict:
+def _receipt_ref(repo, value):
+    """Normalize an artifact spelling, never its bytes or hash."""
+    path = Path(value['path'] if 'path' in value else value['copy'])
+    if path.is_absolute():
+        path = path.resolve().relative_to(repo.resolve())
+    ref = dict(path=path.as_posix(), sha256=value['sha256'])
+    _artifact(repo, ref, 'existing receipt artifact')
+    return ref
+
+
+def _queue_submission(repo, task, sid, artifact=None, actor=None):
+    with sqlite3.connect(f'file:{repo / ".work/queue.sqlite3"}?mode=ro', uri=True) as db:
+        current = db.execute('SELECT owner,artifact FROM tasks WHERE id=?', (task,)).fetchone()
+    if not current or not current[0] or not current[1]:
+        raise CorrectionError('receipt task has no submitted actor/artifact')
+    if actor is not None and actor != current[0]:
+        raise CorrectionError('receipt actor differs from its exact queue submission')
+    path = Path(current[1])
+    path = (path if path.is_absolute() else repo / path).resolve()
+    _verify_submission(repo / '.work/queue.sqlite3', task, sid,
+                       str(artifact or path), current[0])
+    return current[0], path
+
+
+def _review_submission(repo, row, review, review_path):
+    """Bind a report's actor or official task alias to its exact submitted actor."""
+    actor, _ = _queue_submission(repo, row['review_task'], row['review_submission_id'], review_path)
+    if review.get('reviewer') != row['reviewer'] or row['reviewer'] not in (actor, row['review_task']):
+        raise CorrectionError('reviewer is neither the submitted actor nor its official task alias')
+    if actor == row['proposal_author'] or row['reviewer'] == row['proposal_author']:
+        raise CorrectionError('proposal author and submitted reviewer must be distinct')
+    return actor
+
+
+def _owner_harvest_module():
+    """Resolve the peer tool for normal CLI and file-loaded worker entry points."""
+    import importlib.util
+    peer = Path(__file__).resolve().with_name('header_harvest.py')
+    if not peer.is_file():
+        raise CorrectionError('normal owner ingress is missing its peer header_harvest tool')
+    name = '_tu_edit_owner_harvest_' + digest(peer.read_bytes())[:16]
+    if name not in sys.modules:
+        # Peer routines use the ordinary tu_edit import for shared tokenizers.
+        # File-loaded callers need the same actual module registered by name.
+        sys.modules.setdefault('tu_edit', sys.modules[__name__])
+        spec = importlib.util.spec_from_file_location(name, peer)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
+    return sys.modules[name]
+
+
+def _header_owner_receipt(repo, row, base, post):
+    """Use the submitted full header review; admit no function or storage definition."""
+    harvest = _owner_harvest_module()
+    operation = row['operation']
+    graph = json.loads((repo / 'config/tu-build.json').read_text())
+    owner = next((t for t in graph['tus'] if t['id'] == operation.get('owner_tu')), None)
+    if (not owner or owner.get('category') != 'game' or not owner.get('in_scope') or
+            row['path'] != str(Path(owner['path']).with_suffix('.h')) or
+            operation.get('revision') != graph['revision'] or
+            operation.get('original_tu_sha256') != owner['text']['sha256']):
+        raise CorrectionError('reviewed header is not its exact original defining owner')
+    before, after = (data.decode('utf-8', 'surrogateescape') for data in (base, post))
+    if TU(before).blocks or TU(after).blocks or \
+            harvest.owner_migration_context(before) != harvest.owner_migration_context(after):
+        raise CorrectionError('reviewed owner header contains function bodies')
+    for text in (before, after):
+        for item in scan(text):
+            if item.kind not in ('decl', 'comment', 'pp'):
+                raise CorrectionError('reviewed header contains unsupported source')
+            if item.kind == 'decl':
+                raw = item.text(text)
+                retained_static_proto = (re.fullmatch(
+                    r'\s*static\s+[^(){}=;]+\s+[A-Za-z_]\w*\s*\([^{};]*\)\s*;\s*', raw) and
+                    before.count(raw) == after.count(raw) == 1)
+                if (not list(harvest.scan_declarations(raw)) and not retained_static_proto) or \
+                        harvest.ordinary_candidate_c(raw) is not None:
+                    raise CorrectionError('reviewed header contains a storage or function definition')
+    old = {(d.namespace, d.name): d for d in harvest.scan_declarations(before)}
+    new = list(harvest.scan_declarations(after))
+    if len({(d.namespace, d.name) for d in new}) != len(new):
+        raise CorrectionError('reviewed header has ambiguous entities')
+    keys = [(d.namespace, d.name) for d in new if (d.namespace, d.name) not in old or
+            not same_code(d.text, old[(d.namespace, d.name)].text)]
+    exports = []
+    for key in keys:
+        entity = harvest.owner_migration_entity(after, key)
+        if entity.kind in harvest.TYPE_KINDS and '{' in entity.canon:
+            exports.append(dict(namespace=key[0], name=key[1]))
+        elif entity.kind == harvest.KIND_EXTERN_DATA:
+            harvest.original_asm_data_owner(str(repo), owner['id'], key[1])
+            exports.append(dict(namespace=key[0], name=key[1]))
+    return exports
+
+
+def _asm_extern_receipt(repo, row, proposal, report, review, base, post, patch_bytes, evidence_bytes):
+    """Adapt the retained original ASM-owner schemas, retaining every original pin."""
+    if (proposal.get('id') != row['id'] or proposal.get('path') != row['path'] or
+            proposal.get('proposed_by') != row['proposal_author'] or
+            proposal.get('operation') != row['operation'] or proposal.get('zero_credit') is not True or
+            proposal.get('source_credit') != 0 or proposal.get('storage_status') != 'assembly-scaffolding' or
+            proposal.get('function_bodies_changed') != [] or proposal.get('data_definitions_added') != [] or
+            proposal.get('base') != row['base'] or proposal.get('result') != row['result'] or
+            _receipt_ref(repo, proposal['patch']) != row['patch']):
+        raise CorrectionError('original ASM extern proposal differs from its exact carrier')
+    report_path, report_bytes = _artifact(repo, row['proposal'], 'submitted original author report')
+    if (report.get('schema') != 'owner-asm-data-extern-author-report/1' or
+            report.get('task') != row['proposal_task'] or report.get('author') != row['proposal_author'] or
+            report.get('source_credit') != 0 or
+            _receipt_ref(repo, report['evidence']) != row['evidence'] or
+            _receipt_ref(repo, report['patch']) != row['patch'] or
+            _receipt_ref(repo, report['header_postimage']) !=
+            dict(path=Path(row['result']['copy']).as_posix(), sha256=digest(post))):
+        raise CorrectionError('submitted original author report does not pin this proposal/postimage')
+    _queue_submission(repo, row['proposal_task'], row['proposal_submission_id'], report_path,
+                      row['proposal_author'])
+    pin = review.get('proposal') or {}
+    export = review.get('export') or {}
+    evidence = json.loads(evidence_bytes)
+    if (review.get('schema') != 'independent-owner-asm-data-extern-review/1' or
+            review.get('verdict') != 'supported_for_private_owner_header_staging' or
+            pin.get('task') != row['proposal_task'] or
+            pin.get('submission_id') != row['proposal_submission_id'] or
+            _receipt_ref(repo, pin) != _receipt_ref(repo, report['proposal']) or
+            _receipt_ref(repo, review['evidence']) != row['evidence'] or
+            export.get('path') != row['path'] or export.get('base_sha256') != digest(base) or
+            export.get('postimage_sha256') != digest(post) or export.get('zero_credit') is not True or
+            row['affected_tus'] != [export.get('consumer_tu')] or
+            review.get('owner_tu') != proposal.get('owner_tu') or
+            export.get('declaration') != evidence.get('declaration')):
+        raise CorrectionError('original independent ASM review does not bind this exact owner/consumer')
+    harvest = _owner_harvest_module()
+    identity = evidence.get('identity') or {}
+    harvest.verify_asm_data_owner(str(repo), proposal['owner_tu'], identity.get('name'), identity)
+    proof = review['evidence'].get('symbol') or {}
+    expected = dict(name=identity['name'], address=identity['va'], size=identity['size'],
+                    binding=identity['binding'], type=identity['type'], section=identity['section'],
+                    raw_bytes_sha256=identity['raw_bytes_sha256'])
+    if proof != expected or review['evidence'].get('original_elf_sha256') != identity['original_elf_sha256']:
+        raise CorrectionError('independent ASM review original bytes/identity differ')
+    declaration_delta(base.decode(), post.decode(), row['operation']['changes'])
+
+
+def validate_correction(repo: Path, row: dict, *, declaration_config=False) -> dict:
     """Validate row provenance and exact patch before any destination write."""
     row, metadata = _correction_row(row)
+    row = dict(row)
+    correction_kind = row.pop('kind', metadata.get('kind'))
+    verification = row.pop('verification_tus', None)
     required = {
         'role', 'id', 'path', 'action', 'base', 'result', 'patch', 'proposal',
         'review', 'evidence', 'proposal_author', 'proposal_task', 'proposal_submission_id',
         'reviewer', 'review_task', 'review_submission_id', 'affected_tus',
         'zero_credit', 'operation',
     }
-    if set(row) != required or row.get('role') != 'owner_source_correction' or \
+    role = 'owner_config_correction' if declaration_config else 'owner_source_correction'
+    if set(row) != required or row.get('role') != role or \
             row.get('action') != 'patch' or row.get('zero_credit') is not True:
         raise CorrectionError('correction row has unexpected fields or is not zero-credit')
-    _safe_destination(row['path'])
+    if declaration_config:
+        if row['path'] != 'config/header-owner-migrations.json':
+            raise CorrectionError('reviewed declaration config path is outside its one-path scope')
+    else:
+        _safe_destination(row['path'])
     if row['proposal_author'] == row['reviewer']:
         raise CorrectionError('proposal author and reviewer must be distinct')
     if not isinstance(row['affected_tus'], list) or not row['affected_tus'] or \
@@ -3554,28 +3938,38 @@ def validate_correction(repo: Path, row: dict) -> dict:
         review = json.loads(review_bytes)
     except (UnicodeError, ValueError) as exc:
         raise CorrectionError(f'proposal/review JSON is invalid: {exc}') from exc
-    if proposal.get('schema') != 'private-owner-source-patch/1' or \
+    asm_receipt = proposal.get('schema') == 'owner-asm-data-extern-author-report/1'
+    author_report = proposal if asm_receipt else None
+    if asm_receipt:
+        original_proposal_ref = _receipt_ref(repo, author_report['proposal'])
+        original_proposal_bytes = _artifact(repo, original_proposal_ref, 'original ASM extern proposal')[1]
+        proposal = json.loads(original_proposal_bytes)
+        if declaration_config or proposal.get('schema') != 'owner-asm-data-extern-proposal/1':
+            raise CorrectionError('author report adapter is only for the original ASM extern schema')
+        _asm_extern_receipt(repo, row, proposal, author_report, review, base, result, patch_bytes, evidence_bytes)
+    elif proposal.get('schema') != 'private-owner-source-patch/1' or \
             proposal.get('id') != row['id'] or proposal.get('owner_path') != row['path']:
         raise CorrectionError('proposal identity/path differs from correction row')
-    if row['operation'] != proposal.get('field'):
+    if not asm_receipt and row['operation'] != proposal.get('field'):
         raise CorrectionError('correction operation differs from the pinned proposal field')
     identity = proposal.get('source_identity') or {}
-    _, proposal_source = _artifact(repo, {'path': proposal.get('proposal_artifact'),
+    if not asm_receipt:
+        _, proposal_source = _artifact(repo, {'path': proposal.get('proposal_artifact'),
                                          'sha256': proposal.get('proposal_sha256')},
                                   'proposed owner source')
-    if identity.get('before_sha256') != digest(base) or \
-            identity.get('after_sha256') != digest(result) or proposal_source != result:
+    if not asm_receipt and (identity.get('before_sha256') != digest(base) or \
+            identity.get('after_sha256') != digest(result) or proposal_source != result):
         raise CorrectionError('proposal does not bind exact before/after bytes')
-    if proposal.get('patch_artifact') != row['patch']['path'] or \
-            proposal.get('patch_sha256') != digest(patch_bytes):
+    if not asm_receipt and (proposal.get('patch_artifact') != row['patch']['path'] or \
+            proposal.get('patch_sha256') != digest(patch_bytes)):
         raise CorrectionError('proposal does not bind exact patch')
-    if review.get('schema') != 'owner-source-patch-review/1' or \
+    if not asm_receipt and (review.get('schema') != 'owner-source-patch-review/1' or \
             review.get('decision') != 'evidence_supported' or \
-            review.get('reviewer') != row['reviewer']:
+            review.get('reviewer') != row['reviewer']):
         raise CorrectionError('review identity or verdict is not supported')
     submission = review.get('submission') or {}
     pins = review.get('pins') or {}
-    if (submission.get('author') != row['proposal_author'] or
+    if not asm_receipt and (submission.get('author') != row['proposal_author'] or
             submission.get('task') != row['proposal_task'] or
             submission.get('submission_id') != row['proposal_submission_id'] or
             submission.get('artifact') != row['proposal']['path'] or
@@ -3587,14 +3981,13 @@ def validate_correction(repo: Path, row: dict) -> dict:
             (pins.get('proposed_owner_source_sha256') != digest(result) and
              (pins.get('proposed_source') or {}).get('sha256') != digest(result))):
         raise CorrectionError('independent review does not pin this exact author/proposal/patch/source')
-    _verify_submission(repo / '.work/queue.sqlite3', row['proposal_task'], row['proposal_submission_id'],
-                       row['proposal']['path'], row['proposal_author'])
-    _verify_reviewer_task(repo / '.work/queue.sqlite3', row['reviewer'], review_path)
-    _verify_submission(repo / '.work/queue.sqlite3', row['review_task'], row['review_submission_id'],
-                       row['review']['path'], row['reviewer'])
+    if not asm_receipt:
+        _verify_submission(repo / '.work/queue.sqlite3', row['proposal_task'], row['proposal_submission_id'],
+                           str(proposal_path), row['proposal_author'])
+    review_actor = _review_submission(repo, row, review, review_path)
     scope = proposal.get('scope') or {}
-    if scope.get('function_bodies_changed') != [] or \
-            scope.get('accepted_neighbor_bodies_changed') != []:
+    if not asm_receipt and (scope.get('function_bodies_changed') != [] or \
+            scope.get('accepted_neighbor_bodies_changed') != []):
         raise CorrectionError('owner correction changes or fails to preserve function bodies')
     # The exact patch must transform the exact before-image into the exact
     # postimage. Use git's patch parser rather than trusting a claimed diff.
@@ -3611,18 +4004,991 @@ def validate_correction(repo: Path, row: dict) -> dict:
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if apply.returncode or target.read_bytes() != result:
             raise CorrectionError('exact patch does not produce the pinned postimage')
-    return dict(path=row['path'], before_sha256=digest(base), after_sha256=digest(result),
+    receipt = dict(path=row['path'], before_sha256=digest(base), after_sha256=digest(result),
                 proposal_author=row['proposal_author'], reviewer=row['reviewer'],
                 proposal_sha256=digest(proposal_bytes), review_sha256=digest(review_bytes),
                 evidence_sha256=digest(evidence_bytes), patch_sha256=digest(patch_bytes),
                 affected_tus=list(row['affected_tus']), zero_credit=True,
                 operation=row['operation'])
+    if asm_receipt or row['operation'].get('schema') in (
+            'tu-reviewed-owner-source-postimage/1', 'tu-reviewed-declaration-delta/1') and \
+            row['path'].endswith('.h') and correction_kind == 'owner_source':
+        receipt['export_declarations'] = _header_owner_receipt(repo, row, base, result)
+        receipt['review_actor'] = review_actor
+        if not isinstance(verification, list) or not verification or \
+                row['operation']['owner_tu'] not in verification or \
+                not set(row['affected_tus']).issubset(verification):
+            raise CorrectionError('owner receipt verification set omits its owner or consumer')
+        receipt['verification_tus'] = verification
+        if asm_receipt:
+            receipt['author_report_sha256'] = row['proposal']['sha256']
+            receipt['original_proposal'] = original_proposal_ref
+    return receipt
+
+
+def validate_owner_export(repo, report_row):
+    """Carry an existing independent export review without changing owner source."""
+    row, _ = _correction_row(report_row)
+    row = dict(row)
+    if row.pop('kind', None) != 'owner_export':
+        raise CorrectionError('unchanged owner export lacks its normal carrier kind')
+    required = {'role', 'id', 'path', 'action', 'base', 'result', 'patch', 'proposal',
+                'review', 'evidence', 'proposal_author', 'proposal_task', 'proposal_submission_id',
+                'reviewer', 'review_task', 'review_submission_id', 'affected_tus',
+                'verification_tus', 'zero_credit', 'operation'}
+    if set(row) != required or row['role'] != 'owner_source_correction' or \
+            row['action'] != 'patch' or row['zero_credit'] is not True or row['base'] != row['result']:
+        raise CorrectionError('unchanged export carrier changes source or has unexpected fields')
+    _safe_destination(row['path'])
+    author_path, author_bytes = _artifact(repo, row['proposal'], 'original export author report')
+    author_report = json.loads(author_bytes)
+    if author_report.get('schema') != 'existing-owner-type-export-author-report/1' or \
+            author_report.get('task') != row['proposal_task'] or author_report.get('zero_source_credit') is not True:
+        raise CorrectionError('unchanged export author report identity differs')
+    _queue_submission(repo, row['proposal_task'], row['proposal_submission_id'], author_path,
+                      row['proposal_author'])
+    proposal_ref = _receipt_ref(repo, author_report['proposal'])
+    proposal = json.loads(_artifact(repo, proposal_ref, 'original export proposal')[1])
+    export = proposal.get('export') or {}
+    spec = export.get('source_owner') or {}
+    if (proposal.get('schema') != 'existing-owner-type-export-proposal/1' or
+            proposal.get('path') != 'config/header-exports.json' or proposal.get('id') != row['id'] or
+            proposal.get('source_edits') != [] or proposal.get('zero_credit') is not True or
+            export.get('tu') != proposal.get('owner_tu') or spec.get('path') != row['path'] or
+            row['operation'] != dict(schema='tu-reviewed-existing-owner-export/1',
+                owner_tu=proposal['owner_tu'], export=export) or
+            not row['affected_tus'] or len(row['affected_tus']) != len(set(row['affected_tus'])) or
+            row['affected_tus'] != proposal.get('consumers') or
+            export.get('consumers') != row['affected_tus'] or
+            row['verification_tus'] != sorted(set(row['affected_tus']) | {proposal['owner_tu']})):
+        raise CorrectionError('unchanged export scope differs from the original reviewed proposal')
+    if (row['evidence'] != _receipt_ref(repo, proposal['evidence']) or
+            row['patch'] != _receipt_ref(repo, proposal['patch']) or
+            author_report.get('evidence') != proposal.get('evidence') or
+            author_report.get('checks') != proposal.get('checks') or
+            author_report.get('patch') != proposal.get('patch')):
+        raise CorrectionError('unchanged export evidence/patch differs from the original report')
+    _artifact(repo, proposal['checks'], 'original export generation checks')
+    witness = _copy_bytes(repo, row['base']['copy'], row['base']['sha256'], 'unchanged owner source witness')
+    if digest(witness) != spec.get('sha256'):
+        raise CorrectionError('unchanged owner source differs from its original review witness')
+    before_path, before = _artifact(repo, proposal['base'], 'original export config before')
+    after_path, after = _artifact(repo, proposal['result'], 'original export config after')
+    before_doc, after_doc = json.loads(before), json.loads(after)
+    expected = dict(before_doc)
+    expected['exports'] = list(before_doc['exports']) + [export]
+    if after_doc != expected:
+        raise CorrectionError('original export config adds more than the one reviewed owner row')
+    patch_path, _ = _artifact(repo, proposal['patch'], 'original export config patch')
+    with tempfile.TemporaryDirectory(prefix='owner-export-receipt-') as temporary:
+        target = Path(temporary) / proposal['path']
+        target.parent.mkdir(parents=True)
+        target.write_bytes(before)
+        applied = subprocess.run(['git', 'apply', str(patch_path)], cwd=temporary,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=30)
+        if applied.returncode or target.read_bytes() != after:
+            raise CorrectionError('original export patch does not reproduce its config postimage')
+    review_path, review_bytes = _artifact(repo, row['review'], 'original independent export review')
+    review = json.loads(review_bytes)
+    actor = _review_submission(repo, row, review, review_path)
+    if actor == row['proposal_author'] or review.get('schema') != 'existing-owner-type-export-review/1' or \
+            review.get('decision') != 'supported' or review.get('author') != dict(
+                task=row['proposal_task'], owner=row['proposal_author'],
+                submission_id=row['proposal_submission_id'], report=row['proposal']):
+        raise CorrectionError('unchanged export has no distinct supported original review')
+    pinned = review.get('proposal') or {}
+    scope = review.get('scope') or {}
+    if (any(pinned.get(k) != proposal_ref[k] for k in ('path', 'sha256')) or
+            any(pinned.get(k) != proposal.get(k) for k in ('evidence', 'checks', 'patch')) or
+            scope.get('owner_tu') != proposal['owner_tu'] or
+            scope.get('consumer_tus') != row['affected_tus'] or
+            scope.get('source_owner') != dict(path=spec['path'], sha256=spec['sha256']) or
+            (scope.get('name') != (export.get('names') or [None])[0] and
+             scope.get('names') != export.get('names')) or
+            scope.get('zero_source_credit') is not True):
+        raise CorrectionError('independent export review pins or owner scope differ')
+    graph = json.loads((repo / 'config/tu-build.json').read_text())
+    owner = next((t for t in graph['tus'] if t['id'] == proposal['owner_tu']), None)
+    consumers = {t['id']: t for t in graph['tus']}
+    if (not owner or owner.get('category') != 'game' or not owner.get('in_scope') or
+            row['path'] not in (owner['path'], str(Path(owner['path']).with_suffix('.h'))) or
+            any(t not in consumers or consumers[t]['unit'] != owner['unit'] or
+                not consumers[t].get('in_scope') or t == owner['id'] for t in row['affected_tus'])):
+        raise CorrectionError('unchanged export is outside its original owner/consumer tuples')
+    harvest = _owner_harvest_module()
+    harvest.source_bound_exports(str(repo), {}, doc=dict(exports=[export]))
+    return dict(kind='owner_export', path=row['path'], before_sha256=digest(witness),
+                after_sha256=digest(witness), export=export, original_proposal=proposal_ref,
+                proposal_sha256=digest(author_bytes), review_sha256=digest(review_bytes),
+                review_actor=actor, affected_tus=row['affected_tus'],
+                verification_tus=row['verification_tus'], operation=row['operation'], zero_credit=True)
+
+
+def retain_export_owner_source(repo, project, report_row):
+    """Keep newer owner declarations; prove only the reviewed entity and context."""
+    receipt = validate_owner_export(repo, report_row)
+    target = Path(project) / report_row['path']
+    _guard_canonical_write(target)
+    if target.is_symlink() or not target.resolve().is_relative_to(Path(project).resolve()):
+        raise CorrectionError('unchanged export owner source escapes the private project')
+    live = target.read_text(encoding='utf-8')
+    witness = _copy_bytes(repo, report_row['base']['copy'], report_row['base']['sha256'],
+                          'unchanged export source').decode('utf-8')
+    harvest = _owner_harvest_module()
+    if harvest.owner_migration_context(witness) != harvest.owner_migration_context(live):
+        raise CorrectionError('unchanged export owner preprocessing context changed')
+    for declaration in receipt['export']['source_owner']['declarations']:
+        key = declaration['namespace'], declaration['name']
+        before, after = (harvest.owner_migration_entity(text, key) for text in (witness, live))
+        if (before.kind != after.kind or before.defined != after.defined or
+                not same_code(before.text, after.text) or harvest.ordinary_candidate_c(after.text) is not None):
+            raise CorrectionError('unchanged export owner entity changed')
+    pin = digest(target.read_bytes())
+    receipt.update(source_retained=True, current_before_sha256=pin, result_sha256=pin,
+                   outcome='retained_current_owner_source')
+    return receipt
+
+
+def owner_correction_manifest(repo, proposal_path, author_task, author_sid,
+                              review_path, review_task, review_sid, consumers, base_copy=None):
+    """Produce only pointers to actual immutable author/reviewer artifacts."""
+    repo = Path(repo).resolve()
+    def ref(path):
+        target = Path(path)
+        target = (target if target.is_absolute() else repo / target).resolve()
+        relative = target.relative_to(repo).as_posix()
+        return dict(path=relative, sha256=digest(target.read_bytes()))
+    proposal_ref, review_ref = ref(proposal_path), ref(review_path)
+    proposal = json.loads(_artifact(repo, proposal_ref, 'existing proposal')[1])
+    review = json.loads(_artifact(repo, review_ref, 'existing review')[1])
+    author, submitted = _queue_submission(repo, author_task, author_sid)
+    if proposal.get('schema') == 'existing-owner-type-export-proposal/1':
+        if not base_copy:
+            raise CorrectionError('unchanged export requires its already immutable owner source witness')
+        source_ref = ref(base_copy)
+        source = dict(copy=source_ref['path'], sha256=source_ref['sha256'])
+        row = dict(role='owner_source_correction', path=proposal['export']['source_owner']['path'],
+            action='patch', base=source, result=dict(source), patch=_receipt_ref(repo, proposal['patch']),
+            correction=dict(schema='reviewed-source-correction/1', kind='owner_export',
+                id=proposal['id'], proposal=ref(submitted), review=review_ref,
+                evidence=_receipt_ref(repo, proposal['evidence']), proposal_author=author,
+                proposal_task=author_task, proposal_submission_id=author_sid,
+                reviewer=review['reviewer'], review_task=review_task, review_submission_id=review_sid,
+                affected_tus=sorted(consumers),
+                verification_tus=sorted(set(consumers) | {proposal['owner_tu']}), zero_credit=True,
+                operation=dict(schema='tu-reviewed-existing-owner-export/1',
+                               owner_tu=proposal['owner_tu'], export=proposal['export'])))
+        validate_owner_export(repo, row)
+        return dict(schema='reviewed-source-corrections/1', corrections=[row])
+    if proposal.get('schema') == 'owner-asm-data-extern-proposal/1':
+        operation, path = proposal['operation'], proposal['path']
+        base, post = proposal['base'], proposal['result']
+        patch = _receipt_ref(repo, proposal['patch'])
+        evidence = _receipt_ref(repo, json.loads(submitted.read_text())['evidence'])
+        proposal_ref = ref(submitted)
+    elif proposal.get('schema') == 'private-owner-source-patch/1' and \
+            proposal.get('field', {}).get('schema') in (
+                'tu-reviewed-owner-source-postimage/1', 'tu-reviewed-declaration-delta/1') and \
+            proposal.get('owner_path', '').endswith('.h'):
+        if not base_copy:
+            raise CorrectionError('source-postimage manifest requires its immutable original header copy')
+        operation, path = proposal['field'], proposal['owner_path']
+        base_ref = ref(base_copy)
+        base = dict(copy=base_ref['path'], sha256=base_ref['sha256'])
+        post = dict(copy=proposal['proposal_artifact'], sha256=proposal['proposal_sha256'])
+        patch = dict(path=proposal['patch_artifact'], sha256=proposal['patch_sha256'])
+        evidence = proposal['evidence']
+    else:
+        raise CorrectionError('no normal adapter for this immutable proposal schema')
+    graph = json.loads((repo / 'config/tu-build.json').read_text())
+    owner = next((t for t in graph['tus'] if t['id'] == operation['owner_tu']), None)
+    tus = {t['id']: t for t in graph['tus']}
+    if (not owner or len(consumers) != len(set(consumers)) or not consumers or
+            any(t not in tus or tus[t]['unit'] != owner['unit'] or
+                not tus[t].get('in_scope') or t == owner['id'] for t in consumers)):
+        raise CorrectionError('owner manifest has an invalid original consumer set')
+    row = dict(role='owner_source_correction', path=path, action='patch',
+               base=base, result=post, patch=patch,
+               correction=dict(schema='reviewed-source-correction/1', kind='owner_source',
+                   id=proposal['id'], proposal=proposal_ref, review=review_ref, evidence=evidence,
+                   proposal_author=author, proposal_task=author_task, proposal_submission_id=author_sid,
+                   reviewer=review['reviewer'], review_task=review_task, review_submission_id=review_sid,
+                   affected_tus=sorted(consumers), verification_tus=sorted(set(consumers) | {owner['id']}),
+                   zero_credit=True, operation=operation))
+    validate_reviewed_source_correction(repo, row)
+    return dict(schema='reviewed-source-corrections/1', corrections=[row])
+
+
+def declaration_keys(text):
+    """Keys of every top-level item in an exact declaration snippet."""
+    return set().union(*(decl_keys(item.text(text)) for item in scan(text)))
+
+
+def declaration_delta(base_text, result_text, changes):
+    """Prove that exact listed prelude declarations are the entire source delta."""
+    base, result = TU(base_text), TU(result_text)
+    items, _ = prelude_items(base.prelude())
+    expected = base_text
+    seen = set()
+    if not isinstance(changes, list) or not changes:
+        raise CorrectionError('declaration correction has no exact declaration changes')
+    for change in changes:
+        fields = {'before_text', 'after_text', 'before_sha256', 'after_sha256',
+                  'before_keys', 'after_keys', 'witnesses'}
+        if not isinstance(change, dict) or set(change) not in (fields, fields | {'after_anchor'}):
+            raise CorrectionError('declaration change has unexpected fields')
+        before, after = change['before_text'], change['after_text']
+        if not isinstance(before, str) or not isinstance(after, str) or before == after:
+            raise CorrectionError('declaration change lacks distinct exact before/after text')
+        if sha256_text(before) != change['before_sha256'] or sha256_text(after) != change['after_sha256']:
+            raise CorrectionError('declaration text differs from its hash')
+        anchor = change.get('after_anchor')
+        if not before:
+            if (not anchor or sum(text == anchor for _, text in items) != 1 or
+                    len(declaration_keys(after)) != 1 or not re.fullmatch(
+                        r'\s*extern\s+[^;{}=()]+;\s*', lexical(after))):
+                raise CorrectionError('new owner declaration must be an exact anchored plain data extern')
+        elif anchor is not None or before in seen or sum(text == before for _, text in items) != 1:
+            raise CorrectionError('before declaration is repeated or not a unique whole prelude item')
+        seen.add(before)
+        for text, keys in ((before, change['before_keys']), (after, change['after_keys'])):
+            if sorted(declaration_keys(text)) != sorted(tuple(key) for key in keys):
+                raise CorrectionError('declaration keys differ from exact declaration text')
+            for item in scan(text):
+                raw = item.text(text)
+                if item.conditional or item.kind not in ('decl', 'comment', 'pp'):
+                    raise CorrectionError('declaration correction contains non-declaration source')
+                if item.kind == 'pp' and not re.fullmatch(
+                        r'\s*#\s*define\s+([A-Za-z_]\w*)\s+\1\.[A-Za-z_]\w*\s*', raw):
+                    raise CorrectionError('declaration correction contains an unsupported directive')
+        if (before and not declaration_keys(before)) or not change['witnesses']:
+            raise CorrectionError('declaration correction lacks declaration keys or reviewed witnesses')
+        # Replace only the exact prelude item; never a matching use inside a function.
+        head = expected[:TU(expected).prelude_end()]
+        target = before or anchor
+        if head.count(target) != 1:
+            raise CorrectionError('before declaration is not unique in the current prelude')
+        expected = head.replace(target, after if before else anchor + '\n' + after, 1) + expected[len(head):]
+    if expected != result_text:
+        raise CorrectionError('unlisted declaration, function or interstitial bytes changed')
+    before_blocks = {b.key: base.block_text(b) for b in base.blocks}
+    after_blocks = {b.key: result.block_text(b) for b in result.blocks}
+    if before_blocks != after_blocks:
+        raise CorrectionError('declaration correction changes a function block')
+    return dict(function_bodies_changed=[], exact_listed_delta=True)
+
+
+FILE_SCOPE_OPERATION = 'tu-reviewed-file-scope-delta/1'
+
+
+def _file_scope_regions(tu):
+    """Account for every byte outside all top-level function blocks, including helpers."""
+    blocks = tu.blocks
+    regions = {'prelude': tu.text[:blocks[0].start] if blocks else tu.text}
+    previous = blocks[0].start if blocks else len(tu.text)
+    for block in blocks:
+        regions['before:' + block.key] = tu.text[previous:block.start]
+        previous = block.end
+    regions['epilogue'] = tu.text[previous:] if blocks else ''
+    return regions
+
+
+def file_scope_inventory(text):
+    """Exact scanner inventory for one explicit nonfunction region."""
+    items, _ = prelude_items(text)
+    return [dict(gap=gap, text=raw, sha256=sha256_text(raw),
+                 kind=scan(raw)[0].kind, keys=[list(k) for k in sorted(declaration_keys(raw))])
+            for gap, raw in items]
+
+
+def file_scope_delta(base_text, result_text, regions):
+    """Prove a complete listed file-scope delta while preserving every function byte."""
+    base, result = TU(base_text), TU(result_text)
+    signature = lambda tu: [(b.key, b.name, b.state, b.static, b.conditional,
+                            tu.block_text(b), tu.text[b.core_start:b.core_end]) for b in tu.blocks]
+    if signature(base) != signature(result):
+        raise CorrectionError('file-scope correction changes a function block or core')
+    before, after = _file_scope_regions(base), _file_scope_regions(result)
+    fields = {'name', 'before_text', 'after_text', 'before_sha256', 'after_sha256',
+              'before_items', 'after_items'}
+    if (not isinstance(regions, list) or [r.get('name') for r in regions if isinstance(r, dict)] !=
+            list(before) or list(before) != list(after)):
+        raise CorrectionError('file-scope inventory does not list every region in exact order')
+    old_items, new_items = [], []
+    for row in regions:
+        if set(row) != fields:
+            raise CorrectionError('file-scope region has unexpected fields')
+        for label, actual in (('before', before[row['name']]), ('after', after[row['name']])):
+            if row[label + '_text'] != actual or row[label + '_sha256'] != sha256_text(actual):
+                raise CorrectionError('file-scope region differs from exact source bytes')
+            expected = file_scope_inventory(actual)
+            given = row[label + '_items']
+            if not isinstance(given, list) or len(given) != len(expected):
+                raise CorrectionError('file-scope region item inventory is incomplete')
+            for item, facts in zip(given, expected):
+                if (not isinstance(item, dict) or set(item) != set(facts) | {'witnesses'} or
+                        {k: v for k, v in item.items() if k != 'witnesses'} != facts or
+                        not isinstance(item['witnesses'], list) or
+                        (label == 'before' and item['witnesses'])):
+                    raise CorrectionError('file-scope item differs from its exact scanner inventory')
+                scanned = scan(item['text'])[0]
+                if scanned.conditional or scanned.kind not in ('decl', 'comment', 'pp'):
+                    raise CorrectionError('file-scope correction contains conditional or executable source')
+                if scanned.kind == 'pp' and not re.fullmatch(
+                        r'\s*#\s*include\s+"[A-Za-z0-9_./-]+"\s*', item['text']):
+                    raise CorrectionError('file-scope correction contains an unsupported directive')
+                if scanned.kind == 'decl' and re.search(
+                        r'\b(?:asm|__asm|__asm__|__attribute__|INCLUDE_ASM|ACCEPTED_ASM|incbin)\b',
+                        lexical(item['text'])):
+                    raise CorrectionError('file-scope declaration contains an emission extension')
+                (old_items if label == 'before' else new_items).append(item)
+    if base_text == result_text:
+        raise CorrectionError('file-scope correction has no source delta')
+    return dict(function_bodies_changed=[], exact_listed_delta=True,
+                baseline_function_blocks=[dict(name=b.key, sha256=sha256_text(base.block_text(b)),
+                                               core_sha256=sha256_text(base.text[b.core_start:b.core_end]))
+                                          for b in base.blocks],
+                old_items=old_items, new_items=new_items)
+
+
+def _file_scope_roundtrip(post, author, allocated, owner):
+    """The reviewed correction accounts for all declarations; only allocated bodies remain."""
+    corrected, authored = TU(post), TU(author)
+    names = [b.key for b in corrected.blocks]
+    if (not isinstance(allocated, list) or not allocated or len(allocated) != len(set(allocated)) or
+            any(not isinstance(n, str) or n not in names or not any(
+                same_function(n, f['name']) for f in owner['functions']) for n in allocated) or
+            [b.key for b in authored.blocks] != names or
+            _file_scope_regions(corrected) != _file_scope_regions(authored)):
+        raise CorrectionError('authored source has unreviewed file-scope bytes or allocation identity')
+    for block in corrected.blocks:
+        if block.key not in allocated and corrected.block_text(block) != authored.block_text(
+                authored.block(block.key)):
+            raise CorrectionError('authored source changes an unallocated function block')
+    merged = merge3(corrected, corrected, authored, allowed=allocated)
+    if merged.get('conflicts') or merged.get('text') != author:
+        raise CorrectionError('ordinary allocated-body merge does not reproduce exact authored bytes')
+    return dict(author_sha256=sha256_text(author), allocated_functions=list(allocated),
+                exact_ordinary_roundtrip=True)
+
+
+def _file_scope_author(repo, flat, owner):
+    """A slice claim cannot authorize relocation/recovery of whole-TU declarations or data."""
+    uri = f'file:{(repo / ".work/queue.sqlite3").resolve()}?mode=ro'
+    with sqlite3.connect(uri, uri=True) as db:
+        resources = {r[0] for r in db.execute('SELECT resource FROM resources WHERE task_id=?',
+                                             (flat['proposal_task'],))}
+        events = db.execute('SELECT at, action, actor FROM audit WHERE task_id=? ORDER BY id',
+                            (flat['proposal_task'],)).fetchall()
+    if 'otu:' + owner['id'] not in resources:
+        raise CorrectionError('file-scope author lacks the real whole-TU declaration/data assignment')
+    claim = None
+    submitted = None
+    for at, action, actor in events:
+        if action == 'claim':
+            claim = at if actor == flat['proposal_author'] else None
+        elif action in ('release', 'expire'):
+            claim = None
+        elif action == 'submit' and actor == flat['proposal_author']:
+            submitted = (claim, at)
+    if not submitted or submitted[0] is None:
+        raise CorrectionError('file-scope proposal was not submitted under its author claim')
+    for label, path in (('proposal', repo / flat['proposal']['path']),
+                        ('correction postimage', Path(flat['result']['copy']))):
+        if not path.is_absolute():
+            path = repo / path
+        if not submitted[0] <= path.stat().st_mtime <= submitted[1]:
+            raise CorrectionError(f'file-scope {label} was not produced under the whole-TU claim')
+
+
+def _file_scope_compilation(repo, refs, owner, post_sha, original):
+    """Pin fresh compiler emission and normal data/gate/audit evidence to the correction source."""
+    labels = {'source', 'object', 'assembly', 'candidate', 'carves', 'audit', 'gate'}
+    if not isinstance(refs, dict) or set(refs) != labels:
+        raise CorrectionError('file-scope compilation lacks exact source/object/assembly/data/gate/audit pins')
+    raw = {key: _artifact(repo, value, 'file-scope ' + key)[1] for key, value in refs.items()}
+    candidate, carves, audit, gate = (json.loads(raw[k]) for k in ('candidate', 'carves', 'audit', 'gate'))
+    if (digest(raw['source']) != post_sha or
+            candidate.get('schema') != 'data-recovery-candidate/1' or candidate.get('tu') != owner['id'] or
+            candidate.get('unit') != owner['unit'] or
+            (candidate.get('files', {}).get(owner['path']) or {}).get('sha256') != post_sha or
+            (candidate.get('compiler_object') or {}).get('sha256') != digest(raw['object']) or
+            (candidate.get('assembly') or {}).get('sha256') != digest(raw['assembly']) or
+            audit.get('schema') != 'tu-audit/2' or audit.get('ok') is not True or
+            audit.get('grants_acceptance') is not True or audit.get('contract_relaxed') or
+            audit.get('tu_id') != owner['id'] or
+            audit.get('contract', {}).get('id') != owner['contract']['id'] or
+            audit.get('contract', {}).get('flags') != owner['contract']['flags'] or
+            (audit.get('contract', {}).get('compiler', {}).get('sha256') or {}).get('cc1') !=
+            owner['contract']['cc1_sha256'] or
+            audit.get('contract', {}).get('assembler', {}).get('sha256') != owner['contract']['assembler_sha256'] or
+            (audit.get('inputs', {}).get('tu_c') or {}).get('sha256') != post_sha or
+            (audit.get('inputs', {}).get('original') or {}).get('sha256') != original['sha256'] or
+            (audit.get('linked_data_candidate') or {}).get('sha256') != digest(raw['candidate']) or
+            gate.get('schema') != 'elf-gate/1' or gate.get('result') != 'pass' or
+            owner['id'] not in (gate.get('tus') or []) or
+            not set(owner['linked_into']).issubset(gate.get('required_targets') or [])):
+        raise CorrectionError('file-scope compiler/source/object/assembly/data/gate/audit provenance differs')
+    for unit in owner['linked_into']:
+        target = gate.get('targets', {}).get(unit) or {}
+        if (target.get('identical') is not True or
+                unit != owner['unit'] or (target.get('original') or {}).get('sha256') != original['sha256'] or
+                (target.get('built') or {}).get('sha256') != (target.get('original') or {}).get('sha256')):
+            raise CorrectionError('file-scope correction lacks a complete identical linked target')
+    return raw['object'], carves, raw['assembly']
+
+
+def _file_scope_witness(repo, ref, owner, tu_build, verification):
+    """Explicit current accepted declarations or original witnesses, never a candidate-as-authority."""
+    _, raw = _artifact(repo, ref, 'file-scope declaration witness')
+    witness = json.loads(raw)
+    if witness.get('schema') in ('tu-declaration-evidence/1', 'tu-declaration-witness/1'):
+        return _declaration_witness(repo, ref, owner, tu_build, verification)
+    if witness.get('schema') != 'tu-file-scope-witness/1':
+        raise CorrectionError('file-scope declaration witness has an unsupported schema')
+    kind = witness.get('kind')
+    defining = next((t for t in tu_build['tus'] if t['id'] == witness.get('declaration_tu')), None)
+    if not defining or defining['unit'] != owner['unit']:
+        raise CorrectionError('file-scope declaration witness lacks a genuine mapped owner')
+    if kind == 'original_symbol':
+        if set(witness) != {'schema', 'kind', 'declaration_tu', 'witness'}:
+            raise CorrectionError('original declaration witness has unexpected fields')
+        return _declaration_witness(repo, witness['witness'], defining, tu_build, verification)
+    if kind == 'header_include':
+        if set(witness) != {'schema', 'kind', 'declaration_tu', 'header'}:
+            raise CorrectionError('header include witness has unexpected fields')
+        expected = f'include/{defining["unit"]}/{Path(defining["path"]).stem}.h'
+        _artifact(repo, witness['header'], 'published owner header')
+        if witness['header']['path'] != expected:
+            raise CorrectionError('included header is outside its mapped defining owner')
+        return {('include', expected.removeprefix('include/'))}
+    if kind != 'published_declaration' or set(witness) != {
+            'schema', 'kind', 'declaration_tu', 'source', 'text', 'sha256'}:
+        raise CorrectionError('published declaration witness has unexpected fields')
+    if witness['source']['path'] not in (defining['path'], str(Path(defining['path']).with_suffix('.h'))):
+        raise CorrectionError('declaration witness is outside current accepted defining source')
+    _, source = _artifact(repo, witness['source'], 'published defining source')
+    text = source.decode('utf-8', 'surrogateescape')
+    matches = [item for item in scan(text) if item.kind == 'decl' and not item.conditional and
+               item.text(text) == witness['text']]
+    if len(matches) != 1 or sha256_text(witness['text']) != witness['sha256']:
+        raise CorrectionError('published declaration witness is not an exact unique accepted item')
+    return declaration_keys(witness['text'])
+
+
+def _file_scope_original_item(repo, ref, owner, original, section, name, address, size, binding):
+    """Exact original scaffold label span and dlabel binding, paired with original ELF bytes."""
+    if owner['unit'] != 'main' or not isinstance(ref, dict) or set(ref) != {'manifest', 'piece', 'macros'}:
+        raise CorrectionError('original storage item lacks supported MAIN scaffold identity pins')
+    manifest_path, raw = _artifact(repo, ref['manifest'], 'original MAIN scaffold manifest')
+    manifest = json.loads(raw)
+    if (ref['manifest']['path'] != 'build/main/tu-manifest.json' or manifest.get('unit') != 'main' or
+            manifest.get('identity') != {'binary': original['path'], 'sha256': original['sha256']}):
+        raise CorrectionError('original scaffold manifest has a different binary identity')
+    tus = [t for t in manifest.get('tus', []) if t.get('id') == owner['id'] and t.get('path') == owner['path']]
+    if len(tus) != 1:
+        raise CorrectionError('original scaffold does not have its exact defining TU')
+    sec = tus[0].get('sections', {}).get(section) or {}
+    pieces = sec.get('pieces') or [dict(name=tus[0]['name'], start=sec.get('start'), end=sec.get('end'))]
+    matching = [p for p in pieces if int(p['start'], 16) <= address < address + size <= int(p['end'], 16)]
+    if len(matching) != 1:
+        raise CorrectionError('original storage span is outside one defining scaffold piece')
+    piece = matching[0]
+    relative = piece.get('file') or f'asm/main/data/{piece["name"]}.{section[1:]}.s'
+    expected = (manifest_path.parent / relative).resolve().relative_to(repo.resolve()).as_posix()
+    if ref['piece']['path'] != expected or ref['macros']['path'] != 'build/main/include/macro.inc':
+        raise CorrectionError('original item or binding macro is outside the exact scaffold mapping')
+    _, data = _artifact(repo, ref['piece'], 'original storage scaffold piece')
+    _, macros = _artifact(repo, ref['macros'], 'original storage binding macros')
+    macro = re.search(r'(?ms)^\.macro dlabel label, visibility=global\s*\n(.*?)^\.endm', macros.decode())
+    if (not macro or '.\\visibility "\\label"' not in macro[1] or
+            '.type "\\label", @object' not in macro[1]):
+        raise CorrectionError('original dlabel OBJECT/GLOBAL binding macro differs')
+    lines = data.decode('utf-8', 'surrogateescape').splitlines()
+    starts = [i for i, line in enumerate(lines) if re.match(r'^nonmatching\s+\S+', line)]
+    items = []
+    for index, start in enumerate(starts):
+        block = lines[start:starts[index + 1] if index + 1 < len(starts) else len(lines)]
+        labels = [re.fullmatch(r'\s*dlabel\s+([^\s,]+)(?:,\s*visibility=(global|local))?\s*', line)
+                  for line in block]
+        labels = [label for label in labels if label]
+        addresses = [re.match(r'^\s*/\* (?:(?:[0-9A-F]{4,6}) )?([0-9A-F]{8})', line) for line in block]
+        addresses = [int(a[1], 16) for a in addresses if a]
+        if not labels or not addresses:
+            raise CorrectionError('original scaffold contains an unbounded storage item')
+        items.append((labels, addresses[0]))
+    found = [(labels, lo, items[i + 1][1] if i + 1 < len(items) else int(piece['end'], 16))
+             for i, (labels, lo) in enumerate(items) if any(label[1] == name for label in labels)]
+    if (len(found) != 1 or found[0][1:] != (address, address + size) or
+            len([label for label in found[0][0] if label[1] == name and
+                 (0 if label[2] == 'local' else 1) == binding]) != 1):
+        raise CorrectionError('original scaffold name/binding/complete item extent differs')
+
+
+def _file_scope_storage(repo, records, object_raw, carves, owner, original, assembly_raw):
+    """Verify original storage identities/raw bytes and their compiler/carve offsets and order."""
+    _, original_raw = _artifact(repo, original, 'file-scope original ELF')
+    import importlib.util
+    module_name = 'xeno_file_scope_elfinfo'
+    spec = importlib.util.spec_from_file_location(module_name, repo / 'tools/tu/elfinfo.py')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    elf, obj = module.Elf(original_raw), module.Elf(object_raw)
+    compiler_labels, app = set(), False
+    for line in assembly_raw.decode('utf-8', 'surrogateescape').splitlines():
+        if line.strip() == '#APP':
+            app = True
+        elif line.strip() == '#NO_APP':
+            app = False
+        elif not app:
+            label = re.match(r'^([A-Za-z_.$][\w.$]*):(?:\s|$)', line)
+            if label:
+                compiler_labels.add(label[1])
+    fields = {'name', 'section', 'address', 'size', 'binding', 'type', 'object_offset',
+              'raw_sha256', 'original_symbol', 'extent_evidence', 'scaffold'}
+    if not isinstance(records, list):
+        raise CorrectionError('file-scope storage inventory is absent')
+    seen, spans, object_spans = set(), {}, {}
+    for record in records:
+        if (not isinstance(record, dict) or set(record) != fields or record['name'] in seen or
+                any(type(record[k]) is not int for k in ('address', 'size', 'binding', 'type', 'object_offset')) or
+                record['size'] <= 0 or record['object_offset'] < 0 or record['type'] != 1):
+            raise CorrectionError('file-scope storage identity/extent inventory is invalid')
+        seen.add(record['name'])
+        if record['name'] not in compiler_labels:
+            raise CorrectionError('storage label is not emitted by the compiler outside assembly scaffolding')
+        section, address, size = record['section'], record['address'], record['size']
+        window = (owner.get('data_ownership', {}).get(section) or {}).get('window') or []
+        sections = [s for s in elf.sections if s.name == section and s.addr <= address and
+                    address + size <= s.addr + s.size]
+        if (len(window) != 2 or not int(window[0], 16) <= address < address + size <= int(window[1], 16) or
+                len(sections) != 1 or not record['extent_evidence']):
+            raise CorrectionError('file-scope storage lacks original owner/range/extent proof')
+        for pin in record['extent_evidence']:
+            _artifact(repo, pin, 'original storage identity/extent evidence')
+        _file_scope_original_item(repo, record['scaffold'], owner, original, section,
+                                  record['name'], address, size, record['binding'])
+        originals = [s for s in elf.symbols if s.value == address and s.type == 1 and s.name]
+        identity = record['original_symbol']
+        if identity is None:
+            if originals or record['name'] != f'D_{address:08X}' or record['binding'] != 1:
+                raise CorrectionError('fallback storage identity conflicts with original named storage')
+        elif (not isinstance(identity, dict) or set(identity) != {'name', 'binding', 'type', 'size'} or
+              identity['name'] != record['name'] or identity['binding'] != record['binding'] or
+              identity['type'] != record['type'] or
+              len([s for s in originals if s.name == identity['name'] and s.bind == identity['binding'] and
+                   s.type == identity['type'] and s.size == identity['size'] and
+                   elf.sections[s.shndx].name == section]) != 1 or
+              (identity['size'] and identity['size'] != size)):
+            raise CorrectionError('original named storage identity/binding/type/extent differs')
+        symbols = [s for s in obj.symbols if s.name == record['name'] and s.shndx < len(obj.sections)]
+        if len(symbols) != 1:
+            raise CorrectionError('compiled storage is missing or repeated')
+        symbol = symbols[0]
+        emitted = obj.sections[symbol.shndx]
+        if (symbol.type != record['type'] or symbol.bind != record['binding'] or symbol.size != size or
+                symbol.value != record['object_offset'] or emitted.name != section or
+                not 0 <= symbol.value < symbol.value + size <= emitted.size):
+            raise CorrectionError('compiled storage binding/type/extent/section/order differs')
+        original_bytes = (b'\0' * size if sections[0].type == 8 else
+                          elf.section_bytes(sections[0])[address - sections[0].addr:address - sections[0].addr + size])
+        object_bytes = (b'\0' * size if emitted.type == 8 else
+                        obj.section_bytes(emitted)[symbol.value:symbol.value + size])
+        if original_bytes != object_bytes or digest(original_bytes) != record['raw_sha256']:
+            raise CorrectionError('compiled storage bytes differ from exact original bytes')
+        matches = [span for run in carves.get('tus', {}).get(owner['id'], {}).get(section, [])
+                   for span in run.get('c_input_spans', []) if record['name'] in span.get('symbols', [])]
+        if (len(matches) != 1 or matches[0].get('section') != section or
+                [int(v, 16) for v in matches[0].get('range', [])] != [address, address + size] or
+                matches[0].get('object_range') != [symbol.value, symbol.value + size]):
+            raise CorrectionError('normal storage carve does not bind exact original and compiler extents')
+        for table, lo in ((spans, address), (object_spans, symbol.value)):
+            if any(lo < hi and start < lo + size for start, hi in table.setdefault(section, [])):
+                raise CorrectionError('storage inventory overlaps original or compiler extents')
+            table[section].append((lo, lo + size))
+    return seen
+
+
+def _file_scope_is_storage(item):
+    if item['kind'] != 'decl':
+        return False
+    text = lexical(item['text']).strip()
+    if re.match(r'(?:typedef|extern)\b', text) or not any(k[0] == 'ordinary' for k in item['keys']):
+        return False
+    return '=' in text or not re.search(r'\b[A-Za-z_]\w*\s*\([^;{}]*\)\s*;\s*$', text)
+
+
+def _validate_file_scope_correction(repo, flat, receipt, verification, owner, tu_build, base, post):
+    operation = flat['operation']
+    if owner['unit'] != 'main':
+        raise CorrectionError('normal file-scope operation currently supports MAIN TU declaration/data ownership')
+    if set(operation) != {'schema', 'owner_tu', 'revision', 'original_tu_sha256',
+                          'author_source', 'allocated_functions', 'regions', 'storage', 'compilation'}:
+        raise CorrectionError('normal file-scope operation has unexpected fields')
+    _file_scope_author(repo, flat, owner)
+    proof = file_scope_delta(base, post, operation['regions'])
+    prior_storage = [item for item in proof['old_items'] if _file_scope_is_storage(item)]
+    current_storage = [item for item in proof['new_items'] if _file_scope_is_storage(item)]
+    prior_texts = [item['text'] for item in prior_storage]
+    if ([item['text'] for item in current_storage if item['text'] in prior_texts] != prior_texts or
+            any(sum(item['text'] == raw for item in current_storage) != 1 for raw in prior_texts)):
+        raise CorrectionError('file-scope correction changes accepted storage definitions or their source order')
+    _, raw = _artifact(repo, operation['author_source'], 'immutable authored source')
+    roundtrip = _file_scope_roundtrip(post, raw.decode('utf-8', 'surrogateescape'),
+                                     operation['allocated_functions'], owner)
+    _, review_raw = _artifact(repo, flat['review'], 'file-scope independent review')
+    if json.loads(review_raw).get('pins', {}).get('authored_source') != operation['author_source']:
+        raise CorrectionError('independent review does not pin exact authored body source')
+    original = tu_build['units'][owner['unit']]
+    original_ref = dict(path=original['file'], sha256=original['sha256'])
+    object_raw, carves, assembly = _file_scope_compilation(repo, operation['compilation'], owner,
+                                                        digest(post.encode('utf-8', 'surrogateescape')), original_ref)
+    storage = _file_scope_storage(repo, operation['storage'], object_raw, carves, owner, original_ref, assembly)
+    old_texts = {i['text'] for i in proof['old_items']}
+    old_keys = set().union(*(set(tuple(k) for k in i['keys']) for i in proof['old_items']))
+    after_keys, witnessed = set(), set()
+    defined_storage = set()
+    for item in proof['new_items']:
+        keys = set(tuple(k) for k in item['keys'])
+        after_keys.update(keys)
+        if _file_scope_is_storage(item):
+            defined_storage.update(k[1] for k in keys if k[0] == 'ordinary')
+        if item['text'] in old_texts or item['kind'] == 'comment':
+            continue
+        covered = set().union(*[_file_scope_witness(repo, ref, owner, tu_build, verification)
+                               for ref in item['witnesses']])
+        # Storage has its own stronger original-byte, emitted-symbol and carve proof.
+        covered.update(('ordinary', name) for name in storage)
+        if not keys or not keys.issubset(covered):
+            raise CorrectionError('new/changed file-scope item lacks exact independently reviewed witnesses')
+        witnessed.update(covered)
+    if not old_keys.issubset(after_keys | witnessed):
+        raise CorrectionError('file-scope correction removes an unaccounted declaration identity')
+    if storage != defined_storage:
+        raise CorrectionError('storage proof does not exhaustively match every file-scope definition')
+    receipt.update(kind='declaration_only', verification_tus=verification,
+                   function_bodies_changed=[], exact_listed_delta=True,
+                   baseline_function_blocks=proof['baseline_function_blocks'],
+                   storage_verified=sorted(storage), **roundtrip)
+    return receipt
+
+
+def _declaration_witness(repo, ref, owner, tu_build, verification=()):
+    """Check original identities behind a reviewer-pinned declaration decision."""
+    _, raw = _artifact(repo, ref, 'declaration witness')
+    witness = json.loads(raw)
+    if witness.get('schema') == 'tu-declaration-evidence/1':
+        if not isinstance(witness.get('witnesses'), list) or not witness['witnesses']:
+            raise CorrectionError('declaration evidence index has no original witnesses')
+        return set().union(*[_declaration_witness_record(repo, row, owner, tu_build, verification)
+                             for row in witness['witnesses']])
+    return _declaration_witness_record(repo, witness, owner, tu_build, verification)
+
+
+def _declaration_witness_record(repo, witness, owner, tu_build, verification):
+    """One exact original witness, standalone or inside a hash-pinned index."""
+    if not isinstance(witness, dict):
+        raise CorrectionError('declaration witness is not an object')
+    original = tu_build['units'][owner['unit']]
+    if (witness.get('schema') != 'tu-declaration-witness/1' or
+            witness.get('owner_tu') != owner['id'] or
+            witness.get('original_elf') != {'path': original['file'], 'sha256': original['sha256']}):
+        raise CorrectionError('declaration witness has a different owner/original identity')
+    _, original_bytes = _artifact(repo, witness['original_elf'], 'declaration original ELF')
+    import importlib.util
+    module_name = 'xeno_declaration_elfinfo'
+    spec = importlib.util.spec_from_file_location(module_name, repo / 'tools/tu/elfinfo.py')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    elf = module.Elf(original_bytes)
+    kind = witness.get('kind')
+    if kind == 'symbol':
+        identity = witness.get('symbol') or {}
+        matches = [s for s in elf.symbols if s.name == identity.get('name') and
+                   s.value == identity.get('address') and s.bind == identity.get('binding') and
+                   s.type == identity.get('type') and s.size == identity.get('size') and
+                   s.shndx < len(elf.sections) and elf.sections[s.shndx].name == identity.get('section')]
+        if len(matches) != 1:
+            raise CorrectionError('declaration witness symbol identity differs from original ELF')
+        symbol = matches[0]
+        if symbol.type == 2:
+            if not any(f['name'] == symbol.name and int(f['va'], 16) == symbol.value
+                       for f in owner['functions']):
+                raise CorrectionError('declaration function witness is outside its mapped owner TU')
+        else:
+            span = witness.get('extent') or []
+            section = elf.sections[symbol.shndx]
+            window = (owner.get('data_ownership', {}).get(section.name) or {}).get('window') or []
+            boundary = min([s.value for s in elf.symbols if s.shndx == symbol.shndx and
+                            s.value > symbol.value] + [section.addr + section.size])
+            if (len(span) != 2 or span[0] != symbol.value or len(window) != 2 or
+                    not int(window[0], 16) <= span[0] < span[1] <= int(window[1], 16) or
+                    not span[0] < span[1] <= boundary or
+                    (symbol.size and span[1] - span[0] != symbol.size) or
+                    (not symbol.size and (span[1] != boundary or not witness.get('extent_evidence')))):
+                raise CorrectionError('declaration witness lacks an exact original storage extent')
+            for pin in witness.get('extent_evidence') or []:
+                _artifact(repo, pin, 'original storage extent evidence')
+        return {('ordinary', symbol.name), ('macro', symbol.name)}
+    if kind != 'layout' or not witness.get('type_name') or not witness.get('fields'):
+        raise CorrectionError('declaration witness kind is unsupported or lacks original field offsets')
+    extent = witness.get('extent')
+    if not isinstance(extent, int) or extent <= 0 or not witness.get('original_instructions'):
+        raise CorrectionError('layout correction lacks original extent/offset instruction witnesses')
+    for field in witness['fields']:
+        if (set(field) != {'name', 'offset', 'size'} or not field['name'] or
+                not isinstance(field['offset'], int) or not isinstance(field['size'], int) or
+                not 0 <= field['offset'] < field['offset'] + field['size'] <= extent):
+            raise CorrectionError('layout witness field is outside its pinned extent')
+    for instruction in witness['original_instructions']:
+        address, expected = instruction['address'], instruction['bytes']
+        witness_tu = instruction.get('tu', owner['id'])
+        instruction_owner = next((t for t in tu_build['tus'] if t['id'] == witness_tu), None)
+        if (not instruction_owner or instruction_owner['unit'] != owner['unit'] or
+                (witness_tu != owner['id'] and witness_tu not in verification) or
+                not int(instruction_owner['text']['start'], 16) <= address < address + 4 <=
+                    int(instruction_owner['text']['end'], 16)):
+            raise CorrectionError('layout instruction witness is outside its original owner TU')
+        sections = [s for s in elf.sections if s.type != 8 and s.addr <= address and
+                    address + 4 <= s.addr + s.size]
+        if len(sections) != 1 or elf.section_bytes(sections[0])[
+                address - sections[0].addr:address - sections[0].addr + 4].hex() != expected:
+            raise CorrectionError('layout witness instruction differs from original bytes')
+    return {('ordinary', witness['type_name']), ('tag', witness['type_name'])}
+
+
+def validate_declaration_correction(repo, row):
+    """Use existing independent-review pins, then constrain the exact declaration delta."""
+    flat, _ = _correction_row(row)
+    flat = dict(flat)
+    flat.pop('kind', None)
+    verification = flat.pop('verification_tus', None)
+    receipt = validate_correction(repo, flat)
+    operation = flat['operation']
+    fields = {'schema', 'owner_tu', 'revision', 'original_tu_sha256', 'changes'}
+    file_scope = isinstance(operation, dict) and operation.get('schema') == FILE_SCOPE_OPERATION
+    if not isinstance(operation, dict) or (not file_scope and (
+            set(operation) != fields or operation.get('schema') != 'tu-reviewed-declaration-delta/1')):
+        raise CorrectionError('declaration correction operation has an invalid schema')
+    tu_build = json.loads((repo / 'config/tu-build.json').read_text())
+    owner = next((t for t in tu_build['tus'] if t['id'] == operation['owner_tu']), None)
+    if (not owner or not owner.get('in_scope') or owner.get('category') != 'game' or
+            operation['revision'] != tu_build['revision'] or
+            operation['original_tu_sha256'] != owner['text']['sha256'] or
+            flat['path'] not in (owner['path'], str(Path(owner['path']).with_suffix('.h'))) or
+            not isinstance(verification, list) or not verification or
+            len(verification) != len(set(verification)) or owner['id'] not in verification or
+            not set(flat['affected_tus']).issubset(verification)):
+        raise CorrectionError('declaration correction owner, byte identity, path or verification scope differs')
+    base = _copy_bytes(repo, flat['base']['copy'], flat['base']['sha256'], 'declaration base').decode('utf-8', 'surrogateescape')
+    post = _copy_bytes(repo, flat['result']['copy'], flat['result']['sha256'], 'declaration postimage').decode('utf-8', 'surrogateescape')
+    if file_scope:
+        if flat['path'] != owner['path']:
+            raise CorrectionError('normal file-scope operation requires its defining TU source')
+        return _validate_file_scope_correction(repo, flat, receipt, verification, owner, tu_build, base, post)
+    declaration_delta(base, post, operation['changes'])
+    for change in operation['changes']:
+        witnessed = set().union(*[_declaration_witness(repo, ref, owner, tu_build, verification)
+                                  for ref in change['witnesses']])
+        if not set(tuple(key) for key in change['before_keys'] + change['after_keys']).issubset(witnessed):
+            raise CorrectionError('declaration witnesses do not cover every changed declaration key')
+    receipt.update(kind='declaration_only', verification_tus=verification, function_bodies_changed=[])
+    return receipt
+
+
+def validate_declaration_config(repo, report_row):
+    """Pin only reviewed RSSD owner rows to their paired declaration postimages."""
+    flat, _ = _correction_row(report_row)
+    flat = dict(flat)
+    flat.pop('kind', None)
+    verification = flat.pop('verification_tus', None)
+    phase = flat.pop('application_phase', None)
+    receipt = validate_correction(repo, flat, declaration_config=True)
+    operation = flat['operation']
+    if (not isinstance(operation, dict) or set(operation) != {'schema', 'entities'} or
+            operation.get('schema') != 'tu-reviewed-owner-config-delta/1' or
+            not isinstance(operation.get('entities'), list) or not operation['entities'] or
+            phase != 'post_source' or not isinstance(verification, list) or not verification or
+            len(verification) != len(set(verification)) or
+            not set(flat['affected_tus']).issubset(verification)):
+        raise CorrectionError('owner config correction lacks atomic post-source scope or verification')
+    before = json.loads(_copy_bytes(repo, flat['base']['copy'], flat['base']['sha256'], 'owner config base'))
+    post_bytes = _copy_bytes(repo, flat['result']['copy'], flat['result']['sha256'], 'owner config postimage')
+    after = json.loads(post_bytes)
+    expected = json.loads(json.dumps(before))
+    tu_build = json.loads((repo / 'config/tu-build.json').read_text())
+    import importlib.util
+    name = 'xeno_declaration_header_harvest'
+    spec = importlib.util.spec_from_file_location(name, repo / 'tools/header_harvest.py')
+    harvest = importlib.util.module_from_spec(spec)
+    sys.modules[name] = harvest
+    spec.loader.exec_module(harvest)
+    seen, pairs, sources = set(), [], []
+    for entity in operation['entities']:
+        if (set(entity) != {'namespace', 'name', 'owner_tu', 'header_row', 'source',
+                           'before_row_sha256', 'after_row_sha256'} or
+                entity['name'] not in {'RssdRpcResponse', 'RssdWorkFlags', 'RssdWork'} or
+                (entity['namespace'], entity['name']) in seen):
+            raise CorrectionError('owner config correction contains an unscoped or repeated entity')
+        seen.add((entity['namespace'], entity['name']))
+        matches = [r for r in expected['migrations'] if
+                   (r.get('namespace'), r.get('name')) == (entity['namespace'], entity['name'])]
+        if len(matches) != 1:
+            raise CorrectionError('owner migration entity is not unique')
+        migration = matches[0]
+        canonical = lambda value: digest(json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                                    ensure_ascii=False).encode())
+        if canonical(migration) != entity['before_row_sha256']:
+            raise CorrectionError('prior owner migration row differs from its exact pin')
+        header = json.loads(_artifact(repo, entity['header_row'], 'paired declaration row')[1])
+        proof = validate_reviewed_source_correction(repo, header)
+        owner = next((t for t in tu_build['tus'] if t['id'] == entity['owner_tu']), None)
+        if (not owner or (header.get('correction') or {}).get('kind') != 'declaration_only' or
+                proof['operation']['owner_tu'] != owner['id'] or
+                header['path'] != str(Path(owner['path']).with_suffix('.h')) or
+                not set(proof['verification_tus']).issubset(verification)):
+            raise CorrectionError('config entity lacks its exact reviewed defining-header correction')
+        text = _copy_bytes(repo, header['result']['copy'], header['result']['sha256'], 'paired header').decode()
+        declarations = [d for d in harvest.scan_declarations(text) if
+                        (d.namespace, d.name) == (entity['namespace'], entity['name'])]
+        source = entity['source']
+        if (len(declarations) != 1 or set(source) != {'path', 'copy', 'sha256'} or
+                source['path'] != owner['path']):
+            raise CorrectionError('config entity is absent from its postimage or has a different source owner')
+        source_text = _copy_bytes(repo, source['copy'], source['sha256'], 'paired owner source').decode('utf-8', 'surrogateescape')
+        if entity['name'] == 'RssdWork':
+            definitions = [i for i in scan(source_text) if i.kind == 'decl' and
+                           ('ordinary', 'RssdWork') in decl_keys(i.text(source_text)) and
+                           '=' in lexical(i.text(source_text))]
+            if len(definitions) != 1 or owner['id'] != 'main/tu107':
+                raise CorrectionError('RssdWork owner is not its actual mapped C data definition')
+        elif owner['id'] != 'main/tu110':
+            raise CorrectionError('RSSD type entity is outside its reviewed defining TU')
+        migration['canon'] = harvest.normalize_ws(declarations[0].canon)
+        migration['owner'] = dict(migration['owner'], tu=owner['id'], path=header['path'],
+            source_sha256=header['result']['sha256'], tu_source_sha256=source['sha256'],
+            tu_record_sha256=canonical(owner))
+        if canonical(migration) != entity['after_row_sha256']:
+            raise CorrectionError('owner migration postimage differs from its paired exact entity')
+        pairs.append(header)
+        sources.append(source)
+    paired_paths = {header['path'] for header in pairs}
+    required_entities = {(row.get('namespace'), row.get('name')) for row in before['migrations']
+                         if (row.get('owner') or {}).get('path') in paired_paths}
+    if not required_entities.issubset(seen):
+        raise CorrectionError('atomic config omits another entity pinned to the changed owner header')
+    if after != expected:
+        raise CorrectionError('owner config correction changes unlisted rows or historical provenance')
+    receipt.update(kind='declaration_owner_config', verification_tus=verification,
+                   application_phase=phase, prior_config_sha256=flat['base']['sha256'],
+                   paired_headers=pairs, owner_sources=sources)
+    return receipt
+
+
+def apply_declaration_config(repo_root, project_root, row):
+    repo, project = Path(repo_root).resolve(), Path(project_root).resolve()
+    receipt = validate_declaration_config(repo, row)
+    for header in receipt['paired_headers']:
+        if digest((project / header['path']).read_bytes()) != header['result']['sha256']:
+            raise CorrectionError('atomic config application lacks its exact header postimage')
+    for source in receipt['owner_sources']:
+        if digest((project / source['path']).read_bytes()) != source['sha256']:
+            raise CorrectionError('atomic config application lacks its exact defining source postimage')
+    target = project / row['path']
+    current = digest(target.read_bytes())
+    if current not in (row['base']['sha256'], row['result']['sha256']):
+        raise CorrectionError('atomic owner config has a third, unreviewed hash')
+    if current != row['result']['sha256']:
+        out = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'atomic owner config')
+        with tempfile.NamedTemporaryFile(prefix=f'.{target.name}.', dir=target.parent, delete=False) as temp:
+            temp.write(out)
+            temp.flush()
+            os.fsync(temp.fileno())
+            temporary = Path(temp.name)
+        os.chmod(temporary, target.stat().st_mode & 0o777)
+        os.replace(temporary, target)
+    return receipt
+
+
+def reviewed_declaration_view(repo_root, manifest_path, tu_id, project=None):
+    """Validate an opt-in correction manifest and return read-only baseline postimages."""
+    repo = Path(repo_root).resolve()
+    relative = Path(manifest_path)
+    if relative.is_absolute():
+        relative = relative.resolve().relative_to(repo)
+    if '..' in relative.parts:
+        raise CorrectionError('declaration manifest escapes the repository')
+    path = repo / relative
+    manifest = json.loads(path.read_text())
+    if manifest.get('schema') != 'reviewed-source-corrections/1' or not manifest.get('corrections'):
+        raise CorrectionError('declaration manifest has an invalid schema')
+    views, receipts, rows = {}, [], []
+    for row in manifest['corrections']:
+        correction = row.get('correction') or {}
+        if correction.get('kind') not in ('declaration_only', 'declaration_owner_config', 'owner_source', 'owner_export') or tu_id not in (correction.get('affected_tus') or []):
+            raise CorrectionError('worker declaration manifest contains an unrelated correction')
+        config = correction['kind'] == 'declaration_owner_config'
+        receipt = validate_declaration_config(repo, row) if config else validate_reviewed_source_correction(repo, row)
+        if correction.get('kind') == 'owner_source' and 'export_declarations' not in receipt:
+            raise CorrectionError('worker owner source input lacks a validated defining header receipt')
+        if row['path'] in views or (correction.get('kind') != 'owner_export' and
+                digest((repo / row['path']).read_bytes()) != row['base']['sha256']):
+            raise CorrectionError('declaration correction path repeats or its current baseline moved')
+        post = _copy_bytes(repo, row['result']['copy'], row['result']['sha256'], 'declaration view').decode('utf-8', 'surrogateescape')
+        if correction.get('kind') == 'owner_export':
+            post = (repo / row['path']).read_text(encoding='utf-8', errors='surrogateescape')
+        if project is not None and not config:
+            if correction.get('kind') == 'owner_export':
+                retain_export_owner_source(repo, project, row)
+                views[row['path']] = (Path(project) / row['path']).read_text(
+                    encoding='utf-8', errors='surrogateescape')
+                receipts.append(receipt)
+                rows.append(row)
+                continue
+            authored = (Path(project) / row['path']).read_text(encoding='utf-8', errors='surrogateescape')
+            operation = correction['operation']
+            if correction.get('kind') == 'owner_source':
+                if sha256_text(authored) != row['result']['sha256']:
+                    raise CorrectionError('authored owner header differs from the exact reviewed postimage')
+            elif operation.get('schema') == FILE_SCOPE_OPERATION:
+                if sha256_text(authored) != operation['author_source']['sha256']:
+                    raise CorrectionError('authored source differs from its independently reviewed body pin')
+                tu_build = json.loads((repo / 'config/tu-build.json').read_text())
+                owner = next(t for t in tu_build['tus'] if t['id'] == operation['owner_tu'])
+                _file_scope_roundtrip(post, authored, operation['allocated_functions'], owner)
+            else:
+                authored_items, _ = prelude_items(TU(authored).prelude())
+                for change in operation['changes']:
+                    if change['after_text'] and TU(authored).prelude().count(change['after_text']) != 1:
+                        raise CorrectionError('authored source lacks the exact reviewed declaration postimage')
+                    if change['before_text'] and any(item == change['before_text'] for _, item in authored_items):
+                        raise CorrectionError('authored source retains the superseded declaration')
+        views[row['path']] = post
+        receipts.append(receipt)
+        rows.append(row)
+    for row in rows:
+        if (row.get('correction') or {}).get('kind') != 'declaration_owner_config':
+            continue
+        receipt = validate_declaration_config(repo, row)
+        for pair in receipt['paired_headers']:
+            if pair not in rows:
+                raise CorrectionError('atomic config manifest omits its exact paired declaration row')
+    return dict(views=views, rows=rows, receipt=dict(schema='tu-reviewed-declaration-stage/1',
+                target_tu=tu_id, manifest_path=relative.as_posix(), manifest_sha256=digest(path.read_bytes()),
+                corrections=receipts))
 
 
 def apply_correction(repo: Path, root: Path, row: dict) -> dict:
     """Apply exact before->after correction; exact after is idempotent; else fail."""
-    kind = ((row.get('correction') or {}).get('kind')) if isinstance(row, dict) else None
-    validator = (validate_pair_correction if kind == 'owner_pair' or 'pair_manifest' in row else
+    _guard_canonical_write(root / row['path'])
+    kind = ((row.get('correction') or {}).get('kind') or row.get('kind')) if isinstance(row, dict) else None
+    validator = (validate_correction if kind == 'owner_source' else
+                 validate_declaration_correction if kind == 'declaration_only' or
+                 (isinstance(row.get('operation'), dict) and
+                  row['operation'].get('schema') in ('tu-reviewed-declaration-delta/1', FILE_SCOPE_OPERATION)) else
+                 validate_pair_correction if kind == 'owner_pair' or 'pair_manifest' in row else
                  validate_layout_correction if 'owner_manifest' in row else validate_correction)
     receipt = validator(repo, row)
     target = (root / _safe_destination(row['path'])).resolve()
@@ -3915,6 +5281,7 @@ def validate_pair_correction(repo: Path, row: dict) -> dict:
 
 
 def apply_reviewed_source_correction(repo_root, project_root, report_row):
+    _guard_canonical_write(Path(project_root) / report_row['path'])
     row = dict(report_row)
     correction = row.pop('correction', None)
     if isinstance(correction, dict) and correction.get('schema') == 'user-authorized-source-correction/1':
@@ -3923,9 +5290,13 @@ def apply_reviewed_source_correction(repo_root, project_root, report_row):
     if not isinstance(correction, dict) or correction.get('schema') != 'reviewed-source-correction/1':
         raise CorrectionError('report row has no reviewed-source-correction/1 metadata')
     kind = correction.get('kind')
-    if kind not in ('owner_source', 'owner_layout', 'owner_pair'):
+    if kind == 'owner_export':
+        return retain_export_owner_source(Path(repo_root).resolve(), Path(project_root).resolve(), report_row)
+    if kind not in ('owner_source', 'owner_layout', 'owner_pair', 'declaration_only'):
         raise CorrectionError('correction kind is not yet supported by this bounded route')
     row.update({key: value for key, value in correction.items() if key not in ('schema', 'kind')})
+    if kind == 'owner_source':
+        row['kind'] = kind
     return apply_correction(Path(repo_root).resolve(), Path(project_root).resolve(), row)
 
 
@@ -3937,10 +5308,15 @@ def validate_reviewed_source_correction(repo_root, report_row):
     if not isinstance(correction, dict) or correction.get('schema') != 'reviewed-source-correction/1':
         raise CorrectionError('report row has no reviewed-source-correction/1 metadata')
     kind = correction.get('kind')
-    if kind not in ('owner_source', 'owner_layout', 'owner_pair'):
+    if kind == 'owner_export':
+        return validate_owner_export(Path(repo_root).resolve(), report_row)
+    if kind not in ('owner_source', 'owner_layout', 'owner_pair', 'declaration_only'):
         raise CorrectionError('correction kind is not yet supported by this bounded route')
     row.update({key: value for key, value in correction.items() if key not in ('schema', 'kind')})
-    validator = (validate_pair_correction if kind == 'owner_pair' else
+    if kind == 'owner_source':
+        row['kind'] = kind
+    validator = (validate_declaration_correction if kind == 'declaration_only' else
+                 validate_pair_correction if kind == 'owner_pair' else
                  validate_layout_correction if kind == 'owner_layout' else validate_correction)
     return validator(Path(repo_root).resolve(), row)
 
@@ -4615,6 +5991,7 @@ def validate_user_authorized_source_correction(repo: Path, row: dict, correction
 
 
 def apply_user_authorized_source_correction(repo: Path, project: Path, row: dict, correction: dict):
+    _guard_canonical_write(project / row['path'])
     receipt = validate_user_authorized_source_correction(repo, row, correction)
     target = (project / row['path']).resolve()
     target.relative_to(project.resolve())
@@ -4631,3 +6008,7 @@ def apply_user_authorized_source_correction(repo: Path, project: Path, row: dict
     receipt.update(outcome='applied', current_before_sha256=current_sha,
                    result_sha256=digest(target.read_bytes()))
     return receipt
+
+
+if __name__ == '__main__':
+    sys.exit(main())

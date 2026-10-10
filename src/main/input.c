@@ -1,5 +1,7 @@
 #include "common.h"
 #include "shared.h"
+#include "main/jni.h"
+#include "main/find_native_method.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -8,8 +10,6 @@
  * src/main/window.c and src/main/runtime.c show.
  */
 typedef struct JThread JThread;
-
-extern void *classJava_xeno_util_Input;
 
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 
@@ -27,9 +27,6 @@ extern const char D_004DC0A8[];
 typedef struct InputCreateCall {
     int id; /* +0x00 */
 } InputCreateCall;
-
-/* newObject is defined in main/tu227 (src/main/find_native_method.c). */
-extern SceneObject newObject(void *class_object);
 
 /*
  * Input.create(int) builds the xeno/util/Input instance the getters below
@@ -74,7 +71,7 @@ typedef struct InputObjectCall {
  * strength-reduced to shifts and adds); config/symbols/main.txt gives
  * PadData a 0xd0-byte extent, exactly two entries of that stride.
  *
- * header_divergence (recorded, allowed): a per-controller array view of the
+ * TU-local view: a per-controller array view of the
  * same PadData symbol src/main/db_light_write.h, src/main/game_over.h,
  * src/main/party.h (PadPrefix), src/main/game.h (PadDataDebugLayout),
  * src/main/set_path.c (PadDataEffectLayout), src/main/vibration.c

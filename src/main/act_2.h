@@ -13,34 +13,7 @@
  * size 0x29c00 = 64 * 0xa70). src/main/near_dir.h, src/main/chr.h and
  * src/main/set_motion.h each carry the same recovered +0x00..+0x70 head,
  * with the field-by-field evidence for it; it is repeated verbatim here.
- *
- * This TU extends the type past +0x70 with three more evidenced members and
- * the unmodeled spans between them:
- *
- *   +0x71c animData      ACT_animCheckData reads it and passes it unchanged
- *                        to FCV2_checkData (main:0x00306d88, lw a0,0x71c(a0);
- *                        tail call at 0x00306d90). FCV2_checkData itself
- *                        dereferences the pointer to compare a signature word
- *                        (main:0x0030d8c8, lw v1,0(a0), against 0x00564346
- *                        built at 0x0030d8cc/0x0030d8d0 - the bytes "FCV\0"
- *                        read little-endian), so this is a pointer.
- *   +0x720 animUserData  returned unchanged by ACT_animGetUserData
- *                        (main:0x00306d7c, lw v0,0x720(a0)).
- *   +0x7fc moveElementId the joint move-element index
- *                        ACT_jointGetMoveElementID caches. main:0x00306a30
- *                        reads it and the bgezl at 0x00306a34 returns it
- *                        unresolved once it is no longer negative;
- *                        0x00306a58 stores 0 for an absent move.
- *   +0x8d8 move          the actor's move (motion) resource pointer.
- *                        ACT_jointGetMoveElementID reads it (main:0x00306a3c,
- *                        lw v0,0x8d8(s0)) and passes it on to
- *                        JNT_getMoveElement, which dereferences its argument
- *                        (main:0x00313b50, addiu v1,a0,16; lhu a3,8(a0)), so
- *                        this is a pointer.
- *
- * Nothing between +0x70 and +0x71c, between +0x724 and +0x7fc, or between
- * +0x800 and +0x8d8 is recovered, so those spans stay unmodeled_XX
- * (docs/naming.md) rather than invented members.
+ * The selected ACT_* bodies add fields at their original displacements below.
  */
 
 /*
@@ -59,12 +32,82 @@
  * select an animPackTables slot the same way ACT_animGetData's dataId does
  * (srl v0,v0,0x6; andi v0,v0,0x1c is (currentDataId>>8&7)<<2 folded into one
  * shift), so it caches a dataId like the one ACT_animGetData is called with.
- * Nothing else in the slot is evidenced.
+ * ACT_setMotion also writes the following halfword at +0x16 as the next data
+ * id (main:0x00307ee0..0x00307ee4).
+ */
+/* ACT_setMotion (main:0x00307e80..0x00307f50) also uses the flags, playback
+ * bounds, speed, and frame in the prefix. The queued-animation flags halfword
+ * at slot+0x22 is included from the original store's slot-relative address;
+ * the ten bytes before it remain unmodeled.
  */
 typedef struct ActorAnimSlot {
-    unsigned char unmodeled_0[0x14];
+    unsigned int flags;
+    float frame;
+    float speed;
+    float reverseLimit;
+    float forwardLimit;
     unsigned short currentDataId;
+    unsigned short nextDataId;
+    unsigned char unmodeled_18[0x22 - 0x18];
+    unsigned short animQueuedFlags;
 } ActorAnimSlot;
+
+/* The adjacent actor animation pointers are addressed from the embedded slot
+ * base by ACT_setMotion (main:0x00307e80..0x00307f50): animData at +0x2c,
+ * animUserData at +0x30, and animPack at +0x34. The eight bytes before them
+ * remain unmodeled.
+ */
+typedef struct ActorAnimationState {
+    ActorAnimSlot slot;
+    unsigned char unmodeled_24[0x2c - 0x24];
+    void *animData;
+    void *animUserData;
+    void *animPack;
+} ActorAnimationState;
+
+typedef struct ActorAccessoryJointTable {
+    unsigned char unmodeled_00[0x20];
+    int jointId[0x29];
+} ActorAccessoryJointTable;
+
+typedef struct ActorDrawEnv {
+    float fogDistance[4];
+    float fogColor[4];
+    float lightPosition[3][4];
+    float lightColor[3][4];
+    unsigned int flags;
+    unsigned char unmodeled_84[0xa0 - 0x84];
+    float transparency;
+    unsigned char unmodeled_a4[0xb8 - 0xa4];
+    unsigned long long alpha;
+} ActorDrawEnv;
+
+typedef struct ActorAttachment {
+    short type;
+    short joint;
+    void **matrix;
+} ActorAttachment;
+
+/*
+ * ACT_setParent reads matrixResource at actor+0x894 through this 0x58-byte
+ * view. The adjacent actor+0x898 pointer is separately evidenced as the
+ * joint-matrix base; neither field extends the model view.
+ */
+typedef struct ActorModel {
+    unsigned char unmodeled_00[0x54];
+    void *matrixResource;
+} ActorModel;
+
+typedef struct ActorModelState {
+    ActorModel model;
+    Matrix4 *jointMatrices;
+} ActorModelState;
+
+typedef struct ActorMoveHeader {
+    unsigned char unmodeled_00[8];
+    unsigned short baseJointCount;
+    unsigned short extraJointCount;
+} ActorMoveHeader;
 
 typedef struct Actor {
     u32 flags;
@@ -77,29 +120,48 @@ typedef struct Actor {
     Vector4 acceleration;
     Vector4 rotation;
     Vector4 scale;
-    unsigned char unmodeled_70[0x6f0 - 0x70];
-    ActorAnimSlot animSlot;
-    unsigned char unmodeled_706[0x71c - 0x706];
-    void *animData;
-    void *animUserData;
-    unsigned char unmodeled_724[0x7fc - 0x724];
+    unsigned char unmodeled_70[0x86 - 0x70];
+    short resourceKind;
+    unsigned char unmodeled_88[0x698 - 0x88];
+    int attachmentCount;
+    int attachmentIndex;
+    ActorAttachment attachments[8];
+    signed char attachmentUsed[8];
+    unsigned char unmodeled_6e8[0x6f0 - 0x6e8];
+    ActorAnimationState animation;
+    unsigned char unmodeled_728[0x790 - 0x728];
+    unsigned char jointProducer[0x7f8 - 0x790];
+    ActorAccessoryJointTable *accessoryJoints;
     int moveElementId;
-    unsigned char unmodeled_800[0x840 - 0x800];
-    unsigned char model[0x58]; /* +0x840: passed to MDL visibility functions */
-    unsigned char unmodeled_898[0x8d8 - 0x898];
+    unsigned char unmodeled_800[0x824 - 0x800];
+    void *jointMatrices;
+    void *previousJointMatrices;
+    void *staticValueRecords;
+    void *valueRecords;
+    unsigned char unmodeled_834[0x840 - 0x834];
+    ActorModelState model[1]; /* +0x840: model and its joint matrices */
+    unsigned char unmodeled_89c[0x8d0 - 0x89c];
+    void *modelResource;
+    void *matrixResource;
     void *move;
     void *animPackTables[8];
-    unsigned char unmodeled_8fc[0xa70 - 0x8fc];
+    struct Actor *parent;
+    int childCount;
+    struct Actor *children[7];
+    ActorDrawEnv drawEnv;
+    unsigned char unmodeled_9e0[0xa70 - 0x9e0];
 } Actor;
 
 /* ACT_setVisible's third argument is forwarded to both MDL tail calls. */
 extern void ACT_setVisible(Actor *actor, int part, int visible);
+extern void ACT_modelDrawSub(Actor *actor);
+extern void ACT_updateMotionSub(Actor *actor, int pause);
 
 int ACT_jointGetMoveElementID(Actor *actor);
 
 void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
 
-int ACT_setFace(Actor *actor, Actor *parent, int faceId);
+Actor *ACT_setFace(Actor *actor, Actor *parent, int faceId);
 
 void *ACT_animGetUserData(Actor *actor);
 

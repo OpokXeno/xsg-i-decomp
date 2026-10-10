@@ -1,4 +1,5 @@
 #include "common.h"
+
 #include "shared.h"
 
 /* GameLoopState (main VA 0x00338680) is a 0x2a030-byte global (see
@@ -11,16 +12,33 @@
  * gp-relative. This TU-local view is
  * independent of the other partial views other TUs give the same symbol
  * (GameLoopFlagsPrefix, GameLoopStateAddressView, ...; */
+
 extern unsigned char GameLoopState[0x2a030];
+
 #define MoveHokanStateFlag GameLoopState[193]
 
-/* xglVectorScaleAddXYZ is defined by main/tu100 (src/main/xgl_2.c) and
- * declared there in src/main/xgl_2.h (TU-local: include/main/xgl_2.h, the
- * published cross-TU subset, does not yet carry this symbol). Verbatim copy
- * of that declaration; game_camera.c is a second caller, TU-local until the
- * integrator's header_harvest.py run adds it to the published header. */
+/* xglVectorScaleAddXYZ is defined by main/tu100 (src/main/xgl_2.c);
+ * this prototype follows that TU's declaration. */
+
 void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
                           const Vector4 *source, const Vector4 *other);
+
+
+struct CameraCenterSource {
+    unsigned char unmodeled_00[0x10];
+    Vector4 position;
+    unsigned char unmodeled_20[0x66];
+    short type;
+};
+
+static float CfCameraOfsNow[4];
+
+struct CameraScratchpad {
+    unsigned char unmodeled_00[0x40];
+    float matrix[4][4];
+    float translation[4];
+};
+
 
 /*
  * NOT a recovered original function -- unlike, say, src/ov12/rg_select_robot.c's
@@ -183,14 +201,6 @@ static void MoveHokan(void *unused, float step, const Vector4 *target,
     }
 }
 
-struct CameraCenterSource {
-    unsigned char unmodeled_00[0x10];
-    Vector4 position;
-    unsigned char unmodeled_20[0x66];
-    short type;
-};
-static float CfCameraOfsNow[4];
-
 static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
 {
     float vertical_offset;
@@ -206,7 +216,25 @@ static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
     center->w = 1.0f;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_camera", GetCameraPos);
+static void GetCameraPos(float *destination, const float *position,
+                         const float *angles)
+{
+    struct CameraScratchpad *scratchpad = (void *)0x70000000;
+
+    scratchpad->translation[0] = 0.0f;
+    scratchpad->translation[1] = 0.0f;
+    scratchpad->translation[2] = angles[3];
+    scratchpad->translation[3] = 1.0f;
+    xglMatrixStackUnit();
+    xglMatrixStackTrans(position);
+    xglMatrixStackRotY(angles[1]);
+    xglMatrixStackRotX(angles[0]);
+    xglMatrixStackTrans(scratchpad->translation);
+    xglMatrixStackSave(scratchpad->matrix);
+    destination[0] = scratchpad->matrix[3][0];
+    destination[1] = scratchpad->matrix[3][1];
+    destination[2] = scratchpad->matrix[3][2];
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game_camera", GetNearestCenter);
 

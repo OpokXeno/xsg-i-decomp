@@ -77,7 +77,8 @@ typedef union {
  * byte gap rather than a guessed int member.
  */
 typedef struct {
-    unsigned char unmodeled_00[0x10];
+    int color[3];
+    int level;
     int frame;
     int duration;
     int skipRender;
@@ -102,6 +103,11 @@ void nmlModelSetFadeDoit(void);
 extern LayoutStore s_inLayout;
 
 extern Vector4 s_inShadowVec;
+
+extern Vector4 s_inGblPointC[];
+void xglVectorScaleXYZ(float scale, Vector4 *destination, const Vector4 *source);
+typedef unsigned int NmlPointQuadword __attribute__((mode(TI)));
+extern NmlPointQuadword s_inGblPointP[];
 
 /* The four fade-control instances nmlModelSendSignalMovieStart initializes
  * through INIT_FADE_CONTROL; see the FadeControl comment above. */

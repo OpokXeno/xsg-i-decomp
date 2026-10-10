@@ -7,13 +7,8 @@
 
 #include "shared.h"
 
-/*
- * RgFileSys, RgFileSysData and struct RgFileSysData are this TU's types in
- * the accepted spelling of its original record (io ov12-00a34518). More than
- * one TU reads them, so tools/header_harvest.py publishes them in
- * include/shared.h; neither this header nor any other TU restates them.
- * struct RgFileSys itself stays in rg_filesys.c.
- */
+/* Shared RgFileSysData declarations are provided by include/shared.h.
+ * struct RgFileSys itself remains local to rg_filesys.c. */
 
 void RgFileSysPrepareFile(RgFileSys *pSys, const char *pszName,
                           const char *pszRoot);

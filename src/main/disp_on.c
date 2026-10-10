@@ -1,20 +1,50 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "disp_on.h"
 
 extern void xglSleep(void);
+
 extern void MapChange(int map_id);
+
 extern char *MapGetName(int map_id);
+
 extern char *strcpy(char *destination, const char *source);
+
 extern char *strcat(char *destination, const char *source);
+
 extern int SCRIPT_load(const char *path);
+
 extern int SCRIPT_exec(void);
-extern const char event_suffix[];
+
+const char event_suffix[];
+
 extern void GameResourceReset(int reset_mode);
+
 extern void ACT_init(void);
+
 extern void CallMethod(const char *method_name);
 
-INCLUDE_ASM("asm/main/nonmatchings/disp_on", disptest);
+static int disptest(XglTaskPrefix *task)
+{
+    DispSwitchTask *display_task = (DispSwitchTask *)task;
+    GameLoopStateRecord *state = display_task->header.state;
+
+    if ((state->runtime_flags & 0x100u) == 0u)
+        return xglTaskRemove(task);
+
+    display_task->delay -= 1;
+    if (display_task->delay < 0) {
+        if (display_task->request != DISP_REQUEST_ON) {
+            if (display_task->request == DISP_REQUEST_OFF)
+                state->runtime_flags &= ~2u;
+        } else {
+            state->runtime_flags |= 2u;
+        }
+        return xglTaskRemove(task);
+    }
+}
 
 void DISP_on(int countdown)
 {
@@ -148,7 +178,22 @@ void LoadMapOnly(int map_id)
     task->request = MAP_LOAD_MAP_ONLY;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/disp_on", EventTimerTask);
+int EventTimerTask(XglTaskPrefix *task)
+{
+    EventTimerWork *timer_task = (EventTimerWork *)task;
+    unsigned int runtime_flags = GameLoopState.runtime_flags;
+
+    if ((runtime_flags & 1u) == 0u) {
+        if ((runtime_flags & 0x80000030u) != 0u)
+            return xglTaskRemove(task);
+
+        timer_task->countdown -= 1;
+        if (timer_task->countdown == 0) {
+            CallMethod(timer_task->method_reference);
+            xglTaskRemove(task);
+        }
+    }
+}
 
 void setEventTimerTaskEntry(const char *method_reference, int countdown)
 {

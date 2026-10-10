@@ -1,5 +1,8 @@
 #include "common.h"
+
 #include "shared.h"
+
+#include "hair_test.h"
 
 /*
  * JntHairDescriptor is the record JNT_hairID's argument points to at +0x28:
@@ -7,6 +10,7 @@
  * $3,40($4) then lhu $2,8($3)); the rest stays an unmodeled span
  * (docs/naming.md).
  */
+
 typedef struct JntHairDescriptor {
     unsigned char unmodeled_00[8];
     u16 hairID;
@@ -25,6 +29,7 @@ typedef struct JntHairJoint {
  * The word in between is not evidenced here and stays an unmodeled span
  * (docs/naming.md).
  */
+
 typedef struct FpkFcvHeader {
     unsigned int magic;
     unsigned char unmodeled_04[4];
@@ -32,7 +37,9 @@ typedef struct FpkFcvHeader {
 } FpkFcvHeader;
 
 /* "FPK" in the low three bytes of FpkFcvHeader.magic (little-endian). */
+
 #define FPK_MAGIC 0x4B5046
+
 #define FPK_MAGIC_MASK 0xFFFFFF
 
 typedef union HairTestVectorBlock {
@@ -54,6 +61,7 @@ typedef struct HairTestParticle {
 } HairTestParticle;
 
 struct HairTestAct;
+
 typedef struct HairTestActInitial {
     u64 unmodeled_000[2];
     HairTestVectorBlock position;
@@ -66,24 +74,47 @@ typedef struct HairTestActInitial {
     unsigned char jointMatrix;
 } HairTestActInitial;
 
+/* HairTest copies the particle position into the camera as two doublewords
+ * (ld/sd): the camera's position is viewed with the particle's aligned type. */
+typedef struct HairTestCameraView {
+    u8 unmodeled_00[0xd0];
+    PpVector4 position;
+} HairTestCameraView;
+
 static StudioCamera *pCamera_004DC634;
-static struct HairTestAct *pAct_004DC638;
+
+static struct Actor *pAct_004DC638;
+
 static int listpos;
+
 static int listnum;
+
 static int mot;
+
 static int listnow;
+
 static float lookY;
+
 static float crx_004DC650;
+
 static float cry_004DC654;
+
 static int pause;
-static HairTestParticle cpos_00585200;
+
+static PpParticle cpos_00585200;
+
 const HairTestVectorBlock D_004CBBE0 = {
     .vector = { 1.0f, 1.0f, 1.0f, 1.0f }
 };
+
 const char D_004CBBF0[] = "\x0bHairTest";
+
 const char D_004CBC00[] = "\x0bmodel:%3d/%s";
+
 const char D_004CBC10[] = "\x0bmotion:%3d/%3d";
+
 const char D_004CBC20[] = "\x0b* PUASE *";
+
 static HairResourceEntry list[] = {
     { 1, "shion" }, { 9, "shion1" }, { 10, "shion2" },
     { 11, "shion3" }, { 12, "shion4" }, { 13, "shion5" },
@@ -124,25 +155,93 @@ static HairResourceEntry list[] = {
 };
 
 extern void GameResourceInit(int resourceType, int resourceGroup);
-extern void ppInit(HairTestParticle *particle);
-extern void ppSetPos(HairTestParticle *particle, float x, float y, float z);
+
+extern void ppInit(PpParticle *particle);
+
+extern void ppSetPos(PpParticle *particle, float x, float y, float z);
+
 extern void xglStudioInit(void);
+
 extern void xglStudioChange(int studioIndex);
+
 extern void xglStudioMainCameraInit(void);
+
 extern void xglStudioGetCamera(StudioCamera **camera, int cameraIndex);
+
 extern void ACT_init(void);
+
 extern void ACT_resourceInit(void);
-extern void ACT_initMotion(struct HairTestAct *actor);
-extern void ACT_loadMotion(struct HairTestAct *actor, int resourceId, int category);
-extern void ACT_loadResource(struct HairTestAct *actor, int resourceId);
-extern void ACT_allocMatrix(struct HairTestAct *actor, int matrixCount);
-extern void ACT_setModelWrapper(struct HairTestAct *actor, int flags);
-extern struct HairTestAct *ACT_create(int actorIndex, int resourceId);
+
+extern void ACT_initMotion(struct Actor *actor);
+
+extern void ACT_loadMotion(struct Actor *actor, int resourceId, int category);
+
+extern void ACT_loadResource(struct Actor *actor, int resourceId);
+
+extern void ACT_allocMatrix(struct Actor *actor, int matrixCount);
+
+extern void ACT_setModelWrapper(struct Actor *actor, int flags);
+
+extern struct Actor *ACT_create(int actorIndex, int resourceId);
+
 extern void __JNT_computeMatrix(void *joint, void *matrix);
+
 extern void JNT_addConsumer(void *joint, int consumerIndex,
                             void (*computeMatrix)(void *, void *), int flags);
 
 #define HAIR_RESOURCE(i) (list[(i)].resourceId)
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+static int getNumFCV(FpkFcvHeader *header);
+
+typedef struct HairTestAct {
+    unsigned char unmodeled_000[0x724];
+    FpkFcvHeader *fcvHeader;
+} HairTestAct;
+
+struct Actor;
+
+typedef struct Actor {
+    unsigned char unmodeled_000[0x6f0];
+    unsigned int motionFlags;
+    unsigned char unmodeled_6f4[0x30];
+    FpkFcvHeader *fcvHeader;
+} Actor;
+
+extern void xglRenderClearFrame(void);
+
+extern void xglSleep(void);
+
+extern void ppNextStart(PpParticle *particle);
+
+extern void ppNextEnd(PpParticle *particle);
+
+extern void ACT_setMotion(struct Actor *actor, int motion);
+
+extern void ACT_updateMotion(struct Actor *actor);
+
+extern void ACT_modelDraw(struct Actor *actor);
+
+extern double cos(double angle);
+
+extern double sin(double angle);
+
+extern float atan2f(float y, float x);
+
+typedef struct HairTestPad {
+    u64 unmodeled_00[5];
+    unsigned short held;
+    unsigned short pressed;
+    unsigned short repeat;
+    unsigned char unmodeled_2e[0x38];
+    signed char rightX;
+    signed char rightY;
+} HairTestPad;
+
+extern HairTestPad PadData[2];
+
+extern const float D_004D824C;
 
 static void InitTest(void)
 {
@@ -164,13 +263,13 @@ static void InitTest(void)
     xglStudioMainCameraInit();
     xglStudioGetCamera(&pCamera_004DC634, 0);
     camera = pCamera_004DC634;
-    cameraX = cpos_00585200.position.x;
+    cameraX = cpos_00585200.position.vector.x;
     camera->position.x = cameraX;
     listpos = 0;
     listnum = 0;
-    camera->position.y = cpos_00585200.position.y;
+    camera->position.y = cpos_00585200.position.vector.y;
     listnow = 0;
-    camera->position.z = cpos_00585200.position.z;
+    camera->position.z = cpos_00585200.position.vector.z;
     if (HAIR_RESOURCE(0) != 0) {
         do {
             listnum++;
@@ -198,19 +297,6 @@ static void InitTest(void)
     pause = 0;
 }
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-static int getNumFCV(FpkFcvHeader *header);
-
-/*
- * The object pAct_004DC638 points to: only the FCV header pointer at +0x724
- * is evidenced here (main VA 0x002da3f8, lw $2,pAct_004DC638 / lw
- * $4,0x724($2)); the rest stays an unmodeled span (docs/naming.md).
- */
-typedef struct HairTestAct {
-    unsigned char unmodeled_000[0x724];
-    FpkFcvHeader *fcvHeader;
-} HairTestAct;
-
 static void PrintDisp(void)
 {
     xglFontDebugPrintf(0, 0, D_004CBBF0);
@@ -221,7 +307,118 @@ static void PrintDisp(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/hair_test", HairTest);
+void HairTest(void)
+{
+    float moveX;
+    float moveZ;
+    float lookX;
+    float lookZ;
+    float lookHeight;
+    double position;
+    double horizontalMove;
+    double verticalMove;
+    double rotatedMove;
+    int motionCount;
+
+    xglRenderClearFrame();
+    xglSleep();
+    InitTest();
+    if ((PadData[0].held & 0x100) == 0x100 &&
+        (PadData[0].pressed & 0x800) == 0x800) {
+        return;
+    }
+    do {
+        ppNextStart(&cpos_00585200);
+        if (PadData[0].held & 8) {
+        cpos_00585200.position.vector.y += 0.01f;
+        }
+        if (PadData[0].held & 2) {
+        cpos_00585200.position.vector.y -= 0.01f;
+        }
+        if (PadData[0].held & 1) {
+            lookY -= 0.02f;
+        }
+        if (PadData[0].held & 4) {
+            lookY += 0.02f;
+        }
+        moveX = PadData[0].rightX * D_004D824C;
+        moveZ = PadData[0].rightY * D_004D824C;
+        position = cpos_00585200.position.vector.x;
+        horizontalMove = moveX;
+        rotatedMove = horizontalMove * cos(-cry_004DC654);
+        verticalMove = moveZ;
+        cpos_00585200.position.vector.x = position +
+            (rotatedMove - verticalMove * sin(-cry_004DC654));
+        position = cpos_00585200.position.vector.z;
+        rotatedMove = verticalMove * cos(-cry_004DC654);
+        cpos_00585200.position.vector.z = position +
+            (rotatedMove + horizontalMove * sin(-cry_004DC654));
+        ppNextEnd(&cpos_00585200);
+        lookX = -cpos_00585200.position.vector.x;
+        lookZ = -cpos_00585200.position.vector.z;
+        lookHeight = lookY - cpos_00585200.position.vector.y;
+        cry_004DC654 = -atan2f(lookX, cpos_00585200.position.vector.z);
+        crx_004DC650 = atan2f(
+            lookHeight, __builtin_sqrtf(lookX * lookX + lookZ * lookZ));
+        ((HairTestCameraView *)pCamera_004DC634)->position = cpos_00585200.position;
+        pCamera_004DC634->rotation.x = crx_004DC650;
+        pCamera_004DC634->rotation.y = cry_004DC654;
+        pCamera_004DC634->rotation.z = 0.0f;
+        /* Compiler-forced goto: the original enters the update block from the
+         * unpause branch. Structured forms differ: a flag compare is 16 bytes
+         * short, a re-test of pause after the toggle 16 bytes long, and a
+         * conditional-expression test 36 bytes long. */
+        if (pause != 0) {
+            if (PadData[0].pressed & 0x800) {
+                pause = 0;
+                goto unpaused;
+            }
+        } else if (PadData[0].pressed & 0x800) {
+            pause = 1;
+        } else {
+unpaused:
+            if (PadData[0].repeat & 0x4000) {
+                listpos++;
+                if (list[listpos].resourceId == 0) {
+                    listpos = 0;
+                }
+            } else if (PadData[0].repeat & 0x1000) {
+                listpos--;
+                if (listpos < 0) {
+                    listpos = listnum - 1;
+                }
+            }
+            if (!(PadData[0].held & 0x80) && listnow != listpos) {
+                GameResourceInit(0x07000000, 0x06000000);
+                ACT_init();
+                pAct_004DC638 = ACT_create(0, list[listpos].resourceId);
+                ACT_loadResource(pAct_004DC638, list[listpos].resourceId);
+                ACT_loadMotion(pAct_004DC638, list[listpos].resourceId, 1);
+                listnow = listpos;
+            }
+            if (PadData[0].repeat & 0x2000) {
+                mot++;
+            }
+            if (PadData[0].repeat & 0x8000) {
+                mot--;
+            }
+            motionCount = getNumFCV(pAct_004DC638->fcvHeader);
+            while (mot >= motionCount) {
+                mot -= motionCount;
+            }
+            while (mot < 0) {
+                mot += motionCount;
+            }
+            pAct_004DC638->motionFlags |= 8;
+            ACT_setMotion(pAct_004DC638, mot);
+            ACT_updateMotion(pAct_004DC638);
+        }
+        ACT_modelDraw(pAct_004DC638);
+        PrintDisp();
+        xglSleep();
+    } while ((PadData[0].held & 0x100) != 0x100 ||
+             (PadData[0].pressed & 0x800) != 0x800);
+}
 
 static u16 JNT_hairID(JntHairJoint *joint)
 {
@@ -243,3 +440,5 @@ static int getNumFCV(FpkFcvHeader *header)
     }
     return result;
 }
+
+

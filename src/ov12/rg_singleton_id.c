@@ -16,7 +16,7 @@ static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
                     void *instance, void (*destructor)(void *instance));
 
 /*
- * Reviewer-directed correction for the OV12 singleton-manager functions.
+ * Layout and callbacks for the OV12 singleton-manager functions.
  *
  * Identity: slus-20469-412d448de315 / ov12.  The manager layout and callback
  * order are bounded by the original accesses.  The assertion arguments use
@@ -91,7 +91,7 @@ static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
     *count = order_index + 1;
 }
 
-/* Reviewer-directed correction for the OV12 singleton-manager lookup. */
+/* Layout and callbacks for the OV12 singleton-manager lookup. */
 
 static void *_Get(RgSingletonManager *manager, unsigned int singleton_id)
 {
@@ -110,7 +110,7 @@ void RgSingletonIDClear(void)
     _Clear(&s_inIDmgr);
 }
 
-/* Reviewer-directed correction for the OV12 singleton disposal wrapper. */
+/* Layout and callbacks for the OV12 singleton disposal wrapper. */
 
 void RgSingletonDispose(void)
 {
@@ -130,7 +130,7 @@ void RgSingletonIDEntry(int singleton_id, RgSimpleDB *database,
     _Entry(&s_inIDmgr, singleton_id, database, (void (*)(void *))destructor);
 }
 
-/* Reviewer-directed correction for the OV12 singleton ID wrapper. */
+/* Layout and callbacks for the OV12 singleton ID wrapper. */
 
 void *RgSingletonIDGet(unsigned int singleton_id)
 {

@@ -9,6 +9,7 @@
  * is the only member this translation unit reads.
  */
 #include "shared.h"
+#include "main/jni.h"
 
 /* UnduDataGetHeader returns this bounded four-component result. */
 typedef struct LayoutHeader {
@@ -28,11 +29,6 @@ typedef struct LayoutEffectPeer {
     unsigned char unmodeled_08c[0x94 - 0x8C];
     float rotation_y; /* +0x94 */
 } LayoutEffectPeer;
-
-extern void *classJava_xeno_Unit;
-extern void *classJava_xeno_Chr;
-extern void *classJava_xeno_Effect;
-extern void *classJava_xeno_util_Layout;
 
 
 extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);

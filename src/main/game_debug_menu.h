@@ -17,6 +17,8 @@ extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
  * the debug pages, so it keeps the physical button name.
  */
 #define PAD_CROSS 0x0040
+#define PAD_L1 0x0004
+#define PAD_R1 0x0008
 extern PadPrefix PadData;
 
 /*
@@ -40,5 +42,20 @@ typedef struct {
 extern ActorHead actor[ACTOR_COUNT];
 
 void GameResourceDump(int dump);
+
+/* GameDebugMenu selects six pages and resets this byte when cycling pages.
+ * The surrounding GameLoopState bytes are not accessed by this TU. */
+typedef struct {
+    unsigned char unmodeled_00[0x29f50];
+    unsigned char debugPage;
+    unsigned char debugPageInitialized;
+} DebugMenuPageState;
+
+extern DebugMenuPageState GameLoopState;
+static void PauseMenuPage2(void);
+static void PauseMenuPage3(void);
+extern void PauseMenuPageUwamono(void);
+extern void PauseMenuPageEnemy(void);
+extern void PauseMenuPagePartyDebug(void);
 
 #endif /* SRC_MAIN_GAME_DEBUG_MENU_H */

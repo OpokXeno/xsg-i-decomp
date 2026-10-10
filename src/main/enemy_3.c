@@ -324,4 +324,4 @@ void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
     }
 }
 
-const float D_004D8150 = 6.283185482f;
+const float D_004D8150 = 6.2831855f;

@@ -1,14 +1,23 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_thread.h"
+
 #include "game_over.h"
+
 #include "main/xgl_packet.h"
 
 const char GameEndImagePath[24] = "data\\yajima\\end.jpg";
+
 const char GameEndSaveQuestion[0x48] = "\013\031\003\r\000Save clear data?\n\n\014\200  \241\373\013\031\003\r\000 Button: Yes\n\n\014  \200\241\337\013\031\003\r\000 Button: No\000";
+
 const char GameEndQuestion[0x68] = "\013\031\003\r\000Are you sure you want to exit without saving?\n\n\014\200  \241\373\013\031\003\r\000 Button: Yes\n\n\014  \200\241\337\013\031\003\r\000 Button: No\000\000\000\000";
+
 const char GameOverImagePath[24] = "data\\yajima\\gameov.jpg";
+
 const char GameOverStreamPath[32] = "data\\yajima\\gameover.vds";
+
 static u64 TestEnv_0_00369CC0[12] = {
     0x0000000000000000ULL, 0x5100000500000000ULL,
     0x1000000000000004ULL, 0x000000000000000eULL,
@@ -17,15 +26,18 @@ static u64 TestEnv_0_00369CC0[12] = {
     0x000001c000000200ULL, 0x0000000000000052ULL,
     0x0000000000000000ULL, 0x0000000000000053ULL
 };
+
 static u64 TransEnv_1_00369D20[4] = {
     0x0000000000000000ULL, 0x5100000100000000ULL,
     0x0800000000007000ULL, 0x0000000000000000ULL
 };
+
 static u64 FlushEnv_2_00369D40[6] = {
     0x0000000000000000ULL, 0x5100000200000000ULL,
     0x1000000000008001ULL, 0x000000000000000eULL,
     0x0000000000000000ULL, 0x000000000000003fULL
 };
+
 static u64 TestEnv_3_00369D70[20] = {
     0x0000000000000000ULL, 0x5000000900000000ULL,
     0x80ab400000008001ULL, 0x0000000053531e6eULL,
@@ -38,6 +50,7 @@ static u64 TestEnv_3_00369D70[20] = {
     0x00001c0000002000ULL, 0x0000000000000000ULL,
     0x00008df800008ff8ULL, 0x0000000000000000ULL
 };
+
 static u64 TestEnv4[12] = {
     0x0000000000000000ULL, 0x5000000500000000ULL,
     0x4023400000008001ULL, 0x000000000000551eULL,
@@ -46,6 +59,7 @@ static u64 TestEnv4[12] = {
     0x000071f800006ff8ULL, 0x0000000000000000ULL,
     0x00008df800008ff8ULL, 0x0000000000000000ULL
 };
+
 static u64 TestEnv5[12] = {
     0x0000000000000000ULL, 0x5000000500000000ULL,
     0x4023400000008001ULL, 0x000000000000551eULL,
@@ -58,24 +72,32 @@ static u64 TestEnv5[12] = {
 extern GameLoopStatePrefix GameLoopState;
 
 /* GameLoopState.scene_id value that routes GameOver to the ending screen. */
+
 #define GAME_END_SCENE_ID 9998
 
 /* EE RAM staging buffer for the compressed image and the decoded image
  * that DrawImage presents. */
+
 #define IMAGE_LOAD_BUFFER 0x010e0000
+
 #define IMAGE_FRAME_BUFFER 0x01000000
 
 /* PadData.half_2a press bits used by the ending prompts: 0x20 accepts
  * both questions, 0x40 declines the save question. */
+
 #define PAD_DECIDE 0x20
+
 #define PAD_CANCEL 0x40
 
 /* GameEnd's prompt outcome. */
+
 #define END_CHOICE_SAVE 1
+
 #define END_CHOICE_QUIT 2
 
 /* GS ALPHA_1 register: blend = ((A - B) * C >> 7) + D with the FIX
  * coefficient in bits 32..39 (SCE_GS_SET_ALPHA layout). */
+
 #define GS_ALPHA(a, b, c, d, fix) \
     ((u64)(a) | ((u64)(b) << 2) | ((u64)(c) << 4) | ((u64)(d) << 6) | \
      ((u64)(fix) << 32))
@@ -90,6 +112,7 @@ extern GameLoopStatePrefix GameLoopState;
  * 0x00254078) vs 04 (wrapped in do{...}while(0), keeps the original
  * schedule) - the wrapper is what keeps the order, not a coincidence of
  * that one build. */
+
 #define DRAW_FADE_FRAME(env, alpha)                                     \
     do {                                                                \
         DrawImage((void *)IMAGE_FRAME_BUFFER);                          \
@@ -107,9 +130,13 @@ extern GameLoopStatePrefix GameLoopState;
  * and src/main/window_tex_load.c's UmnRenderSize for the screen-size
  * halfwords).
  */
+
 /* DrawBack reads the framebuffer-page halfword at sRender +0x14. */
+
 typedef struct {
-    u8 unmodeled_00[0x14];
+    u8 unmodeled_00[0x10];
+    u16 width;
+    u16 height;
     u16 framebuffer_page;
     u8 unmodeled_16[0x0a];
     u16 buffer_select;
@@ -118,7 +145,45 @@ typedef struct {
 extern DrawImageRenderState sRender;
 
 extern void sceVif1PkCnt(XglPacket *packet, int count);
+
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+
+/* The ending screen: fade the ending image in, ask whether to save, and
+ * either run the save menu or (after a second confirmation) fade out. */
+
+/* The game-over screen: show the game-over image with its stream, then
+ * fade picture and stream volume out together. */
+
+static const char D_004C0738[0x58] = {
+    0x0b, 0x0e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x0d,
+    0x03, 0x19, 0x03, 0x57, 0x6f, 0x75, 0x6c, 0x64,
+    0x20, 0x79, 0x6f, 0x75, 0x20, 0x6c, 0x69, 0x6b,
+    0x65, 0x20, 0x74, 0x6f, 0x20, 0x73, 0x61, 0x76,
+    0x65, 0x3f, 0x0a, 0x0a, 0x0c, 0x80, 0x20, 0x20,
+    0xa1, 0xfb, 0x20, 0x0c, 0x80, 0x80, 0x80, 0x19,
+    0x03, 0x42, 0x75, 0x74, 0x74, 0x6f, 0x6e, 0x3a,
+    0x20, 0x59, 0x65, 0x73, 0x0a, 0x0a, 0x0c, 0x20,
+    0x20, 0x80, 0xa1, 0xdf, 0x20, 0x0c, 0x80, 0x80,
+    0x80, 0x42, 0x75, 0x74, 0x74, 0x6f, 0x6e, 0x3a,
+    0x20, 0x4e, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+static char name_6[0x15] = "data\\yajima\\im00.jpg";
+
+
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+
+
+#define INTERMISSION_LOAD_OFFSET 0x100000
+
+extern u32 GameResourceGetFreeAddr(void);
+
+extern void GameResourceReset(int mode);
+
 static void DrawImage(void *framebuffer)
 {
     XglPacket *packet;
@@ -149,7 +214,40 @@ static void DrawBack(int alpha)
     sceVif1PkRef(xglPacketGetCurrent(), TestEnv_3_00369D70, 10, 0, 0, 0);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_over", copyframe);
+static int copyframe(void)
+{
+    XglPacket *packet;
+    u64 *scratch;
+
+    packet = xglPacketGetCurrent();
+    scratch = (u64 *)0x70000000;
+    scratch[0] = 0;
+    scratch[1] = 0x51000009;
+    scratch[2] = ((u64)0x10000000 << 32) | 0x8008;
+    scratch[3] = 14;
+    scratch[4] = (0x80000 | (sRender.width << 5)) |
+                 ((u64)sRender.height << 37) | ((u64)0x8000 << 36);
+    scratch[5] = 80;
+    scratch[6] = 0;
+    scratch[7] = 81;
+    scratch[8] = ((u64)448 << 32) | 0x200;
+    scratch[9] = 82;
+    scratch[10] = 2;
+    scratch[11] = 83;
+    scratch[12] = 0;
+    scratch[13] = 63;
+    scratch[14] = (0x80000 | (sRender.width << 5)) |
+                  ((u64)sRender.framebuffer_page << 37) | ((u64)0x8000 << 36);
+    scratch[15] = 80;
+    scratch[16] = 2;
+    scratch[17] = 83;
+    scratch[18] = 0;
+    scratch[19] = 63;
+    sceVif1PkCnt(packet, 0);
+    sceVif1PkOpenDirectHLCode(packet, 0);
+    sceVif1PkAddDirectDataN(packet, scratch, 10);
+    sceVif1PkCloseDirectHLCode(packet);
+}
 
 static void redraw_frame(void *framebuffer) {
     xglSleep();
@@ -159,8 +257,6 @@ static void redraw_frame(void *framebuffer) {
     xglSleep();
 }
 
-/* The ending screen: fade the ending image in, ask whether to save, and
- * either run the save menu or (after a second confirmation) fade out. */
 static void GameEnd(void)
 {
     JpegDecodeRequest jpeg;
@@ -258,8 +354,6 @@ static void GameEnd(void)
     xglSleep();
 }
 
-/* The game-over screen: show the game-over image with its stream, then
- * fade picture and stream volume out together. */
 void GameOver(void)
 {
     JpegDecodeRequest jpeg;
@@ -335,4 +429,66 @@ void GameOver(void)
     xglSleep();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game_over", Intermission);
+void Intermission(int chapter)
+{
+    JpegDecodeRequest jpeg;
+    u32 framebuffer;
+    u32 jpeg_source;
+    int alpha;
+    int count;
+    int buttons;
+
+    if (GameLoopState.play_mode == 1) {
+        return;
+    }
+    GameLoopState.frame_status = chapter + 1;
+    alpha = 128;
+    copyframe();
+    count = 0;
+    framebuffer = GameResourceGetFreeAddr();
+    jpeg_source = framebuffer + INTERMISSION_LOAD_OFFSET;
+    name_6[15] = chapter % 10 + '0';
+    name_6[14] = chapter / 10 % 10 + '0';
+    xglCdReadFile(name_6, (void *)jpeg_source, 0, 1);
+    memset(&jpeg, 0, sizeof(jpeg));
+    jpeg.source = jpeg_source;
+    jpeg.destination = framebuffer;
+    xglJpegDecode(&jpeg);
+    xglRenderDrawFlipPk(xglPacketGetCurrent());
+    xglSleep();
+
+    for (;;) {
+        if (alpha > 0) {
+            alpha -= 2;
+        } else {
+            count += 1;
+            if (count >= 6) {
+                break;
+            }
+        }
+        DrawImage((void *)framebuffer);
+        DrawBack(alpha);
+        xglSleep();
+    }
+
+    for (;;) {
+        DrawImage((void *)framebuffer);
+        xglFontPrint(32, 32, -1, D_004C0738);
+        buttons = PadData.half_2a;
+        if (buttons & PAD_DECIDE) {
+            redraw_frame((void *)framebuffer);
+            xglStudioMainCameraInit();
+            MenuFileMain(0);
+            break;
+        }
+        if (buttons & PAD_CANCEL) {
+            xglSoundEffectNormalDirect(5);
+            redraw_frame((void *)framebuffer);
+            break;
+        }
+        xglSleep();
+    }
+    GameResourceReset(0);
+    copyframe();
+    xglSleep();
+}

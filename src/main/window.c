@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/jni.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -147,7 +148,6 @@ void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
  * for two accesses of one type and not for a header modeled with the
  * pointer member SceneObjectHeader declares.
  */
-extern SceneClass *classJava_xeno_util_Window;
 
 /*
  * The call block of Window.create(int): the single int argument selects

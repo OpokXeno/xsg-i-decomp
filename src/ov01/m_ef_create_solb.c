@@ -179,8 +179,8 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_solb", fnSOLB_PR000);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_solb", fnSOLB_DP000);
 
-/* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
- * still asm in their defining TU; declared locally until published there. */
+/* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
+ * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
 static void fnSOLB_PO000(void *self, void *work)

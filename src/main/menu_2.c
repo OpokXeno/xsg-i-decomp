@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/jni.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -129,7 +130,6 @@ void Java_xeno_util_Menu_addItem__Ljava_lang_String_(JThread *thread,
 }
 
 extern MenuNative *TMENU_create(int menu_kind);
-extern void *classJava_xeno_util_Menu;
 
 /* These natives receive VM argument/result slots at four-byte intervals: the
  * original accesses the object at +0, location integers at +4/+8 and results
@@ -146,7 +146,7 @@ void Java_xeno_util_Menu_create__(JThread *thread, void *arguments,
     SceneClass *menuClass;
     MenuNative *menu;
 
-    menuClass = (SceneClass *)classJava_xeno_util_Menu;
+    menuClass = classJava_xeno_util_Menu;
     menu = TMENU_create(-1);
     menu->class_ref = menuClass->instance_class_ref;
     result[0].ref = menu;

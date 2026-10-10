@@ -1,9 +1,13 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_hdd.h"
+
 #include "xgl_hdd.h"
 
 /* xglHddMount removes the high bit from this stored volume identifier. */
+
 static char partitionname[] = {
     'h' ^ 0x80, 'd' ^ 0x80, 'd' ^ 0x80, '0' ^ 0x80, ':' ^ 0x80,
     'P' ^ 0x80, 'P' ^ 0x80, '.' ^ 0x80, 'S' ^ 0x80, 'L' ^ 0x80,
@@ -17,13 +21,18 @@ static char partitionname[] = {
     'n' ^ 0x80, 'o' ^ 0x80, '1' ^ 0x80, 'd' ^ 0x80, '1' ^ 0x80,
     0
 };
+
 static char hddname[] = "pfs0:/xenosaga.00";
+
 static u8 hddcheck[] = "pfs0:/xenosaga.hdd";
+
 static char commonname[] = "hdd0:__common";
+
 static char yoursaves[] = "pfs1:/Your Saves";
 
 /* VIF DIRECT hands five quadwords to GIF. The GIF tag selects one A+D
  * register write, one RGBAQ value and two XYZ2 corner records. */
+
 static HddErrorPacket TestEnv_0_004A8A80[1] = {{
     0, 0, 0, 0x50000005,
     {0x00008001, 0x40034000, 0x551e},
@@ -38,6 +47,7 @@ static HddErrorPacket TestEnv_0_004A8A80[1] = {{
 /* EUC-JP warning text: HDD application data cannot be read, so loading
  * continues from DVD; the final control-marked label says “Button: Continue”.
  * Preserve the embedded font controls and line breaks from the original. */
+
 const unsigned char D_004D2628[] =
     "\x0b\x0e\x01\x01\x00\x00\x00\x0d\x03\xa5\xcf\xa1\xbc\xa5\xc9\xa5\xc7\xa5\xa3\xa5"
     "\xb9\xa5\xaf\xa5\xc9\xa5\xe9\xa5\xa4\xa5\xd6\xa4\xcb\xa4\xa2\xa4\xeb\xa5\xbc\xa5"
@@ -46,13 +56,53 @@ const unsigned char D_004D2628[] =
     "\xfe\xa4\xe1\xa4\xde\xa4\xbb\xa4\xf3\xa1\xa3\x0a\x0a\xa4\xb3\xa4\xec\xb0\xca\xb9"
     "\xdf\xa4\xcf\xa3\xc4\xa3\xd6\xa3\xc4\xa4\xab\xa4\xe9\xc6\xc9\xa4\xdf\xb9\xfe\xa4"
     "\xdf\xa4\xf2\xb9\xd4\xa4\xa4\xa4\xde\xa4\xb9\xa1\xa3\x0a\x0a\x0a\x0a\x0c\x80\x20"
-    "\x20\xa1\xfb\x0c\x80\x80\x80\xa5\xdc\xa5\xbf\xa5\xf3\xa1\xa7\xc2\xb3\xb9\xd4\x00";
+    "\x20\xa1\xfb\x0c\x80\x80\x80\xa5\xdc\xa5\xbf\xa5\xf3\xa1\xa7\xc2\xb3\xb9\xd4";
+
 const char cd_filename[] = "xenosaga.00";
+
 char xgl_hdd_device[] = "hdd0:";
+
 char hdd_mc_path[] = "pfs1:";
+
 u8 mount_device[] = "pfs0:";
+
 HddInstallCBParam *HddInstallCBparam = 0;
+
 static u8 HddActive;
+
+extern char D_004DC378[];
+
+extern char D_004DC380[];
+
+extern char D_004DC388[];
+
+extern int strcmp(const char *left, const char *right);
+
+struct HddFolderStat {
+    unsigned int mode;
+    unsigned char unmodeled_04_27[0x24];
+    unsigned int privateData[6];
+};
+
+struct HddFolderDirectoryEntry {
+    struct HddFolderStat stat;
+    char name[256];
+    unsigned char unmodeled_140[16];
+};
+
+struct HddSavedataStat {
+    unsigned int mode;
+    unsigned int flags;
+    unsigned char unmodeled_08_27[0x20];
+    unsigned int privateData[2];
+    unsigned char unmodeled_30_3f[0x10];
+};
+
+struct HddSavedataDirectoryEntry {
+    struct HddSavedataStat stat;
+    char name[256];
+    unsigned char unmodeled_140[16];
+};
 
 static int xglHddDummyCB(int event, int value)
 {
@@ -302,9 +352,111 @@ int xglHddMcLoad(void *save)
     return xglHddMcUmount();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", Judge_MakeNewFolder);
+static int Judge_MakeNewFolder(void)
+{
+    struct HddFolderDirectoryEntry entry;
+    int directoryCount;
+    int entriesRead;
+    int result;
+    int descriptor;
+    int closeResult;
+    char *entryName;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", Judge_MakeNewSavedata);
+    directoryCount = 0;
+    result = sceDopen(D_004DC378);
+    if (result < 0)
+        return result;
+    descriptor = result;
+
+    for (entriesRead = 0; entriesRead < 1024; entriesRead++) {
+        result = sceDread(descriptor, (struct HddDirectoryEntry *)&entry);
+        if (result <= 0)
+            break;
+
+        entryName = entry.name;
+        if (strcmp(entryName, D_004DC380) != 0 &&
+            strcmp(entryName, D_004DC388) != 0 &&
+            (entry.stat.mode & 0xF000) == 0x1000 &&
+            entry.stat.privateData[0] == 0xFFFF &&
+            entry.stat.privateData[1] == 0xFFFF) {
+            directoryCount++;
+            if (directoryCount >= 256)
+                break;
+        }
+    }
+
+    closeResult = sceDclose(descriptor);
+    if (result >= 0)
+        result = closeResult;
+
+    if (result < 0)
+        return result;
+    return directoryCount < 256;
+}
+
+int Judge_MakeNewSavedata(int descriptor, int card)
+{
+    extern unsigned int strlen(const char *string);
+    extern char *strchr(const char *string, int character);
+    struct HddSavedataDirectoryEntry entry;
+    int directoryCount;
+    int entriesRead;
+    int result;
+    int closeResult;
+    char *path;
+    char *entryName;
+    unsigned int pathLength;
+
+    directoryCount = 0;
+    result = 0;
+    path = (char *)xglMcSetFullPath(card, -1) + 1;
+    if (card < 0) {
+        char *end = path;
+
+        if (*path != '\0') {
+            do {
+                end++;
+            } while (*end != '\0');
+        }
+        end[-1] = '\0';
+    }
+    pathLength = strlen(path);
+
+    for (entriesRead = 0; entriesRead < 1024; entriesRead++) {
+        result = sceDread(descriptor, (struct HddDirectoryEntry *)&entry);
+        if (result <= 0)
+            break;
+
+        entryName = entry.name;
+        if (strcmp(entryName, D_004DC380) == 0 ||
+            strcmp(entryName, D_004DC388) == 0 ||
+            strncmp(entryName, path, pathLength) == 0)
+            continue;
+
+        if ((entry.stat.mode & 0xF000) == 0x1000 &&
+            (entry.stat.flags & 0x4000) == 0)
+            continue;
+
+        if (strchr(entryName, ':') != 0 &&
+            (entry.stat.mode & 0xF000) == 0x2000)
+            continue;
+
+        if ((entry.stat.mode & 0xF000) == 0x4000)
+            continue;
+        if (entry.stat.privateData[0] != 0xFFFF)
+            continue;
+        if (entry.stat.privateData[1] == entry.stat.privateData[0])
+            directoryCount++;
+    }
+
+    closeResult = sceDclose(descriptor);
+    if (result >= 0)
+        result = closeResult;
+
+    if (result < 0)
+        return result;
+    return directoryCount < 0x3FE;
+}
 
 static int xglHddMcCheckYourSaves(int card)
 {
@@ -412,7 +564,126 @@ static int create_file(int card, int slot, const void *data, int size)
     return result;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_hdd", xglHddMcCreate);
+/* The saved image begins with the transfer header. icon.sys occupies +0x40
+ * through +0x403; the game payload starts at +0x440. The gaps remain unknown. */
+struct HddSaveImage {
+    struct HddTransferInfo header;
+    unsigned char unmodeled_0c[0x40 - 0x0c];
+    char iconSystem[0x3c4];
+    unsigned char unmodeled_404[0x440 - 0x404];
+    unsigned char payloadStart; /* First byte; the transfer header gives size. */
+};
+
+int xglHddMcCreate(struct HddCheckState *state)
+{
+    extern int sceIoctl2(int descriptor, int command, const void *input,
+                         unsigned int input_size, void *output,
+                         unsigned int output_size);
+    extern int sceMkdir(const char *path, int mode);
+    extern void xglMcWriteMapName(char *icon_system, int card);
+    extern unsigned char D_004DC390[];
+    extern unsigned char tbl_1_004A8AE0[];
+    char *deviceName;
+    char path[256];
+    struct HddIoStat stat;
+    int result;
+    int descriptor;
+    int remountFailure;
+    struct HddSaveImage *transfer;
+    int checkResult;
+
+    result = -1;
+    xglHddMcUmount();
+    if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+        return -1;
+
+    make_fullpath(path, state->status, -1);
+    if (state->status >= 0 && (descriptor = sceDopen(path)) >= 0) {
+        if (sceDclose(descriptor) < 0) {
+            result = -0x15;
+            goto unmount_card;
+        }
+    } else {
+        checkResult = xglHddMcCheckCore(state);
+        if (checkResult < 0) {
+            result = -(int)tbl_1_004A8AE0[~checkResult];
+            xglHddMcUmount();
+            return result;
+        }
+        if (checkResult == 1) {
+            if (xglHddMcUmount() < 0)
+                return -0x19;
+            remountFailure = -1;
+            deviceName = commonname;
+            descriptor = sceOpen(deviceName, 3);
+            if (descriptor < 0)
+                return -0x10;
+
+            result = 0;
+            if (sceIoctl2(descriptor, 0x6801, D_004DC390, 3, 0, 0) < 0)
+                result = -0x11;
+            if (sceClose(descriptor) < 0)
+                result = -0x12;
+            if (result != 0)
+                return result;
+            if (sceMount(hdd_mc_path, commonname, 4, 0, 0) < 0)
+                return remountFailure;
+            result = 0;
+        }
+
+        descriptor = sceDopen(yoursaves);
+        if (descriptor < 0) {
+            if (sceMkdir(yoursaves, 0x1ff) < 0) {
+                result = -10;
+                goto unmount_card;
+            }
+        } else if (sceDclose(descriptor) < 0) {
+            result = -0x0c;
+            goto unmount_card;
+        }
+
+        if (state->status < 0) {
+            xglHddMcUmount();
+            return result;
+        }
+
+        descriptor = sceDopen(path);
+        if (descriptor < 0 && descriptor != -2) {
+            result = -0x13;
+            goto unmount_card;
+        }
+
+        if (descriptor == -2) {
+            if (sceMkdir(path, 0x1ff) < 0) {
+                result = -0x14;
+                goto unmount_card;
+            }
+            stat.attributes = 0xc4a7;
+            if (sceChstat(path, &stat, 2) < 0) {
+                result = -0x18;
+                goto unmount_card;
+            }
+        } else {
+            result = -0x15;
+            if (sceDclose(descriptor) < 0)
+                goto unmount_card;
+        }
+    }
+
+    result = -0x16;
+    transfer = (struct HddSaveImage *)state->transfer;
+    xglMcWriteMapName(transfer->iconSystem, state->status);
+    if (create_file(state->status, 1, transfer->iconSystem, 0x3c4) >= 0) {
+        result = -0x17;
+        if (create_file(state->status, 2, &transfer->payloadStart,
+                        transfer->header.end - transfer->header.begin) >= 0)
+            result = 0;
+    }
+
+unmount_card:
+    xglHddMcUmount();
+    return result;
+}
 
 int xglHddMcSave(const struct HddSaveRequest *save)
 {

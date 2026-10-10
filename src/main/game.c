@@ -1,5 +1,7 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "game.h"
 
 /*
@@ -7,29 +9,33 @@
  * 16-byte aligned typed storage that the original clears with por+sq; no
  * wide arithmetic.
  */
+
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
-/*
- * 16-byte quadword-aligned vector storage, cleared through the union's quad
- * member. The wrapping union (rather than a bare Quadword field) matters for
- * GameModeDebugMenu's schedule: a store through a union member has alias set
- * 0
- */
-typedef union QuadVector {
-    Quadword quad;
-} QuadVector;
+/* GameDebugMenu accesses the first two bytes at GameLoopState+0x29f50.
+ * Mode exits reset this complete 16-byte region with one native quadword
+ * store. The remaining bytes have no field interpretation in these TUs. */
+typedef union GameDebugMenuStorage {
+    Quadword storage;
+    struct {
+        u8 page;
+        u8 page_initialized;
+        u8 unmodeled_02[14];
+    } fields;
+} GameDebugMenuStorage;
 
 /*
  * PARTIAL ACCESSED VIEW of GameLoopState (0x2a030-byte object at 0x338680).
  * Union of the offsets the merged handlers access:
  *  +0x0c kind u16, +0x10 flags u32, +0x28 camera_callback,
  *  +0x29f40 status u8 (read by GameModeCfEvent),
- *  +0x29f50 pause_vector 16-byte quadword (cleared with por+sq),
+ *  +0x29f50 debug_menu 16-byte reset region (cleared with por+sq),
  *  +0x29f60 saved_kind u16.
  * Spans named _unmodeled_* are opaque sizing bytes never accessed by these
  * bodies; the remainder of the object beyond 0x29f62 is unmodeled. The name
  * is TU-local by canon
  */
+
 /*
  * GameStateSave/GameStateRestore back up and restore two more GameLoopState
  * halfwords (main VA 0x00243278/0x002432f0): +0x0e kindDetail, the halfword
@@ -37,6 +43,7 @@ typedef union QuadVector {
  * GameStateSave writes them into and GameStateRestore reads back to restore
  * kind and kindDetail.
  */
+
 typedef struct GameLoopStateLayout {
     u8 _unmodeled_00[0x0c];
     u16 kind;
@@ -50,13 +57,15 @@ typedef struct GameLoopStateLayout {
     u8 _unmodeled_e4[0x29f40 - 0xe4];
     u8 status;
     u8 _unmodeled_29f41[0x0f];
-    QuadVector pause_vector;
+    GameDebugMenuStorage debug_menu;
     u16 saved_kind;
     u8 _unmodeled_29f62[0x2a030 - 0x29f62];
 } GameLoopStateLayout;
 
 GameLoopStateLayout GameLoopState = {0};
+
 unsigned char SnapDrawCreditFlag = 0;
+
 unsigned char UseTestPath = 0;
 
 /*
@@ -68,31 +77,51 @@ unsigned char UseTestPath = 0;
  * the prototypes this TU needs are repeated below in their canonical
  * spelling.
  */
+
 extern PadDataDebugLayout PadData;
 
 extern void xglSoundEffectNormalDirect(int effect_id);
+
 extern void TWSYS_update(void);
+
 extern void EvtTools(void);
+
 extern void PauseMenu(void);
+
 extern void PartyTimePauseEnd(void);
+
 extern void ACT_pauseUpdate(void);
+
 extern StudioCamera *xglStudioGetCamera2(int camera_id);
+
 extern void JTHREAD_cntl(void);
+
 extern void PLAY_ctrl(void);
+
 extern void TCAMERA_update(void);
+
 extern void ACT_update(void);
+
 extern void MAP_updateUnit(void);
+
 extern void GameDebugMenu(void);
+
 int GameModeDebugMenu(void);
 
 #define game_mode_flags (GameLoopState.flags)
+
 #define game_mode_kind (GameLoopState.kind)
+
 #define game_mode_status (GameLoopState.status)
+
 #define game_mode_saved_kind (GameLoopState.saved_kind)
-#define game_mode_pause_vector (GameLoopState.pause_vector.quad)
+
+#define game_mode_debug_storage (GameLoopState.debug_menu.storage)
+
 #define game_mode_camera_callback (GameLoopState.camera_callback)
 
 extern void xglSoundSendEffect(void *swd, void *sed, int bank);
+
 extern void After_Talk(SceneObject object);
 
 typedef struct EnemyWorkPostTalk {
@@ -105,6 +134,55 @@ extern EnemyWorkPostTalk enepc[16];
 
 #define ACTOR_NUMBER_OFFSET 0x80
 
+extern void GameStateRestoreCameraLight(void);
+
+extern void GameStateRestoreKoware(void);
+
+static u64 attrPrev;
+
+typedef struct GameActorAttributeView {
+    u8 unmodeled_00[0x4e8];
+    u64 attribute_flags;
+} GameActorAttributeView;
+
+#define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
+
+/*
+ * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
+ * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
+ * src/main/enemy_2.h, src/main/set_motion.h, src/main/db_light_write.h and
+ * src/main/tya.c, which name the same two fields for the same reason).
+ * GameDrawShadow only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the
+ * in-use id ACT_create writes and ACT_update skips a slot on when it is
+ * zero; the offsets between them are not evidenced by this TU and stay
+ * unmodeled.
+ */
+
+#define ACTOR_COUNT 64
+
+#define ACTOR_IN_USE_ID_OFFSET 0x86
+
+typedef struct {
+    u32 flags;
+    u8 unmodeled_04[ACTOR_IN_USE_ID_OFFSET - 0x04];
+    short inUseId;
+    u8 unmodeled_88[0xA70 - (ACTOR_IN_USE_ID_OFFSET + 2)];
+} ActorHead;
+
+extern ActorHead actor[ACTOR_COUNT];
+
+/* Defined in src/main/act_3.c (main/tu265). */
+
+void ACT_DrawShadowBegin(void);
+
+void ACT_DrawShadow(ActorHead *unit);
+
+void ACT_DrawShadowEnd(void);
+
+#include "main/control_entry.h"
+
+#include "main/xgl_sound.h"
+
 static void GameCFSoundPurgeSub(void)
 {
     int index = 0;
@@ -116,13 +194,94 @@ static void GameCFSoundPurgeSub(void)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameCFSoundPurge);
+static void GameCFSoundPurge(void)
+{
+    int bank;
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameCFSoundReload);
+    for (bank = 0; bank < 8; bank++) {
+        xglSoundSendSwd(0, -1 - bank);
+        xglSoundSendSmd2(0, bank);
+    }
+    xglSoundSendEffect(0, 0, 1);
+    GameCFSoundPurgeSub();
+    SsdResetSegmentAllocMode(0x70000);
+    SsdSetSegmentAllocMode(0xA8000, 0x10000);
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameCFSoundMenuPurge);
+static void GameCFSoundReload(void)
+{
+    int bank;
+    u8 *segment;
 
-INCLUDE_ASM("asm/main/nonmatchings/game", GameCFSoundMenuReload);
+    segment = (u8 *) ((u32) (WorkEnd + 0x3F) & ~0x3F);
+    for (bank = 0; bank < 8; bank++) {
+        xglSoundSendSwd(0, -1 - bank);
+        xglSoundSendSmd2(0, bank);
+    }
+    SsdResetSegmentAllocMode(0xA8000);
+    SsdSetSegmentAllocMode(0x70000, 0x10000);
+    xglSoundLoadEffect(D_004BE2B0, segment, 1);
+    GameCFSoundPurgeSub();
+}
+
+void GameCFSoundMenuPurge(int mode)
+{
+    int bank;
+    int result[4];
+    unsigned short sequence;
+
+    if (mode == 1) {
+        GameCFSoundMenuPurgeFlag = 0;
+        xglSoundSendEffect(0, 0, 3);
+        for (bank = 0; bank < 8; bank++) {
+            sequence = SoundWork.channels[bank].sequence;
+            if (sequence == 0xFFFF) {
+                continue;
+            }
+            SsdGetSeqPlayStatus(sequence);
+            do {
+            } while (SsdGetResultValue(result) < 0);
+            if ((unsigned short)result[0] == 1) {
+                GameCFSoundMenuPurgeFlag |= 1 << bank;
+                xglSoundSequenceStop2(bank);
+            }
+        }
+    }
+    EnemySound_StopAll(1);
+    for (bank = 4; bank < 8; bank++) {
+        xglSoundSendEffect(0, 0, bank + 4);
+    }
+}
+
+void GameCFSoundMenuReload(void)
+{
+    char environment_name[64];
+    const char *enemy_name;
+    void *free_address;
+    int channel;
+    int enemy_index;
+
+    free_address = GameResourceGetFreeAddr();
+    xglSoundSendSwd(0, -5);
+    xglSoundSendSmd2(0, 4);
+    RES_GetMapEnvSeName(environment_name);
+    xglSoundLoadEffect(environment_name, free_address, 3);
+
+    for (channel = 0; channel < 8; channel++) {
+        if (((GameCFSoundMenuPurgeFlag >> channel) & 1) != 0 &&
+            UmnSimulationNo == 0 && MenuDrillCall == 0) {
+            xglSoundSequenceNormal2(channel, 0x7F);
+        }
+    }
+
+    for (enemy_index = 4; ; enemy_index++) {
+        enemy_name = RES_GetEnemySeName(enemy_index);
+        if (enemy_name == 0 || enemy_name[0] == 0) {
+            break;
+        }
+        xglSoundLoadEffect(enemy_name, free_address, enemy_index + 4);
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/game", Game_Data_Push);
 
@@ -138,9 +297,6 @@ INCLUDE_ASM("asm/main/nonmatchings/game", GameStateRestoreCameraLight);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GameStateSave);
 
-extern void GameStateRestoreCameraLight(void);
-extern void GameStateRestoreKoware(void);
-
 void GameStateRestore(void)
 {
     GameLoopState.kind = GameLoopState.restoreKind;
@@ -154,13 +310,6 @@ INCLUDE_ASM("asm/main/nonmatchings/game", GamePushSaveDataUser);
 INCLUDE_ASM("asm/main/nonmatchings/game", GamePopSaveDataUser);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", InitCfSystem);
-
-static u64 attrPrev;
-
-typedef struct GameActorAttributeView {
-    u8 unmodeled_00[0x4e8];
-    u64 attribute_flags;
-} GameActorAttributeView;
 
 static int checkAttr(GameActorAttributeView *actor)
 {
@@ -180,14 +329,6 @@ static int checkAttr(GameActorAttributeView *actor)
     return selected_attributes;
 }
 
-#define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
-
-/*
- * The actor record's layout beyond this field is not recovered here.
- * talktoObserver (src/main/script.c) reads the same object's flags through
- * this function and tests bit 3 (0x8) to decide whether pending pad input
- * cancels a talk in progress.
- */
 int getScriptFlag(SceneObject object)
 {
     int *script_flags = (int *)((SceneByte *)object + ACTOR_SCRIPT_FLAGS_OFFSET);
@@ -205,34 +346,6 @@ INCLUDE_ASM("asm/main/nonmatchings/game", checkItemBox);
 INCLUDE_ASM("asm/main/nonmatchings/game", CheckGameSymbol);
 
 INCLUDE_ASM("asm/main/nonmatchings/game", GameDispTag);
-
-/*
- * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
- * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
- * src/main/enemy_2.h, src/main/set_motion.h, src/main/db_light_write.h and
- * src/main/tya.c, which name the same two fields for the same reason).
- * GameDrawShadow only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the
- * in-use id ACT_create writes and ACT_update skips a slot on when it is
- * zero; the offsets between them are not evidenced by this TU and stay
- * unmodeled.
- */
-#define ACTOR_COUNT 64
-#define ACTOR_IN_USE_ID_OFFSET 0x86
-
-typedef struct {
-    u32 flags;
-    u8 unmodeled_04[ACTOR_IN_USE_ID_OFFSET - 0x04];
-    short inUseId;
-    u8 unmodeled_88[0xA70 - (ACTOR_IN_USE_ID_OFFSET + 2)];
-} ActorHead;
-
-extern ActorHead actor[ACTOR_COUNT];
-
-/* Defined in src/main/act_3.c (main/tu265), not yet published in
- * include/main/act_3.h. */
-void ACT_DrawShadowBegin(void);
-void ACT_DrawShadow(ActorHead *unit);
-void ACT_DrawShadowEnd(void);
 
 void GameDrawShadow(void)
 {
@@ -269,7 +382,7 @@ static int GameModeEvtTools(void)
             } else {
                 xglSoundEffectNormalDirect(4);
                 game_mode_flags &= 0xfffffffeu;
-                game_mode_pause_vector = 0;
+                game_mode_debug_storage = 0;
                 game_mode_kind = game_mode_saved_kind;
             }
         }
@@ -300,7 +413,7 @@ static int GameModePause(void)
             } else {
                 xglSoundEffectNormalDirect(4);
                 game_mode_flags &= 0xfffffffeu;
-                game_mode_pause_vector = 0;
+                game_mode_debug_storage = 0;
                 game_mode_kind = game_mode_saved_kind;
                 PartyTimePauseEnd();
             }
@@ -335,7 +448,7 @@ static int GameModeEvtDebug(void)
             } else {
                 xglSoundEffectNormalDirect(4);
                 game_mode_flags &= 0xfffffffeu;
-                game_mode_pause_vector = 0;
+                game_mode_debug_storage = 0;
                 game_mode_kind = game_mode_saved_kind;
             }
         }
@@ -386,18 +499,10 @@ static int GameModeCfEvent(void)
     return 0;
 }
 
-/*
- * GameModeDebugMenu (0x00245ba8): the debug-menu game mode, the last
- * handler of the game-mode TU whose static handlers start at 0x00244d20
- * (Game at 0x00245c58 follows it). Pad button 0x100 leaves the menu: clear
- * the pause flag, the 16-byte pause vector and restore the saved mode kind,
- * as the accepted handlers do on resume. Then run the per-frame systems,
- * the debug menu itself and the shared studio-camera callback gate.
- */
 int GameModeDebugMenu(void)
 {
     if ((PadData.debug_buttons & 0x100) != 0) {
-        GameLoopState.pause_vector.quad = 0;
+        GameLoopState.debug_menu.storage = 0;
         GameLoopState.flags &= 0xfffffffeu;
         GameLoopState.kind = GameLoopState.saved_kind;
     }

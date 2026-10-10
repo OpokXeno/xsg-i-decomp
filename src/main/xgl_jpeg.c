@@ -1,28 +1,55 @@
 #include "common.h"
+
 #include "shared.h"
 
-/*
- * The JPEG work area the codec keeps behind the gp-relative `sw` pointer.
- * Only the two regions FFIDCT uses are recovered here: the 8x8 block that holds
- * the result of the first one-dimensional pass, and the quadword pair each pass
- * stages one line through on its way to and from VU0.  The area is quadword
- * aligned, which is what the lqc2/sqc2 pair in FFIDCT needs.  Everything before
- * those two regions belongs to the parts of the codec that are still assembler
- * and stays an opaque reserved span.
- */
+/* The codec work area is quadword aligned for FFIDCT's VU0 transfers.
+ * Quantization tables occupy +0xD0 and +0x1D0; bit input, IDCT storage and
+ * restart counters are modeled below. Other regions remain explicit partial
+ * spans. */
+
 typedef struct JpegWork {
-    u8 reserved0[5232];
+    u8 unmodeled_0000[0xD0];
+    float luminanceQuantization[64];    /* +0xD0 */
+    float chrominanceQuantization[64];  /* +0x1D0 */
+    u8 unmodeled_02d0[0x350 - 0x2D0];
+    u8 *buffer;
+    u8 unmodeled_0354[0x358 - 0x354];
+    signed char bitsRemaining;
+    u8 bufferedByte;
+    u8 unmodeled_035a[0x1470 - 0x35a];
     float idct_block[8][8];
     float idct_stage[8];
+    u8 unmodeled_1590[0x2ba0 - 0x1590];
+    u32 restart_interval;
+    u32 restart_interval_plus_one;
 } JpegWork;
 
 static JpegWork *sw = (JpegWork *)0x70000000;
 
+extern int F2I(float value);
+
+typedef struct JpegHuffCode {
+    u16 code;
+    s16 length;
+} JpegHuffCode;
+
+static void PutBits(u16 code, int length);
+
+/* A DRI marker carries a big-endian restart interval in bytes 2 and 3.
+ * The parser stores that value and its successor at +0x2BA0/+0x2BA4,
+ * then returns the next segment byte. */
+
+extern float I2F(int value);
+
+/* Each quantization table has 64 floats. DefineQuantizeTable selects
+ * luminance for table ID 0 and chrominance otherwise; HuffmanDecode uses
+ * the same bases (main:0x224c24/0x224c30) and indexes 64 coefficients. */
+
+static int GetBit(void);
+
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", ConvertYUV2MCU);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", FFDCT);
-
-extern int F2I(float value);
 
 static void Quantize(int *quantized, const float *coefficients, const float *reciprocals)
 {
@@ -52,20 +79,6 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", RebuildQuantizeTable);
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", PutBits);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", EncodeDc);
-
-/*
- * A Huffman code table entry: the variable-length bit pattern PutBits emits
- * and its bit count. EncodeAc indexes such a table by (run << 4) + size, the
- * scaled run of preceding zero coefficients plus the bit length of the
- * nonzero coefficient that ends the run; a run alone (size 0) is the table's
- * zero-run control code (end-of-block or ZRL).
- */
-typedef struct JpegHuffCode {
-    u16 code;
-    s16 length;
-} JpegHuffCode;
-
-static void PutBits(u16 code, int length);
 
 static void EncodeAc(int value, int runIndex, JpegHuffCode *table)
 {
@@ -110,44 +123,18 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", ExtractHuffmanTableSub);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", xglJpegEncode);
 
-/*
- * Parses a DRI (Define Restart Interval) marker segment: marker[0..1] is the
- * segment length, marker[2..3] the big-endian restart interval. Stores it and
- * that value plus one into the codec work area past the JpegWork extent
- * modeled above (lw/sw at main 0x002248ac/0x002248b4, +0x2ba0/+0x2ba4 of
- * `sw`); nothing in this allocation reads either field back, so their
- * consuming role is not evidenced here. Modeling them as named JpegWork
- * members needs a published extension of that struct (an
- * unmodeled_1590[0x1610] gap then two u32 members), which is a shared-header
- * change outside a single function's additive edit and is reported rather
- * than made here. Returns the byte after the segment, as the marker dispatch
- * table's other parsers do.
- */
 static void *DefineRestartInterval(void *marker)
 {
     u8 *segment = marker;
-    u8 *work = (u8 *)sw;
+    JpegWork *work = sw;
     u32 interval;
 
     interval = (segment[2] << 8) + segment[3];
-    *(u32 *)(work + 0x2ba0) = interval;
-    *(u32 *)(work + 0x2ba4) = interval + 1;
+    work->restart_interval = interval;
+    work->restart_interval_plus_one = interval + 1;
     return segment + 4;
 }
 
-extern float I2F(int value);
-
-/*
- * The luminance and chrominance quantization tables the segment's byte
- * coefficients are converted into lie inside the JpegWork work area at
- * fixed offsets from `sw`: table id 0 (luminance) at +0xD0, any other id
- * (chrominance) at +0x1D0. Both offsets fall inside the reserved0 span
- * documented above; naming them as JpegWork members would edit that
- * already-published struct, which is a shared-header change outside a
- * single function's additive edit and is reported rather than made here
- * (the same constraint DefineRestartInterval's own note records for its
- * fields).
- */
 static u8 *DefineQuantizeTable(u8 *marker)
 {
     u8 *segment;
@@ -158,9 +145,9 @@ static u8 *DefineQuantizeTable(u8 *marker)
     segment = marker;
     count = (segment[0] << 8) + segment[1] - 3;
     if (segment[2] == 0) {
-        dest = (float *)((u8 *)sw + 0xD0);
+        dest = sw->luminanceQuantization;
     } else {
-        dest = (float *)((u8 *)sw + 0x1D0);
+        dest = sw->chrominanceQuantization;
     }
     segment += 3;
 
@@ -178,9 +165,46 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", StartOfFrame);
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", DefineHuffmanTable);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", GetBit);
+static int GetBit(void)
+{
+    u8 *buffer;
+    JpegWork *work;
+    u8 value;
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", decode_sub);
+    if (sw->bitsRemaining == 0) {
+        work = sw;
+        buffer = work->buffer;
+        value = *buffer;
+        if (value == 0xFF) {
+            work->buffer = buffer + 1;
+        }
+        work->bufferedByte = value;
+        work->buffer++;
+        sw->bitsRemaining = 7;
+    } else {
+        sw->bitsRemaining--;
+    }
+    return (sw->bufferedByte >> sw->bitsRemaining) & 1;
+}
+
+static s16 decode_sub(s16 *codes)
+{
+    u32 code = 0;
+    s16 terminator = 0xFE;
+
+    for (;;) {
+        code = code * 2 + GetBit();
+        if (codes[1] != terminator) {
+            do {
+                if ((u16) codes[0] == code) {
+                    return codes[1];
+                }
+                codes += 2;
+            } while (codes[1] != terminator);
+        }
+        codes += 2;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_jpeg", HuffmanDecode);
 

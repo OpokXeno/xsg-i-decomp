@@ -39,8 +39,7 @@ void _InitInfo(RgDispGameInfo *pInfo)
     pInfo->value5 = 0;
 }
 
-extern void assert_prog(const char *expression, const char *source_file,
-                        int line);
+
 extern void DisposeXrgPaint2D_sub(XrgPaint2D *paint, const char *source_file,
                                   int line);
 
@@ -134,12 +133,8 @@ void _paint_set_tex_alpha(RgDispGameInfo *pInfo, const char *pictureName,
     XrgPaint2DAlpha(pInfo->paint, blendMode);
 }
 
-/*
- * This caller's rectangle has the layout of the descriptor in the paint
- * renderer's TU. The descriptor is not yet exported by its public header;
- * retain a distinct TU-local type until that owner publishes the interface.
- * DrawRect consumes the whole descriptor, including its alignment gap.
- */
+/* DrawRect consumes the whole rectangle descriptor, including its
+ * alignment gap; this caller follows the paint renderer's layout. */
 typedef struct RgDispGameInfoColorRect {
     int mode;
     unsigned char quadword_alignment_gap[12];

@@ -35,6 +35,44 @@ typedef struct {
  */
 typedef void *GameLoopStateAddressView[];
 
+/* Game-loop members used by this unit: task scheduler at +8, mode at +c,
+ * and flags at +10. Remaining storage belongs to the game-loop owner. */
+typedef struct ScriptGameLoopState {
+    unsigned char unmodeled_00[8];
+    XglTaskScheduler *task_scheduler;
+    unsigned short kind;
+    unsigned short kindDetail;
+    unsigned int flags;
+} ScriptGameLoopState;
+
+/* Native actor peer used for the talk method's JNI argument. */
+typedef struct Actor {
+    unsigned char unmodeled_00[0x4c0];
+    void *peer;
+} Actor;
+
+/* Window prefix shared by the close-state store and TWIN_dispose. */
+typedef struct TComponent {
+    unsigned char unmodeled_00[0x10];
+    unsigned int flags;
+    unsigned short state;
+} TComponent;
+
+/* PadData contains two 0x68-byte records. Talk cancellation tests the
+ * packed input word at +28 in the first record. */
+typedef struct ScriptPadRecord {
+    unsigned char unmodeled_00[0x28];
+    unsigned long long packed_input;
+    unsigned char unmodeled_30[0x68 - 0x30];
+} ScriptPadRecord;
+
+/* JNI argument slots are references or integers according to the method
+ * signature, matching the VM's four-byte reference/integer value slots. */
+typedef union ScriptMethodArgument {
+    int integer;
+    void *reference;
+} ScriptMethodArgument;
+
 typedef struct ScriptObserverTask ScriptObserverTask;
 
 /*
@@ -144,16 +182,17 @@ struct SceneThread {
 struct ScriptObserverTask {
     XglTaskPrefix task;              /* +0x00 */
     u32 state_flags;                 /* +0x10 */
-    SceneObject object;              /* +0x14 */
+    void *object;                   /* +0x14: Stage or native actor by callback */
+
     SceneObject receiver;            /* +0x18 */
-    GameLoopFlagsPrefix *owner;      /* +0x1c */
+    ScriptGameLoopState *owner;      /* +0x1c */
     int argument1;                   /* +0x20 */
-    int argument2;                   /* +0x24 */
+    int argument2;                   /* +0x24: an int, or the TComponent * talk window */
     u8 unmodeled_28[8];              /* +0x28 */
     const char *method_name;         /* +0x30 */
     const char *method_signature;    /* +0x34 */
     signed char vm_slot;             /* +0x38 */
-    u8 unmodeled_39;                 /* +0x39 */
+    u8 invocation_state;            /* +0x39: cleared before the initial call */
     u8 unmodeled_3a[2];              /* +0x3a */
     SceneMethod *method;             /* +0x3c */
 };

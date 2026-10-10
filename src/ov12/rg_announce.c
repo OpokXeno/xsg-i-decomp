@@ -152,7 +152,7 @@ static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage)
     _paint_add(pAnn, 0x19, x, y - 0x10);
 }
 
-static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
+
 static void _paint_sub(RgAnnounce *pAnn, int index, int x, int y);
 
 static void _round1(RgAnnounce *pAnn) {

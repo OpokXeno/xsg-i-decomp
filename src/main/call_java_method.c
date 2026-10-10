@@ -73,13 +73,13 @@ void EventCheck_Line_Button(void *actor, LayoutHeader *first, LayoutHeader *seco
  * arguments are proven by its own body: it dereferences actor at +0x80 for
  * the enepc-table index and takes the method id in $a1 ($a2, reused there as
  * a local constant, is never supplied by any caller in this TU). */
-extern void Call_JavaMethod(void *actor, int method_id);
+
 
 /* Check_InsideID (0x002d67e8, still assembler in this TU) takes actor plus
  * the two UnduDataGetHeader results, as Check_Locater passes them. The touch
  * handlers receive those same three arguments and forward them untouched
  * (whole-program argument liveness: all three are read on entry). */
-extern int Check_InsideID(void *actor, LayoutHeader *first, LayoutHeader *second);
+
 
 void EventCheck_Line_Touch(void *actor, LayoutHeader *first, LayoutHeader *second) {
     if (Check_InsideID(actor, first, second) != 0) {

@@ -62,4 +62,35 @@ struct XglPacket {
     u8 *cursor;
 };
 
+/* The image block filled by sceGsSetDefLoadImage and sent as five quadwords. */
+typedef struct XglLoadImage {
+    u64 giftag;
+    unsigned char unmodeled_08[0x58];
+} XglLoadImage;
+
+/* One texture entry; the original loop advances by 20 bytes. */
+typedef struct XglTextureTransEntry {
+    u32 size;
+    short height;
+    unsigned char unmodeled_06[2];
+    u32 vramOffset;
+    u32 dataSize;
+    u32 dataOffset;
+} XglTextureTransEntry;
+
+/* The entry list starts at entryOffset and contains count records. */
+typedef struct XglTextureTransSet {
+    unsigned char unmodeled_00[8];
+    int count;
+    u32 entryOffset;
+} XglTextureTransSet;
+
+/* Fields read from the render state by the selected packet functions. */
+struct XglPacketRenderState {
+    unsigned char unmodeled_00[0x1a];
+    unsigned short textureBufferBase;
+    unsigned char unmodeled_1c[4];
+    unsigned short displayBufferBase;
+};
+
 #endif /* SRC_MAIN_XGL_PACKET_H */

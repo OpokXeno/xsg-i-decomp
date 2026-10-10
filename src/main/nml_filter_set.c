@@ -1,15 +1,39 @@
 #include "common.h"
+
 #include "shared.h"
 
 void nmlModelSetFilterGunosys(int *model, int flags, int count);
+
 void nmlModelSetFilterStealth(int *model, int flags);
 
-/*
- * Loads the supplied four-row matrix into the resident VU0 macro-mode
- * registers vf27-vf30 (ee-vu-cop2), the same resident-register family
- * _CurRotTransPersClip below reads back, matching src/main/nml_model_set.c's
- * own _CurSetMatrix.
- */
+struct NmlFilterRenderView {
+    u8 unmodeled_00[2];
+    short pixelStorageMode;
+    u8 unmodeled_04[0x10];
+    u16 framebufferPage;
+    u8 unmodeled_16[0x0a];
+    u16 displayBufferBase;
+};
+
+extern struct NmlFilterRenderView sRender;
+
+struct NmlFilterGsRegisterEntry {
+    u64 value;
+    u64 registerId;
+};
+
+extern void nmlPacketGsInit(void);
+
+extern void packet_gs_entry64(int registerId, void *entry);
+
+extern void nmlPacketAddGsFlush(void);
+
+extern void nmlPacketAddGsFrame(int frame, int offset);
+
+extern void nmlPacketAddGsFBA(int value);
+
+extern void nmlPacketAddGsZbuf(int zBuffer);
+
 static void _CurSetMatrix(float matrix[4][4])
 {
     __asm__ __volatile__(
@@ -24,11 +48,6 @@ static void _CurSetMatrix(float matrix[4][4])
     );
 }
 
-/*
- * Loads the view-scale vector into VU register vf25 and the view-translation
- * vector into vf26, matching src/main/nml_model_set.c's own
- * _CurSetViewScaleTrans.
- */
 static void _CurSetViewScaleTrans(const float viewScale[4], const float viewTrans[4])
 {
     __asm__ __volatile__(
@@ -41,23 +60,12 @@ static void _CurSetViewScaleTrans(const float viewScale[4], const float viewTran
     );
 }
 
-/*
- * Transforms *vector by the resident matrix in vf27-vf30, perspective-divides
- * it, applies the resident view scale (vf25) and translation (vf26) and stores
- * the fixed-point result at *destination (ee-vu-cop2).  The return value is the
- * VU0 clipping-flag register vi18, cleared on entry and accumulated by the
- * vclipw test, masked to its six near/far X/Y/Z bits.
- *
- * The original object masks the flags in $2 and then hands them to the caller
- * through $4 (daddu a0,v0,zero / jr ra / daddu v0,a0,zero), so the returned
- * value is a second local pinned to that register; the instruction-free barrier
- * below keeps both copies alive across the hand-off, which is the only thing
- * that separates them.
- */
 static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
 {
     register int clipFlags asm("$2");
-    register int returnedFlags asm("$4");
+    /* The SQC2 destination is an EE32 address in GPR4. After that
+     * hardware use ends, the same word carries the masked clip flags. */
+    register unsigned int destinationOrFlags asm("$4") = (unsigned int)destination;
 
     __asm__ __volatile__(
         "ctc2 $0,$vi18\n\t"
@@ -82,24 +90,19 @@ static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
         "cfc2 %0,$vi18\n\t"
         "nop"
         : "=r"(clipFlags)
-        : "r"(destination), "r"(vector)
+        : "r"(destinationOrFlags), "r"(vector)
         : "memory"
     );
     clipFlags &= 0x3f;
-    returnedFlags = clipFlags;
-    __asm__ __volatile__("" : : "r"(returnedFlags), "r"(clipFlags));
-    return returnedFlags;
+    destinationOrFlags = clipFlags;
+    __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
+    return destinationOrFlags;
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlModelSetFilterGunosys);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlModelSetFilterStealth);
 
-/*
- * Loads the supplied four-row placement matrix into the resident VU0
- * macro-mode registers vf10-vf13, the second resident matrix family
- * _WeightToGlobalPlaceVec below combines with vf27-30 (_CurSetMatrix).
- */
 static void _WeightToGlobalPlaceInit(float matrix[4][4])
 {
     __asm__ __volatile__(
@@ -116,12 +119,6 @@ static void _WeightToGlobalPlaceInit(float matrix[4][4])
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", _WeightToGlobalPlaceVec);
 
-/*
- * Squared distance between *first and *second: (second - first) dot
- * (second - first), returned as an ordinary float (the "=r" qmfc2 output
- * copied into $f0 by cc1, the same shape as src/main/xgl_2.c's
- * xglPointLength family).
- */
 static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
 {
     register float lengthSq asm("$f0");
@@ -165,17 +162,203 @@ void nmlFilterSetPacket(int *model, int count)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterSetFrameToBuffer);
+void nmlFilterSetFrameToBuffer(int displayBufferBase)
+{
+    struct NmlFilterGsRegisterEntry *gsEntry3f;
+    struct NmlFilterGsRegisterEntry *gsEntry50;
+    struct NmlFilterGsRegisterEntry *gsEntry51;
+    struct NmlFilterGsRegisterEntry *gsEntry52;
+    struct NmlFilterGsRegisterEntry *gsEntry53;
+    struct NmlFilterGsRegisterEntry *entry;
+    int remaining;
+    u64 bitbltBuffer;
+    u64 sourceBuffer;
+    long long pixelStorageMode;
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterSetBufferToFrame);
+    remaining = 4;
+    pixelStorageMode = sRender.pixelStorageMode;
+    sourceBuffer = ((u64)sRender.framebufferPage << 37) | ((u64)0x8000 << 36);
+    bitbltBuffer = 0x80000 | ((displayBufferBase & 0xffff) << 5) |
+        (pixelStorageMode << 56) | sourceBuffer | (pixelStorageMode << 24);
+    gsEntry50 = (struct NmlFilterGsRegisterEntry *)0x70000010;
+    gsEntry51 = (struct NmlFilterGsRegisterEntry *)0x70000020;
+    gsEntry52 = (struct NmlFilterGsRegisterEntry *)0x70000030;
+    gsEntry53 = (struct NmlFilterGsRegisterEntry *)0x70000040;
+    gsEntry3f = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry3f->value = 0;
+    gsEntry3f->registerId = 0x3f;
+    gsEntry50->value = bitbltBuffer;
+    gsEntry50->registerId = 0x50;
+    gsEntry51->value = 0;
+    gsEntry51->registerId = 0x51;
+    gsEntry52->value = ((u64)0x1c0 << 32) | 0x200;
+    gsEntry52->registerId = 0x52;
+    gsEntry53->value = 2;
+    gsEntry53->registerId = 0x53;
+    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    nmlPacketGsInit();
+    for (; remaining >= 0; remaining--, entry++) {
+        packet_gs_entry64((int)entry->registerId, entry);
+    }
+    nmlPacketAddGsFlush();
+}
+
+void nmlFilterSetBufferToFrame(int frameBufferBase)
+{
+    struct NmlFilterGsRegisterEntry *gsEntry3f;
+    struct NmlFilterGsRegisterEntry *gsEntry50;
+    struct NmlFilterGsRegisterEntry *gsEntry51;
+    struct NmlFilterGsRegisterEntry *gsEntry52;
+    struct NmlFilterGsRegisterEntry *gsEntry53;
+    struct NmlFilterGsRegisterEntry *entry;
+    int remaining;
+    u64 bitbltBuffer;
+    u64 sourceBuffer;
+    long long pixelStorageMode;
+
+    remaining = 4;
+    pixelStorageMode = sRender.pixelStorageMode;
+    sourceBuffer = ((u64)(frameBufferBase & 0xffff) << 37) | ((u64)0x8000 << 36);
+    bitbltBuffer = 0x80000 | (sRender.framebufferPage << 5) |
+        (pixelStorageMode << 56) | sourceBuffer | (pixelStorageMode << 24);
+    gsEntry50 = (struct NmlFilterGsRegisterEntry *)0x70000010;
+    gsEntry51 = (struct NmlFilterGsRegisterEntry *)0x70000020;
+    gsEntry52 = (struct NmlFilterGsRegisterEntry *)0x70000030;
+    gsEntry53 = (struct NmlFilterGsRegisterEntry *)0x70000040;
+    gsEntry3f = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry3f->value = 0;
+    gsEntry3f->registerId = 0x3f;
+    gsEntry50->value = bitbltBuffer;
+    gsEntry50->registerId = 0x50;
+    gsEntry51->value = 0;
+    gsEntry51->registerId = 0x51;
+    gsEntry52->value = ((u64)0x1c0 << 32) | 0x200;
+    gsEntry52->registerId = 0x52;
+    gsEntry53->value = 2;
+    gsEntry53->registerId = 0x53;
+    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    nmlPacketGsInit();
+    for (; remaining >= 0; remaining--, entry++) {
+        packet_gs_entry64((int)entry->registerId, entry);
+    }
+    nmlPacketAddGsFlush();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterSetBufferRender);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterSetFrameAlphaClear);
+void nmlFilterSetFrameAlphaClear(void)
+{
+    struct NmlFilterGsRegisterEntry *gsEntry42;
+    struct NmlFilterGsRegisterEntry *gsEntry47;
+    struct NmlFilterGsRegisterEntry *gsEntry1;
+    struct NmlFilterGsRegisterEntry *gsEntry46;
+    struct NmlFilterGsRegisterEntry *gsEntry4First;
+    struct NmlFilterGsRegisterEntry *gsEntry4Last;
+    struct NmlFilterGsRegisterEntry *entry;
+    int remaining;
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterSetTexClear);
+    gsEntry42 = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry47 = (struct NmlFilterGsRegisterEntry *)0x70000010;
+    gsEntry1 = (struct NmlFilterGsRegisterEntry *)0x70000020;
+    gsEntry46 = (struct NmlFilterGsRegisterEntry *)0x70000030;
+    gsEntry4First = (struct NmlFilterGsRegisterEntry *)0x70000040;
+    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)0x70000050;
+    gsEntry42->value = 0x68;
+    gsEntry42->registerId = 0x42;
+    gsEntry47->value = 0x31001;
+    gsEntry47->registerId = 0x47;
+    gsEntry1->value = 0x3f80000001000000;
+    gsEntry1->registerId = 1;
+    gsEntry46->value = 0x46;
+    gsEntry46->registerId = 0;
+    gsEntry4First->value = 0x72007000;
+    gsEntry4First->registerId = 4;
+    gsEntry4Last->value = 0x8e009000;
+    gsEntry4Last->registerId = 4;
+    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterBackClear);
+    nmlPacketGsInit();
+    nmlPacketAddGsFrame(sRender.displayBufferBase, 0);
+    nmlPacketAddGsFBA(0);
+    for (remaining = 5; remaining >= 0; remaining--, entry++) {
+        packet_gs_entry64((int)entry->registerId, entry);
+    }
+    nmlPacketAddGsFlush();
+}
+
+void nmlFilterSetTexClear(void)
+{
+    struct NmlFilterGsRegisterEntry *gsEntry42;
+    struct NmlFilterGsRegisterEntry *gsEntry47;
+    struct NmlFilterGsRegisterEntry *gsEntry1;
+    struct NmlFilterGsRegisterEntry *gsEntry46;
+    struct NmlFilterGsRegisterEntry *gsEntry4First;
+    struct NmlFilterGsRegisterEntry *gsEntry4Last;
+    struct NmlFilterGsRegisterEntry *entry;
+    int remaining;
+
+    gsEntry42 = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry47 = (struct NmlFilterGsRegisterEntry *)0x70000010;
+    gsEntry1 = (struct NmlFilterGsRegisterEntry *)0x70000020;
+    gsEntry46 = (struct NmlFilterGsRegisterEntry *)0x70000030;
+    gsEntry4First = (struct NmlFilterGsRegisterEntry *)0x70000040;
+    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)0x70000050;
+    gsEntry42->value = 0x8a;
+    gsEntry42->registerId = 0x42;
+    gsEntry47->value = 0x31001;
+    gsEntry47->registerId = 0x47;
+    gsEntry1->value = 0x3f80000080000000;
+    gsEntry1->registerId = 1;
+    gsEntry46->value = 0x46;
+    gsEntry46->registerId = 0;
+    gsEntry4First->value = 0x72007000;
+    gsEntry4First->registerId = 4;
+    gsEntry4Last->value = 0x7ff09000;
+    gsEntry4Last->registerId = 4;
+    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+
+    nmlPacketGsInit();
+    for (remaining = 5; remaining >= 0; remaining--, entry++) {
+        packet_gs_entry64((int)entry->registerId, entry);
+    }
+    nmlPacketAddGsFlush();
+}
+
+void nmlFilterBackClear(void)
+{
+    struct NmlFilterGsRegisterEntry *gsEntry47;
+    struct NmlFilterGsRegisterEntry *gsEntry1;
+    struct NmlFilterGsRegisterEntry *gsEntry0;
+    struct NmlFilterGsRegisterEntry *gsEntry4First;
+    struct NmlFilterGsRegisterEntry *gsEntry4Last;
+    struct NmlFilterGsRegisterEntry *entry;
+    int remaining;
+
+    gsEntry47 = (struct NmlFilterGsRegisterEntry *)0x70000000;
+    gsEntry1 = (struct NmlFilterGsRegisterEntry *)0x70000010;
+    gsEntry0 = (struct NmlFilterGsRegisterEntry *)0x70000020;
+    gsEntry4First = (struct NmlFilterGsRegisterEntry *)0x70000030;
+    gsEntry4Last = (struct NmlFilterGsRegisterEntry *)0x70000040;
+    gsEntry47->value = 0x30000;
+    gsEntry47->registerId = 0x47;
+    gsEntry1->value = (u64)0xfe00 << 46;
+    gsEntry1->registerId = 1;
+    gsEntry0->value = 6;
+    gsEntry0->registerId = 0;
+    gsEntry4First->value = 0x72007000;
+    gsEntry4First->registerId = 4;
+    gsEntry4Last->value = 0x8e009000;
+    gsEntry4Last->registerId = 4;
+    entry = (struct NmlFilterGsRegisterEntry *)0x70000000;
+
+    nmlPacketGsInit();
+    nmlPacketAddGsZbuf(1);
+    nmlPacketAddGsFrame(sRender.framebufferPage, 0);
+    for (remaining = 4; remaining >= 0; remaining--, entry++) {
+        packet_gs_entry64((int)entry->registerId, entry);
+    }
+    nmlPacketAddGsFlush();
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_filter_set", nmlFilterSetFlatRender);
 

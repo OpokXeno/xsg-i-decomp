@@ -12,13 +12,15 @@
  * The active print-output context: a pointer to the current VIF packet
  * (+0x00) followed by state that PrintFlush, PrintSprite00, PrintLine,
  * PrintRibbon, PrintCircle and FontTexReload pass through or touch. Only
- * the packet pointer and the scratch tag block FontTexReload builds
- * (+0x30..+0x4f) are named; the rest of this TU never reads or writes it.
+ * the packet pointer and the command workspace beginning at +0x30 are
+ * named. xglFontFlush initializes this context at 0x70000000 and passes
+ * that address through xglFontFlushCore to the queued callback; the
+ * workspace occupies the remaining bytes of the 16 KiB EE scratchpad.
  */
 typedef struct EndPrintContext {
     XglPacket *packet;                /* +0x00 */
     unsigned char unmodeled_04[0x2c]; /* +0x04..+0x2f */
-    u64 scratch[4];                   /* +0x30..+0x4f */
+    u64 scratch[(0x4000 - 0x30) / sizeof(u64)]; /* +0x30..+0x3fff */
 } EndPrintContext;
 
 /* These two routines fill the full eight-qword drawing command buffer. */

@@ -70,7 +70,7 @@ static void _GetStageDataBySerial(u32 serial, void *data)
 }
 
 /* data: the caller's output record (asserted non-null; layout not yet recovered). */
-static void _GetStageData(int stageId, void *data);
+
 
 /* Same (serial, data) interface as _GetStageDataBySerial; the hard data is
  * always stage 3 and the caller's record is forwarded untouched. */
@@ -252,8 +252,8 @@ extern void RgTitlePassTime(RgTitle *title, float time);
 extern void RgTitleDisp(RgTitle *title);
 extern int RgTitleGetResult(RgTitle *title);
 extern float RgGetFrameTime(void);
-extern const char D_00A51600[];
-extern const char D_00A51610[];
+
+
 
 static int _Title(int mode)
 {

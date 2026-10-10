@@ -1,16 +1,42 @@
 #include "common.h"
+
 #include "enemy_1.h"
 
 /* Per-actor work records are cleared before use. */
+
 EnemyWorkEntry enepc[16] = {{0}};
+
 static unsigned short CoolDown_0 = 0;
+
 static unsigned short CoolDown_1 = 0;
+
 void *AdrsEnemyPreset = 0;
+
 void *AdrsEnemySpline = 0;
+
 void *AdrsEnemyExclamation = 0;
+
 void *AdrsEnemyQuestion = 0;
+
 void *AdrsEnemySphere = 0;
+
 void *AdrsEnemySquare = 0;
+
+/* Distance thresholds and retreat speeds used by the two look-back paths.
+ * The original has no named objects for them: cc1 emits each use as an
+ * anonymous .lit4 literal (0x004D8034..0x004D8040). */
+
+#define D_004D8034 0.012f
+
+#define D_004D8038 0.06666667f
+
+#define D_004D803C 0.012f
+
+#define D_004D8040 0.06666667f
+
+/* Per-actor work records are cleared before use. */
+
+/* Distance thresholds and retreat speeds used by the two look-back paths. */
 
 int Get_EffectCode(int attr)
 {
@@ -57,7 +83,22 @@ void Enemy_Damage_Explosion(EnemyActor *actor)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/enemy_1", Enemy_Damage_Electric);
+void Enemy_Damage_Electric(EnemyActor *actor)
+{
+    EnemyWorkEntry *work = &enepc[actor->number];
+    int count = work->hit_count + 1;
+    short limit = work->hit_limit;
+
+    work->hit_count = count;
+    if ((short)count >= limit) {
+        u32 flags = actor->flags;
+
+        work->state_40.alert_level = 0;
+        actor->flags = flags & ~ACTOR_FLAG_AILMENT_ACTIVE;
+        Homing_Search(actor);
+        Enemy_ActionReady(actor, 2);
+    }
+}
 
 void Enemy_Damage_Seal(EnemyActor *actor)
 {
@@ -380,9 +421,3 @@ void Disp_EnemyMark(void)
     mark[15].sphere = AdrsEnemySphere;
     mark[14] = mark[15];
 }
-
-/* Distance thresholds and retreat speeds used by the two look-back paths. */
-const float D_004D8034 = 0.012f;
-const float D_004D8038 = 0.06666667f;
-const float D_004D803C = 0.012f;
-const float D_004D8040 = 0.06666667f;

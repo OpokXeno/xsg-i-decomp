@@ -87,9 +87,7 @@ static short real43array[21];
 static short real51array[21];
 static short real52array[21];
 static short real53array[21];
-extern short real61array[];
-extern short real62array[];
-extern short real63array[];
+
 static char *SaveWork  = (char *)SaveData + 0x15190;
 static short real01array[21];
 static short real02array[21];
@@ -296,7 +294,7 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", pay_print);
 
 /* ov11:0x00a01060. Draws the three-digit slot total stake at its fixed
  * screen position through decprint (ov11:0x00a00de0, LOCAL asm sibling). */
-static void decprint(int value, int digits, int x, int y);
+
 extern short D_00A0DD74;
 
 static void total_pay_print(void)
@@ -369,8 +367,8 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", point_control);
  * slot background sprite built from BoxRect (ov11:0x00a0a0e0) into BoxSpr
  * (ov11:0x00a0a0c0). MakeSprite, SetDrawStatus and SetTest are LOCAL asm
  * siblings whose parameter roles beyond this one call site are not evidenced. */
-static void MakeSprite(void *sprite, void *rect);
-static void SetDrawStatus(int mode, int enable);
+
+
 static void SetTest(int value);
 
 static void SlBgDraw(void)
@@ -398,7 +396,7 @@ INCLUDE_ASM("asm/nonmatchings/ov11/mini_g", SlLineCheck);
  * whether the resulting payout is nonzero. SlLineCheck is a LOCAL asm
  * sibling. */
 static void SlLineCheck(void);
-extern int D_00A0DDC8;
+
 
 static int check_real(void)
 {

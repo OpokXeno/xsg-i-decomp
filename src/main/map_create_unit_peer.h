@@ -85,16 +85,41 @@ extern void xglMatrixStackTrans(const float translation[4]);
 typedef struct MapUnitGroupSequenceEntry {
     unsigned int flags; /* +0x00 */
     int state;          /* +0x04 */
-    unsigned char unmodeled_08[0x08];
+    unsigned char unmodeled_08[0x04];
+    int sequenceMode; /* +0x0c */
     short group; /* +0x10 */
-    unsigned char unmodeled_12[0x24 - 0x12];
+    unsigned char unmodeled_12[0x02];
+    unsigned int sequenceParameters[4]; /* +0x14..+0x20 */
     void (*update_callbacks[4])(MapUnitRecord *unit); /* +0x24 */
-    unsigned char unmodeled_34[0x260 - 0x34];
+    unsigned char unmodeled_34[0x240 - 0x34];
+    float pivot_x; /* +0x240 */
+    float pivot_y; /* +0x244 */
+    float pivot_z; /* +0x248 */
+    unsigned char unmodeled_24c[0x04];
+    float axis_x; /* +0x250 */
+    float axis_y; /* +0x254 */
+    float axis_z; /* +0x258 */
+    float axis_w; /* +0x25c */
 } MapUnitGroupSequenceEntry;
 
 typedef struct MapUnitGroupEntry {
     int flags; /* +0x00; callback argument used by Unit suspend/resume */
-    unsigned char unmodeled_04[0x300 - 0x04];
+    void (*update)(MapUnitRecord *unit); /* +0x04 */
+    unsigned char unmodeled_08[0x08];
+    Vector4 position; /* +0x10 */
+    Vector4 rotation; /* +0x20 */
+    Vector4 scale; /* +0x30 */
+    Matrix4 matrix; /* +0x40 */
+    unsigned char unmodeled_80[0x20];
+    unsigned char serial; /* +0xa0 */
+    unsigned char serialFlags; /* +0xa1 */
+    unsigned char unmodeled_a2[0x06];
+    short animationIndex; /* +0xa8 */
+    unsigned char unmodeled_aa[0x26];
+    void *peer; /* +0xd0 */
+    unsigned char unmodeled_d4[0x100 - 0xd4];
+    MapUnitAnmState anim; /* +0x100 */
+    unsigned char unmodeled_118[0x300 - 0x118];
 } MapUnitGroupEntry;
 
 extern MapUnitGroupSequenceEntry unitSequence[64];

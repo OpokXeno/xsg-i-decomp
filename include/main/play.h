@@ -4,6 +4,21 @@
 #include "shared.h"
 
 /*
+ * FCV2Value is the curve FCV2_getValue samples: a cursor into its key table,
+ * the same two-bit type code FCV_getFKeyType returns (1 = constant sample,
+ * 3 = sampled spline), and either the constant itself or the base of its key
+ * table, aliased in the same word (FCV2_getValue, VA 0x0030d740).
+ * FCV2_getVal (VA 0x0030d428, still ASM) compares and subtracts a float
+ * argument in $f12; FCV2_getValue never writes $f12 before its tail call, so
+ * `frame` is its own parameter, forwarded unchanged.
+ */
+typedef struct FCV2Value {
+    u16 cursor;
+    u16 type;
+    f32 value;
+} FCV2Value;
+
+/*
  * The pointer PLAY_setupDefault clears (sw $0,12 at 0x0026a674). Its
  * pointee is read by PLAY_setup, still assembly in this TU, so it stays
  * opaque here.
@@ -39,6 +54,12 @@ typedef struct TCHParams {
     int frame;                      /* +0x08 */
     int curveIndex;                 /* +0x0c */
 } TCHParams;
+
+typedef struct PlayTCHCurveSet {
+    unsigned short count;
+    unsigned char unmodeled_02[6];
+    FCV2Value *curves[1];
+} PlayTCHCurveSet;
 
 /*
  * The remaining members PLAY_setupDefault evidences (PLAY_setup,

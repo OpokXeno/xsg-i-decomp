@@ -1,41 +1,73 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "nml_model_set.h"
 
 int g_aSubWindow[4] = { 0 };
+
 LayoutStore s_inLayout = { 0 };
 
 static void *s_pMapLast = 0;
+
 static int s_nParentBuf = 0;
+
 static int s_nToumeiNum = 0;
+
 static unsigned int s_nShadowVec = 0;
+
 static int s_nMapShadowParts = 0;
+
 static float s_fSortOffsetEntry = 0.0f;
+
 static int s_nParent = 0;
+
 static int s_nClip = 0;
+
 static int s_nShapeNum = 0;
+
 static int s_nMapClip = 0;
+
 static int s_nPacketSignal = 0;
+
 static int s_nUseZwrite = 0;
+
 static int s_nUseBackBuffer = 0;
+
 static int s_nEffectWrite = 1;
+
 static int s_nMapLast = 0;
+
 static int s_nFadeDoit = 0;
+
 static int s_nPause = 0;
+
 static int s_nMenu = 0;
+
 static int s_nFrameLockOff = 0;
+
 static int s_nRenderCancelOld = 0;
+
 int g_nGsEntry = 0;
 
 static int s_nAlphaGroup;
+
 static int s_nNonAlphaGroup;
+
 static int s_aToumeiId[16];
+
 static float s_aToumei[16];
+
 static int s_aShapeId[32];
+
 static float s_aShapeWeight[32];
+
 static int s_aMapLast[12];
+
 static Vector4 s_inShadowVec;
+
 static Vector4 s_inGblPos;
+
 /*
  * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
  * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
@@ -43,7 +75,243 @@ static Vector4 s_inGblPos;
  * original local-storage order. set_circle_shadow_ratio writes entries 0-7
  * and 16-23.
  */
+
 static int D_00956940[256];
+
+/*
+ * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
+ * with count 0x1e, so the copied extent is established. nmlModelClear clears
+ * projection_entry at +0x1c0. No C body names the earlier float slots; their
+ * meanings stay unknown, so that region is explicit unmodeled storage.
+ */
+
+typedef struct NmlProRealState {
+    unsigned char unmodeled_000[0x1c0];
+    int projection_entry;
+    unsigned char unmodeled_1c4[0x1e0 - 0x1c4];
+} NmlProRealState;
+
+static NmlProRealState s_inProReal[1];
+
+static int s_inBackBuffer[10];
+
+static int s_inMapHandle[4];
+
+static FadeControl s_inFadeOut;
+
+static FadeControl s_inFadeIn;
+
+static FadeControl s_inActiveFadeOut;
+
+static FadeControl s_inActiveFadeIn;
+
+#define NML_RENDER_MAP_ENTRY 0x10000u
+
+static void CONSTRUCT_MODELSYSTEM(void);
+
+/* INIT_BACK_BUFFER (above) is still INCLUDE_ASM; declare it so its caller
+ * does not see an implicit declaration. */
+
+static void INIT_BACK_BUFFER(void);
+
+/*
+ * TU-local partial view of the shared render-state global sRender (main
+ * 0x004A90E0, size 0x5C; see src/main/game_over.c's DrawImageRenderState,
+ * src/main/map_1.c's MapRenderState, src/main/window_tex_load.c's
+ * UmnRenderSize and src/main/game_defocus.c's DefocusRenderState for other
+ * TUs' views of the same object). Only the halfword at +0x22 is evidenced
+ * here: nmlModelSendSignalMovieFinish below forwards it unchanged as the
+ * "ownerIndex" argument of nmlModelSetBackBuffer and
+ * nmlModelSetBackBufferToBattle.
+ */
+
+typedef struct {
+    unsigned char unmodeled_00[0x22];
+    unsigned short ownerIndex;  /* +0x22 */
+} NmlBackBufferOwnerView;
+
+extern NmlBackBufferOwnerView sRender;
+
+/*
+ * nmlModelSetFadeInCancel/nmlModelSetFadeOutCancel/nmlModelSetBackBuffer
+ * (below, this TU) and nmlModelSetBackBufferToBattle (still INCLUDE_ASM)
+ * are used before their definitions; declare them so these calls do not
+ * see an implicit declaration.
+ */
+
+void nmlModelSetFadeInCancel(int frames);
+
+void nmlModelSetFadeOutCancel(int frames);
+
+void nmlModelSetBackBuffer(int modelId, int duration, int ownerIndex, int value);
+
+void nmlModelSetBackBufferToBattle(int ownerIndex);
+
+static void fade_render(NmlPacket packet, FadeControl *control);
+
+/*
+ * D_0095DB90 is main:0x0095DB90, the same byte the FadeControl comment above
+ * ties to s_inFadeOut's "locked" field at +0x30 (0x0095DB60 + 0x30): cited
+ * there only as evidence, not as claimed source. Addressing it through
+ * &s_inFadeOut+0x30 rather than its own symbol changes the emitted %lo
+ * immediate (sw v0,48(v1) for the original's sw v0,0(v1)), so this
+ * function keeps the flat scaffold symbol, as an unsized array so -G8
+ * small-data gp-relative addressing does not apply to it either (matching
+ * D_0095BB3C/D_0095BB44 above).
+ */
+
+extern int D_0095DB90[];
+
+/* D_0095DC48 is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
+ * D_0095DB90 comment above for why it stays a flat scaffold symbol. */
+
+extern int D_0095DC48[];
+
+/* D_0095DBC8 is s_inFadeIn's "cancelFrames" byte (+0x28). */
+
+extern int D_0095DBC8[];
+
+/* D_0095DC08 is s_inActiveFadeOut's "cancelFrames" byte (+0x28). */
+
+extern int D_0095DC08[];
+
+/* D_0095DB88 is s_inFadeOut's "cancelFrames" byte (+0x28). */
+
+extern int D_0095DB88[];
+
+/* D_0095DB84 is s_inFadeOut's "dispose" byte (+0x24). */
+
+extern int D_0095DB84[];
+
+/* D_0095DBC4 is s_inFadeIn's "dispose" byte (+0x24). */
+
+extern int D_0095DBC4[];
+
+/*
+ * TU-local partial view of GameLoopState (main 0x00338680, size 0x2a030;
+ * TU-local by canon, config/header-canon.json). Only the two fields this
+ * setter reads are modeled: the fade level at +0x58 and the three fade
+ * color components at +0x90, both forwarded to fade_set unchanged.
+ */
+
+typedef struct {
+    unsigned char unmodeled_00[0x58];
+    int level;                 /* +0x58 */
+    unsigned char unmodeled_5c[0x90 - 0x5c];
+    float color[3];            /* +0x90 */
+} NmlGameLoopState;
+
+extern NmlGameLoopState GameLoopState;
+
+/* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
+ * this caller does not see an implicit declaration. */
+
+static void fade_set(FadeControl *, float *, int, int, int, int, int);
+
+/* ACT_modelDrawSub supplies alpha as a signed word from its actor at +0x9a8. */
+
+#define NML_RENDER_STENCIL 0x4u
+
+#define NML_RENDER_ZWRITE 0x8u
+
+#define NML_RENDER_TOUMEI 0x20u
+
+/*
+ * Bounds and alignment a model texture pointer must satisfy: the pointer
+ * lands inside main RAM at or above the executable's own load base
+ * (config/tu/main/tu000.json "start": "0x00200000") and at or below the top
+ * of the 32 MiB EE RAM, and it is qword (16-byte) aligned as GIF/DMA
+ * texture transfers require.
+ */
+
+#define NML_TEXTURE_RAM_BASE 0x00200000u
+
+#define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
+
+#define NML_TEXTURE_ALIGN_MASK 0xfu
+
+/*
+ * Stores the current model matrix pointer in the pointer-width s_inLayout
+ * word at byte offset 0x23c (slot 143 of the shared LayoutStore view, which
+ * gives that slot no pointer member).
+ */
+
+/* nmlModelFogPara (above) is still INCLUDE_ASM; declare it so its caller
+ * does not see an implicit declaration. */
+
+static void nmlModelFogPara(LayoutSlot *fog, float fogNear, float fogFar, float fogMin, float fogMax);
+
+#define NML_RENDER_FOG 0x2u
+
+/* The four fog distances of RgFog.dist (defaults 50, 250, 0, 1). */
+
+/* The map callers pass halfword part IDs; the layout has eight shadow slots. */
+
+extern unsigned int strlen(const char *string);
+
+extern int memcmp(const void *left, const void *right, unsigned int count);
+
+extern int strcmp(const char *left, const char *right);
+
+extern char *strstr(const char *string, const char *pattern);
+
+/* nmlModelLexDataCheck remains assembly-owned below. */
+
+int nmlModelLexDataCheck(NmlModel *model);
+
+#define NML_NAME_MATCH_PREFIX 1
+
+#define NML_NAME_MATCH_EXACT 2
+
+#define NML_NAME_MATCH_SUBSTRING 3
+
+/* nmlModelDirectXtxSub (above) is still INCLUDE_ASM; declare it so this
+ * caller does not see an implicit declaration. */
+
+void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId);
+
+/*
+ * Callers (GameRadarDraw main 0x00252fc8, unit6003_draw main 0x003211a0;
+ * both still INCLUDE_ASM) never inspect the result -- the tail call below
+ * matches the compiled form, so this is void.
+ */
+
+#define LAYOUT_W(off) (s_inLayout.slots[(off) / 4].f)
+
+#define LAYOUT_S32(off) (s_inLayout.slots[(off) / 4].i)
+
+/*
+ * CONSTRUCT_CIRCLR_SHADOW (near the top of this TU) is still INCLUDE_ASM
+ * and nmlModelClear is defined below (this TU); declare them, and the
+ * s_inMapHandle array nmlModelClear also declares nearer its own use, so
+ * this caller does not see an implicit declaration.
+ */
+
+static void CONSTRUCT_CIRCLR_SHADOW(void);
+
+void nmlModelClear(void);
+
+/* CLEAR_LAYOUT_MODEL and CLEAR_MODEL_ENTRY (near the top of this TU) are
+ * still INCLUDE_ASM; declare them so this caller does not see an implicit
+ * declaration. */
+
+static void CLEAR_LAYOUT_MODEL(LayoutStore *);
+
+static void CLEAR_MODEL_ENTRY(void);
+
+/* FLUSH_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so this
+ * caller does not see an implicit declaration. */
+
+static void FLUSH_MODELSYSTEM(void);
+
+/*
+ * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
+ * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
+ * Keep its definition between s_inGblPos and s_inProReal, matching the
+ * original local-storage order. set_circle_shadow_ratio writes entries 0-7
+ * and 16-23.
+ */
+
 /*
  * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
  * with count 0x1e, so the copied extent is established.  ProjectMap and
@@ -51,37 +319,34 @@ static int D_00956940[256];
  * at +0x1c0.  Other bytes remain unnamed because their roles are not shown
  * by this TU's C callers.
  */
-typedef struct NmlProRealState {
-    unsigned char unmodeled_000[0x190];
-    float unmodeled_190[4];
-    float value_1a0;
-    float value_1a4;
-    float value_1a8;
-    float unmodeled_1ac;
-    float unmodeled_1b0;
-    float unmodeled_1b4;
-    float value_1b8;
-    float unmodeled_1bc;
-    int projection_entry;
-    unsigned char unmodeled_1c4[0x1e0 - 0x1c4];
-} NmlProRealState;
-static NmlProRealState s_inProReal[1];
-static int s_inBackBuffer[10];
-static int s_inMapHandle[4];
-static FadeControl s_inFadeOut;
-static FadeControl s_inFadeIn;
-static FadeControl s_inActiveFadeOut;
-static FadeControl s_inActiveFadeIn;
 
-#define NML_RENDER_MAP_ENTRY 0x10000u
+extern int s_nDispVisible;
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", _VectorLengthSQ_0022DE28);
+extern char s_aTexName[32];
 
-/*
- * Loads the current model matrix's four rows into the resident VU0
- * macro-mode registers vf27-vf30 (ee-vu-cop2), for the _CurRotTransPersClip/
- * _CurRotTransPersFog/_CurApplyMatrix family that reads them back.
- */
+extern char s_aMatName[32];
+
+static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
+{
+    register float lengthSq asm("$f0");
+
+    __asm__ __volatile__(
+        "lqc2 $vf10,0(%1)\n\t"
+        "lqc2 $vf11,0(%2)\n\t"
+        "vsub.xyz vf10xyz,vf11xyz,vf10xyz\n\t"
+        "vmul.xyz vf10xyz,vf10xyz,vf10xyz\n\t"
+        "vaddz.x vf10x,vf10x,vf10z\n\t"
+        "vaddy.x vf10x,vf10x,vf10y\n\t"
+        "qmfc2 $2,$vf10\n\t"
+        "mtc1 $2,$f2\n\t"
+        "mtc1 $2,%0"
+        : "=f"(lengthSq)
+        : "r"(first), "r"(second)
+        : "$2", "memory"
+    );
+    return lengthSq;
+}
+
 static void _CurSetMatrix(float matrix[4][4])
 {
     __asm__ __volatile__(
@@ -96,11 +361,6 @@ static void _CurSetMatrix(float matrix[4][4])
     );
 }
 
-/*
- * Loads the current view-scale and view-translation vectors into the
- * resident VU0 macro-mode registers vf25 and vf26 (ee-vu-cop2), for the
- * same _CurRotTransPersClip/_CurRotTransPersFog/_CurApplyMatrix family.
- */
 static void _CurSetViewScaleTrans(const float viewScale[4], const float viewTrans[4])
 {
     __asm__ __volatile__(
@@ -113,14 +373,45 @@ static void _CurSetViewScaleTrans(const float viewScale[4], const float viewTran
     );
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", _CurRotTransPersClip_0022DE80);
+static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
+{
+    register int clipFlags asm("$2");
+    /* The SQC2 destination is an EE32 address in GPR4. After that
+     * hardware use ends, the same word carries the masked clip flags. */
+    register unsigned int destinationOrFlags asm("$4") = (unsigned int)destination;
 
-/*
- * Transforms one vector by the resident VU0 matrix (_CurSetMatrix above),
- * perspective-divides it and folds the result into a fog coordinate clamped
- * to the supplied [min, max] bounds, the same resident-register family as
- * _CurApplyMatrix below.
- */
+    __asm__ __volatile__(
+        "ctc2 $0,$vi18\n\t"
+        "lqc2 $vf31,0(%2)\n\t"
+        "vmulax.xyzw ACC,vf27xyzw,vf31x\n\t"
+        "vmadday.xyzw ACC,vf28xyzw,vf31y\n\t"
+        "vmaddaz.xyzw ACC,vf29xyzw,vf31z\n\t"
+        "vmaddw.xyzw vf31xyzw,vf30xyzw,vf0w\n\t"
+        "vnop\n\t"
+        "vnop\n\t"
+        "vnop\n\t"
+        "vclipw.xyz vf31xyz,vf31w\n\t"
+        "vdiv Q,vf0w,vf31w\n\t"
+        "vwaitq\n\t"
+        "vmulq.xyzw vf31xyzw,vf31xyzw,Q\n\t"
+        "vmulaw.xyzw ACC,vf26xyzw,vf0w\n\t"
+        "vmadd.xyzw vf31xyzw,vf31xyzw,vf25xyzw\n\t"
+        "vftoi4.xyw vf23xyw,vf31xyw\n\t"
+        "vftoi0.z vf23z,vf31z\n\t"
+        "vsub.w vf23w,vf23w,vf23w\n\t"
+        "sqc2 $vf23,0(%1)\n\t"
+        "cfc2 %0,$vi18\n\t"
+        "nop"
+        : "=r"(clipFlags)
+        : "r"(destinationOrFlags), "r"(vector)
+        : "memory"
+    );
+    clipFlags &= 0x3f;
+    destinationOrFlags = clipFlags;
+    __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
+    return destinationOrFlags;
+}
+
 static void _CurRotTransPersFog(Vector4 *destination, const Vector4 *vector, const Vector4 *fog) {
     __asm__ __volatile__(
         "lqc2 vf31, 0(%1)\n\t"
@@ -144,11 +435,6 @@ static void _CurRotTransPersFog(Vector4 *destination, const Vector4 *vector, con
     );
 }
 
-/*
- * Multiplies one vector by the resident VU0 matrix (_CurSetMatrix above)
- * and stores the transformed result, the same row-by-row accumulation as
- * src/main/face_point.c's _ApplyMatrix.
- */
 static void _CurApplyMatrix(Vector4 *destination, const Vector4 *vector) {
     __asm__ __volatile__(
         "lqc2 vf31, 0(%0)\n\t"
@@ -166,7 +452,6 @@ static void _CurApplyMatrix(Vector4 *destination, const Vector4 *vector) {
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", _WeightToGlobalVec);
 
-/* Stores componentwise minima in the first vector and maxima in the second. */
 static void _MinMaxSort(Vector4 *min, Vector4 *max) {
     __asm__ __volatile__(
         "lqc2 vf20, 0(%0)\n\t"
@@ -203,30 +488,11 @@ static void FLUSH_ALPHA_GROUP(void)
     s_nNonAlphaGroup = 0;
 }
 
-/*
- * The only word this TU's CLEAR_PROREAL evidences within its caller's
- * "proreal" render block (nmlModelClear passes s_inProReal as the array base, main
- * 0x0095b940, further modeled in part by src/main/nml_packet_add.h's
- * NmlProRealParam at its own +0x11c field): nothing else in this
- * allocation reads or writes byte offset 0x1c0, so it stays a named
- * array index rather than a guessed struct member.
- */
 static void CLEAR_PROREAL(int *proReal)
 {
     proReal[0x1c0 / 4] = 0;
 }
 
-/*
- * s_inBackBuffer (main 0x0095bb20, see the header comment) is reset one
- * word at a time below; only +0x10 and +0x1c/+0x24 have evidenced roles
- * within this allocation:
- *   - +0x10 "owner index": set to -1 (no owner) by CONSTRUCT/INIT.
- *   - +0x1c: D_0095BB3C, the flag nmlModelIsBackBufferRequest reads and
- *     nmlModelSendPacketChangeSignal clears (both above, this TU).
- *   - +0x24: D_0095BB44, the value nmlModelSetMpeg2CrossFadeTime writes;
- *     INIT_BACK_BUFFER is the only one of these three that leaves it
- *     untouched, preserving the configured cross-fade time.
- */
 static void CONSTRUCT_BACK_BUFFER(void)
 {
     s_inBackBuffer[0x10 / 4] = -1;
@@ -254,11 +520,6 @@ static void INIT_BACK_BUFFER(void)
     s_inBackBuffer[0x20 / 4] = 0;
 }
 
-/*
- * The active-request word FLUSH_BACK_BUFFER's caller (nmlModelFlushClear)
- * clears once per frame; CONSTRUCT/INIT_BACK_BUFFER reset it the same way
- * among the other words above.
- */
 static void FLUSH_BACK_BUFFER(void)
 {
     s_inBackBuffer[0x00 / 4] = 0;
@@ -279,14 +540,6 @@ static void FLUSH_PARENT_BUF(void)
     s_nParentBuf = 0;
 }
 
-/*
- * mapHandle[0] and mapHandle[1] are the two words this TU's
- * CONSTRUCT_MAP_HANDLE/CLEAR_MAP_HANDLE/FLUSH_MAP_HANDLE evidence within
- * the caller's map-handle record (nmlModelConstruct passes &s_inMapHandle,
- * main 0x0095db50): CLEAR_MAP_HANDLE resets only mapHandle[0] and
- * FLUSH_MAP_HANDLE resets only mapHandle[1], so the two words are kept
- * separate rather than folded into one guessed struct member.
- */
 static void CONSTRUCT_MAP_HANDLE(int *mapHandle)
 {
     /*
@@ -330,13 +583,18 @@ static void INIT_FADE_CONTROL(FadeControl *control)
     CONSTRUCT_FADE_CONTROL(control);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CLEAR_MODEL_ENTRY);
+static void CLEAR_MODEL_ENTRY(void)
+{
+    s_nDispVisible = -1;
+    s_nToumeiNum = s_nShadowVec = s_nMapShadowParts = s_aTexName[0] = s_aMatName[0] = 0;
+    s_fSortOffsetEntry = 0.0f;
+    s_nParent = 0;
+    s_nClip = 0;
+    s_nShapeNum = 0;
+    s_nMapClip = 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", CONSTRUCT_MODELSYSTEM);
-
-/* CONSTRUCT_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so its
- * caller does not see an implicit declaration. */
-static void CONSTRUCT_MODELSYSTEM(void);
 
 static void INIT_MODELSYSTEM(void)
 {
@@ -426,10 +684,6 @@ void nmlModelSendPacketChangeSignal(void)
     D_0095BB3C[0] = 0;
 }
 
-/* INIT_BACK_BUFFER (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. */
-static void INIT_BACK_BUFFER(void);
-
 void nmlModelSendSignalMovieStart(void)
 {
     INIT_BACK_BUFFER();
@@ -444,41 +698,12 @@ void nmlModelSetMpeg2CrossFadeTime(int time)
     D_0095BB44[0] = time;
 }
 
-/*
- * TU-local partial view of the shared render-state global sRender (main
- * 0x004A90E0, size 0x5C; see src/main/game_over.c's DrawImageRenderState,
- * src/main/map_1.c's MapRenderState, src/main/window_tex_load.c's
- * UmnRenderSize and src/main/game_defocus.c's DefocusRenderState for other
- * TUs' views of the same object). Only the halfword at +0x22 is evidenced
- * here: nmlModelSendSignalMovieFinish below forwards it unchanged as the
- * "ownerIndex" argument of nmlModelSetBackBuffer and
- * nmlModelSetBackBufferToBattle.
- */
-typedef struct {
-    unsigned char unmodeled_00[0x22];
-    unsigned short ownerIndex;  /* +0x22 */
-} NmlBackBufferOwnerView;
+static inline void NmlMovieRestoreSavedBuffer(void)
+{
+    nmlModelSetBackBuffer(D_0095BB44[0], 1, sRender.ownerIndex, 1);
+    nmlModelSetFadeInCancel(30);
+}
 
-extern NmlBackBufferOwnerView sRender;
-
-/*
- * nmlModelSetFadeInCancel/nmlModelSetFadeOutCancel/nmlModelSetBackBuffer
- * (below, this TU) and nmlModelSetBackBufferToBattle (still INCLUDE_ASM)
- * are used before their definitions; declare them so these calls do not
- * see an implicit declaration.
- */
-void nmlModelSetFadeInCancel(int frames);
-void nmlModelSetFadeOutCancel(int frames);
-void nmlModelSetBackBuffer(int modelId, int duration, int ownerIndex, int value);
-void nmlModelSetBackBufferToBattle(unsigned short ownerIndex);
-
-/*
- * The caller (GameMpeg2Play, main 0x00250c18) never inspects the result:
- * the very next instruction after the call is an unrelated jal, so this is
- * void. The case labels are declared in the order the original jump
- * table's targets are laid out in .text (0, 1, 4, 2, 3), not in numeric
- * order, matching the compiled block layout.
- */
 void nmlModelSendSignalMovieFinish(int mode)
 {
     switch (mode - 1) {
@@ -501,26 +726,11 @@ void nmlModelSendSignalMovieFinish(int mode)
         nmlModelSetFadeInCancel(30);
         break;
     case 3:
-        /*
-         * Unlike the other cases, this one's call is a genuine jal that
-         * falls into the shared epilogue below rather than a tail jump
-         * straight into the callee; the single-iteration loop reproduces
-         * that call shape.
-         */
-        nmlModelSetBackBuffer(D_0095BB44[0], 1, sRender.ownerIndex, 1);
-        do {
-            nmlModelSetFadeInCancel(30);
-        } while (0);
+        NmlMovieRestoreSavedBuffer();
         break;
     }
 }
 
-/*
- * s_inLayout.slots[0xac] (byte offset 0x2b0) is a bitmask word this
- * function only ever ORs new bits into, the same raw-slot idiom
- * nmlModelSetFaceModel/nmlModelSetHumanModel use for the render-status word
- * at +0x250 above.
- */
 int nmlModelSetRenderLevel(int level)
 {
     int renderLevel = s_inLayout.slots[0x2b0 / 4].i | level;
@@ -529,8 +739,6 @@ int nmlModelSetRenderLevel(int level)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", fade_render);
-
-static void fade_render(NmlPacket packet, FadeControl *control);
 
 void nmlFadePacketWrite(NmlPacket packet)
 {
@@ -543,18 +751,6 @@ void nmlFadePacketWrite(NmlPacket packet)
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", fade_set);
 
-/*
- * D_0095DB90 is main:0x0095DB90, the same byte the FadeControl comment above
- * ties to s_inFadeOut's "locked" field at +0x30 (0x0095DB60 + 0x30): cited
- * there only as evidence, not as claimed source. Addressing it through
- * &s_inFadeOut+0x30 rather than its own symbol changes the emitted %lo
- * immediate (sw v0,48(v1) for the original's sw v0,0(v1)), so this
- * function keeps the flat scaffold symbol, as an unsized array so -G8
- * small-data gp-relative addressing does not apply to it either (matching
- * D_0095BB3C/D_0095BB44 above).
- */
-extern int D_0095DB90[];
-
 void nmlModelSetFadeOutLock(void) {
     D_0095DB90[0] = 1;
 }
@@ -563,30 +759,17 @@ void nmlModelSetFadeOutLockOff(void) {
     D_0095DB90[0] = 0;
 }
 
-/* D_0095DC48 is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
- * D_0095DB90 comment above for why it stays a flat scaffold symbol. */
-extern int D_0095DC48[];
-
 void nmlModelSetActiveFadeInCancel(int frames) {
     D_0095DC48[0] = (frames < 0) ? 0 : frames;
 }
-
-/* D_0095DBC8 is s_inFadeIn's "cancelFrames" byte (+0x28). */
-extern int D_0095DBC8[];
 
 void nmlModelSetFadeInCancel(int frames) {
     D_0095DBC8[0] = (frames < 0) ? 0 : frames;
 }
 
-/* D_0095DC08 is s_inActiveFadeOut's "cancelFrames" byte (+0x28). */
-extern int D_0095DC08[];
-
 void nmlModelSetActiveFadeOutCancel(int frames) {
     D_0095DC08[0] = (frames < 0) ? 0 : frames;
 }
-
-/* D_0095DB88 is s_inFadeOut's "cancelFrames" byte (+0x28). */
-extern int D_0095DB88[];
 
 void nmlModelSetFadeOutCancel(int frames) {
     D_0095DB88[0] = (frames < 0) ? 0 : frames;
@@ -599,38 +782,13 @@ void nmlModelSetFadeDoit(void)
     s_nFadeDoit = 1;
 }
 
-/* D_0095DB84 is s_inFadeOut's "dispose" byte (+0x24). */
-extern int D_0095DB84[];
-
 void nmlModelSetFadeOutDispose(void) {
     D_0095DB84[0] = 1;
 }
 
-/* D_0095DBC4 is s_inFadeIn's "dispose" byte (+0x24). */
-extern int D_0095DBC4[];
-
 void nmlModelSetFadeInDispose(void) {
     D_0095DBC4[0] = 1;
 }
-
-/*
- * TU-local partial view of GameLoopState (main 0x00338680, size 0x2a030;
- * TU-local by canon, config/header-canon.json). Only the two fields this
- * setter reads are modeled: the fade level at +0x58 and the three fade
- * color components at +0x90, both forwarded to fade_set unchanged.
- */
-typedef struct {
-    unsigned char unmodeled_00[0x58];
-    int level;                 /* +0x58 */
-    unsigned char unmodeled_5c[0x90 - 0x5c];
-    float color[3];            /* +0x90 */
-} NmlGameLoopState;
-
-extern NmlGameLoopState GameLoopState;
-
-/* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
- * this caller does not see an implicit declaration. */
-static void fade_set(FadeControl *, float *, int, int, int, int, int);
 
 void nmlModelSetFadeOut(int duration, int mode) {
     fade_set(&s_inFadeOut, GameLoopState.color, GameLoopState.level, duration + 2, 0, mode, 0);
@@ -638,7 +796,15 @@ void nmlModelSetFadeOut(int duration, int mode) {
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFadeIn);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFadeInInterrupt);
+void nmlModelSetFadeInInterrupt(int frames, float red, float green, float blue)
+{
+    s_inFadeIn.level = 0;
+    s_inFadeIn.duration = frames;
+    s_inFadeIn.frame = frames;
+    s_inFadeIn.color[0] = (int) (red * 255.0f);
+    s_inFadeIn.color[1] = (int) (green * 255.0f);
+    s_inFadeIn.color[2] = (int) (blue * 255.0f);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetActiveFadeOut);
 
@@ -677,9 +843,33 @@ void nmlModelGetGblPosition(Vector4 *position)
     position->w = 1.0f;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetBackBufferToBattle);
+/* Battle and event-skip configure the same special back-buffer request:
+ * a 0x28-frame time, the control state and the owner, written as one group.
+ * The do/while (0) group is what keeps the original store order: without it
+ * cc1 schedules the +0x20 clear ahead of the owner and +0x04 stores. */
+void nmlModelSetBackBufferToBattle(int ownerIndex)
+{
+    do {
+        s_inBackBuffer[6] = 0x28;
+        s_inBackBuffer[5] = 1;
+        s_inBackBuffer[0] = 1;
+        s_inBackBuffer[4] = ownerIndex;
+        s_inBackBuffer[1] = 0;
+    } while (0);
+    s_inBackBuffer[8] = 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetBackBufferToEventSkip);
+void nmlModelSetBackBufferToEventSkip(int ownerIndex)
+{
+    do {
+        s_inBackBuffer[6] = 0x28;
+        s_inBackBuffer[5] = 1;
+        s_inBackBuffer[0] = 1;
+        s_inBackBuffer[4] = ownerIndex;
+        s_inBackBuffer[1] = 0;
+    } while (0);
+    s_inBackBuffer[8] = 0;
+}
 
 void nmlModelSetBackBuffer(int modelId, int duration, int ownerIndex, int value)
 {
@@ -700,8 +890,6 @@ void nmlModelSetEffectWrite(int enabled)
     s_nEffectWrite = enabled;
 }
 
-extern int g_aSubWindow[4];
-
 void nmlModelUseSubWindow(unsigned int index, int enabled) {
     if (index < 4U) {
         g_aSubWindow[index] = enabled;
@@ -721,7 +909,13 @@ void nmlModelSetSortOffset(float offset)
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetGlobalPointLight);
 
-INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetGlobalPointLightCol);
+void nmlModelSetGlobalPointLightCol(int index, const Vector4 *color)
+{
+    if (index < 3U) {
+        xglVectorScaleXYZ(128.0f, &s_inGblPointC[index], color);
+        s_inLayout.fields.render_status |= 0x02000000;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetGlobalPointLightPos);
 
@@ -814,7 +1008,6 @@ void nmlModelSetToumeiParts(int partId, float alpha)
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFilter);
 
-/* ACT_modelDrawSub supplies alpha as a signed word from its actor at +0x9a8. */
 void nmlModelSetPixelAlpha(int alpha)
 {
     if (alpha <= 0) {
@@ -839,10 +1032,6 @@ void nmlModelSetAlpha(u64 alpha)
 {
     s_inLayout.fields.alpha = alpha;
 }
-
-#define NML_RENDER_STENCIL 0x4u
-#define NML_RENDER_ZWRITE 0x8u
-#define NML_RENDER_TOUMEI 0x20u
 
 void nmlModelSetStencil(int enabled)
 {
@@ -890,17 +1079,6 @@ void nmlModelSetToumei(int enabled)
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetLight);
 
-/*
- * Bounds and alignment a model texture pointer must satisfy: the pointer
- * lands inside main RAM at or above the executable's own load base
- * (config/tu/main/tu000.json "start": "0x00200000") and at or below the top
- * of the 32 MiB EE RAM, and it is qword (16-byte) aligned as GIF/DMA
- * texture transfers require.
- */
-#define NML_TEXTURE_RAM_BASE 0x00200000u
-#define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
-#define NML_TEXTURE_ALIGN_MASK 0xfu
-
 void nmlModelSetTexture(const char *texture)
 {
     /* Accept only a non-null, in-range, qword-aligned pointer whose header
@@ -943,13 +1121,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetFogCol);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFogPara);
 
-/* nmlModelFogPara (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. */
-static void nmlModelFogPara(LayoutSlot *fog, float fogNear, float fogFar, float fogMin, float fogMax);
-
-#define NML_RENDER_FOG 0x2u
-
-/* The four fog distances of RgFog.dist (defaults 50, 250, 0, 1). */
 void nmlModelSetFogDist(float fogNear, float fogFar, float fogMin, float fogMax)
 {
     nmlModelFogPara(&s_inLayout.slots[0x1d0 / 4], fogNear, fogFar, fogMin, fogMax);
@@ -990,7 +1161,6 @@ void nmlModelSetShadowMapEntry(void) {
     s_inLayout.fields.render_status |= 0x10000;
 }
 
-/* The map callers pass halfword part IDs; the layout has eight shadow slots. */
 void nmlModelSetMapShadowParts(int partId)
 {
     if (s_nMapShadowParts < 8) {
@@ -1015,18 +1185,6 @@ void nmlModelSetMapLastInit(void)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelSetPartsVisible);
-
-extern unsigned int strlen(const char *string);
-extern int memcmp(const void *left, const void *right, unsigned int count);
-extern int strcmp(const char *left, const char *right);
-extern char *strstr(const char *string, const char *pattern);
-
-/* nmlModelLexDataCheck remains assembly-owned below. */
-int nmlModelLexDataCheck(NmlModel *model);
-
-#define NML_NAME_MATCH_PREFIX 1
-#define NML_NAME_MATCH_EXACT 2
-#define NML_NAME_MATCH_SUBSTRING 3
 
 void nmlModelSetNameVisible(NmlModel *model, const char *name, int visible, int match)
 {
@@ -1086,15 +1244,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelDirectSend);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelDirectXtxSub);
 
-/* nmlModelDirectXtxSub (above) is still INCLUDE_ASM; declare it so this
- * caller does not see an implicit declaration. */
-void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId);
-
-/*
- * Callers (GameRadarDraw main 0x00252fc8, unit6003_draw main 0x003211a0;
- * both still INCLUDE_ASM) never inspect the result -- the tail call below
- * matches the compiled form, so this is void.
- */
 void nmlModelDirectSendXtx(int modelId, void *data)
 {
     const signed char *bytes = data;
@@ -1191,9 +1340,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", deapth_for_studio);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelCalcSpecularClip);
 
-#define LAYOUT_W(off) (s_inLayout.slots[(off) / 4].f)
-#define LAYOUT_S32(off) (s_inLayout.slots[(off) / 4].i)
-
 static void nmlModelCalcDropShadow(void)
 {
     xglMatrixUnit((float (*)[4])&s_inLayout.slots[0x180 / 4].f);
@@ -1259,15 +1405,6 @@ INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFlushSubAlpha);
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFlushSub);
 
-/*
- * CONSTRUCT_CIRCLR_SHADOW (near the top of this TU) is still INCLUDE_ASM
- * and nmlModelClear is defined below (this TU); declare them, and the
- * s_inMapHandle array nmlModelClear also declares nearer its own use, so
- * this caller does not see an implicit declaration.
- */
-static void CONSTRUCT_CIRCLR_SHADOW(void);
-void nmlModelClear(void);
-
 void nmlModelConstruct(void)
 {
     CONSTRUCT_MODELSYSTEM();
@@ -1286,12 +1423,6 @@ void nmlModelConstruct(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelInit);
 
-/* CLEAR_LAYOUT_MODEL and CLEAR_MODEL_ENTRY (near the top of this TU) are
- * still INCLUDE_ASM; declare them so this caller does not see an implicit
- * declaration. */
-static void CLEAR_LAYOUT_MODEL(LayoutStore *);
-static void CLEAR_MODEL_ENTRY(void);
-
 void nmlModelClear(void) {
     CLEAR_LAYOUT_MODEL(&s_inLayout);
     CLEAR_PROREAL((int *) s_inProReal);
@@ -1300,10 +1431,6 @@ void nmlModelClear(void) {
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/nml_model_set", nmlModelFlush);
-
-/* FLUSH_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so this
- * caller does not see an implicit declaration. */
-static void FLUSH_MODELSYSTEM(void);
 
 void nmlModelFlushClear(void) {
     FLUSH_MODELSYSTEM();

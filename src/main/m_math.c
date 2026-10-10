@@ -1,40 +1,48 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_2.h"
+
 #include "m_math.h"
+
+
+extern float srsAtan2(float deltaX, float deltaZ);
+
+#include "sdv.h"
 
 float MMathMakeRandom(void)
 {
-    return (float)xglSRand() * 3.051850945e-05f;
+    return (float)xglSRand() * 3.051851e-05f;
 }
 
 float MMathMakeRandom2PI(void)
 {
-    return (float)xglSRand() * 0.0001917534391f;
+    return (float)xglSRand() * 0.00019175344f;
 }
 
 float MMathCalcRotNear(float first, float second)
 {
-    float difference = fmodf(second, 6.283185005f) - fmodf(first, 6.283185005f);
+    float difference = fmodf(second, 6.283185f) - fmodf(first, 6.283185f);
 
-    if (__builtin_fabsf(difference) > 3.141592741f) {
+    if (__builtin_fabsf(difference) > 3.1415927f) {
         if (difference < 0.0f)
-            difference += 6.283185005f;
+            difference += 6.283185f;
         else
-            difference -= 6.283185005f;
+            difference -= 6.283185f;
     }
     return difference;
 }
 
 float MMathCalcRotFar(float first, float second)
 {
-    float difference = fmodf(second, 6.283185005f) - fmodf(first, 6.283185005f);
+    float difference = fmodf(second, 6.283185f) - fmodf(first, 6.283185f);
 
-    if (__builtin_fabsf(difference) < 3.141592741f) {
+    if (__builtin_fabsf(difference) < 3.1415927f) {
         if (difference < 0.0f)
-            difference += 6.283185005f;
+            difference += 6.283185f;
         else
-            difference -= 6.283185005f;
+            difference -= 6.283185f;
     }
     return difference;
 }
@@ -100,12 +108,6 @@ float *MMathCalcHermite(float *destination, float parameter,
     return destination;
 }
 
-/*
- * MMathCalcHermitePrm: central-difference tangent pair for a Hermite/Catmull-
- * Rom segment. tangent_start = (point_end - point_prev) * 0.5, tangent_end =
- * (point_next - point_start) * 0.5. The 0.5 factor comes from vitof4 (integer
- * 8 converted with a divide-by-16 shift), not a compiler literal.
- */
 void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_end,
                           const HermiteVector *point_prev, const HermiteVector *point_start,
                           const HermiteVector *point_end, const HermiteVector *point_next)
@@ -132,26 +134,10 @@ void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_en
     );
 }
 
-/*
- * MMathDeg2RadVector/I and MMathRad2DegVector/I: scale the XYZ lanes of an
- * aligned four-lane vector by the degrees<->radians conversion factor, W
- * untouched: the lane-selective VU0
- * macro-mode multiply is what the C says, not an approximation of it. The
- * conversion factor is scaffold-owned .lit4 data (config/tu/main/tu219.json
- * data_ownership; declared `extern const float` in m_math.h under its
- * existing splat/symbol-map name, config/symbols/main.txt) read into a local
- * pinned to $f8 -- the original object's own scratch register for this
- * COP1->GPR->VF conduit. The destination pointer is likewise pinned to $2,
- * the register the original object returns it in (tu-worker.md, "register T
- * x asm(...)"): with both locals declared in that order the compiler emits
- * them in the original's own order -- daddu/move into $2 first, then the
- * lit4 load into $f8 -- instead of the unpinned allocator's choice of $f0
- * scheduled ahead of the return copy.
- */
 void *MMathDeg2RadVector(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 0.01745329238f;
+    register float scale asm("$f8") = 0.017453292f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -169,7 +155,7 @@ void *MMathDeg2RadVector(void *destination, const Vector4 *source)
 void *MMathDeg2RadVectorI(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 0.01745329238f;
+    register float scale asm("$f8") = 0.017453292f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -188,7 +174,7 @@ void *MMathDeg2RadVectorI(void *destination, const Vector4 *source)
 void *MMathRad2DegVector(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 57.29578018f;
+    register float scale asm("$f8") = 57.29578f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -206,7 +192,7 @@ void *MMathRad2DegVector(void *destination, const Vector4 *source)
 void *MMathRad2DegVectorI(void *destination, const Vector4 *source)
 {
     register void *result asm("$2") = destination;
-    register float scale asm("$f8") = 57.29578018f;
+    register float scale asm("$f8") = 57.29578f;
     __asm__ __volatile__(
         "mfc1 $8,%2\n\t"
         "qmtc2 $8,vf1\n\t"
@@ -222,11 +208,6 @@ void *MMathRad2DegVectorI(void *destination, const Vector4 *source)
     return result;
 }
 
-/*
- * MMathNormalizeVector2: normalize the XYZ lanes of an aligned four-lane
- * vector with the VU0 macro-mode reciprocal-square-root pipeline (Q
- * register), forcing W to 1.0 (vf0w) on the way out.
- */
 void *MMathNormalizeVector2(void *destination, const Vector4 *source)
 {
     __asm__ __volatile__(
@@ -246,13 +227,6 @@ void *MMathNormalizeVector2(void *destination, const Vector4 *source)
     );
     return destination;
 }
-
-/*
- * The six length/distance functions below are recovered as C with
- * constrained ee-vu-cop2 inline assembly. Their C-visible shape comes from
- * the accepted record's own asm_contract: each takes aligned vectors through a0/a1 and returns the
- * reduced length in f0.
- */
 
 float MMathCalcLength(const Vector4 *vector)
 {
@@ -390,16 +364,6 @@ Vector4 *MMathCalcDirVector(Vector4 *destination, const Vector4 *source,
     return normalized_destination;
 }
 
-/* sef.c (main); no header is published for it yet. */
-extern float srsAtan2(float deltaX, float deltaZ);
-
-/*
- * The call to srsAtan2 is the last statement of this function, but the
- * original keeps a real jal for it followed by its own epilogue rather than
- * tail-jumping into srsAtan2; a value read after the call reproduces that
- * (this compiler otherwise folds a trailing call with nothing after it into
- * a sibling jump).
- */
 void MMathCalcDir(const Vector4 *from, const Vector4 *to)
 {
     float toX;
@@ -408,15 +372,87 @@ void MMathCalcDir(const Vector4 *from, const Vector4 *to)
     toX = to->x;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcAngle);
+Vector4 *MMathCalcAngle(Vector4 *out, Vector4 *source, Vector4 *target)
+{
+    Vector4 difference;
+    register float lengthXZ asm("$f13") = 0.0f;
+    register const Vector4 *sourceArg asm("$5") = source;
+    register const Vector4 *targetArg asm("$6") = target;
+    /* GPR8 first carries an EE32 default-vector address, then the low
+     * word of QMFC2's vector result for its transfer to COP1. */
+    register unsigned int transferWord asm("$8");
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathCalcAngleCam);
+    __asm__ __volatile__("" : : "f"(lengthXZ));
+    transferWord = (unsigned int)&McMathUnitVector;
 
-/*
- * MMathAddRotateVectorY: rotate "offset" about the Y axis by "angle" (VU0
- * macro-mode sin/cos at 0xe8/0x20) and add the result to "base", storing the
- * sum at "destination".
- */
+    if (!targetArg)
+        targetArg = (const Vector4 *)transferWord;
+    if (!sourceArg)
+        sourceArg = (const Vector4 *)transferWord;
+
+    __asm__ __volatile__(
+        "lqc2 vf1,0(%3)\n\t"
+        "lqc2 vf2,0(%4)\n\t"
+        "vsub.xyz vf3,vf2,vf1\n\t"
+        "vmul.xz vf4,vf3,vf3\n\t"
+        "vaddz.x vf4,vf4,vf4z\n\t"
+        "vsqrt Q,vf4x\n\t"
+        "sqc2 vf3,0(%5)\n\t"
+        "sqc2 vf0,0(%2)\n\t"
+        "vwaitq\n\t"
+        "vaddq.x vf1,vf0,Q\n\t"
+        "qmfc2 %1,vf1\n\t"
+        "mtc1 %1,%0"
+        : "+f"(lengthXZ), "=&r"(transferWord)
+        : "r"(out), "r"(sourceArg), "r"(targetArg), "r"(&difference)
+        : "memory");
+
+    out->x = srsAtan2(difference.y, lengthXZ);
+    out->y = srsAtan2(difference.x, difference.z);
+    return out;
+}
+
+Vector4 *MMathCalcAngleCam(Vector4 *out, Vector4 *source, Vector4 *target)
+{
+    Vector4 difference;
+    register float lengthXZ asm("$f13") = 0.0f;
+    register const Vector4 *sourceArg asm("$5") = source;
+    register const Vector4 *targetArg asm("$6") = target;
+    /* GPR8 first carries an EE32 default-vector address, then the low
+     * word of QMFC2's vector result for its transfer to COP1. */
+    register unsigned int transferWord asm("$8");
+
+    __asm__ __volatile__("" : : "f"(lengthXZ));
+    transferWord = (unsigned int)&McMathUnitVector;
+
+    if (!targetArg)
+        targetArg = (const Vector4 *)transferWord;
+    if (!sourceArg)
+        sourceArg = (const Vector4 *)transferWord;
+
+    __asm__ __volatile__(
+        "lqc2 vf1,0(%3)\n\t"
+        "lqc2 vf2,0(%4)\n\t"
+        "vsub.xyz vf3,vf1,vf2\n\t"
+        "vmul.xz vf4,vf3,vf3\n\t"
+        "vaddz.x vf4,vf4,vf4z\n\t"
+        "vsqrt Q,vf4x\n\t"
+        "vsub.y vf3y,vf2y,vf1y\n\t"
+        "sqc2 vf3,0(%5)\n\t"
+        "sqc2 vf0,0(%2)\n\t"
+        "vwaitq\n\t"
+        "vaddq.x vf1,vf0,Q\n\t"
+        "qmfc2 %1,vf1\n\t"
+        "mtc1 %1,%0"
+        : "+f"(lengthXZ), "=&r"(transferWord)
+        : "r"(out), "r"(sourceArg), "r"(targetArg), "r"(&difference)
+        : "memory");
+
+    out->x = srsAtan2(difference.y, lengthXZ);
+    out->y = srsAtan2(difference.x, difference.z);
+    return out;
+}
+
 Vector4 *MMathAddRotateVectorY(Vector4 *destination, float angle, const Vector4 *base, const Vector4 *offset)
 {
     __asm__ __volatile__(
@@ -441,12 +477,6 @@ Vector4 *MMathAddRotateVectorY(Vector4 *destination, float angle, const Vector4 
     return destination;
 }
 
-/*
- * MMathCalcOffset: compose a position offset from two lane-packed angles
- * (yaw in "first"'s w and "second"'s y, pitch chained through "second"'s x)
- * with VU0 macro-mode sin/cos (0xe8/0x20), scale it by "second"'s w and add
- * it to "first", storing the sum at "destination".
- */
 Vector4 *MMathCalcOffset(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -473,10 +503,6 @@ Vector4 *MMathCalcOffset(Vector4 *destination, const Vector4 *first, const Vecto
     return destination;
 }
 
-/*
- * MMathCalcOffsetXYZ: the single-angle-chain counterpart of MMathCalcOffset
- * (angle taken from "first"'s w only), same VU0 macro-mode sin/cos shape.
- */
 Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -498,7 +524,6 @@ Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, const Ve
     return destination;
 }
 
-/* MMathSubVectorMulS: destination = (first - second) * scale (xyz only). */
 Vector4 *MMathSubVectorMulS(Vector4 *destination, const Vector4 *first, const Vector4 *second, float scale)
 {
     __asm__ __volatile__(
@@ -514,7 +539,6 @@ Vector4 *MMathSubVectorMulS(Vector4 *destination, const Vector4 *first, const Ve
     return destination;
 }
 
-/* MMathSubVectorDivS: destination = (first - second) / scale (xyz only). */
 Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first, const Vector4 *second, float scale)
 {
     __asm__ __volatile__(
@@ -532,10 +556,6 @@ Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first, const Ve
     return destination;
 }
 
-/*
- * MMathDivVector: destination.xyz = first.xyz / second.xyz (lane by lane,
- * VU0 macro-mode divider unit); destination.w is passed through from first.
- */
 Vector4 *MMathDivVector(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -557,7 +577,6 @@ Vector4 *MMathDivVector(Vector4 *destination, const Vector4 *first, const Vector
     return destination;
 }
 
-/* MMathDivVectorS: destination.xyz = source.xyz / scale. */
 Vector4 *MMathDivVectorS(Vector4 *destination, const Vector4 *source, float scale)
 {
     __asm__ __volatile__(
@@ -573,7 +592,6 @@ Vector4 *MMathDivVectorS(Vector4 *destination, const Vector4 *source, float scal
     return destination;
 }
 
-/* MMathDivVector4: destination = first / second, all four lanes. */
 Vector4 *MMathDivVector4(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -598,7 +616,6 @@ Vector4 *MMathDivVector4(Vector4 *destination, const Vector4 *first, const Vecto
     return destination;
 }
 
-/* MMathDivVectorS4: destination = source / scale, all four lanes. */
 Vector4 *MMathDivVectorS4(Vector4 *destination, const Vector4 *source, float scale)
 {
     __asm__ __volatile__(
@@ -618,7 +635,6 @@ INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathIsVectorEqual);
 
 INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathIsVectorEqual4);
 
-/* MMathVectorDotProduct: xyz dot product, reduced through vf1's x lane. */
 float MMathVectorDotProduct(const Vector4 *first, const Vector4 *second)
 {
     float result;
@@ -635,7 +651,6 @@ float MMathVectorDotProduct(const Vector4 *first, const Vector4 *second)
     return result;
 }
 
-/* MMathVectorCrossProduct: destination.xyz = first x second, w forced to 1.0. */
 Vector4 *MMathVectorCrossProduct(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -650,7 +665,6 @@ Vector4 *MMathVectorCrossProduct(Vector4 *destination, const Vector4 *first, con
     return destination;
 }
 
-/* MMathVectorInterpolation: destination = first * (1 - parameter) + second * parameter. */
 Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first, const Vector4 *second, float parameter)
 {
     __asm__ __volatile__(
@@ -1057,15 +1071,6 @@ Matrix4 *MMathTranslateMatrix(Matrix4 *out, const Matrix4 *matrix, const Vector4
     return out;
 }
 
-/*
- * MMathCalcMatrixVector: build an orientation matrix that faces "direction",
- * starting from the identity (built in VU0 registers via vmr32 rotations of
- * the hardwired vf0 = (0,0,0,1), instead of loading McMathUnitMatrix from
- * memory) and then applying a yaw rotation (atan2 of direction.x,
- * direction.z) followed by a pitch rotation (atan2 of direction.y, the
- * vector's XZ length). When direction has no XZ component the yaw rotation
- * is skipped (undefined for a vector pointing straight up/down).
- */
 Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
 {
     float directionX;
@@ -1088,11 +1093,6 @@ Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
     return out;
 }
 
-/*
- * MMathCalcVectorMatrix: loads the matrix row at offset 0x20 (the third row)
- * and writes VF00 - row to the output. VF00 is the VU0 hardwired constant
- * (0, 0, 0, 1), so this negates the row's x/y/z and produces w = 1 - row.w.
- */
 Vector4 *MMathCalcVectorMatrix(Vector4 *out, const Matrix4 *matrix)
 {
     __asm__ __volatile__(
@@ -1104,12 +1104,6 @@ Vector4 *MMathCalcVectorMatrix(Vector4 *out, const Matrix4 *matrix)
     return out;
 }
 
-/*
- * MMathCalcAngleMatrix: recover the yaw/pitch pair of "matrix" from the
- * direction vector MMathCalcVectorMatrix reads out of its third row. out->z
- * and out->w come from the leading "sqc2 vf0" (VU0's hardwired (0,0,0,1))
- * and are never overwritten; out->x is yaw, out->y is pitch.
- */
 Vector4 *MMathCalcAngleMatrix(Vector4 *out, const Matrix4 *matrix)
 {
     Vector4 direction;
@@ -1121,12 +1115,6 @@ Vector4 *MMathCalcAngleMatrix(Vector4 *out, const Matrix4 *matrix)
     return out;
 }
 
-/*
- * MMathRotTransPers: transform "point" by "matrix", perspective-divide by
- * the resulting w, then scale/offset it into screen space with
- * camera->screenScale and camera->screenOffset (fields at 0x80/0x70,
- * StudioCamera) and store the fixed-point result at "destination".
- */
 void MMathRotTransPers(Vector4 *destination, const StudioCamera *camera, const Matrix4 *matrix, const Vector4 *point)
 {
     __asm__ __volatile__(
@@ -1154,4 +1142,56 @@ void MMathRotTransPers(Vector4 *destination, const StudioCamera *camera, const M
         : : "r"(point), "r"(matrix), "r"(&camera->screenScale), "r"(&camera->screenOffset), "r"(destination) : "memory");
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/m_math", MMathRotTransPersClip);
+int MMathRotTransPersClip(Vector4 *destination, const StudioCamera *camera, const Matrix4 *matrix, const Vector4 *point)
+{
+    register int clipped_mask __asm__("$9");
+    int result;
+
+    __asm__ __volatile__(
+        "lqc2 vf1, 0(%0)\n\t"
+        "lqc2 vf2, 0(%1)\n\t"
+        "lqc2 vf3, 16(%1)\n\t"
+        "lqc2 vf4, 32(%1)\n\t"
+        "lqc2 vf5, 48(%1)\n\t"
+        "vmulax.xyzw ACC, vf2, vf1x\n\t"
+        "vmadday.xyzw ACC, vf3, vf1y\n\t"
+        "vmaddaz.xyzw ACC, vf4, vf1z\n\t"
+        "vmaddw.xyzw vf1, vf5, vf1w\n\t"
+        "vdiv Q, vf0w, vf1w\n\t"
+        "ctc2.ni $0, $vi18\n\t"
+        "lqc2 vf2, 0(%2)\n\t"
+        "lqc2 vf3, 0(%3)\n\t"
+        :
+        : "r"(point), "r"(matrix), "r"(&camera->screenScale), "r"(&camera->screenOffset)
+        : "memory");
+
+    clipped_mask = 0x8000;
+
+    __asm__ __volatile__(
+        "vwaitq\n\t"
+        "vmulq.xyz vf4, vf1, Q\n\t"
+        "vclipw.xyz vf4xyz, vf0w\n\t"
+        "vmula.xyz ACC, vf4, vf2\n\t"
+        "vmaddw.xyz vf5, vf3, vf0w\n\t"
+        "vftoi4.xy vf1, vf5\n\t"
+        "vftoi0.z vf1, vf5\n\t"
+        "cfc2.ni %0, $vi18\n\t"
+        "nop"
+        : "=r"(result)
+        :
+        : "memory");
+
+    if (result != 0)
+        result = clipped_mask;
+
+    __asm__ __volatile__(
+        "qmtc2.ni %0, vf2\n\t"
+        "vmr32.w vf1, vf2\n\t"
+        "sqc2 vf1, 0(%1)\n\t"
+        "nop"
+        :
+        : "r"(result), "r"(destination)
+        : "memory");
+
+    return result;
+}

@@ -225,7 +225,7 @@ int entryPhase26(void)
     return 1;
 }
 
-extern int dataCdSync(void);
+
 extern int selectPL(int excludeUnit);
 extern void dataSndSeLoad(int unit, int seId);
 extern int entryPhase31(void);
@@ -266,9 +266,9 @@ int entryPhase31(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/entry_first_init", entryPhase35);
 
-extern void dataUnitFileLoad2(int unit);
-extern int entryPhase35(void);
-extern int sefCheckLoad(void);
+
+
+
 static int pCreateUnit;
 
 int entryPhase36(void)
@@ -280,7 +280,7 @@ int entryPhase36(void)
     return 1;
 }
 
-extern int cfEncountGet(void);
+
 extern void calcCfEncount(int flags);
 extern void thinkInitExec(void);
 extern void sdvSaveAmbient(void);
@@ -335,8 +335,8 @@ int entryPhase50(void)
     return 1;
 }
 
-extern void dataSndSeLoad2(int unit);
-extern void sndSeTransPlay(int unit, int seId, int volume);
+
+
 int entryPhase60(void);
 
 int entryPhase51(void)
@@ -403,7 +403,7 @@ int entryPhase90(void) {
 
 extern void calcDeadReset(void);
 extern void dataLeaderReload(void);
-extern int sndMuStop(void);
+
 
 int entryPhase100(void) {
     calcDeadReset();
@@ -503,7 +503,7 @@ int fadeIn(int speed, int delay) {
 }
 
 void fadeOutObj(FadeObjTask *self);
-extern void fadeObjDraw(FadeObjTask *self);
+
 
 int fadeOut(int speed, int delay) {
     FadeObjTask *self;
@@ -535,7 +535,7 @@ void fadeInObj(ObjectTask *task) {
     }
 }
 
-extern void fadeObjDraw(FadeObjTask *self);
+
 
 void fadeOutObj(FadeObjTask *self)
 {

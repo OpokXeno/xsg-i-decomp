@@ -18,10 +18,10 @@
  "tools": {
   "ee-gcc2.96-realconv-lp7": {
    "role": "cc1 of every GCC 2.96-family compile contract (game and runtime C)",
-   "dir": "ee-gcc2.96-realconv-lp7-fsv3-v1/bin",
-   "version": "gcc 2.96-ee-001003-1 (cc1), locally patched: realconv + lp7 + fsv3",
+   "dir": "ee-gcc2.96-realconv-lp7-fsv4-v1/bin",
+   "version": "gcc 2.96-ee-001003-1 (cc1), locally patched: realconv + lp7 + fsv3 + fsv4",
    "files": {
-    "cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625",
+    "cc1": "7599b7520faca316c40ba87c46479851dfbf9e83dce557c7757587bac7e6c55f",
     "cpp0": "f6f6b598f39649edfe171d6da8c7f91d07f2b87c2aeeffffbc5f566bfb1a39a9",
     "ee-gcc": "b8c284d16c9c0a0e8788e9522c46881e224ad01fa1c732aed43f821cc32f168b"
    },
@@ -40,13 +40,13 @@
     },
     "rebuild": [
      "Download the base archive and check its SHA-256.",
-     "Extract lib/gcc-lib/ee/2.96-ee-001003-1/{cc1,cpp0} and bin/ee-gcc into <root>/ee-gcc2.96-realconv-lp7-fsv3-v1/bin/.",
+     "Extract lib/gcc-lib/ee/2.96-ee-001003-1/{cc1,cpp0} and bin/ee-gcc into <root>/ee-gcc2.96-realconv-lp7-fsv4-v1/bin/.",
      "cpp0 and ee-gcc are used unmodified.",
-     "Apply the patches below to cc1, in file-offset order (eight single-byte patches and four multi-byte patches: fsv1 and fsv3); the result must hash to the cc1 SHA-256 above."
+     "Apply the patches below to cc1, in file-offset order (eight single-byte patches and five multi-byte patches: fsv1, fsv3 and fsv4); the result must hash to the cc1 SHA-256 above."
     ],
     "cc1_byte_patches": {
      "note": [
-      "Each entry patches the bytes of the extracted cc1 at `file_offset` (one byte, except the fsv1 and fsv3 entries, which replace the given hex strings).",
+      "Each entry patches the bytes of the extracted cc1 at `file_offset` (one byte, except the fsv1, fsv3 and fsv4 entries, which replace the given hex strings).",
       "`old` must be the byte already there; `new` replaces it.",
       "The six `realconv` patches turn the six MASK_MIPS5900 conversion gates",
       "of the bundled e-type float code into unconditional jumps, so decimal",
@@ -66,6 +66,13 @@
       "over debug_rtx_list (only called by the debug-only debug_rtx_find) that gives the",
       "MEM of a non-function, non-small-data decl its type alias set by calling",
       "set_mem_attributes before DECL_RTL is stored. The cave source is cave.s in the release.",
+      "The `fsv4` patch (user decision 2026-10-09, reports/cc1-fsv4-gcse-transp.md)",
+      "supersedes fsv3 on top of it: compute_transp (gcse.c, 0x080f30d6) passes",
+      "rtx_varies_p instead of rtx_addr_varies_p as the varies argument of",
+      "canon_true_dependence, so fixed_scalar_and_varying_struct_p can apply in gcse",
+      "load-PRE transparency: an in-struct store through a varying pointer no longer",
+      "kills a fixed scalar load. FSF gcse.c passes rtx_addr_varies_p there; the",
+      "original EE build is inferred to differ (MenuShopCore, main 0x0024EE80).",
       "Why this is a patched binary and not a published one (public-compiler hunt,",
       "2026-09-12, .work/attempts/tu-public-compiler-hunt/attempt-1/artifact.json):",
       "all 15 public ee-gcc* entries of the pinned decompme catalog revision were",
@@ -182,6 +189,15 @@
        "governs": "clause 2: a LO_SUM mem2_addr counts as non-varying (cmpb $0x90,(%eax))"
       },
       {
+       "group": "fsv4",
+       "file_offset": 700630,
+       "old": "68b0970d08",
+       "new": "68cc950d08",
+       "length": 5,
+       "function": "compute_transp",
+       "governs": "varies argument of call canon_true_dependence (0x080f30e6): push $rtx_addr_varies_p (0x080d97b0) -> push $rtx_varies_p (0x080d95cc)"
+      },
+      {
        "group": "lp7",
        "file_offset": 1593246,
        "old": "0x04",
@@ -201,7 +217,8 @@
      "intermediate_hashes": {
       "realconv_only_cc1": "403fe76c8b2adc1a24c5d0491ac245a8100d57a8341c4d66956a38bd1ab4c754",
       "realconv_lp7_cc1": "50cca55fdbe84716787a64718911435ab0578d6751b90874bedbea3aa381c847",
-      "realconv_lp7_fsv1_cc1": "7abe318da59f6dc6595a7a65766098581d9169a0732786c70db85f688c47f3bf"
+      "realconv_lp7_fsv1_cc1": "7abe318da59f6dc6595a7a65766098581d9169a0732786c70db85f688c47f3bf",
+      "realconv_lp7_fsv3_cc1": "790f9f8ca43d2de4cb3621730d287f779f18102f36e2925768d25245b36f5625"
      }
     },
     "license": "GPL-2.0-or-later (GCC).  The published binary ships without corresponding source; no 2.96-ee-001003 source tree is available, so this is a license reference, not corresponding-source proof.",

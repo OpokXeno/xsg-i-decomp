@@ -36,20 +36,31 @@ extern GsDispEnv DispEnv;
 
 typedef void (*XglRenderFadeCallback)(XglPacket *packet);
 
+/* The selected render flip body reads these resolution fields. */
+typedef struct XglRenderReso {
+    unsigned char unmodeled_00[2];
+    short frame_psm;                   /* +0x02 */
+    short frame_width;                 /* +0x04 */
+    unsigned char unmodeled_06[2];
+} XglRenderReso;
+
 typedef struct XglRenderState {
-    unsigned char unmodeled_00[0x10];
+    XglRenderReso reso;                /* +0x00 */
+    unsigned char unmodeled_08[0x08];
     u16 width;                         /* +0x10 */
     u16 height;                        /* +0x12 */
-    unsigned char unmodeled_14[0x0c];
+    u16 flip_base;                     /* +0x14 */
+    unsigned char unmodeled_16[0x0a];
     u16 display_buffer_base;            /* +0x20 */
     u16 draw_buffer_base;               /* +0x22 */
-    unsigned char unmodeled_24[0x20];
+    XglRenderFadeCallback final_packet_callback[8]; /* +0x24 */
     XglRenderFadeCallback fade_callback; /* +0x44 */
     u32 render_status;                  /* +0x48 */
     u32 frame_delta;                    /* +0x4c */
     u32 frame_count;                    /* +0x50 */
     u32 frame_status;                   /* +0x54 */
-    unsigned char unmodeled_58[4];
+    unsigned char scene_disabled;       /* +0x58 */
+    unsigned char unmodeled_59[3];
 } XglRenderState;
 
 extern XglRenderState sRender;

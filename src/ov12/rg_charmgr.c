@@ -205,11 +205,7 @@ void RgCharMgrGC(RgCharMgr *manager)
     }
 }
 
-/*
- * RgCharControl is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
- * that TU's own header does not publish it, so this follows the RgCharFree
- * precedent above instead of including that TU's own src header.
- */
+/* RgCharControl follows its owning ov12/tu002 declaration (src/ov12/rg_char.h). */
 extern void RgCharControl(RgChar *pChar);
 
 void _RgCharMgrCallControl(RgCharMgr *manager)
@@ -230,11 +226,7 @@ void _RgCharMgrCallControl(RgCharMgr *manager)
     }
 }
 
-/*
- * RgCharDisp is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
- * that TU's own header does not publish it, so this follows the RgCharFree
- * precedent above instead of including that TU's own src header.
- */
+/* RgCharDisp follows its owning ov12/tu002 declaration (src/ov12/rg_char.h). */
 extern void RgCharDisp(RgChar *pChar);
 
 void _RgCharMgrCallDisp(RgCharMgr *manager)
@@ -255,11 +247,7 @@ void _RgCharMgrCallDisp(RgCharMgr *manager)
     }
 }
 
-/*
- * RgCharPassTime is defined and declared by ov12/tu002 (src/ov12/rg_char.h);
- * that TU's own header does not publish it, so this follows the RgCharFree
- * precedent above instead of including that TU's own src header.
- */
+/* RgCharPassTime follows its owning ov12/tu002 declaration (src/ov12/rg_char.h). */
 extern void RgCharPassTime(RgChar *pChar, float deltaTime);
 
 void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime)

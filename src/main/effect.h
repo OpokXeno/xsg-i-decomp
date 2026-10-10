@@ -6,6 +6,7 @@
 #define SRC_MAIN_EFFECT_H
 
 #include "shared.h"
+#include "main/jni.h"
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -116,14 +117,15 @@ typedef struct NativeEffectPeer {
     float scale_x;
     float scale_y;
     float scale_z;
-    unsigned char unmodeled_0ac[0x6bc - 0xac];
+    float scale_w; /* +0xAC: returned by Java_xeno_Effect_getScale__ */
+    unsigned char unmodeled_0b0[0x6bc - 0xb0];
     void *caster_chr;            /* +0x6BC: the xeno.Chr instance's peer */
     void *target_chr;            /* +0x6C0: the xeno.Chr instance's peer */
     EffectUnitPeer *caster_unit; /* +0x6C4 */
     EffectUnitPeer *target_unit; /* +0x6C8 */
     unsigned char unmodeled_6cc[0xa8c - 0x6cc];
-    unsigned char flags;
-    unsigned char unmodeled_a8d[0xa9a - 0xa8d];
+    unsigned int flags; /* +0xA8C: force-loop, clip, and no-attach bits */
+    unsigned char unmodeled_a90[0xa9a - 0xa90];
     unsigned char display; /* +0xA9A: Java_xeno_Effect_disp__Z */
 } NativeEffectPeer;
 
@@ -137,10 +139,6 @@ struct EffectUnitPeer {
     unsigned char unmodeled_000[0xe8];
     NativeEffectPeer *caster_effect; /* +0xE8 */
 };
-
-extern void *classJava_xeno_Effect;
-
-extern void *classJava_xeno_Chr;
 
 /* Field-name string constants, byte-identical in the original binary:
    D_004DC130 "id", D_004DC138 "args", D_004DC140 "peer", D_004DC148 "px",

@@ -370,7 +370,7 @@ void _HitBgAttackType(RgWeaponAttackType *weapon, int bgObject)
     }
 }
 
-extern void CreateRgHitEffectPosDir(int id, RgVector direction, const void *param3, const void *param4);
+extern void CreateRgHitEffectPosDir(int id, RgVector direction, const void *, const void *);
 extern int RgRobotGetGeom(int robotId);
 extern void RgRobotGiveDamage(int robotId, RgVector direction, int flags, float damage);
 extern void RgRobotInvalidAttack(int robotId, RgVector direction, float damage);

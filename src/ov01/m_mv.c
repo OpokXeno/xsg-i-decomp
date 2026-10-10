@@ -41,7 +41,7 @@ typedef struct MvGifEnvironment {
     u64 transfer_tag;
 } MvGifEnvironment;
 
-extern MvGifEnvironment mvEnv;
+
 
 typedef struct MvRenderControl {
     unsigned char unmodeled_00[0x14];
@@ -49,10 +49,10 @@ typedef struct MvRenderControl {
 } MvRenderControl;
 
 #define MV_RENDER_STATE ((MvRenderControl *) 0x004a90e0)
-extern PadPrefix PadData;
-extern void FlushCache(int mode);
-extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
-extern int xglMoviePlay(void *movie);
+
+
+
+
 void MMvStop(void);
 
 /* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */

@@ -17,7 +17,7 @@
  */
 typedef struct MenuTextEntry {
     const char *name;
-    unsigned char unmodeled_04[4];
+    const unsigned char *auxiliary;
     const unsigned char *sortName;
 } MenuTextEntry;
 

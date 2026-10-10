@@ -331,10 +331,7 @@ void menuMapHSet(int enable)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuMapDisp);
 
-/*
- * ov01/tu008 src/ov01/gr_gp_init.c, still asm there; forward-declared here
- * until that TU publishes its header.
- */
+/* Defined by ov01/tu008 (src/ov01/gr_gp_init.c). */
 extern void grCloseSpr(void);
 extern void grGsRegSet(int packet, int reg, int value);
 extern void grOpenSpr(int packet);
@@ -452,7 +449,6 @@ void menuStatObjDraw(ObjectTask *task) {
     }
 }
 
-#include "ov01/calc.h"
 
 /* calcUPGet's return type comes from its definer, ov01/tu004 calc.c
  * (published include/ov01/calc.h); calcUPGet itself is still asm there, so

@@ -61,6 +61,23 @@ typedef unsigned char EnemyStateBlock[0x38b0];
  * between +0x70 and +0x80 is recovered, so the slot number at +0x80 and the
  * target angle at +0x9e4 stay outside it and keep the byte view below.
  */
+struct Actor;
+typedef struct ActorHead {
+    u32 flags;
+    void (*update)(struct Actor *actor);
+    void (*draw)(struct Actor *actor);
+    u32 quadword_alignment_gap;
+    Vector4 position;
+    Vector4 previous_position;
+    Vector4 velocity;
+    Vector4 acceleration;
+    Vector4 rotation;
+    Vector4 scale;
+} ActorHead;
+
+/* The 0x70-byte ActorHead remains the embedded prefix. Set_Motion and
+ * Sound_FootStep additionally read or write the named Actor members below at
+ * offsets confirmed by their field accesses and neighboring actor code. */
 typedef struct Actor {
     u32 flags;
     void (*update)(struct Actor *actor);
@@ -72,6 +89,17 @@ typedef struct Actor {
     Vector4 acceleration;
     Vector4 rotation;
     Vector4 scale;
+    unsigned char unmodeled_70[0xb0 - 0x70];
+    short last_step_distance;               /* +0xb0, Sound_FootStep */
+    unsigned char unmodeled_b2[0x6f0 - 0xb2];
+    unsigned int movement_flags;             /* +0x6f0, Sound_FootStep */
+    float movement_distance;                 /* +0x6f4, Sound_FootStep */
+    unsigned char unmodeled_6f8[0x704 - 0x6f8];
+    unsigned short motion_id;                /* +0x704, Sound_FootStep */
+    unsigned char unmodeled_706[0x714 - 0x706];
+    float motion_parameter;                  /* +0x714, Set_Motion */
+    unsigned char unmodeled_718[0x744 - 0x718];
+    float copied_motion_parameter;           /* +0x744, Set_Motion */
 } Actor;
 
 /* The actor's target facing angle, in radians like Actor.rotation.
@@ -237,5 +265,19 @@ typedef struct Actor {
 
 #define ENEMY_JAVA_REACTION(entry) \
     ((int *)((unsigned char *)(entry) + ENEMY_JAVA_REACTION_OFFSET))
+
+typedef struct EnemyJavaReactionWord {
+    int value;
+} EnemyJavaReactionWord;
+
+#define ENEMY_JAVA_REACTION_AT(entry, offset) \
+    ((EnemyJavaReactionWord *)((unsigned char *)(entry) + (offset)))
+
+#define ENEMY_ACTION_STATE_OFFSET 0x48
+
+/* Set_Motion copies this value from the per-enemy entry at +0x3858. */
+#define ENEMY_MOTION_PARAMETER_OFFSET 0x3858
+#define ENEMY_MOTION_PARAMETER(entry) \
+    ((float *)((unsigned char *)(entry) + ENEMY_MOTION_PARAMETER_OFFSET))
 
 #endif /* SRC_MAIN_SET_MOTION_H */

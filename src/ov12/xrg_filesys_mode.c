@@ -18,14 +18,7 @@ const char D_00A58F00[16] = "pBuf != NIL";
 #define MODE_STACK_DEPTH 8
 extern void assert_prog(const char *expression, const char *source_file,
                         int line);
-extern unsigned int strlen(const char *string);
-extern char *strcpy(char *destination, const char *source);
-extern char *strcat(char *destination, const char *source);
-extern int xglCdGetFileSize(const char *name);
-extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-extern const char root_name_name_check[];
-extern const char root_name_source_file[];
-extern const char root_name_result_check[];
+
 extern void *RgHeapAlloc(void *heap, unsigned int size, const char *source_file,
                          int line);
 extern void RgError(const char *message, const char *source_file, int line, ...);

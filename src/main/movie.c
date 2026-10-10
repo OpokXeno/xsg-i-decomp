@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/jni.h"
 
 /* GameMovieStop is defined in main/tu125 (src/main/game_movie.c), not yet
  * recovered. */
@@ -25,7 +26,6 @@ extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern short GameMovieFrame;
 extern unsigned char GameMovieTransparent;
 extern unsigned char GameMovieAlpha;
-extern void *classJava_xeno_Movie;
 
 extern void GameMoviePlay(char *path);
 

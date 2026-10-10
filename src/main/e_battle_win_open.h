@@ -13,7 +13,7 @@
  * calls WindowDXSet embeds one of (TopStatusWinMain, the Char/Agws/Menu*Main
  * family, eBattleWinOpen/2/3/4, ...). Only the members WindowDXSet itself
  * writes are modelled here:
- *   +0x0C tag_id             -- WindowDXMain passes it as eTagFontSet's
+ *   +0x0C tag_id             -- borrowed title text passed as eTagFontSet's
  *                                second argument (`lw $5,0xC($16)` in the
  *                                delay slot of `jal eTagFontSet`, $4 =
  *                                window+0x80).
@@ -32,22 +32,231 @@
  * recovered.
  */
 typedef struct WindowDX WindowDX;
+
+typedef struct WindowDXRect {
+    short x;
+    short y;
+    int style;
+    short width;
+    short height;
+} WindowDXRect;
+
+typedef struct WindowDXFrame {
+    unsigned char unmodeled_00[4];
+    short x;
+    short y;
+    int style;
+    short width;
+    short height;
+    signed char progress;
+    unsigned char mode;
+    unsigned char unmodeled_12[0x44 - 0x12];
+} WindowDXFrame;
+
+typedef struct WindowDXRibbonCell {
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+    unsigned char a;
+    unsigned char unmodeled_04[8];
+} WindowDXRibbonCell;
+
+typedef struct WindowDXRibbon {
+    short x;
+    short y;
+    int style;
+    short width;
+    short height;
+    unsigned char unmodeled_0c[0x18 - 0x0c];
+    WindowDXRibbonCell cells[6];
+    unsigned char unmodeled_60[0x70 - 0x60];
+} WindowDXRibbon;
+
+typedef struct WindowDXSprite {
+    unsigned char unmodeled_00[0x10];
+    unsigned short kind;
+    unsigned char unmodeled_12[0x14 - 0x12];
+} WindowDXSprite;
+
+typedef struct BattleWinTagFont {
+    unsigned char unmodeled_00[4];
+    short x;
+    short y;
+    int style;
+    unsigned char color_r;
+    unsigned char color_g;
+    unsigned char color_b;
+    unsigned char color_a;
+    unsigned char unmodeled_10[0x20 - 0x10];
+} BattleWinTagFont;
+
+typedef struct BattleWinMessage {
+    unsigned char unmodeled_00;
+    unsigned char mode;
+    unsigned char unmodeled_02[2];
+    short x;
+    short y;
+    int extent;
+    unsigned char unmodeled_0c[4];
+    unsigned char color_r;
+    unsigned char color_g;
+    unsigned char color_b;
+    unsigned char unmodeled_13[0x18 - 0x13];
+    const char *text;
+    unsigned char paged;
+    unsigned char unmodeled_1d[0x44 - 0x1d];
+} BattleWinMessage;
+
+typedef struct BattleWinNumber {
+    short x;
+    short y;
+    int style;
+    unsigned char color_r;
+    unsigned char color_g;
+    unsigned char color_b;
+    unsigned char unmodeled_0b;
+    unsigned char font;
+    unsigned char unmodeled_0d;
+    unsigned char option;
+    unsigned char places;
+    unsigned char unmodeled_10[4];
+    int value;
+    unsigned char unmodeled_18[0x90 - 0x18];
+} BattleWinNumber;
+
+typedef struct BattleWinCursor {
+    unsigned char mode;
+    unsigned char shown;
+    unsigned char unmodeled_02[2];
+    short x;
+    short y;
+    int style;
+    unsigned char unmodeled_0c[0x24 - 0x0c];
+} BattleWinCursor;
+
+typedef struct BattleWinCommand {
+    const char *text;
+    const char *description;
+    unsigned char flags;
+    signed char icon;
+    unsigned char unmodeled_0a[2];
+} BattleWinCommand;
+
+typedef struct BattleWinItem {
+    const char *text;
+    int icon;
+    signed char flags;
+    unsigned char unmodeled_09[3];
+} BattleWinItem;
+
 struct WindowDX {
-    unsigned char unmodeled_00[0xC];
-    int tag_id;                        /* +0x0C */
+    short x;                           /* +0x00 */
+    short y;                           /* +0x02 */
+    int style;                         /* +0x04 */
+    short width;                       /* +0x08 */
+    short height;                      /* +0x0A */
+    const char *tag_id;                 /* +0x0C: title text */
     unsigned char state;               /* +0x10 */
     unsigned char ribbon_initialized;  /* +0x11 */
     unsigned char unmodeled_12[2];
     void (*close_callback)(WindowDX *window, void *arg); /* +0x14 */
     void *close_callback_arg;          /* +0x18 */
-    unsigned char unmodeled_1c[16];
+    unsigned char unmodeled_1c[4];
+    WindowDXRect rect;                 /* +0x20 */
     unsigned char color_r;             /* +0x2C */
     unsigned char color_g;             /* +0x2D */
     unsigned char color_b;             /* +0x2E */
     unsigned char alpha;               /* +0x2F */
+    unsigned char unmodeled_30[0x3C - 0x30];
+    WindowDXFrame frame;               /* +0x3C */
+    BattleWinTagFont title_font;        /* +0x80 */
+    WindowDXRibbon ribbon_top;          /* +0xA0 */
+    WindowDXRibbon ribbon_bottom;       /* +0x110 */
+    WindowDXSprite sprite;              /* +0x180 */
 };
 
 void WindowDXSet(WindowDX *window);
+
+typedef struct WindowSPCursor {
+    unsigned char state;
+    unsigned char draw_flags;
+    unsigned char anim;
+    unsigned char unmodeled_03;
+    short x;
+    short y;
+    int style;
+    short width;
+    short height;
+    const char *title;
+    signed char columns;
+    signed char rows;
+    unsigned char unmodeled_16[2];
+    int buttons;
+    BattleWinItem *items;
+    signed char visible_top;
+    signed char visible_bottom;
+    signed char visible_cols;
+    signed char visible_rows;
+    signed char current_row;
+    signed char max_scroll;
+    signed char mode;
+    unsigned char unmodeled_27;
+    short selected_index;
+    short item_count;
+    WindowDX window;
+    BattleWinCursor cursors[3];
+    BattleWinMessage messages[24];
+    BattleWinNumber numbers[26];
+    WindowDXRect rect;
+} WindowSPCursor;
+
+typedef unsigned char WindowSPKeepBuffer[5];
+
+typedef struct BattleWinPad {
+    unsigned char unmodeled_00[0x2A];
+    unsigned short half_2a;
+    unsigned char unmodeled_2c[6];
+    unsigned short half_32;
+    unsigned short half_34;
+} BattleWinPad;
+
+extern BattleWinPad PadData;
+
+typedef struct BattleWinTask {
+    unsigned char unmodeled_00[0x1C];
+    int buttons;
+    int selection;
+} BattleWinTask;
+
+void WindowDXMain(WindowDX *window);
+int WindowSPSelect(WindowSPCursor *cursor, int button_flags);
+void WindowSPSet(WindowSPCursor *list);
+void WindowSPItemChange(WindowSPCursor *list);
+void WindowSPSelectJump(WindowSPCursor *list, int index);
+void WindowSPMain(WindowSPCursor *list);
+void WindowSPSetSelect(WindowSPCursor *list, unsigned char *keep);
+void subMWModeExSet(WindowSPCursor *list);
+void subMWPosSet(WindowSPCursor *list);
+void subMWDraw(WindowSPCursor *list);
+void subMWControlType00(WindowSPCursor *list);
+void subMWControlType01(WindowSPCursor *list);
+void endPrintExtFunc(int color, int id, void *data);
+void eTagFontMain(void *tag);
+void eNumberMain(void *number);
+void eMessageSet(void *message, const char *text);
+void eMessageTextChange(void *message, const char *text);
+void eMessageMain(void *message);
+int eMessageNextPage(void *message, int reset_page);
+void OpenCloseMain(void *controller);
+void endSpriteSet(void *sprite, int mode);
+void eTagFontSet(void *tag, const char *text);
+void eRibbonSet(void *ribbon, int kind);
+void eRibbonMain(void *ribbon);
+void eNumberSet(void *number, int mode);
+void eCursolSet(void *cursor, int index);
+void eCursolMain(void *cursor);
+void eCursolModeChange(void *cursor, int mode);
+void xglSoundEffectNormalID(int id, int volume);
 
 /*
  * BW is the work area eBattleWinOpen/eBattleWinMain/eBattleWinClose share
@@ -61,12 +270,13 @@ void WindowDXSet(WindowDX *window);
  */
 typedef struct BattleWindow BattleWindow;
 struct BattleWindow {
-    unsigned char unmodeled_00[8];
-    unsigned char state;      /* +0x0008 */
-    unsigned char unmodeled_09[0x1740 - 9];
-    WindowDX window;          /* +0x1740 */
-    unsigned char unmodeled_1770[0x18D5 - (0x1740 + 0x30)];
-    unsigned char active;     /* +0x18D5 */
+    unsigned char unmodeled_00;
+    unsigned char mode;              /* +0x0001 */
+    unsigned char unmodeled_02[2];
+    BattleWinCommand *commands;      /* +0x0004 */
+    WindowSPCursor list;             /* +0x0008 */
+    WindowDX window;                 /* +0x1740 */
+    BattleWinMessage message;        /* +0x18D4 */
 };
 
 extern BattleWindow *BW;
@@ -80,8 +290,10 @@ void eBattleWinClose(void *window);
  */
 typedef struct BattleWindow2 BattleWindow2;
 struct BattleWindow2 {
-    unsigned char unmodeled_00[8];
-    WindowDX window; /* +0x0008 */
+    int active;                        /* +0x00 */
+    int text_offset;                   /* +0x04 */
+    WindowDX window;                   /* +0x0008 */
+    BattleWinMessage message;          /* +0x019C */
 };
 
 extern BattleWindow2 *BW2;
@@ -97,10 +309,15 @@ void eBattleWinClose2(void);
  */
 typedef struct BattleWindow3 BattleWindow3;
 struct BattleWindow3 {
-    unsigned char unmodeled_00[4];
-    WindowDX window;              /* +0x0004 */
-    unsigned char unmodeled_34[0x324 - (4 + 0x30)];
-    unsigned char secondary_state; /* +0x0324 */
+    int active;                    /* +0x0000 */
+    WindowDX window;               /* +0x0004 */
+    BattleWinMessage messages[3];  /* +0x0198 */
+    BattleWinTagFont tag_font;     /* +0x0264 */
+    BattleWinNumber number;        /* +0x0284 */
+    WindowDX window2;              /* +0x0314 */
+    BattleWinTagFont tag_fonts[5]; /* +0x04A8 */
+    BattleWinNumber numbers[5];    /* +0x0548 */
+    BattleWinMessage messages2[4]; /* +0x0818 */
 };
 
 extern BattleWindow3 *BW3;
@@ -115,9 +332,10 @@ void eBattleWinClose3(void);
  */
 typedef struct BattleWindow4 BattleWindow4;
 struct BattleWindow4 {
-    unsigned char unmodeled_00[4];
-    int page;         /* +0x0004 */
-    WindowDX window;  /* +0x0008 */
+    int active;               /* +0x0000 */
+    int page;                 /* +0x0004 */
+    WindowDX window;          /* +0x0008 */
+    BattleWinMessage message; /* +0x019C */
 };
 
 extern BattleWindow4 *BW4;
@@ -161,17 +379,6 @@ void eBattleWinInit(void);
  * Everything else is unmodeled until a function that reads or writes it is
  * recovered.
  */
-typedef struct WindowSPCursor {
-    unsigned char unmodeled_00[0x20];
-    unsigned char visible_top;    /* +0x20 */
-    unsigned char visible_bottom; /* +0x21 */
-    unsigned char unmodeled_22[2];
-    unsigned char current_row;    /* +0x24 */
-    unsigned char unmodeled_25[3];
-    short selected_index;         /* +0x28 */
-    short item_count;             /* +0x2A */
-} WindowSPCursor;
-
 /*
  * A saved snapshot of one WindowSPCursor: item_count, selected_index,
  * visible_top, visible_bottom and current_row packed into 5 bytes in that

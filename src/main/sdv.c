@@ -1,34 +1,127 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "sdv.h"
+
 #include "m_ef_obj.h"
 
 static float _sdvMapRgb[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
 static float _sdvAmbient[4] = {0.25f, 0.25f, 0.25f, 1.0f};
+
 const float McMathUnitMatrix[4][4] = {
     {1.0f, 0.0f, 0.0f, 0.0f},
     {0.0f, 1.0f, 0.0f, 0.0f},
     {0.0f, 0.0f, 1.0f, 0.0f},
     {0.0f, 0.0f, 0.0f, 1.0f},
 };
+
 static short _sdvSpecialBuf[8];
+
 static SdvAlter _sdvAlter[16];
+
 static int _sdvAmbFrame = 0;
+
 static int _sdvAmbState = 0;
+
 static unsigned char charID_0;
+
 static int eftCate_1;
+
 unsigned short itmBox[255] = {0};
+
 unsigned short wpnBox[255] = {0};
+
 unsigned short bltBox[255] = {0};
+
 unsigned short accBox[255] = {0};
+
 unsigned short evtBox[255] = {0};
+
 long long moneyBox = 0;
+
 unsigned char orgData[33][0x180] = {{0}};
+
 unsigned char batDatBuf[0x10000] = {0};
+
 unsigned char thinkBuf[0x4000] = {0};
+
 MEfObjCamParams mefCamParams = {0};
 
 extern void *memset(void *, int, unsigned int);
+
+extern Vector4 *MMathVectorInterpolation(Vector4 *destination,
+                                         const Vector4 *first,
+                                         const Vector4 *second,
+                                         float parameter);
+
+extern unsigned char *sefGetBattleData(void);
+
+extern short _hitFlag;
+
+extern short _hitSignal;
+
+typedef struct SdvSequence {
+    unsigned int event_address;
+    unsigned char unmodeled_04[4];
+    int elapsed;
+    int position;
+    int stride;
+    int last_sound;
+} SdvSequence;
+
+extern void sefMemZero(void *data, unsigned int size);
+
+const Vector4 McMathUnitVector = {0.0f, 0.0f, 0.0f, 1.0f};
+
+static int serial_3 = 0;
+
+extern Vector4 *func_A2C3F8(void);
+
+extern int sefGetDmgNull(void);
+
+extern void sefGetPosition(Vector4 *position, void *actor, int part);
+
+extern int _nowEftNo;
+
+extern void func_A31500(float *params, int kind);
+
+extern void func_A31AE0(int kind, void *params);
+
+extern void func_A31BB8(int kind);
+
+extern int func_A31C30(int kind);
+
+extern void func_A31CA0(int value0, int value1, int value2, int value3,
+                        int value4);
+
+
+
+typedef struct SdvCameraParam {
+    int kind;
+    unsigned char unmodeled_04[12];
+    Vector4 position;
+    int actor;
+    int actor_number;
+    int part;
+    int source_actor;
+    int source_number;
+    int source_part;
+    int target_actor;
+    int target_number;
+    int target_part;
+    unsigned char unmodeled_44[40];
+    float weight;
+} SdvCameraParam;
+
+typedef struct SdvBattleCameraActors {
+    int source_actor;
+    int target_actor;
+    unsigned char unmodeled_08[8];
+    short source_number;
+    short target_number;
+} SdvBattleCameraActors;
 
 void sdvInitAmbient(void)
 {
@@ -36,7 +129,26 @@ void sdvInitAmbient(void)
     _sdvAmbState = 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSaveAmbient);
+void sdvSaveAmbient(void)
+{
+    void *ambient = xglStudioGetLight2();
+    void *map_rgb = func_A2C3F8();
+
+    __asm__ __volatile__(
+        "lq $8, 0(%1)\n"
+        "sq $8, 0(%0)\n"
+        :
+        : "r" (_sdvAmbient), "r" (ambient)
+        : "$8", "memory");
+    __asm__ __volatile__(
+        "lq $8, 0(%1)\n"
+        "sq $8, 0(%0)\n"
+        :
+        : "r" (_sdvMapRgb), "r" (map_rgb)
+        : "$8", "memory");
+    _sdvAmbFrame = 0;
+    _sdvAmbState = 0;
+}
 
 static void sdvSetAmbStateSub(int state, int effect_no, int force)
 {
@@ -73,11 +185,6 @@ void sdvRestoreAmbient(void)
 {
     sdvSetAmbient(_sdvMapRgb, _sdvAmbient);
 }
-
-extern Vector4 *MMathVectorInterpolation(Vector4 *destination,
-                                         const Vector4 *first,
-                                         const Vector4 *second,
-                                         float parameter);
 
 void sdvExecAmbient(void)
 {
@@ -139,18 +246,6 @@ void sdvExecAmbient(void)
         sdvSetAmbient(&map_rgb, &ambient);
     }
 }
-
-extern unsigned char *sefGetBattleData(void);
-extern short _hitFlag;
-extern short _hitSignal;
-typedef struct SdvSequence {
-    unsigned int event_address;
-    unsigned char unmodeled_04[4];
-    int elapsed;
-    int position;
-    int stride;
-    int last_sound;
-} SdvSequence;
 
 int sdvExecSeqTbl(SdvSequence *sequence)
 {
@@ -303,7 +398,83 @@ int sdvSelectCamera(SdvCameraChoice *choice, int script_base,
     return chosen;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvSetCameraParam);
+static void sdvSetCameraParam(void *camera_data, int selection, const short *position)
+{
+    SdvCameraParam *camera = camera_data;
+    Vector4 origin;
+    int part = -1;
+    int source = 0;
+    int kind;
+    void *battle_data = sefGetBattleData();
+    SdvBattleCameraActors *battle = battle_data;
+
+    if (selection == 256 || selection == 512) {
+        kind = 1;
+        part = 0;
+        if (selection == 256)
+            source = 1;
+    } else if ((unsigned int)(selection - 257) < 16) {
+        kind = 1;
+        part = selection - 256;
+        source = 1;
+    } else if (selection == 529) {
+        kind = 1;
+        part = sefGetDmgNull() - 512;
+    } else if ((unsigned int)(selection - 513) < 16) {
+        kind = 1;
+        part = selection - 512;
+    } else {
+        kind = 2;
+        if (selection != 32)
+            kind = selection == 33 ? 3 : 0;
+    }
+    memset(camera, 0, 112);
+    camera->kind = kind;
+    switch (kind) {
+    case 0: {
+        float x = position[0] * 0.01f;
+        float y = position[1] * 0.01f;
+        float z = position[2] * 0.01f;
+        camera->position.z = z;
+        camera->position.x = x;
+        camera->position.y = y;
+        if (selection == 5) {
+            sefGetPosition(&origin, 0, 5);
+            __asm__ __volatile__(
+                "lqc2 vf1, 0(%0)\n\t"
+                "lqc2 vf2, 0(%1)\n\t"
+                "vadd.xyz vf1, vf1, vf2\n\t"
+                "sqc2 vf1, 0(%0)"
+                : : "r"(&camera->position), "r"(&origin) : "memory");
+        }
+        return;
+    }
+    case 1:
+        camera->actor = source ? battle->source_actor : battle->target_actor;
+        {
+            short number = source ? battle->source_number : battle->target_number;
+            camera->actor_number = number;
+            camera->part = part;
+        }
+        return;
+    case 2:
+    case 3: {
+        int actor = battle->source_actor;
+        short target_number = battle->target_number;
+        camera->source_actor = actor;
+        {
+            short source_number = battle->source_number;
+            int target_actor = battle->target_actor;
+            camera->source_part = 15;
+            camera->target_actor = target_actor;
+            camera->source_number = source_number;
+            camera->target_number = target_number;
+            camera->target_part = 15;
+        }
+        break;
+    }
+    }
+}
 
 static void sdvSetCameraOffset(SdvCamOffset *cam, int kind,
                                const int16_t *vec)
@@ -325,7 +496,112 @@ static void sdvSetCameraOffset(SdvCamOffset *cam, int kind,
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvProgressPrm);
+int sdvProgressPrm(int kind, void *data, int size)
+{
+    typedef struct SdvCameraParameters {
+        float before_offset[28];
+        SdvCamOffset offset;
+        float after_offset[4];
+    } SdvCameraParameters;
+
+    typedef struct SdvCameraInterpolation {
+        SdvCameraParameters params;
+        int source_byte_3;
+        unsigned int source_byte_2;
+        int frame_delta;
+        short transition_type;
+        short unmodeled_be;
+    } SdvCameraInterpolation;
+
+    SdvCameraPhase *phase = data;
+    const short *keyframes = phase->active;
+    const short *current;
+    const short *next;
+    SdvCameraParameters params;
+    SdvCameraInterpolation transition;
+    int frame;
+    int time_delta;
+    int now_effect_no;
+    int has_camera_params;
+    int in_reset_window;
+
+    frame = sdvProgressKey(keyframes, &phase->cursor, size);
+    if ((unsigned int)frame < 0x400U) {
+        current = keyframes + frame * size;
+        next = current + size;
+        time_delta = next[0] - current[0];
+        now_effect_no = _nowEftNo;
+        in_reset_window =
+            (unsigned int)now_effect_no - 2000U < 100U;
+        if (now_effect_no == 0x9A1 || now_effect_no == 0x99D) {
+            in_reset_window = 1;
+        }
+
+        if (kind == 0x41) {
+            if (current[1] >= 0) {
+                func_A31CA0(current[1], current[2], current[3], current[4],
+                            current[5]);
+            }
+            return frame;
+        }
+
+        if (time_delta <= 0 || frame == 0 || current[0] == 0x1000 ||
+            next[0] == 0x400) {
+            has_camera_params = 0;
+            if (func_A31C30(kind) != 0) {
+                func_A31BB8(kind);
+            }
+            memset(&params, 0, 0xB0);
+            if ((unsigned int)kind < 2U) {
+                has_camera_params = 1;
+                sdvSetCameraParam(params.before_offset, current[7], current + 4);
+                sdvSetCameraOffset(&params.offset, current[11], current + 8);
+                params.before_offset[27] = 0.5f;
+            } else if (kind == 3) {
+                params.after_offset[1] = (float)current[2];
+                params.after_offset[0] = (float)current[3] * 0.017453292f;
+                func_A31920(2, params.before_offset);
+            }
+            func_A31920(kind, params.before_offset);
+            if (in_reset_window && has_camera_params) {
+                memset(&params, 0, 0xB0);
+                func_A31500(&params.before_offset[4], kind);
+                params.before_offset[0] = 0.0f;
+                params.offset.kind = 0;
+                func_A31920(kind, params.before_offset);
+            }
+        }
+
+        if (time_delta > 0 && next[0] < 0x400) {
+            memset(&transition, 0, 0xC0);
+            transition.source_byte_3 = (signed char)((unsigned short)current[1] >> 8);
+            transition.source_byte_2 = (unsigned short)current[1] & 0xFFU;
+            transition.frame_delta = time_delta;
+            if ((unsigned int)kind < 2U) {
+                sdvSetCameraParam(transition.params.before_offset, next[7], next + 4);
+                sdvSetCameraOffset(&transition.params.offset, next[11], next + 8);
+                transition.params.before_offset[27] = 0.5f;
+                transition.transition_type = 1;
+            } else if (kind == 3) {
+                if (next[3] != current[3]) {
+                    transition.params.after_offset[0] =
+                        (float)next[3] * 0.017453292f;
+                    func_A31AE0(2, &transition);
+                }
+                if (next[2] == current[2]) {
+                    return frame;
+                }
+                transition.params.after_offset[1] = (float)next[2];
+            }
+            func_A31AE0(kind, &transition);
+            if (next[size] == 0x400) {
+                phase->cursor.position++;
+            }
+        }
+    }
+
+    return frame;
+}
 
 void sdvScheduleCamera(SdvCameraTask *task)
 {
@@ -398,21 +674,54 @@ INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvDrawSpecial);
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvScheduleAlter);
 
-extern void sefMemZero(void *data, unsigned int size);
-
 void sdvInitAlter(SdvAlter *alter)
 {
     sefMemZero(alter, sizeof(*alter));
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvCreateAlter);
+int sdvCreateAlter(SdvAlterParameters *parameters)
+{
+    int index;
+    int unavailable = -1;
+
+    index = 0;
+    do {
+        if (_sdvAlter[index].active == 0) {
+            int serial = (serial_3 + 1) & 255;
+            serial_3 = serial;
+            _sdvAlter[index].parameters = *parameters;
+            _sdvAlter[index].serial = serial_3;
+            _sdvAlter[index].active = 1;
+            _sdvAlter[index].samples = 0;
+            _sdvAlter[index].phase = 0.0f;
+            _sdvAlter[index].cursor = 0;
+            return (serial << 16) | index;
+        }
+        ++index;
+    } while (index < 16);
+    return unavailable;
+}
 
 void sdvDestroyAlter(SdvAlter *alter)
 {
     sefMemZero(alter, sizeof(*alter));
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvKillAlter);
+void sdvKillAlter(int alter_id)
+{
+    int index;
+    int serial;
+
+    if (alter_id < 0)
+        return;
+    index = alter_id & 0xFFFF;
+    serial = alter_id >> 16;
+    if (_sdvAlter[index].active == 0)
+        return;
+    if (_sdvAlter[index].serial != serial)
+        return;
+    sdvDestroyAlter(&_sdvAlter[index]);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sdv", sdvExecAlter);
 

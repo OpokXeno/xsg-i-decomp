@@ -2,11 +2,99 @@
 
 #include "mdl.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/mdl", MDL_setGroupVisible);
+#define SWAP32(x) \
+    ((((u32)(x) >> 24) | (((x) >> 8) & 0xff00)) | \
+     ((((u32)(x) << 8) & 0xff0000) | ((u32)(x) << 24)))
 
-INCLUDE_ASM("asm/main/nonmatchings/mdl", MDL_setNameVisible);
+int MDL_setGroupVisible(MdlHandle *model, int group, int visible)
+{
+    MdlResource *resource = (MdlResource *)(u32)model->entry;
+    u32 bit;
+    int count;
+    int partCount;
+    int wordIndex;
+    int partIndex;
 
-INCLUDE_ASM("asm/main/nonmatchings/mdl", MDL_setVisible);
+    if (resource == 0) {
+        return 0;
+    }
+
+    group = (((u32)group >> 24) | ((group >> 8) & 0xff00)) | ((((u32)group << 8) & 0xff0000) | ((u32)group << 24));
+    count = 0;
+    partCount = resource->partCount;
+    for (partIndex = 0; partIndex < partCount; partIndex++) {
+        if (model->parts[partIndex].group != group) {
+            continue;
+        }
+        bit = 1u << (partIndex & 31);
+        wordIndex = partIndex >> 5;
+        if (visible) {
+            model->visibleParts[wordIndex] |= bit;
+        } else {
+            model->visibleParts[wordIndex] &= ~bit;
+        }
+        count++;
+    }
+    return count;
+}
+
+int MDL_setNameVisible(MdlHandle *model, const int *name, int visible)
+{
+    MdlResource *resource = (MdlResource *)(u32)model->entry;
+    u32 bit;
+    int key0;
+    int key1;
+    int mask0;
+    int mask1;
+    int count;
+    int partCount;
+    int wordIndex;
+    int partIndex;
+
+    if (resource == 0 || model->parts == 0) {
+        return 0;
+    }
+
+    key0 = name[0];
+    key1 = name[1];
+    mask0 = name[2];
+    mask1 = name[3];
+    key0 = SWAP32(key0);
+    key1 = SWAP32(key1);
+    mask0 = SWAP32(mask0);
+    mask1 = SWAP32(mask1);
+    key0 &= mask0;
+    key1 &= mask1;
+    count = 0;
+    partCount = resource->partCount;
+    for (partIndex = 0; partIndex < partCount; partIndex++) {
+        if (((model->parts[partIndex].name[0] & mask0) != key0) || ((model->parts[partIndex].name[1] & mask1) != key1)) {
+            continue;
+        }
+        bit = 1u << (partIndex & 31);
+        wordIndex = partIndex >> 5;
+        count++;
+        if (visible) {
+            model->visibleParts[wordIndex] |= bit;
+        } else {
+            model->visibleParts[wordIndex] &= ~bit;
+        }
+    }
+    return count;
+}
+
+void MDL_setVisible(MdlHandle *model, int partIndex, int visible)
+{
+    int bitIndex = partIndex & 31;
+    int wordIndex = partIndex >> 5;
+    u32 bit = 1u << bitIndex;
+
+    if (visible != 0) {
+        model->visibleParts[wordIndex] |= bit;
+    } else {
+        model->visibleParts[wordIndex] &= ~bit;
+    }
+}
 
 void MDL_create(MdlHandle *model, const MdlResource *resource)
 {
@@ -53,10 +141,6 @@ void MDL_partsSetVisible(MdlHandle *model)
     }
 }
 
-/*
- * Applies the model's texture and placement, marks its parts visible, then
- * tail-calls the model system to enter it for rendering.
- */
 void MDL_draw(MdlHandle *model, const Vector4 *place)
 {
     int entry = model->entry;

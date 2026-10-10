@@ -1,7 +1,57 @@
 #include "common.h"
 
+#include "e_message.h"
+
 /* Number of message sprites currently allocated by the print routines. */
+
 static int msg_spr_count = 0;
+
+/*
+ * The message object eMessageModeChange, eMessageDraw and eMessageMain
+ * receive.  Callers build it on their stack and it extends well past the
+ * mode byte (eMessageMain also reads +0x00 and +0x18, TextTest fills +0x04
+ * to +0x1C); only the mode byte eMessageModeChange writes is modelled.
+ * eMessageMain dispatches on it with lbu, so it is unsigned.
+ */
+
+typedef struct EMessageParam {
+    unsigned char unmodeled_00;
+    unsigned char mode;
+} EMessageParam;
+
+extern void eMessageMain(EMessageParam *message);
+
+extern char *eMessageNextWaitKeySearch(char *text);
+
+typedef struct EMessageTextParam {
+    unsigned char unmodeled_00[0x18];
+    char *text;
+    unsigned char page_available;
+    unsigned char page_index;
+    unsigned char page_count;
+} EMessageTextParam;
+
+typedef struct EMessagePageState {
+    unsigned char flags;
+    unsigned char mode;
+    unsigned char unmodeled_02[26];
+    unsigned char page_available;
+    unsigned char page_index;
+    unsigned char page_count;
+} EMessagePageState;
+
+/* Current write position of the message text being built. */
+
+static char *MessageCpyEnd;
+
+extern void eMessageCat(char *src);
+
+/* Number of message sprites currently allocated by the print routines. */
+
+
+
+
+/* Current write position of the message text being built. */
 
 void eMessageSpriteReset(void)
 {
@@ -34,20 +84,6 @@ INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageDrawType01);
 
 INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageMain);
 
-/*
- * The message object eMessageModeChange, eMessageDraw and eMessageMain
- * receive.  Callers build it on their stack and it extends well past the
- * mode byte (eMessageMain also reads +0x00 and +0x18, TextTest fills +0x04
- * to +0x1C); only the mode byte eMessageModeChange writes is modelled.
- * eMessageMain dispatches on it with lbu, so it is unsigned.
- */
-typedef struct EMessageParam {
-    unsigned char unmodeled_00;
-    unsigned char mode;
-} EMessageParam;
-
-extern void eMessageMain(EMessageParam *message);
-
 void eMessageModeChange(EMessageParam *message, unsigned char mode)
 {
     message->mode = mode;
@@ -55,16 +91,17 @@ void eMessageModeChange(EMessageParam *message, unsigned char mode)
 
 INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageSet);
 
-INCLUDE_ASM("asm/main/nonmatchings/e_message", eMessageTextChange);
-
-typedef struct EMessagePageState {
-    unsigned char flags;
-    unsigned char mode;
-    unsigned char unmodeled_02[26];
-    unsigned char page_available;
-    unsigned char page_index;
-    unsigned char page_count;
-} EMessagePageState;
+void eMessageTextChange(EMessageTextParam *message, char *text)
+{
+    message->text = text;
+    if (message->page_available != 0) {
+        message->page_index = 0;
+        message->page_count = 0;
+        while (*(text = eMessageNextWaitKeySearch(text)) != '\0') {
+            message->page_count++;
+        }
+    }
+}
 
 int eMessageNextPage(EMessagePageState *message, int reset_page)
 {
@@ -99,11 +136,6 @@ void eMessageDraw(EMessageParam *message)
 {
     eMessageMain(message);
 }
-
-/* Current write position of the message text being built. */
-static char *MessageCpyEnd;
-
-extern void eMessageCat(char *src);
 
 void eMessageCpy(char *dst, char *src)
 {

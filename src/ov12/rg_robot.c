@@ -504,7 +504,7 @@ static int _DamagePassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDamageStatus);
 
-static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+
 static int _GetDropMotion(int eSide);
 static int _InitDropStatus(RgStatus *status, RgBody *body, int motion, int eSide);
 
@@ -715,7 +715,7 @@ static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry)
     RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
 }
 
-extern void RgGeomFree(RgGeomPoint *point);
+
 
 static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry)
 {
@@ -732,7 +732,7 @@ static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry)
 }
 
 /* ov12:0x00a51a78 contains the assertion expression "pGeom != NIL". */
-extern const char D_00A51A78[];
+
 
 static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry)
 {
@@ -876,8 +876,8 @@ static int _EyeGeomPassTime(RgBody *body, float deltaTime)
 }
 
 extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
-extern void RgGeomPointSetPos(RgGeomPoint *point, RgVector position);
-extern void RgGeomPointMovePos(RgGeomPoint *point, RgVector position);
+
+
 extern void XrgAddVector(RgVector destination, RgVector first, RgVector second);
 extern void XrgScaleVector(RgVector destination, RgVector source, float scale);
 
@@ -940,7 +940,7 @@ static void _DisposeBody(RgBody *body)
     RgHeapFree(InstanceOfRgHeap(), body, D_00A51840, 3494);
 }
 
-extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
+
 extern void XrgSoundRingMoving(int soundID, int unused, float volume);
 
 static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
@@ -1005,7 +1005,7 @@ static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
 
 static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)
 {
-    float brake_scale = 0.30000001192092895508f;
+    float brake_scale = 0.3f;
 
     (void)command;
     RgRobSubBreak(body->geometry, brake_scale, brake_scale);
@@ -1016,7 +1016,7 @@ static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecDashCmd);
 
 static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgCmd *command,
-                             int param1, int param2);
+                             int, int);
 
 static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -1594,7 +1594,7 @@ void RgRobotHitWeaponAttack(RgStatus *pRobot, int param)
     }
 }
 
-extern float XrgNormalizeVector(RgVector destination, RgVector source);
+
 
 void RgRobotInvalidAttack(RgStatus *pRobot, RgVector direction, float scale)
 {

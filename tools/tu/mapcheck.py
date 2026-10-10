@@ -273,6 +273,24 @@ def main():
                                     compiler_section=sec, start=lo, end=hi)
         return None
 
+    tu_by_c_object = {(t.get("c_link_object") or f"build/c/{t['name']}.o"): t for t in tus}
+
+    def stray_common_origin(obj, sec):
+        """The TU and the symbols of one unplaced C COMMON/.scommon/NOBITS input."""
+        t = tu_by_c_object.get(obj)
+        path = a.manifest.resolve().parent / obj
+        symbols = []
+        if path.is_file():
+            elf = Elf(path.read_bytes())
+            names = {x.index: x.name for x in elf.sections}
+            for s in elf.symbols:
+                if not s.name or s.type in (3, 4):
+                    continue
+                common = s.shndx == (SHN_MIPS_SCOMMON if sec == ".scommon" else SHN_COMMON)
+                if common or (0 < s.shndx < SHN_LORESERVE and names.get(s.shndx) == sec):
+                    symbols.append(s.name)
+        return dict(tu=(t or {}).get("id"), tu_name=(t or {}).get("name"), symbols=sorted(symbols))
+
     for (o, sec), (addr, size) in placed.items():
         if o in code_objs and sec != ".text" and size:
             problems.append(dict(kind="scaffold object data contribution", object=o, section=sec, size=size,
@@ -283,8 +301,12 @@ def main():
                 c_report.setdefault(owner["tu"], {}).setdefault(sec, dict(start=f"0x{addr:08X}", size=size,
                                                                           owner=owner))
             else:
+                # A C tentative definition with no explicit place (the link's
+                # stray_common_guard normally stops it first): name its TU and symbols.
+                origin = stray_common_origin(o, sec) if o.startswith("build/c/") else {}
                 problems.append(dict(kind="COMMON allocation", object=o, section=sec, size=size,
-                                     addr=f"0x{addr:08X}", reason="no exact C-owned original BSS span"))
+                                     addr=f"0x{addr:08X}", reason="no exact C-owned original BSS span",
+                                     **origin))
 
     # ---- R3: COMMON tails, fixed blobs, retail bins
     for sec, v in m["sections"].items():
@@ -409,6 +431,41 @@ def main():
                     scaffold_witness_size=witness.size, linked_address=f"0x{expected_va:08X}",
                     linked_symbol_size=final[0].size, credited_as_c=False)
 
+    nested_cache = {}
+
+    def nested_function_identity(t, s, cdefs):
+        """A registered GNU nested function whose cc1 counter differs from the original.
+
+        cc1 names every nested function (and function-local static) `name.N`, N
+        being the count of such private names emitted before it in the TU. While
+        functions that own earlier private names are still INCLUDE_ASM, the C
+        object numbers the nested function lower than the original. The identity
+        is the registered gnu-nested-function mapping (config/gnu-nested-functions.json
+        and config/tu/source-classes.json, the mapping tools/tu_audit.py checks):
+        accept exactly one LOCAL FUNC `source_name.M` of the C object at the
+        original address with the original size, and report both names."""
+        root = a.manifest.resolve().parent.parent.parent
+        tu_id = t.get("id")
+        if tu_id not in nested_cache:
+            sys.path.insert(0, str(root / "tools"))
+            import tu_edit
+            nested_cache[tu_id] = tu_edit.gnu_nested_specs(root, tu_id)
+        for parent, spec in nested_cache[tu_id].items():
+            for item in spec.get("nested_functions") or []:
+                if (item.get("original_name") != s.name or int(item.get("va", "0"), 16) != s.value
+                        or item.get("size") != s.size or item.get("binding") != "LOCAL"
+                        or item.get("type") != "FUNC"):
+                    continue
+                pattern = re.escape(item["source_name"]) + r"\.[0-9]+"
+                found = [(name, d) for name, defs in cdefs.items() if re.fullmatch(pattern, name)
+                         for d in defs if d["addr"] == s.value]
+                if (len(found) == 1 and found[0][1]["size"] == s.size and found[0][1]["bind"] == 0
+                        and found[0][1]["type"] == 2 and found[0][1]["section"] == ".text"):
+                    return dict(original_symbol=s.name, original_va=f"0x{s.value:08X}", size=s.size,
+                                parent=parent, source_name=item["source_name"],
+                                c_symbol=found[0][0], c_address=f"0x{found[0][1]['addr']:08X}")
+        return None
+
     for t in tus:
         if mode(t) != "c":
             continue
@@ -516,6 +573,12 @@ def main():
                     continue
                 tu_audit["symbols_checked"] += 1
                 got = [d for d in cdefs.get(s.name, []) if d["addr"] == s.value]
+                if not got and sec == ".text" and s.type == 2 and s.bind == 0:
+                    proof = nested_function_identity(t, s, cdefs)
+                    if proof:
+                        tu_audit.setdefault("nested_function_identity_proofs", []).append(proof)
+                        tu_audit["symbols_checked"] += 1
+                        continue
                 if not got:
                     alias = storage_aliases.get(s.name)
                     storage_owner = alias.get("storage_owner") if alias else None

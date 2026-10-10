@@ -1,12 +1,17 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "xgl_pad.h"
 
 /*
  * The DMA channel table and the MFIFO state are provided by the scaffold data
  * for this TU.  Only the register slots touched by these routines are named.
  */
+
 typedef struct XglDmaChannel {
+    /* EE DMAC MMIO registers: CHCR +0x00, MADR +0x10, QWC +0x20, TADR +0x30.
+     * The hardware updates CHCR while the polling loops wait for completion. */
     volatile u32 control;
     u32 reserved_04[3];
     volatile u32 memory_address;
@@ -33,20 +38,40 @@ static XglDmaChannel *tbl[10] = {
     (XglDmaChannel *)0x1000d000,
     (XglDmaChannel *)0x1000d400
 };
+
 XglPadRecord PadData[2] = {{0}};
-static XglDmaChannel *mfifo_drain;
+
+/* The first word is the channel pointer; the second word's role is unknown. */
+
+struct MfifoDrainStorage {
+    XglDmaChannel *channel;
+    u32 unmodeled_04;
+};
+
+static struct MfifoDrainStorage mfifo_drain;
+
+#define mfifo_drain mfifo_drain.channel
 
 extern void FlushCache(int mode);
+
 extern int sceGsSyncPath(int mode, int timeout);
 
 /* EE DMAC global registers and the SPR-from channel registers. */
+
 #define DMAC_CTRL      ((volatile u32 *)0x1000E000)
+
 #define DMAC_STAT      ((volatile u32 *)0x1000E010)
+
 #define DMAC_RBSR      ((volatile u32 *)0x1000E040)
+
 #define DMAC_RBOR      ((volatile u32 *)0x1000E050)
+
 #define D8_CHCR        ((volatile u32 *)0x1000D000)
+
 #define D8_MADR        ((volatile u32 *)0x1000D010)
+
 #define D8_QWC         ((volatile u32 *)0x1000D020)
+
 #define D8_SADR        ((volatile u32 *)0x1000D080)
 
 void xglDmaDirectSrcChain(u32 channel, u32 address);
@@ -148,7 +173,26 @@ void xglDmaBufferRequest(XglDmaBuffer *buffer, u32 channel)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_dma", xglDmaMFIFOSetup);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_dma", xglDmaMFIFOKick);
+u32 xglDmaMFIFOKick(u32 spr_address, u32 count)
+{
+    u32 ring_size = *DMAC_RBSR + 16;
+    XglDmaChannel **drain_slot = &mfifo_drain;
+    XglDmaChannel *drain;
+    u32 room;
+
+    while (*D8_CHCR & 0x100U)
+        ;
+    *D8_SADR = spr_address & 0x3ff0U;
+    *D8_QWC = count;
+    drain = *drain_slot;
+    do {
+        room = (drain->tag_address - *D8_MADR + ring_size) & (ring_size - 16);
+        if (room == 0)
+            room = ring_size;
+    } while (!(count * 16 < room));
+    *D8_CHCR = 0x100;
+    return room;
+}
 
 void xglDmaMFIFOLeave(void)
 {

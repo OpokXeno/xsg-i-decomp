@@ -249,4 +249,60 @@ typedef struct CameraChangeIDArgs {
 
 extern void GameCameraChangeID(int, int, int);
 
+typedef struct CameraVector3 {
+    float x;
+    float y;
+    float z;
+} CameraVector3;
+
+/*
+ * One record of the CF-camera table CfCameraDefine (main:0x00362e80, 33 records
+ * of 0xa0 bytes, defined by src/main/maptbl.c). The Java CF setters of this
+ * unit address it by camera index, or by every record when the index is
+ * negative. Only the members those setters touch are named; the rest of each
+ * record is unmodeled storage.
+ */
+typedef struct CfCameraDefinition {
+    unsigned char pedestal_mode;          /* +0x00 */
+    unsigned char pedestal_interpolation; /* +0x01 */
+    unsigned char unmodeled_02[6];
+    float current_yaw;                    /* +0x08 */
+    unsigned char unmodeled_0c[4];
+    float offset[3];                      /* +0x10 */
+    float perspective;                    /* +0x1c */
+    union {
+        struct {
+            int first_mode;     /* +0x20 */
+            float first_value;  /* +0x24 */
+            int second_mode;    /* +0x28 */
+            float second_value; /* +0x2c */
+        } offset;
+        float pedestal[4];
+    } parameters;                         /* +0x20 */
+    float angles[4];                      /* +0x30 */
+    float lock_position[3];               /* +0x40 */
+    int lock_mode;                        /* +0x4c */
+    float interpolation[2];               /* +0x50 */
+    unsigned char unmodeled_58[8];
+    float fog_parameters[4];              /* +0x60 */
+    float fog_color[4];                   /* +0x70 */
+    unsigned char unmodeled_80[32];
+} CfCameraDefinition;
+
+extern CfCameraDefinition CfCameraDefine[33];
+
+/* Interpreter native-call storage, defined by main/tu226 init_vm.c.
+ * Native callbacks receive arrays of these four-byte value slots for both
+ * arguments and results; the method descriptor selects each member. */
+typedef union VMSlot {
+    int i;
+    float f;
+    void *ref;
+    unsigned char b;
+    short s;
+    unsigned short c;
+} VMSlot;
+
+typedef struct VMThreadP VMThread;
+
 #endif /* SRC_MAIN_CAMERA_H */

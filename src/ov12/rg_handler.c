@@ -49,7 +49,7 @@ void RgHandlerRobotVsRobot(RgGeom *robotGeom, RgBgCollision *collision)
     }
 }
 
-extern void *RgGeomGetParent(RgGeom *pGeom);
+
 extern void RgShotHitRobot(void *shot, int robot, RgVector position);
 extern void RgWeaponHitRobot(void *weapon, int robotId, int damage);
 extern void RgShotHitBg(void *shot, int bgObject, RgVector position);

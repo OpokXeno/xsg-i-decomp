@@ -86,8 +86,8 @@ INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_dora", fnDORA_PR000);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_dora", fnDORA_DP000);
 
-/* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
- * still asm in their defining TU; declared locally until published there. */
+/* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
+ * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
 /* work's layout is unresolved beyond +0x70: the per-frame lifetime counter

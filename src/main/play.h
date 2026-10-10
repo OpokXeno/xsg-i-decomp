@@ -6,6 +6,7 @@
 #define SRC_MAIN_PLAY_H
 
 #include "shared.h"
+#include "main/jni.h"
 
 /*
  * The engine's playback controller, recovered head.
@@ -86,8 +87,6 @@ typedef struct TCHParams {
     int frame;                      /* +0x08 */
     int curveIndex;                 /* +0x0c */
 } TCHParams;
-
-extern SceneClass *classJava_xeno_util_TCHParams;
 
 /*
  * The per-function .lit4 float constants of this TU (still scaffold-owned):

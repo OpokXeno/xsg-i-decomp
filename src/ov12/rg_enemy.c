@@ -114,8 +114,8 @@ extern void RgRobotDashContinue(RgRobot *pRobot);
 extern void RgRobotBreak(RgRobot *pRobot);
 extern void RgRobotTargetting(RgRobot *pRobot);
 extern void RgRobotShot(RgRobot *pRobot, unsigned int eType);
-extern RgWeaponEssence *RgWeaponGetEss(RgWeapon *weapon);
-extern struct RgWeaponShotEssence *RgWeaponEssCastToShot(RgWeaponEssence *essence);
+
+
 extern float RgWeaponGetShotNum(RgWeapon *weapon);
 extern float RgGetFrameTime(void);
 

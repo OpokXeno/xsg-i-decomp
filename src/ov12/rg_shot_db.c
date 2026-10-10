@@ -173,7 +173,7 @@ extern void RgReadTextGetString(RgReadText *pReader, char *pszOut);
 extern float RgReadTextGetFloat(RgReadText *pReader);
 extern int RgReadTextIsEOF(RgReadText *pReader);
 extern void RgReadTextUnget(RgReadText *pReader, char *pszToken);
-extern int strcmp(const char *s1, const char *s2);
+
 
 /*
  * Scaffold-owned data (splat names, no config/symbols/ov12.txt entry).
@@ -183,7 +183,7 @@ extern int strcmp(const char *s1, const char *s2);
  * reports. ov12:0x00a53530 holds "spd", the text key _ReadNormal and
  * _ReadBeam both recognize for the shot speed.
  */
-extern const char D_00A53470[];
+
 extern const char D_00A53520[];
 extern const char D_00A53530[];
 
@@ -481,7 +481,7 @@ static RgShotDbFireEssence *_ReadFire(RgReadText *pReader)
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_shot_db", RgShotDBRead);
 
 extern const char D_00A535D8[];
-extern const char D_00A53470[];
+
 
 void RgShotDBClear(RgSimpleDB *database)
 {

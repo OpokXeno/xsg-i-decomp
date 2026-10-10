@@ -6,7 +6,9 @@
 #define SRC_MAIN_JNI_H
 
 #include "shared.h"
+#include "main/jni.h"
 #include "main/data_buffer.h"
+#include "main/find_native_method.h"
 
 /*
  * The allocation header of src/main/xheap.c's free-block heap
@@ -26,6 +28,11 @@ extern void *xheap_pop(void);
 extern void xheap_current_clear(void);
 
 extern void initClassDB(void);
+
+extern void *xmalloc(int size, int type);
+
+extern void *jthreadTop;
+extern void *jthreadCurrent;
 
 extern int instanceOf(SceneClass *scene_class, SceneClass *parent_class);
 
@@ -75,36 +82,6 @@ typedef struct JThread {
  * instead reads back the entry at its low byte.
  */
 extern int classDB[8];
-
-/*
- * Resolves a class already loaded from the class database and installs its
- * native method table, given the address of the engine's cached
- * class-object slot and the class's fully-qualified name. Defined at main
- * 0x002f5120 (src/main/find_native_method.c).
- */
-extern void *loadStaticClass(void **class_slot, u8 *class_name);
-
-extern void *classJava_xeno_Camera;
-extern void *classJava_xeno_Chr;
-extern void *classJava_xeno_Effect;
-extern void *classJava_xeno_Enepc;
-extern void *classJava_xeno_Light;
-extern void *classJava_xeno_Movie;
-extern void *classJava_xeno_PlayControl;
-extern void *classJava_xeno_Scene;
-extern void *classJava_xeno_Stage;
-extern void *classJava_xeno_Uwamono;
-extern void *classJava_xeno_util_Format;
-extern void *classJava_xeno_util_Input;
-extern void *classJava_xeno_util_Layout;
-extern void *classJava_xeno_util_Menu;
-extern void *classJava_xeno_util_Runtime;
-extern void *classJava_xeno_util_Spline;
-extern void *classJava_xeno_util_TCHParams;
-extern void *classJava_xeno_util_Toolkit;
-extern void *classJava_xeno_util_Vector4f;
-extern void *classJava_xeno_util_Window;
-extern void *classJava_xeno_vm_System;
 
 /* The fully-qualified class names JNI_loadNativeClass resolves. */
 extern const u8 D_004CCA70[16]; /* "xeno/vm/System" */

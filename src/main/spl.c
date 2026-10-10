@@ -1,5 +1,7 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "spl.h"
 
 void SPL_init(SplineState *spline, unsigned int weight_mode,
@@ -110,7 +112,43 @@ static void setWeightIndex(SplinePoint *points, int count)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/spl", SPL_init2);
+void SPL_init2(SplineState *spline, int interpolation_mode, float *samples,
+               int sample_count, unsigned int component_count)
+{
+    if ((spline->first_key & 0x0f) != 8) {
+        unsigned short weight_scheme = spline->first_key & 0xf0;
+        interpolation_mode += 2;
+        switch (weight_scheme) {
+        case 0:
+            setWeightLen((SplinePoint *)samples, sample_count);
+            break;
+        case 0x20:
+            setWeightLen2((SplinePoint *)samples, sample_count);
+            break;
+        case 0x40:
+            setWeightTime((SplinePoint *)samples, sample_count,
+                          (float)(short)spline->last_key);
+            break;
+        case 0x30:
+            setWeightIndex((SplinePoint *)samples, sample_count);
+            break;
+        }
+    }
+    spline->first_key = spline->first_key & 0x0f;
+    spline->samples = samples;
+    spline->sample_count = sample_count;
+    spline->component_count = component_count;
+    spline->weight_mode = interpolation_mode;
+    switch (interpolation_mode) {
+    case 3:
+    case 1:
+        SPL_cardinalInit(spline);
+        break;
+    case 2:
+    case 0:
+        return;
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/spl", SPL_cardinalInit);
 

@@ -1,4 +1,5 @@
 #include "common.h"
+
 #include "shared.h"
 
 typedef struct PlayerLookAtState {
@@ -7,9 +8,25 @@ typedef struct PlayerLookAtState {
     u32 unmodeled_08;
     u32 unmodeled_0c;
     u32 flags;
-    u8 unmodeled_14[0x29f2d];
+    u8 unmodeled_14[0xc];
+    u32 map_flags;
+    u8 unmodeled_24[0x9c];
+    u8 move_mode;
+    u8 unmodeled_c1[0x29e80];
     signed char look_at_target;
+    u8 unmodeled_29f42[0x2a014 - 0x29f42];
+    void *effect;
 } PlayerLookAtState;
+
+typedef struct ActorUndulation {
+    u8 unmodeled_00[8];
+    s16 attr_mask;
+} ActorUndulation;
+
+typedef struct PlayerEffect {
+    u8 unmodeled_00[0x6bc];
+    struct LookAtPlayerActor *owner;
+} PlayerEffect;
 
 typedef struct LookAtPlayerActor {
     u32 flags;
@@ -17,12 +34,44 @@ typedef struct LookAtPlayerActor {
     void (*draw)(struct LookAtPlayerActor *actor);
     u32 quadword_alignment_gap;
     Vector4 position;
-    u8 unmodeled_20[0x60];
+    Vector4 previous_position;
+    Vector4 velocity;
+    Vector4 external_velocity;
+    float rotation_x;
+    float rotation_y;
+    float rotation_z;
+    float move_speed;
+    Vector4 scale;
+    u8 unmodeled_70[0x10];
     u8 number;
-    u8 unmodeled_81[0x9ec - 0x81];
+    u8 unmodeled_81[0x4c8 - 0x81];
+    ActorUndulation undulation;
+    u8 unmodeled_4d2[0x4e8 - 0x4d2];
+    u64 terrain_flags;
+    u8 unmodeled_4f0[0x694 - 0x4f0];
+    signed char stick_x;
+    signed char stick_y;
+    u8 unmodeled_696[0x6f8 - 0x696];
+    float motion_speed;
+    u8 unmodeled_6fc[0x704 - 0x6fc];
+    u16 motion_id;
+    u8 unmodeled_706[0x9a0 - 0x706];
+    u32 render_flags;
+    u8 unmodeled_9a4[0x9c0 - 0x9a4];
+    float filter_param;
+    u8 unmodeled_9c4[0x9d8 - 0x9c4];
+    u64 flash_frames;
+    u8 unmodeled_9e0[0x9e4 - 0x9e0];
+    float aim_angle;
+    float body_radius;
     s16 look_at_timer;
     s16 look_at_target;
-    u8 unmodeled_9f0[0xa70 - 0x9f0];
+    s16 flash_timer;
+    u8 unmodeled_9f2[0xa10 - 0x9f2];
+    PlayerEffect *effects[8];
+    s16 effect_timer;
+    s16 effect_slot;
+    u8 unmodeled_a34[0xa70 - 0xa34];
 } LookAtPlayerActor;
 
 typedef union PlayerAimVector {
@@ -37,106 +86,37 @@ typedef struct PlayerAimMapUnit {
 } PlayerAimMapUnit;
 
 extern PlayerLookAtState GameLoopState;
+
 extern LookAtPlayerActor actor[64];
+
 extern PlayerAimMapUnit MapUnit[64];
 
 int Get_MostNear_Actor(LookAtPlayerActor *player_actor);
+
 void Actor_LookAt_Set(LookAtPlayerActor *player_actor, int mode, Vector4 *target);
+
 void Actor_LookAt_Release(LookAtPlayerActor *player_actor, int mode);
+
 void Actor_LookAt(LookAtPlayerActor *player_actor);
+
 void PlayerLookAtAim(void);
-
-void LookAt_Player(LookAtPlayerActor *player_actor)
-{
-    int nearest_actor_index;
-    signed char look_at_target;
-
-    nearest_actor_index = Get_MostNear_Actor(player_actor);
-    if (player_actor->look_at_timer == 2) {
-        Actor_LookAt(player_actor);
-        return;
-    }
-    if (GameLoopState.flags & 0x8000) {
-        Actor_LookAt_Release(player_actor, 0);
-        return;
-    }
-    look_at_target = GameLoopState.look_at_target;
-    if (look_at_target != -1) {
-        PlayerLookAtAim();
-        return;
-    }
-
-    Actor_LookAt_Release(player_actor, 0);
-    if (nearest_actor_index != look_at_target &&
-        !(actor[nearest_actor_index].flags & 8)) {
-        actor[player_actor->number].look_at_target = nearest_actor_index;
-        Actor_LookAt_Set(player_actor, 1, &actor[nearest_actor_index].position);
-        Actor_LookAt(player_actor);
-        return;
-    }
-    Actor_LookAt_Release(player_actor, 1);
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/look_at_player", Player_System_Init);
 
 /* Player-movement speed thresholds and vector scaling rate GameCfPlayerMove
  * compares/applies each frame; GameCfPlayerMoveInit restores their defaults. */
-static static int WALK_THRESHOLD_I;
-static static float WALK_THRESHOLD_F;
-static static int RUN_THRESHOLD_I;
-static static float RUN_THRESHOLD_F;
-static static float VECTOR_RATE;
+
+static int WALK_THRESHOLD_I;
+
+static float WALK_THRESHOLD_F;
+
+static int RUN_THRESHOLD_I;
+
+static float RUN_THRESHOLD_F;
+
+static float VECTOR_RATE;
 
 extern int F2I(float value);
 
-void GameCfPlayerMoveParamSet(float walkThreshold, float runThreshold, float vectorRate)
-{
-    int walkThresholdInt;
-    int runThresholdInt;
-
-    walkThresholdInt = F2I(walkThreshold);
-    WALK_THRESHOLD_F = walkThreshold;
-    WALK_THRESHOLD_I = walkThresholdInt;
-    runThresholdInt = F2I(runThreshold);
-    RUN_THRESHOLD_F = runThreshold;
-    VECTOR_RATE = vectorRate;
-    RUN_THRESHOLD_I = runThresholdInt;
-}
-
 #define D_004D7C0C 0.0007999999798f
-
-void GameCfPlayerMoveInit(void)
-{
-    WALK_THRESHOLD_I = 32;
-    WALK_THRESHOLD_F = 32.0f;
-    RUN_THRESHOLD_I = 96;
-    RUN_THRESHOLD_F = 96.0f;
-    VECTOR_RATE = D_004D7C0C;
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/look_at_player", GameCfPlayerMove);
-
-INCLUDE_ASM("asm/main/nonmatchings/look_at_player", HitCheckActor);
-
-INCLUDE_ASM("asm/main/nonmatchings/look_at_player", NyuruActor);
-
-void PlayerLookAtAim(void)
-{
-    int look_at_target;
-    void *player_actor;
-    PlayerAimVector target_position;
-
-    look_at_target = GameLoopState.look_at_target;
-    player_actor = GameLoopState.player_actor;
-    target_position = MapUnit[look_at_target].position;
-    target_position.vector.y += 1.0f;
-    Actor_LookAt_Set(player_actor, 0, &target_position.vector);
-    Actor_LookAt(player_actor);
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/look_at_player", GameCfPlayerLoadResource);
-
-
 
 const char D_004BF7A0[16] = "shion6_h";
 
@@ -1284,8 +1264,6 @@ const char D_004D9DC8[8] = "char\\";
 
 const char D_004D9DD0[8] = "cid_";
 
-
-
 const char D_004D8AC0[8] = "jr4";
 
 const char D_004D8B98[8] = "jr";
@@ -1579,3 +1557,471 @@ const char D_004D9C38[8] = "000";
 const char D_004D9C70[8] = "ag";
 
 const char D_004D9D10[8] = "_";
+
+
+
+typedef struct PlayerPadView {
+    u8 unmodeled_00[0x28];
+    u16 held;
+    u8 unmodeled_2a[0x66 - 0x2a];
+    signed char stick_x;
+    signed char stick_y;
+} PlayerPadView;
+
+typedef struct CameraDefinition {
+    u8 unmodeled_00[0x34];
+    float yaw;
+} CameraDefinition;
+
+extern PlayerPadView PadData;
+
+extern CameraDefinition CfCameraDefine;
+
+extern Vector4 EnemyTarget;
+
+extern short EfTab_Code[15];
+
+extern short EfTab_Intr[15];
+
+extern short EfTab_Loop[15];
+
+int Check_EnemyBurn(void);
+
+int Check_EnemyElec(void);
+
+int Check_EnemyFound(void);
+
+int xglSoundEffectCheckID(int id, int arg);
+
+void xglSoundEffectStopID(int id, int arg);
+
+void sefDeleteEffectCf(void *effect);
+
+PlayerEffect *sefCreateEffectCf(int code, int a, int b);
+
+int Ladder_Main(LookAtPlayerActor *player_actor);
+
+int SCRIPT_getCfTime(void);
+
+float I2F(int value);
+
+float atan2f(float y, float x);
+
+float floorf(float value);
+
+float xglSin(float angle);
+
+void xglMatrixStackRotY(float angle);
+
+float xglCos(float angle);
+
+int Get_Attr(const Vector4 *position, int map_index, int attr_mask);
+
+int Get_EffectCode(int attribute);
+
+void ACT_setMotion2(LookAtPlayerActor *player_actor, int motion, int blend);
+
+void Enemy_FindByEar(LookAtPlayerActor *player_actor, const Vector4 *position);
+
+void HitCheckMapUnitWithNyuru(LookAtPlayerActor *player_actor);
+
+static short HitCheckActor(LookAtPlayerActor *player_actor);
+
+static int NyuruActor(LookAtPlayerActor *player_actor, LookAtPlayerActor *other);
+
+float UnduCheck(const Vector4 *position, void *velocity, ActorUndulation *undulation);
+
+int HitCheckMapUnit(LookAtPlayerActor *player_actor);
+
+float Get_Cursol_by_Reduce_Speed_Angle_Loop(float cursor, float target, float rate);
+
+void ShootMapUnit(void);
+
+void ACT_updateMotion(LookAtPlayerActor *player_actor);
+
+void GameIdLightSet(LookAtPlayerActor *player_actor, int arg);
+
+void Set_Shadow(LookAtPlayerActor *player_actor);
+
+void Get_EnemyIDPos(const Vector4 *position, Vector4 *target);
+
+void Check_Locater(LookAtPlayerActor *player_actor);
+
+#include "main/get.h"
+
+int CheckActorExist(LookAtPlayerActor *target);
+
+float Get_Angle(const Point4 *first, const Point4 *second);
+
+/* HitCheckActor's minimum collision radius and maximum vertical separation
+ * thresholds. These literal-pool values are read once for each actor scan. */
+extern const float D_004D7C34;
+
+extern const float D_004D7C38;
+
+extern const float D_004D7C3C;
+
+void LookAt_Player(LookAtPlayerActor *player_actor)
+{
+    int nearest_actor_index;
+    signed char look_at_target;
+
+    nearest_actor_index = Get_MostNear_Actor(player_actor);
+    if (player_actor->look_at_timer == 2) {
+        Actor_LookAt(player_actor);
+        return;
+    }
+    if (GameLoopState.flags & 0x8000) {
+        Actor_LookAt_Release(player_actor, 0);
+        return;
+    }
+    look_at_target = GameLoopState.look_at_target;
+    if (look_at_target != -1) {
+        PlayerLookAtAim();
+        return;
+    }
+
+    Actor_LookAt_Release(player_actor, 0);
+    if (nearest_actor_index != look_at_target &&
+        !(actor[nearest_actor_index].flags & 8)) {
+        actor[player_actor->number].look_at_target = nearest_actor_index;
+        Actor_LookAt_Set(player_actor, 1, &actor[nearest_actor_index].position);
+        Actor_LookAt(player_actor);
+        return;
+    }
+    Actor_LookAt_Release(player_actor, 1);
+}
+
+INCLUDE_ASM("asm/main/nonmatchings/look_at_player", Player_System_Init);
+
+void GameCfPlayerMoveParamSet(float walkThreshold, float runThreshold, float vectorRate)
+{
+    int walkThresholdInt;
+    int runThresholdInt;
+
+    walkThresholdInt = F2I(walkThreshold);
+    WALK_THRESHOLD_F = walkThreshold;
+    WALK_THRESHOLD_I = walkThresholdInt;
+    runThresholdInt = F2I(runThreshold);
+    RUN_THRESHOLD_F = runThreshold;
+    VECTOR_RATE = vectorRate;
+    RUN_THRESHOLD_I = runThresholdInt;
+}
+
+void GameCfPlayerMoveInit(void)
+{
+    WALK_THRESHOLD_I = 32;
+    WALK_THRESHOLD_F = 32.0f;
+    RUN_THRESHOLD_I = 96;
+    RUN_THRESHOLD_F = 96.0f;
+    VECTOR_RATE = D_004D7C0C;
+}
+
+void GameCfPlayerMove(void)
+{
+    LookAtPlayerActor *player = GameLoopState.player_actor;
+    float run_scale = 1.0f;
+    float speed;
+    int stick_speed;
+    int terrain_bits;
+    int ground_effect;
+    int hit;
+    PlayerAimVector position_before_move;
+    const Vector4 *before_move;
+
+    if (Check_EnemyBurn() == 0 && xglSoundEffectCheckID(0x10009, 0) != 0) {
+        xglSoundEffectStopID(0x10009, 0);
+    }
+    if (Check_EnemyElec() == 0 && xglSoundEffectCheckID(0x10008, 0) != 0) {
+        xglSoundEffectStopID(0x10008, 0);
+    }
+    if (Check_EnemyFound() == 0) {
+        if (GameLoopState.effect != 0) {
+            sefDeleteEffectCf(GameLoopState.effect);
+        }
+        GameLoopState.effect = 0;
+    }
+    if (player->flash_timer != 0) {
+        if (--player->flash_timer <= 0) {
+            player->flash_timer = 0;
+            player->flags &= ~0x800;
+        } else {
+            unsigned short phase = player->flash_timer;
+
+            if (!(phase & 1) || (short)phase >= 19) {
+                player->flags |= 0x800;
+                player->render_flags |= 3;
+                player->flash_frames = 0x48;
+                player->filter_param = 0.5f;
+            } else {
+                player->flags &= ~0x800;
+            }
+        }
+    }
+    if (Ladder_Main(player) == 1) {
+        player->flags &= ~0x20;
+        return;
+    }
+    speed = 0.0f;
+    stick_speed = 0;
+    player->flags |= 0x20;
+    player->external_velocity.y = -0.05f;
+    player->previous_position.x = player->position.x;
+    player->previous_position.y = player->position.y;
+    player->previous_position.z = player->position.z;
+    player->velocity.x = 0.0f;
+    player->velocity.z = 0.0f;
+    player->external_velocity.x = 0.0f;
+    player->external_velocity.z = 0.0f;
+    if (!(GameLoopState.flags & 0x8000) && SCRIPT_getCfTime() >= 3) {
+        signed char stick_x = PadData.stick_x;
+        signed char stick_y = PadData.stick_y;
+        float length;
+        float angle;
+
+        if (PadData.held & 0xa000) {
+            stick_x = (PadData.held & 0x8000) ? -127 : 127;
+        }
+        if (PadData.held & 0x5000) {
+            stick_y = (PadData.held & 0x1000) ? -127 : 127;
+        }
+        if (GameLoopState.flags & 0x100000) {
+            stick_x = player->stick_x;
+            stick_y = player->stick_y;
+        } else {
+            player->stick_x = stick_x;
+            player->stick_y = stick_y;
+        }
+        if (GameLoopState.move_mode != 2) {
+            float x = I2F(stick_x);
+            float y = I2F(stick_y);
+
+            length = __builtin_sqrtf(x * x + y * y);
+            angle = floorf((atan2f(x, y) + 0.19634955f) / 0.3926991f) * 0.3926991f
+                + CfCameraDefine.yaw;
+        } else {
+            length = -I2F(stick_y);
+            angle = player->rotation_y - I2F(stick_x) * 0.001f;
+        }
+        if (128.0f <= length) {
+            length = 128.0f;
+        }
+        if (WALK_THRESHOLD_F <= length) {
+            player->aim_angle = angle;
+            if (player->terrain_flags & 0x10) {
+                if (RUN_THRESHOLD_F <= length) {
+                    length = RUN_THRESHOLD_F - 0.1f;
+                }
+            }
+            if (PadData.held & 2) {
+                length = (RUN_THRESHOLD_F - 0.1f) / 1.5f;
+            }
+            stick_speed = F2I(length);
+            speed = length * VECTOR_RATE;
+            terrain_bits = (int)(player->terrain_flags & 0x3f000000);
+            if (!(terrain_bits & 0x0f000000)) {
+                static float rate[4] = { 1.0f, 2.0f, 0.5f, 3.0f };
+
+                speed *= rate[(u32)terrain_bits >> 28];
+            }
+        } else {
+            stick_speed = 0;
+            speed = 0.0f;
+        }
+        player->move_speed = speed;
+        player->velocity.x += xglSin(player->aim_angle) * speed;
+        player->velocity.y += 0.0f;
+        player->velocity.z += xglCos(player->aim_angle) * speed;
+        {
+            static float rate[4] = { 1.0f, 2.0f, 0.5f, 3.0f };
+            static u8 idx[16] = { 0, 1, 3, 2, 5, 0, 4, 0, 7, 8, 0, 0, 6, 0, 0, 0 };
+            static float vec[9][2] = {
+                { 0.0f, 0.0f },  { 0.0f, 1.0f },  { 1.0f, 1.0f },
+                { 1.0f, 0.0f },  { 1.0f, -1.0f }, { 0.0f, -1.0f },
+                { -1.0f, -1.0f }, { -1.0f, 0.0f }, { -1.0f, 1.0f },
+            };
+
+            terrain_bits = (int)(player->terrain_flags & 0x3f000000);
+            if (terrain_bits & 0x0f000000) {
+                float scale = VECTOR_RATE * 128.0f * rate[(u32)terrain_bits >> 28];
+                float *direction = vec[idx[((u32)terrain_bits & 0x0f000000) >> 24]];
+
+                player->velocity.x += scale * direction[0];
+                player->velocity.z += scale * direction[1];
+            }
+            run_scale = rate[(u32)terrain_bits >> 28];
+        }
+    }
+    if (!(GameLoopState.flags & 0x4000)) {
+        int abs_speed = stick_speed;
+
+        if (abs_speed < 0) {
+            abs_speed = -abs_speed;
+        }
+
+        if (abs_speed < WALK_THRESHOLD_I) {
+            if (player->motion_id != 0x1b) {
+                ACT_setMotion2(player, 0, 9);
+            }
+            player->motion_speed = 0.033333335f;
+        } else if (abs_speed < RUN_THRESHOLD_I) {
+            ACT_setMotion2(player, 1, 9);
+            player->motion_speed = speed * 0.5f / run_scale;
+        } else {
+            ACT_setMotion2(player, 3, 9);
+            player->motion_speed = speed * 0.23333335f / run_scale;
+            Enemy_FindByEar(player, &player->position);
+        }
+    }
+    speed = __builtin_fabsf(speed);
+    ground_effect = Get_EffectCode(Get_Attr(&player->position, 0, 0));
+    if (0.01f < speed || EfTab_Loop[ground_effect] == 1) {
+        if (ground_effect != -1) {
+            if (EfTab_Intr[ground_effect] != -1) {
+                player->effect_timer++;
+            }
+            if ((EfTab_Intr[ground_effect] != -1 && player->effect_timer >= EfTab_Intr[ground_effect])
+                || player->effect_timer == -1) {
+                PlayerEffect *effect = sefCreateEffectCf(EfTab_Code[ground_effect], 0, 0);
+
+                player->effects[player->effect_slot] = effect;
+                if (effect != 0) {
+                    effect->owner = player;
+                    player->effect_timer = 0;
+                    player->effect_slot = (player->effect_slot + 1) % 8;
+                }
+            }
+        } else {
+            player->effect_timer = ground_effect;
+        }
+    }
+    player->velocity.x += player->external_velocity.x;
+    player->velocity.y += player->external_velocity.y;
+    player->velocity.z += player->external_velocity.z;
+    __builtin_memcpy(&position_before_move, &player->position, sizeof(position_before_move));
+    before_move = &position_before_move.vector;
+    player->position.x += player->velocity.x;
+    player->position.z += player->velocity.z;
+    HitCheckMapUnitWithNyuru(player);
+    hit = HitCheckActor(player);
+    if (hit != -1) {
+        NyuruActor(player, &actor[hit]);
+    }
+    player->velocity.x = player->position.x - before_move->x;
+    player->velocity.z = player->position.z - before_move->z;
+    player->undulation.attr_mask = (player->undulation.attr_mask & 0xfff8) | 2;
+    player->position.x = before_move->x;
+    player->position.z = before_move->z;
+    {
+        float floor_height = UnduCheck(&player->position, &player->velocity, &player->undulation);
+
+        if (floor_height != -1000.0f && player->position.y < floor_height) {
+            player->position.y = floor_height;
+            player->velocity.y = 0.0f;
+        }
+    }
+    if (HitCheckMapUnit(player) != -1) {
+        __builtin_memcpy(&player->position, &position_before_move, sizeof(position_before_move));
+    }
+    player->rotation_y = Get_Cursol_by_Reduce_Speed_Angle_Loop(player->rotation_y, player->aim_angle, 4.0f);
+    xglMatrixStackUnit();
+    xglMatrixStackTrans(&player->position.x);
+    xglMatrixStackRotZ(player->rotation_z);
+    xglMatrixStackRotY(player->rotation_y);
+    xglMatrixStackRotX(player->rotation_x);
+    if (GameLoopState.map_flags & 1) {
+        ShootMapUnit();
+    }
+    LookAt_Player(player);
+    ACT_updateMotion(player);
+    GameIdLightSet(player, 0);
+    Set_Shadow(player);
+    Get_EnemyIDPos(&player->position, &EnemyTarget);
+    if (!(GameLoopState.flags & 0x8000)) {
+        Check_Locater(player);
+    }
+}
+
+static short HitCheckActor(LookAtPlayerActor *player_actor)
+{
+    short i;
+    float dx;
+    float dz;
+    float distance;
+    float minimum_body_radius;
+    float maximum_height_difference;
+    Vector4 *pos;
+
+    minimum_body_radius = D_004D7C34;
+    maximum_height_difference = D_004D7C38;
+    for (i = 0; i < 64; i++) {
+        if (!CheckActorExist(&actor[i])) {
+            continue;
+        }
+        if (player_actor->number == i) {
+            continue;
+        }
+        pos = &actor[i].position;
+        if (actor[i].body_radius < minimum_body_radius) {
+            continue;
+        }
+        if (maximum_height_difference < __builtin_fabsf(player_actor->position.y - pos->y)) {
+            continue;
+        }
+        dx = player_actor->position.x - pos->x;
+        dz = player_actor->position.z - pos->z;
+        distance = __builtin_sqrtf(dx * dx + dz * dz);
+        if (distance <= player_actor->body_radius + actor[i].body_radius) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int NyuruActor(LookAtPlayerActor *player_actor, LookAtPlayerActor *other)
+{
+    float angle;
+    float reach;
+    Vector4 contact;
+    int hit;
+
+    angle = Get_Angle((const Point4 *)&player_actor->position,
+                      (const Point4 *)&other->position);
+    player_actor->position.x -= player_actor->velocity.x;
+    player_actor->position.z -= player_actor->velocity.z;
+    reach = player_actor->body_radius + other->body_radius + D_004D7C3C;
+    contact.x = other->position.x - reach * xglSin(angle);
+    contact.z = other->position.z - reach * xglCos(angle);
+    player_actor->velocity.x = contact.x - player_actor->position.x;
+    player_actor->velocity.z = contact.z - player_actor->position.z;
+    player_actor->position.x += player_actor->velocity.x;
+    player_actor->position.z += player_actor->velocity.z;
+    hit = HitCheckActor(player_actor);
+    if (hit != -1) {
+        player_actor->position.x -= player_actor->velocity.x;
+        player_actor->position.z -= player_actor->velocity.z;
+        return 0;
+    }
+    if (HitCheckMapUnit(player_actor) != hit) {
+        player_actor->position.x -= player_actor->velocity.x;
+        player_actor->position.z -= player_actor->velocity.z;
+        return 0;
+    }
+    return 1;
+}
+
+void PlayerLookAtAim(void)
+{
+    int look_at_target;
+    void *player_actor;
+    PlayerAimVector target_position;
+
+    look_at_target = GameLoopState.look_at_target;
+    player_actor = GameLoopState.player_actor;
+    target_position = MapUnit[look_at_target].position;
+    target_position.vector.y += 1.0f;
+    Actor_LookAt_Set(player_actor, 0, &target_position.vector);
+    Actor_LookAt(player_actor);
+}
+
+INCLUDE_ASM("asm/main/nonmatchings/look_at_player", GameCfPlayerLoadResource);

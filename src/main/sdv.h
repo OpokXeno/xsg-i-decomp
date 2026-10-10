@@ -5,6 +5,8 @@
 #ifndef SRC_MAIN_SDV_H
 #define SRC_MAIN_SDV_H
 
+extern const Vector4 McMathUnitVector;
+
 typedef struct SdvKeyCursor {
     int position;
     int elapsed;
@@ -69,8 +71,8 @@ extern int eftCate_1;
  * The first 8 bytes are otherwise unread by sdvScheduleCamera.
  */
 typedef struct SdvCameraPhase {
-    unsigned char unmodeled_00[8];
-    int active;                    /* +0x08 */
+    SdvKeyCursor cursor;           /* +0x00 */
+    const short *active;           /* +0x08 */
 } SdvCameraPhase;
 
 /*
@@ -87,7 +89,7 @@ typedef struct SdvCameraTask {
 } SdvCameraTask;
 
 extern short _sefBattleMode;
-extern void sdvProgressPrm(int kind, void *data, int size);
+extern int sdvProgressPrm(int kind, void *data, int size);
 extern void func_A31920(int kind, float *params);
 
 void sdvScheduleCamera(SdvCameraTask *task);
@@ -101,10 +103,20 @@ void sdvClearSpecialWork(void);
  * One 0x1280-byte alter record. Only the +0x1278 status halfword that
  * sdvInitAlters, sdvDestroyAlters and sdvExecAlters read is named.
  */
+typedef struct SdvAlterParameters {
+    unsigned long long unmodeled_00[14];
+} SdvAlterParameters;
+
 typedef struct SdvAlter {
-    unsigned char unmodeled_0000[0x1278];
+    SdvAlterParameters parameters;
+    unsigned char unmodeled_0070[0x1200];
+    float phase;
+    unsigned short cursor;
+    unsigned short samples;
     unsigned short active;          /* +0x1278 */
-    unsigned char unmodeled_127a[6];
+    unsigned char unmodeled_127a[2];
+    short serial;
+    unsigned char unmodeled_127e[2];
 } SdvAlter;
 
 extern SdvAlter _sdvAlter[16];

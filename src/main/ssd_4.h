@@ -18,7 +18,11 @@
 typedef struct SsdMemoryBlock {
     struct SsdMemoryBlock *next;       /* +0x00 */
     int end;                            /* +0x04 */
-    unsigned char unmodeled_08[0x38]; /* +0x08..0x3f: fields only the still-scaffold allocator functions of this TU touch */
+    unsigned char state;                /* +0x08: allocator state (2 for low, 18 for high) */
+    unsigned char flags;                /* +0x09: cleared when an allocation is created */
+    unsigned char _unmodeled_0a[2];     /* +0x0a..0x0b */
+    int tag;                            /* +0x0c: allocator tag argument */
+    unsigned char _unmodeled_10[0x30];  /* +0x10..0x3f */
 } SsdMemoryBlock;
 
 #endif /* SRC_MAIN_SSD_4_H */

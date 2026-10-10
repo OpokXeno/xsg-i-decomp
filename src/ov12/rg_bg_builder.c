@@ -133,13 +133,13 @@ static RgGeom *_CreateColi(void *pDB, const char *pszVariant, int id)
  * ov12:0x00a55760 holds the assertion expression "pszName != NIL".
  * ov12:0x00a55780 holds the format string "already entried '%s'".
  */
-extern const char D_00A55738[];
-extern const char D_00A55760[];
+
+
 extern const char D_00A55780[];
 
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
-extern int RgSimpleDBFind(RgSimpleDB *pDB, const char *pszName);
+
 extern void RgSimpleDBEntry(RgSimpleDB *pDB, void *pDat, const char *pszName);
 
 static RgColiEntry *_EntryColi(RgSimpleDB *pDB, const char *pszName, int id,
@@ -274,7 +274,7 @@ extern RgDispModel *CreateXrgDispModelImpl(const char *name,
 extern void RgDispModelSetMode(RgDispModel *dispModel, int mode);
 extern void RgGeomSetParent(RgGeom *pGeom, void *parent);
 extern void RgGeomTrayGetLocal(void *tray, Matrix4 destination);
-extern void RgGeomTraySetLocal(void *tray, Matrix4 source);
+
 
 /* Defined later in this TU (LOCAL sibling still in asm). */
 static RgGeom *_CreateColi(void *pGroup, const char *variant, int id);

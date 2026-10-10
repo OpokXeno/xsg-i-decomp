@@ -1,6 +1,12 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "tch.h"
+
+static void getInfoAddr(TimeChart *chart);
+
+struct PlayTCHCurveSet;
 
 static void getInfoAddr(TimeChart *chart)
 {
@@ -40,15 +46,6 @@ static void getInfoAddr(TimeChart *chart)
     }
 }
 
-static void getInfoAddr(TimeChart *chart);
-
-/*
- * TCH_getInfoID: linear search of chart's record index for the entry named
- * "name" (comparing at most "length" characters, or strlen(name) of them
- * when the caller passes a negative length), returning its index or -1.
- * getInfoAddr (this TU, still assembly) performs chart's one-time pointer
- * relocation on the first call.
- */
 int TCH_getInfoID(TimeChart *chart, const char *name, int length)
 {
     int index;
@@ -65,25 +62,39 @@ int TCH_getInfoID(TimeChart *chart, const char *name, int length)
     entry = chart->records;
     index = 0;
     if (chart->recordCount != 0) {
-        while (strncmp(entry->name, name, searchLength) != 0) {
+        do {
+            if (strncmp(entry->name, name, searchLength) == 0) {
+                return index;
+            }
             index += 1;
             entry = (const TchEntry *)((const char *)entry + entry->wordCount * 4 + 8);
-            if (index >= chart->recordCount) {
-                goto not_found;
-            }
-            /*
-             * Unreachable, but keeps the compiler from rotating this loop
-             * into a pretest shape that duplicates the strncmp/index/entry
-             * work ahead of it.
-             */
-            continue;
-            break;
-        }
-
-        return index;
+        } while (index < chart->recordCount);
     }
-not_found:
     return -1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tch", TCH_getInfo);
+struct PlayTCHCurveSet *TCH_getInfo(void *timeChart, int index)
+{
+    TimeChart *chart;
+    int entryIndex;
+    void *entry;
+
+    chart = timeChart;
+    if (chart->relocated == 0) {
+        getInfoAddr(chart);
+    }
+    if (index < 0 || index >= chart->recordCount) {
+        return 0;
+    }
+
+    entry = (struct PlayTCHCurveSet *)chart->records;
+    entryIndex = 0;
+    while (entryIndex < chart->recordCount) {
+        if (index == entryIndex) {
+            return entry;
+        }
+        entry = &((TchEntry *)entry)->pointerOffsets[((TchEntry *)entry)->wordCount];
+        entryIndex++;
+    }
+    return 0;
+}

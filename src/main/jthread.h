@@ -6,6 +6,7 @@
 #define SRC_MAIN_JTHREAD_H
 
 #include "shared.h"
+#include "main/jni.h"
 
 /*
  * The VM thread object JTHREAD_defaultUnit/JTHREAD_defaultChr are installed
@@ -73,15 +74,6 @@ typedef struct JThreadStageObject {
     unsigned char unmodeled_00[0x2c];
     SceneObject stage; /* +0x2c */
 } JThreadStageObject;
-
-/*
- * classJava_xeno_Unit is already declared in shared.h; classJava_xeno_Chr
- * is not, since its layout-sensitive uses live in other TUs' own headers
- * (src/main/chr.h, src/main/scene_1.h, src/main/layout.h,
- * src/main/toolkit.h). This TU only ever passes it to lookupClassField, so
- * it is restated verbatim with those TUs' spelling.
- */
-extern void *classJava_xeno_Chr;
 
 /*
  * lookupClassField/loadConstString/JNI_callMethod are the runtime's

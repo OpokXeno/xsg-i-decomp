@@ -97,9 +97,12 @@ typedef struct AgwsListRow {
 } AgwsListRow;
 
 typedef struct AgwsListSPWindow {
-    unsigned char unmodeled_00[1];
+    unsigned char state;
     unsigned char rowCount;
-    unsigned char unmodeled_02[0x0C - 0x02];
+    unsigned char unmodeled_02[2];
+    short x;
+    short y;
+    int color;
     short width;
     short height;
     int flags;
@@ -109,8 +112,33 @@ typedef struct AgwsListSPWindow {
     AgwsListRow *items;
 } AgwsListSPWindow;
 
+typedef struct AgwsListTag {
+    unsigned char unmodeled_00[4];
+    short x;
+    short y;
+    int depth;
+    unsigned char red;
+    unsigned char green;
+    unsigned char blue;
+    unsigned char unmodeled_0f[0x20 - 0x0F];
+} AgwsListTag;
+
+typedef struct AgwsListCursor {
+    unsigned char unmodeled_00[4];
+    short x;
+    short y;
+    int depth;
+    unsigned char unmodeled_0c[0x28 - 0x0C];
+} AgwsListCursor;
+
 typedef struct AgwsListWork {
-    unsigned char unmodeled_00[0x130];
+    unsigned char state;
+    unsigned char visible;
+    unsigned char selectedRow;
+    unsigned char unmodeled_03;
+    int color;
+    AgwsListTag tag[8];
+    AgwsListCursor cursor;
     AgwsListSPWindow window;
 } AgwsListWork;
 
@@ -340,7 +368,7 @@ int MenuSortGet(int listIndex, int index);
 int MenuFaceEpidGet(short sortEntry, int kind);
 void eNumberSet(void *number, int mode);
 void eNumberMain(void *number);
-void eTagFontSet(void *tag, int tag_word);
+void eTagFontSet(void *tag, const char *text);
 void eTagFontMain(void *tag);
 int MenuPasLengthGet(const char *text);
 void MenuPasWindow(void);

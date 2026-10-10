@@ -1,5 +1,29 @@
 #include "common.h"
+
 #include "shared.h"
+#include "main/jni.h"
+
+#include "main/play.h"
+
+#include "playcontrol.h"
+
+/* Native integer arguments occupy complete 32-bit VM slots. The camera
+ * controller takes the low halfword. The VM passes frame bounds as raw
+ * operand words; copy their representation into signed Java integers before
+ * converting frames to seconds, preserving negative frame values. */
+typedef struct PlayControlIntegerCall {
+    Play *control;
+    int cameraIndex;
+    int flags;
+} PlayControlIntegerCall;
+
+typedef struct PlayControlTimingCall {
+    Play *control;
+    int cameraIndex;
+    int flags;
+    unsigned int frameRangeBits[2];
+    float frameStep;
+} PlayControlTimingCall;
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -8,6 +32,7 @@
  * (thread, arguments[, result]) convention src/main/runtime.c and
  * src/main/camera.c use.
  */
+
 typedef struct JThread JThread;
 
 /*
@@ -21,6 +46,7 @@ typedef struct JThread JThread;
  * start__/stop__). play.h is TU-local to the play TU, so this TU keeps its
  * own tag for the object.
  */
+
 typedef struct PlayControlHandle {
     int class_ref;                  /* +0x00, copied as a VM object-header word */
     int signal;                    /* +0x04, lw/sw at 0x002fa3ec/0x002fa404 */
@@ -67,18 +93,81 @@ typedef struct PlayControlSetChartObserverArguments {
     PlayControlString *method_name;
 } PlayControlSetChartObserverArguments;
 
-extern SceneClass *classJava_xeno_util_Window;
 extern PlayControlHandle *PLAY_getCurrent(void);
+
 extern void PLAY_setObserver(PlayControlHandle *play, int event_id, int event_key,
                              SceneObject observer, SceneMethod *method);
+
 extern SceneString *loadConstString(const char *bytes, int length);
+
 extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
                                void *signature_or_type);
+
 extern SceneType *TYPE_Void;
+
 extern int TCH_getInfoID(void *chart, const char *name, int length);
 
 /* Create the native playback object and attach the class reference expected by
    the script VM's SceneObject header. */
+
+/*
+ * Java_xeno_PlayControl_getSignal__ (main VA 0x002fa3e8, 16 bytes, GLOBAL
+ * binding). Returns the playback controller's signal word.
+ */
+
+/* The call block of signal__I (java signature "(I)V"): the receiving
+   PlayControl's native handle and the signal value to store. */
+
+typedef struct PlayControlSignalArguments {
+    PlayControlHandle *control; /* +0x0 */
+    int value;                   /* +0x4 */
+} PlayControlSignalArguments;
+
+/*
+ * Java_xeno_PlayControl_signal__I (main VA 0x002fa3f8, 16 bytes, GLOBAL
+ * binding). Sets the playback controller's signal word.
+ */
+
+/* The call block of loadCamera__Ljava_lang_Object_ (java signature
+   "(Ljava/lang/Object;)V"): the receiving PlayControl's native handle and
+   the Object argument, stored verbatim into the handle's source field. */
+
+typedef struct PlayControlLoadCameraArguments {
+    PlayControlHandle *control; /* +0x0 */
+    void *camera;                 /* +0x4 */
+} PlayControlLoadCameraArguments;
+
+/*
+ * Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_ (main VA
+ * 0x002fa4b0, 16 bytes, GLOBAL binding). Stores the given Object into the
+ * playback controller's source field.
+ */
+
+/* Already recovered in src/main/play.c (main's play TU, VA 0x0026a770);
+   restated here verbatim (a TU-local declaration cannot be included from
+   another TU). Stores its second argument into the playback controller's
+   timeChart field (play.h +0x08). */
+
+extern void PLAY_setTimeChart(PlayControlHandle *play, void *time_chart);
+
+/* The call block of loadTimeChart__Ljava_lang_Object_ (java signature
+   "(Ljava/lang/Object;)V"): the receiving PlayControl's native handle and
+   the Object argument, passed through to PLAY_setTimeChart unchanged. */
+
+typedef struct PlayControlLoadTimeChartArguments {
+    PlayControlHandle *control; /* +0x0 */
+    void *time_chart;             /* +0x4 */
+} PlayControlLoadTimeChartArguments;
+
+typedef struct PlayControlCallBackParams PlayControlCallBackParams;
+
+extern PlayControlCallBackParams *PLAY_getCallBackParams(PlayControlHandle *play);
+
+/*
+ * Java_xeno_PlayControl_getParams__ (main VA 0x002fa648, 44 bytes, GLOBAL
+ * binding). Returns the playback controller's callback-parameter object.
+ */
+
 void Java_xeno_PlayControl_create__(JThread *thread, void *arguments,
                                     int *result)
 {
@@ -91,10 +180,6 @@ void Java_xeno_PlayControl_create__(JThread *thread, void *arguments,
     *result = (int)play;
 }
 
-/*
- * Java_xeno_PlayControl_getSignal__ (main VA 0x002fa3e8, 16 bytes, GLOBAL
- * binding). Returns the playback controller's signal word.
- */
 void Java_xeno_PlayControl_getSignal__(JThread *thread,
                                        PlayControlHandle **arguments,
                                        int *result)
@@ -102,85 +187,63 @@ void Java_xeno_PlayControl_getSignal__(JThread *thread,
     *result = (*arguments)->signal;
 }
 
-/* The call block of signal__I (java signature "(I)V"): the receiving
-   PlayControl's native handle and the signal value to store. */
-typedef struct PlayControlSignalArguments {
-    PlayControlHandle *control; /* +0x0 */
-    int value;                   /* +0x4 */
-} PlayControlSignalArguments;
-
-/*
- * Java_xeno_PlayControl_signal__I (main VA 0x002fa3f8, 16 bytes, GLOBAL
- * binding). Sets the playback controller's signal word.
- */
 void Java_xeno_PlayControl_signal__I(JThread *thread,
                                      PlayControlSignalArguments *arguments)
 {
     arguments->control->signal = arguments->value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/playcontrol", Java_xeno_PlayControl_init__II);
+void Java_xeno_PlayControl_init__II(JThread *thread,
+                                     const PlayControlIntegerCall *arguments)
+{
+    Play *play = arguments->control;
+    Play *control = play;
 
-INCLUDE_ASM("asm/main/nonmatchings/playcontrol", Java_xeno_PlayControl_init__IIIIF);
+    __builtin_memcpy(&control->cameraIndex, &arguments->cameraIndex, sizeof(control->cameraIndex));
+    control->flags = arguments->flags;
+    PLAY_setup(play);
+}
 
-/* The call block of loadCamera__Ljava_lang_Object_ (java signature
-   "(Ljava/lang/Object;)V"): the receiving PlayControl's native handle and
-   the Object argument, stored verbatim into the handle's source field. */
-typedef struct PlayControlLoadCameraArguments {
-    PlayControlHandle *control; /* +0x0 */
-    void *camera;                 /* +0x4 */
-} PlayControlLoadCameraArguments;
+void Java_xeno_PlayControl_init__IIIIF(JThread *thread,
+                                        const PlayControlTimingCall *arguments)
+{
+    Play *control = arguments->control;
+    int start_frame;
+    int end_frame;
+    float start_time;
+    float frame_step;
 
-/*
- * Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_ (main VA
- * 0x002fa4b0, 16 bytes, GLOBAL binding). Stores the given Object into the
- * playback controller's source field.
- */
+    __builtin_memcpy(&control->cameraIndex, &arguments->cameraIndex, sizeof(control->cameraIndex));
+    control->flags = arguments->flags;
+    PLAY_setup(control);
+    __builtin_memcpy(&start_frame, &arguments->frameRangeBits[0], sizeof(start_frame));
+    start_time = (float)start_frame * PLAY_SECONDS_PER_FRAME;
+    control->startTime = start_time;
+    __builtin_memcpy(&end_frame, &arguments->frameRangeBits[1], sizeof(end_frame));
+    control->endTime = (float)end_frame * PLAY_SECONDS_PER_FRAME;
+    frame_step = arguments->frameStep;
+    control->currentTime = start_time;
+    control->frameStep = frame_step * PLAY_SECONDS_PER_FRAME;
+}
+
 void Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_(
     JThread *thread, PlayControlLoadCameraArguments *arguments)
 {
     arguments->control->source = arguments->camera;
 }
 
-/* Already recovered in src/main/play.c (main's play TU, VA 0x0026a770);
-   restated here verbatim (a TU-local declaration cannot be included from
-   another TU). Stores its second argument into the playback controller's
-   timeChart field (play.h +0x08). */
-extern void PLAY_setTimeChart(PlayControlHandle *play, void *time_chart);
-
-/* The call block of loadTimeChart__Ljava_lang_Object_ (java signature
-   "(Ljava/lang/Object;)V"): the receiving PlayControl's native handle and
-   the Object argument, passed through to PLAY_setTimeChart unchanged. */
-typedef struct PlayControlLoadTimeChartArguments {
-    PlayControlHandle *control; /* +0x0 */
-    void *time_chart;             /* +0x4 */
-} PlayControlLoadTimeChartArguments;
-
-/*
- * Java_xeno_PlayControl_loadTimeChart__Ljava_lang_Object_ (main VA
- * 0x002fa4c0, 32 bytes, GLOBAL binding). Hands the given Object to
- * PLAY_setTimeChart as the playback controller's time-chart resource.
- */
 void Java_xeno_PlayControl_loadTimeChart__Ljava_lang_Object_(
     JThread *thread, PlayControlLoadTimeChartArguments *arguments)
 {
     PLAY_setTimeChart(arguments->control, arguments->time_chart);
 }
 
-/*
- * Java_xeno_PlayControl_start__ (main VA 0x002fa4e0, 20 bytes, GLOBAL
- * binding). Sets the playback controller's running bit (0x1).
- */
 void Java_xeno_PlayControl_start__(JThread *thread,
                                    PlayControlHandle **arguments)
 {
     (*arguments)->flags |= 1;
 }
 
-/*
- * Java_xeno_PlayControl_stop__ (main VA 0x002fa4f8, 24 bytes, GLOBAL
- * binding). Clears the playback controller's running bit (0x1).
- */
 void Java_xeno_PlayControl_stop__(JThread *thread,
                                   PlayControlHandle **arguments)
 {
@@ -241,24 +304,6 @@ void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Lja
                      observer, method);
 }
 
-/*
- * The callback-parameter object PLAY_getCallBackParams returns (`TCHParams`
- * in src/main/play.h for the play TU: the playback controller's embedded
- * +0x1cc member). play.h is TU-local to the play TU, so this TU keeps its
- * own opaque tag for the returned pointer; nothing here dereferences it.
- */
-typedef struct PlayControlCallBackParams PlayControlCallBackParams;
-
-/* Already recovered in src/main/play.c (main's play TU, VA 0x0026ab90);
-   restated here verbatim (a TU-local declaration cannot be included from
-   another TU). Returns the playback controller's own callback-parameter
-   object. */
-extern PlayControlCallBackParams *PLAY_getCallBackParams(PlayControlHandle *play);
-
-/*
- * Java_xeno_PlayControl_getParams__ (main VA 0x002fa648, 44 bytes, GLOBAL
- * binding). Returns the playback controller's callback-parameter object.
- */
 void Java_xeno_PlayControl_getParams__(JThread *thread,
                                        PlayControlHandle **arguments,
                                        PlayControlCallBackParams **result)

@@ -106,6 +106,7 @@ import os
 import re
 import struct
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -113,6 +114,7 @@ sys.path.insert(0, str(HERE))
 from elfinfo import Elf  # noqa: E402
 
 REGISTRY = 'config/tu/data-carves.json'
+CANONICAL_ROOT = Path('/home/pc/xenosaga1-port/xenosaga-i-decomp')
 PUBLIC_REGISTRY = 'config/objects/data-carves.json'
 SCHEMA = 'tu-data-carves/1'
 # Sections a compiler fills with anonymous constants of a function: jump tables
@@ -183,6 +185,15 @@ def load_registry(root):
     if data.get('schema') != SCHEMA:
         raise CarveError(f'{path}: schema {data.get("schema")!r} is not {SCHEMA}')
     data.setdefault('tus', {})
+    # Explicit NOBITS input spans establish placement without a function-root
+    # list. Older storage records therefore lack this display-only field.
+    # Keep their ownership and allocation evidence intact; an empty list does
+    # not supply provenance or make the linked data audit pass.
+    for sections in data['tus'].values():
+        for section in ('.bss', '.sbss'):
+            for run in sections.get(section, []):
+                if run.get('c_input_spans'):
+                    run.setdefault('generated_by', [])
     return data
 
 
@@ -244,21 +255,7 @@ def write_registry(root, tu_id, runs, basis=None):
     path = registry_path(root)
     data = load_registry(root)
     old = data['tus'].get(tu_id)
-    new = None
-    if runs:
-        new = {}
-        for sec, items in sorted(runs.items()):
-            new[sec] = []
-            for r in items:
-                entry = {k: r[k] for k in ('range', 'generated', 'generated_by', 'c_owned_symbols',
-                                            'also_referenced_by_c', 'reached_through',
-                                            'c_input_spans', 'c_storage_aliases',
-                                            'uncredited_c_symbols', 'uncredited_scaffold_ranges') if k in r}
-                if basis is not None:
-                    entry['basis'] = basis
-                elif r.get('basis') is not None:
-                    entry['basis'] = r['basis']
-                new[sec].append(entry)
+    new = registry_entry(runs, basis, old)
     if old == new:
         return False
     if new is None:
@@ -266,7 +263,10 @@ def write_registry(root, tu_id, runs, basis=None):
     else:
         data['tus'][tu_id] = new
     data['tus'] = {k: data['tus'][k] for k in sorted(data['tus'])}
-    doc = dict(schema=SCHEMA,
+    # A TU update must retain the registry's common-tail storage placements
+    # and other metadata used by the whole-file build.
+    doc = dict(data)
+    doc.update(schema=SCHEMA,
                doc=('C-owned data runs carved out of scaffold data pieces: the jump tables and '
                     'literals a recovered C function generates (tools/tu/data_carve.py, '
                     'docs/tu-build.md "Data ownership"). Written by tools/worker.py (private), '
@@ -279,6 +279,41 @@ def write_registry(root, tu_id, runs, basis=None):
     tmp.write_text(json.dumps(doc, indent=1) + '\n')
     os.replace(tmp, path)
     return True
+
+
+def registry_entry(runs, basis=None, old=None):
+    """The entry `write_registry` records for `runs` over the entry `old` (None: removed)."""
+    # A run's verified owner correction is placement metadata apply_main()
+    # needs (it moves the run out of its scaffold owner's piece). Derived runs
+    # never carry it, so a new basis must inherit it from the registered run of
+    # the same section and range, or the build cannot be regenerated
+    # (main/tu091 menutbl, 2026-10-06).
+    old_corrections = {}
+    for sec, items in (old or {}).items():
+        for r in items or []:
+            correction = (r.get('basis') or {}).get('owner_correction')
+            if correction is not None:
+                old_corrections[(sec, hx(r['range'][0]), hx(r['range'][1]))] = correction
+    new = None
+    if runs:
+        new = {}
+        for sec, items in sorted(runs.items()):
+            new[sec] = []
+            for r in items:
+                entry = {k: r[k] for k in ('range', 'generated', 'generated_by', 'c_owned_symbols',
+                                            'also_referenced_by_c', 'reached_through',
+                                            'c_input_spans', 'c_storage_aliases',
+                                            'uncredited_c_symbols', 'uncredited_scaffold_ranges') if k in r}
+                if basis is not None:
+                    entry['basis'] = basis
+                    correction = (r.get('basis') or {}).get('owner_correction') or old_corrections.get(
+                        (sec, hx(r['range'][0]), hx(r['range'][1])))
+                    if correction is not None:
+                        entry['basis'] = dict(basis, owner_correction=correction)
+                elif r.get('basis') is not None:
+                    entry['basis'] = r['basis']
+                new[sec].append(entry)
+    return new
 
 
 # ---------------------------------------------------------------------------
@@ -1717,6 +1752,193 @@ def aliases(unit_dir):
     return out
 
 
+def original_storage_symbols(root, unit, original, name, address, section,
+                             binding, symbol_type, size):
+    """Resolve one storage identity, including registered VA-qualified names."""
+    def matching(original_name):
+        return [symbol for symbol in original.symbols if symbol.name == original_name and
+                symbol.value == address and symbol.bind == binding and symbol.type == symbol_type and
+                symbol.size == size and 0 < symbol.shndx < len(original.sections) and
+                original.sections[symbol.shndx].name == section]
+
+    exact = matching(name)
+    if exact:
+        return exact
+    # A file-local compiler suffix is not a C identifier. Splat's registered
+    # spelling may replace its dot with an underscore, but that registration,
+    # exact VA and original local zero-size identity must all agree.
+    symbols_path = Path(root) / 'config' / 'symbols' / (unit + '.txt')
+    if (binding, symbol_type, size) == (0, 0, 0) and symbols_path.is_file():
+        assignments = re.findall(r'^\s*' + re.escape(name) + r'\s*=\s*(0x[0-9A-Fa-f]+)\s*;',
+                                 symbols_path.read_text(), re.MULTILINE)
+        if len(assignments) == 1 and int(assignments[0], 16) == address:
+            registered = [symbol for symbol in original.symbols
+                          if re.fullmatch(r'.+\.[0-9]+', symbol.name) and
+                          symbol.name.replace('.', '_') == name and symbol in matching(symbol.name)]
+            if len(registered) == 1:
+                return registered
+    # Splat registers a local name qualified by its VA when the retail name
+    # occurs in several original objects. Require that actual unit assignment;
+    # a suffix alone never establishes an alias or changes an ELF identity.
+    qualified = re.fullmatch(r'(.+)_([0-9A-Fa-f]{8})', name)
+    if (not qualified or int(qualified.group(2), 16) != address or
+            (binding, symbol_type, size) != (0, 0, 0) or not symbols_path.is_file()):
+        return []
+    assignments = re.findall(r'^\s*' + re.escape(name) + r'\s*=\s*(0x[0-9A-Fa-f]+)\s*;',
+                             symbols_path.read_text(), re.MULTILINE)
+    if len(assignments) != 1 or int(assignments[0], 16) != address:
+        return []
+    return matching(qualified.group(1))
+
+
+def registered_object_items(root, unit, original, symbol, items):
+    """Exact retail local OBJECTs whose mapped labels use registered aliases."""
+    if unit != 'main' or symbol.bind != 0 or symbol.type != 1 or symbol.size <= 0:
+        return []
+    path = Path(root) / 'config' / 'symbols' / (unit + '.txt')
+    if not path.is_file():
+        return []
+    text, matches = path.read_text(), []
+    for section, section_items_ in items.items():
+        for item in section_items_:
+            identities = [s for s in original.symbols if s.name == symbol.name and
+                          s.value == item['start'] and s.bind == symbol.bind and
+                          s.type == symbol.type and s.size == symbol.size and
+                          0 < s.shndx < len(original.sections) and original.sections[s.shndx].name == section]
+            if len(identities) != 1 or symbol.size > item['end'] - item['start']:
+                continue
+            registered = []
+            for label in item.get('labels', []):
+                values = re.findall(r'^\s*' + re.escape(label) + r'\s*=\s*(0x[0-9A-Fa-f]+)\s*;',
+                                    text, re.MULTILINE)
+                if len(values) == 1 and int(values[0], 16) == item['start']:
+                    registered.append(label)
+            if registered:
+                matches.append((section, item, registered))
+    return matches
+
+
+def nobits_parent_array(root, unit, ctx, section, csec, elf, original, source, obj,
+                        items, original_references, owner_name=None):
+    """Prove one local array spanning original map-only interior labels.
+
+    The original item boundaries must tile the complete compiler span. Neither
+    the array count nor NOBITS contents can widen that original span, and no
+    child label becomes a recovered ELF identity.
+    """
+    storage = [s for s in elf.symbols if s.shndx == csec.index and s.type in (0, 1)]
+    if owner_name is not None:
+        storage = [s for s in storage if s.name == owner_name]
+    if len(storage) != 1:
+        return None
+    symbol = storage[0]
+    if (symbol.bind, symbol.type, symbol.size) != (0, 0, 0) or (
+            owner_name is None and symbol.value != 0):
+        return None
+    asm_path = Path(str(obj) + '.s')
+    if not asm_path.is_file():
+        asm_path = Path(obj).with_suffix('.s')
+    if not asm_path.is_file():
+        return None
+    sys.path.insert(0, str(HERE.parent))
+    from tu import data_gate as provenance
+    definition = provenance.emitted_storage(asm_path.read_text(errors='surrogateescape')).get(symbol.name, {})
+    extent = definition.get('size') if owner_name is not None else csec.size
+    if type(extent) is not int or extent <= 0 or symbol.value + extent > csec.size:
+        return None
+    array = provenance.source_storage_array_extent(
+        Path(source).read_text(errors='surrogateescape'), symbol.name, extent)
+    if (not array or definition.get('extent_kind') != 'label-space' or
+            definition.get('section') != csec.name or definition.get('size') != extent):
+        return None
+    bases = [(i, item) for i, item in enumerate(items) if symbol.name in item['labels']]
+    if len(bases) != 1:
+        return None
+    first, base = bases[0]
+    lo, hi = base['start'], base['start'] + extent
+    retail = original_storage_symbols(root, unit, original, symbol.name, lo, section, 0, 0, 0)
+    if len(retail) != 1 or lo % max(1, csec.align) or not any(
+            p['start'] <= lo < hi <= p['end'] for p in ctx['pieces'].get(section, [])):
+        return None
+    original_ids = [s for s in original.symbols if s.type not in (3, 4) and
+                    lo <= s.value < hi and 0 < s.shndx < len(original.sections) and
+                    original.sections[s.shndx].name == section]
+    if len(original_ids) != 1 or original_ids[0].index != retail[0].index:
+        return None
+    covered, cursor = [], lo
+    for index in range(first, len(items)):
+        item = items[index]
+        if cursor == hi:
+            break
+        if item['start'] != cursor or not cursor < item['end'] <= hi:
+            return None
+        covered.append(index)
+        cursor = item['end']
+    if cursor != hi or len(covered) < 2:
+        return None
+    # Local GAS references ordinarily target the section symbol, rather than
+    # the zero-size storage label. Preserve their real addends as corroboration
+    # of every interior alias consumed by original code in this TU.
+    targets = [symbol] + [s for s in elf.symbols if s.shndx == csec.index and s.type == 3]
+    relocations = [dict(ref, owner_offset=ref['addend'] + target.value - symbol.value)
+                   for target in targets
+                   for ref in provenance.storage_relocations(elf, target.index, None)]
+    aliases = []
+    for index in covered[1:]:
+        item = items[index]
+        offset = item['start'] - lo
+        consumers = set(item['labels']) & original_references
+        for target in elf.symbols:
+            if target.shndx == 0 and target.name in consumers:
+                relocations.extend(dict(ref, owner_offset=offset+ref['addend'],
+                                        map_alias=target.name)
+                                   for ref in provenance.storage_relocations(elf, target.index, None))
+        if consumers and not any(ref['owner_offset'] == offset for ref in relocations):
+            return None
+        for name in item['labels']:
+            aliases.append(dict(original_name=name, address=h8(item['start']),
+                                storage_owner=dict(name=symbol.name, address=h8(lo), size=extent)))
+    return dict(name=symbol.name, lo=lo, hi=hi, items=covered, aliases=aliases,
+                source_array=array, relocations=relocations,
+                original_name=retail[0].name,
+                original_item_ranges=[[items[i]['start'], items[i]['end']] for i in covered])
+
+
+def compiler_static_object_functions(elf, symbol, source_text, assembly):
+    """Require a function static declaration and its exact cc1 object reference."""
+    local = re.fullmatch(r'([A-Za-z_][A-Za-z_0-9]*)\.\d+', symbol.name)
+    if not local or symbol.bind != 0 or symbol.type != 1 or symbol.size <= 0:
+        return []
+    sys.path.insert(0, str(HERE.parent))
+    import tu_edit
+    from tu import data_gate as provenance
+    tu = tu_edit.TU(source_text)
+    functions = []
+    emitted = provenance.cc1_functions(assembly)
+    for block in tu.blocks:
+        if block.state != 'c' or block.name not in emitted:
+            continue
+        tokens = tu_edit.c_tokens(tu.text[block.core_start:block.core_end])
+        for index, token in enumerate(tokens):
+            if token != 'static':
+                continue
+            end = next((i for i in range(index + 1, len(tokens)) if tokens[i] in ('=', ';', '{', '(')), len(tokens))
+            if local[1] in tokens[index + 1:end]:
+                functions.append(block.name)
+                break
+    references = section_references(elf, elf.sections[symbol.shndx])
+    proved = set()
+    for ref in references:
+        if ref['target'] != symbol.value:
+            continue
+        origin_section = elf.sections[elf.sections[ref['rel']].info]
+        owners = [s for s in elf.symbols if s.type == 2 and s.size and s.name in functions and
+                  s.shndx == origin_section.index and s.value <= ref['offset'] < s.value + s.size]
+        if len(owners) == 1:
+            proved.add(owners[0].name)
+    return sorted(proved)
+
+
 def section_items(ctx, sec):
     """[item] of every piece of one TU section, in address order."""
     items = []
@@ -1897,6 +2119,70 @@ def section_references(elf, csec, allow_negative_base=False):
                 return rt_field == register
             return False
 
+        def annulled_return_restore(pc, reference):
+            """A BNEL return path does not restore registers on fallthrough.
+
+            Admit only a stack restore in the likely branch's delay slot,
+            followed on the taken path by a closed, same-function epilogue.
+            Other delay slots and non-returning branch targets stay conservative.
+            """
+            if pc < 4:
+                return False
+            branch = struct.unpack_from('<I', tdata, pc - 4)[0]
+            restore = struct.unpack_from('<I', tdata, pc)[0]
+            if (branch >> 26 != 0x15 or restore >> 26 not in (35, 55)
+                    or (restore >> 21) & 31 != 29
+                    or (restore >> 16) & 31 not in (*range(16, 24), 30, 31)):
+                return False
+            target = pc + (_sext16(branch) << 2)
+            owners = [s for s in syms if s.shndx == tgt.index and s.type == 2
+                      and s.size and s.value <= pc < s.value + s.size
+                      and s.value <= reference < s.value + s.size]
+            if len(owners) != 1:
+                return False
+            owner = owners[0]
+            end = owner.value + owner.size
+            if not reference < target < end or end > len(tdata):
+                return False
+            # No alternate direct entry may execute the annulled instruction.
+            if any(s.shndx == tgt.index and s.name and s.type != 3
+                   and s.value == pc for s in syms):
+                return False
+            for at in range(owner.value, end, 4):
+                insn = struct.unpack_from('<I', tdata, at)[0]
+                op = insn >> 26
+                if op == 0 and insn & 63 == 8 and (insn >> 21) & 31 != 31:
+                    return False
+                if op in (4, 5, 6, 7, 20, 21, 22, 23) or (
+                        op == 1 and (insn >> 16) & 31 in (0, 1, 2, 3, 16, 17, 18, 19)) or (
+                        op in (16, 17, 18, 19) and (insn >> 21) & 31 == 8):
+                    if at + 4 + (_sext16(insn) << 2) == pc:
+                        return False
+                elif op in (2, 3) and (insn & 0x3ffffff) << 2 == pc:
+                    return False
+            for at, kind, symbol_index, addend in entries:
+                if owner.value <= at < end and kind == 4 and symbol_index < len(syms):
+                    symbol = syms[symbol_index]
+                    if symbol.shndx == tgt.index:
+                        encoded = struct.unpack_from('<I', tdata, at)[0]
+                        displacement = addend if addend is not None else (encoded & 0x3ffffff) << 2
+                        if symbol.value + displacement == pc:
+                            return False
+            # Only stack restores, followed by jr ra / addiu sp,sp,N.
+            if any(target <= entry[0] < end for entry in entries):
+                return False
+            for at in range(target, min(end, target + 128), 4):
+                insn = struct.unpack_from('<I', tdata, at)[0]
+                if insn == 0x03e00008:
+                    if at + 8 != end:
+                        return False
+                    delay = struct.unpack_from('<I', tdata, at + 4)[0]
+                    return (delay >> 16 == 0x27bd and _sext16(delay) > 0)
+                if (insn >> 26 not in (35, 55) or (insn >> 21) & 31 != 29
+                        or (insn >> 16) & 31 not in (*range(16, 24), 30, 31)):
+                    return False
+            return False
+
         for i, (off, rtype, symi, add) in enumerate(entries):
             if symi >= len(syms) or syms[symi].shndx != csec.index:
                 continue
@@ -1944,6 +2230,8 @@ def section_references(elf, csec, allow_negative_base=False):
                                 live_bases = {hi_reg}
                                 for pc in range(hi_off + 4, off, 4):
                                     insn = struct.unpack_from('<I', tdata, pc)[0]
+                                    if annulled_return_restore(pc, off):
+                                        continue
                                     opcode = insn >> 26
                                     rs_field = (insn >> 21) & 31
                                     rt_field = (insn >> 16) & 31
@@ -2856,10 +3144,1439 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
     return plans
 
 
-def derive(root, unit, unit_dir, tu_id, source, obj):
-    """{'runs': {section: [run]}, 'sections': {section: detail}, 'problems': [..]} for one candidate."""
+def anonymous_coordinate_candidates(elf, csec, rels, data, want, length,
+                                    target_parts, original, deadline, tu_id, sec):
+    """Find eligible coordinates before bounding the complete span proofs.
+
+    Other compiler objects and a jump-table entry pointing at a different
+    original instruction cannot start this span. Discarding those positions
+    avoids charging every unrelated relocation in a large TU as a candidate.
+    The complete initializer/provenance proof still judges each survivor.
+    """
+    occupied = [(p['offset'], p['end']) for p in target_parts
+                if p['input_section'] == csec.name]
+    named = [s.value for s in elf.symbols if s.shndx == csec.index and s.type == 1]
+    text = next((s for s in elf.sections if s.name == '.text'), None)
+    functions = [s for s in elf.symbols if text and s.shndx == text.index and s.type == 2]
+    originals = {}
+    for symbol in original.symbols:
+        if symbol.shndx and symbol.type == 2:
+            originals.setdefault((symbol.name, symbol.bind), []).append(symbol)
+    relocations = {off: (kind, index) for off, kind, index in rels}
+    candidates = set()
+
+    def consider(offset):
+        if time.monotonic() > deadline:
+            raise CarveError(f'{tu_id}: anonymous coordinate proof exceeds its 20-second bound')
+        if offset < 0 or offset + length > csec.size:
+            return
+        if any(lo < offset + length and offset < hi for lo, hi in occupied):
+            return
+        if any(offset <= value < offset + length for value in named):
+            return
+        relocation = relocations.get(offset)
+        if want is not None and len(want) >= 4 and relocation and relocation[0] == 2:
+            symbol = elf.symbols[relocation[1]]
+            if text and symbol.shndx == text.index:
+                target = symbol.value + struct.unpack_from('<I', data, offset)[0]
+                owners = [s for s in functions
+                          if s.value <= target < s.value + max(s.size, 1)]
+                if len(owners) != 1:
+                    return
+                owner = owners[0]
+                mapped = originals.get((owner.name, owner.bind), [])
+                if len(mapped) != 1:
+                    return
+                value = (mapped[0].value + target - owner.value) & 0xffffffff
+                if value != struct.unpack_from('<I', want)[0]:
+                    return
+        candidates.add(offset)
+        if len(candidates) > 128:
+            raise CarveError(f'{tu_id} {sec}: anonymous coordinate search exceeds its bound')
+
+    for offset, _, _ in rels:
+        consider(offset)
+    if want is not None:
+        offset = data.find(want)
+        while offset >= 0:
+            consider(offset)
+            offset = data.find(want, offset + 1)
+        # A mixed anonymous run can begin with a literal and contain a later
+        # relocated table. Its complete original payload is absent from the
+        # raw object, and no relocation starts at the literal's coordinate.
+        # Seed from an unchanged leading word; the caller still proves the
+        # complete source provenance, bytes, relocations and unique mapping.
+        if len(want) >= 4:
+            offset = data.find(want[:4])
+            while offset >= 0:
+                if time.monotonic() > deadline:
+                    raise CarveError(f'{tu_id}: anonymous coordinate proof exceeds its 20-second bound')
+                if not any(position in relocations for position in range(offset - 3, offset + 4)):
+                    consider(offset)
+                offset = data.find(want[:4], offset + 1)
+    return candidates
+
+
+def current_switch_group_runs(run, original_items, c_refs, per_func, external_names):
+    """Expand a legacy multi-table run into its currently emitted original items.
+
+    Old heuristic runs can group several compiler-generated switch tables. A
+    subset restores some functions to assembly, so those tables also return to
+    scaffolding. This only selects original item identities; the caller still
+    proves every selected compiler coordinate, initializer and relocation.
+    """
+    if run.get('c_input_spans'):
+        return None
+    names = set(run.get('c_owned_symbols') or [])
+    if not 2 <= len(names) <= 64 or any(not re.fullmatch(r'jtbl_[0-9A-Fa-f]+', name) for name in names):
+        return None
+    lo, hi = map(hx, run.get('generated') or run['range'])
+    range_lo, range_hi = map(hx, run['range'])
+    group = sorted((item for item in original_items
+                    if item['start'] < hi and lo < item['end']), key=lambda item: item['start'])
+    if (not 2 <= len(group) <= 64 or range_lo != lo or group[0]['start'] != lo or
+            group[-1]['end'] != range_hi or hi > range_hi or
+            any(a['end'] != b['start'] for a, b in zip(group, group[1:])) or
+            any(not set(item['labels']).intersection(names) for item in group) or
+            set().union(*(set(item['labels']).intersection(names) for item in group)) != names):
+        return None
+    selected = []
+    for item in group:
+        labels = set(item['labels'])
+        if not labels.intersection(c_refs) or labels.intersection(external_names):
+            continue
+        start, end = item['start'], min(item['end'], hi)
+        current = copy.deepcopy(run)
+        current.update(range=[h8(start), h8(end)], generated=[h8(start), h8(end)],
+                       generated_by=sorted(name for name, refs in per_func.items()
+                                           if labels.intersection(refs)),
+                       c_owned_symbols=sorted(labels.intersection(names)),
+                       also_referenced_by_c=[],
+                       c_input_spans=[dict(section='.rodata', range=[h8(start), h8(end)],
+                                          symbols=[], anonymous_emission=True, credit='verified')])
+        selected.append(current)
+    return selected
+
+
+def legacy_initialized_owner_span(root, unit, ctx, elf, original, section, run, current_named, items):
+    """Rebind a dense legacy run to its exact existing compiler OBJECTs.
+
+    Registered item labels fix the old original ownership. A current owner
+    whose name is already mapped supplies the raw-to-original coordinate;
+    every other owner must agree in original address, extent and ELF identity,
+    and the complete initialized payload/relocations must still be exact.
+    """
+    names = set(run.get('c_owned_symbols') or [])
+    if (unit != 'main' or section in ('.bss', '.sbss') or run.get('c_input_spans')
+            or not names or names <= current_named.keys() or run.get('uncredited_c_symbols')
+            or run.get('uncredited_scaffold_ranges') or run.get('support_only')
+            or run.get('credit', 'verified') != 'verified'):
+        return None
+    lo, range_hi = map(hx, run['range'])
+    # The C object emits [lo, hi); a padded legacy range keeps its trailing
+    # original fill as scaffold, exactly as the named-owner refresh below does.
+    generated_lo, hi = map(hx, run.get('generated') or run['range'])
+    if generated_lo != lo or not lo < hi <= range_hi:
+        return None
+    original_items = [item for item in items if lo <= item['start'] < hi]
+    if (not original_items or original_items[0]['start'] != lo or original_items[-1]['end'] < hi
+            or (range_hi != hi and original_items[-1]['end'] != range_hi)
+            or any(a['end'] != b['start'] for a, b in zip(original_items, original_items[1:]))):
+        return None
+    path = Path(root) / 'config/symbols' / (unit + '.txt')
+    if not path.is_file():
+        return None
+    assignments = path.read_text()
+    rows, anchors, mapped_names = [], [], set()
+    for item in original_items:
+        labels = names.intersection(item.get('labels') or [])
+        if len(labels) != 1:
+            return None
+        label = next(iter(labels))
+        addresses = re.findall(r'^\s*' + re.escape(label) + r'\s*=\s*(0x[0-9A-Fa-f]+)\s*;',
+                               assignments, re.MULTILINE)
+        if len(addresses) != 1 or int(addresses[0], 16) != item['start']:
+            return None
+        # The original OBJECT at the item: it ends inside the item (any
+        # remainder is the item's own alignment fill, compared as bytes below).
+        extent = min(item['end'], hi) - item['start']
+        identities = [s for s in original.symbols if s.name and s.value == item['start']
+                      and s.type == 1 and 0 < s.size <= extent
+                      and 0 < s.shndx < len(original.sections)
+                      and original.sections[s.shndx].name == section]
+        if len(identities) != 1:
+            return None
+        identity = identities[0]
+        rows.append((item, identity, extent))
+        mapped_names.add(label)
+        # A current OBJECT named like the registered label, or like the
+        # original OBJECT itself (asIntensity.0 for asIntensity_0, main/tu101),
+        # fixes the raw-to-original coordinate.
+        symbol = current_named.get(label) or current_named.get(identity.name)
+        if symbol is not None:
+            if (symbol.size, symbol.bind, symbol.type, symbol.other) != \
+                    (identity.size, identity.bind, identity.type, identity.other):
+                return None
+            anchors.append((symbol.shndx, item['start'] - symbol.value))
+    if mapped_names != names or not anchors or len(set(anchors)) != 1:
+        return None
+    index, base = anchors[0]
+    csec = elf.sections[index]
+    if csec.type != 1 or not 0 <= lo - base < hi - base <= csec.size:
+        return None
+    owners, parts = [], []
+    for item, identity, extent in rows:
+        matches = [s for s in current_named.values() if s.shndx == index
+                   and s.value == item['start'] - base
+                   and (s.size, s.bind, s.type, s.other) ==
+                       (identity.size, identity.bind, identity.type, identity.other)]
+        if len(matches) != 1:
+            return None
+        owners.append(matches[0].name)
+        part = dict(section=csec.name, range=[h8(item['start']), h8(item['start'] + extent)],
+                    object_range=[item['start'] - base, item['start'] - base + extent],
+                    symbols=[matches[0].name])
+        if extent > identity.size:
+            part['zero_padding_tail'] = extent - identity.size
+        parts.append(part)
+    piece = dict(offset=lo - base, end=hi - base, length=hi - lo, lo=lo, hi=hi)
+    proof = compare_bytes(elf, csec, [piece], ctx,
+                          target_pieces={csec.name: [piece]}, original_elf=original)
+    if not proof.get('checked') or not proof.get('equal') or proof.get('unresolved_relocations'):
+        return None
+    if not any('zero_padding_tail' in part for part in parts):
+        # Owners that tile the run exactly: one span, as before.
+        parts = [dict(section=csec.name, range=[h8(lo), h8(hi)],
+                      object_range=[lo - base, hi - base], symbols=owners)]
+    current = dict(c_owned_symbols=owners, c_input_spans=parts)
+    if hi != range_hi:
+        current.update(range=[h8(lo), h8(hi)], generated=[h8(lo), h8(hi)])
+    return current
+
+
+def original_literal_coordinates(elf, original, csec, functions):
+    """Constrain anonymous literal coordinates by unchanged load sites.
+
+    An equal float payload does not make its original address interchangeable.
+    Pair only a literal relocation in one current C function with the same
+    instruction site in its unique, same-extent original function. The retail
+    GP and exact load opcode/registers establish the original target; bytes,
+    source provenance and complete split placement remain separate guards.
+    """
+    if csec.name != '.lit4' or csec.type != 1:
+        return {}
+    gps = [s for s in original.symbols if s.name == '_gp' and s.shndx != 0]
+    if len(gps) != 1:
+        return {}
+    gp = gps[0].value
+    coordinates = {}
+    for ref in section_references(elf, csec):
+        if ref['type'] != 8 or ref['target'] % 4 or not 0 <= ref['target'] <= csec.size - 4:
+            continue
+        text = elf.sections[elf.sections[ref['rel']].info]
+        owners = [s for s in elf.symbols if s.name in functions and s.type == 2
+                  and s.shndx == text.index and s.size > 0
+                  and s.value <= ref['offset'] <= s.value + s.size - 4]
+        if len(owners) != 1 or text.name != '.text' or text.type != 1:
+            continue
+        owner = owners[0]
+        originals = [s for s in original.symbols if s.name == owner.name and s.type == 2
+                     and (s.size, s.bind, s.other) == (owner.size, owner.bind, owner.other)
+                     and 0 < s.shndx < len(original.sections)
+                     and original.sections[s.shndx].name == '.text']
+        if len(originals) != 1:
+            continue
+        at = ref['offset'] - owner.value
+        if at % 4 or ref['offset'] + 4 > text.size:
+            continue
+        current_word = struct.unpack_from('<I', elf.section_bytes(text), ref['offset'])[0]
+        original_word = struct.unpack('<I', va_bytes(original, originals[0].value + at, 4))[0]
+        if (current_word >> 16 != original_word >> 16 or original_word >> 26 != 49
+                or (original_word >> 21) & 31 != 28):
+            continue
+        address = gp + _sext16(original_word)
+        regions = [s for s in original.sections if s.name == '.lit4' and s.type == 1
+                   and s.addr <= address <= s.addr + s.size - 4]
+        if (len(regions) != 1 or address % 4
+                or elf.section_bytes(csec)[ref['target']:ref['target'] + 4] !=
+                   va_bytes(original, address, 4)):
+            continue
+        previous = coordinates.setdefault(ref['target'], address)
+        if previous != address:
+            raise CarveError('one compiler literal coordinate names conflicting original addresses')
+    return coordinates
+
+
+def refresh_nobits_spans(obj, elf, declared):
+    """Refresh raw offsets while retaining every named original storage extent.
+
+    Source order can change cc1's local label-space allocation order. A stored
+    object_range describes that compilation, not the original VA. Rebind only
+    exact named storage from current ordinary compiler directives; ownership,
+    original ranges and the subsequent full NOBITS proof remain unchanged.
+    """
+    assembly = next((p for p in (Path(str(obj) + '.s'), Path(obj).with_suffix('.s'))
+                     if p.is_file()), None)
+    if assembly is None:
+        return declared, []
+    sys.path.insert(0, str(HERE.parent))
+    from tu import data_gate as provenance
+    emitted = provenance.emitted_storage(assembly.read_text(errors='surrogateescape'))
+    refreshed, changes = copy.deepcopy(declared), []
+    for section in ('.bss', '.sbss'):
+        for run in refreshed.get(section, []):
+            for part in run.get('c_input_spans') or []:
+                names = part.get('symbols') or []
+                if not names or not part.get('object_range'):
+                    continue
+                input_section = base_section_name(part['section'])
+                matches = [[s for s in elf.symbols if s.name == name
+                            and 0 < s.shndx < len(elf.sections)
+                            and elf.sections[s.shndx].name == input_section
+                            and elf.sections[s.shndx].type == 8
+                            and s.type in (0, 1)] for name in names]
+                if any(len(rows) != 1 for rows in matches):
+                    continue
+                symbols = sorted((rows[0] for rows in matches), key=lambda s: s.value)
+                cursor = start = symbols[0].value
+                valid = True
+                for symbol in symbols:
+                    definition = emitted.get(symbol.name, {})
+                    extent = definition.get('size')
+                    if (symbol.value != cursor or type(extent) is not int or extent <= 0
+                            or definition.get('section') != input_section
+                            or definition.get('extent_kind') != 'label-space'
+                            or symbol.size not in (0, extent)):
+                        valid = False
+                        break
+                    cursor += extent
+                lo, hi = map(hx, part.get('range', run['range']))
+                if not valid or cursor - start != hi - lo:
+                    continue
+                current = [start, cursor]
+                if current != part['object_range']:
+                    changes.append(dict(section=section, symbols=names,
+                                        previous=part['object_range'], current=current))
+                    part['object_range'] = current
+    return refreshed, changes
+
+
+def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declared, c_refs, per_func):
+    """Refresh private placement requests from current C objects and originals.
+
+    Original VA/extent ownership is retained. Only compiler coordinates change;
+    new named owners require an exact original item. Anonymous coordinates need
+    unique exact bytes/relocations and the producer's existing cc1 provenance
+    proof. The ordinary splitter still requires complete input coverage.
+    Nothing here writes a registry or supplies acceptance evidence.
+    """
+    if unit != 'main':
+        return declared, None
+    initialized = {sec: runs for sec, runs in declared.items() if sec not in ('.bss', '.sbss')}
+    if not initialized:
+        return declared, None
+    asm_path = Path(str(obj) + '.s')
+    if not asm_path.is_file():
+        asm_path = Path(obj).with_suffix('.s')
+    if not asm_path.is_file():
+        raise CarveError(f'{tu_id}: current initialized-span refresh has no cc1 assembly')
+    assembly = asm_path.read_text(errors='surrogateescape')
+    outside_labels = set()
+    app = False
+    for line in assembly.splitlines():
+        if line.strip() == '#APP':
+            app = True
+        elif line.strip() == '#NO_APP':
+            app = False
+        elif not app:
+            match = re.match(r'^([A-Za-z_.$][\w.$]*):(?:\s|$)', line)
+            if match:
+                outside_labels.add(match.group(1))
+    named_symbols = [s for s in elf.symbols if s.type == 1 and s.size > 0 and
+                     0 < s.shndx < len(elf.sections) and elf.sections[s.shndx].type != 8 and
+                     elf.sections[s.shndx].name in SECTIONS and s.name in outside_labels]
+    current_named = {s.name: s for s in named_symbols}
+    if len(current_named) != len(named_symbols):
+        raise CarveError(f'{tu_id}: initialized-span refresh has ambiguous compiler OBJECT names')
+    # Typed dependency symbols already have an explicit retained route. They
+    # must refresh its compiler coordinates without becoming new definitions
+    # or acquiring recovered-data credit.
+    old_names = {n for runs in initialized.values() for run in runs
+                 for n in (list(run.get('c_owned_symbols') or []) +
+                           list(run.get('uncredited_c_symbols') or []) +
+                           [name for part in run.get('c_input_spans') or []
+                            for name in part.get('symbols') or []])}
+    mixed = any(run.get('c_input_spans') for runs in initialized.values() for run in runs) and \
+            any(not run.get('c_input_spans') for runs in initialized.values() for run in runs)
+    stale = False
+    # Named owners a declared span still lists but the C object no longer
+    # defines at all: the span must be re-proved (see `dropped_owners`).
+    defined_names = {s.name for s in elf.symbols if s.name and s.shndx != 0}
+    for runs in initialized.values():
+        for run in runs:
+            for part in run.get('c_input_spans', []):
+                names = part.get('symbols') or []
+                if names and all(n in current_named for n in names):
+                    offsets = [current_named[n].value for n in names]
+                    stale |= min(offsets) != int(part['object_range'][0])
+                elif names and not set(names) & defined_names:
+                    stale = True
+    covered_inputs = {}
+    for runs in initialized.values():
+        for run in runs:
+            for part in run.get('c_input_spans', []):
+                if part.get('object_range'):
+                    name = base_section_name(part['section'])
+                    covered_inputs[name] = max(covered_inputs.get(name, 0),int(part['object_range'][1]))
+    stale |= any(section.size != covered_inputs[section.name] for section in elf.sections
+                 if section.name in covered_inputs and section.type != 8)
+    literal_coordinates = {}
+    if unit == 'main' and any(part.get('anonymous_emission') is True
+            for run in initialized.get('.lit4', []) for part in run.get('c_input_spans', [])):
+        original = Elf(Path(ctx['orig']).read_bytes())
+        for csec in elf.sections:
+            if csec.name == '.lit4' and csec.size:
+                literal_coordinates = original_literal_coordinates(elf, original, csec, per_func)
+                for run in initialized.get('.lit4', []):
+                    for part in run.get('c_input_spans', []):
+                        if part.get('anonymous_emission') is True and part.get('object_range'):
+                            offset, end = map(int, part['object_range'])
+                            lo = hx(part.get('range', run['range'])[0])
+                            stale |= any(offset <= at < end and address != lo + at - offset
+                                         for at, address in literal_coordinates.items())
+    if not mixed and not stale and not (set(current_named) - old_names):
+        return declared, None
+    items = {sec: section_items(ctx, sec) for sec in initialized if sec in ctx['pieces']}
+    for sec in SECTIONS:
+        if sec not in ('.bss', '.sbss') and sec in ctx['pieces'] and sec not in items:
+            items[sec] = section_items(ctx, sec)
+    refreshed = copy.deepcopy(declared)
+    original = None
+    for sec in initialized:
+        for run in refreshed[sec]:
+            names = set(run.get('c_owned_symbols') or [])
+            if run.get('c_input_spans') or not names or names <= current_named.keys():
+                continue
+            if original is None:
+                original = Elf(Path(ctx['orig']).read_bytes())
+            current = legacy_initialized_owner_span(root, unit, ctx, elf, original, sec,
+                                                    run, current_named, items.get(sec, []))
+            if current:
+                run.update(current)
+    old_names = {n for runs in refreshed.values() for run in runs
+                 for n in (list(run.get('c_owned_symbols') or []) +
+                           list(run.get('uncredited_c_symbols') or []) +
+                           [name for part in run.get('c_input_spans') or []
+                            for name in part.get('symbols') or []])}
+    target_parts = []
+    anonymous = []
+    external_names = set(current_named) | {s.name for s in elf.symbols if s.shndx == 0}
+    if '.rodata' in refreshed:
+        current_runs = []
+        for run in refreshed['.rodata']:
+            replacement = current_switch_group_runs(run, items.get('.rodata', []),
+                                                    c_refs, per_func, external_names)
+            current_runs.extend([run] if replacement is None else replacement)
+        refreshed['.rodata'] = current_runs
+
+    def named_part(sec, lo, hi, names, original_part=None):
+        symbols = [current_named.get(name) for name in names]
+        if any(s is None for s in symbols):
+            raise CarveError(f'{tu_id} {sec}: retained named owners lack current outside-#APP compiler OBJECTs: {names}')
+        symbols.sort(key=lambda s: s.value)
+        csec = elf.sections[symbols[0].shndx]
+        cursor = symbols[0].value
+        for sym in symbols:
+            if sym.shndx != csec.index or sym.value != cursor:
+                raise CarveError(f'{tu_id} {sec}: current named owners do not tile the retained input span')
+            cursor += sym.size
+        padding = int((original_part or {}).get('zero_padding_tail', 0))
+        if cursor - symbols[0].value + padding != hi - lo:
+            raise CarveError(f'{tu_id} {sec}: current named owner extent differs from original span {h8(lo)}-{h8(hi)}')
+        part = copy.deepcopy(original_part or {})
+        part.update(section=csec.name, range=[h8(lo), h8(hi)],
+                    object_range=[symbols[0].value, cursor + padding], symbols=[s.name for s in symbols])
+        target_parts.append(dict(offset=symbols[0].value, end=cursor + padding, length=hi-lo,
+                                 lo=lo, hi=hi, input_section=csec.name, target_section=sec))
+        return part
+
+    dropped_owners = []
+    for sec, runs in initialized.items():
+        for run in refreshed[sec]:
+            parts = run.get('c_input_spans') or []
+            if parts:
+                new_parts = []
+                for part in parts:
+                    lo, hi = map(hx, part.get('range', run['range']))
+                    if (part.get('symbols') and not set(part['symbols']) & defined_names
+                            and not part.get('support_only') and part.get('credit', 'verified') == 'verified'
+                            and _anonymous_span_names_are_scaffold(items.get(sec, []),
+                                                                   set(run.get('c_owned_symbols') or []), lo, hi)):
+                        # Every named owner of this span is gone from the C
+                        # object (main/tu191: `const float D_004D8034` became a
+                        # #define, so only cc1's anonymous literal remains). The
+                        # span keeps its original items and is re-proved as an
+                        # anonymous emission of the target family's own compiler
+                        # section: a unique coordinate with the original bytes
+                        # and cc1 provenance, or the refresh refuses as before.
+                        new_part = dict(section=raw_section_name(unit, sec), range=[h8(lo), h8(hi)],
+                                        symbols=[], anonymous_emission=True, credit='verified')
+                        dropped_owners.append(dict(section=sec, range=[h8(lo), h8(hi)],
+                                                   input_section=part.get('section'),
+                                                   symbols=sorted(part['symbols'])))
+                        new_parts.append(new_part)
+                        anonymous.append((sec, run, new_part, lo, hi))
+                    elif part.get('symbols'):
+                        new_parts.append(named_part(sec, lo, hi, part['symbols'], part))
+                    elif part.get('anonymous_emission') is True and part.get('credit', 'verified') == 'verified':
+                        new_part = copy.deepcopy(part)
+                        new_parts.append(new_part)
+                        anonymous.append((sec, run, new_part, lo, hi))
+                    else:
+                        raise CarveError(f'{tu_id} {sec}: refresh cannot infer a dependency-only or unsupported anonymous input span')
+                run['c_input_spans'] = new_parts
+            else:
+                names = run.get('c_owned_symbols') or []
+                generated = run.get('generated') or run['range']
+                lo, hi = map(hx, generated)
+                if names and all(name in current_named for name in names):
+                    parts = []
+                    for name in names:
+                        matches = [it for it in items.get(sec, []) if name in it['labels'] and lo <= it['start'] < hi]
+                        if len(matches) != 1:
+                            raise CarveError(f'{tu_id} {sec}: retained named owner has no unique original item: {name}')
+                        it = matches[0]
+                        sym = current_named[name]
+                        item_hi = min(it['end'], hi)
+                        padding = item_hi - it['start'] - sym.size
+                        if padding < 0:
+                            raise CarveError(f'{tu_id} {sec}: current named owner exceeds its original item: {name}')
+                        original_part = dict(zero_padding_tail=padding) if padding else None
+                        parts.append(named_part(sec, it['start'], item_hi, [name], original_part))
+                    parts.sort(key=lambda p: hx(p['range'][0]))
+                    if hx(parts[0]['range'][0]) != lo or hx(parts[-1]['range'][1]) != hi or any(
+                            hx(a['range'][1]) != hx(b['range'][0]) for a, b in zip(parts, parts[1:])):
+                        raise CarveError(f'{tu_id} {sec}: retained original run is not exactly tiled by current named owners')
+                    run['range'] = [h8(lo), h8(hi)]
+                    run['c_input_spans'] = parts
+                elif names and _anonymous_span_names_are_scaffold(items.get(sec, []), set(names), lo, hi):
+                    part = dict(section=raw_section_name(unit, sec), range=[h8(lo), h8(hi)],
+                                symbols=[], anonymous_emission=True, credit='verified')
+                    run['range'] = [h8(lo), h8(hi)]
+                    run['c_input_spans'] = [part]
+                    anonymous.append((sec, run, part, lo, hi))
+                else:
+                    raise CarveError(f'{tu_id} {sec}: retained compiler run has no exact current owner identities')
+
+    # New C objects are routed only by an original mapped name/extent. Their
+    # initializer and any meaningful retail binding/type are checked below by
+    # the unchanged exact split planner.
+    for name in sorted(set(current_named) - old_names):
+        sym = current_named[name]
+        matches = [(sec, it) for sec, its in items.items() for it in its if name in it['labels']]
+        if not matches:
+            original = Elf(Path(ctx['orig']).read_bytes())
+            aliases_ = registered_object_items(root, unit, original, sym, items)
+            source_path = Path(root) / 'src' / unit / (ctx['name'] + '.c')
+            if (len(aliases_) == 1 and source_path.is_file() and compiler_static_object_functions(
+                    elf, sym, source_path.read_text(), assembly)):
+                matches = [(aliases_[0][0], aliases_[0][1])]
+        if len(matches) != 1:
+            raise CarveError(f'{tu_id}: new compiler OBJECT {name} has no unique original mapped item')
+        sec, it = matches[0]
+        lo, hi = it['start'], it['start'] + sym.size
+        if hi > it['end'] or any(hx(r['range'][0]) < hi and lo < hx(r['range'][1]) for r in refreshed.get(sec, [])):
+            raise CarveError(f'{tu_id}: new compiler OBJECT {name} overlaps or exceeds original ownership')
+        part = named_part(sec, lo, hi, [name])
+        refreshed.setdefault(sec, []).append(dict(range=[h8(lo), h8(hi)], generated=[h8(lo), h8(hi)],
+            generated_by=[], c_owned_symbols=[name], also_referenced_by_c=[], c_input_spans=[part]))
+
+    # An added C function may emit unnamed literals or switch tables beside
+    # named objects. Select only the original items that its original body
+    # references; byte/relocation coordinates and cc1 provenance are still
+    # independently required below. Undefined scaffold names remain unowned.
+    undefined = {symbol.name for symbol in elf.symbols if symbol.shndx == 0}
+    # A C-owned data item can point at an anonymous literal that no function
+    # names directly (a function-local `static char *tmp = "..."`): route the
+    # items the claimed data items reference as well. Names the C object leaves
+    # undefined stay scaffold, and every routed span still needs the unique
+    # exact compiler coordinate proof below (main/tu155 tmp.0, 2026-10-06).
+    claimed_refs = set(c_refs)
+    data_only_runs = set()
+    for original_items in items.values():
+        for item in original_items:
+            if set(item.get('labels', [])).intersection(set(c_refs) | set(current_named)):
+                claimed_refs |= item_references(item)
+    for sec, original_items in items.items():
+        input_section = raw_section_name(unit,sec)
+        if not any(section.name == input_section and section.size and section.type != 8
+                   for section in elf.sections):
+            continue
+        for item in original_items:
+            names = set(item.get('labels',[]))
+            lo, hi = item['start'],item['end']
+            if (not names.intersection(claimed_refs) or names.intersection(current_named) or names.intersection(undefined) or
+                    any(hx(run['range'][0]) < hi and lo < hx(run['range'][1]) for run in refreshed.get(sec,[]))):
+                continue
+            claimed_names = sorted(names.intersection(claimed_refs))
+            part = dict(section=input_section,range=[h8(lo),h8(hi)],symbols=[],
+                        anonymous_emission=True,credit='verified')
+            run = dict(range=[h8(lo),h8(hi)],generated=[h8(lo),h8(hi)],
+                       generated_by=sorted(name for name,refs in per_func.items() if names.intersection(refs)),
+                       c_owned_symbols=claimed_names,also_referenced_by_c=[],c_input_spans=[part])
+            refreshed.setdefault(sec,[]).append(run)
+            anonymous.append((sec,run,part,lo,hi))
+            if not names.intersection(c_refs):
+                data_only_runs.add(id(run))
+    # No count bound: each candidate is a distinct original item of this TU's
+    # own pieces (at most one per item), and the coordinate search below keeps
+    # its 20-second deadline. The former 64-item cap counted optional
+    # data-only items before they were dropped and stopped main/tu132.
+
+    # Reuse the linked-data producer's closed cc1/source/include proof. A byte
+    # search alone never establishes that an anonymous payload came from C.
+    if anonymous:
+        sys.path.insert(0, str(HERE.parent))
+        from tu import data_gate as provenance
+        preprocessed = Path(str(obj) + '.i')
+        if not preprocessed.is_file():
+            preprocessed = Path(obj).with_suffix('.i')
+        if not preprocessed.is_file():
+            raise CarveError(f'{tu_id}: anonymous refresh has no current preprocessed C input')
+        cpp = preprocessed.read_text(errors='surrogateescape')
+        original = Elf(Path(ctx['orig']).read_bytes())
+        if unit == 'main' and not literal_coordinates:
+            for csec in elf.sections:
+                if csec.name == '.lit4' and csec.size:
+                    literal_coordinates = original_literal_coordinates(elf, original, csec, per_func)
+        search_deadline = time.monotonic() + 20
+        # The cc1 provenance proof depends only on the input section; prove it
+        # once per section rather than once per anonymous item.
+        section_proofs = {}
+
+        def compiler_only(input_sec):
+            if input_sec not in section_proofs:
+                try:
+                    section_proofs[input_sec] = (provenance.compiler_only_section(
+                        assembly, cpp, unit_dir, input_sec), None)
+                except (ValueError, OSError) as exc:
+                    section_proofs[input_sec] = (None, exc)
+            proof, exc = section_proofs[input_sec]
+            if exc is not None:
+                raise exc
+            return proof
+
+        for sec, run, part, lo, hi in anonymous:
+            input_sec = base_section_name(part['section'])
+            csecs = [s for s in elf.sections if s.name == input_sec and s.size and s.type != 8]
+            optional = id(run) in data_only_runs
+            if len(csecs) != 1:
+                if optional:
+                    refreshed[sec] = [r for r in refreshed[sec] if r is not run]
+                    continue
+                raise CarveError(f'{tu_id} {sec}: anonymous refresh has no populated compiler input')
+            csec = csecs[0]
+            if csec.size > 1024 * 1024:
+                raise CarveError(f'{tu_id} {sec}: anonymous refresh exceeds the bounded input size')
+            try:
+                proof = compiler_only(input_sec)
+            except (ValueError, OSError) as exc:
+                if optional:
+                    refreshed[sec] = [r for r in refreshed[sec] if r is not run]
+                    continue
+                raise CarveError(f'{tu_id} {sec}: anonymous compiler provenance refused: {exc}') from exc
+            if proof is None and input_sec != '.lit4':
+                if optional:
+                    refreshed[sec] = [r for r in refreshed[sec] if r is not run]
+                    continue
+                raise CarveError(f'{tu_id} {sec}: anonymous payload has no precise cc1 source proof')
+            length = hi - lo
+            rels = read_relocations(elf).get(csec.index, [])
+            want = va_bytes(original, lo, length)
+            data = elf.section_bytes(csec)
+            candidates = anonymous_coordinate_candidates(
+                elf, csec, rels, data, want, length, target_parts, original,
+                search_deadline, tu_id, sec)
+            exact = []
+            for offset in sorted(candidates):
+                if time.monotonic() > search_deadline:
+                    raise CarveError(f'{tu_id}: anonymous coordinate proof exceeds its 20-second bound')
+                if any(p['input_section'] == input_sec and p['offset'] < offset + length and offset < p['end']
+                       for p in target_parts):
+                    continue
+                if any(s.shndx == csec.index and s.type == 1 and offset <= s.value < offset + length for s in elf.symbols):
+                    continue
+                if input_sec == '.lit4':
+                    # A proven use fixes both raw and original coordinates.
+                    # Do not let an equal-byte candidate take another item's
+                    # load site, or omit a site already paired with this item.
+                    if any((offset <= at < offset + length or lo <= address < hi)
+                           and address != lo + at - offset
+                           for at, address in literal_coordinates.items()):
+                        continue
+                if proof is None:
+                    try:
+                        provenance.compiler_li_s_pool(assembly, cpp, unit_dir, elf, csec,
+                            dict(offset=offset, length=length, lo=lo), sec)
+                    except (ValueError, OSError):
+                        continue
+                mapped_targets = {}
+                for p in target_parts:
+                    mapped_targets.setdefault(p['input_section'], []).append(p)
+                # An anonymous initializer can point to a literal inside its
+                # own span. Include the candidate's coordinate in this full
+                # byte check, alongside previously verified outside spans.
+                # It enters target_parts only after a unique exact proof.
+                mapped_targets.setdefault(input_sec, []).append(dict(
+                    offset=offset, end=offset + length, lo=lo, hi=hi))
+                check = compare_bytes(elf, csec, [dict(offset=offset, length=length, lo=lo)], ctx,
+                                      target_pieces=mapped_targets, original_elf=original)
+                if check.get('checked') and check.get('equal') and check.get('unresolved_relocations') == 0:
+                    exact.append(offset)
+            if len(exact) > 1 and input_sec != '.lit4':
+                # Preserve the existing non-literal payload route. GP literal
+                # addresses require the original-reference proof above, even
+                # when two payloads contain identical float bytes.
+                reloc_offsets = [off for off, _, _ in rels]
+                payloads = {bytes(data[off:off + length]) for off in exact}
+                if len(payloads) == 1 and not any(off <= r < off + length for off in exact for r in reloc_offsets):
+                    exact = [min(exact)]
+            if not exact and proof is not None and part is (run.get('c_input_spans') or [None])[-1] \
+                    and hx(run['range'][1]) == hi and want:
+                # The last anonymous item of a TU section (a jump table, say)
+                # can carry the alignment fill before the next TU's data inside
+                # its scaffold item, while the compiler section ends at the
+                # payload. Trim only trailing zero words shorter than 16 bytes
+                # whose payload ends the compiler section exactly; the trimmed
+                # fill stays scaffold (main/tu155, main/tu212, 2026-10-06).
+                pad = 0
+                while pad + 1 < length and pad + 1 < 16 and not want[length - pad - 1]:
+                    pad += 1
+                    trimmed = length - pad
+                    # The payload either ends the compiler section, or the
+                    # next compiler item follows at the compiler's own (smaller)
+                    # alignment (main/tu166 WindowSPMain table before the
+                    # 16-aligned "Hard Disk Drive" string).
+                    trim_candidates = sorted(set(anonymous_coordinate_candidates(
+                        elf, csec, rels, data, want[:trimmed], trimmed, target_parts, original,
+                        search_deadline, tu_id, sec)) | {csec.size - trimmed})
+                    trim_exact = []
+                    for offset in trim_candidates:
+                        if offset < 0 or offset + trimmed > csec.size:
+                            continue
+                        if any(p['input_section'] == input_sec and p['offset'] < offset + trimmed and offset < p['end']
+                               for p in target_parts):
+                            continue
+                        if any(s.shndx == csec.index and s.type == 1 and offset <= s.value < offset + trimmed
+                               for s in elf.symbols):
+                            continue
+                        mapped_targets = {}
+                        for p in target_parts:
+                            mapped_targets.setdefault(p['input_section'], []).append(p)
+                        mapped_targets.setdefault(input_sec, []).append(dict(
+                            offset=offset, end=offset + trimmed, lo=lo, hi=lo + trimmed))
+                        check = compare_bytes(elf, csec, [dict(offset=offset, length=trimmed, lo=lo)], ctx,
+                                              target_pieces=mapped_targets, original_elf=original)
+                        if check.get('checked') and check.get('equal') and check.get('unresolved_relocations') == 0:
+                            trim_exact.append(offset)
+                    if len(trim_exact) == 1:
+                        exact.append(trim_exact[0])
+                        length, hi = trimmed, lo + trimmed
+                        part['range'] = [h8(lo), h8(hi)]
+                        run['range'] = [run['range'][0], h8(hi)]
+                        if run.get('generated') and hx(run['generated'][1]) > hi:
+                            run['generated'] = [run['generated'][0], h8(hi)]
+                        break
+            if len(exact) != 1 and id(run) in data_only_runs:
+                # Reached only through another item's data and not proven
+                # emitted by C: leave it scaffold, exactly as before.
+                refreshed[sec] = [r for r in refreshed[sec] if r is not run]
+                continue
+            if len(exact) != 1:
+                raise CarveError(f'{tu_id} {sec}: anonymous original span {h8(lo)}-{h8(hi)} has {len(exact)} exact compiler coordinates')
+            part['object_range'] = [exact[0], exact[0] + length]
+            target_parts.append(dict(offset=exact[0], end=exact[0]+length, length=length,
+                                     lo=lo, hi=hi, input_section=input_sec, target_section=sec))
+    registry = copy.deepcopy(load_registry(root))
+    registry['tus'][tu_id] = refreshed
+    # Includes original OBJECT binding/type/extents, initializer/relocation
+    # equality, exact gaps, and complete current section endpoints.
+    split_plans(root, unit, unit_dir, tu_id, elf, registry=registry)
+    for runs in refreshed.values():
+        runs.sort(key=lambda run: hx(run['range'][0]))
+    return refreshed, dict(kind='current-compiler-original-item-span-refresh',
+                           object=str(obj), named_owners=sorted(current_named),
+                           anonymous_spans=len(anonymous),
+                           **({'dropped_stale_owners': dropped_owners} if dropped_owners else {}),
+                           literal_reference_coordinates={str(k): h8(v)
+                                                          for k, v in literal_coordinates.items()})
+
+
+def prove_nobits_ownership(root, unit, ctx, source, obj, elf, csec, owners,
+                          original_references, *, common_tail=False):
+    """Recheck named storage identity and extent; NOBITS has no byte equality."""
+    if csec.type != 8 or not owners:
+        raise CarveError(f'{csec.name}: no named NOBITS ownership proof')
+    asm_path = Path(str(obj) + '.s')
+    if not asm_path.is_file():
+        asm_path = Path(obj).with_suffix('.s')
+    if not asm_path.is_file():
+        raise CarveError(f'{csec.name}: NOBITS ownership lacks current cc1 assembly')
+    sys.path.insert(0, str(HERE.parent))
+    from tu import data_gate as provenance
+    assembly = asm_path.read_bytes()
+    emitted = provenance.emitted_storage(assembly.decode('utf-8', 'surrogateescape'))
+    original_bytes = Path(ctx['orig']).read_bytes()
+    original = Elf(original_bytes)
+    storage = [s for s in elf.symbols if s.shndx == csec.index and s.type not in (3, 4)]
+    if len(storage) != len(owners) or len({o['name'] for o in owners}) != len(owners):
+        raise CarveError(f'{csec.name}: NOBITS owners do not cover exact compiler symbols')
+    items = [] if common_tail else section_items(ctx, csec.name)
+    parent = None
+    identities = []
+    cursor = 0
+    for owner in sorted(owners, key=lambda o: o['offset']):
+        off, extent = owner['offset'], owner.get('extent', 0)
+        address = hx(owner['mapped_address'])
+        candidates = [s for s in storage if s.name == owner['name']]
+        if (len(candidates) != 1 or type(off) is not int or type(extent) is not int or
+                type(owner['size']) is not int or extent <= 0 or off != cursor):
+            raise CarveError(f'{csec.name}: NOBITS owner spans do not tile the raw section')
+        symbol = candidates[0]
+        if (symbol.value != off or symbol.size != owner['size'] or
+                owner['input_section'] != csec.name or
+                owner['bind'] != {0: 'LOCAL', 1: 'GLOBAL', 2: 'WEAK'}.get(symbol.bind) or
+                owner['type'] != ('NOTYPE' if symbol.type == 0 else 'OBJECT')):
+            raise CarveError(f'{csec.name}: named compiler NOBITS identity differs')
+        retail = original_storage_symbols(root, unit, original, symbol.name, address,
+                                           csec.name, symbol.bind, symbol.type, symbol.size)
+        definition = emitted.get(symbol.name, {})
+        if (len(retail) != 1 or owner.get('original_name', retail[0].name) != retail[0].name or
+                definition.get('size') != extent or
+                definition.get('section') not in (csec.name, 'COMMON') or
+                definition.get('extent_kind') not in ('label-space', 'common-directive')):
+            raise CarveError(f'{csec.name}: NOBITS owner lacks original identity/current cc1 storage')
+        identities.append(dict(name=retail[0].name, address=h8(address), size=retail[0].size,
+                               bind=retail[0].bind, type=retail[0].type))
+        if symbol.size:
+            if symbol.type != 1 or symbol.size != extent:
+                raise CarveError(f'{csec.name}: positive-size NOBITS OBJECT extent differs')
+        else:
+            if common_tail or (symbol.bind, symbol.type) != (0, 0):
+                raise CarveError(f'{csec.name}: zero-size NOBITS identity is not an original local label')
+            mapped_name = retail[0].name.replace('.', '_')
+            symbols_path = Path(root) / 'config' / 'symbols' / (unit + '.txt')
+            assignments = (re.findall(r'^\s*' + re.escape(mapped_name) +
+                            r'\s*=\s*(0x[0-9A-Fa-f]+)\s*;', symbols_path.read_text(), re.MULTILINE)
+                           if symbols_path.is_file() else [])
+            mapped_alias = (re.fullmatch(r'.+\.[0-9]+', retail[0].name) and
+                            len(assignments) == 1 and int(assignments[0], 16) == address)
+            if not any((symbol.name in item['labels'] or
+                        mapped_alias and mapped_name in item['labels']) and
+                       item['start'] == address and item['end'] == address + extent for item in items):
+                parent = nobits_parent_array(root, unit, ctx, csec.name, csec, elf,
+                                             original, source, obj, items,
+                                             original_references, owner_name=symbol.name)
+                if not parent or (parent['name'], parent['lo'], parent['hi']) != (
+                        symbol.name, address, address + extent):
+                    raise CarveError(f'{csec.name}: zero-size owner lacks exact original extent proof')
+        if not common_tail and not any(p['start'] <= address < address + extent <= p['end']
+                                       for p in ctx['pieces'].get(csec.name, [])):
+            raise CarveError(f'{csec.name}: NOBITS owner escapes its original TU span')
+        cursor += extent
+    if cursor != csec.size:
+        raise CarveError(f'{csec.name}: NOBITS proof leaves unowned compiler storage')
+    return dict(schema='named-nobits-section-proof/1', verified=True,
+                input_section=csec.name, object_size=csec.size, owners=owners,
+                original_identities=identities,
+                cc1_storage={owner['name']: emitted[owner['name']] for owner in owners},
+                source_sha256=hashlib.sha256(Path(source).read_bytes()).hexdigest(),
+                object_sha256=hashlib.sha256(elf.data).hexdigest(),
+                assembly_path=str(asm_path), assembly_sha256=hashlib.sha256(assembly).hexdigest(),
+                original_elf_sha256=hashlib.sha256(original_bytes).hexdigest())
+
+
+def common_tail_ownership(root, unit, ctx, tu_id, source, obj, elf, csec, references):
+    """Recognize only a complete, already registered named common-tail partition."""
+    rows = [row for rows in load_registry(root).get('common_tail', {}).values() for row in rows
+            if row.get('tu') == tu_id and
+            (row.get('c_input_span') or {}).get('section') == csec.name]
+    if not rows:
+        return None
+    owners = []
+    for row in rows:
+        part, owner = row['c_input_span'], row.get('storage_owner') or {}
+        lo, hi = (hx(v) for v in row['range'])
+        off, end = part['object_range']
+        alignment = owner.get('alignment', 0)
+        if (unit != 'main' or row.get('section') != csec.name or csec.type != 8 or
+                hx(owner.get('address', '0')) != lo or owner.get('size') != hi-lo or
+                owner.get('linkage') != 'global' or row.get('symbols') != [owner.get('name')] or
+                type(alignment) is not int or alignment <= 0 or alignment & (alignment-1) or
+                type(off) is not int or type(end) is not int or lo % alignment or
+                off < 0 or end-off != hi-lo or end > csec.size):
+            raise CarveError(f'{tu_id} {csec.name}: common-tail record lacks exact named coordinates')
+        owners.append(dict(name=owner['name'], bind='GLOBAL', type='OBJECT', size=hi-lo,
+                           input_section=csec.name, offset=off, mapped_address=h8(lo), extent=hi-lo))
+    proof = prove_nobits_ownership(root, unit, ctx, source, obj, elf, csec, owners,
+                                  references, common_tail=True)
+    for row in rows:
+        owner = row['storage_owner']
+        if proof['cc1_storage'][owner['name']].get('alignment') != owner['alignment']:
+            raise CarveError(f'{tu_id} {csec.name}: common-tail compiler alignment differs')
+    return dict(object_size=csec.size, common_tail=rows, storage=proof,
+                bytes=dict(checked=False, reason='NOBITS identity and exact common-tail extent are proved separately'))
+
+
+def derivation_section_problems(root, unit_dir, got, source, obj):
+    """Initialized bytes and NOBITS named storage require different proofs."""
+    elf = Elf(Path(obj).read_bytes())
+    bad = {}
+    ctx = None
+    for sec, runs in got['runs'].items():
+        detail = got['sections'].get(sec) or {}
+        csec = next((s for s in elf.sections if s.name == sec), None)
+        if csec is None or csec.type != 8:
+            comparison = detail.get('bytes') or {}
+            if comparison.get('checked') is not True or comparison.get('equal') is not True:
+                bad[sec] = detail.get('bytes')
+            continue
+        proof = detail.get('storage') or {}
+        assembly = Path(proof.get('assembly_path', ''))
+        fingerprint = hashlib.sha256(json.dumps(normalize_runs({sec: runs}), sort_keys=True).encode()).hexdigest()
+        if proof.get('schema') == NOBITS_LAYOUT_SCHEMA:
+            # Re-prove the published runs from the current object and original.
+            try:
+                if ctx is None:
+                    ctx = tu_context(root, got['unit'], unit_dir, got['tu'])
+                fresh_runs, fresh = nobits_layout_runs(root, got['unit'], ctx, got['tu'], source, obj,
+                                                       elf, sec, runs)
+                if (normalize_runs({sec: fresh_runs}) != normalize_runs({sec: runs})
+                        or proof.get('runs_sha256') != fingerprint
+                        or {k: v for k, v in fresh.items() if k != 'derived'} !=
+                        {k: v for k, v in proof.items() if k not in ('derived', 'runs_sha256')}):
+                    raise CarveError('NOBITS layout receipt differs from current evidence')
+            except CarveError as exc:
+                bad[sec] = dict(reason=str(exc))
+            continue
+        if (proof.get('schema') != 'named-nobits-section-proof/1' or proof.get('verified') is not True or
+                proof.get('input_section') != sec or proof.get('object_size') != csec.size or
+                not proof.get('owners') or proof.get('runs_sha256') != fingerprint or
+                proof.get('source_sha256') != hashlib.sha256(Path(source).read_bytes()).hexdigest() or
+                proof.get('object_sha256') != hashlib.sha256(elf.data).hexdigest() or
+                not assembly.is_file() or
+                proof.get('assembly_sha256') != hashlib.sha256(assembly.read_bytes()).hexdigest()):
+            bad[sec] = dict(reason='NOBITS lacks current source/object/cc1 and exact named-span proof')
+            continue
+        try:
+            if ctx is None:
+                ctx = tu_context(root, got['unit'], unit_dir, got['tu'])
+            references = identifiers(f for d in ctx['fdirs'] if d.is_dir() for f in d.glob('*.s'))
+            fresh = prove_nobits_ownership(root, got['unit'], ctx, source, obj, elf,
+                                          csec, proof['owners'], references)
+            if fresh != {k: v for k, v in proof.items() if k != 'runs_sha256'}:
+                raise CarveError('NOBITS ownership receipt differs from current evidence')
+        except CarveError as exc:
+            bad[sec] = dict(reason=str(exc))
+    return bad
+
+
+def initialized_original_object_aliases(elf, original, section, run):
+    """Exact original named OBJECT aliases of proved initialized C owners."""
+    aliases_ = []
+    lo, hi = map(hx, run['range'])
+    for part in run.get('c_input_spans') or []:
+        if part.get('support_only') or part.get('credit', 'verified') != 'verified':
+            continue
+        input_sec = base_section_name(part['section'])
+        sections = [s for s in elf.sections if s.name == input_sec and s.type == 1]
+        if len(sections) != 1:
+            continue
+        start, end = part['object_range']
+        part_lo, part_hi = map(hx, part['range'])
+        for name in part.get('symbols') or []:
+            if name not in (run.get('c_owned_symbols') or []):
+                continue
+            owners = [s for s in elf.symbols if s.name == name and s.shndx == sections[0].index
+                      and s.type == 1 and s.size > 0 and start <= s.value < s.value+s.size <= end]
+            if len(owners) != 1:
+                continue
+            owner = owners[0]
+            address = part_lo + owner.value - start
+            if not lo <= part_lo <= address < address+owner.size <= part_hi <= hi:
+                continue
+            for symbol in original.symbols:
+                if (symbol.name and symbol.name != name and symbol.value == address and
+                        (symbol.size, symbol.bind, symbol.type, symbol.other) ==
+                        (owner.size, owner.bind, owner.type, owner.other) and
+                        0 < symbol.shndx < len(original.sections) and
+                        original.sections[symbol.shndx].name == section):
+                    identities = [s for s in original.symbols if s.name == symbol.name and s.value == address
+                                  and 0 < s.shndx < len(original.sections)
+                                  and original.sections[s.shndx].name == section]
+                    if len(identities) != 1:
+                        raise CarveError(f'{section}: original initialized alias has no unique named identity')
+                    aliases_.append(dict(original_name=symbol.name, address=h8(address),
+                                         storage_owner=dict(name=name, address=h8(address), size=owner.size)))
+    return sorted(aliases_, key=lambda row: (hx(row['address']), row['original_name']))
+
+
+def withdraw_candidate_data(root, unit, unit_dir, tu_id, obj, elf, ctx, declared,
+                            accepted_root=CANONICAL_ROOT, accepted_runs=None):
+    """Remove only absent, unpublished named requests with intact original scaffolding.
+
+    Canonical placements are a preservation floor, never proof of new recovery.
+    Current ELF definitions and cc1 labels/common directives both prevent an
+    absence inference, including legacy LOCAL NOTYPE label-space storage.
+    Anonymous literals/tables and ambiguous mixed spans remain for normal derive.
+    """
+    published = (load_registry(accepted_root)['tus'].get(tu_id) or {}) \
+        if accepted_runs is None else accepted_runs
+    protected = [(hx(r['range'][0]), hx(r['range'][1]))
+                 for rows in published.values() for r in rows]
+    assembly = next((p for p in (Path(str(obj) + '.s'), Path(obj).with_suffix('.s'))
+                     if p.is_file()), None)
+    if assembly is None:
+        return copy.deepcopy(declared), []
+    defined = {s.name for s in elf.symbols if s.name and s.shndx != 0}
+    undefined = {s.name for s in elf.symbols if s.name and s.shndx == 0}
+    app = False
+    for line in assembly.read_text(errors='surrogateescape').splitlines():
+        token = line.strip()
+        if token == '#APP':
+            app = True
+        elif token == '#NO_APP':
+            app = False
+        elif not app:
+            match = re.match(r'^\s*([A-Za-z_.$][\w.$]*):(?:\s|$)', line)
+            common = re.match(r'^\s*\.(?:comm|lcomm)\s+([A-Za-z_.$][\w.$]*)\s*,', line)
+            if match or common:
+                defined.add((match or common).group(1))
+    filtered, removed = {}, []
+    for sec, runs in declared.items():
+        items = section_items(ctx, sec) if sec in ctx['pieces'] else []
+        for run in runs:
+            lo, hi = map(hx, run['range'])
+            parts = run.get('c_input_spans') or []
+            # A published overlap or a non-candidate request is not withdrawable.
+            candidate = (run.get('basis') or {}).get('kind') in ('candidate', 'derived', 'review-stage')
+            owners = set(run.get('c_owned_symbols') or [])
+            if (candidate and parts and not any(a < hi and lo < b for a, b in protected)
+                    and all(p.get('anonymous_emission') is True and not p.get('symbols')
+                            and not p.get('support_only') and p.get('credit', 'verified') == 'verified'
+                            and not any(s.name == base_section_name(p['section']) and s.size
+                                        for s in elf.sections) for p in parts)):
+                group = sorted((i for i in items if lo <= i['start'] < hi),
+                               key=lambda i: i['start'])
+                if (group and group[0]['start'] == lo and group[-1]['end'] == hi
+                        and all(a['end'] == b['start'] for a, b in zip(group, group[1:]))):
+                    removed.append(dict(section=sec, range=[h8(lo), h8(hi)],
+                                        symbols=sorted(owners),
+                                        reason='unpublished anonymous compiler input section is absent; original scaffold retained'))
+                    continue
+            # Old requests group named objects and compiler switch tables into
+            # one dense run. An ordinary extern can restore one named object
+            # to unchanged scaffolding without retracting the adjacent tables.
+            # Split only an exact original item tiling with unique owner labels;
+            # never infer anonymous compiler tables to be absent by their names.
+            if (candidate and not parts and owners
+                    and not any(a < hi and lo < b for a, b in protected)):
+                group = sorted((i for i in items if lo <= i['start'] < hi),
+                               key=lambda i: i['start'])
+                tiled = (group and group[0]['start'] == lo and group[-1]['end'] == hi
+                         and all(a['end'] == b['start'] for a, b in zip(group, group[1:])))
+                labels = [owners.intersection(item['labels']) for item in group]
+                removable = [names for names in labels if len(names) == 1
+                             and names <= undefined and not names.intersection(defined)
+                             and not next(iter(names)).startswith('jtbl_')]
+                if (tiled and all(len(names) == 1 for names in labels)
+                        and set().union(*labels) == owners and removable):
+                    retained = []
+                    for item, names in zip(group, labels):
+                        start, end = item['start'], item['end']
+                        if names in removable:
+                            removed.append(dict(section=sec, range=[h8(start), h8(end)],
+                                                symbols=sorted(names),
+                                                reason='unpublished legacy owner is an ordinary extern; original scaffold retained'))
+                            continue
+                        row = copy.deepcopy(run)
+                        generated_hi = min(end, hx((run.get('generated') or run['range'])[1]))
+                        row.update(range=[h8(start), h8(end)],
+                                   generated=[h8(start), h8(generated_hi)],
+                                   c_owned_symbols=sorted(names))
+                        if retained and hx(retained[-1]['range'][1]) == start:
+                            retained[-1]['range'][1] = h8(end)
+                            retained[-1]['generated'][1] = h8(generated_hi)
+                            retained[-1]['c_owned_symbols'].extend(sorted(names))
+                        else:
+                            retained.append(row)
+                    filtered.setdefault(sec, []).extend(retained)
+                    continue
+            if (not candidate or not parts or any(a < hi and lo < b for a, b in protected)
+                    or any(not p.get('symbols') or p.get('anonymous_emission')
+                           or not set(p['symbols']) <= owners
+                           or p.get('support_only') or p.get('credit', 'verified') != 'verified'
+                           for p in parts)):
+                filtered.setdefault(sec, []).append(copy.deepcopy(run))
+                continue
+            ranges = [tuple(map(hx, p.get('range', run['range']))) for p in parts]
+            if (ranges[0][0] != lo or ranges[-1][1] != hi
+                    or any(a >= b for a, b in ranges)
+                    or any(a[1] != b[0] for a, b in zip(ranges, ranges[1:]))):
+                filtered.setdefault(sec, []).append(copy.deepcopy(run))
+                continue
+            keep, withdrawn = [], []
+            for part in parts:
+                names = set(part['symbols'])
+                start, end = map(hx, part.get('range', run['range']))
+                group = sorted((i for i in items if start <= i['start'] < end),
+                               key=lambda i: i['start'])
+                intact = (group and group[0]['start'] == start and group[-1]['end'] == end
+                          and all(a['end'] == b['start'] for a, b in zip(group, group[1:])))
+                if names and not names.intersection(defined) and intact:
+                    withdrawn.append(dict(section=sec, range=[h8(start), h8(end)],
+                                          symbols=sorted(names),
+                                          reason='unpublished named owner absent from current compiler input; original scaffold retained'))
+                else:
+                    retained = copy.deepcopy(part)
+                    retained['range'] = [h8(start), h8(end)]
+                    keep.append(retained)
+            if not withdrawn:
+                filtered.setdefault(sec, []).append(copy.deepcopy(run))
+                continue
+            # Kept parts retain their original coordinates; normal refresh derives
+            # their current raw offsets. Never infer a split within a mixed part.
+            groups = []
+            for part in keep:
+                if groups and hx(groups[-1][-1]['range'][1]) == hx(part['range'][0]):
+                    groups[-1].append(part)
+                else:
+                    groups.append([part])
+            for group in groups:
+                row = copy.deepcopy(run)
+                row.update(range=[h8(hx(group[0]['range'][0])), h8(hx(group[-1]['range'][1]))],
+                           generated=[h8(hx(group[0]['range'][0])), h8(hx(group[-1]['range'][1]))],
+                           c_input_spans=group,
+                           c_owned_symbols=sorted({n for p in group for n in p['symbols']}))
+                if row.get('c_storage_aliases'):
+                    row['c_storage_aliases'] = [a for a in row['c_storage_aliases']
+                        if a['storage_owner']['name'] in row['c_owned_symbols']]
+                filtered.setdefault(sec, []).append(row)
+            removed.extend(withdrawn)
+    return filtered, removed
+
+
+NOBITS_LAYOUT_SCHEMA = 'nobits-layout-proof/1'
+SHN_COMMON, SHN_MIPS_SCOMMON = 0xFFF2, 0xFF03
+NOBITS_COMMON_INPUTS = {'.sbss': '.scommon', '.bss': 'COMMON'}
+
+
+def nobits_identity(original_symbols, items, name, address):
+    """How the storage label `name` placed at `address` corresponds to the original.
+
+    ('name' | 'spelling' | 'local-static', original symbol) when an original
+    ELF symbol of this section at `address` is spelled `name`, its registered
+    spelling (`.` as `_`, optionally `_<ADDRESS>`) or its cc1 function-static
+    form (`name.N`); ('scaffold-label', None) when no original ELF symbol starts
+    there and the scaffold item at `address` carries `name`; ('position', the
+    original symbol, or None for a scaffold item without an ELF symbol) when
+    only the address coincides; None otherwise."""
+    at = [s for s in original_symbols if s.value == address]
+    for symbol in at:
+        if symbol.name == name:
+            return 'name', symbol
+    for symbol in at:
+        spelled = symbol.name.replace('.', '_')
+        if name in (spelled, f'{spelled}_{address:08X}', f'{symbol.name}_{address:08X}'):
+            return 'spelling', symbol
+    for symbol in at:
+        if re.fullmatch(re.escape(name) + r'\.[0-9]+', symbol.name):
+            return 'local-static', symbol
+    if not at and any(item['start'] == address and name in item['labels'] for item in items):
+        return 'scaffold-label', None
+    if at:
+        return 'position', at[0]
+    if any(item['start'] == address for item in items):
+        return 'position', None
+    return None
+
+
+def nobits_layout_runs(root, unit, ctx, tu_id, source, obj, elf, sec, requested):
+    """NOBITS runs proven by symbol offsets against original addresses.
+
+    NOBITS input has no bytes; what places it is where each compiler storage
+    label lands. For every span (`c_input_spans`) of the requested runs:
+
+      * the span lies inside the TU's original `sec` pieces, its object_range
+        has the span's length, spans of one input section do not overlap, a
+        split input starts at offset 0 and an unsplit one covers it whole and
+        is aligned at its start (exactly what `split_plans`/`split_object`
+        and the linker pin need);
+      * every symbol and every relocation target of the input section lies in
+        exactly one span, and each symbol's extent (ELF size, else its cc1
+        `.lcomm`/label-space size) ends inside its span;
+      * each symbol lands on its original identity: an original ELF symbol of
+        `sec` at the mapped address with its name, registered spelling or cc1
+        function-static name, or a scaffold label there when the original has
+        no ELF symbol. A requested span may also map a renamed label by
+        address alone (`identity: position`, reported);
+      * every original ELF symbol inside a span starts a mapped label or is a
+        `c_storage_aliases` row of that label's storage, and no original ELF
+        symbol lies inside a label's extent otherwise; every alias row is
+        re-proved against the original and the object.
+
+    COMMON input (`.scommon`/`COMMON`) is accepted only as a span holding the
+    object's single tentative definition, whose allocation is then exact.
+    With no requested run the spans are derived: one per symbol at its
+    identity address (name, spelling, function-static or scaffold label;
+    never position), merging neighbours contiguous in both spaces.
+    Returns (runs, proof); raises CarveError naming the first failed check.
+    """
+    if unit != 'main':
+        raise CarveError(f'{sec}: the NOBITS layout proof is MAIN-only')
+    asm_path = next((p for p in (Path(str(obj) + '.s'), Path(obj).with_suffix('.s')) if p.is_file()), None)
+    if asm_path is None:
+        raise CarveError(f'{sec}: the NOBITS layout proof needs the cc1 assembly')
+    sys.path.insert(0, str(HERE.parent))
+    from tu import data_gate as provenance
+    assembly = asm_path.read_bytes()
+    emitted = provenance.emitted_storage(assembly.decode('utf-8', 'surrogateescape'))
+    original_bytes = Path(ctx['orig']).read_bytes()
+    original = Elf(original_bytes)
+    pieces = ctx['pieces'].get(sec) or []
+    if not pieces:
+        raise CarveError(f'{sec}: the TU has no original {sec} piece')
+    items = section_items(ctx, sec)
+    in_tu = lambda lo, hi: any(p['start'] <= lo < hi <= p['end'] for p in pieces)  # noqa: E731
+    original_symbols = [s for s in original.symbols if s.name and s.type in (0, 1)
+                        and 0 < s.shndx < len(original.sections)
+                        and original.sections[s.shndx].name == sec
+                        and any(p['start'] <= s.value < p['end'] for p in pieces)]
+    csec = next((s for s in elf.sections if s.name == sec and s.size and s.type == 8), None)
+    # The COMMON input is either the object's tentative definitions or, once
+    # allocated by `ld -r -d`, a real NOBITS section of that name.
+    common_sec = next((s for s in elf.sections if s.name == NOBITS_COMMON_INPUTS[sec]
+                       and s.size and s.type == 8), None)
+    commons = [s for s in elf.symbols if s.name and (
+        s.shndx in (SHN_COMMON, SHN_MIPS_SCOMMON)
+        or (common_sec is not None and s.shndx == common_sec.index and s.type not in (3, 4)))]
+
+    def extent(symbol):
+        if symbol.size:
+            return symbol.size
+        storage = emitted.get(symbol.name) or {}
+        size = storage.get('size')
+        if storage.get('extent_kind') in ('label-space', 'common-directive') and type(size) is int and size > 0:
+            return size
+        raise CarveError(f'{sec}: storage label {symbol.name} has no ELF size or cc1 extent')
+
+    def input_symbols(input_sec):
+        if input_sec == sec:
+            return [s for s in elf.symbols if csec is not None and s.shndx == csec.index
+                    and s.type not in (3, 4)]
+        return commons
+
+    if not requested:
+        if csec is None:
+            raise CarveError(f'{sec}: no compiler {sec} input to derive')
+        located = []
+        for symbol in input_symbols(sec):
+            candidates = {s.value for s in original_symbols} | \
+                         {item['start'] for item in items if symbol.name in item['labels']}
+            addresses = {address for address in candidates
+                         if (nobits_identity(original_symbols, items, symbol.name, address)
+                             or ('position',))[0] != 'position'}
+            if len(addresses) != 1:
+                raise CarveError(f'{sec}: storage label {symbol.name} has {len(addresses)} original '
+                                 f'identity addresses in the TU')
+            located.append((symbol.value, extent(symbol), addresses.pop(), symbol))
+        located.sort(key=lambda row: row[0])
+        groups = []
+        for value, size, address, symbol in located:
+            last = groups[-1] if groups else None
+            if last and last['end'] == value and last['hi'] == address:
+                last.update(end=value + size, hi=address + size)
+                last['symbols'].append(symbol)
+            else:
+                groups.append(dict(offset=value, end=value + size, lo=address, hi=address + size,
+                                   symbols=[symbol]))
+        requested = []
+        for group in sorted(groups, key=lambda g: g['lo']):
+            names = [s.name for s in group['symbols']]
+            run = dict(range=[h8(group['lo']), h8(group['hi'])], generated=[h8(group['lo']), h8(group['hi'])],
+                       generated_by=[], c_owned_symbols=names, also_referenced_by_c=[],
+                       c_input_spans=[dict(section=sec, range=[h8(group['lo']), h8(group['hi'])],
+                                           object_range=[group['offset'], group['end']], symbols=names)])
+            aliases_ = []
+            for symbol in group['symbols']:
+                address = group['lo'] + symbol.value - group['offset']
+                kind, identity = nobits_identity(original_symbols, items, symbol.name, address)
+                if identity is not None and identity.name != symbol.name:
+                    aliases_.append(dict(original_name=identity.name, address=h8(address),
+                                         storage_owner=dict(name=symbol.name, address=h8(address),
+                                                            size=extent(symbol))))
+            if aliases_:
+                run['c_storage_aliases'] = aliases_
+            requested.append(run)
+        derived = True
+    else:
+        derived = False
+
+    keys = ('range', 'generated', 'generated_by', 'c_owned_symbols', 'also_referenced_by_c',
+            'reached_through', 'c_input_spans', 'c_storage_aliases', 'uncredited_c_symbols',
+            'uncredited_scaffold_ranges')
+    runs = [{k: copy.deepcopy(run[k]) for k in keys if k in run} for run in requested]
+    by_input, rows, alias_rows = {}, [], []
+    for index, run in enumerate(runs):
+        parts = run.get('c_input_spans') or []
+        if not parts or run.get('uncredited_c_symbols') or run.get('uncredited_scaffold_ranges'):
+            raise CarveError(f'{sec}: run {run["range"][0]} is not a plain credited NOBITS mapping')
+        lo, hi = map(hx, run['range'])
+        cursor = lo
+        for part in sorted(parts, key=lambda p: hx(p['range'][0])):
+            p_lo, p_hi = map(hx, part['range'])
+            if p_lo != cursor or p_hi <= p_lo or part.get('support_only') or \
+                    part.get('credit', 'verified') != 'verified':
+                raise CarveError(f'{sec}: run {h8(lo)} spans do not tile it')
+            input_sec = base_section_name(part['section'])
+            if input_sec not in (sec, NOBITS_COMMON_INPUTS[sec]):
+                raise CarveError(f'{sec}: span input {part["section"]} is not {sec} or its COMMON input')
+            if not in_tu(p_lo, p_hi):
+                raise CarveError(f'{sec}: span {h8(p_lo)}-{h8(p_hi)} escapes the TU\'s original {sec}')
+            by_input.setdefault(input_sec, []).append(dict(part=part, run=index, lo=p_lo, hi=p_hi))
+            cursor = p_hi
+        if cursor != hi:
+            raise CarveError(f'{sec}: run {h8(lo)} spans do not tile it')
+        if set(run.get('c_owned_symbols') or []) != {n for p in parts for n in p.get('symbols') or []}:
+            raise CarveError(f'{sec}: run {h8(lo)} c_owned_symbols differ from its span symbols')
+    if csec is not None and sec not in by_input:
+        raise CarveError(f'{sec}: the compiler {sec} input ({csec.size:#x} bytes) is not mapped')
+    # An input placed whole moves rigidly, so its relocation targets need no
+    # span check (and an unpaired LO16 into a 64 KiB section needs no pairing).
+    split_input = csec is not None and len(by_input.get(sec, [])) > 1
+    references = section_references(elf, csec) if split_input else []
+    for input_sec, spans in sorted(by_input.items()):
+        if input_sec == sec:
+            if csec is None:
+                raise CarveError(f'{sec}: spans name a {sec} input the object does not allocate')
+            size, align = csec.size, max(1, csec.align)
+        else:
+            if len(commons) != 1 or len(spans) != 1 or (common_sec is not None and commons[0].value):
+                raise CarveError(f'{sec}: {input_sec} spans need exactly one tentative definition')
+            if common_sec is not None:
+                size, align = common_sec.size, max(1, common_sec.align)
+            else:
+                size, align = commons[0].size, max(1, commons[0].value)
+        for row in spans:
+            obj_range = row['part'].get('object_range')
+            if obj_range is None and len(spans) == 1:
+                obj_range = [0, size]
+            if obj_range is None or len(obj_range) != 2:
+                raise CarveError(f'{sec}: span {h8(row["lo"])} lacks object_range')
+            row['offset'], row['end'] = map(int, obj_range)
+            if not 0 <= row['offset'] < row['end'] <= size or row['end'] - row['offset'] != row['hi'] - row['lo']:
+                raise CarveError(f'{sec}: span {h8(row["lo"])} object_range differs from its original extent')
+        spans.sort(key=lambda r: r['offset'])
+        if any(a['end'] > b['offset'] for a, b in zip(spans, spans[1:])):
+            raise CarveError(f'{sec}: {input_sec} spans overlap in the object')
+        if len(spans) == 1:
+            if (spans[0]['offset'], spans[0]['end']) != (0, size) or spans[0]['lo'] % align:
+                raise CarveError(f'{sec}: the unsplit {input_sec} input ({size:#x} bytes, alignment {align:#x}) '
+                                 f'does not fill {h8(spans[0]["lo"])}-{h8(spans[0]["hi"])}')
+        elif spans[0]['offset'] != 0:
+            raise CarveError(f'{sec}: a split {input_sec} input must start at offset 0')
+        symbols = input_symbols(input_sec)
+        for symbol in symbols:
+            owners = [r for r in spans if r['offset'] <= (0 if input_sec != sec else symbol.value) < r['end']]
+            if len(owners) != 1:
+                raise CarveError(f'{sec}: {input_sec} label {symbol.name} lies in {len(owners)} spans')
+            row = owners[0]
+            value = 0 if input_sec != sec else symbol.value
+            size_ = extent(symbol)
+            if value + size_ > row['end']:
+                raise CarveError(f'{sec}: {symbol.name} extends past its span')
+            address = row['lo'] + value - row['offset']
+            identity = nobits_identity(original_symbols, items, symbol.name, address)
+            if identity is None or (derived and identity[0] == 'position'):
+                raise CarveError(f'{sec}: {symbol.name} at {h8(address)} has no original identity')
+            kind, original_symbol = identity
+            if original_symbol is not None and original_symbol.size and original_symbol.size != size_:
+                raise CarveError(f'{sec}: {symbol.name} extent {size_:#x} differs from original '
+                                 f'{original_symbol.name} size {original_symbol.size:#x}')
+            if symbol.name not in (row['part'].get('symbols') or []):
+                raise CarveError(f'{sec}: {symbol.name} is not named by its span')
+            rows.append(dict(name=symbol.name, input_section=input_sec, offset=value, extent=size_,
+                             mapped_address=h8(address), identity=kind,
+                             original_name=original_symbol.name if original_symbol is not None else None,
+                             run=row['run']))
+        named = {n for r in spans for n in r['part'].get('symbols') or []}
+        if named - {s.name for s in symbols}:
+            raise CarveError(f'{sec}: spans name absent labels {sorted(named - {s.name for s in symbols})}')
+        if input_sec == sec:
+            for ref in references:
+                if not any(r['offset'] <= ref['target'] < r['end'] for r in spans):
+                    raise CarveError(f'{sec}: a relocation reaches {sec}+{ref["target"]:#x} outside every span')
+    # Original ELF symbols inside the runs: each starts a mapped label or is a
+    # proved alias row of the storage that covers it.
+    for index, run in enumerate(runs):
+        mapped = [r for r in rows if r['run'] == index]
+        for alias in run.get('c_storage_aliases') or []:
+            owner = alias['storage_owner']
+            address = hx(alias['address'])
+            label = [r for r in mapped if r['name'] == owner['name']
+                     and hx(r['mapped_address']) == hx(owner['address']) and r['extent'] == int(owner['size'])]
+            known = ([s for s in original_symbols if s.name == alias['original_name'] and s.value == address]
+                     or [i for i in items if i['start'] == address and alias['original_name'] in i['labels']])
+            if (len(label) != 1 or not hx(owner['address']) <= address < hx(owner['address']) + int(owner['size'])
+                    or not known):
+                raise CarveError(f'{sec}: storage alias {alias["original_name"]} is not proved by its owner')
+            alias_rows.append(dict(alias, storage_owner=dict(owner)))
+        aliased = {(a['original_name'], hx(a['address'])) for a in run.get('c_storage_aliases') or []}
+        lo, hi = map(hx, run['range'])
+        for symbol in original_symbols:
+            if not lo <= symbol.value < hi or (symbol.name, symbol.value) in aliased:
+                continue
+            if any(hx(r['mapped_address']) == symbol.value for r in mapped):
+                continue
+            raise CarveError(f'{sec}: original {symbol.name} at {h8(symbol.value)} has no mapped C storage')
+        for r in mapped:
+            start = hx(r['mapped_address'])
+            inside = [s for s in original_symbols if start < s.value < start + r['extent']
+                      and (s.name, s.value) not in aliased]
+            if inside:
+                raise CarveError(f'{sec}: {r["name"]} covers original {inside[0].name} at {h8(inside[0].value)}')
+    for run in runs:
+        run.setdefault('generated', list(run['range']))
+        run.setdefault('generated_by', [])
+        run.setdefault('also_referenced_by_c', [])
+    proof = dict(schema=NOBITS_LAYOUT_SCHEMA, verified=True, section=sec, derived=derived,
+                 input_sections={k: [dict(range=[h8(r['lo']), h8(r['hi'])], object_range=[r['offset'], r['end']])
+                                     for r in v] for k, v in sorted(by_input.items())},
+                 labels=[{k: v for k, v in r.items() if k != 'run'} for r in rows],
+                 aliases=alias_rows,
+                 position_only=[r['name'] for r in rows if r['identity'] == 'position'],
+                 source_sha256=hashlib.sha256(Path(source).read_bytes()).hexdigest(),
+                 object_sha256=hashlib.sha256(elf.data).hexdigest(),
+                 assembly_path=str(asm_path), assembly_sha256=hashlib.sha256(assembly).hexdigest(),
+                 original_elf_sha256=hashlib.sha256(original_bytes).hexdigest())
+    return runs, proof
+
+
+def derive(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
+           accepted_root=CANONICAL_ROOT, accepted_runs=None, declared=None):
+    """{'runs': {section: [run]}, 'sections': {section: detail}, 'problems': [..]} for one candidate.
+
+    `declared` replaces the TU's registry entry as the starting request and is
+    otherwise treated exactly like it (withdrawal, refresh, canonical form), so
+    `derive(..., declared=E)` is what `check` reports once E is the entry.
+    `_declared` is the internal re-derivation of an already canonical request."""
     ctx = tu_context(root, unit, unit_dir, tu_id)
-    declared = (load_registry(root)['tus'].get(tu_id) or {})
+    if _declared is not None:
+        declared = copy.deepcopy(_declared)
+    elif declared is not None:
+        declared = copy.deepcopy(declared)
+    else:
+        declared = load_registry(root)['tus'].get(tu_id) or {}
     inc, acc = source_scaffold_names(source)
     files = {}
     for d in ctx['fdirs']:
@@ -2884,6 +4601,44 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
             extern.add(al[n][0])
     out = dict(tu=tu_id, unit=unit, source=str(source), object=str(obj), c_functions=c_funcs,
                runs={}, sections={}, problems=[])
+    if _declared is None:
+        declared, withdrawn = withdraw_candidate_data(
+            root, unit, unit_dir, tu_id, obj, elf, ctx, declared, accepted_root, accepted_runs)
+        out['declared_current'] = copy.deepcopy(declared)
+        out['withdrawn_candidate_data'] = withdrawn
+    heuristic_initialized_aliases_added = False
+    declared, nobits_refresh = refresh_nobits_spans(obj, elf, declared)
+    if nobits_refresh:
+        out['nobits_span_refresh'] = nobits_refresh
+        out['declared_current'] = copy.deepcopy(declared)
+    try:
+        declared, refresh = refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declared, c_refs, per_func)
+        if refresh:
+            out['span_refresh'] = refresh
+            out['declared_current'] = copy.deepcopy(declared)
+    except CarveError as exc:
+        # A legacy request (runs without c_input_spans) that the refresh cannot
+        # rebind is still exact when a derivation from no initialized request
+        # at all finds the same runs: every byte, owner and run boundary is
+        # then re-proved from the compiled object and the original alone
+        # (datacarve-tools-20261010, proposal 1).
+        initialized = {sec: runs for sec, runs in declared.items()
+                       if sec not in ('.bss', '.sbss') and runs}
+        if _declared is None and initialized and not any(
+                run.get('c_input_spans') for runs in initialized.values() for run in runs):
+            fresh = derive(root, unit, unit_dir, tu_id, source, obj,
+                           accepted_root=accepted_root, accepted_runs=accepted_runs,
+                           declared={sec: runs for sec, runs in declared.items()
+                                     if sec in ('.bss', '.sbss')})
+            fresh_initialized = {sec: runs for sec, runs in fresh['runs'].items()
+                                 if sec not in ('.bss', '.sbss')}
+            if not fresh['problems'] and normalize_runs(fresh_initialized) == normalize_runs(initialized):
+                fresh['legacy_request_kept'] = dict(
+                    refresh_refused=str(exc),
+                    reason='the legacy initialized runs equal a derivation without any initialized request')
+                return fresh
+        out['problems'].append(str(exc))
+        return out
     if unit != 'main':
         raw_cc1 = overlay_cc1_sidecar(unit_dir, unit, ctx['name'])
         if raw_cc1:
@@ -2931,6 +4686,7 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
             missing_cc1 = sorted(raw_owner_names - asm_labels)
             if missing_cc1:
                 raise CarveError(f'{tu_id}: raw cc1 has no outside-#APP C storage labels: {", ".join(missing_cc1)}')
+            initialized_original = Elf(Path(ctx['orig']).read_bytes())
             for sec, runs in explicit_sections.items():
                 out_runs = []
                 total = 0
@@ -2967,8 +4723,12 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                         source_sections.add(input_sec)
                         if credited:
                             total += int(obj_range[1]) - int(obj_range[0])
-                        seen_owners.update(names)
-                        seen_owners.update(anonymous_names)
+                        # Dependency-only names are checked against their own
+                        # uncredited identities above. They must not become
+                        # recovered owners when the retained coordinates move.
+                        if credited:
+                            seen_owners.update(names)
+                            seen_owners.update(anonymous_names)
                         cursor = p_hi
                     if cursor != hi or seen_owners != owners:
                         raise CarveError(f'{tu_id} {sec}: explicit subspans do not cover the target run and owners')
@@ -2982,6 +4742,21 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                         out_run['uncredited_c_symbols'] = sorted(uncredited)
                     if run.get('c_storage_aliases'):
                         out_run['c_storage_aliases'] = run['c_storage_aliases']
+                    aliases_ = list(out_run.get('c_storage_aliases') or [])
+                    for alias in initialized_original_object_aliases(elf, initialized_original, sec, out_run):
+                        previous = [a for a in aliases_ if a['original_name'] == alias['original_name']]
+                        if previous:
+                            owner = previous[0]['storage_owner']
+                            require_same = (len(previous) == 1 and hx(previous[0]['address']) == hx(alias['address']) and
+                                            owner['name'] == alias['storage_owner']['name'] and
+                                            hx(owner['address']) == hx(alias['storage_owner']['address']) and
+                                            owner['size'] == alias['storage_owner']['size'])
+                            if not require_same:
+                                raise CarveError(f'{tu_id} {sec}: retained original alias conflicts with current initialized owner')
+                        else:
+                            aliases_.append(alias)
+                    if aliases_:
+                        out_run['c_storage_aliases'] = sorted(aliases_, key=lambda a: (hx(a['address']), a['original_name']))
                     out_runs.append(out_run)
                 out['runs'][sec] = out_runs
                 out['sections'][sec] = dict(input_sections=sorted(source_sections),
@@ -2999,11 +4774,22 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
         except CarveError as exc:
             out['problems'].append(str(exc))
             return out
-        return out
+        # Validated initialized spans do not cover every compiler section.
+        # A newly recovered function can additionally emit an anonymous
+        # switch table or literal; discover those sections below while
+        # retaining the exact explicit mappings already proved above.
     # 1. the sections to carve and their items; the items the original assembly
     # of the C functions names (or the C object defines)
     work = {}
+    # Raw input sections the explicit spans above route (possibly into other
+    # target families, main/tu164 `.sdata` -> `.data`): split_plans already
+    # accounted for every byte of each one, endpoints and gaps included.
+    explicit_raw_inputs = {base_section_name(part.get('section', ''))
+                           for runs in explicit_sections.values() for run in runs
+                           for part in run.get('c_input_spans') or []}
     for sec in SECTIONS:
+        if sec in explicit_sections:
+            continue
         if unit != 'main' and sec in ('.sbss', '.bss'):
             continue
         c_name = raw_section_name(unit, sec)
@@ -3011,6 +4797,21 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
         pieces = ctx['pieces'].get(sec)
         if csec is None or (unit != 'main' and sec in MAIN_ONLY_SECTIONS):
             continue
+        if csec.type != 8 and c_name in explicit_raw_inputs:
+            out['sections'].setdefault(sec, dict(
+                object_size=csec.size,
+                note=f'every byte of the C object\'s {c_name} is routed by explicit c_input_spans'))
+            continue
+        if csec.type == 8:
+            try:
+                common = common_tail_ownership(root, unit, ctx, tu_id, source, obj, elf,
+                                               csec, c_refs | asm_refs)
+            except CarveError as exc:
+                out['problems'].append(str(exc))
+                continue
+            if common:
+                out['sections'][sec] = common
+                continue
         detail = dict(object_size=csec.size)
         out['sections'][sec] = detail
         if sec in ctx['placed']:
@@ -3069,6 +4870,17 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                            and set(items[i]['labels']) & x['refs'][j]})
         if shared:
             detail['shared_with_scaffold'] = shared
+        if csec.type == 8:
+            # A named parent array can contain original map-only labels. They
+            # remain part of its existing declared span when several arrays
+            # share the current compiler input section. The exact per-owner
+            # source/cc1/original-identity proof below still decides admission.
+            requested = [(hx(r['range'][0]), hx(r['range'][1]))
+                         for r in declared.get(sec, []) if r.get('c_input_spans')]
+            if requested:
+                gen = sorted(set(gen) | {i for i, item in enumerate(items)
+                             if any(lo <= item['start'] < item['end'] <= hi
+                                    for lo, hi in requested)})
         groups = []
         for i in gen:
             if groups and groups[-1][-1] == i - 1:
@@ -3101,11 +4913,32 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
         # phase than the original) is cut there into two runs (plan_split
         # check_items); every cut is recorded.
         plan, regrouped = None, []
+        local_storage_aliases = {}
+        parent_array = (nobits_parent_array(root, unit, ctx, sec, csec, elf, orig, source, obj,
+                                           items, c_refs | asm_refs) if csec.type == 8 else None)
+        if parent_array:
+            gen = parent_array['items']
+            groups = [gen]
+            local_storage_aliases = {alias['original_name']: alias for alias in parent_array['aliases']}
         for _ in range(len(gen) + 1):
             spans = [(items[g[0]]['start'], items[g[-1]]['end']) for g in groups]
             group_records = [r for r in (declared.get(sec) or [])
                              if hx(r['range'][0]) in {lo for lo, _ in spans}]
             if csec.type == 8:
+                if parent_array:
+                    lo, hi = parent_array['lo'], parent_array['hi']
+                    detail['nobits_ownership'] = [dict(
+                        name=parent_array['name'], bind='LOCAL', type='NOTYPE',
+                        input_section=csec.name, offset=0, size=0, mapped_address=h8(lo),
+                        extent=hi-lo, original_name=parent_array['original_name'],
+                        extent_basis='exact original scaffold item tiling and ordinary cc1 array storage',
+                        source_array=parent_array['source_array'],
+                        original_item_ranges=parent_array['original_item_ranges'],
+                        consumer_relocations=parent_array['relocations'])]
+                    detail['covered_scaffold_items'] = [items[i]['name'] for i in gen]
+                    detail['bytes'] = dict(checked=False, reason='NOBITS has no byte payload; exact original parent/span and compiler array storage prove ownership')
+                    plan = dict(pieces=[dict(offset=0, length=csec.size, end=csec.size, lo=lo, hi=hi)], notes=[])
+                    break
                 syms = [s for s in elf.symbols if s.shndx == csec.index]
                 owned = [(i, s) for i in gen for s in syms
                          if s.name in set(items[i]['labels']) and s.type == 1 and s.bind == 1]
@@ -3118,6 +4951,12 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                     raw_ranges = []
                     proof = []
                     valid = True
+                    asm_path = Path(str(obj) + '.s')
+                    if not asm_path.is_file():
+                        asm_path = Path(obj).with_suffix('.s')
+                    sys.path.insert(0, str(HERE.parent))
+                    from tu import data_gate as provenance
+                    emitted = provenance.emitted_storage(asm_path.read_text()) if asm_path.is_file() else {}
                     for (lo, hi), record in zip(spans, group_records):
                         parts = record.get('c_input_spans') or []
                         names = set(record.get('c_owned_symbols') or [])
@@ -3138,28 +4977,51 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                             break
                         raw_ranges.append((off, end))
                         target_pieces.append(dict(offset=off, length=end-off, end=end, lo=lo, hi=hi))
-                        for name in sorted(names):
-                            raw = [s for s in syms if s.name == name]
-                            retail = [s for s in orig.symbols if s.name == name and s.shndx != 0]
-                            if (len(raw) != 1 or len(retail) != 1 or
-                                    raw[0].value != off or retail[0].value != lo or
-                                    raw[0].bind != retail[0].bind or raw[0].type != retail[0].type):
+                        named = [[s for s in syms if s.name == name] for name in names]
+                        if any(len(matches) != 1 for matches in named):
+                            valid = False
+                            break
+                        cursor = off
+                        for sym in sorted((matches[0] for matches in named), key=lambda s: s.value):
+                            name = sym.name
+                            address = lo + sym.value - off
+                            definition = emitted.get(name, {})
+                            extent = definition.get('size')
+                            retail = original_storage_symbols(root, unit, orig, name, address, sec,
+                                                              sym.bind, sym.type, sym.size)
+                            if (len(retail) != 1 or sym.value != cursor or type(extent) is not int or
+                                    extent <= 0 or sym.value + extent > end or
+                                    definition.get('section') not in (csec.name, 'COMMON') or
+                                    definition.get('extent_kind') not in ('label-space', 'common-directive') or
+                                    retail[0].value != address or sym.bind != retail[0].bind or
+                                    sym.type != retail[0].type):
                                 valid = False
                                 break
-                            sym = raw[0]
                             if sym.size:
-                                if sym.size != hi-lo or retail[0].size != hi-lo:
+                                if sym.size != extent or retail[0].size != extent:
                                     valid = False
                                     break
                             elif (sym.type != 0 or sym.bind != 0 or retail[0].size != 0):
                                 valid = False
                                 break
+                            elif extent > next((item['end'] - item['start'] for item in items
+                                                if item['start'] == address and name in item['labels']), 0):
+                                parent = nobits_parent_array(root, unit, ctx, sec, csec, elf,
+                                                             orig, source, obj, items,
+                                                             c_refs | asm_refs, owner_name=name)
+                                if not parent or (parent['lo'], parent['hi']) != (address, address + extent):
+                                    valid = False
+                                    break
+                                local_storage_aliases.update({alias['original_name']: alias
+                                                              for alias in parent['aliases']})
                             proof.append(dict(name=name,
                                               bind='LOCAL' if sym.bind == 0 else 'GLOBAL',
                                               type='NOTYPE' if sym.type == 0 else 'OBJECT',
                                               input_section=csec.name, offset=sym.value,
-                                              size=sym.size, mapped_address=h8(lo), extent=hi-lo))
-                        if not valid:
+                                              size=sym.size, mapped_address=h8(address), extent=extent))
+                            cursor += extent
+                        if not valid or cursor != end:
+                            valid = False
                             break
                     if valid:
                         raw_ranges.sort()
@@ -3208,7 +5070,8 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                         out['problems'].append(f'{sec}: NOBITS owner {sym.name} does not span exactly {h8(lo)}-{h8(hi)}')
                     else:
                         proof.append(dict(name=sym.name, bind='GLOBAL', type='OBJECT',
-                                          input_section=csec.name, offset=sym.value, size=sym.size))
+                                          input_section=csec.name, offset=sym.value, size=sym.size,
+                                          mapped_address=h8(lo), extent=hi-lo))
                 else:
                     local_notypes = []
                     for i in gen:
@@ -3219,9 +5082,39 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                                 matches[0].size == it['end'] - it['start']:
                             sym = matches[0]
                             proof.append(dict(name=sym.name, bind='GLOBAL', type='OBJECT',
-                                              input_section=csec.name, offset=sym.value, size=sym.size))
+                                              input_section=csec.name, offset=sym.value, size=sym.size,
+                                              mapped_address=h8(it['start']), extent=it['end']-it['start']))
                             continue
                         local = [s for s in syms if s.name in labels and s.type == 0 and s.bind == 0]
+                        if not local and len(labels) == 1:
+                            # A scaffold label can differ from the exact retail
+                            # local name. Resolve by original identity and VA,
+                            # never by rewriting punctuation in either name.
+                            retail = [s for s in orig.symbols if s.value == it['start'] and
+                                      0 < s.shndx < len(orig.sections) and s.type == 0 and s.bind == 0 and s.size == 0 and
+                                      orig.sections[s.shndx].name == sec]
+                            if len(retail) == 1:
+                                candidates = [s for s in syms if s.name == retail[0].name and
+                                              s.type == 0 and s.bind == 0 and s.size == 0 and
+                                              s.value == it['start'] - lo]
+                                if len(candidates) == 1:
+                                    asm_path = Path(str(obj) + '.s')
+                                    if not asm_path.is_file():
+                                        asm_path = Path(obj).with_suffix('.s')
+                                    if asm_path.is_file():
+                                        sys.path.insert(0, str(HERE.parent))
+                                        from tu import data_gate as provenance
+                                        emitted = provenance.emitted_storage(asm_path.read_text(errors='surrogateescape'))
+                                        storage = emitted.get(candidates[0].name) or {}
+                                        if (storage.get('extent_kind') == 'label-space' and
+                                                storage.get('section') == csec.name and
+                                                storage.get('size') == it['end'] - it['start']):
+                                            local = candidates
+                                            local_storage_aliases[it['name']] = dict(
+                                                original_name=it['name'], address=h8(it['start']),
+                                                storage_owner=dict(name=candidates[0].name,
+                                                                   address=h8(it['start']),
+                                                                   size=it['end']-it['start']))
                         if len(local) != 1:
                             out['problems'].append(
                                 f'{sec}: NOBITS symbol ownership does not prove {it["name"]} '
@@ -3230,7 +5123,8 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                         sym = local[0]
                         raw_matches = [s for s in syms if s.name == sym.name]
                         target = it['start']
-                        orig_matches = [s for s in orig.symbols if s.name == sym.name and s.shndx != 0]
+                        orig_matches = original_storage_symbols(root, unit, orig, sym.name, target, sec,
+                                                                sym.bind, sym.type, sym.size)
                         if (len(raw_matches) != 1 or sym.value != it['start'] - lo or sym.size != 0
                                 or len(orig_matches) != 1 or orig_matches[0].value != target
                                 or orig_matches[0].bind != 0 or orig_matches[0].type != 0
@@ -3246,6 +5140,8 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                                               input_section=csec.name, offset=sym.value, size=0,
                                               mapped_address=h8(it['start']),
                                               extent=it['end'] - it['start'],
+                                              original_name=original_storage_symbols(
+                                                  root, unit, orig, sym.name, it['start'], sec, 0, 0, 0)[0].name,
                                               extent_basis='adjacent original section-item boundaries'))
                 if out['problems'] and out['problems'][-1].startswith(f'{sec}: NOBITS'):
                     break
@@ -3257,6 +5153,7 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                 break
             try:
                 current_registry = load_registry(root)
+                current_registry['tus'][tu_id] = copy.deepcopy(declared)
                 split_plans(root, unit, unit_dir, tu_id, elf, registry=current_registry)
                 explicit_rows = [record for record in group_records if record.get('c_input_spans')]
                 if explicit_rows:
@@ -3291,13 +5188,23 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                     plan = dict(pieces=target_pieces,
                                 notes=['explicit target spans are tied to validated raw input ranges'])
                 else:
-                    explicit = split_plans(root, unit, unit_dir, tu_id, elf,
+                    explicit = (split_plans(root, unit, unit_dir, tu_id, elf,
                                             registry=current_registry).get(sec)
+                                if any(r.get('c_input_spans') for r in declared.get(sec, []))
+                                else None)
                     if explicit is not None:
                         plan = explicit
+                        # split_plans uses the same bounded alignment-pad
+                        # absorption as the linker. Keep the logical C-owner
+                        # spans, but compare its physical slices to those
+                        # independently marked original padding boundaries.
+                        physical_runs = absorb_padding(tu_id, sec,
+                            [dict(range=[h8(lo), h8(hi)]) for lo, hi in spans], items)
+                        physical_spans = [(hx(r['range'][0]), hx(r['range'][1]))
+                                          for r in physical_runs]
                         if len(group_records) != len(spans) or len(plan['pieces']) != len(spans) or any(
                                 (p['lo'], p['hi']) != span
-                                for p, span in zip(plan['pieces'], spans)):
+                                for p, span in zip(plan['pieces'], physical_spans)):
                             raise CarveError(f'{sec}: explicit input spans differ from compiler-derived scaffold runs')
                     else:
                         plan = plan_split(elf, csec, run_specs(items, spans, group_records),
@@ -3341,18 +5248,231 @@ def derive(root, unit, unit_dir, tu_id, source, obj):
                 run['uncredited_c_symbols'] = sorted(uncredited)
             if record.get('c_input_spans'):
                 run['c_input_spans'] = record['c_input_spans']
+                if csec.type == 8 and (len(run['c_input_spans']) != 1 or
+                        run['c_input_spans'][0].get('range') != run['range'] or
+                        run['c_input_spans'][0].get('object_range') != [p['offset'], p['offset'] + p['length']]):
+                    # A retained request can carry an old partial extent. Do
+                    # not copy it over the freshly proved complete local
+                    # storage run. Both original boundaries and current cc1
+                    # .space directives must independently tile this piece.
+                    asm_path = Path(str(obj) + '.s')
+                    if not asm_path.is_file():
+                        asm_path = Path(obj).with_suffix('.s')
+                    sys.path.insert(0, str(HERE.parent))
+                    from tu import data_gate as provenance
+                    emitted = provenance.emitted_storage(asm_path.read_text()) if asm_path.is_file() else {}
+                    owners = [owner for owner in detail.get('nobits_ownership', [])
+                              if owner.get('mapped_address') and lo <= hx(owner['mapped_address']) < hi]
+                    cursor = p['offset']
+                    valid = bool(owners)
+                    for owner in sorted(owners, key=lambda row: row['offset']):
+                        definition = emitted.get(owner['name'], {})
+                        extent = owner.get('extent', 0)
+                        valid &= (owner.get('bind') == 'LOCAL' and owner.get('type') == 'NOTYPE' and
+                                  owner.get('size') == 0 and owner['offset'] == cursor and extent > 0 and
+                                  hx(owner['mapped_address']) == lo + cursor - p['offset'] and
+                                  definition.get('extent_kind') == 'label-space' and
+                                  definition.get('section') == csec.name and definition.get('size') == extent)
+                        cursor += extent
+                    valid &= cursor == p['offset'] + p['length'] and lo + p['length'] == hi
+                    if not valid:
+                        out['problems'].append(f'{sec}: stale NOBITS input span lacks exact original/cc1 owner extent proof')
+                        continue
+                    run['c_input_spans'] = [dict(section=csec.name, range=run['range'],
+                                                object_range=[p['offset'], p['offset'] + p['length']],
+                                                symbols=[owner['name'] for owner in owners])]
+            alias_rows = [local_storage_aliases[items[i]['name']] for i in g
+                          if items[i]['name'] in local_storage_aliases]
+            if alias_rows:
+                run['c_owned_symbols'] = sorted(set(
+                    local_storage_aliases[name]['storage_owner']['name']
+                    if name in local_storage_aliases else name for name in run['c_owned_symbols']))
+                run['c_input_spans'] = [dict(section=csec.name, range=[h8(lo),h8(hi)],
+                                            object_range=[p['offset'],p['offset']+p['length']],
+                                            symbols=run['c_owned_symbols'])]
+                run['c_storage_aliases'] = alias_rows
             through = {items[i]['name']: work[w['reached'][i][0]]['items'][w['reached'][i][1]]['name']
                        for i in g if i in w['reached']}
             if through:
                 run['reached_through'] = through
             runs.append(run)
         detail['bytes'] = compare_bytes(elf, csec, plan['pieces'], ctx)
+        if (csec.type == 1 and detail['bytes'].get('checked') and detail['bytes'].get('equal')
+                and not detail['bytes'].get('unresolved_relocations')):
+            if orig is None:
+                orig = Elf(Path(ctx['orig']).read_bytes())
+            # A derivation without a registry entry has no group records; it
+            # must reach the same canonical form as one that has them, or the
+            # entry it writes would not derive again (datacarve-tools-20261010).
+            for k, (run, piece) in enumerate(zip(runs, plan['pieces'])):
+                record = group_records[k] if k < len(group_records) else {}
+                if (run.get('c_input_spans') or run.get('uncredited_c_symbols')
+                        or record.get('uncredited_scaffold_ranges') or record.get('support_only')
+                        or record.get('credit', 'verified') != 'verified'):
+                    continue
+                lo, hi = map(hx, run['range'])
+                owners = set(run.get('c_owned_symbols') or [])
+                # The mapped object slice is the piece's length; bytes past it
+                # up to piece['end'] are input alignment fill that stays an
+                # unclaimed (zero, symbol- and relocation-free) gap.
+                symbols = [s for s in elf.symbols if s.name in owners and s.type == 1
+                           and s.size > 0 and s.shndx == csec.index
+                           and piece['offset'] <= s.value < s.value + s.size <= piece['offset'] + piece['length']]
+                if (not owners or {s.name for s in symbols} != owners or len(symbols) != len(owners)
+                        or piece['lo'] != lo or piece['hi'] != hi or piece['length'] != hi - lo):
+                    continue
+                # The heuristic planner has already proved the exact compiler
+                # slice and original bytes. Carry that real coordinate to the
+                # same initialized-object identity helper used by explicit
+                # runs; do not guess offset zero for a native unsplit input.
+                candidate = dict(run, c_input_spans=[dict(section=csec.name, range=run['range'],
+                    object_range=[piece['offset'], piece['offset'] + piece['length']], symbols=sorted(owners))])
+                try:
+                    proven = initialized_original_object_aliases(elf, orig, sec, candidate)
+                except CarveError as exc:
+                    out['problems'].append(f'{tu_id} {sec}: {exc}')
+                    return out
+                if not proven:
+                    continue
+                aliases_ = copy.deepcopy(record.get('c_storage_aliases') or [])
+                for alias in proven:
+                    previous = [a for a in aliases_ if a['original_name'] == alias['original_name']]
+                    if previous:
+                        owner = previous[0]['storage_owner']
+                        if not (len(previous) == 1 and hx(previous[0]['address']) == hx(alias['address'])
+                                and owner['name'] == alias['storage_owner']['name']
+                                and hx(owner['address']) == hx(alias['storage_owner']['address'])
+                                and owner['size'] == alias['storage_owner']['size']):
+                            out['problems'].append(f'{tu_id} {sec}: retained original alias conflicts with current initialized owner')
+                            return out
+                    else:
+                        aliases_.append(alias)
+                run['c_input_spans'] = candidate['c_input_spans']
+                run['c_storage_aliases'] = sorted(aliases_, key=lambda a: (hx(a['address']), a['original_name']))
+                heuristic_initialized_aliases_added = True
+        if csec.type == 8:
+            try:
+                detail['storage'] = prove_nobits_ownership(
+                    root, unit, ctx, source, obj, elf, csec,
+                    detail.get('nobits_ownership'), c_refs | asm_refs)
+                detail['storage']['runs_sha256'] = hashlib.sha256(json.dumps(
+                    normalize_runs({sec: runs}), sort_keys=True).encode()).hexdigest()
+            except CarveError as exc:
+                out['problems'].append(str(exc))
         if len(runs) == 1 and ctx['imported'].get(sec) == spans[0]:
             # exactly the import-era run the tracked split already cuts (docs/tu-build.md)
             detail['import_split'] = runs[0]
             continue
         out['runs'][sec] = runs
+    # A NOBITS section the proofs above refuse is re-proved by its symbol
+    # offsets against the original addresses (requested runs, else derived
+    # ones); when that proof holds, its runs replace the refusal, which stays
+    # reported as `superseded_problems` (datacarve-tools-20261010, proposal 4).
+    if unit == 'main':
+        for sec in ('.bss', '.sbss'):
+            refused = [p for p in out['problems'] if p.startswith(f'{sec}: ')]
+            if not refused:
+                continue
+            detail = out['sections'].setdefault(sec, {})
+            requested = declared.get(sec) or []
+            if not any(run.get('c_input_spans') for run in requested):
+                requested = []          # a legacy NOBITS request is derived afresh
+            try:
+                runs, proof = nobits_layout_runs(root, unit, ctx, tu_id, source, obj, elf, sec, requested)
+            except CarveError as exc:
+                detail['nobits_layout_proof'] = dict(refused=str(exc))
+                continue
+            out['problems'] = [p for p in out['problems'] if p not in refused]
+            proof['runs_sha256'] = hashlib.sha256(json.dumps(
+                normalize_runs({sec: runs}), sort_keys=True).encode()).hexdigest()
+            detail.update(superseded_problems=refused, storage=proof,
+                          bytes=dict(checked=False, reason='NOBITS has no byte payload; every storage label '
+                                     'lands on its original address (nobits-layout-proof/1)'))
+            for stale in ('nobits_ownership', 'covered_scaffold_items', 'nobits_layout_proof'):
+                detail.pop(stale, None)
+            out['runs'][sec] = runs
+    initialized_runs = [run for sec, runs in out['runs'].items()
+                        if sec not in ('.bss', '.sbss') for run in runs]
+    if (_declared is None and not out['problems'] and (heuristic_initialized_aliases_added or
+            any(run.get('c_input_spans') for run in initialized_runs) and
+            any(not run.get('c_input_spans') for run in initialized_runs))):
+        # A newly discovered literal/table must enter the registry in the same
+        # representation the fresh consumer derives. Reuse the exact current
+        # cc1/source, original-byte/relocation and complete-input checks before
+        # publishing coordinates; original alignment fill remains scaffold.
+        try:
+            canonical, refresh = refresh_initialized_spans(
+                root, unit, unit_dir, tu_id, obj, elf, ctx, out['runs'], c_refs, per_func)
+            result = derive(root, unit, unit_dir, tu_id, source, obj, _declared=canonical,
+                            accepted_root=accepted_root, accepted_runs=accepted_runs)
+            if 'declared_current' in out:
+                result['declared_current'] = out['declared_current']
+                result['withdrawn_candidate_data'] = out['withdrawn_candidate_data']
+            if normalize_runs(result['runs']) != normalize_runs(canonical):
+                result['problems'].append(f'{tu_id}: fresh initialized-run derivation is not stable')
+            if refresh:
+                result['span_refresh'] = refresh
+            return result
+        except CarveError as exc:
+            out['problems'].append(str(exc))
     return out
+
+
+def derive_entry(root, unit, unit_dir, tu_id, source, obj, basis=None, rounds=4):
+    """The runs `derive` reports (and `derive --write` records) for one TU.
+
+    `check` derives from the registered entry and compares, so an entry is only
+    useful when deriving from it reproduces it (datacarve-tools-20261010):
+
+    1. derive from the TU's entry. When that has problems, a stale request must
+       not stop a re-derivation: derive again from the entry's NOBITS runs
+       alone, then from no entry at all, and report every attempt
+       (`derive_attempts`).
+    2. Re-derive from the runs exactly as `write_registry` records them (with
+       `basis`), until a derivation reproduces its own entry. A legacy run the
+       refresh rewrites as explicit c_input_spans is therefore recorded in that
+       form, and a second `derive --write` changes nothing.
+
+    Every derivation is the ordinary `derive`: no byte, owner or placement
+    check is relaxed, and an entry that never reproduces itself is a problem.
+    """
+    old = load_registry(root)['tus'].get(tu_id) or {}
+    attempts = []
+
+    def attempt(start, label):
+        try:
+            got = derive(root, unit, unit_dir, tu_id, source, obj, declared=start)
+        except CarveError as exc:
+            got = dict(tu=tu_id, runs={}, problems=[str(exc)], error=True)
+        attempts.append(dict(start=label, problems=list(got['problems']),
+                             sections=sorted(got.get('runs') or {})))
+        return got
+
+    got = attempt(old, 'registry entry' if old else 'no registry entry')
+    if got['problems'] and old:
+        nobits = {sec: runs for sec, runs in old.items() if sec in ('.bss', '.sbss') and runs}
+        starts = ([(nobits, 'registry NOBITS runs only')] if nobits and nobits != old else []) + \
+                 [({}, 'no registry entry')]
+        for start, label in starts:
+            retry = attempt(start, label)
+            if not retry['problems']:
+                got = retry
+                break
+    if not got['problems']:
+        for _ in range(rounds):
+            again = attempt(registry_entry(got['runs'], basis, old) or {}, 'derived entry')
+            if again['problems']:
+                got['problems'] = [f'{tu_id}: the derived entry does not derive again: {p}'
+                                   for p in again['problems']]
+                break
+            if normalize_runs(again['runs']) == normalize_runs(got['runs']):
+                break
+            got = again
+        else:
+            got['problems'].append(f'{tu_id}: the derivation does not reproduce its own entry '
+                                   f'within {rounds} rounds')
+    got['derive_attempts'] = attempts
+    return got
 
 
 def symbolize(root, unit, unit_dir, tu_id, obj):
@@ -3433,7 +5553,7 @@ def symbolize(root, unit, unit_dir, tu_id, obj):
     return out
 
 
-def compare_bytes(elf, csec, pieces, ctx, target_pieces=None):
+def compare_bytes(elf, csec, pieces, ctx, target_pieces=None, original_elf=None):
     """The C section with its relocations resolved at the TU's original addresses vs the original runs.
 
     `pieces`: the plan of `plan_split` (or, for one run, the run start as an int)."""
@@ -3442,7 +5562,7 @@ def compare_bytes(elf, csec, pieces, ctx, target_pieces=None):
     data = bytearray(elf.section_bytes(csec))
     if isinstance(pieces, int):
         pieces = [dict(offset=0, length=len(data), lo=pieces)]
-    orig = Elf(Path(ctx['orig']).read_bytes())
+    orig = original_elf if original_elf is not None else Elf(Path(ctx['orig']).read_bytes())
     text = next((s for s in elf.sections if s.name == '.text'), None)
     unresolved, diff = 0, []
     wants = []
@@ -3579,18 +5699,27 @@ def main(argv=None):
                                 for sec, plan in plans.items()})
         a.out.with_name(a.out.name + '.json').write_text(json.dumps(report, indent=1) + '\n')
         return 0
-    try:
-        got = derive(a.root, a.unit, a.unit_dir, a.tu, a.source, a.obj)
-    except CarveError as exc:
-        got = dict(tu=a.tu, runs={}, problems=[str(exc)], error=True)
+    basis = None
+    if a.cmd == 'derive':
+        basis = json.loads(a.basis) if a.basis else dict(kind='derived', tool='tools/tu/data_carve.py derive',
+                                                           object=str(a.obj))
+        got = derive_entry(a.root, a.unit, a.unit_dir, a.tu, a.source, a.obj, basis=basis)
+    else:
+        try:
+            got = derive(a.root, a.unit, a.unit_dir, a.tu, a.source, a.obj)
+        except CarveError as exc:
+            got = dict(tu=a.tu, runs={}, problems=[str(exc)], error=True)
     if a.cmd == 'check':
         declared = load_registry(a.root)['tus'].get(a.tu) or {}
         got['declared'] = declared
         got['consistent'] = normalize_runs(declared) == normalize_runs(got['runs']) and not got['problems']
     if a.cmd == 'derive' and a.write and not got['problems']:
-        basis = json.loads(a.basis) if a.basis else dict(kind='derived', tool='tools/tu/data_carve.py derive',
-                                                           object=str(a.obj))
         got['written'] = write_registry(a.root, a.tu, got['runs'], basis=basis)
+    elif a.cmd == 'derive' and a.write and got.get('withdrawn_candidate_data'):
+        # Apply only the independently established absence transition, retaining
+        # every other request when a separate derivation still needs repair.
+        got['withdrawn_only'] = True
+        got['written'] = write_registry(a.root, a.tu, got['declared_current'])
     if a.json_out:
         a.json_out.write_text(json.dumps(got, indent=1) + '\n')
     print(json.dumps(got, indent=1))

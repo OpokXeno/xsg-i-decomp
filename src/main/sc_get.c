@@ -1,47 +1,47 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "sc_get.h"
 
 /* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
-ScriptRecord _scriptWork[16] = {{0}};
+
+ScriptRecord _scriptWork[];
+
 #define SCRIPT_WORK_BYTES ((unsigned char *)(void *)_scriptWork)
 
 /* EUC-JP: "clear effect outside the valid range %d %d". */
-static const char D_004CC7B8[48] =
-    "\xC8\xCF\xB0\xCF\xB3\xB0\xA4\xCE\xA5\xA8\xA5\xD5\xA5\xA7\xA5\xAF\xA5\xC8\xA4\xF2\xBE\xC3\xB5\xEE\xA4\xB7\xA4\xE8\xA4\xA6\xA4\xC8\xA4\xB7\xA4\xC6\xA4\xDE\xA4\xB9\x20\x25\x64\x20\x25\x64";
-static const char D_004CC818[24] = "register overflow : %d";
-static const char D_004CC850[32] = "--- effect stack under flow";
 
-static short _cmdPut = 0;
-int _scMslCate = 0;
-extern int _nowScript;
-extern int _nowEvent;
+static const char D_004CC7B8[];
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scInitScript);
+static const char D_004CC818[];
+
+static const char D_004CC850[];
+
+static short _cmdPut;
+
+int _scMslCate;
+
+int _nowScript;
+
+int _nowEvent;
 
 /*
  * scFindScriptData is a genuine tail call (`j sefSearchMapperIndex`, not
  * `jal`) into the mapper-index search main/tu211 (src/main/sef.c) defines;
  * that function is still INCLUDE_ASM there.
  */
+
 extern int sefSearchMapperIndex(int eftNo);
-
-static int scFindScriptData(int eftNo)
-{
-    return sefSearchMapperIndex(eftNo);
-}
-
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scCreateScript);
-
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scDestroyScript);
-
 
 /*
  * sefDestroyScriptScheduler2 (main:0x002e5320, defined in main/tu211/sef.c)
  * takes the same script_index/task_index pair scDeleteTask below does; its
  * own accepted definition (src/main/sef.c) documents the match.
  */
+
 extern void sefDestroyScriptScheduler2(int script_index, int task_index);
+
 static void scDeleteTask(int script_index, int task_index);
 
 /*
@@ -50,6 +50,331 @@ static void scDeleteTask(int script_index, int task_index);
  * same +0x400 pointer scGetTableAdrIdx and its siblings below read) is
  * loaded, also deletes the one task scDeleteTask selects.
  */
+
+extern void scDestroyScript(int script_index);
+
+/* scExecScript (above) is still INCLUDE_ASM; declare it so its caller does
+ * not see an implicit declaration. */
+
+static void scExecScript(void);
+
+/*
+ * sefExecScheduler runs the effect scheduler's tick; it is defined in
+ * main/tu211 (src/main/sef.c), still INCLUDE_ASM there. scExecEffect calls
+ * scExecScript, then genuinely tail-calls (`j`, not `jal`) into it.
+ */
+
+extern void sefExecScheduler(void);
+
+/*
+ * Invalidate one task slot and decrement its owning script's active count.
+ * The original storage declarations are unavailable; the slot's recovered
+ * members are in sc_get.h, and the script header at +0x440 of each script
+ * record keeps its measured offsets, because only its active-task counter has
+ * an evidenced role here.
+ */
+
+extern int tracePrint();
+
+/*
+ * scGetReg resolves a script-register selector the same way scGetRegAdr
+ * below does (bit 0x8000 set means "read the register that selector names,
+ * then use its value as the real selector"; an out-of-range selector reports
+ * the error through tracePrint and reads as 0), but keeps its own copy of the
+ * address computation and bound check instead of calling scGetRegAdr.
+ */
+
+/* Same indirect-selector and bound-check logic as scGetReg above, writing
+ * `value` into the resolved register instead of reading it. */
+
+extern int scGetCmdScript(ScriptTask *task);
+
+extern int scGetReg(int reg);
+
+extern int scGetAdrScript(ScriptTask *task);
+
+static int scCreateTask(int script_index, int task_index, int address, ScriptTaskParameters *data);
+
+static void scDeleteTaskAll(int event, int task_index);
+
+/*
+ * scGetNumScript decodes the current script command's next numeric operand.
+ * Every opcode handler is called with the running ScriptTask in $a0 (as
+ * scONGOScript and scPAUSEScript use it), and the handlers below hand that
+ * task on to scGetNumScript: the R*Script handlers save $a0 across
+ * scGetCmdScript and reload it before the call (daddu a0,s0 at 0x002eae90),
+ * and scABORTScript, whose first call it is, leaves $a0 untouched
+ * (0x002eabc4..0x002eabc8). scGetNumScript's own body does not read it.
+ */
+
+extern int scGetNumScript(ScriptTask *task);
+
+extern unsigned int strlen(const char *s);
+
+const char D_004DBB38[];
+
+/* Preserve the earlier external reference above while owning its bytes here. */
+
+/* Keep the active script scalars after scRDUMPScript's small-data format. */
+
+extern void scSetReg(int reg, int value);
+
+extern void sdvSetAmbState(int state, int effect_no);
+
+extern void sdvSetAmbState2(int state, int effect_no);
+
+extern int scGetAdrImmScript(ScriptTask *task);
+
+/*
+ * sefCreateScheduler (main:0x002e5900) and sefCreateBattleActorTbl
+ * (main:0x002e63f0) are still assembly in main/tu211/sef.c. sefCreateScheduler
+ * is called here with the task's own two 16-byte spans at +0x20/+0x30 (the
+ * same +0x30 span scCreateTask's own comment above documents) and the current
+ * script's data table pointer; -1 is the same "auto-assign" sentinel
+ * scOBJEVEScript's scCreateTask call above uses for its task-index argument.
+ */
+
+extern int sefCreateScheduler(int address, void *taskField0x30, void *taskField0x20, int table, int taskIndex);
+
+extern void sefCreateBattleActorTbl(short effect_no);
+
+/* scFreezeCamera (still assembly in this TU) takes the task's effect_no. */
+
+static void scFreezeCamera(int effect_no);
+
+extern char *srsAnalyzeEftNo(int effectId, int *charId, int *effectCategory);
+
+static int scERRORScript(ScriptTask *task);
+
+static int scGOScript(ScriptTask *task);
+
+static int scGOSUBScript(ScriptTask *task);
+
+static int scBRAScript(ScriptTask *task);
+
+static int scEXITScript(ScriptTask *task);
+
+static int scRETURNScript(ScriptTask *task);
+
+static int scONGOScript(ScriptTask *task);
+
+static int scONGOSUBScript(ScriptTask *task);
+
+static int scPRINTScript(ScriptTask *task);
+
+static int scRPUTScript(ScriptTask *task);
+
+static int scRDUMPScript(ScriptTask *task);
+
+static int scCMDPUTONScript(ScriptTask *task);
+
+static int scCMDPUTOFFScript(ScriptTask *task);
+
+static int scFADEONScript(ScriptTask *task);
+
+static int scRSETScript(ScriptTask *task);
+
+static int scRINCScript(ScriptTask *task);
+
+static int scRDECScript(ScriptTask *task);
+
+static int scRADDScript(ScriptTask *task);
+
+static int scRSUBScript(ScriptTask *task);
+
+static int scRMULScript(ScriptTask *task);
+
+static int scRDIVScript(ScriptTask *task);
+
+static int scRMODScript(ScriptTask *task);
+
+static int scR_ANDScript(ScriptTask *task);
+
+static int scR_ORScript(ScriptTask *task);
+
+static int scR_XORScript(ScriptTask *task);
+
+static int scR_NOTScript(ScriptTask *task);
+
+static int scR_NEGScript(ScriptTask *task);
+
+static int scRRNDScript(ScriptTask *task);
+
+static int scREVEScript(ScriptTask *task);
+
+static int scOBJEVEScript(ScriptTask *task);
+
+static int scABORTScript(ScriptTask *task);
+
+static int scPAUSEScript(ScriptTask *task);
+
+static int scWAITCNTScript(ScriptTask *task);
+
+static int scWAITEVEScript(ScriptTask *task);
+
+static int scWAITEFTScript(ScriptTask *task);
+
+static int scWAITMOVIEScript(ScriptTask *task);
+
+static int scWAITMISSILEScript(ScriptTask *task);
+
+static int scEFFECTScript(ScriptTask *task);
+
+static int scEFFECT2Script(ScriptTask *task);
+
+static int scEFFECT3Script(ScriptTask *task);
+
+static int scMOVIEScript(ScriptTask *task);
+
+static int scMISSILEScript(ScriptTask *task);
+
+static int scMISSILE3Script(ScriptTask *task);
+
+static int (*_scFuncHandler[73])(ScriptTask *task) = {
+    scERRORScript, scGOScript, scGOSUBScript, scBRAScript,
+    scEXITScript, scRETURNScript, scONGOScript, scONGOSUBScript,
+    scERRORScript, scERRORScript, scPRINTScript, scRPUTScript,
+    scRDUMPScript, scCMDPUTONScript, scCMDPUTOFFScript, scFADEONScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scRSETScript, scRINCScript, scRDECScript, scRADDScript,
+    scRSUBScript, scRMULScript, scRDIVScript, scRMODScript,
+    scR_ANDScript, scR_ORScript, scR_XORScript, scR_NOTScript,
+    scR_NEGScript, scRRNDScript, scREVEScript, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scOBJEVEScript, scABORTScript, scPAUSEScript, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scERRORScript, scERRORScript, scWAITCNTScript, scWAITEVEScript,
+    scWAITEFTScript, scWAITMOVIEScript, scWAITMISSILEScript, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scEFFECTScript, scEFFECT2Script, scEFFECT3Script, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scERRORScript, scERRORScript, scMOVIEScript, scMISSILEScript,
+    scMISSILE3Script
+};
+
+/* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
+
+static const char D_004CC790[];
+
+static const char D_004CC7E8[];
+
+static const char D_004CC800[];
+
+static const char D_004CC830[];
+
+static const char D_004CC870[];
+
+static const char D_004CC898[];
+
+static ScriptZeroPosition _zeroPos_0041E290;
+
+extern void **svGetScript(int effectNo);
+
+extern void sefDestroyScriptScheduler(int script_index);
+
+extern int srsGetEffect2Idx(int effectNo);
+
+extern int sefCreateScheduler2(int address, void *taskData, void *positionData, int table, int flags, int taskIndex);
+
+extern int func_A32FA8(const char *filename);
+
+extern int rand(void);
+
+extern void func_A31500(int *position, int mode);
+
+extern void func_A31920(int mode, int *position);
+
+void scInitScript(void)
+{
+    int script;
+    int task;
+
+    _cmdPut = 0;
+    for (script = 0; script < 16; script++) {
+        _scriptWork[script].dataTable = 0;
+        _scriptWork[script].dataIndex = -1;
+        _scriptWork[script].activeTasks = 0;
+        _scriptWork[script].eventValue = 0;
+        _scriptWork[script].event = 0;
+        for (task = 0; task < 8; task++) {
+            ScriptTask *slot = &_scriptWork[script].tasks[task];
+
+            memset(slot, 0, 128);
+            slot->task_no = task;
+            slot->script_no = script;
+        }
+    }
+}
+
+static int scFindScriptData(int eftNo)
+{
+    return sefSearchMapperIndex(eftNo);
+}
+
+int scCreateScript(ScriptTaskParameters *info)
+{
+    int effectNo;
+    int dataIndex;
+    int script;
+    int task;
+    void **entry;
+
+    effectNo = info->effect_no;
+    dataIndex = scFindScriptData(effectNo);
+    if (dataIndex < 0) {
+        tracePrint((unsigned char *)D_004CC790, effectNo);
+        return dataIndex;
+    }
+    for (script = 0; script < 16; script++) {
+        if (_scriptWork[script].dataTable != 0 && _scriptWork[script].event == effectNo) {
+            task = scCreateTask(script, -1, ((short *)_scriptWork[script].dataTable)[((short *)_scriptWork[script].dataTable)[0]], info);
+            if (task >= 0) {
+                return task | (script << 8);
+            }
+        }
+    }
+    for (script = 0; script < 16; script++) {
+        if (_scriptWork[script].dataTable == 0) {
+            entry = svGetScript(effectNo);
+            if (entry == 0) {
+                return -1;
+            }
+            _scriptWork[script].event = effectNo;
+            _scriptWork[script].dataIndex = dataIndex;
+            _scriptWork[script].dataTable = *entry;
+            task = scCreateTask(script, 0, ((short *)_scriptWork[script].dataTable)[((short *)_scriptWork[script].dataTable)[0]], info);
+            if (task >= 0) {
+                task |= script << 8;
+            }
+            return task;
+        }
+    }
+    return -1;
+}
+
+void scDestroyScript(int script_index)
+{
+    int task;
+
+    if (script_index >= 0) {
+        sefDestroyScriptScheduler(script_index);
+        if (_scriptWork[script_index].dataTable != 0) {
+            _scriptWork[script_index].dataTable = 0;
+            _scriptWork[script_index].dataIndex = -1;
+            _scriptWork[script_index].activeTasks = 0;
+            _scriptWork[script_index].eventValue = 0;
+            _scriptWork[script_index].event = 0;
+            for (task = 0; task < 8; task++) {
+                ScriptTask *slot = &_scriptWork[script_index].tasks[task];
+
+                memset(slot, 0, 128);
+                slot->task_no = task;
+                slot->script_no = script_index;
+            }
+        }
+    }
+}
+
 void scDestroyScript2(int script_index, int task_index)
 {
     /* tracePrint's other callers in this TU (below) declare it with fewer
@@ -67,8 +392,6 @@ void scDestroyScript2(int script_index, int task_index)
     }
 }
 
-extern void scDestroyScript(int script_index);
-
 void scDestroyScriptAll(void)
 {
     int script_index;
@@ -79,32 +402,47 @@ void scDestroyScriptAll(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/sc_get", scExecScript);
 
-/* scExecScript (above) is still INCLUDE_ASM; declare it so its caller does
- * not see an implicit declaration. */
-static void scExecScript(void);
-
-/*
- * sefExecScheduler runs the effect scheduler's tick; it is defined in
- * main/tu211 (src/main/sef.c), still INCLUDE_ASM there. scExecEffect calls
- * scExecScript, then genuinely tail-calls (`j`, not `jal`) into it.
- */
-extern void sefExecScheduler(void);
-
 void scExecEffect(void)
 {
     scExecScript();
     sefExecScheduler();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scCreateTask);
+static int scCreateTask(int script_index, int task_index, int address, ScriptTaskParameters *data)
+{
+    int slot;
+    ScriptTask *task;
 
-/*
- * Invalidate one task slot and decrement its owning script's active count.
- * The original storage declarations are unavailable; the slot's recovered
- * members are in sc_get.h, and the script header at +0x440 of each script
- * record keeps its measured offsets, because only its active-task counter has
- * an evidenced role here.
- */
+    if (task_index >= 8) {
+        tracePrint((unsigned char *)D_004CC7E8, task_index);
+        return -1;
+    }
+    if (task_index < 0) {
+        for (slot = 0; slot < 8; slot++) {
+            task = &_scriptWork[script_index].tasks[slot];
+            if ((task->flags & 1) == 0) {
+                task_index = slot;
+                break;
+            }
+        }
+    }
+    if (task_index >= 0) {
+        task = &_scriptWork[script_index].tasks[task_index];
+        task->flags = 1;
+        task->script_pc[task->branch_depth] = address;
+        task->parameters = *data;
+        task->effect_scheduler = -1;
+        task->initial_position.words[0] = _zeroPos_0041E290.words[0];
+        task->slot_no = task_index;
+        _scriptWork[script_index].eventValue = task_index;
+        _scriptWork[script_index].activeTasks++;
+        task->initial_position.words[1] = _zeroPos_0041E290.words[1];
+    } else {
+        tracePrint((unsigned char *)D_004CC800, script_index);
+    }
+    return task_index;
+}
+
 static void scDeleteTask(int script_index, int task_index)
 {
     ScriptTask *task;
@@ -140,17 +478,19 @@ static void scDeleteTask(int script_index, int task_index)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scDeleteTaskAll);
+static void scDeleteTaskAll(int selected_script, int unused_task_index)
+{
+    int script_index;
+    int task_index;
 
-extern int tracePrint(unsigned char *fmt, unsigned int value);
+    for (script_index = 0; script_index < 16; script_index++) {
+        if (selected_script < 0 || script_index == selected_script) {
+            for (task_index = 0; task_index < 8; task_index++)
+                scDeleteTask(script_index, task_index);
+        }
+    }
+}
 
-/*
- * scGetReg resolves a script-register selector the same way scGetRegAdr
- * below does (bit 0x8000 set means "read the register that selector names,
- * then use its value as the real selector"; an out-of-range selector reports
- * the error through tracePrint and reads as 0), but keeps its own copy of the
- * address computation and bound check instead of calling scGetRegAdr.
- */
 int scGetReg(int reg)
 {
     int *address;
@@ -172,8 +512,6 @@ int scGetReg(int reg)
     return value;
 }
 
-/* Same indirect-selector and bound-check logic as scGetReg above, writing
- * `value` into the resolved register instead of reading it. */
 void scSetReg(int reg, int value)
 {
     int *address;
@@ -192,10 +530,22 @@ void scSetReg(int reg, int value)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGetCmdScript);
+int scGetCmdScript(ScriptTask *task)
+{
+    short *command;
+    int offset;
 
-extern int scGetCmdScript(ScriptTask *task);
-extern int scGetReg(int reg);
+    unsigned short depth;
+
+    command = (short *)0;
+    offset = task->script_pc[task->branch_depth];
+    depth = task->branch_depth;
+    if (offset != 0) {
+        command = (short *)_scriptWork[_nowScript].dataTable + offset;
+    }
+    task->script_pc[(short)depth]++;
+    return *command;
+}
 
 int scGetNumScript(ScriptTask *task)
 {
@@ -229,14 +579,6 @@ int scGetRegScript(ScriptTask *task)
     return resolved_operand;
 }
 
-/*
- * scGetAdrScript forwards the running task it was given straight through to
- * scGetCmdScript (register evidence: it sets up no argument of its own before
- * the `jal scGetCmdScript`), and collapses the same 0xFFFF/-1 "no address"
- * sentinels scGetImmAdrImmIdx2 above documents.
- */
-extern int scGetCmdScript(ScriptTask *task);
-
 int scGetAdrScript(ScriptTask *task)
 {
     int address;
@@ -248,12 +590,6 @@ int scGetAdrScript(ScriptTask *task)
     return address;
 }
 
-/*
- * scGetAdrIdx reads the same task->script_pc[task->branch_depth] operand
- * scGetCmdAdrScript below does and resolves it to a data-table base exactly
- * the way scGetTableAdrIdx does, then indexes that base by `index` instead of
- * returning it directly.
- */
 unsigned short scGetAdrIdx(ScriptTask *task, int index)
 {
     int operand;
@@ -272,38 +608,22 @@ unsigned short scGetAdrIdx(ScriptTask *task, int index)
     return value;
 }
 
-extern int _nowScript;
-
-/*
- * Reads a table-relative entry from the current script's data table (the
- * pointer stored at the script record's +0x400, the same field
- * scGetTableAdrImmIdx, scGetImmAdrImmIdx, scGetTableNumIdx, scAdrToImm and
- * scGetCmdAdrScript below read): `base` selects an optional sub-table before
- * `index` is applied (`base == 0` reads directly at `index * 2`). Same
- * 0xFFFF/-1 "no address" sentinels as scGetAdrScript, scGetImmAdrImmIdx2 and
- * scOfsToAdr collapse to 0.
- */
 unsigned short scGetTableAdrIdx(int base, int index)
 {
-    int table;
+    unsigned short *table;
     int value;
 
     table = 0;
     if (base != 0) {
-        table = *(int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x400) + base * 2;
+        table = (unsigned short *)_scriptWork[_nowScript].dataTable + base;
     }
-    value = *(unsigned short *)(table + index * 2);
+    value = table[index];
     if (value == 0xFFFF || value == -1) {
         value = 0;
     }
     return value;
 }
 
-/*
- * Forwards `base`/`index` to scGetTableAdrIdx and turns the entry it returns
- * into an absolute address in the current script's data table: entry 0
- * stays 0, any other entry is doubled and added to the table pointer.
- */
 int scGetTableAdrImmIdx(int base, int index)
 {
     unsigned short entry;
@@ -312,17 +632,11 @@ int scGetTableAdrImmIdx(int base, int index)
     entry = scGetTableAdrIdx(base, index);
     address = 0;
     if (entry != 0) {
-        address = *(int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x400) + entry * 2;
+        address = (int)_scriptWork[_nowScript].dataTable + entry * 2;
     }
     return address;
 }
 
-/*
- * Reads a 16-bit entry directly out of `table[index]` (an immediate table
- * the caller passed, not the current script's), normalizes the same
- * 0xFFFF/-1 sentinels scGetTableAdrIdx above collapses, and turns a nonzero
- * entry into an absolute address in the current script's data table.
- */
 int scGetImmAdrImmIdx(const unsigned short *table, int index)
 {
     int entry;
@@ -334,17 +648,11 @@ int scGetImmAdrImmIdx(const unsigned short *table, int index)
     }
     address = 0;
     if (entry != 0) {
-        address = *(int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x400) + entry * 2;
+        address = (int)_scriptWork[_nowScript].dataTable + entry * 2;
     }
     return address;
 }
 
-/*
- * Resolves a table-indexed operand to an address relative to `base`: the
- * halfword at `table[index]` is a count of halfword units (multiplied by 2
- * below), with the same 0xFFFF/-1 "no address" sentinels as scGetAdrScript
- * collapsing to 0.
- */
 int scGetImmAdrImmIdx2(int base, unsigned short *table, int index)
 {
     int offset;
@@ -363,16 +671,15 @@ int scGetImmAdrImmIdx2(int base, unsigned short *table, int index)
 
 short scGetTableNumIdx(int base, int index)
 {
-    int table;
+    short *table;
 
     table = 0;
     if (base != 0) {
-        table = *(int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x400) + base * 2;
+        table = (short *)_scriptWork[_nowScript].dataTable + base;
     }
-    return *(short *)(table + index * 2);
+    return table[index];
 }
 
-/* Reads a signed 16-bit table entry: `table[index]`. */
 short scGetImmNumIdx(short *table, int index)
 {
     return table[index];
@@ -393,34 +700,33 @@ int scGetAdrImmScript(ScriptTask *task)
     return (int)&table[table_index];
 }
 
-static int scERRORScript(void)
+static int scERRORScript(ScriptTask *task)
 {
     return 0;
 }
 
-extern int scGetAdrScript(ScriptTask *task);
-
-/*
- * scGOScript is the script VM's GO opcode wrapper: it stores the resolved
- * address at the branch-stack entry `branch_depth` selects, the same slot
- * scONGOScript above writes.
- */
 static int scGOScript(ScriptTask *task)
 {
     task->script_pc[task->branch_depth] = scGetAdrScript(task);
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scGOSUBScript);
+static int scGOSUBScript(ScriptTask *task)
+{
+    int destination = scGetAdrScript(task);
+    short branch_depth = task->branch_depth;
+    unsigned int next_depth = (unsigned short)task->branch_depth + 1;
 
-extern int tracePrint(unsigned char *fmt, unsigned int value);
+    if (branch_depth < 3) {
+        unsigned int shifted_depth = next_depth << 16;
+        task->branch_depth = next_depth;
+        task->script_pc[(int)shifted_depth >> 16] = destination;
+    } else {
+        ((int (*)(unsigned char *))tracePrint)((unsigned char *)D_004CC830);
+    }
+    return 1;
+}
 
-/*
- * scRETURNScript is the script VM's RETURN opcode handler: it pops the
- * branch-stack entry the task's current depth points to (clearing it) and
- * decrements the depth; with nothing left to return to (branch_depth <= 0)
- * it reports the underflow through tracePrint instead.
- */
 static int scRETURNScript(ScriptTask *task)
 {
     short depth = task->branch_depth;
@@ -435,20 +741,54 @@ static int scRETURNScript(ScriptTask *task)
     return 1;
 }
 
-static int scEXITScript(void)
+static int scEXITScript(ScriptTask *task)
 {
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scBRAScript);
+static int scBRAScript(ScriptTask *task)
+{
+    int take_branch = 0;
+    int left = scGetNumScript(task);
+    int comparison = scGetCmdScript(task);
+    int right = scGetNumScript(task);
+    int destination = scGetAdrScript(task);
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scONGOSUB);
+    switch (comparison) {
+    case 0: if (left == right) take_branch = 1; break;
+    case 1: if (left != right) take_branch = 1; break;
+    case 2: if (left > right) take_branch = 1; break;
+    case 3: if (left >= right) take_branch = 1; break;
+    case 4: if (left < right) take_branch = 1; break;
+    case 5: if (left <= right) take_branch = 1; break;
+    default:
+        tracePrint((unsigned char *)D_004CC870, comparison);
+        break;
+    }
+    if (take_branch)
+        task->script_pc[task->branch_depth] = destination;
+    return 1;
+}
 
-/*
- * scONGOScript is the script VM's ONGO opcode wrapper.  scONGOSUB performs the
- * operand decoding and branch selection; this wrapper stores the result into
- * the branch-stack entry the task's current depth selects.
- */
+static int scONGOSUB(ScriptTask *task)
+{
+    int index;
+    int count;
+    int next;
+    int target;
+
+    index = scGetNumScript(task);
+    count = scGetCmdScript(task);
+    next = task->script_pc[task->branch_depth] + count;
+    if (index >= 0 && index < count) {
+        target = scGetAdrIdx(task, index);
+    } else {
+        target = next;
+    }
+    task->script_pc[task->branch_depth] = next;
+    return target;
+}
+
 static int scONGOScript(ScriptTask *task)
 {
     int destination = scONGOSUB(task);
@@ -458,23 +798,17 @@ static int scONGOScript(ScriptTask *task)
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scONGOSUBScript);
+static int scONGOSUBScript(ScriptTask *task)
+{
+    int destination = scONGOSUB(task);
 
-/*
- * scCreateTask (main:0x002ea028, still assembly in this TU) takes the
- * script to create the task under, a task-index hint (-1 auto-assigns a free
- * slot, the same sentinel scOBJEVEScript passes below), the branch address to
- * seed script_pc[0] with (sc_get.h's ScriptTask comment) and the 16-byte
- * caller span it copies into the new task's +0x30 (the same comment).
- */
-extern int scCreateTask(int script_index, int task_index, int address, unsigned char *data);
+    if (task->branch_depth < 3) {
+        task->branch_depth++;
+        task->script_pc[task->branch_depth] = destination;
+    }
+    return 1;
+}
 
-/*
- * scOBJEVEScript is the script VM's OBJEVE opcode handler: it decodes a
- * numeric operand and an address operand, creates a task at that address
- * (auto-assigning its slot), and stores the decoded number into the new
- * task's effect_scheduler halfword.
- */
 static int scOBJEVEScript(ScriptTask *task)
 {
     int number;
@@ -482,7 +816,7 @@ static int scOBJEVEScript(ScriptTask *task)
     ScriptTask *newTask;
 
     number = scGetNumScript(task);
-    newTaskIndex = scCreateTask(_nowScript, -1, scGetAdrScript(task), &task->unmodeled_20[0x10]);
+    newTaskIndex = scCreateTask(_nowScript, -1, scGetAdrScript(task), &task->parameters);
     if (newTaskIndex >= 0) {
         newTask = (ScriptTask *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + newTaskIndex * 128);
         newTask->effect_scheduler = number;
@@ -490,33 +824,6 @@ static int scOBJEVEScript(ScriptTask *task)
     return 1;
 }
 
-extern int _nowEvent;
-extern int _nowScript;
-static void scDeleteTaskAll(int event, int task_index);
-/*
- * scGetNumScript decodes the current script command's next numeric operand.
- * Every opcode handler is called with the running ScriptTask in $a0 (as
- * scONGOScript and scPAUSEScript use it), and the handlers below hand that
- * task on to scGetNumScript: the R*Script handlers save $a0 across
- * scGetCmdScript and reload it before the call (daddu a0,s0 at 0x002eae90),
- * and scABORTScript, whose first call it is, leaves $a0 untouched
- * (0x002eabc4..0x002eabc8). scGetNumScript's own body does not read it.
- */
-extern int scGetNumScript(ScriptTask *task);
-
-/*
- * Deletes the task the decoded index selects.  A negative index deletes every
- * task of the given event instead (gp-relative _nowEvent/_nowScript at
- * 0x002eabdc/0x002eabf0).
- *
- * `event` first receives the scGetNumScript(task) result (discarded once
- * `taskIndex` is initialised from the same expression) and only later the
- * _nowEvent load: forms 01-03 (build/form-0{1,2,3}/functions/scABORTScript.json)
- * show that giving `taskIndex` and `event` independent initialisations, in
- * either declaration order, costs the compiler the shared epilogue between
- * the two branches (+8 bytes over the original); the chained assignment
- * below (form04) is what keeps it.
- */
 static int scABORTScript(ScriptTask *task)
 {
     int taskIndex;
@@ -538,18 +845,6 @@ static int scPAUSEScript(ScriptTask *task)
     return 1;
 }
 
-extern unsigned int strlen(const char *s);
-
-/*
- * scPRINTScript is the script VM's PRINT opcode handler: the current command
- * operand (task->script_pc[task->branch_depth], the same value
- * scGetCmdAdrScript below decodes) is the address, in the script's data
- * table, of an inline null-terminated string; this handler does not print it
- * (that trace call is compiled out of this build), but still has to skip the
- * script reader past the string's bytes, so it advances the same script_pc
- * entry by the string's length, padded to an even count of bytes plus its
- * terminator, in halfword units.
- */
 static int scPRINTScript(ScriptTask *task)
 {
     char *string;
@@ -566,30 +861,13 @@ static int scPRINTScript(ScriptTask *task)
     return 1;
 }
 
-/*
- * scGetCmdScript (still asm) decodes the running task's next command
- * operand: it reads the task the handler was given in $a0
- * (`lh $3,0x54($4)` = task->branch_depth at 0x002ea418,
- * `addiu $5,$4,0x8` = task->script_pc at 0x002ea41c).
- */
-extern int scGetCmdScript(ScriptTask *task);
-extern int scGetReg(int reg);
-
 static int scRPUTScript(ScriptTask *task)
 {
     scGetReg(scGetCmdScript(task));
     return 1;
 }
 
-
-/*
- * scRDUMPScript dumps the 16 script registers through the trace logger, 8 per
- * line, formatting each as " %04x" and re-terminating the line buffer between
- * lines.
- */
-extern const char D_004DBB38[];
-
-static int scRDUMPScript(void)
+static int scRDUMPScript(ScriptTask *task)
 {
     char line[128];
     int length;
@@ -606,27 +884,17 @@ static int scRDUMPScript(void)
     return 1;
 }
 
-/* Preserve the earlier external reference above while owning its bytes here. */
-const char D_004DBB38[8] = " %04x";
-
-/* Keep the active script scalars after scRDUMPScript's small-data format. */
-int _nowScript = 0;
-int _nowEvent = 0;
-
-
-static int scCMDPUTONScript(void)
+static int scCMDPUTONScript(ScriptTask *task)
 {
     _cmdPut = 1;
     return 1;
 }
 
-static int scCMDPUTOFFScript(void)
+static int scCMDPUTOFFScript(ScriptTask *task)
 {
     _cmdPut = 0;
     return 1;
 }
-
-extern void scSetReg(int reg, int value);
 
 static int scRSETScript(ScriptTask *task)
 {
@@ -679,13 +947,6 @@ static int scRMULScript(ScriptTask *task)
     return 1;
 }
 
-/*
- * `divisor` duplicates `operand` into its own local: form01
- * (build/form-01/functions/scRDIVScript.json) shows the original keeps a
- * third callee-saved register (s2) holding this value only for the `beql
- * s2,zero` zero-divide guard, separate from the register the `div`
- * instruction itself reads, and drops to two saved registers without it.
- */
 static int scRDIVScript(ScriptTask *task)
 {
     int reg = scGetCmdScript(task);
@@ -698,7 +959,6 @@ static int scRDIVScript(ScriptTask *task)
     return 1;
 }
 
-/* Same compiler-forced extra register as scRDIVScript; see its comment. */
 static int scRMODScript(ScriptTask *task)
 {
     int reg = scGetCmdScript(task);
@@ -754,14 +1014,31 @@ static int scR_NEGScript(ScriptTask *task)
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scRRNDScript);
+static int scRRNDScript(ScriptTask *task)
+{
+    int reg;
+    int low;
+    int span;
+    int value;
 
-/*
- * scREVEScript is the script VM's REVE opcode handler: it stores the
- * current script's header halfword at +0x446 (the header's other evidenced
- * entry is scDeleteTask's active-task counter at +0x448) into the operand
- * register scGetCmdScript decodes.
- */
+    reg = scGetCmdScript(task);
+    low = scGetNumScript(task);
+    span = scGetNumScript(task);
+    if (span < low) {
+        value = span;
+        span = low;
+        low = value;
+    }
+    span = (short)(span - low);
+    if (span != 0) {
+        value = (short)(rand() % span);
+    } else {
+        value = 0;
+    }
+    scSetReg(reg, value + low);
+    return 1;
+}
+
 static int scREVEScript(ScriptTask *task)
 {
     int reg;
@@ -788,11 +1065,6 @@ static int scWAITCNTScript(ScriptTask *task)
     return 2;
 }
 
-/*
- * scWAITEVEScript is the WAIT-for-event opcode handler: it reads the event
- * number operand, records it as the task's wait_value and sets wait_mode to
- * 2, then returns the parser-yield status 2.
- */
 static int scWAITEVEScript(ScriptTask *task)
 {
     task->wait_value = scGetNumScript(task);
@@ -800,13 +1072,6 @@ static int scWAITEVEScript(ScriptTask *task)
     return 2;
 }
 
-/*
- * scWAITEFTScript is the WAIT-for-effect opcode handler. It consumes an
- * operand from the script stream (the scGetNumScript(task) call), but the
- * value it waits on is the effect_scheduler handle scEFFECTScript (still
- * asm) already stored in the task: it copies that into wait_value and sets
- * wait_mode to 3.
- */
 static int scWAITEFTScript(ScriptTask *task)
 {
     scGetNumScript(task);
@@ -815,40 +1080,40 @@ static int scWAITEFTScript(ScriptTask *task)
     return 2;
 }
 
-/* scWAITMOVIEScript is the WAIT-for-movie opcode handler: no operand of its
- * own, it just sets wait_mode to 4 and yields. */
 static int scWAITMOVIEScript(ScriptTask *task)
 {
     task->wait_mode = 4;
     return 2;
 }
 
-/* scWAITMISSILEScript is the WAIT-for-missile opcode handler: no operand of
- * its own, it just sets wait_mode to 5 and yields. */
 static int scWAITMISSILEScript(ScriptTask *task)
 {
     task->wait_mode = 5;
     return 2;
 }
 
-/* scFADEONScript sets the fade-on bit of the task's flags word and returns
- * the running status 1. */
 static int scFADEONScript(ScriptTask *task)
 {
     task->flags |= 0x100;
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scFreezeCamera);
+static void scFreezeCamera(int effect_no)
+{
+    int i;
 
-extern void sdvSetAmbState(int state, int effect_no);
-extern void sdvSetAmbState2(int state, int effect_no);
+    if ((unsigned int)(effect_no - 2000) < 100u) {
+        int modes[2] = {0, 1};
+        int params[44];
 
-/*
- * scSetAmbient is the script VM's ambient-state opcode handler: outside an
- * event it starts (or overrides, when `flags & 0x100`) the ambient state for
- * `effect_no`.
- */
+        for (i = 0; i < 2; i++) {
+            memset(params, 0, 176);
+            func_A31500(&params[4], modes[i]);
+            func_A31920(modes[i], (params[0] = 0, params[28] = 0, params));
+        }
+    }
+}
+
 static void scSetAmbient(ScriptTask *task)
 {
     short effectNo;
@@ -856,7 +1121,7 @@ static void scSetAmbient(ScriptTask *task)
     if (_nowEvent != 0) {
         return;
     }
-    effectNo = task->effect_no;
+    effectNo = task->parameters.effect_no;
     if (task->flags & 0x100) {
         sdvSetAmbState2(1, effectNo);
         return;
@@ -864,30 +1129,6 @@ static void scSetAmbient(ScriptTask *task)
     sdvSetAmbState(1, effectNo);
 }
 
-extern int scGetAdrImmScript(ScriptTask *task);
-
-/*
- * sefCreateScheduler (main:0x002e5900) and sefCreateBattleActorTbl
- * (main:0x002e63f0) are still assembly in main/tu211/sef.c. sefCreateScheduler
- * is called here with the task's own two 16-byte spans at +0x20/+0x30 (the
- * same +0x30 span scCreateTask's own comment above documents) and the current
- * script's data table pointer; -1 is the same "auto-assign" sentinel
- * scOBJEVEScript's scCreateTask call above uses for its task-index argument.
- */
-extern int sefCreateScheduler(int address, void *taskField0x30, void *taskField0x20, int table, int taskIndex);
-extern void sefCreateBattleActorTbl(short effect_no);
-
-/* scFreezeCamera (still assembly in this TU) takes the task's effect_no. */
-extern void scFreezeCamera(short effect_no);
-
-/*
- * scEFFECTScript is the script VM's EFFECT opcode handler: a resolved address
- * creates an effect scheduler seeded from the task's own state, records the
- * scheduler handle in the task's effect_scheduler field (the same field the
- * WAIT-for-effect handler above reads back), and, once the scheduler starts
- * successfully, applies the task's ambient state and freezes the camera for
- * its effect.
- */
 static int scEFFECTScript(ScriptTask *task)
 {
     int address;
@@ -895,37 +1136,106 @@ static int scEFFECTScript(ScriptTask *task)
 
     address = scGetAdrImmScript(task);
     if (address != 0) {
-        schedulerId = sefCreateScheduler(address, &task->unmodeled_20[0x10], &task->unmodeled_20[0],
+        schedulerId = sefCreateScheduler(address, &task->parameters, &task->initial_position,
             (int)((ScriptRecord *)(SCRIPT_WORK_BYTES + _nowScript * 1104))->dataTable, -1);
         task->effect_scheduler = schedulerId;
-        sefCreateBattleActorTbl(task->effect_no);
+        sefCreateBattleActorTbl(task->parameters.effect_no);
         if (schedulerId >= 0) {
             scSetAmbient(task);
-            scFreezeCamera(task->effect_no);
+            scFreezeCamera(task->parameters.effect_no);
         }
     }
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scEFFECT2Script);
+static int scEFFECT2Script(ScriptTask *task)
+{
+    int address;
+    int command;
+    int selector;
+    int next;
+    int entry;
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scEFFECT3Script);
+    address = 0;
+    command = scGetCmdScript(task);
+    selector = srsGetEffect2Idx(task->parameters.effect_no);
+    if ((unsigned int)((unsigned short)task->parameters.effect_no - 2900) < 99u) {
+        selector = 1;
+    }
+    next = task->script_pc[task->branch_depth] + command;
+    if (selector < command) {
+        entry = scGetAdrIdx(task, selector);
+        if (entry == 0) {
+            address = 0;
+        } else {
+            address = (int)((unsigned char *)_scriptWork[_nowScript].dataTable + entry * 2);
+        }
+    }
+    task->script_pc[task->branch_depth] = next;
+    if (address != 0) {
+        task->effect_scheduler = sefCreateScheduler(address, &task->parameters, &task->initial_position,
+            (int)_scriptWork[_nowScript].dataTable, -1);
+        sefCreateBattleActorTbl(task->parameters.effect_no);
+    }
+    return 1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scMOVIEScript);
+static int scEFFECT3Script(ScriptTask *task)
+{
+    int count;
+    int firstAddress;
+    int secondAddress;
+    int savedWord;
+    short savedHalf;
+    int schedulerId;
 
-extern int scGetAdrImmScript(ScriptTask *task);
-extern int srsAnalyzeEftNo(short effectId, unsigned char *charId, int *effectCategory);
+    count = scGetNumScript(task);
+    firstAddress = scGetAdrImmScript(task);
+    secondAddress = scGetAdrImmScript(task);
+    if (_nowEvent == 0) {
+        savedWord = task->parameters.scheduler_word;
+        savedHalf = task->parameters.scheduler_halfword;
+        task->parameters.scheduler_word = 0;
+        task->parameters.scheduler_halfword = 0;
+        schedulerId = sefCreateScheduler(firstAddress, &task->parameters, &task->initial_position,
+            (int)_scriptWork[_nowScript].dataTable, -1);
+        task->parameters.scheduler_word = savedWord;
+        task->parameters.scheduler_halfword = savedHalf;
+        if (schedulerId >= 0) {
+            scSetAmbient(task);
+            scFreezeCamera(task->parameters.effect_no);
+        }
+    }
+    task->effect_scheduler = sefCreateScheduler2(secondAddress, &task->parameters, &task->initial_position,
+        (int)_scriptWork[_nowScript].dataTable, count * _nowEvent, -1);
+    sefCreateBattleActorTbl(task->parameters.effect_no);
+    return 1;
+}
 
-/*
- * scMISSILEScript is the script VM's MISSILE opcode handler: outside an
- * event, a nonzero resolved address stores itself as `missile_adr`, marks
- * the task missile-active and sets flags bit 0x20, clears the two halfwords
- * at +0x66/+0x68 (no read of either is evidenced in this allocation), and
- * hands the task's `effect_no` to srsAnalyzeEftNo for category analysis.
- */
+static int scMOVIEScript(ScriptTask *task)
+{
+    char *name;
+    int length;
+    char path[256];
+
+    name = (char *)0;
+    if (task->script_pc[task->branch_depth] != 0) {
+        name = (char *)_scriptWork[_nowScript].dataTable
+            + task->script_pc[task->branch_depth] * 2;
+    }
+    length = strlen(name);
+    length = (length & 1) ? length + 1 : length + 2;
+    task->script_pc[task->branch_depth] += length / 2;
+    if (_nowEvent == 0) {
+        sprintf(path, "%s%s", D_004CC898, name);
+        func_A32FA8(path);
+    }
+    return 1;
+}
+
 static int scMISSILEScript(ScriptTask *task)
 {
-    unsigned char charId;
+    int charId;
     int address;
 
     address = scGetAdrImmScript(task);
@@ -935,12 +1245,29 @@ static int scMISSILEScript(ScriptTask *task)
         task->flags |= 0x20;
         task->missile_reset0 = 0;
         task->missile_reset1 = 0;
-        srsAnalyzeEftNo(task->effect_no, &charId, &_scMslCate);
+        srsAnalyzeEftNo(task->parameters.effect_no, &charId, &_scMslCate);
     }
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scMISSILE3Script);
+static int scMISSILE3Script(ScriptTask *task)
+{
+    int charId;
+    int address;
+    int count;
+
+    count = scGetNumScript(task);
+    address = scGetAdrImmScript(task);
+    if (address != 0) {
+        task->missile_active = 1;
+        task->missile_adr = address;
+        task->flags |= 0x20;
+        task->missile_reset1 = 0;
+        task->missile_reset0 = -count * _nowEvent;
+        srsAnalyzeEftNo(task->parameters.effect_no, &charId, &_scMslCate);
+    }
+    return 1;
+}
 
 static int scDispatchScript(ScriptTask *task)
 {
@@ -954,22 +1281,96 @@ static int scDispatchScript(ScriptTask *task)
     if (flags & 0x10) {
         scWaitParseScript(task);
         flags = task->flags;
-        if (flags & 0x10)
-            goto check_move;
     }
 
-    scParseScript(task);
-    flags = task->flags;
-
-check_move:
+    if (!(flags & 0x10)) {
+        scParseScript(task);
+        flags = task->flags;
+    }
     if (flags & 0x20)
         scMoveParseScript(task);
     return 1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scParseScript);
+static int scParseScript(ScriptTask *task)
+{
+    int count;
+    int result;
+    int command;
+    unsigned short flags;
 
-INCLUDE_ASM("asm/main/nonmatchings/sc_get", scAnalyzeScriptCf);
+    count = 0;
+    while (command = scGetCmdScript(task), (result = _scFuncHandler[command](task)) != 0) {
+        flags = task->flags;
+        if (flags == 0 || (flags & 4)) {
+            goto done;
+        }
+        if (result == 2) {
+            task->flags = flags | 0x10;
+            goto done;
+        }
+        count++;
+        if (count > 2000) {
+            goto done;
+        }
+    }
+    scDeleteTask(_nowScript, _nowEvent);
+done:
+    return 1;
+}
+
+/* A table offset of 0xFFFF (or -1) marks an absent entry. */
+static inline int scOffsetOrNone(int offset)
+{
+    int result = offset;
+
+    if (offset == 0xFFFF || offset == -1) {
+        result = 0;
+    }
+    return result;
+}
+
+short *scAnalyzeScriptCf(int effectNo, int *offset)
+{
+    short *table;
+    void **entry;
+    int index;
+    int value;
+    int tableOffset;
+
+    index = scFindScriptData(effectNo);
+    *offset = 0;
+    if (index < 0) {
+        tracePrint((unsigned char *)D_004CC790, effectNo);
+        return (short *)0;
+    }
+    entry = svGetScript(effectNo);
+    if (entry != 0) {
+        table = *entry;
+        if (table != 0) {
+            value = 0;
+            if (table[8] == 60) {
+                tableOffset = (unsigned short)table[9];
+                value = scOffsetOrNone(tableOffset);
+            } else if (table[8] == 61) {
+                index = srsGetEffect2Idx(effectNo);
+                if (index < table[9]) {
+                    tableOffset = (unsigned short)table[10 + index];
+                    value = scOffsetOrNone(tableOffset);
+                }
+            } else if (table[8] == 62) {
+                tableOffset = (unsigned short)table[10];
+                value = scOffsetOrNone(tableOffset);
+            }
+            if (value == 0) {
+                return (short *)0;
+            }
+            *offset = value;
+            return table;
+        }
+    }
+    return (short *)0;
+}
 
 struct EventTask *scGetTaskAdr(int script_index, int task_index)
 {
@@ -979,13 +1380,6 @@ struct EventTask *scGetTaskAdr(int script_index, int task_index)
     return (struct EventTask *)(SCRIPT_WORK_BYTES + script_index * 1104 + task_index * 128);
 }
 
-
-/*
- * Resolves a script-register selector (0-15) to the address of its backing
- * storage in the current script's record (+0x404, 16 4-byte slots); an
- * out-of-range selector reports the error through tracePrint and returns
- * NULL instead.
- */
 void *scGetRegAdr(unsigned int reg)
 {
     if (reg >= 16u) {
@@ -995,10 +1389,6 @@ void *scGetRegAdr(unsigned int reg)
     return SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x404 + reg * 4;
 }
 
-/*
- * Collapses the same 0xFFFF/-1 "no address" sentinels scGetAdrScript and
- * scGetImmAdrImmIdx2 above document to 0; any other offset is returned as-is.
- */
 int scOfsToAdr(int offset)
 {
     if (offset == 0xFFFF || offset == -1) {
@@ -1007,28 +1397,17 @@ int scOfsToAdr(int offset)
     return offset;
 }
 
-/*
- * Converts a halfword-unit immediate index into an absolute address in the
- * current script's data table: 0 stays 0, any other index is doubled and
- * added to the table pointer, the same as scGetTableAdrImmIdx above.
- */
 int scAdrToImm(int index)
 {
     int address;
 
     address = 0;
     if (index != 0) {
-        address = *(int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x400) + index * 2;
+        address = (int)_scriptWork[_nowScript].dataTable + index * 2;
     }
     return address;
 }
 
-/*
- * Reads the running task's next command operand (script_pc[branch_depth],
- * still decoded the same way scGetCmdScript is) and, when nonzero, turns it
- * into an absolute address in the current script's data table the same way
- * scAdrToImm above does.
- */
 int scGetCmdAdrScript(ScriptTask *task)
 {
     int operand;
@@ -1037,7 +1416,27 @@ int scGetCmdAdrScript(ScriptTask *task)
     address = 0;
     operand = task->script_pc[task->branch_depth];
     if (operand != 0) {
-        address = *(int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x400) + operand * 2;
+        address = (int)_scriptWork[_nowScript].dataTable + operand * 2;
     }
     return address;
 }
+
+ScriptRecord _scriptWork[16] = {{0}};
+static const char D_004CC7B8[48] =
+    "\xC8\xCF\xB0\xCF\xB3\xB0\xA4\xCE\xA5\xA8\xA5\xD5\xA5\xA7\xA5\xAF\xA5\xC8\xA4\xF2\xBE\xC3\xB5\xEE\xA4\xB7\xA4\xE8\xA4\xA6\xA4\xC8\xA4\xB7\xA4\xC6\xA4\xDE\xA4\xB9\x20\x25\x64\x20\x25\x64";
+static const char D_004CC818[24] = "register overflow : %d";
+static const char D_004CC850[32] = "--- effect stack under flow";
+static short _cmdPut = 0;
+int _scMslCate = 0;
+int _nowScript = 0;
+int _nowEvent = 0;
+const char D_004DBB38[8] = " %04x";
+static const char D_004CC790[40] = "--- error no load effect data %d";
+static const char D_004CC7E8[24] = "\xC8\xCF\xB0\xCF\xB3\xB0\xA4\xCE" "Task(%d)" "\xA4\xC7\xA4\xB9";
+static const char D_004CC800[24] = "task work is empty : %d";
+static const char D_004CC830[32] = "--- effect stack over flow";
+static const char D_004CC870[16] = "--- bad exp(%d)";
+static const char D_004CC898[24] = "data\\simajiri\\movie\\";
+static ScriptZeroPosition _zeroPos_0041E290 = {{0, 0x3f80000000000000ULL}};
+
+

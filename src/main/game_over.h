@@ -19,7 +19,10 @@ static int copyframe(void);
  * this TU does not repeat or contradict those names for spans it never
  * touches  */
 typedef struct {
-    u8 unmodeled_00[0x18];
+    u8 unmodeled_00[0x0e];
+    /* Intermission reads the save-in-progress mode at +0x0e. */
+    u16 play_mode;
+    u8 unmodeled_10[0x08];
     int scene_id;
     u8 unmodeled_1c[0x50 - 0x1c];
     u16 frame_status;

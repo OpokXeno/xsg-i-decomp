@@ -75,7 +75,7 @@ extern float tanf(float value);
  * exactly these two spans itself. This dialect has no way to spell that
  * alignment without an attribute the route does not admit, so the spans are
  * declared, named for the alignment they reproduce and for nothing else, and
- * they remain the one part of this type a reviewer must pass on.
+ * they represent only those alignment gaps.
  *
  * The trail is a ten-slot history: `active` says whether a slot holds a
  * segment, `points` holds its two endpoints and `twist` their two roll angles.
@@ -372,8 +372,8 @@ static void fnMSP02_DM000(void *task, MspEffect *effect)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DP000);
 
-/* MEfObjDestroy (src/main/m_ef_obj.c) and sefHitEffect (src/main/sef.c) are
- * still asm in their defining TU; declared locally until published there. */
+/* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
+ * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
 /* Same frame gating as MSP00's fnMSP00_PO000 (see m_ef_create_msp_00.c),

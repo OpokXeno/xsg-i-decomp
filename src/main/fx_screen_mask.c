@@ -1,6 +1,14 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "fx_screen_mask.h"
+
+static void screenMask(ScreenMaskTask *task);
+
+static int (*fxFunction[1])(XglTaskPrefix *) = {
+    (int (*)(XglTaskPrefix *))screenMask
+};
 
 static void screenMask(ScreenMaskTask *task)
 {
@@ -18,11 +26,43 @@ static void screenMask(ScreenMaskTask *task)
     }
 }
 
-static int (*fxFunction[1])(XglTaskPrefix *) = {
-    (int (*)(XglTaskPrefix *))screenMask
-};
+static int fxAdapter(XglTaskPrefix *entry)
+{
+    FxAdapterTask *task = (FxAdapterTask *)entry;
+    int countdown;
 
-INCLUDE_ASM("asm/main/nonmatchings/fx_screen_mask", fxAdapter);
+    if ((task->flags & 1u) == 0u) {
+        task->flags |= 1u;
+    }
+
+    countdown = (unsigned short)task->countdown;
+    countdown--;
+    task->countdown = (short)countdown;
+    if ((short)countdown >= 0) {
+        return countdown;
+    }
+
+    {
+        int (*callback)(XglTaskPrefix *) = task->next_callback;
+        XglTaskScheduler *scheduler = GameLoopState[2];
+        XglTaskPrefix *active_tail =
+            scheduler != 0 ? scheduler->active_tail : 0;
+        FxAdapterTask *next_task = (FxAdapterTask *)xglTaskEntryNext(
+            scheduler, callback, active_tail);
+        int i;
+
+        if (next_task != 0) {
+            next_task->flags = 0;
+            next_task->state = GameLoopState;
+            next_task->next_callback = 0;
+        }
+        for (i = 0; i < 4; i++) {
+            next_task->callback_arguments[i] = task->callback_arguments[i];
+        }
+    }
+
+    return xglTaskRemove(entry);
+}
 
 void FX_ScreenMask(int unused, int color, int duration, int mode)
 {

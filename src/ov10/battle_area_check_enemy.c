@@ -371,7 +371,7 @@ s32 CheckChudanCommand(s32 side, CardGameWork *work)
 
 INCLUDE_ASM("asm/nonmatchings/ov10/battle_area_check_enemy", Check413Command);
 
-s32 GetPrice(CardLayerStack *stack);
+
 
 /* Highest-price flagged card on the other side's disposal board, encoded as
  * a disposal slot index (-1 if none qualifies). */

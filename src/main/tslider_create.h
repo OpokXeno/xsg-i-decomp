@@ -114,4 +114,24 @@ void TWIN_initScene(TwinWindow2 *window);
 
 void TSLIDER_drawDefault(TwinWindow2 *window);
 
+/* The TMENU_addQuery2 view of MenuNative's query text and row storage. */
+typedef struct MenuNative {
+    unsigned char unmodeled_00[0x0c];
+    short width;                   /* +0x0c */
+    unsigned short height;         /* +0x0e */
+    unsigned char unmodeled_10[0x57 - 0x10];
+    unsigned char rowWidth;        /* +0x57 */
+    unsigned char unmodeled_58[0x141 - 0x58];
+    unsigned char rowCount;        /* +0x141 */
+    unsigned char selectedRow;     /* +0x142 */
+    unsigned char scroll;          /* +0x143 */
+    unsigned char **rows;          /* +0x144 */
+    unsigned char *textStart;      /* +0x148 */
+    unsigned char unmodeled_14c[0x154 - 0x14c];
+    unsigned char *textEnd;        /* +0x154 */
+} MenuNative;
+
+extern void TMENU_addItem(MenuNative *menu, const char *text);
+void TMENU_addQuery2(MenuNative *menu, char **texts, int count);
+
 #endif /* SRC_MAIN_TSLIDER_CREATE_H */

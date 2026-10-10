@@ -2306,10 +2306,10 @@ extern const char D_00A4D9D0[];
 extern const char D_00A4D9E0[];
 extern const char D_00A4D9C0[];
 extern const char D_00A4D9A8[];
-extern const char D_00A48F20[];
+
 extern const char D_00A4DA50[];
 extern const char D_00A4DA28[];
-extern const char D_00A48EF8[];
+
 extern const char D_00A4DA40[];
 extern const char D_00A4DA88[];
 extern const char D_00A4DA80[];
@@ -2332,8 +2332,8 @@ extern const char D_00A4DAE8[];
 extern const char D_00A4DB50[];
 extern const char D_00A4DB40[];
 extern const char D_00A4DB78[];
-extern const char D_00A47E30[];
-extern const char D_00A47DD8[];
+
+
 extern const char D_00A4DB68[];
 extern const char D_00A4DB88[];
 extern const char D_00A4DB60[];

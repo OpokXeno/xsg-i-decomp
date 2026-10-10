@@ -6,6 +6,8 @@
 #define SRC_MAIN_TOOLKIT_H
 
 #include "shared.h"
+#include "main/jni.h"
+#include "main/find_native_method.h"
 
 typedef struct JavaThread {
     unsigned int : 32; /* +0 */
@@ -126,15 +128,6 @@ extern JavaThread *JNI_createThread(int kind, int stack_words,
  */
 typedef struct JThread JThread;
 
-/*
- * classJava_xeno_Unit is already declared in shared.h; classJava_xeno_Chr
- * is not, since its layout-sensitive uses live in other TUs' own headers
- * (src/main/chr.h, src/main/scene_1.h, src/main/layout.h). This TU only
- * ever passes it to JNI_isInstanceOf, so it is restated verbatim with
- * those TUs' spelling.
- */
-extern void *classJava_xeno_Chr;
-
 /* Canonical spelling (config/header-canon.json) for this primitive. */
 extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 
@@ -222,7 +215,6 @@ typedef struct ToolkitStagePeer {
     void *java_object; /* +0x2c */
 } ToolkitStagePeer;
 
-extern SceneClass *classJava_xeno_Stage;
 extern ToolkitStagePeer *STAGE_create(u16 stage_id);
 
 /* The three-coordinate records passed from getPeer_Effect to the CF helper. */
@@ -238,7 +230,6 @@ typedef struct ToolkitEffectPeer {
     SceneObject java_object; /* +0x6b8: assigned at main 0x002f9ae8 */
 } ToolkitEffectPeer;
 
-extern SceneClass *classJava_xeno_Effect;
 extern int sefLoadEffectCf(int cf_id, int effect_no);
 extern ToolkitEffectPeer *sefCreateEffectCf(int effect_id,
                                             ToolkitEffectVector *position,
@@ -264,10 +255,8 @@ typedef struct ToolkitEnemyPeer {
     unsigned char light_peer; /* +0x510; only its address is passed to Java */
 } ToolkitEnemyPeer;
 
-extern SceneClass *classJava_xeno_Light;
 extern const char D_004DC118[];
 extern const float D_004D83AC;
-extern SceneObject newObject(SceneClass *scene_class);
 extern ToolkitEnemyPeer *ACT_createEnemy(int identifier, int enemy_id);
 extern int ACT_initMotion(void *peer);
 

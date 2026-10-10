@@ -6,13 +6,15 @@
 #define SRC_MAIN_STAGE_2_H
 
 #include "shared.h"
+#include "main/jni.h"
+
+struct JThreadHandle;
 
 /*
  * The runtime class handle for the Java xeno.Stage class (main 0x004dc7f0,
  * .sbss, gp-relative-loaded by every native below that calls
  * JNI_isInstanceOf/lookupClassField). No TU in this scope defines it.
  */
-extern SceneClass *classJava_xeno_Stage;
 
 /*
  * The "peer" field name lookupClassField(classJava_xeno_Stage, ...) looks
@@ -30,7 +32,10 @@ extern const char D_004DC208[];
 typedef struct StageThread {
     u8 unmodeled_00[0x0d];
     u8 wait_kind;            /* +0x0d */
-    u8 unmodeled_0e[0x24 - 0x0e];
+    u8 unmodeled_0e[0x14 - 0x0e];
+    void (*entry)(struct JThreadHandle *thread); /* +0x14 */
+    SceneMethod *method;     /* +0x18 */
+    u8 unmodeled_1c[0x24 - 0x1c];
     unsigned int flags;      /* +0x24 */
     u8 unmodeled_28[0x3c - 0x28];
     u16 resume_frames;       /* +0x3c */
@@ -80,9 +85,15 @@ struct StageJavaString {
 };
 
 struct StageStringStorage {
-    u32 unmodeled_00[2];
+    u32 unmodeled_00;
+    int length;               /* +0x04 */
     const char *text;            /* +0x08 */
 };
+
+typedef struct StagePeer {
+    u8 unmodeled_00[0x0c];
+    u32 stage_state; /* +0x0c; cleared when a stage method is started */
+} StagePeer;
 
 typedef struct StageVisibleCall {
     int part_index;
@@ -130,6 +141,8 @@ typedef union StageFadeValues {
 typedef union StageNativeSlot {
     int integer;
     float floating;
+    SceneObject object;
+    StageJavaString *method_name;
 } StageNativeSlot;
 
 /*
@@ -180,6 +193,10 @@ extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern StageThread *JTHREAD_get(SceneObject object);
+extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+                               void *signature_or_type);
+extern SceneType *TYPE_Void;
+extern void JTHREAD_defaultStage(struct JThreadHandle *thread);
 
 extern void nmlModelSetMapLastEntry(int model_id, int entry);
 extern void nmlModelSetBackBuffer(int model_id, int count, int priority, int mode);

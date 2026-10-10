@@ -20,6 +20,39 @@ typedef struct MissileImagePair {
     short secondary_index;
 } MissileImagePair;
 
+/* Fields read from the image-list item returned by svGetImageListItem. */
+typedef struct MissileImage {
+    unsigned int texture_word;
+    unsigned char unmodeled_04[14];
+    unsigned short buffer_pointer;
+    unsigned short format;
+    unsigned short buffer_width;
+    unsigned char unmodeled_18[4];
+    unsigned short width_log2;
+    unsigned short height_log2;
+} MissileImage;
+
+/* Parameter block passed to the missile-spawn routine. */
+typedef struct MissileSpawn {
+    int command_value;
+    int spawn_context0;
+    int spawn_context2;
+    int command_flag;
+    float position[4];
+    unsigned short spawn_parameter;
+    unsigned char unmodeled_22[2];
+    int spawn_context1;
+    int command_type;
+    unsigned char unmodeled_2c[4];
+    int target[4];
+    int primary_image_word;
+    int secondary_image_word;
+    unsigned long long pair_registers[3];
+    unsigned char unmodeled_60[8];
+    unsigned short tail_parameters[2];
+    unsigned char unmodeled_6c[4];
+} MissileSpawn;
+
 typedef struct MissileCommandEntry {
     short frame;
     u16 flags;
@@ -35,8 +68,8 @@ typedef struct MissileCommandData {
     short primary_image_index;         /* +0x02 */
     short secondary_image_index;       /* +0x04 */
     short command_kind;                /* +0x06 */
-    MissileImagePair image_pairs[3];    /* +0x08 */
-    unsigned char unmodeled_14[4];
+    MissileImagePair image_pairs[3];    /* +0x08, the three pairs traversed */
+    unsigned char unmodeled_14[4];      /* +0x14, not read by the handler */
     MissileCommandEntry entries[1];     /* +0x18, followed by remaining entries */
 } MissileCommandData;
 

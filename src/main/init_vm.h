@@ -2,6 +2,7 @@
 #define INIT_VM_RECOVERY_PRIVATE_H
 
 #include "shared.h"
+#include "main/init_vm.h"
 
 extern SceneString *loadConstString(const char *bytes, int length);
 
@@ -26,7 +27,6 @@ struct VMClass {
     unsigned char element_size;
 };
 
-extern VMClass *newClass(void);
 
 /*
  * xheap.c's (main/tu225) own free-block heap header. initVM never reads or
@@ -45,7 +45,15 @@ extern void xheap_init(int keep_heap, xheap_block *heap, int size);
  */
 extern void *JNI_createThread(int kind, int stack_words, int frame_words);
 
-extern void loadStaticClass(SceneClass **class_slot, const char *name);
+/*
+ * Defined in main/tu227 (src/main/find_native_method.c) and declared by that
+ * TU's include/main/find_native_method.h; restated verbatim because that
+ * header's newObject(SceneClass *) would clash with this TU's interpreter
+ * declaration newObject(VMClass *) (init_vm.c), whose VMClass view the
+ * interpreter's getClass/newArray/primitiveClassTable chain still uses.
+ */
+extern void *newClass(void);
+extern void loadStaticClass(void *class_slot, const char *name);
 
 extern void *initVMThread;
 
@@ -87,9 +95,6 @@ extern const char D_004DBFE8[]; /* "()V" */
 extern const char D_004DBFF0[]; /* "(I)V" */
 extern const char D_004DBFF8[]; /* "Code" */
 
-extern SceneClass *classObject;
-extern SceneClass *classString;
-extern SceneClass *classStringBuffer;
 
 extern const char D_004CD628[]; /* "java/lang/Object" */
 extern const char D_004CD640[]; /* "java/lang/StringBuffer" */

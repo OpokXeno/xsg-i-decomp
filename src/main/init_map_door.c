@@ -1,10 +1,15 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "init_map_door.h"
 
 extern signed char printflg;
-extern const char D_004CA3B8[16];
-extern const char D_004CA3C8[24];
+
+const char D_004CA3B8[16] = "id=%d DoorOpen\n";
+
+const char D_004CA3C8[24] = "id=%d DoorClose\n";
+
 int printf(const char *, ...);
 
 /*
@@ -15,24 +20,43 @@ int printf(const char *, ...);
  * into $a0 after DoorOpenStanbyFunc clobbers the register. Left unprototyped
  * to admit both call shapes exactly as compiled.
  */
+
 float CheckDoorDist();
+
 void CheckDoorPos();
+
 int CheckDoorSwitch(DoorUnit *door);
+
 void DoorCommonFunc(DoorUnit *door);
+
 void DoorOpenStanbyFunc();
+
 void EventDoorStanbyFunc(DoorUnit *door);
+
 void EventDoorOpenOpeFunc(DoorUnit *door);
+
 void EventDoorOpenNowFunc(DoorUnit *door);
+
 void AutoDoorOpenOpeFunc(DoorUnit *door);
+
 void AutoDoorOpenNowFunc(DoorUnit *door);
+
 void HalfAutoDoorOpenNowFunc(DoorUnit *door);
+
 void MjDoorStanbyFunc(DoorUnit *door);
+
 void AutoDoorStanbyFunc(DoorUnit *door);
+
 extern DoorMapUnit MapUnit[64];
+
 int AutoDoorCloseOpeFunc(DoorUnit *door);
+
 void EventDoorCloseOpeFunc(DoorUnit *door);
+
 int xglSoundEffectCheckID();
+
 void xglSoundEffectPosID();
+
 void xglSoundEffectStopID();
 
 typedef struct DoorPlayerState {
@@ -49,13 +73,85 @@ typedef struct DoorGameLoopState {
 } DoorGameLoopState;
 
 extern DoorGameLoopState GameLoopState;
+
 extern PadPrefix PadData;
+
 /* The original uses these as compiler-emitted single-precision constants. */
+
 float CheckDist2D(Vector4 *player_position, DoorPosition *door_position);
+
 float atan2f(float y, float x);
+
 float nearDir(float first, float second);
 
-INCLUDE_ASM("asm/main/nonmatchings/init_map_door", InitMapDoor);
+void GetPartsPos();
+
+void GetPartsSize();
+
+void MAP_updateUnitDoor(DoorUnit *door);
+
+const char D_004CA280[56] = "InitMapDoor id=%d kind=%d doorType=%d doorRange=%f\n";
+
+const char D_004CA2B8[32] = "doorpos[X]=%f Y=%f Z=%f\n";
+
+const char D_004CA2D8[32] = "hitsize[X]=%f Y=%f Z=%f\n";
+
+const char D_004CA2F8[40] = "range=%f scope=%f spd=%d\n";
+
+void InitMapDoor(DoorUnit *door)
+{
+    DoorParams *params = &door->params;
+    int linked_index;
+    signed char door_type;
+
+    GetPartsPos(door);
+    __builtin_memcpy(&door->x, &door->model_x, 16);
+    GetPartsSize(door);
+    if (params->travel_distance == 0.0f) {
+        params->travel_distance = door->resting_position.values.x +
+                                 door->resting_position.values.x;
+    }
+    door->update_func = MAP_updateUnitDoor;
+    if ((unsigned char) door->open_phase != 4) {
+        door->open_phase = 0;
+    }
+    linked_index = params->linked_unit;
+    if (linked_index != -1) {
+        DoorParams *linked_params = &MapUnit[linked_index].params;
+        linked_params->open_limit = params->open_limit;
+        linked_params->part_size_x = params->part_size_x;
+        linked_params->part_size_y = params->part_size_y;
+        linked_params->part_size_z = params->part_size_z;
+        linked_params->part_offset_x = params->part_offset_x;
+        linked_params->part_offset_y = params->part_offset_y;
+        linked_params->part_offset_z = params->part_offset_z;
+        linked_params->travel_distance = params->travel_distance;
+        linked_params->trigger_distance = params->trigger_distance;
+        MapUnit[linked_index].open_phase = 4;
+        GetPartsPos(&MapUnit[linked_index]);
+        MapUnit[linked_index].position = MapUnit[linked_index].model_position;
+    }
+    door_type = params->door_type;
+    if (door_type == 1 && CheckDoorDist(door) < params->trigger_distance) {
+        params->event_signal = door_type;
+        door->open_phase = 2;
+    }
+    if (params->event_signal == 1) {
+        door->open_phase = 2;
+    }
+    params->initialization_state = 0;
+    door->flags |= 0x80000000U;
+    if (!printflg) {
+        return;
+    }
+    printf(D_004CA280, door->door_number, params->kind,
+           params->door_type, params->travel_distance);
+    printf(D_004CA2B8, door->x, door->y, door->z);
+    printf(D_004CA2D8, door->resting_position.values.x,
+           door->resting_position.values.y, door->resting_position.values.z);
+    printf(D_004CA2F8, params->travel_distance,
+           params->trigger_distance, params->open_limit);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/init_map_door", MAP_updateUnitDoor);
 
@@ -147,16 +243,10 @@ int MjDoorFunc(DoorUnit *door)
     }
 }
 
-/* MAP_updateUnitDoor's handler for a double door: nothing to do here. */
 void DoubleDoorFunc(void)
 {
 }
 
-/*
- * Opens when the player enters range: mirrors the door's own position into
- * its attached model, then when close enough starts the standby/opening
- * sound (restarting it first if it is already playing).
- */
 void AutoDoorStanbyFunc(DoorUnit *door)
 {
     int position;
@@ -178,11 +268,6 @@ void AutoDoorStanbyFunc(DoorUnit *door)
     }
 }
 
-/*
- * Advances the door's open travel counter, keeps the moving sound at the
- * door's position and applies the shared open motion (DoorCommonFunc); once
- * the travel counter reaches the configured limit, enters the open phase.
- */
 void AutoDoorOpenOpeFunc(DoorUnit *door)
 {
     int position;
@@ -216,11 +301,6 @@ void AutoDoorOpenFuncSub(DoorUnit *door)
     }
 }
 
-/*
- * Holds the door open for a short delay, then once the player leaves
- * trigger range stops the moving sound, plays the closing sound and enters
- * the closing phase.
- */
 void AutoDoorOpenNowFunc(DoorUnit *door)
 {
     int position[4];
@@ -275,10 +355,6 @@ int AutoDoorCloseOpeFunc(DoorUnit *door)
     }
 }
 
-/*
- * Starts opening on the event signal, restarting the moving sound if it is
- * already playing and logging the door number when print mode is enabled.
- */
 void EventDoorStanbyFunc(DoorUnit *door)
 {
     int position;
@@ -305,11 +381,6 @@ void EventDoorStanbyFunc(DoorUnit *door)
     }
 }
 
-/*
- * Advances the door's open travel counter, keeps the moving sound at the
- * door's position and applies the shared open motion (DoorCommonFunc); once
- * the travel counter reaches the configured limit, enters the open phase.
- */
 void EventDoorOpenOpeFunc(DoorUnit *door)
 {
     int position;
@@ -325,11 +396,6 @@ void EventDoorOpenOpeFunc(DoorUnit *door)
     }
 }
 
-/*
- * Holds the door open at the configured travel limit until the event signal
- * clears, then logs the door number when print mode is enabled, plays the
- * closing sound and enters the closing phase.
- */
 void EventDoorOpenNowFunc(DoorUnit *door)
 {
     int position;
@@ -366,11 +432,6 @@ void EventDoorCloseOpeFunc(DoorUnit *door)
     }
 }
 
-/*
- * Opens only once both the player is close enough and the configured switch
- * test passes, then starts the standby/opening sound as the other stanby
- * functions do.
- */
 void MjDoorStanbyFunc(DoorUnit *door)
 {
     int position;
@@ -392,11 +453,6 @@ void MjDoorStanbyFunc(DoorUnit *door)
     }
 }
 
-/*
- * Holds the door open for a short delay, arms closing once the player is
- * within trigger range, then closes with the closing sound once the player
- * leaves that range.
- */
 void HalfAutoDoorOpenNowFunc(DoorUnit *door)
 {
     int position[4];
@@ -426,9 +482,6 @@ void HalfAutoDoorOpenNowFunc(DoorUnit *door)
         xglSoundEffectPosID(params->close_sound_channel, position, 1, door->sound_channel + 1);
     }
 }
-
-const char D_004CA3B8[16] = "id=%d DoorOpen\n";
-const char D_004CA3C8[24] = "id=%d DoorClose\n";
 
 void DoorCommonFunc(DoorUnit *door)
 {
@@ -550,7 +603,9 @@ void CheckDoorPos(DoorUnit *door, DoorPosition *position)
     }
 
     target_unit = &MapUnit[linked_index];
-    position->values.x = door->x - (door->x - target_unit->position.x) * 0.5f;
+    position->values.x = door->x - (door->x - target_unit->position.values.x) * 0.5f;
     position->values.y = door->y;
-    position->values.z = door->z - (door->z - target_unit->position.z) * 0.5f;
+    position->values.z = door->z - (door->z - target_unit->position.values.z) * 0.5f;
 }
+
+

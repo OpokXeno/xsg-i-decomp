@@ -6,6 +6,8 @@
 #define SRC_MAIN_SCENE_1_H
 
 #include "shared.h"
+#include "main/jni.h"
+#include "main/find_native_method.h"
 
 typedef struct SceneWindow SceneWindow;
 
@@ -99,8 +101,6 @@ struct SceneWindow {
 
 void SCENE_instance(SceneVm *vm, SceneObject scene_object);
 
-extern void *classJava_xeno_Chr;
-
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 
 extern SceneString *NAME_Constructor;
@@ -122,7 +122,6 @@ extern int instanceOf(SceneClass *scene_class, SceneClass *parent_class);
 
 extern SceneClass *loadClass(SceneString *name, int initialize);
 
-extern SceneObject newObject(SceneClass *scene_class);
 
 extern SceneWindow *TWIN_create2(int component_id);
 
@@ -148,8 +147,6 @@ void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
                  void *method_name);
 
 extern SceneType *TYPE_Void;
-
-extern SceneClass *classJava_xeno_Scene;
 
 extern const char scene_cleanup_name[];
 

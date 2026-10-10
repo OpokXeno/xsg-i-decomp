@@ -31,14 +31,14 @@ typedef struct SsdTimeCode {
 
 void SsdSetSeqMasterVolume(int sequence, int volume, int duration);
 
-int SsdPlaySequence(SsdSequenceData *sequence, int arg1, int arg2)
+int SsdPlaySequence(SsdSequenceData *sequence, int request_value1, int request_value2)
 {
     RssdRequest request;
     int size = sequence->size;
 
     request.arg[0].pointer = sequence;
-    request.arg[1].value = arg1;
-    request.arg[2].value = arg2;
+    request.arg[1].value = request_value1;
+    request.arg[2].value = request_value2;
     RssdWork.flags |= RSSD_FLAG_SUCCESS;
     RssdCallFunc(48, &request, sequence, size);
     return RssdWork.response.value;

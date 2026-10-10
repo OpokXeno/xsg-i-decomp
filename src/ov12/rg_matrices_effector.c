@@ -339,7 +339,7 @@ static void _EffectorJob(MatrixEffector *effector)
 }
 
 static void _InitEffector(MatrixEffector *effector);
-extern int s_inSingleIdentifier;
+
 static void _SingleEffectorJob(MatrixEffector *effector);
 
 static void _InitSingleEffector(MatrixEffector *effector)
@@ -349,7 +349,7 @@ static void _InitSingleEffector(MatrixEffector *effector)
     effector->job = _SingleEffectorJob;
 }
 
-extern int s_inDoubleIdentifier;
+
 static void _DoubleEffectorJob(MatrixEffector *effector);
 
 static void _InitDoubleEffector(MatrixEffector *effector)

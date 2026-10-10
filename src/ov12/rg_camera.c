@@ -8,9 +8,16 @@ static int _SetBit(int *flags, int bit, int value);
 static void _PassTimeVersion3(RgCamera *camera, float elapsed);
 static int _GetVer3TimerID(char *timerName);
 extern int strcmp(const char *left, const char *right);
-extern const char D_00A527F0[], D_00A527E8[], D_00A527E0[], D_00A527D0[];
-extern const char D_00A527C8[], D_00A527C0[], D_00A527B8[], D_00A527A8[];
-extern const char D_00A52798[], D_00A52788[];
+extern const char D_00A527F0[];
+extern const char D_00A527E8[];
+extern const char D_00A527E0[];
+extern const char D_00A527D0[];
+extern const char D_00A527C8[];
+extern const char D_00A527C0[];
+extern const char D_00A527B8[];
+extern const char D_00A527A8[];
+extern const char D_00A52798[];
+extern const char D_00A52788[];
 const char D_00A52750[] = "pCam != NIL";
 const char D_00A52760[] = "../rg_camera.euc.c";
 const char D_00A52778[] = "pStudio != NIL";
@@ -193,7 +200,7 @@ static int _IsActionDash(RgCamera *camera)
     return _CheckBit(RG_CAMERA_ACTION_FLAGS(camera), 3);
 }
 
-extern RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio);
+
 extern int RgDrawViewIsPointInView(RgDrawView *view, RgPointVector *point, float margin);
 
 static void _IsActionTargetInScrn(RgCamera *camera)

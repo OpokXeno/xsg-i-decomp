@@ -4,20 +4,29 @@
 #include "shared.h"
 
 /*
- * Also touched by loadClass, which caches its own findClass lookup at +0x8
- * (read back on the next call, re-resolved only while it is still zero).
+ * Allocates an instance of `scene_class` (instance_size bytes) and seeds its
+ * header word with the class's instance_class_ref (main 0x002f4828).
  */
-typedef struct ClassEntry {
-    u8 unmodeled_00[0x8];
-    void *resolvedClass;      /* +0x8: cached findClass(this) result */
-    void *next;                /* +0xC: next entry in the class-cache chain */
-    u8 unmodeled_10[0x8];
-    void *classPointer;  /* +0x18: copied into a new instance's header word */
-    u8 unmodeled_1c[0x16];
-    u16 staticFieldCount; /* +0x32: zeroed for a class newClass has just made */
-    u8 unmodeled_34[0x4];
-    int instanceSize;    /* +0x38: xmalloc size for a new instance of this class */
-    u8 unmodeled_3c[4]; /* Remaining bytes of the 0x40-byte class allocation. */
-} ClassEntry;
+void *newObject(SceneClass *scene_class);
+
+/*
+ * Allocates a fresh 0x40-byte class record with no static fields and no
+ * instance size yet, carrying java.lang.Class's own class reference.  The
+ * callers fill it through their own views of the record (initWrapperClass,
+ * the class-file loader, lookupArray), so it is returned untyped like any
+ * other allocation.
+ */
+void *newClass(void);
+
+/*
+ * Resolves the class `name` (loading it through the class cache when it is
+ * not resolved yet), stores it in the caller's class slot and initializes it
+ * (main 0x002f5120).  `class_slot` is the address of the caller's cached
+ * class pointer, whatever view of the class record the caller keeps there:
+ * jni.c's xeno.* slots and init_vm.c's classString are SceneClass pointers,
+ * init_vm.c's classObject a JavaClass pointer, and find_native_method.c
+ * itself writes the slot as a JavaClass pointer.
+ */
+void loadStaticClass(void *class_slot, const char *name);
 
 #endif /* INCLUDE_MAIN_FIND_NATIVE_METHOD_H */

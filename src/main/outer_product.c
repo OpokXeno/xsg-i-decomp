@@ -1,12 +1,22 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_2.h"
+
 #include "outer_product.h"
 
 typedef union {
     Vector4 vector;
     u64 words[2];
 } OuterProductVector;
+
+extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
+                               const Vector4 *third, Vector4 *vertical);
+
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
+
+extern void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
 
 void OuterProduct(const OuterProductVector *left, const OuterProductVector *right,
                   OuterProductVector *destination)
@@ -48,11 +58,6 @@ void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
     xglVectorOuter(&normal, &first_edge, &second_edge);
     xglVectorOuter(vertical, &first_edge, &normal);
 }
-
-extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
-                               const Vector4 *third, Vector4 *vertical);
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-extern void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
 
 float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *third)
 {
@@ -152,7 +157,40 @@ int CheckCrossLine(const Vector4 *first_start, const Vector4 *first_end,
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/outer_product", CheckCrossCircle);
+int CheckCrossCircle(const Vector4 *start, const Vector4 *end,
+                     const Vector4 *center, float radius)
+{
+    Vector4 middle;
+    Vector4 direction;
+    float projection_x;
+    float half_length;
+    float along;
+    float x;
+    float z;
+    int result;
+
+    direction.x = end->x - start->x;
+    direction.y = 0.0f;
+    direction.z = end->z - start->z;
+    direction.w = 1.0f;
+    half_length = __builtin_sqrtf(direction.x * direction.x
+                                  + direction.z * direction.z) * 0.5f;
+    xglVectorNormal(&direction, &direction);
+    half_length += radius;
+    result = 0;
+    middle.x = start->x + (end->x - start->x) * 0.5f;
+    middle.z = start->z + (end->z - start->z) * 0.5f;
+    x = center->x - middle.x;
+    z = center->z - middle.z;
+    along = x * direction.x + z * direction.z;
+    if (!(half_length < __builtin_fabsf(along))) {
+        projection_x = along * direction.x;
+        x = center->x - (projection_x + middle.x);
+        z = center->z - (along * direction.z + middle.z);
+        result = x * x + z * z < radius * radius;
+    }
+    return result;
+}
 
 float CheckDist3D(const Vector4 *first, const Vector4 *second)
 {

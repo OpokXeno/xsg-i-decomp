@@ -16,6 +16,8 @@ typedef union Matrix {
 
 extern float xglAtan2(float x, float y);
 
+void xglMatrix2Quaternion(float quaternion[4], const Matrix *matrix);
+
 void xglVectorClamp(Vector4 *destination, const Vector4 *source,
                     float minimum, float maximum);
 

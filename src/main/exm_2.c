@@ -1,12 +1,16 @@
 #include "common.h"
+
 #include "shared.h"
 
 typedef struct EXM_WindState EXM_WindState;
 
-static EXM_WindState *wind;
-extern float wave;
-extern float waverad;
 static EXM_WindState _wind;
+
+static EXM_WindState *wind = &_wind;
+
+static float wave = 0.0f;
+
+static float waverad = 0.0f;
 
 /* The +0x10 vector fields are named from the allocated reset and setter stores.
  * The u64 at +0x08 preserves the 8-byte alignment of the complete wind state. */
@@ -28,14 +32,14 @@ void EXM_ResetWind(void);
  * 4-byte aligned instead compiles the same `*wind = *para;` assignment to
  * ldl/ldr/sdl/sdr.
  */
-typedef struct EXM_WindVector {
-    float x;
-    float y;
-    float z;
-    float w;
+
+typedef union EXM_WindVector {
+    Vector4 vector;
+    unsigned long long words[2];
 } EXM_WindVector;
 
 /* The 64 unitSequence entries have a 0x260-byte stride in the named callers. */
+
 typedef struct UnitSequenceEntry {
     unsigned char unmodeled_00[0x04];
     int state;
@@ -62,9 +66,6 @@ struct EXM_WindState {
 };
 
 static EXM_WindState _wind = { 0 };
-static EXM_WindState *wind = &_wind;
-static float wave = 0.0f;
-static float waverad = 0.0f;
 
 /*
  * MapUnit is a 64-entry array with a 0x300-byte stride.  These are additive
@@ -74,6 +75,7 @@ static float waverad = 0.0f;
  * TU names its position vector.  A union keeps those independently evidenced
  * views without asserting that same-offset fields have one shared meaning.
  */
+
 typedef struct MapUnitDrawView {
     unsigned int flags; /* +0x00 */
     void (*update)(void *unit); /* +0x04 */
@@ -124,17 +126,113 @@ MapUnitRecord MapUnit[64] = { 0 };
 
 UnitSequenceEntry unitSequence[64] = { 0 };
 
-INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_GetWindPower);
+/* D_004D8774/D_004D8778 are the two clamp values, +/- 2*pi. */
+
+#define D_004D8774 6.2831855f
+
+#define D_004D8778 -6.2831855f
+
+typedef union EXM_WindVectorStorage {
+    Vector4 vector;
+    u64 pair[2];
+} EXM_WindVectorStorage;
+
+
+typedef struct EXM_WindFrame {
+    unsigned char unmodeled_00[0x54];
+    float angle; /* +0x54, read by EXM_GetWindPower */
+} EXM_WindFrame;
+
+typedef struct EXM_WindUnit {
+    unsigned char unmodeled_000[0x720];
+    float axis_cos; /* +0x720 */
+    unsigned char unmodeled_724[0x1c];
+    float axis_sin; /* +0x740 */
+    unsigned char unmodeled_744[0x0c];
+    float position[3]; /* +0x750 */
+    unsigned char unmodeled_75c[0x820 - 0x75c];
+    EXM_WindFrame *frame; /* +0x820 */
+} EXM_WindUnit;
+
+float xglSin(float angle);
+
+void xglVectorNormal(Vector4 *dest, const Vector4 *src);
+
+void MATRIX_identity4s(Matrix4 destination);
+
+void MATRIX_rotY4s(Matrix4 matrix, float angle);
+
+void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
+
+void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *position)
+{
+    EXM_WindVector force;
+    Vector4 *force_vector;
+    Matrix4 matrix;
+    EXM_WindFrame *frame;
+    float power;
+    float scale;
+    float axis_cos;
+    float axis_sin;
+    float x;
+    float z;
+
+    if (wind->mode == 0) {
+        result[0] = position[0];
+    } else {
+        wave += 1.3f;
+        power = xglSin(wind->shake_rad - wave) * wave;
+        axis_cos = unit->axis_cos;
+        axis_sin = unit->axis_sin;
+        switch (wind->mode) {
+        case 1:
+            scale = wind->direction.vector.w * (power * wind->shake_power + 1.0f);
+            force = wind->direction;
+            force.vector.x *= scale;
+            force.vector.y *= scale;
+            force.vector.z *= scale;
+            force_vector = &force.vector;
+            break;
+        case 2:
+            force.vector.x = unit->position[0] + position[0] * axis_cos + position[2] * axis_sin - wind->direction.vector.x;
+            force.vector.y = unit->position[1] + position[1] - wind->direction.vector.y;
+            force.vector.z = unit->position[2] + position[2] * axis_cos - position[0] * axis_sin - wind->direction.vector.z;
+            xglVectorNormal(&force.vector, &force.vector);
+            scale = wind->direction.vector.w * (power * wind->shake_power + 1.0f);
+            force.vector.x *= scale;
+            force.vector.y *= scale;
+            force.vector.z *= scale;
+            force_vector = &force.vector;
+            break;
+        default:
+            result[0] = position[0];
+            return;
+        }
+        x = force_vector->x * axis_cos - force_vector->z * axis_sin;
+        z = force_vector->z * axis_cos + force_vector->x * axis_sin;
+        frame = unit->frame;
+        if (frame != 0) {
+            MATRIX_identity4s(matrix);
+            MATRIX_translate4s(matrix, x, 0.0f, z);
+            MATRIX_rotY4s(matrix, -frame->angle);
+            x = matrix[3][0];
+            z = matrix[3][2];
+        }
+        result[0] = position[0] + x;
+        result[1] = position[1] + force_vector->y;
+        result[2] = position[2] + z;
+    }
+}
 
 void EXM_ResetWind(void)
 {
     float reset_value;
     wind->mode = 0;
     reset_value = 0.0f;
-    wind->direction.w = reset_value;
-    wind->direction.z = reset_value;
-    wind->direction.y = reset_value;
-    wind->direction.x = reset_value;
+    wind->direction.vector.w = reset_value;
+    wind->direction.vector.z = reset_value;
+    wind->direction.vector.y = reset_value;
+    wind->direction.vector.x = reset_value;
     wind->shake_power = reset_value;
     wind->shake_time = reset_value;
     wind->shake_rad = reset_value;
@@ -171,10 +269,6 @@ void EXM_SetShakePower(float power)
     wind->shake_power = power;
 }
 
-/* D_004D8774/D_004D8778 are the two clamp values, +/- 2*pi. */
-#define D_004D8774 6.2831855f
-#define D_004D8778 -6.2831855f
-
 void EXM_SetShakeTime(float time)
 {
     if (time > D_004D8774) {
@@ -185,9 +279,31 @@ void EXM_SetShakeTime(float time)
     wind->shake_time = time;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_SetDirectionalWind);
+void EXM_SetDirectionalWind(Vector4 *direction)
+{
+    EXM_WindState *state;
 
-INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_SetPointWind);
+    if (direction != 0) {
+        state = wind;
+        state->direction.vector = *direction;
+    } else {
+        state = wind;
+    }
+    state->mode = 1;
+}
+
+void EXM_SetPointWind(Vector4 *point)
+{
+    EXM_WindState *state;
+
+    if (point != 0) {
+        state = wind;
+        state->direction.vector = *point;
+    } else {
+        state = wind;
+    }
+    state->mode = 2;
+}
 
 void EXM_SetWindStruct(EXM_WindState *state)
 {
@@ -199,7 +315,23 @@ void EXM_ClearWindStruct(void)
     wind = &_wind;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/exm_2", EXM_StepShakeWind);
+void EXM_StepShakeWind(void)
+{
+    if (wind != 0) {
+        wind->shake_rad += wind->shake_time;
+        if (wind->shake_rad > D_004D8774) {
+            wind->shake_rad -= D_004D8774;
+        } else if (wind->shake_rad < 0.0f) {
+            wind->shake_rad += D_004D8774;
+        }
+    }
+    waverad += 0.5f;
+    if (waverad > D_004D8774) {
+        waverad -= D_004D8774;
+    } else if (waverad < 0.0f) {
+        waverad += D_004D8774;
+    }
+}
 
 void EXM_SetShakeWind(float rad)
 {

@@ -31,12 +31,8 @@ static void InitializeSystem(void);
  * asm data.
  */
 
-/*
- * xglCdLoadOverlay, the sound and SPU-DMA entry points and the ov02 boot
- * screens ControlEntry drives: each is defined in a different translation
- * unit that is still assembly or does not yet publish a shared header for
- * it, so the prototype is declared here from this call site's evidence.
- */
+/* ControlEntry subsystem prototypes follow the argument and return
+ * types evidenced by these cross-TU call sites. */
 extern void xglCdLoadOverlay(int overlayId);
 extern void xglSoundLoadEffect(const char *bankName, void *buffer, int mode);
 extern void xglSoundLoadSwd(const char *swdName, void *buffer);
@@ -100,12 +96,8 @@ extern int sceCdMmode(int media);
 extern int sceFsReset(void);
 extern void *sceCdPOffCallback(void (*func)(void), void *old_func);
 
-/*
- * xgl subsystem entry points InitializeSystem calls. Each is defined in a
- * different translation unit of this unit that either is still assembly or
- * does not yet publish a shared header for it, so the prototype is declared
- * here from this call site's evidence.
- */
+/* InitializeSystem subsystem prototypes follow the argument and return
+ * types evidenced by these cross-TU call sites. */
 extern int xglCdSifLoadModule(const char *path, int flags);
 extern void xglCdPowerOffCB(void);
 extern void xglSoundInitial(void);

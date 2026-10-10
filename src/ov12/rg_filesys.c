@@ -82,9 +82,8 @@ const char D_00A55C18[16] = "  normal\n";
 const char D_00A55C28[16] = "  dup org=%p\n";
 const char D_00A55C38[16] = "  prepare\n";
 
-extern unsigned int RgVectorSize(void *vector);
-extern void *RgVectorIndex(void *vector, unsigned int index,
-                           const char *source_file, int line);
+
+
 
 static RgFileSysData *_FindFileObj(RgFileSys *pSys, RgFileSysData *pFile)
 {
@@ -206,8 +205,7 @@ extern unsigned int XrgCdFileAlignmentSize(unsigned int size);
 extern void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile,
                              int iLine);
 extern int XrgCdFileRead(const char *pszFile, void *pBuf);
-extern void RgHeapFree(RgHeap *heap, void *ptr, const char *source_file,
-                       int line);
+
 extern void RgError(const char *message, const char *source_file, int line,
                     ...);
 extern char *strcpy(char *destination, const char *source);
@@ -290,10 +288,9 @@ RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
     return pFile;
 }
 
-extern void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile,
-                             int iLine);
+
 extern void *memcpy(void *destination, const void *source, unsigned int count);
-extern char *strcpy(char *destination, const char *source);
+
 extern const char D_00A55A68[]; /* "pOrg != NIL" */
 extern const char D_00A55A78[]; /* "pDup->common.m_pBuf != NIL" */
 
@@ -384,14 +381,14 @@ void RgFileSysDisposePrepares(RgFileSys *pSys)
     pSys->prepared_count = 0;
 }
 
-extern void RgVectorPush(void *vector, void *element);
-extern void XrgLog(const char *format, const char *source_file, int line, ...);
-extern int _FindFile(RgFileSys *pSys, const char *pszName);
-extern const char D_00A559B0[]; /* "pszName != NIL" */
+
+
+
+ /* "pszName != NIL" */
 extern const char D_00A55B10[]; /* "pBuf != NIL" */
 extern const char D_00A55B20[]; /* "RgFileSysOnMemory failure (already loaded %s)\n" */
 extern const char D_00A55B50[]; /* "RG_FILESYS : on memory (%s %p:%d)\n" */
-extern void RgError(const char *message, const char *source_file, int line, ...);
+
 
 RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
                                  void *pBuf, unsigned int nSize)
@@ -424,14 +421,13 @@ RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
     return pFile;
 }
 
-extern const char D_00A55A30[]; /* "pFile != NIL" */
+ /* "pFile != NIL" */
 extern const char D_00A55B78[]; /* "pFile->m_pSys != NIL" */
 extern const char D_00A55B90[]; /* "pFile->m_pOrg != NIL" */
 extern const char D_00A55BA8[]; /* "unknown filesys error (%s) call NIS!" */
 extern int RgVectorRemove(void *vector, void *element, const char *source_file,
                           int line);
-extern void RgError(const char *message, const char *source_file, int line,
-                    ...);
+
 
 void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *source_file,
                               int line)
@@ -499,7 +495,7 @@ typedef struct RgFileSysDataName {
     char name; /* +0x1C */
 } RgFileSysDataName;
 
-extern const char D_00A55A30[]; /* "pFile != NIL" */
+ /* "pFile != NIL" */
 
 char *RgFileSysDataGetName(RgFileSysData *pFile)
 {

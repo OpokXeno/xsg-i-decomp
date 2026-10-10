@@ -81,7 +81,6 @@ void JTHREAD_cntl(void);
 void MAP_updateUnit(void);
 void PLAY_ctrl(void);
 void TCAMERA_update(void);
-extern PadPrefix PadData;
 extern int mode_004DC5A8;
 
 #endif /* SRC_MAIN_DB_LIGHT_WRITE_H */

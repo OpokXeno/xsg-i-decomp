@@ -18,4 +18,23 @@ typedef struct TitleParticleView {
     s16 speed;
 } TitleParticleView;
 
+/* copyframe reads the screen size and framebuffer-page halfwords of sRender
+ * (the same object and offsets as main/tu130's DrawImageRenderState view). */
+typedef struct {
+    u8 unmodeled_00[0x10];
+    u16 width;
+    u16 height;
+    u16 framebuffer_page;
+} TitleRenderState;
+
+extern TitleRenderState sRender;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+
 #endif /* SRC_OV02_TITLE_H */

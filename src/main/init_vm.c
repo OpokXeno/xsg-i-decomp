@@ -1448,9 +1448,7 @@ const char D_004DC038[8] = "double";
 /* Keep the pointer's original zero-initialized storage after its extern uses. */
 VMClass *classBoolean = 0;
 
-struct ClassEntry;
-extern struct ClassEntry _dummyClass;
-struct ClassEntry *classClass = &_dummyClass;
+JavaClass *classClass = &_dummyClass;
 
 /* Zero-initialized VM handles stored and initialized by this translation unit. */
 SceneString *ATTR_InnerClasses;
@@ -1473,7 +1471,7 @@ VMClass *classChar;
 VMClass *classShort;
 void (*jthreadResetFunc)(void);
 void *initVMThread;
-SceneClass *classObject;
+JavaClass *classObject;
 void *classEntryPool;
 VMClass *classFloat;
 VMClass *classDouble;

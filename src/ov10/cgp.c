@@ -70,14 +70,14 @@ float Player1Color[4][4] = {
     {0.0f, 0.0f, 0.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 1.0f},
-    {0.800000011920929f, 0.800000011920929f, 1.2000000476837158f, 1.0f}
+    {0.8f, 0.8f, 1.2f, 1.0f}
 };
 
 float Player2Color[4][4] = {
     {0.0f, 0.0f, 0.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 1.0f},
-    {1.2000000476837158f, 0.800000011920929f, 0.800000011920929f, 1.0f}
+    {1.2f, 0.8f, 0.8f, 1.0f}
 };
 
 char *PermMessTbl[16] = {
@@ -441,9 +441,9 @@ void CGPPrintJunk(CardPlaySide *side)
     printf(D_00A4E508);
 }
 
-extern int printf(const char *format, ...);
-extern const char D_00A4E500[];
-extern const char D_00A4E508[];
+
+
+
 extern const char D_00A4E520[];
 
 void CGPPrintSute(CardPlaySide *side)
@@ -1500,10 +1500,10 @@ void CGPCursor2Pos(CGPCursorPosition *position, CardGameWork *work)
     }
 }
 
-extern float HandPos1P[];
-extern float HandPos2P[];
 
-extern void CGPCursor2Pos(CGPCursorPosition *position, CardGameWork *work);
+
+
+
 
 /*
  * Clamps the cursor index to 0..3, resolves the cursor's zone/card (
@@ -1763,8 +1763,7 @@ void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlayField *fie
     CardPlayCleanHand(&field->hand.maintenanceView);
 }
 
-extern s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
-                               s16 operand, s16 target);
+
 extern s32 CardPlayChkCost(CardDefinition *definitions, CardPlaySide *side,
                            s32 cardId, CardGameWork *work);
 extern s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side,
@@ -1945,7 +1944,7 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
     return (power < 0) ? 0 : power;
 }
 
-extern int CardPlayCntOpe(CardPlaySide *side, int opeId);
+
 
 /*
  * Extra battle effects the attacking card scores, added to the effect count

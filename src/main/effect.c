@@ -1,17 +1,49 @@
 #include "common.h"
+
 #include "effect.h"
 
+/* Runtime Java fields occupy one EE VM value word. The descriptor
+ * supplies its byte offset; its declared Java/native kind selects
+ * the integer, floating or reference representation below. No fixed
+ * Java-object field positions are assumed. */
+typedef union EffectFieldValue {
+    NativeEffectPeer * effect;
+    EffectUnitPeer * unit;
+    EffectCallArgs * arguments;
+    float floating;
+    int integer;
+    void * native_pointer;
+} EffectFieldValue;
+
+
 char D_004DC130[8] = "id";
+
 char D_004DC138[8] = "args";
+
 char D_004DC140[8] = "peer";
+
 char D_004DC148[8] = "px";
+
 char D_004DC150[8] = "py";
+
 char D_004DC158[8] = "pz";
+
 char D_004DC160[8] = "rx";
+
 char D_004DC168[8] = "ry";
+
 char D_004DC170[8] = "rz";
 
 #define EFFECT_PI 3.1415927f
+
+struct UnitScaleVector {
+    SceneObjectClassRef *class_ref;
+    float z;
+    float y;
+    float x;
+    float w;
+    unsigned char unmodeled_14[4];
+};
 
 void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
 {
@@ -32,6 +64,7 @@ void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
 
 void Java_xeno_Effect_disp__Z(JThread *thread, EffectBooleanCall *arguments)
 {
+    EffectFieldValue *field_value;
     unsigned char *object;
     JavaField *field;
     NativeEffectPeer *peer;
@@ -39,7 +72,8 @@ void Java_xeno_Effect_disp__Z(JThread *thread, EffectBooleanCall *arguments)
     object = arguments->object;
     if (object != 0) {
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
-        peer = *(NativeEffectPeer **)(object + field->offset);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
         if (peer != 0) {
             if (arguments->value != 0) {
                 sefRewindEffectCf((SchedulerState *)peer);
@@ -53,6 +87,7 @@ void Java_xeno_Effect_disp__Z(JThread *thread, EffectBooleanCall *arguments)
 
 void Java_xeno_Effect_setScale__FFF(JThread *thread, EffectVectorCall *arguments)
 {
+    EffectFieldValue *field_value;
     unsigned char *object;
     JavaField *field;
     NativeEffectPeer *peer;
@@ -60,7 +95,8 @@ void Java_xeno_Effect_setScale__FFF(JThread *thread, EffectVectorCall *arguments
     object = arguments->object;
     if (object != 0) {
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
-        peer = *(NativeEffectPeer **)(object + field->offset);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
         if (peer != 0) {
             peer->scale_x = arguments->x;
             peer->scale_y = arguments->y;
@@ -69,7 +105,32 @@ void Java_xeno_Effect_setScale__FFF(JThread *thread, EffectVectorCall *arguments
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_getScale__);
+void Java_xeno_Effect_getScale__(JThread *thread, EffectCall *arguments, unsigned int *result)
+{
+    EffectFieldValue *field_value;
+    /* This native returns a Vector4f object reference through the VM result
+     * word. The static object retains its normal Java class-reference header. */
+    static struct UnitScaleVector scale;
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
+    SceneObject object_result;
+
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
+        scale.class_ref = classJava_xeno_util_Vector4f->instance_class_ref;
+        scale.x = peer->scale_x;
+        scale.y = peer->scale_y;
+        scale.z = peer->scale_z;
+        scale.w = peer->scale_w;
+        object_result = (SceneObject)&scale;
+        /* Store the object-pointer representation in the raw VM result slot. */
+        __builtin_memcpy(result, &object_result, sizeof(object_result));
+    }
+}
 
 void Java_xeno_Effect_getTranslate__(JThread *thread, EffectCall *arguments)
 {
@@ -133,7 +194,27 @@ void Java_xeno_Effect_getRotate__(JThread *thread, EffectCall *arguments)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_setRotate__);
+void Java_xeno_Effect_setRotate__(JThread *thread, EffectCall *arguments)
+{
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
+    float *rotate;
+
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        peer = *(NativeEffectPeer **)(object + field->offset);
+        rotate = peer->rotate;
+
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC160, -1), 0);
+        rotate[0] = (*(float *)(object + field->offset) / 180.0f) * EFFECT_PI;
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC168, -1), 0);
+        rotate[1] = (*(float *)(object + field->offset) / 180.0f) * EFFECT_PI;
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC170, -1), 0);
+        rotate[2] = (*(float *)(object + field->offset) / 180.0f) * EFFECT_PI;
+    }
+}
 
 void Java_xeno_Effect_setCaster__Lxeno_Chr_(JThread *thread, EffectChrCall *arguments)
 {
@@ -214,6 +295,7 @@ void Java_xeno_Effect_setTarget__Lxeno_Unit_(JThread *thread, EffectUnitCall *ar
 
 void Java_xeno_Effect_setTransOffset__FFF(JThread *thread, EffectVectorCall *arguments)
 {
+    EffectFieldValue *field_value;
     unsigned char *object;
     JavaField *field;
     NativeEffectPeer *peer;
@@ -221,7 +303,8 @@ void Java_xeno_Effect_setTransOffset__FFF(JThread *thread, EffectVectorCall *arg
     object = arguments->object;
     if (object != 0) {
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
-        peer = *(NativeEffectPeer **)(object + field->offset);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
         if (peer != 0) {
             peer->translate[0] = peer->translate[0] + arguments->x;
             peer->translate[1] = peer->translate[1] + arguments->y;
@@ -232,6 +315,7 @@ void Java_xeno_Effect_setTransOffset__FFF(JThread *thread, EffectVectorCall *arg
 
 void Java_xeno_Effect_getForceLoop__(JThread *thread, EffectCall *arguments, signed char *result)
 {
+    EffectFieldValue *field_value;
     unsigned char *object;
     JavaField *field;
     NativeEffectPeer *peer;
@@ -239,17 +323,17 @@ void Java_xeno_Effect_getForceLoop__(JThread *thread, EffectCall *arguments, sig
     object = arguments->object;
     if (object != 0) {
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
-        peer = *(NativeEffectPeer **)(object + field->offset);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
         if (peer != 0) {
             *result = peer->flags & 0x20;
         }
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_setForceLoop__Z);
-
-void Java_xeno_Effect_getClip__(JThread *thread, EffectCall *arguments, signed char *result)
+void Java_xeno_Effect_setForceLoop__Z(JThread *thread, EffectBooleanCall *arguments)
 {
+    EffectFieldValue *field_value;
     unsigned char *object;
     JavaField *field;
     NativeEffectPeer *peer;
@@ -257,17 +341,61 @@ void Java_xeno_Effect_getClip__(JThread *thread, EffectCall *arguments, signed c
     object = arguments->object;
     if (object != 0) {
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
-        peer = *(NativeEffectPeer **)(object + field->offset);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
+        if (peer != 0) {
+            if (arguments->value == 1) {
+                peer->flags |= 0x20;
+            } else {
+                peer->flags &= ~0x20U;
+            }
+        }
+    }
+}
+
+void Java_xeno_Effect_getClip__(JThread *thread, EffectCall *arguments, signed char *result)
+{
+    EffectFieldValue *field_value;
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
+
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
         if (peer != 0) {
             *result = peer->flags & 0x10;
         }
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_setClip__Z);
+void Java_xeno_Effect_setClip__Z(JThread *thread, EffectBooleanCall *arguments)
+{
+    EffectFieldValue *field_value;
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
+
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
+        if (peer != 0) {
+            if (arguments->value == 1) {
+                peer->flags |= 0x10;
+            } else {
+                peer->flags &= ~0x10U;
+            }
+        }
+    }
+}
 
 void Java_xeno_Effect_clearEffect__(JThread *thread, EffectCall *arguments)
 {
+    EffectFieldValue *field_value;
     unsigned char *object;
     JavaField *field;
     void *peer;
@@ -275,13 +403,54 @@ void Java_xeno_Effect_clearEffect__(JThread *thread, EffectCall *arguments)
     object = arguments->object;
     if (object != 0) {
         field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
-        peer = *(void **)(object + field->offset);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->native_pointer;
         if (peer != 0) {
             sefClearEffectCf(peer);
         }
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_setMotion__Z);
+void Java_xeno_Effect_setMotion__Z(JThread *thread, EffectBooleanCall *arguments)
+{
+    EffectFieldValue *field_value;
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
 
-INCLUDE_ASM("asm/main/nonmatchings/effect", Java_xeno_Effect_noAttach__Z);
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
+        if (peer != 0) {
+            if (arguments->value == 1) {
+                peer->flags |= 0x80;
+            } else {
+                peer->flags &= ~0x80U;
+            }
+        }
+    }
+}
+
+void Java_xeno_Effect_noAttach__Z(JThread *thread, EffectBooleanCall *arguments)
+{
+    EffectFieldValue *field_value;
+    unsigned char *object;
+    JavaField *field;
+    NativeEffectPeer *peer;
+
+    object = arguments->object;
+    if (object != 0) {
+        field = lookupClassField(classJava_xeno_Effect, loadConstString(D_004DC140, -1), 0);
+        field_value = (void *)(object + field->offset);
+        peer = field_value->effect;
+        if (peer != 0) {
+            if (arguments->value == 1) {
+                peer->flags |= 0x400;
+            } else {
+                peer->flags &= ~0x400U;
+            }
+        }
+    }
+}

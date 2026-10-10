@@ -5,9 +5,9 @@ extern u8 *WorkEnd;
 
 extern HomogeneousVector cursor[];
 
-extern struct ClassEntry _dummyClass;
+extern JavaClass _dummyClass;
 
-extern void *classJava_xeno_Unit;
+extern SceneClass *classJava_xeno_Unit;
 
 int MEfObjDestroy(void *object);
 

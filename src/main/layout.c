@@ -38,7 +38,7 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
     field = lookupClassField(classJava_xeno_Unit,
                              loadConstString("ry", -1), 0);
     *(float *)(layout + field->offset) =
-        rotation[1] / 3.141592741f * 180.0f;
+        rotation[1] / 3.1415927f * 180.0f;
 }
 
 void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
@@ -79,7 +79,7 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
     field = lookupClassField(classJava_xeno_Chr,
                              loadConstString("ry", -1), 0);
     *(float *)(layout + field->offset) =
-        rotation[1] / 3.141592741f * 180.0f;
+        rotation[1] / 3.1415927f * 180.0f;
 }
 
 void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
@@ -114,7 +114,7 @@ void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
     field = lookupClassField(classJava_xeno_Effect,
                              loadConstString("ry", -1), 0);
     *(float *)(layout + field->offset) =
-        header->components[3] / 3.141592741f * 180.0f;
+        header->components[3] / 3.1415927f * 180.0f;
 }
 
 void Java_xeno_util_Layout_set__Ljava_lang_Object_I(JThread *thread,

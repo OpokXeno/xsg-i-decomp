@@ -1,12 +1,19 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/string_utf_get_hash.h"
+
 #include "xheap.h"
 
 static xheap_block *heap_top;
+
 static int heap_size;
+
 static xheap_frame *frame_stack;
+
 static xheap_block *freeBlock;
+
 void *jthreadCurrent;
 
 extern void reloadClassEntry(void *heap_boundary);
@@ -58,7 +65,27 @@ void *xheap_pop(void) {
     return freeBlock;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xheap", xheap_info);
+int xheap_info(int *category_totals) {
+    xheap_block *block;
+    int total;
+    int i;
+
+    for (i = 31; i >= 0; i--) {
+        category_totals[i] = 0;
+    }
+
+    total = 0;
+    for (block = heap_top; block != 0; block = block->next) {
+        if (block->category != 0) {
+            int size = block->size_words << 2;
+            int category = block->category & 0x1f;
+
+            total = total + size + 12;
+            category_totals[category] = category_totals[category] + size + 12;
+        }
+    }
+    return total;
+}
 
 void infoMemory(void) {
     int totals[32];

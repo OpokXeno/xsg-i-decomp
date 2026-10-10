@@ -1,7 +1,9 @@
 #include "common.h"
 
 static int mode_004DC5A8;
+
 #include "shared.h"
+
 #include "db_light_write.h"
 
 /*
@@ -11,7 +13,91 @@ static int mode_004DC5A8;
  * words at +0x50/+0x54. Six slots of the existing vector type express the
  * recorded object extent without assigning meanings to the other words.
  */
+
+typedef struct CursorState {
+    int mode;
+    unsigned char unmodeled_04[0x0C];
+    HomogeneousVector position;
+    unsigned char unmodeled_20[0x30];
+    CursorCallback callback;
+    void *callback_argument;
+    unsigned char unmodeled_58[8];
+} CursorState;
+
 HomogeneousVector cursor[6];
+
+#include "main/xgl_studio.h"
+
+/* Owner declarations used by these debug views; storage remains original scaffolding. */
+
+typedef struct {
+    unsigned char unmodeled_00[0x50];
+    unsigned int matrix_data_offset;
+} MapPartListView;
+
+typedef struct {
+    unsigned char unmodeled_00[4];
+    MapPartListView *parts;
+} MapStageModelView;
+
+typedef struct {
+    unsigned char unmodeled_00[0x54];
+    MapStageModelView *model;
+} MapGameLoopStateView;
+
+typedef struct {
+    unsigned char unmodeled_00[0x28];
+    unsigned short half_28;
+    unsigned short half_2a;
+    unsigned short half_2c;
+    unsigned char unmodeled_2e[0x66 - 0x2e];
+    signed char stick_x;
+    signed char stick_y;
+} DbLightWritePadSecondPrefix;
+
+typedef struct {
+    unsigned char unmodeled_00[0x28];
+    unsigned short half_28;
+    unsigned short half_2a;
+    unsigned char unmodeled_2c[0x68 - 0x2c];
+    DbLightWritePadSecondPrefix second;
+} DbLightWritePadData;
+
+extern MapGameLoopStateView GameLoopState;
+
+extern DbLightWritePadData PadData;
+
+extern int visible_0;
+
+extern int partsIndex;
+
+extern const char D_004C2158[];
+
+extern const char D_004DA520[];
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+extern void nmlModelSetPartsVisible(MapPartListView *parts,
+                                    int part_index, int visible);
+
+extern Vector4 lightDir[6];
+
+extern Vector4 lightCol[6];
+
+extern void xglLightIntensityParallel(void *light, int index,
+                                      const Vector4 *intensity);
+
+extern void xglLightIntensityAmbient(void *light,
+                                     const Vector4 *intensity);
+
+extern void xglLightDirection(void *light, unsigned int index,
+                              const Vector4 *direction);
+
+extern float atan2f(float y, float x);
+
+extern float xglSin(float angle);
+
+extern float xglCos(float angle);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", DB_lightWrite);
 
@@ -51,11 +137,6 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", drawTags);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", drawVector4);
 
-/*
- * updateCursorMode2 supplies the cursor and an actor position here.  A
- * candidate is eligible only when its xyz distance is below radius; the
- * distance is returned for nearest-candidate selection, otherwise -1.0f.
- */
 float ball2point(const Vector4 *cursor_position,
                  const Vector4 *actor_position, float radius)
 {
@@ -83,7 +164,27 @@ void *prevActor(int startIndex)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", nextActor);
+ActorHead *nextActor(register int startIndex)
+{
+    register ActorHead *entry;
+    ActorHead *end;
+
+    if (startIndex < ACTOR_COUNT) {
+        startIndex *= sizeof(ActorHead);
+        entry = (ActorHead *)((char *)actor + startIndex);
+        end = &actor[ACTOR_COUNT];
+        for (;;) {
+            if (entry->inUseId != 0 && !(entry->flags & 8)) {
+                return entry;
+            }
+            entry++;
+            if ((int)entry >= (int)end) {
+                break;
+            }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateCursorMode1);
 
@@ -112,9 +213,67 @@ void drawCursor(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", initCursor);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", printM);
+static void printM(int x, int y, const float *matrix)
+{
+    char buffer[256];
+    const float *rowEnd;
+    int rowIndex;
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", MAP_serach);
+    rowEnd = matrix + 3;
+    rowIndex = 0;
+    do {
+        rowIndex++;
+        sprintf(buffer, D_004C2158,
+                rowEnd[-3], rowEnd[-2], rowEnd[-1], rowEnd[0]);
+        xglFontDebugPrintf(x, y, buffer);
+        if (rowIndex > 3)
+            break;
+        rowEnd += 4;
+        y += 8;
+    } while (1);
+}
+
+void MAP_serach(void)
+{
+    MapStageModelView *model;
+    MapPartListView *parts;
+    DbLightWritePadSecondPrefix *mapPad;
+    unsigned char *matrix_base;
+    void *matrix_data;
+    char buffer[256];
+
+    model = GameLoopState.model;
+    mapPad = &PadData.second;
+    visible_0++;
+    if (model != 0) {
+        parts = model->parts;
+        if (parts != 0) {
+            matrix_base = (unsigned char *)parts +
+                          parts->matrix_data_offset;
+            if (mapPad->half_2c & 0x4000) {
+                nmlModelSetPartsVisible(parts, partsIndex, 1);
+                visible_0 = 0;
+                partsIndex--;
+            }
+
+            if (mapPad->half_2c & 0x1000) {
+                nmlModelSetPartsVisible(model->parts,
+                                        partsIndex, 1);
+                visible_0 = 0;
+                partsIndex++;
+            }
+
+            if (partsIndex < 0)
+                partsIndex = 0;
+            matrix_data = matrix_base + partsIndex * sizeof(Matrix4);
+            printM(0x20, 0x40, matrix_data);
+            sprintf(buffer, D_004DA520, partsIndex);
+            xglFontDebugPrintf(8, 0x20, buffer);
+            nmlModelSetPartsVisible(model->parts, partsIndex,
+                                    (visible_0 >> 4) & 1);
+        }
+    }
+}
 
 void EvtTools(void)
 {
@@ -139,7 +298,38 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", initLight3);
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", initLight2);
 
-INCLUDE_ASM("asm/main/nonmatchings/db_light_write", initLight);
+void initLight(void)
+{
+    StudioLight *light;
+    Vector4 direction;
+    int lightIndex;
+
+    xglStudioGetLight(&light);
+    lightIndex = 0;
+    do {
+        Vector4 *source = &lightDir[lightIndex];
+
+        if (__builtin_sqrtf((source->x * source->x) +
+                            (source->y * source->y)) > 1.0f) {
+            float angle = atan2f(source->x, source->y);
+            source->x = xglSin(angle);
+            source->y = xglCos(angle);
+        }
+
+        direction.x = source->x;
+        direction.y = source->y;
+        direction.z = __builtin_sqrtf(
+            1.0f - ((direction.x * direction.x) +
+                    (direction.y * direction.y)));
+        if (source->z < 0.0f)
+            direction.z = -direction.z;
+
+        xglLightIntensityParallel(light, lightIndex, &lightCol[lightIndex]);
+        xglLightDirection(light, lightIndex, &direction);
+    } while (++lightIndex < 3);
+
+    xglLightIntensityAmbient(light, &lightCol[3]);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateLight);
 
@@ -147,15 +337,18 @@ INCLUDE_ASM("asm/main/nonmatchings/db_light_write", updateWind);
 
 void VW_setCursorMode(int mode)
 {
-    *(int *)((unsigned char *)cursor + CURSOR_MODE_OFFSET) = mode;
+    CursorState *state = (void *)cursor;
+
+    state->mode = mode;
     changeCameraMode();
 }
 
 void VW_setCursorFunc(CursorCallback callback, void *argument)
 {
-    unsigned char *cursorBytes = (unsigned char *)cursor;
-    *(CursorCallback *)(cursorBytes + CURSOR_CALLBACK_OFFSET) = callback;
-    *(void **)(cursorBytes + CURSOR_CALLBACK_ARGUMENT_OFFSET) = argument;
+    CursorState *state = (void *)cursor;
+
+    state->callback = callback;
+    state->callback_argument = argument;
 }
 
 void VW_setCursor(const Vector4 *position)

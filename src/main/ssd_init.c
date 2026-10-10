@@ -1,46 +1,73 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "ssd_init.h"
 
 /*
  * libkernel syscall stub (main:0x00200550).
  */
+
 extern int iSignalSema(int sema_id);
+
 extern void SleepThread(void);
 
 /*
  * RssdInitIop is this TU's own IOP sound RPC client setup (its body is still
  * scaffold below); sceSifRpcLoop is the SCE SDK SIF RPC server loop.
  */
-extern void RssdInitIop(void);
-extern void sceSifRpcLoop(void *queue);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdInit);
+extern void RssdInitIop(void);
+
+extern void sceSifRpcLoop(void *queue);
 
 enum {
     RSSD_CMD_QUIT    = 0x02,
     RSSD_CMD_RESUME  = 0x05,
-    RSSD_CMD_SUSPEND = 0x06
+    RSSD_CMD_SUSPEND = 0x06,
+    RSSD_FLAG_BUSY   = 0x02
 };
 
 /*
  * libkernel syscall stubs.
  */
+
 extern int DeleteSema(int sema_id);
+
 extern int DeleteThread(int thread_id);
+
 extern int TerminateThread(int thread_id);
 
 /*
  * This TU's own RPC completion handler (its body is still scaffold below);
  * sceSifRemoveRpc is the SCE SDK RPC server deregistration call.
  */
+
 extern void RssdFuncCallCompleted(int status);
+
 extern void *sceSifRemoveRpc(void *sd, void *qd);
 
 /*
- * Sends the quit command, then tears down the RPC receive callback, the SIF
- * RPC server registration and the two service threads SsdInit started.
+ * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
+ * on the queue reserved at RssdWork.rpc_queue. It never returns.
  */
+
+/* SIF RPC middleware bulk memory copy. */
+
+extern void SsdCopyMemory(void *dst, void *src, int size);
+
+extern int printf(const char *format, ...);
+
+const char D_004D4AA0[] = "Rssd get result error !\n";
+
+/*
+ * libkernel syscall stub (main:0x00200550).
+ */
+
+extern int SignalSema(int sema_id);
+
+INCLUDE_ASM("asm/main/nonmatchings/ssd_init", SsdInit);
+
 void SsdQuit(void)
 {
     RssdRequest request;
@@ -57,10 +84,6 @@ void SsdQuit(void)
     RssdWork.flags = 0;
 }
 
-/*
- * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
- * on the queue reserved at RssdWork.rpc_queue. It never returns.
- */
 void RSsdSifRpcThread(void)
 {
     RssdInitIop();
@@ -71,17 +94,21 @@ INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdInitIop);
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdSifRpcServer);
 
-INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdBusy);
+void RssdBusy(RssdRequest *request)
+{
+    int request_size;
+    short request_channel_count;
 
-/* SIF RPC middleware bulk memory copy. */
-extern void SsdCopyMemory(void *dst, void *src, int size);
+    RssdWork.flags |= RSSD_FLAG_BUSY;
+    RssdWork.request_parameter = request->arg[0].value;
+    request_channel_count = request->arg[2].rate_channel.request_channel_count;
+    request_size = request->arg[3].value;
+    RssdWork.sample_rate = request->arg[2].rate_channel.sample_rate;
+    RssdWork.request_channel_count = request_channel_count;
+    RssdWork.request_size = request_size;
+    SignalSema(RssdWork.busy_sema_id);
+}
 
-/*
- * Copies one streamed sample chunk (the payload following the RssdRequest
- * header) to the running SPU write pointer and advances it by the copied
- * byte count; clears the streaming-busy flag once the request reports no
- * more data is coming.
- */
 void RssdSpuRead(RssdRequest *request)
 {
     int size;
@@ -135,17 +162,6 @@ void RssdBackNextWaveThread(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdCallFunc);
 
-/*
- * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
- * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
- * result, else flag bit 5) through the registered one-shot completion
- * callback, then signals the waiting thread's semaphore.
- *
- * It runs from the SIF RPC interrupt context, so it ends with the
- * ee-interrupt-handler-return primitive: `sync.l`
- * orders every earlier load/store, including the iSignalSema effects, before
- * `ei` re-enables interrupts on the way out.
- */
 void RssdSifRpcCallback(void)
 {
     int status;
@@ -170,14 +186,10 @@ void RssdSifRpcCallback(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/ssd_init", RssdFuncCallCompleted);
 
-/* Returns the bit RssdSifRpcCallback clears on RPC completion. */
 int RssdGetCallCompletedCode(void)
 {
     return (RssdWork.flags >> 3) & 1;
 }
-
-extern int printf(const char *format, ...);
-const char D_004D4AA0[] = "Rssd get result error !\n";
 
 int SsdGetResultValue(int *value)
 {

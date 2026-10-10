@@ -1,6 +1,20 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "tslider_create.h"
+
+typedef struct TsliderLiteralPool {
+    char close_command[24];
+    char script_root[28];
+    char trailing_empty_string[4];
+} TsliderLiteralPool;
+
+const TsliderLiteralPool D_004C1D18 = {
+    "/[waitkey(0);close()]",
+    "host0:/home/xeno/script/",
+    ""
+};
 
 TwinWindow2 *TSLIDER_create(int requestedSlot)
 {
@@ -41,16 +55,6 @@ void TSLIDER_init(TwinWindow2 *slider)
     slider->width = slider->max_digits * digitWidth + 0x10;
 }
 
-/*
- * One frame of the slider component. flags bit 0x2 records that the phase of
- * the current state has been armed: while it is clear this arms the phase of
- * `state` (the frame counter it runs on) and returns, and while it is set it
- * advances that phase. State 1 opens the slider over 11 frames and then hands
- * over to the idle state 14; 14 reads the pad, where circle confirms and cross
- * confirms with value -1 (both go to 15) and the directions step the value;
- * 15 starts the closing state 2, which counts the 10 frames back down and then
- * clears the component-alive and update bits TSLIDER_create set.
- */
 void TSLIDER_updateDefault(TwinWindow2 *slider)
 {
     if ((slider->flags & 2) == 0) {
@@ -157,17 +161,119 @@ void TSLIDER_drawDefault(TwinWindow2 *window)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tslider_create", TMENU_addQuery2);
+void TMENU_addQuery2(MenuNative *menu, char **texts, int count)
+{
+    unsigned char *out = menu->textEnd;
+    int i;
+    int row;
+    int lines;
+    int firstItem;
+    int textWidth;
+    int current;
+    int lastByte;
+    int windowWidth;
+    unsigned char *lineStart;
+    unsigned char *textBlockEnd;
 
-/*
- * The field-conversation entry point of the toolkit text window: it marks the
- * record's mode byte with 3 and lets TWIN_init2 apply the matching layout
- * (WIN_initCF, src/main/twsys_init.c), the way TWIN_initScene below marks the
- * same byte with 4 for the scene-VM window. The window is spelled void * here
- * like TWIN_init2's own parameter, because this TU reaches the one record
- * through both of its partial views: createItemGetWin holds the TwinWindow
- * view and only the TwinWindow2 view names the mode halfword.
- */
+    if (menu->textStart == 0) {
+        menu->textStart = out;
+    }
+    firstItem = -1;
+    lines = 0;
+    for (i = 0; i < count; i++) {
+        unsigned char *src = (unsigned char *) texts[i];
+
+        if (((src[0] << 16) | (src[1] << 8) | src[2]) == 0) {
+            *out++ = 0;
+            *out++ = 0;
+            menu->textEnd = out;
+            firstItem = i + 1;
+            break;
+        }
+        for (;;) {
+            current = *src++;
+            if (current == 0) {
+                lineStart = menu->textEnd;
+                if (menu->rowWidth < out - lineStart) {
+                    menu->rowWidth = out - lineStart;
+                }
+                lastByte = out[-1];
+                if (i == count - 1) {
+                    if (lastByte != '\n') {
+                        *out++ = 0;
+                        *out++ = 0;
+                        menu->textEnd = out;
+                    } else {
+                        out[-1] = 0;
+                        *out++ = 0;
+                        break;
+                    }
+                } else if (lastByte != '\n') {
+                    *out++ = '\n';
+                    menu->textEnd = out;
+                } else {
+                    break;
+                }
+                lines++;
+                break;
+            }
+            if (current == '/') {
+                if (*src == '[') {
+                    int markupByte;
+                    for (;;) {
+                        markupByte = *src++;
+                        if (markupByte >= 161) {
+                            *out++ = markupByte;
+                            *out++ = *src++;
+                            continue;
+                        }
+                        if (markupByte == ']') {
+                            break;
+                        }
+                    }
+                } else {
+                    *out++ = current;
+                }
+            } else if (current == '\n') {
+                int length = out - menu->textEnd;
+                if (menu->rowWidth < length) {
+                    menu->rowWidth = length;
+                }
+                *out++ = current;
+                menu->textEnd = out;
+                lines++;
+            } else {
+                *out++ = current;
+                if (current >= 160) {
+                    *out++ = *src++;
+                }
+            }
+        }
+    }
+    textBlockEnd = menu->textEnd;
+    textWidth = menu->rowWidth * 10;
+    windowWidth = menu->textStart == 0 ? textWidth + 56 : textWidth + 136;
+    if (menu->width < windowWidth) {
+        menu->width = windowWidth;
+    }
+    menu->rows = (unsigned char **) (((unsigned int) textBlockEnd + 3) >> 2 << 2);
+    menu->textEnd = (unsigned char *) (menu->rows + lines);
+    for (row = 0; row < lines; row++) {
+        menu->rows[row] = menu->textEnd;
+        *menu->textEnd = 0;
+        menu->textEnd += menu->rowWidth + 32;
+    }
+    menu->rowCount = lines;
+    menu->selectedRow = 0;
+    menu->scroll = 0;
+    menu->height += lines * 24 + 24;
+    if (firstItem > 0) {
+        for (i = firstItem; i < count; i++) {
+            TMENU_addItem(menu, texts[i]);
+        }
+    }
+}
+
 void TWIN_initCF(void *window)
 {
     TwinWindow2 *textWindow = window;
@@ -185,18 +291,6 @@ void TWIN_initScene(TwinWindow2 *window)
     window->x = 0.0f;
     window->y = 324.0f;
 }
-
-typedef struct TsliderLiteralPool {
-    char close_command[24];
-    char script_root[28];
-    char trailing_empty_string[4];
-} TsliderLiteralPool;
-
-const TsliderLiteralPool D_004C1D18 = {
-    "/[waitkey(0);close()]",
-    "host0:/home/xeno/script/",
-    ""
-};
 
 void *createItemGetWin(const char *text)
 {

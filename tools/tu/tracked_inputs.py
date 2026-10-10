@@ -54,9 +54,10 @@ UNTRACKED_MANIFEST_KEYS = ("inputs", "generator", "staged_headers")
 # files on this machine.  Local paths are never tracked, so a clone is not asked
 # to keep this project's private directory layout.
 TOOL_TOKENS = {
-    # Tool id unchanged; since 2026-09-23 it is the fsv3 release (reports/cc1-fsv3-alias.md).
-    ".work/toolchains/ee-gcc2.96-realconv-lp7-fsv3-v1/bin": "tool:ee-gcc2.96-realconv-lp7",
-    ".work/toolchains/ee-gcc2.96-realconv-lp7-fsv3-v1/bin/cc1": "tool:ee-gcc2.96-realconv-lp7/cc1",
+    # Tool id unchanged; since 2026-09-23 it is the fsv3 release (reports/cc1-fsv3-alias.md),
+    # since 2026-10-09 the fsv4 release (reports/cc1-fsv4-gcse-transp.md).
+    ".work/toolchains/ee-gcc2.96-realconv-lp7-fsv4-v1/bin": "tool:ee-gcc2.96-realconv-lp7",
+    ".work/toolchains/ee-gcc2.96-realconv-lp7-fsv4-v1/bin/cc1": "tool:ee-gcc2.96-realconv-lp7/cc1",
     ".work/toolchains/compiler-variants/ee-gcc2.9-991111": "tool:ee-gcc2.9-991111",
     ".work/toolchains/compiler-variants/ee-gcc2.9-991111/cc1": "tool:ee-gcc2.9-991111/cc1",
     # Tool id unchanged; since 2026-09-24 it is the nolabel release (reports/as-la29-vsqrt-nolabel.md),
@@ -68,7 +69,7 @@ TOOL_TOKENS = {
 }
 # The same tools named inside prose, where the sentence is the point.
 TOOL_PROSE = {
-    ".work/toolchains/ee-gcc2.96-realconv-lp7-fsv3-v1": "ee-gcc2.96-realconv-lp7",
+    ".work/toolchains/ee-gcc2.96-realconv-lp7-fsv4-v1": "ee-gcc2.96-realconv-lp7",
 }
 
 

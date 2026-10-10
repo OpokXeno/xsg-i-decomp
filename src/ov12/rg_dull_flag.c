@@ -18,7 +18,7 @@ void InitRgDullFlag(RgDullFlag *pDull)
 }
 
 /* The assertion text "fTime >= RG_FCONST(0.0)". */
-extern const char D_00A54098[];
+
 
 void RgDullFlagSetDullTime(RgDullFlag *pDull, float fTime)
 {

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/jni.h"
 
 typedef struct JThread JThread;
 
@@ -10,7 +11,6 @@ typedef struct LightVectorCall {
     float z;
 } LightVectorCall;
 
-extern void *classJava_xeno_Light;
 extern const char D_004DC180[];
 extern const char D_004DC188[];
 /* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */

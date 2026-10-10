@@ -313,7 +313,6 @@ int configPlPos(int slot)
 /* Debug menu left/right adjuster: steps *value by step (d-pad) or by
    10 * step (shoulder buttons), wrapping from past max to min and from below
    min to max. Returns nonzero when *value changed. */
-extern int valLR(int *value, int min, int max, int step);
 
 extern void monsSetNoSet(int monsSetNo);
 int configMonsSet(void) {
@@ -649,7 +648,7 @@ int equipEther2(void) {
     return equipEther(8, 0xB);
 }
 
-extern int calcEtherEquipOrg(int charaId, int slot, int etherId);
+
 extern int etherPos[4]; /* screen cursor column per ether sub-slot */
 
 int equipEther(int firstSlot, int lastSlot) {

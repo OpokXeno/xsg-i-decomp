@@ -63,11 +63,97 @@ TOOLS = ROOT / "tools/tu"
 sys.path.insert(0, str(TOOLS))
 import toolchain as tcmod        # noqa: E402
 import tracked_inputs            # noqa: E402
+import data_carve                # noqa: E402
 
 UNITS = ("main", "ov01", "ov02", "ov10", "ov11", "ov12")
 OVERLAYS = ("ov01", "ov02", "ov10", "ov11", "ov12")
 SCAFFOLD_HEADERS = ("include_asm.h", "common.h", "labels.inc", "macro.inc")
 DEFAULT_JOBS = 4
+
+
+def merge_tu_carves(published, current):
+    """Apply current runs without losing published runs or storage identities."""
+    merged = {}
+    for section in sorted(set(published) | set(current)):
+        old_runs = published.get(section) or []
+        new_runs = []
+        for run in current.get(section) or []:
+            entry = dict(run)
+            start, end = map(data_carve.hx, run["range"])
+            aliases = {}
+            old_keys = set()
+            for old in old_runs:
+                old_start, old_end = map(data_carve.hx, old["range"])
+                if start < old_end and old_start < end:
+                    for alias in old.get("c_storage_aliases") or []:
+                        owner = alias["storage_owner"]
+                        owner_start = data_carve.hx(owner["address"])
+                        if not start <= owner_start < owner_start + int(owner["size"]) <= end:
+                            raise SystemExit("configure: a TU override splits a published storage alias: "
+                                             + alias["original_name"])
+                        key = (alias["original_name"], data_carve.hx(alias["address"]))
+                        if key in old_keys:
+                            raise SystemExit("configure: duplicate published storage alias: " + alias["original_name"])
+                        old_keys.add(key)
+                        aliases[key] = alias
+            current_keys = set()
+            for alias in run.get("c_storage_aliases") or []:
+                key = (alias["original_name"], data_carve.hx(alias["address"]))
+                if key in current_keys:
+                    raise SystemExit("configure: duplicate TU storage alias: " + alias["original_name"])
+                current_keys.add(key)
+                aliases[key] = dict(aliases.get(key) or {}, **alias)
+            if aliases:
+                entry["c_storage_aliases"] = [aliases[key] for key in sorted(aliases)]
+                entry["c_owned_symbols"] = sorted(set(run.get("c_owned_symbols") or []) |
+                                                  {alias["storage_owner"]["name"]
+                                                   for alias in aliases.values()})
+            new_runs.append(entry)
+        for old in old_runs:
+            start, end = map(data_carve.hx, old["range"])
+            if not any(start < data_carve.hx(run["range"][1]) and
+                       data_carve.hx(run["range"][0]) < end for run in new_runs):
+                new_runs.append(old)
+        if new_runs:
+            merged[section] = sorted(new_runs, key=lambda run: tuple(map(data_carve.hx, run["range"])))
+    return merged
+
+
+def effective_data_carves(root, build):
+    """Retain published storage evidence and apply the current TU overrides.
+
+    Review and integration stage candidate runs in config/tu/data-carves.json.
+    The object registry also carries guarded overlay allocations and common-tail
+    placements; selecting either file alone can lose one side of that evidence.
+    Keep every run's original provenance and record both input files in the
+    generated registry consumed by the link and split steps.
+    """
+    registry = dict(schema=data_carve.SCHEMA, tus={})
+    inputs = []
+    for role, relative in (("published", data_carve.PUBLIC_REGISTRY),
+                           ("tu_override", data_carve.REGISTRY)):
+        path = root / relative
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        data = json.loads(raw)
+        if data.get("schema") != data_carve.SCHEMA:
+            raise SystemExit(f"configure: {path}: unsupported data-carve schema {data.get('schema')!r}")
+        tus = dict(registry["tus"])
+        for tu, current in (data.get("tus") or {}).items():
+            tus[tu] = merge_tu_carves(tus.get(tu) or {}, current)
+        registry.update(data)
+        registry["tus"] = tus
+        inputs.append(dict(role=role, path=relative, sha256=hashlib.sha256(raw).hexdigest()))
+    registry["configure_inputs"] = inputs
+    path = build / "configure-data-carves.json"
+    content = json.dumps(registry, indent=1) + "\n"
+    if not path.is_file() or path.read_text() != content:
+        build.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(content)
+        os.replace(temporary, path)
+    return path
 
 
 def jobs(root):
@@ -202,8 +288,9 @@ def configure_main(root, build, logs, tc, verbose):
     stage_headers(root, unit_dir)
     # Refresh the published headers before Ninja enumerates its dependencies.
     stage_shared_headers(root, unit_dir)
+    registry = effective_data_carves(root, build)
     check(run([sys.executable, "-B", TOOLS / "ninja_main.py", "--root", root,
-               "--unit-dir", unit_dir, "--carve-registry", root / "config/objects/data-carves.json"],
+               "--unit-dir", unit_dir, "--carve-registry", registry],
               root, log, 120, env=tool_env(tc)),
           "ninja_main.py", log)
     stage_headers(root, unit_dir)          # ninja_main writes its own copies too
@@ -252,9 +339,9 @@ def finish_overlays(root, build, overlays, logs, tc, verbose):
     for unit in overlays:
         unit_dir = build / unit
         stage_headers(root, unit_dir)      # after the dialect pass rewrote labels.inc
-        # A published build uses the committed storage-owner records. Private
-        # campaign sidecars under gates/ can retain older source/object pins.
-        registry = root / "config/objects/data-carves.json"
+        # The same effective ownership drives both the data carve and the
+        # guarded overlay allocation; campaign sidecars under gates/ are unused.
+        registry = effective_data_carves(root, build)
         check(run([sys.executable, "-B", TOOLS / "ninja_ovl.py", unit_dir, unit,
                    "--root", root, "--manifest", unit_dir / "compile-manifest.json",
                    "--bss-record", registry, "--carve-registry", registry],

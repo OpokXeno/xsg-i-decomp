@@ -35,6 +35,189 @@ DEPENDENCY_PACKET_KEYS = frozenset({
 })
 
 
+def _reviewed_declaration_context(db, request):
+    """Bind declaration refinement to a current independent ready receipt."""
+    try:
+        rows = _ro_rows(db, 'SELECT reviewer, report, report_sha256 FROM integration_ready '
+                        'WHERE task_id=? AND submission_id=? AND closed_at IS NULL',
+                        (request['task'], request['submission_id']))
+    except sqlite3.OperationalError as exc:
+        if 'no such table: integration_ready' in str(exc):
+            return None
+        raise
+    if not rows:
+        return None
+    if len(rows) != 1:
+        raise DependencyError('declaration refinement has ambiguous readiness')
+    row = rows[0]
+    report_path = Path(row['report']).resolve()
+    if not report_path.is_file() or sha256_file(report_path) != row['report_sha256']:
+        raise DependencyError('declaration refinement ready report differs from its queue pin')
+    report = read_json(report_path)
+    if report.get('reviewer') != row['reviewer']:
+        raise DependencyError('declaration refinement reviewer differs from its queue pin')
+    matches = []
+    for candidate in report.get('candidates') or []:
+        if (candidate.get('tu') != request['tu_id'] or
+                candidate.get('verdict') != 'ready_to_integrate' or
+                candidate.get('review_complete') is not True):
+            continue
+        for source in candidate.get('sources') or []:
+            if (source.get('task') == request['task'] and
+                    source.get('submission_id') == request['submission_id'] and
+                    (source.get('result') or {}).get('sha256') == request['result_sha256'] and
+                    (source.get('submitted_tu') or {}).get('sha256') == request['tu_source_sha256'] and
+                    source.get('author') != row['reviewer']):
+                matches.append(candidate)
+    if len(matches) != 1:
+        raise DependencyError('declaration refinement lacks one independently reviewed source identity')
+    files = [item for item in matches[0].get('files') or []
+             if item.get('role') == 'tu_source' and item.get('action') == 'patch' and
+             (item.get('base') or {}).get('origin') == 'published' and
+             (item.get('result') or {}).get('sha256') == request['tu_source_sha256']]
+    if len(files) != 1:
+        raise DependencyError('declaration refinement lacks pinned published-before/provider-after files')
+    before, after = files[0]['base'], files[0]['result']
+    for image in (before, after):
+        if not Path(image['copy']).is_file() or sha256_file(image['copy']) != image['sha256']:
+            raise DependencyError('declaration refinement review source copy differs from its pin')
+    return dict(schema='reviewed-owned-declarations/1', queue_db=str(Path(db).resolve()),
+                report_path=str(report_path), report_sha256=row['report_sha256'],
+                reviewer=row['reviewer'], before=before, after=after)
+
+
+def _nominal_struct(raw, tu_edit):
+    code = tu_edit.lexical(raw).strip()
+    match = re.fullmatch(r'typedef\s+struct\s+(\w+)\s*\{(.*)\}\s*(\w+)\s*;', code, re.S)
+    if not match:
+        raise DependencyError('owned refinement requires a named plain struct typedef')
+    identity = (match[1], match[3])
+    members, offset, alignment = {}, 0, 1
+    scalar = {'char': (1, 1), 'signed char': (1, 1), 'unsigned char': (1, 1),
+              'short': (2, 2), 'unsigned short': (2, 2),
+              'int': (4, 4), 'unsigned int': (4, 4), 'float': (4, 4)}
+    for declaration in match[2].split(';'):
+        if not declaration.strip():
+            continue
+        member = re.fullmatch(r'\s*(.*?)\b(\w+)\s*(?:\[\s*(0x[0-9a-fA-F]+|[0-9]+)\s*\])?\s*',
+                              declaration, re.S)
+        if not member:
+            raise DependencyError('owned refinement contains an unsupported member declarator')
+        type_text = ' '.join(member[1].split())
+        pointer = type_text.endswith('*')
+        if pointer:
+            if not re.fullmatch(r'(?:struct\s+)?[A-Za-z_]\w*\s*\*', type_text):
+                raise DependencyError('owned refinement contains an unsupported pointer type')
+            width, align = 4, 4
+        elif type_text in scalar:
+            width, align = scalar[type_text]
+        else:
+            raise DependencyError('owned refinement contains an unsupported scalar type')
+        count = int(member[3], 0) if member[3] else 1
+        if not 0 < count <= 1048576 or member[2] in members:
+            raise DependencyError('owned refinement has an invalid or duplicate member')
+        offset = (offset + align - 1) // align * align
+        members[member[2]] = dict(offset=offset, size=width * count, type=type_text,
+                                   pointer=pointer, array=member[3] is not None)
+        offset += width * count
+        alignment = max(alignment, align)
+    extent = (offset + alignment - 1) // alignment * alignment
+    return identity, members, extent
+
+
+def _validate_nominal_refinement(before, after, tu_edit):
+    old_identity, old_members, old_extent = _nominal_struct(before, tu_edit)
+    new_identity, new_members, new_extent = _nominal_struct(after, tu_edit)
+    if old_identity != new_identity or old_extent != new_extent:
+        raise DependencyError('owned refinement changes nominal identity or EE extent')
+    opaque = [(item['offset'], item['offset'] + item['size'])
+              for name, item in old_members.items() if name.startswith('unmodeled_')]
+    for name, item in old_members.items():
+        if name.startswith('unmodeled_'):
+            continue
+        replacement = new_members.get(name)
+        if (replacement is None or replacement['array'] != item['array'] or
+                (replacement['offset'], replacement['size']) != (item['offset'], item['size'])):
+            raise DependencyError('owned refinement removes or moves an existing modeled member')
+        if replacement['type'] != item['type']:
+            if not (item['type'] in ('int', 'unsigned int') and not item['array'] and
+                    replacement['pointer'] and not replacement['array']):
+                raise DependencyError('owned refinement changes an existing member type')
+    for name, item in new_members.items():
+        if name in old_members and not name.startswith('unmodeled_'):
+            continue
+        if not any(start <= item['offset'] and item['offset'] + item['size'] <= end
+                   for start, end in opaque):
+            raise DependencyError('owned refinement adds a member outside an original opaque span')
+    return dict(identity=list(old_identity), extent=old_extent,
+                before_sha256=sha256_bytes(before.encode()), after_sha256=sha256_bytes(after.encode()))
+
+
+def _refine_reviewed_prelude(current, provider, record, tu_edit):
+    patch = tu_edit.make_patch(current, provider, names=[block.key for block in current.functions()])
+    removals = (patch.get('prelude') or {}).get('remove') or []
+    if not removals:
+        return current, []
+    proof = record.get('reviewed_owned_declarations')
+    if (not isinstance(proof, dict) or not isinstance(proof.get('queue_db'), str) or
+            proof != _reviewed_declaration_context(proof['queue_db'], record['request'])):
+        raise DependencyError('owned prelude refinement is not bound to a current independent review')
+    if (sha256_bytes(record['source_text'].encode('utf-8', errors='surrogateescape')) != record['source_sha256'] or
+            record['source_sha256'] != proof['after']['sha256']):
+        raise DependencyError('owned refinement provider source differs from its reviewed after image')
+    reviewed_before = tu_edit.TU(Path(proof['before']['copy']).read_text(), None)
+    replacements, evidence = [], []
+    old_items = tu_edit.scan(current.prelude())
+    provider_items = tu_edit.scan(provider.prelude())
+    reviewed_items = tu_edit.scan(reviewed_before.prelude())
+    allowed_additions = {row['text'] for row in _provider_prelude_allowlist(record, patch, tu_edit)}
+    declared = set().union(*(tu_edit.decl_keys(item.text(current.prelude())) for item in old_items))
+    for removed in removals:
+        removed_norm = tu_edit._norm(removed)
+        keys = tu_edit.decl_keys(removed)
+        before = [item for item in old_items if tu_edit._norm(item.text(current.prelude())) == removed_norm]
+        prior = [item.text(reviewed_before.prelude()) for item in reviewed_items
+                 if tu_edit._norm(item.text(reviewed_before.prelude())) == removed_norm]
+        after = [item.text(provider.prelude()) for item in provider_items
+                 if item.kind == 'decl' and not item.conditional and tu_edit.decl_keys(item.text(provider.prelude())) == keys]
+        if (len(before) != 1 or len(prior) != 1 or len(after) != 1 or
+                before[0].kind != 'decl' or before[0].conditional):
+            raise DependencyError('owned prelude refinement lacks a unique pinned before/after declaration')
+        old_raw = before[0].text(current.prelude())
+        if old_raw != prior[0]:
+            raise DependencyError('owned refinement original entity differs from its reviewed before image')
+        detail = _validate_nominal_refinement(old_raw, after[0], tu_edit)
+        # A newly specialized pointer may need an additive typedef before the
+        # refined owner. Import only the same declaration the existing provider
+        # selector authorizes; never synthesize a forward typedef or type view.
+        introduced = []
+        _, new_members, _ = _nominal_struct(after[0], tu_edit)
+        for member in new_members.values():
+            if not member['pointer']:
+                continue
+            pointee = member['type'].rstrip('*').strip()
+            if pointee in ('void', 'int') or pointee.startswith('struct ') or ('ordinary', pointee) in declared:
+                continue
+            needed = [item.text(provider.prelude()) for item in provider_items
+                      if item.kind == 'decl' and not item.conditional and
+                      ('ordinary', pointee) in tu_edit.decl_keys(item.text(provider.prelude()))]
+            if len(needed) != 1 or needed[0] not in allowed_additions:
+                raise DependencyError('owned refinement needs an unauthorized prerequisite declaration')
+            _check_declaration_conflicts(current.text, introduced + needed,
+                                         record['request']['task'], 'owned refinement', tu_edit)
+            introduced.extend(needed)
+            declared.update(tu_edit.decl_keys(needed[0]))
+        replacement = '\n\n'.join(introduced + after)
+        replacements.append((before[0].start, before[0].end, replacement))
+        detail['prerequisite_declarations'] = [dict(text=raw, sha256=sha256_bytes(raw.encode()))
+                                              for raw in introduced]
+        evidence.append(dict(detail, review=proof))
+    text = current.text
+    for start, end, replacement in sorted(replacements, reverse=True):
+        text = text[:start] + replacement + text[end:]
+    return tu_edit.TU(text, current.path), evidence
+
+
 def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -303,7 +486,8 @@ def load_dependencies(repo, db, requests, tu_id, target_functions, revision, tu_
             header_text=header_text, header_sha256=header_sha256,
             published_header_text=published_header_text,
             source_sha256=source.get('sha256'), functions=functions, form=form_name,
-            form_source_sha256=request.get('form_source_sha256')))
+            form_source_sha256=request.get('form_source_sha256'),
+            reviewed_owned_declarations=_reviewed_declaration_context(db, request)))
     return records
 
 
@@ -322,7 +506,8 @@ def load_packet_dependencies(repo, db, packets, tu_id, target_functions, revisio
         return []
     requests = []
     for index, packet in enumerate(packets):
-        if not isinstance(packet, dict) or set(packet) != DEPENDENCY_PACKET_KEYS:
+        if not isinstance(packet, dict) or set(packet) not in (
+                DEPENDENCY_PACKET_KEYS, DEPENDENCY_PACKET_KEYS | {'reviewed_owned_declarations'}):
             raise DependencyError(f'dependency packet row {index} does not contain the complete pinned record schema')
         request = packet.get('request')
         if not isinstance(request, dict) or set(request) != DEPENDENCY_REQUEST_KEYS:
@@ -348,6 +533,9 @@ def load_packet_dependencies(repo, db, packets, tu_id, target_functions, revisio
         for field, supplied, verified in comparisons:
             if supplied != verified:
                 raise DependencyError(f'dependency packet row {index} {field} differs from its current immutable pin')
+        if ('reviewed_owned_declarations' in packet and
+                packet['reviewed_owned_declarations'] != record['reviewed_owned_declarations']):
+            raise DependencyError(f'dependency packet row {index} declaration review differs from its current pin')
         supplied_path = packet.get('source_path')
         if not isinstance(supplied_path, str) or Path(supplied_path).resolve() != Path(record['source_path']).resolve():
             raise DependencyError(f'dependency packet row {index} source_path differs from its current immutable pin')
@@ -668,6 +856,7 @@ def compose(base_text, records, tu_edit):
     details = []
     for record in records:
         theirs = tu_edit.TU(record['source_text'], record.get('source_path'))
+        current, refinements = _refine_reviewed_prelude(current, theirs, record, tu_edit)
         names = [block.key for block in current.functions()]
         base_regions = tu_edit.Regions(current, names, 'dependency base')
         candidate_regions = tu_edit.Regions(theirs, names, 'dependency candidate')
@@ -774,7 +963,8 @@ def compose(base_text, records, tu_edit):
                             tu_source_sha256=record['source_sha256'],
                             functions=record['functions'], form=record['form'],
                             declarations=imported_declarations,
-                            prelude_declarations=selected_prelude))
+                            prelude_declarations=selected_prelude,
+                            owned_declaration_refinements=refinements))
     manifest = dict(schema=SCHEMA, tu=records[0]['request']['tu_id'] if records else None,
                     base_sha256=base_sha256, dependencies=details,
                     composed_base_sha256=sha256_bytes(current.text.encode('utf-8', errors='surrogateescape')))

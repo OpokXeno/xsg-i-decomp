@@ -1,14 +1,23 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_packet.h"
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
+
 typedef struct Matrix { float elements[16]; } Matrix;
+
 static int _draw3D = 0;
+
 static int _nEffect2D = 0;
+
 static int eft_5 = -1;
-static unsigned char charID_3;
+
+static int charID_3;
+
 static int eftCate_4;
+
 static int _nowImage;
 
 /*
@@ -16,6 +25,7 @@ static int _nowImage;
  * and svGetImageItem indexes; only its address is ever taken in this
  * allocation, so its fields stay unmodeled.
  */
+
 typedef struct SvImageItem {
     unsigned char unmodeled_00[0x24];
 } SvImageItem;
@@ -25,30 +35,23 @@ typedef struct SvImageItem {
  * allocation) followed by 0x100 SvImageItem entries (0x1C + 0x100*0x24 =
  * 0x241C, svImageListCreate's own clear size).
  */
+
 typedef struct SvImageList {
     unsigned char unmodeled_header[0x1C];
     SvImageItem items[0x100];
 } SvImageList;
 
-extern SvImageList _imageList;
-
-void *svGetImageItem(int index) {
-    return &_imageList.items[index];
-}
-
-void svImageListCreate(void) {
-    memset(&_imageList, 0, sizeof(SvImageList));
-}
+SvImageList _imageList = {0};
 
 /*
  * One 0x24-byte entry of an image mapper's item table: only the leading
  * dword svImageListDestroy clears is modeled.
  */
+
 typedef struct SvImageMapperItem {
     int used; /* 0x00, cleared when non-zero */
     unsigned char unmodeled_04[0x24 - 4];
 } SvImageMapperItem;
-
 
 /*
  * The image-mapper table has a 0x1C-byte header followed by 0x100 entries
@@ -56,12 +59,21 @@ typedef struct SvImageMapperItem {
  * the active word is at +0x08, the type byte at +0x0E, and the resource
  * name pointer at +0x20.
  */
+
 typedef struct SvTypeListEntry {
-    unsigned char unmodeled_00[8];
+    const void *data;
+    unsigned char unmodeled_04[4];
     int used;
-    unsigned char unmodeled_0C[2];
+    short resourceKind;
     unsigned char type;
-    unsigned char unmodeled_0F[0x11];
+    unsigned char unmodeled_0F[3];
+    unsigned short basePointer;
+    unsigned short bitsPerPixel;
+    unsigned short bufferWidthPixels;
+    unsigned short width;
+    unsigned short height;
+    unsigned short textureWidthExponent;
+    unsigned short textureHeightExponent;
     const char *name;
 } SvTypeListEntry;
 
@@ -83,17 +95,226 @@ typedef struct SvReferenceImageSlot {
 
 /* _imageMapper's symbol-table size is 40 mapper records followed by these
  * forty two-word reference-image slots. */
+
 typedef struct SvImageMapperStorage {
     SvTypeList typeLists[40];
     SvReferenceImageSlot referenceImages[40];
 } SvImageMapperStorage;
 
 /* Forty 0x241C-byte mapper records followed by forty reference-image slots. */
-SvImageMapperStorage _imageMapper = {0};
-Matrix _defMatLcMod = {{0.0f}};
-Matrix _defMatLn = {{0.0f}};
-SvImageList _imageList = {0};
 
+SvImageMapperStorage _imageMapper = {0};
+
+Matrix _defMatLcMod = {{0.0f}};
+
+Matrix _defMatLn = {{0.0f}};
+
+int strcmp(const char *, const char *);
+
+/*
+ * Only `data`, `destAddress` and `format` are evidenced (svLoadClut's three
+ * field reads); the bytes between `data` and `destAddress` are an explicit
+ * unmodeled span rather than an invented field.
+ */
+
+typedef struct ClutUploadRequest {
+    void *data;                     /* 0x00, CLUT pixel data source address */
+    unsigned char unmodeled_04[0x0E];
+    unsigned short destAddress;     /* 0x12, GS local CLUT destination */
+    unsigned short format;          /* 0x14, 8 => 256-entry CLUT, else 16-entry */
+} ClutUploadRequest;
+
+/*
+ * Parameter roles as the SDK body (main 0x0020b208) packs them: GS
+ * BITBLTBUF DBP/DPSM/DBW from basePointer/pixelFormat/bufferWidth, TRXPOS
+ * DSAX/DSAY from x/y, TRXREG RRW/RRH from width/height, then `qwc`
+ * quadwords of `image` sent by reference.
+ */
+
+extern void sceVif1PkRefLoadImage(XglPacket *packet,
+                                  unsigned short basePointer,
+                                  unsigned char pixelFormat,
+                                  unsigned short bufferWidth,
+                                  const void *image, unsigned int qwc,
+                                  unsigned int x, unsigned int y,
+                                  unsigned int width, unsigned int height);
+
+s16 svLoadImageList(SvTypeList *typeList);
+
+static int svImageListAlloc(int typeListAddr);
+
+/*
+ * One svAddScript2 sub-record, at +0x1C of a 0x24-byte slot of the type
+ * list's item array. Only the fields this function itself writes are
+ * modeled, at their byte offset from this sub-record's own base: `codePtr`
+ * (+0x00, the script's own +0xC0 address), `active` (+0x08, always 1),
+ * `kind` (+0x0C, always 5, matching this function's own "script" name),
+ * `id` (+0x0E, the script's own +0xA halfword), two cleared halfwords
+ * (+0x18/+0x1A) and `dataPtr` (+0x20, the script's own +0x14 address).
+ * +0x20 (slot +0x3C) lands past the slot's own 0x24-byte stride, into the
+ * next slot's leading bytes -- evidenced by the original bytes, not
+ * treated as a bug.
+ */
+
+typedef struct SvScriptSlot {
+    void *codePtr;                  /* 0x00 */
+    unsigned char unmodeled_04[4];
+    int active;                      /* 0x08 */
+    short kind;                       /* 0x0C */
+    short id;                          /* 0x0E */
+    unsigned char unmodeled_10[8];
+    short clearedA;                     /* 0x18 */
+    short clearedB;                      /* 0x1A */
+    unsigned char unmodeled_1C[4];
+    void *dataPtr;                        /* 0x20 */
+} SvScriptSlot;
+
+int svAnalyzeChunk(SvTypeList *typeList, void *chunk);
+
+static SvTypeList *svGetTypeList(int type);
+
+void svImageListDestroy(SvTypeList *typeList);
+
+/*
+ * SGsSendPacket's own address precedes SGsPacket's definition (below, before
+ * SGsInitGifPacket, outside this allocation): the same four fields, at the
+ * same evidenced offsets that definition documents, restated here under a
+ * local tag so this allocation adds text only next to its own function.
+ */
+
+typedef struct SGsPacketReset {
+    int count;               /* 0x0 */
+    int tagIndex;             /* 0x4 */
+    int loopCount;             /* 0x8 */
+    void *base;               /* 0xC, starts at the scratchpad (0x70000000) */
+} SGsPacketReset;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+
+extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
+
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
+                                    int count);
+
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+
+extern void sceVif1PkTerminate(XglPacket *packet);
+
+#define SEF_CLIP_VIEW_VOLUME_OFFSET 0x4F0
+
+/*
+ * sefDrawSchedulerEffect (still INCLUDE_ASM here) calls sefClipViewVolume and
+ * branches on the returned v0, and sefClipViewVolume itself ends in a tail
+ * jump to sefClipViewVolumeA (no jal, so its result is whatever
+ * sefClipViewVolumeA returns): both are declared non-void here.
+ */
+
+static int sefClipViewVolumeA(void *scheduler);
+
+static void sefInitClipViewVolume(void *view);
+
+static void sefDrawSchedulerEffect(int schedulerIndex);
+
+extern void SGsSetZTestEnv(int enable);
+
+extern char *srsAnalyzeEftNo(int effectId, int *charId,
+                            int *effectCategory);
+
+/*
+ * One 0xab0-byte record of the scheduler table sefGetScheduler returns
+ * (src/main/sef.h, "The original scheduler table..."). Only the three
+ * fields this function reads are named; sefIsDeadSchduler (sef.c) reads the
+ * same in-use word raw through its own TU's SchedulerState, which this TU
+ * cannot include (TU-local elsewhere), so this is a separate, narrower view
+ * of the same bytes.
+ */
+
+typedef struct SchedulerRecord {
+    unsigned char unmodeled_000[0x6b0];
+    int inUse;                            /* +0x6b0 */
+    unsigned char unmodeled_6b4[0xa78 - 0x6b4];
+    short effectId;                       /* +0xa78 */
+    unsigned char unmodeled_a7a[0xa8c - 0xa7a];
+    int flags;                            /* +0xa8c */
+    unsigned char unmodeled_a90[0xab0 - 0xa90];
+} SchedulerRecord;
+
+/* sef.c (main/tu211) returns unsigned char *; this prototype
+ * preserves that return type across the call. */
+
+extern unsigned char *sefGetScheduler(void);
+
+#define SCHEDULER_COUNT 0x80
+
+/* Draws the alters whose group (+0x0E) equals layer. */
+
+void sdvDrawAlters(int layer);
+
+extern int _scMslCate;
+
+void MEfObjExec2nd(void);
+
+static void svDrawSchedulerParticle(void);
+
+/*
+ * The SGs* family (SGsInitGifPacket, SGsOpenGifPacket, SGsCloseGifPacket,
+ * SGsAddReg, SGsAddGifXYZ2, SGsSendPacket and others in this TU) shares one
+ * accumulator: a growing array of 16-byte GIF records at `base`, `count`
+ * records long. SGsOpenGifPacket/SGsCloseGifPacket/SGsAddReg (still
+ * INCLUDE_ASM here, read for this evidence per docs/naming.md) show that
+ * `tagIndex` is the record index SGsOpenGifPacket saves so
+ * SGsCloseGifPacket can patch the GIFtag it opened, and `loopCount` is
+ * OR-ed, unshifted, into that tag's low (NLOOP) bits by SGsCloseGifPacket;
+ * both functions here leave it at 1.
+ */
+
+/*
+ * One 128-bit GIF packet record. The SGs* writers fill it as a whole
+ * quadword (sq), as two doublewords (sd at 0x0/0x8: a register value and
+ * its A+D address) or as four words (sw, SGsAddGifXYZ2).
+ */
+
+typedef union SGsGifRecord {
+    Quadword quad;
+    unsigned long long dword[2];
+    int word[4];
+    unsigned short halfword[8];
+    float floatValue[4];
+} SGsGifRecord;
+
+typedef struct SGsPacket {
+    int count;              /* 0x0 */
+    int tagIndex;           /* 0x4 */
+    int loopCount;          /* 0x8 */
+    SGsGifRecord *base;     /* 0xC, starts at the scratchpad (0x70000000) */
+} SGsPacket;
+
+typedef struct SvImageParameter {
+    unsigned long long texture;
+    float width;
+    float height;
+} SvImageParameter;
+
+extern const char D_004DBA50[];
+
+extern const char D_004DBA58[];
+
+/*
+ * GS XYZF2 vertex: X/Y are (value*16 + screen offset), Z and F are the
+ * raw depth and fog values -- the PS2 SDK's own XYZ2/XYZF2 naming.
+ */
+
+#include "sv_get_image_item.h"
+
+void *svGetImageItem(int index) {
+    return &_imageList.items[index];
+}
+
+void svImageListCreate(void) {
+    memset(&_imageList, 0, sizeof(SvImageList));
+}
 
 void svImageListDestroy(SvTypeList *typeList)
 {
@@ -133,7 +354,6 @@ static int svImageListAlloc(int typeListAddr)
     return -1;
 }
 
-
 static SvTypeList * svGetTypeList(int type) {
     return &_imageMapper.typeLists[type];
 }
@@ -159,9 +379,25 @@ static void *svGetImageListItemSub(int type, unsigned int flags)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetImageListItem);
+void *svGetImageListItem(int type, unsigned int flags)
+{
+    int typeIndex;
 
-int strcmp(const char *, const char *);
+    if ((flags & 0x100) != 0) {
+        typeIndex = 0;
+    } else if ((flags & 0x200) != 0) {
+        typeIndex = type;
+    } else if ((flags & 0x400) != 0) {
+        typeIndex = type;
+    } else if ((flags & 0x800) != 0) {
+        typeIndex = 15;
+    } else if ((flags & 0x1000) != 0) {
+        typeIndex = type;
+    } else {
+        typeIndex = 14;
+    }
+    return svGetImageListItemSub(typeIndex, flags);
+}
 
 static SvTypeListEntry *svGetResFromName(const char *name)
 {
@@ -184,35 +420,99 @@ static SvTypeListEntry *svGetResFromName(const char *name)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetPrmFromName);
+SvImageParameter *svGetPrmFromName(const char *baseName,
+                                   SvImageParameter *parameter)
+{
+    char resourceName[128];
+    SvTypeListEntry *bitmap;
+    SvTypeListEntry *clut;
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svLoadTexture);
+    sprintf(resourceName, D_004DBA50, baseName);
+    bitmap = svGetResFromName(resourceName);
+    sprintf(resourceName, D_004DBA58, baseName);
+    clut = svGetResFromName(resourceName);
 
-/*
- * Only `data`, `destAddress` and `format` are evidenced (svLoadClut's three
- * field reads); the bytes between `data` and `destAddress` are an explicit
- * unmodeled span rather than an invented field.
- */
-typedef struct ClutUploadRequest {
-    void *data;                     /* 0x00, CLUT pixel data source address */
-    unsigned char unmodeled_04[0x0E];
-    unsigned short destAddress;     /* 0x12, GS local CLUT destination */
-    unsigned short format;          /* 0x14, 8 => 256-entry CLUT, else 16-entry */
-} ClutUploadRequest;
+    if (bitmap != 0) {
+        if (clut != 0) {
+            unsigned long long baseBits;
+            unsigned long long dimensionBits;
+            unsigned long long formatBits;
+            unsigned long long clutBits;
+            int pixelFormat;
+            unsigned short clutBasePointer;
+            unsigned short bitsPerPixel;
+            float scaledWidth;
 
-/*
- * Parameter roles as the SDK body (main 0x0020b208) packs them: GS
- * BITBLTBUF DBP/DPSM/DBW from basePointer/pixelFormat/bufferWidth, TRXPOS
- * DSAX/DSAY from x/y, TRXREG RRW/RRH from width/height, then `qwc`
- * quadwords of `image` sent by reference.
- */
-extern void sceVif1PkRefLoadImage(XglPacket *packet,
-                                  unsigned short basePointer,
-                                  unsigned char pixelFormat,
-                                  unsigned short bufferWidth,
-                                  const void *image, unsigned int qwc,
-                                  unsigned int x, unsigned int y,
-                                  unsigned int width, unsigned int height);
+            clutBasePointer = clut->basePointer;
+            baseBits = (unsigned long long)bitmap->basePointer |
+                       0x2000000000000000ULL;
+            dimensionBits =
+                ((unsigned long long)bitmap->textureWidthExponent << 26) |
+                0x400000000ULL;
+            pixelFormat = 20;
+            bitsPerPixel = bitmap->bitsPerPixel;
+            if (bitsPerPixel == 8) {
+                pixelFormat = 19;
+            }
+            formatBits =
+                ((unsigned long long)pixelFormat << 20) |
+                ((unsigned long long)(bitmap->bufferWidthPixels >> 6) << 14);
+            clutBits =
+                ((unsigned long long)bitmap->textureHeightExponent << 30) |
+                ((unsigned long long)clutBasePointer << 37);
+            scaledWidth = bitmap->width * 0.01f;
+            parameter->height = bitmap->height * 0.01f;
+            parameter->width = scaledWidth;
+            parameter->texture = (baseBits | formatBits) |
+                                 (dimensionBits | clutBits);
+            return parameter;
+        }
+    }
+
+    memset(parameter, 0, 16);
+    return 0;
+}
+
+void svLoadTexture(SvTypeListEntry *image)
+{
+    XglPacket *packet;
+    unsigned short basePointer;
+    unsigned short height;
+    unsigned short width;
+    unsigned short bitsPerPixel;
+
+    basePointer = image->basePointer;
+    height = image->height;
+    width = image->width;
+    packet = xglPacketGetCurrent();
+    bitsPerPixel = image->bitsPerPixel;
+
+    if (bitsPerPixel == 8) {
+        unsigned short bufferWidth;
+        int qwc;
+
+        bufferWidth = image->bufferWidthPixels;
+        qwc = bufferWidth * height;
+        if (qwc < 0) {
+            qwc += 15;
+        }
+        sceVif1PkRefLoadImage(packet, basePointer, 19,
+                              bufferWidth >> 6, image->data,
+                              (unsigned int)(qwc >> 4), 0, 0, width, height);
+    } else {
+        unsigned short bufferWidth;
+        int qwc;
+
+        bufferWidth = image->bufferWidthPixels;
+        qwc = bufferWidth * height;
+        if (qwc < 0) {
+            qwc += 15;
+        }
+        sceVif1PkRefLoadImage(packet, basePointer, 20,
+                              bufferWidth >> 6, image->data,
+                              (unsigned int)(qwc >> 4), 0, 0, width, height);
+    }
+}
 
 void svLoadClut(ClutUploadRequest *clut)
 {
@@ -228,8 +528,6 @@ void svLoadClut(ClutUploadRequest *clut)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svLoadImageList);
-
-s16 svLoadImageList(SvTypeList *typeList);
 
 s16 svLoadMapperList(void)
 {
@@ -272,33 +570,6 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddClut);
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddModel);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svAddScript);
-
-int svImageListAlloc();
-
-/*
- * One svAddScript2 sub-record, at +0x1C of a 0x24-byte slot of the type
- * list's item array. Only the fields this function itself writes are
- * modeled, at their byte offset from this sub-record's own base: `codePtr`
- * (+0x00, the script's own +0xC0 address), `active` (+0x08, always 1),
- * `kind` (+0x0C, always 5, matching this function's own "script" name),
- * `id` (+0x0E, the script's own +0xA halfword), two cleared halfwords
- * (+0x18/+0x1A) and `dataPtr` (+0x20, the script's own +0x14 address).
- * +0x20 (slot +0x3C) lands past the slot's own 0x24-byte stride, into the
- * next slot's leading bytes -- evidenced by the original bytes, not
- * treated as a bug.
- */
-typedef struct SvScriptSlot {
-    void *codePtr;                  /* 0x00 */
-    unsigned char unmodeled_04[4];
-    int active;                      /* 0x08 */
-    short kind;                       /* 0x0C */
-    short id;                          /* 0x0E */
-    unsigned char unmodeled_10[8];
-    short clearedA;                     /* 0x18 */
-    short clearedB;                      /* 0x1A */
-    unsigned char unmodeled_1C[4];
-    void *dataPtr;                        /* 0x20 */
-} SvScriptSlot;
 
 static int svAddScript2(int typeListAddr, void *script)
 {
@@ -343,8 +614,6 @@ static void svInitRefImage(void)
     }
 }
 
-int svAnalyzeChunk(SvTypeList *typeList, void *chunk);
-
 void svAddImageMapper(int type, int width, void *chunk, int height) {
     SvTypeList *typeList;
     SvTypeList *header;
@@ -360,10 +629,6 @@ void svAddImageMapper(int type, int width, void *chunk, int height) {
     svAnalyzeChunk(typeList, chunk);
 }
 
-
-static SvTypeList *svGetTypeList(int type);
-void svImageListDestroy(SvTypeList *typeList);
-
 void svDeleteImageMapper(int type)
 {
     SvTypeList *typeList = svGetTypeList(type);
@@ -373,34 +638,33 @@ void svDeleteImageMapper(int type)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDeleteImageMapperID);
+void svDeleteImageMapperID(int id)
+{
+    int index;
 
-INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDeleteImageMapperData);
+    for (index = 2; index < 14; index++) {
+        if (_imageMapper.typeLists[index].width == id) {
+            svImageListDestroy(&_imageMapper.typeLists[index]);
+            return;
+        }
+    }
+}
+
+void svDeleteImageMapperData(int data)
+{
+    int index;
+
+    for (index = 2; index < 14; index++) {
+        if (_imageMapper.typeLists[index].height == data) {
+            svImageListDestroy(&_imageMapper.typeLists[index]);
+            return;
+        }
+    }
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svFileLoadScript);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svGetScript);
-
-/*
- * SGsSendPacket's own address precedes SGsPacket's definition (below, before
- * SGsInitGifPacket, outside this allocation): the same four fields, at the
- * same evidenced offsets that definition documents, restated here under a
- * local tag so this allocation adds text only next to its own function.
- */
-typedef struct SGsPacketReset {
-    int count;               /* 0x0 */
-    int tagIndex;             /* 0x4 */
-    int loopCount;             /* 0x8 */
-    void *base;               /* 0xC, starts at the scratchpad (0x70000000) */
-} SGsPacketReset;
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
-                                    int count);
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-extern void sceVif1PkTerminate(XglPacket *packet);
 
 void SGsSendPacket(SGsPacketReset *packet)
 {
@@ -435,17 +699,6 @@ static void sefInitClipViewVolume(void *view) {
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", sefClipViewVolumeA);
 
-#define SEF_CLIP_VIEW_VOLUME_OFFSET 0x4F0
-
-/*
- * sefDrawSchedulerEffect (still INCLUDE_ASM here) calls sefClipViewVolume and
- * branches on the returned v0, and sefClipViewVolume itself ends in a tail
- * jump to sefClipViewVolumeA (no jal, so its result is whatever
- * sefClipViewVolumeA returns): both are declared non-void here.
- */
-static int sefClipViewVolumeA(void *scheduler);
-static void sefInitClipViewVolume(void *view);
-
 int sefClipViewVolume(void *scheduler, void *effect)
 {
     sefInitClipViewVolume((unsigned char *)effect + SEF_CLIP_VIEW_VOLUME_OFFSET);
@@ -454,28 +707,6 @@ int sefClipViewVolume(void *scheduler, void *effect)
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", sefDrawParticle2D);
 
-/*
- * svRotMatrixScale: for each of the four source rows (effect-record offsets
- * +0x00/+0x10/+0x20/+0x30) forms row.x*vf13 + row.y*vf14 + row.z*vf15 through
- * the VU0 accumulator (vf13/vf14/vf15 are caller-established persistent VU0
- * columns, read only -- docs/ee-reference/vu.md, "Persistent VF state and
- * call boundaries"), adds row.w*vf8 (vf8 is the source record's contribution
- * vector at +0xC0), scales the result row i by scale-vector lane i (the
- * source record's scale vector at +0x100, one lane per row across every
- * output lane), and stores the four transformed rows into dst. All six
- * source loads precede all four destination stores, so an aliased
- * destination cannot clobber a not-yet-loaded source row. The source
- * effect record's full layout beyond these three evidenced sub-vectors is
- * not yet recovered, so it is addressed here by byte offset instead of an
- * invented, padded struct (AGENTS.md, "Source and acceptance").
- *
- * The block ends its last COP2 store with an explicit trailing `nop`: cc1's
- * bare `j $31` epilogue (a leaf function, no frame) leaves its delay slot to
- * the assembler, which in reorder mode fills it by moving the preceding
- * `sqc2`. The original leaves that slot an unfilled `jr $31; nop`, so the
- * block ends with a `nop` for the assembler to move instead, restoring the
- * original instruction order and extent
- */
 static void svRotMatrixScale(void *dst, const void *src)
 {
     const char *base = (const char *)src;
@@ -529,36 +760,6 @@ INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", sefDrawParticleListCf);
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", sefDrawSchedulerEffect);
 
-static void sefDrawSchedulerEffect(int schedulerIndex);
-extern void SGsSetZTestEnv(int enable);
-extern int srsAnalyzeEftNo(short effectId, unsigned char *charId,
-                            int *effectCategory);
-
-/*
- * One 0xab0-byte record of the scheduler table sefGetScheduler returns
- * (src/main/sef.h, "The original scheduler table..."). Only the three
- * fields this function reads are named; sefIsDeadSchduler (sef.c) reads the
- * same in-use word raw through its own TU's SchedulerState, which this TU
- * cannot include (TU-local elsewhere), so this is a separate, narrower view
- * of the same bytes.
- */
-typedef struct SchedulerRecord {
-    unsigned char unmodeled_000[0x6b0];
-    int inUse;                            /* +0x6b0 */
-    unsigned char unmodeled_6b4[0xa78 - 0x6b4];
-    short effectId;                       /* +0xa78 */
-    unsigned char unmodeled_a7a[0xa8c - 0xa7a];
-    int flags;                            /* +0xa8c */
-    unsigned char unmodeled_a90[0xab0 - 0xa90];
-} SchedulerRecord;
-
-/* sef.c (main/tu211) defines this returning unsigned char *; declare it with
- * that exact type and cast at the one call site so a later cross-TU
- * publication of the real prototype cannot conflict with this one. */
-extern unsigned char *sefGetScheduler(void);
-
-#define SCHEDULER_COUNT 0x80
-
 static void svDrawSchedulerBlk(int eftCate, int eftNo)
 {
     short effectId;
@@ -587,20 +788,12 @@ static void svDrawSchedulerBlk(int eftCate, int eftNo)
     } while (schedulerIndex < SCHEDULER_COUNT);
 }
 
-
-/* Draws the alters whose group (+0x0E) equals layer. */
-void sdvDrawAlters(int layer);
-
 static void svDrawAlters(int layer)
 {
     if (_draw3D == 0) {
         sdvDrawAlters(layer);
     }
 }
-
-extern int _scMslCate;
-
-void MEfObjExec2nd(void);
 
 static void svDrawMissile(int category)
 {
@@ -612,9 +805,6 @@ static void svDrawMissile(int category)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDrawSchedulerParticle);
-
-
-static void svDrawSchedulerParticle(void);
 
 void svDrawScheduler2D(void)
 {
@@ -634,38 +824,6 @@ void svDrawScheduler(void)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/sv_get_image_item", svDrawScheduler3D);
-
-/*
- * The SGs* family (SGsInitGifPacket, SGsOpenGifPacket, SGsCloseGifPacket,
- * SGsAddReg, SGsAddGifXYZ2, SGsSendPacket and others in this TU) shares one
- * accumulator: a growing array of 16-byte GIF records at `base`, `count`
- * records long. SGsOpenGifPacket/SGsCloseGifPacket/SGsAddReg (still
- * INCLUDE_ASM here, read for this evidence per docs/naming.md) show that
- * `tagIndex` is the record index SGsOpenGifPacket saves so
- * SGsCloseGifPacket can patch the GIFtag it opened, and `loopCount` is
- * OR-ed, unshifted, into that tag's low (NLOOP) bits by SGsCloseGifPacket;
- * both functions here leave it at 1.
- */
-
-/*
- * One 128-bit GIF packet record. The SGs* writers fill it as a whole
- * quadword (sq), as two doublewords (sd at 0x0/0x8: a register value and
- * its A+D address) or as four words (sw, SGsAddGifXYZ2).
- */
-typedef union SGsGifRecord {
-    Quadword quad;
-    unsigned long long dword[2];
-    int word[4];
-    unsigned short halfword[8];
-    float floatValue[4];
-} SGsGifRecord;
-
-typedef struct SGsPacket {
-    int count;              /* 0x0 */
-    int tagIndex;           /* 0x4 */
-    int loopCount;          /* 0x8 */
-    SGsGifRecord *base;     /* 0xC, starts at the scratchpad (0x70000000) */
-} SGsPacket;
 
 void SGsInitGifPacket(SGsPacket *packet)
 {
@@ -707,10 +865,6 @@ void SGsAddGifRGBA(SGsPacket *packet, Quadword rgba)
     packet->count++;
 }
 
-/*
- * GS XYZF2 vertex: X/Y are (value*16 + screen offset), Z and F are the
- * raw depth and fog values -- the PS2 SDK's own XYZ2/XYZF2 naming.
- */
 void SGsAddGifXYZ2(SGsPacket *packet, int x, int y, int z, int fog)
 {
     packet->base[packet->count].word[0] = x * 0x10 + 0x7000;
@@ -744,3 +898,7 @@ void SGsAddGifUV(SGsPacket *packet, int u_coordinate, int v_coordinate)
         (unsigned short)((unsigned int)v_coordinate << 4);
     packet->count++;
 }
+
+const char D_004DBA50[8] = {'%', 's', '.', 'b', 'm', 'p', '\0', '\0'};
+
+const char D_004DBA58[8] = {'%', 's', '.', 'c', 'l', 't', '\0', '\0'};

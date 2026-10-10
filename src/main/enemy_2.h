@@ -165,6 +165,18 @@ typedef struct Actor {
     u8 number;
     u8 unmodeled_81[0xec - 0x81];
     int command_code;
+    unsigned char unmodeled_f0[0x6f4 - 0xf0];
+    float motion_frame;               /* +0x6F4 */
+    float motion_speed;               /* +0x6F8 */
+    float motion_start;               /* +0x6FC */
+    float motion_end;                 /* +0x700 */
+    unsigned short motion_number;     /* +0x704 */
+    short motion_progress;            /* +0x706 */
+    unsigned char unmodeled_708[0x712 - 0x708];
+    short motion_state;               /* +0x712 */
+    unsigned char unmodeled_714[0x9ee - 0x714];
+    short look_at_target;             /* +0x9EE */
+    unsigned char unmodeled_9f0[0xa70 - 0x9f0];
 } Actor;
 
 /* A deliberately narrow TU-local view of the actor slot byte. The immutable
@@ -333,6 +345,20 @@ typedef struct EnemyTurn {
 #define ENEMY_TURN_FLAGS(work) \
     (*(unsigned int *)((unsigned char *)(work) + ENEMY_TURN_FLAGS_OFFSET))
 
+/* Enemy_Command_Sac_Move's state begins at +0x3800 of the opaque EnemyWork
+ * entry: the original stores two four-float vectors at +0x3800/+0x3810 and
+ * frame/duration halfwords at +0x3820/+0x3822 (0x002d33b0..0x002d33f4). */
+typedef struct EnemySacMove {
+    Vector4 start;
+    Vector4 target;
+    short frame;
+    short duration;
+} EnemySacMove;
+
+#define ENEMY_SAC_MOVE_OFFSET 0x3800
+#define ENEMY_SAC_MOVE(work) \
+    ((EnemySacMove *)((unsigned char *)(work) + ENEMY_SAC_MOVE_OFFSET))
+
 /* The bit this function sets in ENEMY_TURN_FLAGS to ask for a timed turn. */
 #define ENEMY_TURN_REQUEST 0x10000
 
@@ -427,11 +453,26 @@ extern void Enemy_Pause(Actor *actor);
 typedef unsigned int GameLoopStateWords[];
 extern GameLoopStateWords GameLoopState;
 
+/* The ladder command addresses sixteen entries at the end of GameLoopState:
+ * type bytes at +0x29fa0, mode bytes at +0x29fb0 and scales at +0x29fc0.
+ * Their total extent ends at the original 0x2a030-byte GameLoopState symbol. */
+typedef struct GameLoopMapState {
+    unsigned char unmodeled_00[0x29fa0];
+    signed char ladder_type[16];
+    signed char ladder_mode[16];
+    float ladder_scale[16];
+} GameLoopMapState;
+
 /* Sibling of this TU, still original bytes (INCLUDE_ASM above): converts a
  * command's target selector into the enepc/Actor index Enemy_Command_Target
  * below stores, the same numbering ACT_create hands out into Actor.number
  * (+0x80). */
 extern int Get_ActorNumber(int target);
 extern void Check_Encount(Actor *actor, int enable, signed char command);
+extern Actor actor[64];
+extern int ACT_setMotion2(Actor *actor, int motion, int flags);
+extern int Actor_LookAt_Set(Actor *actor, signed char duration,
+                            const Vector4 *target_position);
+extern int Actor_LookAt_Release(Actor *actor, signed char duration);
 
 #endif /* SRC_MAIN_ENEMY_2_H */

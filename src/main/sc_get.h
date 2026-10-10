@@ -7,6 +7,25 @@
 
 typedef struct ScriptTask ScriptTask;
 
+typedef struct ScriptPosition {
+    unsigned long long words[2];
+} ScriptPosition;
+
+/* The constant position scCreateTask seeds every task with: (0, 0, 0, 1). */
+typedef union ScriptZeroPosition {
+    unsigned long long words[2];
+    float components[4];
+} ScriptZeroPosition;
+
+typedef struct ScriptTaskParameters {
+    unsigned char unmodeled_00[4];
+    int scheduler_word;
+    unsigned char unmodeled_08[0x0C];
+    short effect_no;
+    short scheduler_halfword;
+    unsigned char unmodeled_18[0x0C];
+} ScriptTaskParameters;
+
 /*
  * One slot of the script VM's task table.  The table is `_scriptWork`, indexed
  * as `script * 1104 + task * 128`, with at most 8 task slots per script
@@ -75,14 +94,15 @@ typedef struct ScriptTask ScriptTask;
  */
 struct ScriptTask {
     unsigned short flags;             /* +0x00 */
-    unsigned char unmodeled_02[6];    /* +0x02 */
+    unsigned char unmodeled_02[2];    /* +0x02 */
+    short task_no;                    /* +0x04 */
+    short script_no;                  /* +0x06 */
     int script_pc[6];                 /* +0x08 */
-    unsigned char unmodeled_20[36];   /* +0x20 */
-    short effect_no;                  /* +0x44 */
-    unsigned char unmodeled_46[14];   /* +0x46 */
+    ScriptPosition initial_position; /* +0x20..+0x2F */
+    ScriptTaskParameters parameters; /* +0x30..+0x53, copied as one call block */
     short branch_depth;               /* +0x54 */
     unsigned short effect_scheduler;  /* +0x56 */
-    unsigned char unmodeled_58[2];    /* +0x58 */
+    short slot_no;                    /* +0x58, scCreateTask stores its slot index */
     unsigned short wait_mode;         /* +0x5A */
     short missile_active;             /* +0x5C */
     /* scWAITCNTScript's mode-1 frame count is evidenced at +0x5E. */
@@ -120,10 +140,11 @@ struct ScriptRecord {
     ScriptTask tasks[8]; /* eight 0x80-byte task slots */
     int *dataTable; /* +0x400 */
     int registers[16]; /* +0x404, register selectors 0..15 */
-    unsigned short unmodeled_444;
+    short dataIndex; /* +0x444: scCreateScript's mapper result */
     short eventValue; /* +0x446: returned by scREVEScript */
-    unsigned short unmodeled_448;
-    unsigned char unmodeled_44A[6];
+    short activeTasks; /* +0x448: number of active task slots */
+    short event; /* +0x44A: event number matched by scCreateScript */
+    unsigned char unmodeled_44C[4];
 };
 
 extern ScriptRecord _scriptWork[16];

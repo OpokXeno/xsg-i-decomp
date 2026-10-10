@@ -48,10 +48,10 @@ void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction, float scale)
     RgGeomPointAddForce(geometry, force);
 }
 
-extern void RgGeomPointGetVel(RgGeomPoint *point, RgVector velocity);
+
 extern void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity);
 extern float RgGeomRobotGetRotVel(const RgGeom *geom);
-extern void RgGeomRobotSetRotVel(RgGeom *geom, float rotVel);
+
 extern void XrgScaleVector(RgVector destination, RgVector source,
                            float scale);
 

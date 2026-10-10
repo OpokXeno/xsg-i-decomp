@@ -1,9 +1,56 @@
 #include "common.h"
+
 #include "stage_2.h"
 
 const char D_004DC208[8] = "peer";
 
-INCLUDE_ASM("asm/main/nonmatchings/stage_2", Java_xeno_Stage_start__ILjava_lang_Object_);
+
+void nmlModelSetMapLastInit(void);
+
+void nmlModelSetBackBufferClear(void);
+
+void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
+                                                 StageNativeSlot *arguments,
+                                                 unsigned int *failure_result)
+{
+    SceneClass *scene_class = classJava_xeno_Stage;
+    SceneObject object = arguments[0].object;
+    JavaField *peer_field;
+    StagePeer *peer;
+    StageStringStorage *storage;
+    SceneString *name;
+    SceneMethod *method;
+    StageThread *peer_thread;
+    StageJavaString *method_object;
+
+    if (JNI_isInstanceOf(object, scene_class) == 0) {
+        *failure_result = 0;
+        return;
+    }
+
+    peer_field = lookupClassField(scene_class,
+                                  loadConstString(D_004DC208, -1), 0);
+    peer = (StagePeer *)*(SceneObject *)(object + peer_field->offset);
+    if (arguments[1].integer != 0) {
+        if (arguments[1].integer == 1) {
+            method_object = arguments[2].method_name;
+            peer->stage_state = 0;
+            scene_class = ((SceneObjectHeader *)object)->class_ref->scene_class;
+            storage = method_object->storage;
+            name = loadConstString(storage->text, storage->length);
+            method = findMethod(scene_class, name, TYPE_Void);
+            peer_thread = JTHREAD_get((SceneObject)peer);
+            if (peer_thread != 0) {
+                peer_thread->entry = JTHREAD_defaultStage;
+                peer_thread->method = method;
+                peer_thread->flags |= 0x10;
+            }
+            if (peer_thread == (StageThread *)thread) {
+                peer_thread->flags |= 0x21;
+            }
+        }
+    }
+}
 
 void Java_xeno_Stage_stop__(StageThread *thread, StageObjectCall *arguments,
                             u32 *failure_result)
@@ -50,13 +97,6 @@ void Java_xeno_Stage_setPartsLast__I(StageThread *thread, StageIntCall *argument
         nmlModelSetMapLastEntry(model->id, arguments->value);
     }
 }
-
-/*
- * nmlModelSetMapLastInit is src/main/nml_model_set.c's own INCLUDE_ASM
- * function (main/tu... , still unresolved there); this TU only tail-calls
- * it, so it stays a local extern declaration until that TU converts it.
- */
-void nmlModelSetMapLastInit(void);
 
 void Java_xeno_Stage_setPartsLastReset__(void)
 {
@@ -197,12 +237,6 @@ void Java_xeno_Stage_setBgClip__I(StageThread *thread, StageIntCall *arguments)
 {
     GameLoopState.bg_clip = arguments->value;
 }
-
-/*
- * nmlModelSetBackBufferClear is src/main/nml_model_set.c's own INCLUDE_ASM
- * function, still unresolved there; this TU only tail-calls it.
- */
-void nmlModelSetBackBufferClear(void);
 
 void Java_xeno_Stage_clrBackBuffer__(void)
 {

@@ -633,7 +633,7 @@ struct BattleMsgOpenParams {
     int target;
 };
 extern void eBattleWinOpen4(struct BattleMsgOpenParams *params);
-extern MessageTask *objEntryPure(void (*callback)(MessageTask *));
+
 
 void battleMsgPut2(int textId, int speaker, int target)
 {
@@ -692,7 +692,7 @@ ObjectTask *thinkUnitPtrGetReg(int reg)
 extern int calcBoost(ObjectTask *unit, int mode);
 extern int calcBoostChk(ObjectTask *unit, int mode);
 extern CalcUnitParam *calcUPGet(ObjectTask *unit);
-extern const char D_00A46468[];
+
 
 int cmdCounterBoost(void)
 {

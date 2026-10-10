@@ -9,9 +9,6 @@ typedef struct SchedulerState SchedulerState;
 
 int sefIsDeadSchduler(unsigned int scheduler_index);
 
-/* Opaque owner span to _lineData; C callers view evidenced 0xab0-byte rows. */
-static unsigned char _scheduler[0x55800];
-
 SchedulerState *sefGetNowScheduler(void);
 
 /* Original TU-local current-scheduler pointer (main:0x004DC670). */

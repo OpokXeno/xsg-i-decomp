@@ -165,7 +165,7 @@ static float _GetFloat(RgReadText *pReader)
 
 extern int atoi(const char *nptr);
 
-static char *_SkipWhiteSpace(RgReadText *pReader);
+
 
 int _GetInt(RgReadText *pReader)
 {

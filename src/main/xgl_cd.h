@@ -52,25 +52,56 @@ typedef struct CdReadMode {
     unsigned char data_pattern;
 } CdReadMode;
 
+/* SDK entry points used by this translation unit. */
+extern int sceCdGetDiskType(void);
+extern int sceCdStatus(void);
+extern int sceCdReadDvdDualInfo(int *on_dual);
+extern int sceCdBreak(void);
+extern int sceCdInit(int mode);
+extern int sceCdMmode(int media);
+extern int sceCdStStat(void);
+extern int sceCdStInit(unsigned int buffer_count, unsigned int bank_count,
+                       int buffer);
+extern int sceCdStStart(unsigned int lbn, CdReadMode *read_mode);
+extern int sceOpen(const char *path, int flags, ...);
+extern int sceSifLoadModule(const char *path, int args_length, const char *args);
+extern int sceSifLoadElf(const char *path, void *exec_data);
+extern int sceSifAllocIopHeap(int bytes);
+extern void FlushCache(int mode);
+
 /* Only the fields xglCdArcInitSub1 writes are evidenced here. */
 typedef struct CdArchiveEntry {
     unsigned char state;
-    unsigned char unmodeled_01[3];
+    unsigned char unmodeled_01;
+    unsigned char packed;
+    unsigned char unmodeled_03;
     unsigned char *destination;
     int lbn;
+    int file_lbn_offset;
+    int stored_bytes;
+    int size_bytes;
 } CdArchiveEntry;
 
 /* xglCdGetFilePos fills a 0x30-byte file-position record; only its leading
  * lbn word is evidenced by its callers in this TU. */
 typedef struct CdFilePosition {
     int lbn;
-    unsigned char unmodeled_04[0x2c];
+    int stored_bytes;
+    unsigned char unmodeled_08[0x1c];
+    unsigned char source;
+    unsigned char unmodeled_25;
+    unsigned char packed;
+    unsigned char unmodeled_27;
+    int descriptor;
+    int size_bytes;
 } CdFilePosition;
 
 /* Defined later in this file (INCLUDE_ASM); declared here, like BCD2INT
  * above, so its LOCAL definition does not follow a non-static declaration. */
 static int xglCdGetFilePos(CdFilePosition *file_position, const char *path,
                            void (*callback)(int event, int value));
+
+int xglCdGetFileSize(const char *path);
 
 void xglCdPowerOffCB(void);
 

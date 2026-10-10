@@ -14,6 +14,25 @@ extern ConstString **constStringTable;
 
 typedef u32 ConstantPoolWord;
 
+typedef union ClassConstantPoolValue {
+    void *object;
+    unsigned char *tags;
+} ClassConstantPoolValue;
+
+typedef struct ClassFieldRecord {
+    SceneString *name;
+    u16 flags;
+    unsigned char unmodeled_06[2];
+    void *type_or_descriptor;
+    u32 field_size;
+    u32 instance_offset;
+} ClassFieldRecord;
+
+typedef struct ClassSignatureResult {
+    unsigned char unmodeled_00[0x3a];
+    unsigned char field_size;
+} ClassSignatureResult;
+
 /*
  * This is the runtime class-file descriptor used by the native loader.
  */
@@ -24,7 +43,7 @@ struct ClassDescriptor {
     u16 type_flags;
     u32 volatile class_loader;
     u32 volatile super_class_index;
-    ConstantPoolWord *constant_pool;
+    void *constant_pool;
     void *dispatch_methods;
     void *fields;
     void *methods;
@@ -59,15 +78,22 @@ void initClassDB(void);
  * addCode's evidenced Code_attribute fields (JVM class file format): the
  * code pointer at +0x14, max_stack/max_locals at +0x18/+0x1a and a
  * 16-bit code_length at +0x1c holding the low half of the classfile's
- * 32-bit attribute length. Earlier members are read by addField/addMethod
- * (still asm in this TU) and stay unmodeled here.
+ * 32-bit attribute length. addMethod also establishes the name, descriptor,
+ * parameter and return sizes, declaring class, access flags and state.
  */
 struct SceneMethod {
-    unsigned char unmodeled_00[0x14];
+    SceneString *name;
+    SceneTypeDescriptor *descriptor;
+    s16 parameter_size;
+    s16 return_size;
+    ClassDescriptor *declaring_class;
+    u16 access_flags;
+    u16 state;
     void *code;
     u16 max_stack;
     u16 max_locals;
     u16 code_length;
+    u16 unmodeled_1e;
 };
 
 /*
@@ -79,7 +105,7 @@ struct SceneMethod {
 void DataBuffer_seek(DataBuffer *buffer, int offset);
 
 void addCode(DataBuffer *buffer, ClassDescriptor *class_info,
-             SceneMethod *method);
+             SceneMethod *method, u32 attribute_length);
 
 /*
  * DataBuffer and its readers are defined by main/tu230
@@ -98,8 +124,8 @@ unsigned int DataBuffer_getUIntAt(DataBuffer *buffer);
  * binding in the original symbol table, so readClass's forward declarations
  * of them are static. Parameter types come from readClass's own call sites;
  * each keeps its DataBuffer cursor and the ClassDescriptor being built.
- * readAttributes' third argument is only ever seen as the literal 0 readClass
- * passes, so its width is not yet evidenced.
+ * readAttributes receives a field or method record from readFields/readMethods;
+ * readClass passes a null target for class-level attributes.
  */
 static void readConstantPool(DataBuffer *buffer, ClassDescriptor *class_info);
 
@@ -110,7 +136,7 @@ static void readFields(DataBuffer *buffer, ClassDescriptor *class_info);
 static void readMethods(DataBuffer *buffer, ClassDescriptor *class_info);
 
 static void readAttributes(DataBuffer *buffer, ClassDescriptor *class_info,
-                            int);
+                            void *attribute_target);
 
 ClassDescriptor *readClass(DataBuffer *buffer, ClassDescriptor *class_info,
                            u32 class_loader);

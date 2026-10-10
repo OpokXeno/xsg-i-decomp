@@ -1,7 +1,18 @@
 #include "common.h"
+
 #include "shared.h"
+
 #include "main/xgl_2.h"
+
 #include "map_create_unit_peer.h"
+
+#include "main/play.h"
+
+extern void ANM_resetDefault(MapUnitAnmState *anim, int param);
+
+extern void *PLAY_getCurrent(void);
+
+extern void SEQ_motionUnit(MapUnitMotionRecord *unit);
 
 INCLUDE_ASM("asm/main/nonmatchings/map_create_unit_peer", MAP_createUnitPeer);
 
@@ -24,9 +35,6 @@ INCLUDE_ASM("asm/main/nonmatchings/map_create_unit_peer", SEQ_moveUnitChr);
 INCLUDE_ASM("asm/main/nonmatchings/map_create_unit_peer", SEQ_moveUnitXZ);
 
 INCLUDE_ASM("asm/main/nonmatchings/map_create_unit_peer", SEQ_motionUnit);
-
-/* Still asm; declared here until its own TU is published. */
-extern void ANM_resetDefault(MapUnitAnmState *anim, int param);
 
 void MAP_setUnitMotion(MapUnitMotionRecord *unit, int motionId)
 {
@@ -54,28 +62,27 @@ int MAP_callUnitGroup(int group, void (*callback)(int *))
     return 0;
 }
 
-/* play.c (main); no header is published for it yet (also declared this way
- * in src/main/near_dir.c). */
-extern void *PLAY_getCurrent(void);
-/* Still asm; declared here until its own TU is published. */
-extern void SEQ_motionUnit(MapUnitMotionRecord *unit);
+/* Build the matrix from the position, rotation and scale kept by both
+ * sequenced units and motion-pack units. */
+#define MAP_BUILD_UNIT_TRANSFORM(unit) do { \
+    xglMatrixStackUnit(); \
+    xglMatrixStackTrans(&(unit)->position.x); \
+    xglMatrixStackRotX((unit)->rotation.x); \
+    xglMatrixStackRotY((unit)->rotation.y); \
+    xglMatrixStackRotZ((unit)->rotation.z); \
+    xglMatrixStackScale(&(unit)->scale.x); \
+    xglMatrixStackSave((unit)->matrix); \
+} while (0)
 
 void MAP_updateUnitMPack(MapUnitMotionRecord *unit)
 {
-    void *play = PLAY_getCurrent();
+    Play *play = PLAY_getCurrent();
 
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(&unit->position.x);
-    xglMatrixStackRotX(unit->rotation.x);
-    xglMatrixStackRotY(unit->rotation.y);
-    xglMatrixStackRotZ(unit->rotation.z);
-    xglMatrixStackScale(&unit->scale.x);
-    xglMatrixStackSave(unit->matrix);
+    MAP_BUILD_UNIT_TRANSFORM(unit);
     SEQ_motionUnit(unit);
 
-    /* PLAY_getCurrent's object (play.c) is not recovered; +0x44 is the one
-     * float this TU reads from it, mirrored into the unit's own motionTime. */
-    unit->anim.motionTime = *(float *)((unsigned char *)play + 0x44);
+    /* PLAY_setupDefault and PLAY_ctrl establish currentTime at +0x44. */
+    unit->anim.motionTime = play->currentTime;
 }
 
 void MAP_updateUnitSequence(MapUnitRecord *unit)
@@ -107,16 +114,7 @@ void MAP_updateUnitSequence(MapUnitRecord *unit)
         }
     }
 
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(&unit->position.x);
-    xglMatrixStackRotX(unit->rotation.x);
-    xglMatrixStackRotY(unit->rotation.y);
-    xglMatrixStackRotZ(unit->rotation.z);
-    xglMatrixStackScale(&unit->scale.x);
-    /* Preserve the matrix-save call before the shared register epilogue. */
-    do {
-        xglMatrixStackSave(unit->matrix);
-    } while (0);
+    MAP_BUILD_UNIT_TRANSFORM(unit);
 }
 
 void MAP_updateUnitDefault(MapUnitRecord *unit)
@@ -137,7 +135,39 @@ void MAP_updateUnitDefault(MapUnitRecord *unit)
     xglMatrixStackSave(unit->matrix);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/map_create_unit_peer", MAP_initUnitSequance);
+void MAP_initUnitSequance(void)
+{
+    MapUnitGroupEntry *unit = MapUnit;
+    MapUnitGroupSequenceEntry *sequence = unitSequence;
+    int remaining = 63;
+
+    do {
+        remaining--;
+        sequence->flags = 0;
+        sequence->state = 0;
+        sequence->sequenceMode = 0;
+        sequence->sequenceParameters[0] = 0;
+        sequence->sequenceParameters[1] = 0;
+        sequence->sequenceParameters[2] = 0;
+        sequence->sequenceParameters[3] = 0;
+        sequence->update_callbacks[0] = 0;
+        sequence->update_callbacks[1] = 0;
+        sequence->update_callbacks[2] = 0;
+        sequence->update_callbacks[3] = 0;
+        sequence++;
+    } while (remaining >= 0);
+
+    remaining = 63;
+    do {
+        remaining--;
+        unit->peer = 0;
+        unit->flags = 0;
+        unit->serialFlags = 0;
+        unit->animationIndex = 0;
+        unit->update = MAP_updateUnitDefault;
+        unit++;
+    } while (remaining >= 0);
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/map_create_unit_peer", MAP_updateUnitPartsSequence);
 
