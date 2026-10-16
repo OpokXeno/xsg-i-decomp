@@ -136,7 +136,8 @@ struct CalcUnitParam {
     unsigned char unmodeled_54[0x5E - 0x54];
     short weaponId[3];       /* +0x5E: per-slot weapon ids */
     short accessoryId[3];    /* +0x64: calcMagDefGet's per-slot item ids */
-    unsigned char unmodeled_6a[0x70 - 0x6A];
+    short attachmentId[3];   /* +0x6A: calcWpnEnableChk's `lh $3,0x6A($3)`,
+                              * mirroring CalcCharParaData's attachmentId */
     short wpnSlotValue[3];   /* +0x70: calcDblActChk, per weapon slot */
     short normalTechniqueId[CALC_NORMAL_TECHNIQUE_COUNT]; /* +0x76 */
     short slotTechniqueId[2];   /* +0x82: calcSlotAChk's own pair, right

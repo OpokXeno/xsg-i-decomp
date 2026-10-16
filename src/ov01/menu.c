@@ -73,7 +73,7 @@ typedef struct MenuEventTimerWork {
     float z; /* +0x98 */
 } MenuEventTimerWork;
 
-void menuATBEnvMake(int packet);
+void menuATBEnvMake(void *packet);
 void menuEventTimerDispSub(ObjectTask *task, int packet);
 
 /* Keep source-owned local BSS objects in their original address order;
@@ -440,7 +440,35 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStockObj);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStockObjDraw);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", faceUVGet);
+/*
+ * The 3x11 face-icon sheet's per-character source cell: chrId<32 indexes a
+ * grid of 21x25 cells (column = chrId%3, row = chrId/3); chrId>=32 (no face
+ * tile) picks one of three fixed columns from calcUPGet(task)->flags's
+ * 0x4000/0x2000 bits and leaves the row at 0.
+ */
+void faceUVGet(ObjectTask *task, int *srcX, int *srcY)
+{
+    int chrId;
+    CalcUnitParam *up;
+    u16 flags;
+
+    chrId = menuStatChrIdGet(task);
+    if (chrId < 0x20) {
+        *srcX = (chrId % 3) * 21 + 0x40;
+        *srcY = (chrId / 3) * 25;
+        return;
+    }
+    up = calcUPGet(task);
+    *srcY = 0;
+    flags = up->flags;
+    if (flags & 0x4000) {
+        *srcX = 0xC0;
+    } else if (flags & 0x2000) {
+        *srcX = 0xD5;
+    } else {
+        *srcX = 0xEA;
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuMapItemDispSub);
 
@@ -690,7 +718,32 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", keyGideDisp);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuGuideFrameDisp);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", monsNameDisp);
+extern const char **dataEnemyNameGet(int index);
+extern const char **dataPlayerNameGet(int id);
+extern unsigned int strlen(const char *s);
+void menuGuideFrameDisp(void *packet, int x, int y, int width, int height);
+void menuFontEnvMake(void *packet);
+void menuStatEnvMake(void *packet);
+void menuFontPut(void *packet, int x, int y, const char *text);
+
+void monsNameDisp(void *packet, ObjectTask *unitTask, int x, int y, int isEnemy)
+{
+    const char *name;
+    int len;
+
+    menuStatEnvMake(packet);
+    menuGuideFrameDisp(packet, x, y, 0x50, 2);
+    x = x + 2;
+    y = y + 3;
+    menuFontEnvMake(packet);
+    if (isEnemy == 1) {
+        name = *dataEnemyNameGet(calcUPGet(unitTask)->charaId);
+    } else {
+        name = *dataPlayerNameGet(calcUPGet(unitTask)->charaId);
+    }
+    len = strlen(name);
+    menuFontPut(packet, x + (0x10 - len) * 5, y, name);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuKeyGuideHelp);
 
@@ -786,7 +839,62 @@ void menuFontPutSub(int packet, int x, int y, int charCode) {
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontPut);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuActCurPut);
+/*
+ * The cursor object's transform, the work's +0x90..+0x110 tail that
+ * grCalcMatrix reads through grBBCalc (src/ov01/gr_gp_init.c TransformState:
+ * position at +0x90, offset at +0xa0, added to position). menuActCurPut
+ * saves and restores all 0x80 bytes with aligned ld/sd, so the storage is
+ * eight-byte aligned (the include/ov01/m_ef_create.h spelling); it writes
+ * position through sefGetNullPosition and offset.y (swc1 +0x14) itself.
+ */
+typedef union MenuCursorTransform {
+    struct {
+        Vector4 position; /* +0x00 */
+        Vector4 offset;   /* +0x10 */
+        unsigned char unmodeled_20[0x60];
+    } fields;
+    u64 storage[0x80 / sizeof(u64)];
+} MenuCursorTransform;
+
+typedef struct MenuCursorWork {
+    unsigned char unmodeled_00[0x90];
+    MenuCursorTransform transform; /* +0x90 */
+} MenuCursorWork;
+
+/* A unit task's motion actor beside its ObjectTask prefix
+ * (`lw $5,0x14($6)`; src/ov01/cmd.h CmdUnitRecord names the same word). */
+typedef struct MenuUnitTask {
+    ObjectTask task;   /* +0x00 */
+    void *motionActor; /* +0x14 */
+} MenuUnitTask;
+
+/* src/main/sef.c and src/ov01/gr_gp_init.c (ov01/tu008). */
+extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
+extern int grBBCalc(ObjectTask *task, int *screenX, int *screenY);
+
+void menuActCurPut(int packet, ObjectTask *cursor, ObjectTask *unit, int frame)
+{
+    MenuCursorTransform saved;
+    int screenX;
+    int screenY;
+    MenuCursorTransform *transform;
+
+    if (unit == 0 || (((BattleActor *)unit->work)->flags & ACTOR_FLAG_ENEMY)) {
+        return;
+    }
+    transform = &((MenuCursorWork *)cursor->work)->transform;
+    saved = *transform;
+    sefGetNullPosition(&transform->fields.position, ((MenuUnitTask *)unit)->motionActor, 0, 0);
+    transform->fields.offset.y = 1.3f;
+    if (grBBCalc(cursor, &screenX, &screenY) != 0) {
+        menuStatEnvMake((void *)packet);
+        grOpenSpr(packet);
+        menuStatSprite(packet, screenX - 8, screenY - 8, 16, 16, (frame % 8) * 16, 0x80);
+        grCloseSpr();
+        grPacketSend(packet);
+    }
+    *transform = saved;
+}
 
 void menuStatSprite(int packet, int x, int y, int width, int height, int srcX, int srcY) {
     GrSprite sprite;
@@ -867,17 +975,95 @@ void menuStatTexTrans(void) {
     grPacketSend((int)&packet);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuEnvMake);
+/* GS_REG_SET's real (void *, long long, long long) prototype, as
+ * src/ov01/entry_first_init.c's encEnvMake already declares it for the same
+ * idiom. */
+extern void GS_REG_SET(void *packet, long long register_id, long long control);
+extern unsigned short dataXtxAdrGet(int index);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatEnvMake);
+void menuEnvMake(void *packet)
+{
+    unsigned short tbp0 = dataXtxAdrGet(0xD);
+    unsigned short tbp1 = dataXtxAdrGet(0xE);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFaceEnvMake);
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x2000000629340000LL);
+    GS_REG_SET(packet, 0x42, 0);
+    GS_REG_SET(packet, 0x47, 0x3000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuATBEnvMake);
+void menuStatEnvMake(void *packet)
+{
+    unsigned short tbp0 = dataXtxAdrGet(0);
+    unsigned short tbp1 = dataXtxAdrGet(3);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuFontEnvMake);
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x2000000629340000LL);
+    GS_REG_SET(packet, 0x42, 0);
+    GS_REG_SET(packet, 0x47, 0x3000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatIconEnvMake);
+void menuFaceEnvMake(void *packet)
+{
+    unsigned short tbp0 = dataXtxAdrGet(0x8);
+    unsigned short tbp1 = dataXtxAdrGet(0x9);
+
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x2000000629340000LL);
+    GS_REG_SET(packet, 0x42, 0);
+    GS_REG_SET(packet, 0x47, 0x3000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}
+
+void menuATBEnvMake(void *packet)
+{
+    unsigned short tbp0 = dataXtxAdrGet(4);
+    unsigned short tbp1 = dataXtxAdrGet(7);
+
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x2000000629340000LL);
+    GS_REG_SET(packet, 0x42, 0);
+    GS_REG_SET(packet, 0x47, 0x3000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}
+
+void menuFontEnvMake(void *packet)
+{
+    unsigned short tbp0 = dataXtxAdrGet(0xB);
+    unsigned short tbp1 = dataXtxAdrGet(0xC);
+
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x2000000629340000LL);
+    GS_REG_SET(packet, 0x42, 0x44);
+    GS_REG_SET(packet, 0x47, 0x3000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}
+
+void menuStatIconEnvMake(void *packet)
+{
+    unsigned short tbp0 = dataXtxAdrGet(0);
+    unsigned short tbp1 = dataXtxAdrGet(1);
+
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x2000000629340000LL);
+    GS_REG_SET(packet, 0x42, 0);
+    GS_REG_SET(packet, 0x47, 0x3000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuATBEnvPalSet);
 

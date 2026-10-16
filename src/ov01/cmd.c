@@ -44,6 +44,9 @@ const char D_00A461E8[16] = "** reg err %d\n";
 extern const char D_00A461F8[];
 extern const char D_00A46210[];
 extern const char D_00A46248[]; /* "** ONGO err\n": cmdOngo (printf arg when the jump-table index is out of range) */
+extern const char D_00A46258[]; /* cmdOngosub printf arg when count < index (same check as cmdOngo) */
+extern const char D_00A46268[]; /* cmdOngosub printf arg when the return-address stack (ctx->returnDepth) is full */
+extern const char D_00A46280[]; /* cmdRmath1 printf arg for an unrecognized opIndex */
 extern const char D_00A462D0[];
 extern const char D_00A462E8[];
 extern const char D_00A46318[];
@@ -575,7 +578,32 @@ int cmdOngo(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdOngosub);
+int cmdOngosub(ThinkProcess *proc)
+{
+    int index = cmdNum(proc->pc);
+    int count;
+    ThinkContext *ctx;
+
+    proc->pc += 2;
+    count = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    if (count < index) {
+        printf(D_00A46258);
+        return 1;
+    }
+
+    ctx = (ThinkContext *)pContext;
+    if (ctx->returnDepth < 16) {
+        ctx->returnStack[ctx->returnDepth++] = proc->pc + count * 2;
+    } else {
+        printf(D_00A46268);
+        return 1;
+    }
+
+    proc->pc = cmdNum(proc->pc + index * 2);
+    return 0;
+}
 
 int cmdRset(ThinkProcess *proc)
 {
@@ -589,7 +617,40 @@ int cmdRset(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdRmath1);
+int cmdRmath1(ThinkProcess *proc)
+{
+    int opIndex = *(short *)thinkAdrGet(proc->pc - 2);
+    int regNo = thinkRegNo(proc->pc) & 0xFFFF;
+    int regValue;
+    unsigned short masked;
+    short result;
+
+    proc->pc += 2;
+    regValue = thinkRegGet(regNo);
+
+    switch (opIndex) {
+    case 8:
+        result = regValue + 1;
+        break;
+    case 9:
+        result = regValue - 1;
+        break;
+    case 18:
+        masked = regValue & 0xFFFF;
+        result = ~masked;
+        break;
+    case 19:
+        masked = regValue & 0xFFFF;
+        result = ~masked + 1;
+        break;
+    default:
+        printf(D_00A46280);
+        return 1;
+    }
+
+    thinkRegSet(regNo, result & 0xFFFF);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdRmath2);
 
@@ -948,7 +1009,42 @@ int cmdUnitpara(ObjectTask *unit, int category, int value, int mode)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdUnitparaSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdUnittbl);
+extern int unitTblGet(int side, ObjectTask ***table);
+
+int cmdUnittbl(ThinkProcess *proc)
+{
+    int regNo;
+    int outStart;
+    int adr;
+    int side;
+    ObjectTask **table;
+    int i = 0;
+    int count;
+    short successCount = 0;
+
+    regNo = thinkRegNo(proc->pc);
+    proc->pc += 2;
+    outStart = cmdNum(proc->pc);
+    proc->pc += 2;
+    side = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    count = unitTblGet(side, &table);
+
+    if (count > 0) {
+        adr = outStart;
+        for (; i < count; i++) {
+            if (table[i] != 0 && !(((CmdActorFlags *)table[i]->work)->flags & 0x80)) {
+                *(short *)thinkAdrGet(adr) = unitNoGet(table[i]);
+                adr += 2;
+                successCount++;
+            }
+        }
+    }
+
+    thinkRegSet(regNo & 0xFFFF, successCount & 0xFFFF);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdUnitCreate);
 
@@ -1174,15 +1270,146 @@ int cmdCamBankMoveMode(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamLock);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamCopy);
+/* The w store last gives the original's order of the four swc1 stores. */
+int cmdCamCopy(void)
+{
+    Vector4 coord;
+    McamParams *cam;
+    int point;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamSetPos);
+    if (camMode == 1) {
+        point = 0;
+    } else if (camMode == 0) {
+        point = 1;
+    } else {
+        printf(D_00A465A8);
+        return 0;
+    }
+    MCamGetCurrentCoord(&coord, point);
+    cam = mcamPtrGet();
+    cam->unitTrackEnabled = 0;
+    cam->offsEnabled = 0;
+    cam->lockPosition.x = coord.x;
+    cam->lockPosition.y = coord.y;
+    cam->lockPosition.z = coord.z;
+    cam->lockPosition.w = 1.0f;
+    myMCamSet(camMode, cam);
+    return 0;
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamSetAct);
+int cmdCamSetPos(ThinkProcess *proc)
+{
+    McamParams *cam = mcamPtrGet();
+    float posZ;
+
+    cam->unitTrackEnabled = 0;
+    cam->lockPosition.x = (float)cmdNum(proc->pc) * 0.01f;
+    proc->pc += 2;
+    cam->lockPosition.y = (float)cmdNum(proc->pc) * 0.01f;
+    proc->pc += 2;
+    posZ = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->lockPosition.w = 1.0f;
+    cam->offsEnabled = 0;
+    cam->lockPosition.z = posZ * 0.01f;
+    myMCamSet(camMode, cam);
+    return 0;
+}
+
+int cmdCamSetAct(ThinkProcess *proc)
+{
+    int unitNo;
+    McamParams *cam = mcamPtrGet();
+    ObjectTask *unit;
+    int actId;
+    float offsX;
+    float offsY;
+    float offsZ;
+
+    unitNo = unitNoChk(cmdNum(proc->pc));
+
+    cam->unitTrackEnabled = 1;
+
+    unit = unitPtrGet(unitNo);
+    cam->targetBlock = ((UnitDeadTimeRecord *)unit)->target;
+    unit = unitPtrGet(unitNo);
+    cam->charaId = calcUPGet(unit)->charaId;
+
+    proc->pc += 2;
+    actId = cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offsEnabled = 1;
+    cam->actId = actId;
+
+    offsX = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.x = offsX * 0.01f;
+
+    offsY = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.y = offsY * 0.01f;
+
+    offsZ = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.w = 1.0f;
+    cam->offset.z = offsZ * 0.01f;
+
+    myMCamSet(camMode, cam);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamSetAct2);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamSetAct3);
+/*
+ * Two-unit form of cmdCamSetAct. Each unit number has its own variable: one
+ * shared variable outranks proc and cam for $16..$18 and permutes all three.
+ */
+int cmdCamSetAct3(ThinkProcess *proc)
+{
+    McamParams *cam = mcamPtrGet();
+    int firstUnitNo;
+    int secondUnitNo;
+    ObjectTask *unit;
+    float offsX;
+    float offsY;
+    float offsZ;
+
+    firstUnitNo = unitNoChk(cmdNum(proc->pc));
+    cam->unitTrackEnabled = 3;
+    unit = unitPtrGet(firstUnitNo);
+    cam->pairTarget[0].targetBlock = ((UnitDeadTimeRecord *)unit)->target;
+    unit = unitPtrGet(firstUnitNo);
+    cam->pairTarget[0].charaId = calcUPGet(unit)->charaId;
+    proc->pc += 2;
+    cam->pairTarget[0].actId = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    secondUnitNo = unitNoChk(cmdNum(proc->pc));
+    unit = unitPtrGet(secondUnitNo);
+    cam->pairTarget[1].targetBlock = ((UnitDeadTimeRecord *)unit)->target;
+    unit = unitPtrGet(secondUnitNo);
+    cam->pairTarget[1].charaId = calcUPGet(unit)->charaId;
+    proc->pc += 2;
+    cam->pairTarget[1].actId = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    cam->offsEnabled = 1;
+    offsX = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.x = offsX * 0.01f;
+
+    offsY = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.y = offsY * 0.01f;
+
+    offsZ = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.w = 1.0f;
+    cam->offset.z = offsZ * 0.01f;
+
+    myMCamSet(camMode, cam);
+    return 0;
+}
 
 int cmdCamOffsPos(ThinkProcess *proc)
 {
@@ -1229,7 +1456,31 @@ int cmdCamOffsAng(ThinkProcess *proc)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamMove);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamShake);
+/* MCamShake (ov01/m_cam, still INCLUDE_ASM there): five script-decoded int args. */
+extern void MCamShake(int, int, int, int, int);
+
+int cmdCamShake(ThinkProcess *proc)
+{
+    int mode;
+    int amplitude;
+    int phaseStep;
+    int holdFrames;
+    int decayFrames;
+
+    mode = cmdNum(proc->pc);
+    proc->pc += 2;
+    amplitude = cmdNum(proc->pc);
+    proc->pc += 2;
+    phaseStep = cmdNum(proc->pc);
+    proc->pc += 2;
+    holdFrames = cmdNum(proc->pc);
+    proc->pc += 2;
+    decayFrames = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    MCamShake(mode, amplitude, phaseStep, holdFrames, decayFrames);
+    return 0;
+}
 
 int cmdCamCenterLength(ThinkProcess *proc)
 {
@@ -1549,7 +1800,27 @@ int cmdStatGet(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdStatSet);
+int cmdStatSet(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+    int category;
+    int flag;
+    int unitNo;
+    ObjectTask *unit;
+    int value;
+
+    proc->pc += 2;
+    category = cmdNum(proc->pc);
+    proc->pc += 2;
+    flag = cmdNum(proc->pc);
+    proc->pc += 2;
+    unitNo = cmdNum(proc->pc);
+    proc->pc += 2;
+    unit = unitPtrGet(unitNo);
+    value = calcStatSet(unit, category, flag, 0);
+    thinkRegSet(regNo & 0xFFFF, value & 0xFFFF);
+    return 0;
+}
 
 /*
  * calcStatReset (src/ov01/calc.c, still asm there) resets one status
@@ -1574,28 +1845,6 @@ int cmdStatReset(ThinkProcess *proc)
     calcStatReset(unitPtrGet(unitNo), category, mask, 0);
     return 0;
 }
-
-/*
- * The block cmdDeadTime reaches through the pointer stored just past
- * ObjectTask's modeled task/work prefix; only the field this function
- * writes is modeled.
- */
-typedef struct UnitDeadTimeBlock {
-    unsigned char unmodeled_0[0xD0];
-    float value;    /* +0xD0: reciprocal-scaled duration */
-} UnitDeadTimeBlock;
-
-/*
- * Offset 0x14 of the record unitPtrGet returns lands just past ObjectTask's
- * modeled task/work prefix (shared.h); the real per-unit allocation is
- * longer than that partial view (shared.h's own XglTaskPrefix comment
- * documents the same gap for the task-specific payload). cmdDeadTime is the
- * only function in this allocation that reads the pointer stored there.
- */
-typedef struct UnitDeadTimeRecord {
-    unsigned char unmodeled_0[0x14];
-    UnitDeadTimeBlock *target;   /* +0x14 */
-} UnitDeadTimeRecord;
 
 int cmdDeadTime(ThinkProcess *proc)
 {

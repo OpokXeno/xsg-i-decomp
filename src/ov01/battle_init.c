@@ -206,9 +206,14 @@ typedef struct ScenarioStep {
     unsigned char unmodeled_00[0x10];
     int stride; /* +0x10: added into ScenarioBatState.index by scenarioBatNext */
 } ScenarioStep;
-typedef void (*ScenarioPhaseFunc)(void);
 /*
- * One destination record. scenarioDstSet (still asm) appends a whole 0x28-byte
+ * scenarioBatExec calls the installed phase with (scenarioSrcGet(0),
+ * scenarioDstGet(0)) in $a0/$a1.
+ */
+typedef struct ScenarioDstEntry ScenarioDstEntry;
+typedef void (*ScenarioPhaseFunc)(int source, ScenarioDstEntry *dest);
+/*
+ * One destination record. scenarioDstSet appends a whole 0x28-byte
  * record built by unitJobTypeAtk/unitCmdItemSub (src/ov01/unit_cmd.c) at
  * dest[count]; scenarioDstGet hands out &dest[index + offset]. Only the words
  * this TU's callers of scenarioDstGet touch are modeled:
@@ -218,14 +223,14 @@ typedef void (*ScenarioPhaseFunc)(void);
  *   +0x08: battleExec copies it into D_00A57B78.
  *   +0x14: scenarioBatExecPhase30 zeroes it after scenarioEffCall.
  */
-typedef struct ScenarioDstEntry {
+struct ScenarioDstEntry {
     ObjectTask *unit;                 /* +0x00 */
     unsigned char unmodeled_04[4];
     int word08;                       /* +0x08 */
     unsigned char unmodeled_0c[8];
     int word14;                       /* +0x14 */
     unsigned char unmodeled_18[0x10];
-} ScenarioDstEntry;
+};
 
 /*
  * The record limit scenarioDstSet and scenarioDstGet both test (`slti 0xD`).
@@ -294,7 +299,21 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlConfusion);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlJunk);
 
-static int actStock[9];
+/*
+ * The action-stock record (0x24 bytes, the span the old `int actStock[9]`
+ * covered). actStockRemove compares the unit against +0x10/+0x14 and the
+ * first `count` (+0x18) words from +0x00. The actor words are pointers, not
+ * ints: only with pointer-typed loads may the scheduler hoist the +0x10 load
+ * above the `*index = -1` int store, as the original does (sw in the delay
+ * slot of the first bne).
+ */
+typedef struct ActStock {
+    ObjectTask *stock[4];  /* +0x00 */
+    ObjectTask *boost[2];  /* +0x10: calcBoost's per-mode boosting actor */
+    int count;             /* +0x18 */
+    unsigned char unmodeled_1c[8];
+} ActStock;
+static ActStock actStock;
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockInit);
 
@@ -304,16 +323,43 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockMake);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockPick);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockRemove);
+/*
+ * Drop `unit` from the boost slots and the stock; *index receives its stock
+ * position, or -1. Nonzero when any slot held it.
+ */
+int actStockRemove(ObjectTask *unit, int *index)
+{
+    int removed = 0;
+    int i;
+
+    *index = -1;
+    if (actStock.boost[0] == unit) {
+        actStock.boost[0] = 0;
+        removed = 1;
+    }
+    if (actStock.boost[1] == unit) {
+        actStock.boost[1] = 0;
+        removed = 1;
+    }
+    for (i = 0; i < actStock.count; i++) {
+        if (actStock.stock[i] == unit) {
+            actStock.stock[i] = 0;
+            removed = 1;
+            *index = i;
+            break;
+        }
+    }
+    return removed;
+}
 
 /*
- * The current action-stock count actStockInit/actStockMake/actStockPick/
- * actStockRemove (still INCLUDE_ASM here) read and write through the
- * address this returns (data still asm-owned; original ELF symbol name).
+ * The action-stock record actStockInit/actStockMake/actStockPick (still
+ * INCLUDE_ASM here) and actStockRemove work on; menu.c and calc.c declare
+ * it as `int *`, so that published type is kept.
  */
 int *actStockGet(void)
 {
-    return actStock;
+    return (int *)&actStock;
 }
 
 /*
@@ -336,7 +382,44 @@ extern int unitTblGet(int side, BattleUnit ***table);
 extern int calcBoostChk(BattleUnit *unit, int mode);
 extern int calcBoost(BattleUnit *unit, int mode);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlBoostPl);
+/* "** BOOST PL=%d (%d)\n" (data still asm-owned; original ELF symbol name). */
+extern const char D_00A43D78[];
+
+extern int dataPadRead(int padNo);
+extern void menuBoostDisp(int enabled);
+
+int battleCtrlBoostPl(void)
+{
+    BattleUnit **table;
+    int selection;
+    int held;
+
+    held = dataPadRead(1);
+    if (dataPadRead(0) & 0xA) {
+        menuBoostDisp(1);
+        selection = -1;
+        if (held & 0x80) {
+            selection = 0;
+        } else if (held & 0x10) {
+            selection = 1;
+        } else if (held & 0x20) {
+            selection = 2;
+        }
+
+        unitTblGet(0, &table);
+        if (selection != -1 && table[selection] != 0 &&
+            calcBoostChk(table[selection], 1) != 0) {
+            printf(D_00A43D78, calcUPGet((ObjectTask *)table[selection])->charaId,
+                   ((signed char *)calcUPGet((ObjectTask *)table[selection]))[CALC_PARAM_BOOST_LEVEL_OFF]);
+            calcBoost(table[selection], 1);
+            return 1;
+        }
+        return 0;
+    }
+
+    menuBoostDisp(0);
+    return 0;
+}
 
 extern int rnd(int max);
 
@@ -780,7 +863,7 @@ void scenarioPtrFuncSet(ScenarioPhaseFunc func)
     scenarioPtr.phaseTimer = 0;
 }
 
-void scenarioBatExecPhase10(void);
+void scenarioBatExecPhase10(int source, ScenarioDstEntry *dest);
 extern void sndInit2(void);
 void scenarioBatInit(void)
 {
@@ -800,7 +883,16 @@ int scenarioSrcSet(const ScenarioStep *source)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioDstSet);
+/* Append a copy of `entry` at dest[count]; 0 once the record limit is reached. */
+int scenarioDstSet(const ScenarioDstEntry *entry)
+{
+    if (scenarioPtr.count >= SCENARIO_DST_LIMIT) {
+        return 0;
+    }
+    scenarioPtr.dest[scenarioPtr.count] = *entry;
+    scenarioPtr.count++;
+    return 1;
+}
 
 /*
  * The scenario source index (data still asm-owned, splat name kept); a
@@ -837,7 +929,31 @@ int scenarioBatNext(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioCam);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExec);
+void scenarioBatEnd(void);
+
+/*
+ * Run the installed scenario phase on the current destination record; 1 once
+ * no record is left (scenarioBatEnd has run), 0 while records remain.
+ */
+int scenarioBatExec(void)
+{
+    /*
+     * Unprototyped view of scenarioSrcGet: the call sets $a0 = 0
+     * (0x00a0bbfc) although the definition above takes no parameters.
+     */
+    extern int scenarioSrcGet();
+    ScenarioDstEntry *dest = scenarioDstGet(0);
+    int source = scenarioSrcGet(0);
+
+    if (dest) {
+        scenarioPtr.nextPhase(source, dest);
+        if (scenarioDstGet(0)) {
+            return 0;
+        }
+    }
+    scenarioBatEnd();
+    return 1;
+}
 
 int sefCheckLoad(void);
 int dataCdSync(void);
@@ -1082,7 +1198,88 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specSyoukanProc);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specHensinProc);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specAnalyzeProc);
+/*
+ * CalcUnitParam (include/ov01/calc.h, calc.c's own TU): specAnalyzeProc
+ * reads two more halfwords that TU hasn't named yet.
+ */
+#define CALC_PARAM_MAX_HP_OFF 0x0
+#define CALC_PARAM_CONDITIONS_OFF 0x18
+
+/*
+ * eBattleWinOpen3's analysis-window record when BW3BattleOrDataBase selects
+ * the battle variant (src/main/endou_test.c's own EndouBattleAnalysisParams,
+ * still asm there; src/ov02/umn_guno_data_base_get.c restates the other
+ * variant as UmnDataBaseWinParam for the database view).
+ */
+typedef struct AnalysisWinParams {
+    int x;                      /* +0x00 */
+    int y;                      /* +0x04 */
+    int style;                  /* +0x08 */
+    const char *name;           /* +0x0C */
+    short hp;                   /* +0x10 */
+    short maxHp;                /* +0x12 */
+    unsigned short conditions;  /* +0x14 */
+    unsigned char unmodeled_16[2];
+    int techPoints;             /* +0x18 */
+    int etherPoints;            /* +0x1C */
+    int skillPoints;            /* +0x20 */
+    int experience;             /* +0x24 */
+    long money;                 /* +0x28 */
+    unsigned short commonDrop;  /* +0x30 */
+    unsigned short rareDrop;    /* +0x32 */
+} AnalysisWinParams;
+
+extern void eBattleWinOpen3(AnalysisWinParams *param);
+extern void UmnDataBaseAnalisisSet(int monsterId);
+extern const char **dataEnemyNameGet(int index);
+
+/*
+ * dataGainGet's own record (src/ov01/data_unit_org_get.c, GainRecord, still
+ * opaque there); specAnalyzeProc's own fields, restated locally the same
+ * way battle_init.c already restates unit_cmd.h's CmdEntry as
+ * SyoukanCmdEntry.
+ */
+typedef struct GainWinStat {
+    int experience;             /* +0x00 */
+    unsigned short rewardMoney; /* +0x04 */
+    unsigned char techPoints;   /* +0x06 */
+    unsigned char etherPoints;  /* +0x07 */
+    unsigned char skillPoints;  /* +0x08 */
+    unsigned char unmodeled_09[4];
+    unsigned char commonDropHi; /* +0x0D */
+    unsigned char rareDropHi;   /* +0x0E */
+    unsigned char unmodeled_0f[1];
+    unsigned char commonDropLo; /* +0x10 */
+    unsigned char rareDropLo;   /* +0x11 */
+    unsigned char unmodeled_12[2];
+} GainWinStat;
+
+extern GainWinStat *dataGainGet(int entry);
+
+void specAnalyzeProc(ObjectTask *unit)
+{
+    AnalysisWinParams params;
+    GainWinStat *gain;
+
+    gain = dataGainGet(calcUPGet(unit)->charaId);
+    UmnDataBaseAnalisisSet(calcUPGet(unit)->charaId);
+
+    params.x = 0x10;
+    params.y = 0x6C;
+    params.style = 0x00FFFFFD;
+    params.name = *dataEnemyNameGet(calcUPGet(unit)->charaId);
+    params.hp = calcUPGet(unit)->currentHp;
+    params.maxHp = *(unsigned short *)((char *)calcUPGet(unit) + CALC_PARAM_MAX_HP_OFF);
+    params.conditions = *(unsigned short *)((char *)calcUPGet(unit) + CALC_PARAM_CONDITIONS_OFF);
+    params.techPoints = gain->techPoints;
+    params.etherPoints = gain->etherPoints;
+    params.skillPoints = gain->skillPoints;
+    params.money = gain->rewardMoney;
+    params.experience = gain->experience;
+    params.commonDrop = gain->commonDropLo + (gain->commonDropHi << 8);
+    params.rareDrop = gain->rareDropLo + (gain->rareDropHi << 8);
+    eBattleWinOpen3(&params);
+}
 
 void specEscapeProc(void)
 {
@@ -1670,7 +1867,56 @@ void objDispPlCur(void)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispEnCur);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispCur);
+/* Actor.flags bit marking an enemy unit (as src/ov01/data_unit_org_get.h). */
+#define BATTLE_ACTOR_FLAG_ENEMY 0x40
+/* Cursor state flags bit: the target's battle line is checked (calcLineChk). */
+#define CURSOR_STATE_FLAG_LINE_CHECK 0x8
+
+/*
+ * Unprototyped here only: objDispCur sets $a1 = cursor (0x00a10698) and
+ * $a0 = packet (0x00a1072c) for this call; its definition below takes none.
+ */
+void objDispCurSubPl();
+extern void curEnvMake(void *packet, int isAlly);
+extern void objDispCurSubEn(void *packet, CursorObject *cursor, int outOfLine);
+extern void curPutSub(void *packet, CursorObject *cursor);
+extern void *objCmdPtrGet(ObjectTask *task);
+extern int calcLineChk(ObjectTask *unit);
+
+/*
+ * Draw the battle cursor into one GS packet: the player-side cursor, or the
+ * enemy-side one, coloured by the target's side and marked when the
+ * line-checked target is out of line.
+ */
+void objDispCur(CursorObject *cursor, int isPlayer)
+{
+    int packet[2]; /* grGpInit's record, as in curTexTrans */
+    int outOfLine;
+    int isAlly;
+
+    grGpInit(packet);
+    if (!isPlayer) {
+        /* The original calls it (0x00a1069c) and ignores the result. */
+        objCmdPtrGet((ObjectTask *)cursor);
+        if ((cursor->state->flags & CURSOR_STATE_FLAG_LINE_CHECK) &&
+            tgtUnitGet() != 0 && calcLineChk((ObjectTask *)tgtUnitGet()) == 0) {
+            outOfLine = 1;
+            isAlly = 0;
+        } else {
+            unsigned int isEnemy;
+
+            outOfLine = 0;
+            isEnemy = tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_ENEMY;
+            isAlly = isEnemy == 0;
+        }
+        curEnvMake(packet, isAlly);
+        objDispCurSubEn(packet, cursor, outOfLine);
+        curPutSub(packet, cursor);
+    } else {
+        objDispCurSubPl(packet, cursor);
+    }
+    grPacketSend(packet);
+}
 
 void objDispCurSubPl(void)
 {
@@ -1720,4 +1966,31 @@ void curTexTrans(void)
     grPacketSend(packet);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curEnvMake);
+/*
+ * GS_REG_SET's real (void *, long long, long long) prototype, as
+ * src/ov01/entry_first_init.c's encEnvMake and src/ov01/menu.c's
+ * menuStatEnvMake already declare it for the same idiom.
+ */
+extern void GS_REG_SET(void *packet, long long register_id, long long control);
+extern unsigned short dataXtxAdrGet(int index);
+
+void curEnvMake(void *packet, int isAlly)
+{
+    unsigned short tbp0, tbp1;
+
+    if (!isAlly) {
+        tbp0 = dataXtxAdrGet(0xF);
+        tbp1 = dataXtxAdrGet(0x10);
+    } else {
+        tbp0 = dataXtxAdrGet(0xF);
+        tbp1 = dataXtxAdrGet(0x12);
+    }
+
+    GS_REG_SET(packet, 0xE, 0x1000000000008005LL);
+    GS_REG_SET(packet, 0x6,
+               tbp0 | ((long long)tbp1 << 37) | 0x20000005DD340000LL);
+    GS_REG_SET(packet, 0x42, 0);
+    GS_REG_SET(packet, 0x47, 0x5000D);
+    GS_REG_SET(packet, 0x8, 0);
+    GS_REG_SET(packet, 0x14, 0);
+}

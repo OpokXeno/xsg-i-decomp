@@ -225,6 +225,14 @@ extern int calcLineChk(ObjectTask *unit);
  */
 extern int calcStatGet(ObjectTask *unit, int category, int flag);
 
+/*
+ * calcStatSet (src/ov01/calc.c, still asm) applies a status category/flag
+ * to a unit and reports the result, with the same always-zero fourth word
+ * calcStatReset (below) takes; cmdStatSet (0x00a22420) is this TU's only
+ * claimed caller.
+ */
+extern int calcStatSet(ObjectTask *unit, int category, int flag, int unused);
+
 /* calcUPGet's return type comes from its definer, ov01/tu004 calc.c
  * (published include/ov01/calc.h); calcUPGet itself is still asm there, so
  * it is redeclared here the same way src/ov01/snd.c, src/ov01/menu.c and
@@ -530,14 +538,59 @@ typedef struct McamAngleOffset {
 } McamAngleOffset;
 
 /*
+ * The block cmdDeadTime and cmdCamSetAct reach through the pointer stored
+ * just past ObjectTask's modeled task/work prefix; only the field
+ * cmdDeadTime writes is modeled.
+ */
+typedef struct UnitDeadTimeBlock {
+    unsigned char unmodeled_0[0xD0];
+    float value;    /* +0xD0: cmdDeadTime, reciprocal-scaled duration */
+} UnitDeadTimeBlock;
+
+/*
+ * Offset 0x14 of the record unitPtrGet returns lands just past ObjectTask's
+ * modeled task/work prefix (shared.h); the real per-unit allocation is
+ * longer than that partial view (shared.h's own XglTaskPrefix comment
+ * documents the same gap for the task-specific payload). cmdDeadTime and
+ * cmdCamSetAct are the only functions in this allocation that read the
+ * pointer stored there.
+ */
+typedef struct UnitDeadTimeRecord {
+    unsigned char unmodeled_0[0x14];
+    UnitDeadTimeBlock *target;   /* +0x14 */
+} UnitDeadTimeRecord;
+
+/*
  * mcamPtrGet (this TU, still asm) returns the camera-offset parameter block
  * cmdCamOffsPos (0x00a21458) fills in; only the members that function
  * touches are modeled. cmdCamOffsAng (this TU, still asm) reaches the same
  * +0x70 enable flag for its own angle block, so it stays a separate,
- * unmodeled span here.
+ * unmodeled span here. cmdCamSetAct (0x00a20f28) reaches a disjoint span at
+ * the head of the same block: +0x00 (sw $19,0x0($18), a one/zero flag),
+ * +0x20 (sw $3,0x20($18), the unit's UnitDeadTimeRecord target pointer),
+ * +0x24 (sw $4,0x24($18), the unit's CalcUnitParam charaId widened to a
+ * word) and +0x28 (sw $2,0x28($18), the raw third script operand).
  */
+/*
+ * One tracked unit of cmdCamSetAct3's two-unit camera (mode 3 in
+ * unitTrackEnabled): the same three words cmdCamSetAct stores at
+ * +0x20..+0x28 for a single unit.
+ */
+typedef struct McamActorTarget {
+    UnitDeadTimeBlock *targetBlock;    /* +0x0: the unit's UnitDeadTimeRecord target */
+    int charaId;                       /* +0x4: CalcUnitParam charaId */
+    int actId;                         /* +0x8: script operand */
+} McamActorTarget;
+
 typedef struct McamParams {
-    unsigned char unmodeled_0[0x70];
+    int unitTrackEnabled;              /* +0x00: cmdCamSetAct; cmdCamCopy clears it (sw $0,0x0($2)) */
+    unsigned char unmodeled_4[0x10 - 0x4];
+    Vector4 lockPosition;              /* +0x10: cmdCamCopy (swc1 0x10/0x14/0x18, w 1.0f at 0x1C) */
+    UnitDeadTimeBlock *targetBlock;    /* +0x20: cmdCamSetAct */
+    int charaId;                       /* +0x24: cmdCamSetAct */
+    int actId;                         /* +0x28: cmdCamSetAct */
+    McamActorTarget pairTarget[2];     /* +0x2C/+0x38: cmdCamSetAct3 (sw 0x2C..0x40($18)) */
+    unsigned char unmodeled_44[0x70 - 0x44];
     int offsEnabled;                  /* +0x70 */
     unsigned char unmodeled_74[0x80 - 0x74];
     Vector4 offset;                   /* +0x80: x/y/z scaled by 0.01, w fixed at 1.0 */
@@ -545,6 +598,17 @@ typedef struct McamParams {
 } McamParams;
 
 extern McamParams *mcamPtrGet(void);
+
+/*
+ * MCamGetCurrentCoord (src/ov01/m_cam.c) fills a coordinate with the given
+ * camera point (0 or 1); cmdCamCopy (0x00a20d98) passes the point opposite
+ * the current camMode.
+ */
+extern Vector4 *MCamGetCurrentCoord(Vector4 *coord, int point);
+
+/* "** CamCopy err **\n" at 0x00a465a8 (ov01 .rodata): cmdCamCopy's message
+ * when camMode is neither 0 nor 1. */
+extern const char D_00A465A8[];
 
 /*
  * StudioLight's ambient_color (include/main/xgl_studio.h, main/tu101) is the
