@@ -128813,6 +128813,93 @@
         },
         {
           "range": [
+            "0x00a0bcf0",
+            "0x00a0bd10"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A0BCF0"
+          ],
+          "generated_by": [
+            "SlPrizeCheck"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0bcf0",
+                "0x00a0bd10"
+              ],
+              "object_range": [
+                144,
+                176
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified"
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0bda0",
+            "0x00a0bdb4"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A0BDA0"
+          ],
+          "generated_by": [
+            "SlChangeRealEffect"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0bda0",
+                "0x00a0bdb4"
+              ],
+              "object_range": [
+                176,
+                196
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified"
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0bdc0",
+            "0x00a0bddc"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A0BDC0"
+          ],
+          "generated_by": [
+            "SlEvent"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0bdc0",
+                "0x00a0bddc"
+              ],
+              "object_range": [
+                208,
+                236
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified"
+            }
+          ]
+        },
+        {
+          "range": [
             "0x00a0be10",
             "0x00a0be90"
           ],
@@ -128838,8 +128925,8 @@
                 "0x00a0be28"
               ],
               "object_range": [
-                144,
-                168
+                240,
+                264
               ],
               "symbols": [
                 "D_00A0BE10"
@@ -128853,8 +128940,8 @@
                 "0x00a0be40"
               ],
               "object_range": [
-                168,
-                192
+                264,
+                288
               ],
               "symbols": [
                 "D_00A0BE28"
@@ -128868,8 +128955,8 @@
                 "0x00a0be58"
               ],
               "object_range": [
-                192,
-                216
+                288,
+                312
               ],
               "symbols": [
                 "D_00A0BE40"
@@ -128883,8 +128970,8 @@
                 "0x00a0be70"
               ],
               "object_range": [
-                216,
-                240
+                312,
+                336
               ],
               "symbols": [
                 "D_00A0BE58"
@@ -128898,8 +128985,8 @@
                 "0x00a0be90"
               ],
               "object_range": [
-                240,
-                272
+                336,
+                368
               ],
               "symbols": [
                 "D_00A0BE70"
@@ -128928,8 +129015,8 @@
                 "0x00a0c030"
               ],
               "object_range": [
-                272,
-                480
+                368,
+                576
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -128957,8 +129044,8 @@
                 "0x00a0c078"
               ],
               "object_range": [
-                480,
-                504
+                576,
+                600
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -128997,8 +129084,8 @@
                 "0x00a0c088"
               ],
               "object_range": [
-                504,
-                520
+                600,
+                616
               ],
               "symbols": [
                 "D_00A0C078"
@@ -129011,8 +129098,8 @@
                 "0x00a0c098"
               ],
               "object_range": [
-                520,
-                536
+                616,
+                632
               ],
               "symbols": [
                 "D_00A0C088"
@@ -129025,8 +129112,8 @@
                 "0x00a0c0a8"
               ],
               "object_range": [
-                536,
-                552
+                632,
+                648
               ],
               "symbols": [
                 "D_00A0C098"
@@ -129071,8 +129158,8 @@
                 "0x00a0c0c8"
               ],
               "object_range": [
-                552,
-                568
+                648,
+                664
               ],
               "symbols": [
                 "D_00A0C0B8"
@@ -129085,8 +129172,8 @@
                 "0x00a0c0d8"
               ],
               "object_range": [
-                568,
-                584
+                664,
+                680
               ],
               "symbols": [
                 "D_00A0C0C8"
@@ -129099,8 +129186,8 @@
                 "0x00a0c0e8"
               ],
               "object_range": [
-                584,
-                600
+                680,
+                696
               ],
               "symbols": [
                 "D_00A0C0D8"
@@ -129113,8 +129200,8 @@
                 "0x00a0c100"
               ],
               "object_range": [
-                600,
-                624
+                696,
+                720
               ],
               "symbols": [
                 "D_00A0C0E8"
@@ -129127,8 +129214,8 @@
                 "0x00a0c120"
               ],
               "object_range": [
-                624,
-                656
+                720,
+                752
               ],
               "symbols": [
                 "D_00A0C100"
@@ -129141,8 +129228,8 @@
                 "0x00a0c130"
               ],
               "object_range": [
-                656,
-                672
+                752,
+                768
               ],
               "symbols": [
                 "D_00A0C120"
@@ -129169,8 +129256,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1072,
-                1104
+                1280,
+                1312
               ],
               "range": [
                 "0x00a0c130",
@@ -129201,8 +129288,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1104,
-                1136
+                1312,
+                1344
               ],
               "range": [
                 "0x00a0c150",
@@ -129233,8 +129320,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1136,
-                1168
+                1344,
+                1376
               ],
               "range": [
                 "0x00a0c170",
@@ -129265,8 +129352,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1168,
-                1208
+                1376,
+                1416
               ],
               "range": [
                 "0x00a0c190",
@@ -129301,8 +129388,8 @@
                 "0x00a0c1c8"
               ],
               "object_range": [
-                672,
-                688
+                768,
+                784
               ],
               "symbols": [
                 "D_00A0C1B8"
@@ -129332,12 +129419,41 @@
                 "0x00a0c1d8"
               ],
               "object_range": [
-                688,
-                704
+                784,
+                800
               ],
               "symbols": [
                 "D_00A0C1C8"
               ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0c220",
+            "0x00a0c26c"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A0C220"
+          ],
+          "generated_by": [
+            "PokerMain"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0c220",
+                "0x00a0c26c"
+              ],
+              "object_range": [
+                800,
+                876
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified"
             }
           ]
         },
@@ -129366,8 +129482,8 @@
                 "0x00a0c288"
               ],
               "object_range": [
-                704,
-                728
+                880,
+                904
               ],
               "symbols": [
                 "D_00A0C270"
@@ -129381,8 +129497,8 @@
                 "0x00a0c2a0"
               ],
               "object_range": [
-                728,
-                752
+                904,
+                928
               ],
               "symbols": [
                 "D_00A0C288"
@@ -129396,8 +129512,8 @@
                 "0x00a0c2b8"
               ],
               "object_range": [
-                752,
-                776
+                928,
+                952
               ],
               "symbols": [
                 "D_00A0C2A0"
@@ -129411,8 +129527,8 @@
                 "0x00a0c2d0"
               ],
               "object_range": [
-                776,
-                800
+                952,
+                976
               ],
               "symbols": [
                 "D_00A0C2B8"
@@ -129426,8 +129542,8 @@
                 "0x00a0c2e8"
               ],
               "object_range": [
-                800,
-                824
+                976,
+                1000
               ],
               "symbols": [
                 "D_00A0C2D0"
@@ -129440,12 +129556,41 @@
                 "0x00a0c300"
               ],
               "object_range": [
-                824,
-                848
+                1000,
+                1024
               ],
               "symbols": [
                 "D_00A0C2E8"
               ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0c300",
+            "0x00a0c31c"
+          ],
+          "c_owned_symbols": [
+            "jtbl_00A0C300"
+          ],
+          "generated_by": [
+            "GameModeChange"
+          ],
+          "also_referenced_by_c": [],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0c300",
+                "0x00a0c31c"
+              ],
+              "object_range": [
+                1024,
+                1052
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified"
             }
           ]
         },
@@ -129470,8 +129615,8 @@
                 "0x00a0c338"
               ],
               "object_range": [
-                848,
-                872
+                1056,
+                1080
               ],
               "symbols": [
                 "D_00A0C320"
@@ -129485,8 +129630,8 @@
                 "0x00a0c350"
               ],
               "object_range": [
-                872,
-                896
+                1080,
+                1104
               ],
               "symbols": [
                 "D_00A0C338"
@@ -129517,8 +129662,8 @@
                 "0x00a0c3b0"
               ],
               "object_range": [
-                896,
-                928
+                1104,
+                1136
               ],
               "symbols": [
                 "D_00A0C390"
@@ -129532,8 +129677,8 @@
                 "0x00a0c3d0"
               ],
               "object_range": [
-                928,
-                960
+                1136,
+                1168
               ],
               "symbols": [
                 "D_00A0C3B0"
@@ -129563,8 +129708,8 @@
                 "0x00a0c5b0"
               ],
               "object_range": [
-                960,
-                992
+                1168,
+                1200
               ],
               "symbols": [
                 "D_00A0C590"
@@ -129578,8 +129723,8 @@
                 "0x00a0c5c8"
               ],
               "object_range": [
-                992,
-                1016
+                1200,
+                1224
               ],
               "symbols": [
                 "D_00A0C5B0"
@@ -129608,8 +129753,8 @@
                 "0x00a0c6e0"
               ],
               "object_range": [
-                1016,
-                1032
+                1224,
+                1240
               ],
               "symbols": [
                 "D_00A0C6D0"
@@ -129637,8 +129782,8 @@
                 "0x00a0c720"
               ],
               "object_range": [
-                1040,
-                1072
+                1248,
+                1280
               ],
               "symbols": [],
               "anonymous_emission": true,
