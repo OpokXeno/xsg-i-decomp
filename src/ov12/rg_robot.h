@@ -354,9 +354,15 @@ struct RgStatus {
 };
 
 typedef struct RgRobotStatus RgRobotStatus;
+typedef struct RgCmd RgCmd;
 
-typedef int (*RgStatusExecCmdFunc)(RgRobotStatus *status, int param,
-                                    RgBody *body);
+/*
+ * A status's command handler: _StatusExecCmd passes the body in $5 and
+ * the command in $6 (ov12:0x00a02b3c), the order every recovered handler
+ * (_ExecCmdInDrop, _ExecCmdInHissatu, _DamageExecCmd, ...) reads them in.
+ */
+typedef int (*RgStatusExecCmdFunc)(RgRobotStatus *status, RgBody *body,
+                                    RgCmd *command);
 typedef int (*RgStatusPassTimeFunc)(RgRobotStatus *status, RgBody *body,
                                      float deltaTime);
 typedef void (*RgStatusDispFunc)(RgRobotStatus *status, RgBody *body);
@@ -510,7 +516,7 @@ struct RgRobotStatus {
  * _ExecHitByBody through the same casts (ov12:0x00a07c6c/0x00a07c74).
  * Bytes 0x28-0x2f stay unmodeled.
  */
-typedef struct RgCmd {
+struct RgCmd {
     int param;                       /* +0x00 */
     unsigned char unmodeled_04[0xc]; /* +0x04 */
     float scratch0;                  /* +0x10 */
@@ -522,7 +528,7 @@ typedef struct RgCmd {
     unsigned char unmodeled_28[8];   /* +0x28 */
     int type;                        /* +0x30 */
     unsigned char unmodeled_34[0xc]; /* +0x34 */
-} RgCmd;
+};
 
 /*
  * RgStatus's cmdQueue (+0x08) points to this fixed-size ring: _PassTimeRobot

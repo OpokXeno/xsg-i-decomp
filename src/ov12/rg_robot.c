@@ -251,7 +251,7 @@ static void _DisposeStatus(RgRobotStatus *status)
     RgHeapFree(InstanceOfRgHeap(), status, D_00A51840, 648);
 }
 
-static int _StatusExecCmd(RgRobotStatus *status, RgBody *body, int param)
+static int _StatusExecCmd(RgRobotStatus *status, RgCmd *command, RgBody *body)
 {
     RgStatusExecCmdFunc execCmdMethod;
 
@@ -260,7 +260,7 @@ static int _StatusExecCmd(RgRobotStatus *status, RgBody *body, int param)
     }
     execCmdMethod = status->execCmdMethod;
     if (execCmdMethod != 0) {
-        return execCmdMethod(status, param, body);
+        return execCmdMethod(status, body, command);
     }
     return 0;
 }
@@ -367,7 +367,7 @@ damage:
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _MovingPassTime);
 
-static int _AllowAllCmdInMoving(RgRobotStatus *status, int param, RgBody *body);
+static int _AllowAllCmdInMoving(RgRobotStatus *status, RgBody *body, RgCmd *command);
 static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
 
 static void _InitMovingStatus(RgRobotStatus *status, RgBody *body)
@@ -528,7 +528,7 @@ static void _BreakingExit(RgRobotStatus *status, RgBody *body)
     _BodyPlayMotion(body, 0);
 }
 
-static int _ExecCmdInBreaking(RgRobotStatus *status, int param, RgBody *body);
+static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
 static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
 {
@@ -973,7 +973,7 @@ static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
         assert_prog(D_00A51B48, D_00A51840, 3153);
     }
     body->cmdMask |= 1 << command->type;
-    return _StatusExecCmd(robotStatus, (RgBody *) command, (int) body);
+    return _StatusExecCmd(robotStatus, command, body);
 }
 
 extern float RgGeomPointGetSpeed(RgGeomPoint *point);
