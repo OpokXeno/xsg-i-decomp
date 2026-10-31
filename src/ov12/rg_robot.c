@@ -773,7 +773,22 @@ static int _BodyGetTargetPos(RgBody *body, RgPointVector *position)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetSpec);
+static void _BodySetSpec(RgBody *body, RgRobotSpec *spec)
+{
+    float life;
+
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 2773);
+    }
+    if (spec != 0) {
+        body->spec = spec;
+        body->dashTime = spec->dashTime;
+        body->lifeMax = body->life = spec->life;
+        RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+        RgRobotEffectSetJetPtclName(body->effect, spec->jetEffect);
+        RgRobotEffectSetDashPtclName(body->effect, spec->dashEffect);
+    }
+}
 
 extern void RgGeomFree(RgGeomPoint *point);
 extern void RgGeomPointSetMoveResist(RgGeomPoint *point, float resist);
