@@ -435,7 +435,28 @@ void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle)
     XrgMulMatrix(destination, source, rotation);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgInvMatrix);
+/*
+ * Inverts a rigid transform: the transposed 3x3 rotation times a
+ * translation by the negated source position.
+ */
+void XrgInvMatrix(RgMatrix destination, const RgMatrix source)
+{
+    RgMatrix rotation;
+    RgMatrix translation;
+    int row;
+    int column;
+
+    XrgUnitMatrix(rotation);
+    for (row = 0; row < 3; row++) {
+        for (column = 0; column < 3; column++) {
+            rotation[column * 4 + row] = source[row * 4 + column];
+        }
+    }
+    XrgUnitMatrix(translation);
+    /* XrgNegateVector only reads its source; its prototype is not const. */
+    XrgNegateVector(translation + 12, (float *) source + 12);
+    XrgMulMatrix(destination, rotation, translation);
+}
 
 extern double atan2(double y, double x);
 
