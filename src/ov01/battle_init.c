@@ -240,9 +240,10 @@ typedef struct ScenarioStep {
  * prototyping. That call (`jalr $3` at 0x00a0bc1c) sets $a0 to
  * scenarioSrcGet(0)'s return and $a1 to scenarioDstGet(0)'s record (`daddu
  * $5,$16,$0` at 0x00a0bc08, `daddu $4,$2,$0` at 0x00a0bc10); only this
- * parameter list makes the compiler emit that set-up. Whether any phase
- * handler reads the two values is not established; the handlers themselves
- * (scenarioBatExecPhase10 and the ones chained from it) are still asm here.
+ * parameter list makes the compiler emit that set-up. scenarioBatExecPhase10
+ * reads `source` as the ScenarioBatExec record (`lw $4,0x0($17)` at
+ * 0x00a0bee4, `lw $3,0x4($17)` at 0x00a0bef4) and hands `dest` to
+ * scenarioCam as its target list (`daddu $5,$18,$0` at 0x00a0bef0).
  */
 typedef struct ScenarioDstEntry ScenarioDstEntry;
 typedef void (*ScenarioPhaseFunc)(int source, ScenarioDstEntry *dest);
@@ -354,7 +355,38 @@ static ActStock actStock;
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockInit);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockMaxGet);
+extern int calcBattleChk(ObjectTask *unit);
+
+/*
+ * The action-stock limit: half the units on side 2 still able to fight,
+ * rounded up, capped at 4.
+ */
+int actStockMaxGet(void)
+{
+    BattleUnit **table;
+    int count;
+    int i;
+    int fighters;
+
+    fighters = 0;
+    count = unitTblGet(2, &table);
+    for (i = 0; i < count; i++) {
+        if (table[i] != 0 && calcBattleChk((ObjectTask *)table[i])) {
+            fighters++;
+        }
+    }
+    if (fighters > 0) {
+        if (fighters * 5 % 10 >= 5) {
+            fighters = fighters / 2 + 1;
+        } else {
+            fighters = fighters / 2;
+        }
+    }
+    if (fighters > 4) {
+        fighters = 4;
+    }
+    return fighters;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockMake);
 
@@ -738,8 +770,8 @@ typedef struct PartyAttackSlot {
 
 /*
  * plTbl (data still asm-owned; original ELF symbol name): three 8-byte
- * entries. plUnitTblGet writes only the first two fields of each; the
- * remaining four bytes are written by plUnitTblSet (still INCLUDE_ASM).
+ * entries. plUnitTblGet and plUnitTblSet write only the first two fields of
+ * each; nothing in this TU's C touches the remaining four bytes.
  */
 typedef struct PlUnitEntry {
     short partyId;         /* +0x0 */
@@ -764,7 +796,30 @@ PlUnitEntry *plUnitTblGet(void) {
     return plTbl;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", plUnitTblSet);
+/*
+ * The party record's attack-slot table (src/main/party.h PartyDataPrefix:
+ * attack_slots at +0x30), viewed with the offset inside the struct so that
+ * index*4 + 0x30 is added before the record base (`addiu $4,$4,0x30` at
+ * 0x00a0b6b8, `addu $2,$2,$4` at 0x00a0b6c0); partyId is stored first (`sb`
+ * at 0x00a0b6cc ahead of the `sh`).
+ */
+typedef struct PartyAttackView {
+    unsigned char unmodeled_00[0x30];
+    PartyAttackSlot attackSlots[3]; /* +0x30 */
+} PartyAttackView;
+
+/* Assign a party member and its attack position to slot `index`, both in the
+ * party record and in plTbl. */
+void plUnitTblSet(int index, int partyId, int attackPosition)
+{
+    PartyAttackView *party;
+
+    party = (PartyAttackView *)PartyDataGet();
+    party->attackSlots[index].partyId = partyId;
+    party->attackSlots[index].attackPosition = attackPosition;
+    plTbl[index].partyId = partyId;
+    plTbl[index].attackPosition = attackPosition;
+}
 
 /*
  * GameLoopState (config/symbols/main.txt, data still asm-owned) is a
@@ -975,8 +1030,16 @@ int scenarioBatNext(void)
  */
 typedef struct TecFlagView {
     unsigned char flags;                      /* +0x00 */
-    unsigned char unmodeled_01[0x11 - 0x01];
+    unsigned char unmodeled_01[0x02 - 0x01];
+    u16 procFlags; /* +0x02: with bit 0x20 (TEC_PROC_FLOW_SPEC) set,
+                    * scenarioSrcEndChk returns the caller's result (`lhu
+                    * $3,0x2($2)`/`andi $3,$3,0x20` at 0x00a0ea54); calc.c's
+                    * TecKindView names the same u16 flags */
+    unsigned char unmodeled_04[0x11 - 0x04];
     signed char kind;                         /* +0x11 */
+    unsigned char unmodeled_12[0x16 - 0x12];
+    short effectNo; /* +0x16: scenarioBatExecPhase50 waits on this effect
+                     * (`lh $4,0x16($2)` at 0x00a0cb8c into sefIsFinishEffect) */
 } TecFlagView;
 
 extern TecFlagView *dataTecGet(int tecId);
@@ -989,6 +1052,9 @@ extern TecFlagView *dataTecGet(int tecId);
 typedef struct ItmTrgView {
     unsigned char unmodeled_00[0x08];
     u8 trgFlags; /* +0x08 */
+    unsigned char unmodeled_09[0x10 - 0x09];
+    short effectNo; /* +0x10: the item's effect (`lh $4,0x10($2)` at
+                     * 0x00a0cb98 into sefIsFinishEffect) */
 } ItmTrgView;
 
 extern ItmTrgView *dataItmGet(int itmId);
@@ -1081,7 +1147,35 @@ int scenarioBatDataSync(int *sourceIndex)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", etehrCVGet);
+/*
+ * The ether voice for a scenario action: 4 by default, 5 or 6 for the
+ * listed techniques of characters 3, 6 and 7.
+ */
+int etehrCVGet(ScenarioBatExec *exec)
+{
+    int voice = 4;
+
+    switch (calcUPGet((ObjectTask *)exec->unit)->charaId) {
+    case 3:
+        if (exec->tecId >= 0x236 && exec->tecId <= 0x239) {
+            voice = 5;
+        }
+        break;
+    case 6:
+        if (exec->tecId == 0x254) {
+            voice = 5;
+        } else if (exec->tecId == 0x257) {
+            voice = 6;
+        }
+        break;
+    case 7:
+        if (exec->tecId >= 0x262 && exec->tecId <= 0x263) {
+            voice = 5;
+        }
+        break;
+    }
+    return voice;
+}
 
 extern void EXM_SetDirectionalWind(Vector4 *direction);
 extern void EXM_SetShakePower(float power);
@@ -1154,7 +1248,47 @@ void hairWindOff(BattleUnit *unit)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase10);
+void statEffOff(ObjectTask *unit);
+/* Defined in src/main/sef.c and src/ov01/snd.c. */
+extern void sefLoadEffect(int effect_no, int character_id);
+extern int sndConvSpid(ObjectTask *unit, int mode, int tecId, int itmId);
+extern int sndSeRegChk(ObjectTask *unit, int seType);
+extern void dataSndSeLoad(ObjectTask *unit, int seId);
+void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest);
+
+/*
+ * First phase of a scenario action. `source` is the record scenarioSrcGet
+ * hands out as an int (the action: unit, type, technique id, item id or
+ * weapon slot, read at +0x0/+0x4/+0x8/+0xC); `dest` is the current
+ * destination record, whose first word scenarioCam reads as the target.
+ * On the phase's first frame it suspends the unit's status-effect ticks,
+ * queues the action camera, loads the action's effect and its sound effect,
+ * then hands over to scenarioBatExecPhase20 within the same frame.
+ */
+void scenarioBatExecPhase10(int source, ScenarioDstEntry *dest)
+{
+    ScenarioBatExec *exec = (ScenarioBatExec *)source;
+    int effectNo;
+    int seType;
+
+    if (scenarioPtr.phaseTimer == 0) {
+        statEffOff((ObjectTask *)exec->unit);
+        scenarioCam(exec, (BattleUnit **)dest);
+        if (exec->type != 3) {
+            effectNo = dataTecGet(exec->tecId)->effectNo;
+        } else {
+            effectNo = dataItmGet(exec->slotOrItemId)->effectNo;
+        }
+        sefLoadEffect(effectNo, calcUPGet((ObjectTask *)exec->unit)->charaId);
+        seType = sndConvSpid((ObjectTask *)exec->unit, exec->type, exec->tecId,
+                             exec->slotOrItemId);
+        if (!sndSeRegChk((ObjectTask *)exec->unit, seType)) {
+            dataSndSeLoad((ObjectTask *)exec->unit, seType);
+        }
+    }
+    scenarioPtrFuncSet(scenarioBatExecPhase20);
+    scenarioBatExecPhase20(source, dest);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase20);
 
@@ -1164,7 +1298,34 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase30);
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase40);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase50);
+/* Defined in src/main/sef.c; nonzero once the effect has finished. */
+extern int sefIsFinishEffect(int effect_no);
+void statEffOn(ObjectTask *unit);
+
+/*
+ * Wait for the action's effect (the item's for an item action, else the
+ * technique's) to finish, then queue camera event 1 for the acting unit,
+ * re-enable its status-effect ticks and advance the scenario.
+ */
+void scenarioBatExecPhase50(int source, ScenarioDstEntry *dest)
+{
+    ScenarioBatExec *exec = (ScenarioBatExec *)source;
+    int effectNo;
+
+    if (exec->type != 3) {
+        effectNo = dataTecGet(exec->tecId)->effectNo;
+    } else {
+        effectNo = dataItmGet(exec->slotOrItemId)->effectNo;
+    }
+    if (sefIsFinishEffect(effectNo)) {
+        D_00A57B80.type = 1;
+        D_00A57B80.unit = exec->unit;
+        D_00A57B80.param = exec->tecId;
+        camEventExec(&D_00A57B80);
+        statEffOn((ObjectTask *)exec->unit);
+        scenarioBatNext();
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecMain);
 
@@ -1506,7 +1667,53 @@ void spWepDispOnSub(BattleUnit *unit, int slot, int fade)
     transWepIn(unit, slot);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", spWepDispOff);
+void spWepDispOffSub(BattleUnit *unit, int slot, int fade);
+
+/*
+ * spWepDispOn's counterpart at the end of an action: hide the weapon the
+ * action showed again (fading for kind-6 techniques and for slot-2 weapons
+ * 0x11 and 0xB), or put a special weapon's actor back.
+ */
+void spWepDispOff(ScenarioBatExec *exec, int weapon)
+{
+    int tecKind;
+    struct WepSpEntry *wepSp;
+    int weaponId;
+    Actor *weaponActor;
+
+    if (exec->type == 1) {
+        tecKind = dataTecGet(exec->tecId)->kind;
+    } else {
+        spWepDispOffSub(exec->unit, weapon, 0);
+        return;
+    }
+
+    weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[2];
+    if (tecKind == 6) {
+        spWepDispOffSub(exec->unit, exec->slotOrItemId, 1);
+    } else if (weaponId == 0x11 || weaponId == 0xB) {
+        spWepDispOffSub(exec->unit, 2, 1);
+    } else {
+        wepSp = dataTid2WepSp(exec->tecId);
+        if (wepSp != 0) {
+            weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[2];
+            if ((unsigned int)(weaponId - 0xD) >= 4) {
+                weaponActor = exec->unit->weapon[weapon & 3];
+                if (weaponActor != 0 && weaponId != 0x11) {
+                    weaponActor->flags &= ~WEAPON_HIDDEN_BIT;
+                }
+            } else {
+                ACT_setHand(exec->unit->actor, 0);
+            }
+            spWepDispOffSub(exec->unit, 2, 0);
+        } else if (exec->tecId == 8 || exec->tecId == 0xB) {
+            weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[exec->slotOrItemId];
+            if (weaponId == 0xC) {
+                spWepDispOffSub(exec->unit, exec->slotOrItemId, 0);
+            }
+        }
+    }
+}
 
 /*
  * spWepDispOff's worker: with fade clear the weapon actor in slot
@@ -1571,7 +1778,42 @@ void transWepOutDraw(Actor *actor) {
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioSrcEndChk);
+#define TEC_PROC_FLOW_SPEC 0x20
+/* Actor.windFlags bit 0x1000 (`andi $2,$2,0x1000` at 0x00a0eab0 and
+ * 0x00a0eae0): set, the unit is still held in its action motion. */
+#define ACTOR_MOTION_HOLD_BIT 0x1000
+
+extern void unitMotStandSet(ObjectTask *unit);
+
+/*
+ * Whether the scenario action has finished: a special-flow technique
+ * reports `done` as its flow handler left it; techniques and items of
+ * types 2 and 3 wait for their effect (an item also returns its unit to
+ * the standing motion while it is held); anything else waits for the
+ * motion hold to be set.
+ */
+int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done)
+{
+    int effectNo;
+    unsigned int held;
+
+    if (exec->type != 3 && (dataTecGet(exec->tecId)->procFlags & TEC_PROC_FLOW_SPEC)) {
+        return done;
+    }
+    if (exec->type == 2 || exec->type == 3) {
+        if (exec->type != 3) {
+            effectNo = dataTecGet(exec->tecId)->effectNo;
+        } else {
+            effectNo = dataItmGet(exec->slotOrItemId)->effectNo;
+            if (exec->unit->actor->windFlags & ACTOR_MOTION_HOLD_BIT) {
+                unitMotStandSet((ObjectTask *)exec->unit);
+            }
+        }
+        return sefIsFinishEffect(effectNo) != 0;
+    }
+    held = exec->unit->actor->windFlags & ACTOR_MOTION_HOLD_BIT;
+    return held != 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatEnd);
 
@@ -1751,7 +1993,56 @@ void objCurRemove(void)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objCur);
+/* src/ov01/obj.c; menu.c redeclares them the same way. */
+extern void *objCmdPtrGet(ObjectTask *task);
+extern void objHatoVec(ObjectTask *task, int steps);
+extern int objStdMove(ObjectTask *task);
+/* src/main/sef.c, spelled as src/ov01/menu.c and src/ov01/m_cam.c do. */
+extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
+
+/* curCmdSet selectors: 1 moves the cursor to a position, 2 to a unit; 3 is
+ * accepted by objCur alongside 2. */
+#define CURSOR_CMD_POSITION 1
+#define CURSOR_CMD_UNIT 2
+/* Cursor state flag bits: 0x2 is set by curCmdSet while a command is
+ * queued; 0x4 hides the cursor (objCurDraw); 0x8 marks a unit selection. */
+#define CURSOR_STATE_FLAG_QUEUED 0x2
+#define CURSOR_STATE_FLAG_HIDDEN 0x4
+
+/*
+ * The cursor task's per-frame step: run the queued command. A position
+ * move steps the cursor until objStdMove reports arrival; a unit command
+ * snaps it to the unit's null position unless the cursor is hidden.
+ * Either way the queued flag is cleared once the command is done.
+ */
+void objCur(CursorObject *cursor)
+{
+    CursorCommandState *state = cursor->state;
+    CursorCommand *cmd = objCmdPtrGet((ObjectTask *)cursor);
+    Vector4 *position = &state->transform.fields.position;
+    BattleUnit *unit;
+    unsigned int flags;
+
+    switch (cmd->selector) {
+    case CURSOR_CMD_UNIT:
+    case 3:
+        unit = (BattleUnit *)cmd->argument;
+        flags = state->flags;
+        if (!(flags & CURSOR_STATE_FLAG_HIDDEN)) {
+            sefGetNullPosition(position, unit->actor, 0, 0);
+            flags = state->flags;
+        }
+        state->flags = flags & ~CURSOR_STATE_FLAG_QUEUED;
+        break;
+    case CURSOR_CMD_POSITION:
+        objHatoVec((ObjectTask *)cursor, 2);
+        if (objStdMove((ObjectTask *)cursor)) {
+            state->flags &= ~CURSOR_STATE_FLAG_QUEUED;
+            cmd->selector = 0;
+        }
+        break;
+    }
+}
 
 extern void objDispPlCur(void);
 extern void objDispEnCur(CursorObject *cursor);
@@ -1814,18 +2105,30 @@ void curCmdSet(CursorObject *cursor, const CursorCommand *command)
  * selectable item, indexed by curIdx (word width, stride 4); count bounds
  * curIdx on both ends; prevIdx is a snapshot of curIdx taken on entry and
  * compared again after the target update to decide whether to play the
- * selection sound. Earlier bytes are unmodeled; entries[] is sized to the
- * gap its own offset leaves before count (0x24..0x47, stride 4 = 9 words).
+ * selection sound. units[] and entries[] are each sized to the gap their
+ * offsets leave (0x00..0x23 and 0x24..0x47, stride 4 = 9 words).
  */
 typedef struct CursorSelectList {
-    unsigned char unmodeled_00[0x24];
-    void *entries[9]; /* +0x24..+0x47 */
+    BattleUnit *units[9]; /* +0x00..+0x23: the selectable units;
+                           * curMove2Pos reads units[curIdx]->actor (`lw
+                           * $3,0x0($2)`/`lw $5,0x14($3)` at 0x00a0fb48) */
+    void *entries[9]; /* +0x24..+0x47: unit pointers, or position ids
+                       * (cast) when posMode is set (curMove2Pos) */
     int count;         /* +0x48 */
     int curIdx;         /* +0x4C */
     int prevIdx;         /* +0x50 */
-    unsigned char unmodeled_54[4];
-    int groupFlag;       /* +0x58: toggled by curGrpSel */
+    int posMode;         /* +0x54: nonzero, curMove2Pos targets a field
+                          * position from entries[] instead of a unit
+                          * (`lw $2,0x54($16)` at 0x00a0fb24) */
+    int groupFlag;       /* +0x58: toggled by curGrpSel, set by curSelGrpSet */
 } CursorSelectList;
+
+/*
+ * The battle cursor's selection record (original ELF symbol name):
+ * curSel/curMove2Pos work on it and curSelGrpSet/curSelGrpGet
+ * own its group word.
+ */
+static CursorSelectList curMove;
 
 /*
  * dataPadRead is defined by ov01/tu005 data_unit_org_get.c (still asm);
@@ -1895,7 +2198,55 @@ int curGrpSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int pr
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curMove2Pos);
+/* src/ov01/data_unit_org_get.c, spelled as src/ov01/unit_cmd.h does. */
+extern Vector4 *dataPosTblGet(int index);
+
+/*
+ * Send the cursor to the selected entry: a unit's null position, raised by
+ * the unit's size class (1.0 below class 3, none for class 3, 2.5 above),
+ * or a field position from dataPosTblGet (negative ids mirror x). A hidden
+ * cursor jumps there at once; the move itself is queued as command 1.
+ */
+void curMove2Pos(CursorObject *cursor, CursorSelectList *list)
+{
+    CursorCommand cmd;
+    CursorCommandState *state = cursor->state;
+    CursorTransform *transform = &state->transform;
+    Vector4 *pos;
+    int posId;
+    int sizeClass;
+    float x;
+
+    if (list->posMode == 0) {
+        sefGetNullPosition(&transform->fields.goal, list->units[list->curIdx]->actor, 0, 0);
+        sizeClass = calcUPGet((ObjectTask *)list->units[list->curIdx])->sizeClass;
+        if (sizeClass < 3) {
+            transform->fields.offset.y = 1.0f;
+        } else if (sizeClass < 4) {
+            transform->fields.offset.y = 0.0f;
+        } else {
+            transform->fields.offset.y = 2.5f;
+        }
+    } else {
+        posId = (int)list->entries[list->curIdx];
+        pos = dataPosTblGet(posId);
+        x = pos->x;
+        transform->fields.goal.x = x;
+        transform->fields.goal.y = pos->y;
+        transform->fields.goal.z = pos->z;
+        if (posId < 0) {
+            transform->fields.goal.x = -x;
+        }
+        transform->fields.offset.y = 0.0f;
+    }
+    if (state->flags & CURSOR_STATE_FLAG_HIDDEN) {
+        transform->fields.position.x = transform->fields.goal.x;
+        transform->fields.position.y = transform->fields.goal.y;
+        transform->fields.position.z = transform->fields.goal.z;
+    }
+    cmd.selector = CURSOR_CMD_POSITION;
+    curCmdSet(cursor, &cmd);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curEnProcInit);
 
@@ -1910,52 +2261,50 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curTgtProcInit);
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curTgtProc);
 
 /*
- * The battle cursor's selection-group record (data still asm-owned, splat
- * name kept); curSelGrpSet is the only known writer of the evidenced word.
- */
-typedef struct CurSelGrp {
-    unsigned char unmodeled_00[0x58];
-    u32 group; /* +0x58: written 0 or 1 by curSelGrpSet */
-} CurSelGrp;
-static CurSelGrp curMove;
-
-/*
  * Written -1 whenever curSelGrpSet derives the group from flags instead of
  * receiving it directly (data still asm-owned; original ELF symbol name); no other
  * reference is evidenced in this TU.
  */
 void curSelGrpSet(u32 group, int flags)
 {
-    CurSelGrp *state = &curMove;
+    CursorSelectList *state = &curMove;
 
     if (group < 2U) {
-        state->group = group;
+        state->groupFlag = group;
         return;
     }
     if (flags & 8) {
-        state->group = 0;
+        state->groupFlag = 0;
     } else if (flags & 0x40) {
-        state->group = 0;
+        state->groupFlag = 0;
     } else {
-        state->group = 1;
+        state->groupFlag = 1;
     }
     oldCurGrp = -1;
 }
 
 /*
- * The current selection group (data still asm-owned, splat name kept); a
- * different object from CurSelGrp above, whose writer is not in this TU.
+ * The current selection group.
  */
 int curSelGrpGet(void)
 {
-    return curMove.group;
+    return curMove.groupFlag;
 }
 
 void objDispPlCur(void)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispEnCur);
+extern void curTexTrans(int unused);
+extern void objDispCur(CursorObject *cursor, int isPlayer);
+extern void menuStatTexTrans(void);
+extern void grGpInit(void *packet);
+extern void grPacketSend(void *packet);
+extern int frameCntGet(void);
+/* src/ov01/menu.c takes a GrPacket *; this file passes grGpInit's
+ * `int packet[2]` record as void *, as objDispCur does. */
+extern void menuActCurPut(void *packet, ObjectTask *cursor, ObjectTask *unit, int frame);
+extern void monsNameDisp(void *packet, ObjectTask *unitTask, int x, int y, int isEnemy);
 
 /*
  * Bit 0x40 of the target's work-record flags word (`lw $3,0x10($2)`/`lw
@@ -1964,6 +2313,49 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispEnCur);
  * header is not included here).
  */
 #define BATTLE_ACTOR_FLAG_ENEMY 0x40
+/* Bit 0x80 of the same word: objDispEnCur skips the name of a target that
+ * has it (`andi $2,$2,0x80` at 0x00a10620). */
+#define BATTLE_ACTOR_FLAG_DEAD 0x80
+
+/*
+ * Draw the enemy-side cursor: the cursor itself, the acting unit's marker
+ * when the target is an enemy, and the target's name while a selection is
+ * active and help mode 2 is off (an enemy target only while it is alive).
+ */
+void objDispEnCur(CursorObject *cursor)
+{
+    int packet[2]; /* grGpInit's record, as in curTexTrans */
+    int selectActive;
+    unsigned int enemyBit;
+    int isEnemy;
+
+    curTexTrans(0);
+    objDispCur(cursor, 0);
+    menuStatTexTrans();
+    if (tgtUnitGet() != 0 && (tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_ENEMY)) {
+        grGpInit(packet);
+        menuActCurPut(packet, (ObjectTask *)cursor, (ObjectTask *)actUnitGet(),
+                      ((unsigned int)frameCntGet() >> 1) & 7);
+    }
+    if (tgtUnitGet() == 0) {
+        return;
+    }
+    selectActive = cursor->state->selectActive;
+    if (selectActive != 1 || battleCtrlHelpGet() == 2) {
+        return;
+    }
+    enemyBit = tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_ENEMY;
+    isEnemy = enemyBit != 0;
+    if (isEnemy == selectActive) {
+        if (tgtUnitGet() == 0 || (tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_DEAD)) {
+            return;
+        }
+    }
+    grGpInit(packet);
+    monsNameDisp(packet, (ObjectTask *)tgtUnitGet(), 8, 0x5C, isEnemy);
+    grPacketSend(packet);
+}
+
 /*
  * Bit 0x8 of the cursor state's flags word (`andi $2,$2,0x8` at
  * 0x00a106ac): set, objDispCur runs the tgtUnitGet/calcLineChk test below.
@@ -2035,7 +2427,54 @@ void objDispCurSubPl(void *packet, CursorObject *cursor)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispCurSubEn);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curPutSub);
+/*
+ * grPutFT4STQ's quad record (src/ov01/gr_gp_init.c, TU-local there: four
+ * corners, one shared RGBA, per-corner S/T); restated for the cursor quad.
+ */
+typedef struct CursorQuad {
+    Vector4 points[4];       /* +0x00 */
+    unsigned char color[4];  /* +0x40: R, G, B, A */
+    float s[4];              /* +0x44 */
+    float t[4];              /* +0x54 */
+} CursorQuad;
+/* The enemy-target cursor quad (data still asm-owned; original ELF symbol name). */
+extern CursorQuad cur1;
+
+extern void grCalcMatrix(CursorObject *cursor, Matrix4 matrix);
+extern void grGsRegSet(void *packet, int reg, int value);
+extern void grOpenFT4STQ(void *packet);
+extern void grPutFT4STQ(void *packet, CursorQuad *quad, Matrix4 matrix);
+extern void grCloseFT4STQ(void);
+
+/*
+ * Draw the spinning cursor quad: the cursor's transform is flattened onto
+ * the ground, given a unit scale and a one-turn-per-360-frames Y rotation,
+ * turned into a matrix and restored afterwards.
+ */
+void curPutSub(void *packet, CursorObject *cursor)
+{
+    CursorTransform saved;
+    Matrix4 matrix;
+    CursorTransform *transform;
+    float degToRad;
+
+    transform = &cursor->state->transform;
+    saved = *transform;
+    transform->fields.scale.x = 1.0f;
+    transform->fields.offset.y = 0.01f;
+    transform->fields.scale.y = 1.0f;
+    transform->fields.scale.z = 1.0f;
+    transform->fields.position.y = 0.0f;
+    degToRad = 0.017453292f; /* pi/180 */
+    transform->fields.rotation.y = degToRad * (float)((unsigned int)frameCntGet() % 360);
+    grCalcMatrix(cursor, matrix);
+    grGsRegSet(packet, 0x14, 0x60);
+    grGsRegSet(packet, 0x42, 0x44);
+    grOpenFT4STQ(packet);
+    grPutFT4STQ(packet, &cur1, matrix);
+    grCloseFT4STQ();
+    *transform = saved;
+}
 
 /*
  * grGpInit's own record (src/ov01/gr_gp_init.c, still asm there; that TU
@@ -2066,7 +2505,11 @@ extern void xglPacketTextureTrans(int textureId);
  * texture upload, matching the dataXtxFileGet(2) transfer just above it. */
 #define GS_REG_TEXFLUSH 0x3F
 
-void curTexTrans(void)
+/*
+ * objDispEnCur, the only caller, passes 0 (`daddu $4,$0,$0` at 0x00a10538,
+ * the delay slot of `jal curTexTrans`); the body never reads $a0.
+ */
+void curTexTrans(int unused)
 {
     int packet[2]; /* grGpInit's own record: a data pointer and an element
                      * count (this call site's own evidence for the size). */
