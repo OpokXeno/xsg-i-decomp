@@ -620,7 +620,48 @@ static int _DamagePassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 0x10;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDamageStatus);
+extern int RgRobSubGetDamageMotion(RgGeomPoint *geometry, RgVector direction);
+
+/*
+ * stiffScale scales the spec's damage-stiff-time, clamped to 0.1..10 s
+ * through the inline helper (the original keeps the bound in $f1, as
+ * with RgDispLifeSetWin's clamp); a positive stiffTime overrides it, and
+ * dashEscape becomes the Damage status's scratch1.
+ *
+ * The float argument comes before the flag: _ExecDamageCmd loads the
+ * flag (lw $7, ov12:0x00a07c10) ahead of the float (lwc1 $f12 in the
+ * jal delay slot), which GCC only schedules that way for this order.
+ */
+static inline float _ClampStiffTime(float time, float min, float max)
+{
+    return time < min ? min : (time > max ? max : time);
+}
+
+static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
+                              RgCmd *command, float stiffScale, int dashEscape,
+                              float stiffTime)
+{
+    RgRobotSpec *spec;
+    float time;
+
+    spec = body->spec;
+    if (status == 0) {
+        assert_prog(D_00A518F0, D_00A51840, 2478);
+    }
+    _StopAllShotThread(body);
+    _SetStatus(status, 6, body);
+    body->weakHitAccum = 0.0f;
+    body->weakHitWindow = 0.0f;
+    status->execCmdMethod = _DamageExecCmd;
+    status->passTimeMethod = _DamagePassTime;
+    status->scratch0AsFloat = _ClampStiffTime(stiffScale * spec->damageStiffTime,
+                                              0.1f, 10.0f);
+    status->scratch1 = dashEscape;
+    if (stiffTime > 0.0f) {
+        status->scratch0AsFloat = stiffTime;
+    }
+    _BodyPlayMotion(body, RgRobSubGetDamageMotion(body->geometry, (float *) command));
+}
 
 
 static int _GetDropMotion(int eSide);
@@ -1267,13 +1308,6 @@ extern void CreateRgHitEffectPosDir(RgVector position, RgVector direction,
                                     char *name1, char *name2);
 extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
-/*
- * The float argument comes before the flag: _ExecDamageCmd loads the
- * flag (lw $7, ov12:0x00a07c10) ahead of the float (lwc1 $f12 in the
- * jal delay slot), which GCC only schedules that way for this order.
- */
-static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
-                              RgCmd *command, float p5, int flag, float p6);
 
 static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
