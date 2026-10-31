@@ -14,7 +14,12 @@ typedef union {
 
 extern CmdTecparaValue *cmdTecparaSub(int tec, short category, short *valueType);
 
-extern void unitCmdListSet(ObjectTask *unit, int *count);
+/*
+ * Returns int: with a void callee gcc keeps cmdUnitChange's 0x25 command in
+ * $2 across the call, while the original reserves $2 for the return value
+ * and uses $3 (addiu $3,$0,0x25 at 0x00a1fd3c).
+ */
+extern int unitCmdListSet(ObjectTask *unit, int *count);
 
 /* Sixteen 0x24-byte process records, as walked by the execution loops. */
 static ThinkProcess processBuf[16];
@@ -1065,7 +1070,38 @@ int cmdUnittbl(ThinkProcess *proc)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdUnitCreate);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdUnitChange);
+int cmdUnitChange(ThinkProcess *proc)
+{
+    int regNo = thinkRegNo(proc->pc);
+    int targetNo;
+    ObjectTask *unit;
+    int changed;
+    int distance;
+    int commandList[8];
+
+    proc->pc += 2;
+    targetNo = cmdNum(proc->pc);
+    proc->pc += 2;
+    unit = thinkUnitPtrGetReg(0x8010);
+    changed = 0;
+    if (unit != 0) {
+        commandList[0] = 0x2B;
+        if (calcUPGet(unit)->posId < 0) {
+            distance = -calcUPGet(unit)->posId;
+        } else {
+            distance = calcUPGet(unit)->posId;
+        }
+        commandList[1] = distance;
+        commandList[2] = targetNo;
+        unitCmdListSet(unit, commandList);
+        commandList[0] = 0x25;
+        commandList[1] = 0;
+        unitCmdListSet(unit, commandList);
+        changed = 1;
+    }
+    thinkRegSet(regNo & 0xFFFF, changed);
+    return 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdAtktbl);
 
@@ -1124,7 +1160,30 @@ int cmdMonsSetNoGet(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdPartySizeGet);
+int cmdPartySizeGet(ThinkProcess *proc)
+{
+    int regNo;
+    int side;
+    ObjectTask **table;
+    int i = 0;
+    int count;
+    int maxSize = 0;
+
+    regNo = thinkRegNo(proc->pc);
+    proc->pc += 2;
+    side = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    count = unitTblGet(side, &table);
+    for (; i < count; i++) {
+        if (table[i] != 0 && maxSize < calcUPGet(table[i])->sizeClass) {
+            maxSize = calcUPGet(table[i])->sizeClass;
+        }
+    }
+
+    thinkRegSet(regNo & 0xFFFF, maxSize & 0xFFFF);
+    return 0;
+}
 
 int cmdLightAmb(ThinkProcess *proc)
 {
