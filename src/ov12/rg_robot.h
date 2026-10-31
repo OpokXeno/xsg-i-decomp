@@ -113,21 +113,63 @@ typedef struct RgHomingThread {
  *                     RgGeomRobotSetRotResist (lwc1 0x2c($16),
  *                     ov12:0x00a061fc)
  */
+/*
+ * rg_robot_spec.c (ov12/tu008) evidences the rest of the record:
+ *   +0x00 charID   RgRobotDBRead stores RgActorNameToCharID's result here
+ *                  (sw at 0x00a0de5c); InitRgRobotSpec sets -1
+ *   the text keywords RgRobotSpecReadFromText hands to RgTextInfoRead
+ *   (stack table at sp+0x1b0, FLOAT_OFFSET / STRING_OFFSET entries) name
+ *   +0x10 "dash-spd-max", +0x18 "rot-spd-bottom-rate", +0x30 "dash-time",
+ *   +0x38 "dash-cooldown", +0x4c "life", +0x50 "damage-stiff-time",
+ *   +0x54 "body-attack-damage", +0x58 "jet-eff", +0x78 "dash-eff" and
+ *   +0x98 "sude" (32-byte strings up to the 0xb8 RgRobotDBRead allocates)
+ *   +0x3c m_aAutoHoming[2], the name in _AnaAutoHoming's assert
+ *         "nID < sizeof(pSpec->m_aAutoHoming) / ...": per entry a float
+ *         value (atof times pi) and a flag word ORed from "see-target" 1,
+ *         "lock-on" 2, "shot" 4 and "in-scrn" 8
+ * The same table names fields this header already carries under other
+ * names: +0x0c "move-spd-max" (baseSpeed), +0x1c "weight" (speedRating),
+ * +0x20 "engine-power"/"engine-impulse" (accelRate), +0x34 "dash-power"
+ * (attackAdvanceRate); +0x04 (type) receives the "dash-mode" keyword
+ * (normal 0, vr 1, neo 2, neo2 3, neo3 4). They are left unrenamed here.
+ */
+typedef struct RgAutoHoming {
+    float value;
+    unsigned int flags;
+} RgAutoHoming;
+
 typedef struct RgRobotSpec {
-    unsigned char unmodeled_00[4];   /* +0x00 */
+    int charID;                      /* +0x00 */
     int type;                        /* +0x04 */
     unsigned char unmodeled_08[4];   /* +0x08 */
     float baseSpeed;                 /* +0x0c */
-    unsigned char unmodeled_10[4];   /* +0x10 */
+    float dashSpeedMax;              /* +0x10 */
     float turnRate;                  /* +0x14 */
-    unsigned char unmodeled_18[4];   /* +0x18 */
+    float rotSpeedBottomRate;        /* +0x18 */
     float speedRating;                /* +0x1c */
     float accelRate;                 /* +0x20 */
     float rotateForce;               /* +0x24 */
     float moveResist;                /* +0x28 */
     float rotResist;                 /* +0x2c */
-    unsigned char unmodeled_30[4];   /* +0x30 */
+    float dashTime;                  /* +0x30 */
     float attackAdvanceRate;          /* +0x34 */
+    float dashCooldown;              /* +0x38 */
+    RgAutoHoming m_aAutoHoming[2];   /* +0x3c */
+    float life;                      /* +0x4c */
+    float damageStiffTime;           /* +0x50 */
+    float bodyAttackDamage;          /* +0x54 */
+    char jetEffect[0x20];            /* +0x58 */
+    char dashEffect[0x20];           /* +0x78 */
+    /*
+     * InitRgRobotSpec copies its 8-byte default "UNARMED" here with one
+     * aligned ld/sd pair (sd at 0x00a0d268), so the name shares storage
+     * with a doubleword view, as RgBattleNames.weaponStorage does in
+     * rg_main.c; sudeWords is never read on its own.
+     */
+    union {
+        char sude[0x20];
+        unsigned long long sudeWords[4];
+    };                               /* +0x98 */
 } RgRobotSpec;
 
 /*
