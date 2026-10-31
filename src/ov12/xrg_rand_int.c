@@ -489,4 +489,31 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgIsTriIntersectedByRay);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgQuantAngle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgQuantAngle4);
+/*
+ * Wraps angle into (-pi, pi] and returns its quadrant around the forward
+ * direction: 0 for [-pi/4, pi/4), 1 for [pi/4, 3pi/4), 2 behind (|angle| >= 3pi/4),
+ * 3 for [-3pi/4, -pi/4); -1 is unreachable after the wrap. The bounds are
+ * the original float literals (0x3F490FDB, 0x4016CBE4).
+ */
+int XrgQuantAngle4(float angle)
+{
+    while (angle > 3.1415927f) {
+        angle -= 6.2831855f;
+    }
+    while (angle < -3.1415927f) {
+        angle += 6.2831855f;
+    }
+    if (-0.7853982f <= angle && angle < 0.7853982f) {
+        return 0;
+    }
+    if (0.7853982f <= angle && angle < 2.3561945f) {
+        return 1;
+    }
+    if (2.3561945f <= angle || angle < -2.3561945f) {
+        return 2;
+    }
+    if (-2.3561945f <= angle && angle < -0.7853982f) {
+        return 3;
+    }
+    return -1;
+}
