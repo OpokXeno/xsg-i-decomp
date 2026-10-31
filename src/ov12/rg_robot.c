@@ -405,7 +405,33 @@ static int _ExecCmdInHissatu(RgRobotStatus *status, RgBody *body, RgCmd *command
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _HissatuPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _HissatuExit);
+extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
+extern void RgRobotEffectTermDash(RgRobotEffect *effect);
+extern void XrgSoundRingStopMoving(int soundID);
+
+static void _HissatuExit(RgRobotStatus *status, RgBody *body)
+{
+    float maxSpeed;
+    void *weapon0;
+    void *weapon1;
+
+    (void)status;
+    weapon0 = body->weapon[0];
+    weapon1 = body->weapon[1];
+    maxSpeed = _CalcMaxSpeed(body, body->spec->baseSpeed);
+    if (weapon0 != 0) {
+        RgWeaponRestartLockon(weapon0);
+        RgWeaponShotStop(weapon0);
+    }
+    if (weapon1 != 0) {
+        RgWeaponRestartLockon(weapon1);
+        RgWeaponShotStop(weapon1);
+    }
+    _StopHomingThread(body->homingThread);
+    RgGeomPointSetMaxXYSpd(body->geometry, maxSpeed);
+    RgRobotEffectTermDash(body->effect);
+    RgRobotEffectTermJet(body->effect);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitStatusHissatu);
 
@@ -493,10 +519,6 @@ static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExecCmd);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashPassTime);
-
-extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
-extern void RgRobotEffectTermDash(RgRobotEffect *effect);
-extern void XrgSoundRingStopMoving(int soundID);
 
 static void _DashExit(RgRobotStatus *status, RgBody *body)
 {
