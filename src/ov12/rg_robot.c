@@ -272,10 +272,34 @@ static void _StatusDisp(RgRobotStatus *status, RgBody *body)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowAllCmdInMoving);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowDamageCmd);
-
 static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+
+static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command);
+
+/*
+ * The original range-checks the command type with sltiu (ov12:0x00a02d78)
+ * before splitting the 8/9/14 cases, which GCC only emits for an unsigned
+ * switch operand.
+ */
+static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int result;
+
+    result = 0;
+    switch ((unsigned int) command->type) {
+    case 8:
+        result = _ExecDamageCmd(status, body, command);
+        break;
+    case 9:
+        result = _ExecWeakDamageCmd(status, body, command);
+        break;
+    case 14:
+        result = _ExecHitByBody(status, body, command);
+        break;
+    }
+    return result;
+}
 
 static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -1154,14 +1178,31 @@ static int _ExecDropWeaponCmd(RgStatus *status, RgBody *body,
                : 0x200;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecDamageCmd);
-
 extern void CreateRgHitEffectPosDir(RgVector position, RgVector direction,
                                     char *name1, char *name2);
 extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
+/*
+ * The float argument comes before the flag: _ExecDamageCmd loads the
+ * flag (lw $7, ov12:0x00a07c10) ahead of the float (lwc1 $f12 in the
+ * jal delay slot), which GCC only schedules that way for this order.
+ */
 static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
-                              RgCmd *command, int flag, float p5, float p6);
+                              RgCmd *command, float p5, int flag, float p6);
+
+static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    float life;
+
+    life = body->life - command->scratch0;
+    body->life = life;
+    if (life < 0.0f) {
+        body->life = 0.0f;
+    }
+    _InitDamageStatus(status, body, command, command->scratch0,
+                      command->scratch1, 0.0f);
+    return 0x80;
+}
 extern const char D_00A51BA0[];
 
 static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
@@ -1178,7 +1219,7 @@ static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
     if (body->life < 0.0f) {
         body->life = 0.0f;
     }
-    _InitDamageStatus(status, body, command, 1, 0.0f, 0.5f);
+    _InitDamageStatus(status, body, command, 0.0f, 1, 0.5f);
     return 0x400;
 }
 
@@ -1199,7 +1240,7 @@ static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
     accum = body->weakHitAccum + command->scratch0;
     body->weakHitAccum = accum;
     if (*(float *) &command->scratch1 <= accum) {
-        _InitDamageStatus(status, body, command, 1, accum, 0.0f);
+        _InitDamageStatus(status, body, command, accum, 1, 0.0f);
         body->weakHitWindow = 0.0f;
         body->weakHitAccum = 0.0f;
     } else {
