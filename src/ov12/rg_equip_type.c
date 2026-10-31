@@ -44,7 +44,55 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", CopyRgEquip);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipAddMount);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipSetDefault);
+extern void RgEquipAddMount(RgEquipRecord *pEquip, int eType, int ePos,
+                            unsigned int posMask);
+
+/*
+ * The 8 mount positions RG_EQUIP_POS_LEFT_HAND..RG_EQUIP_POS_BACK_RIGHT
+ * (D_00A53E10; RgEquipAddMount bounds ePos + 1 below 9).
+ */
+#define RG_EQUIP_POS_NUM 8
+
+/* ov12:0x00a53f38 holds "nMount >= 0"; s_aePosToType (.data, still
+ * scaffold-owned) maps each of the 8 mount positions to its equip type. */
+extern const char D_00A53F38[];
+extern int s_aePosToType[RG_EQUIP_POS_NUM];
+
+void RgEquipSetDefault(RgEquipRecord *pEquip, unsigned int posMask)
+{
+    int eType;
+    int ePos;
+    int i;
+    int nMount;
+    unsigned int typeMask;
+    unsigned int mountMask;
+
+    if (pEquip == 0) {
+        assert_prog(D_00A53E98, D_00A53E80, 100);
+    }
+    pEquip->mountCount = 0;
+    for (eType = 0; eType < RG_EQUIP_TYPE_COUNT; eType++) {
+        typeMask = 0;
+        for (ePos = 0; ePos < RG_EQUIP_POS_NUM; ePos++) {
+            if (s_aePosToType[ePos] == eType) {
+                typeMask |= 1 << ePos;
+            }
+        }
+        mountMask = typeMask & posMask;
+        if (mountMask != 0) {
+            nMount = -1;
+            for (i = 0; i < RG_EQUIP_POS_NUM; i++) {
+                if (mountMask & (1 << i)) {
+                    nMount = i;
+                }
+            }
+            if (nMount < 0) {
+                assert_prog(D_00A53F38, D_00A53E80, 118);
+            }
+            RgEquipAddMount(pEquip, eType, nMount, mountMask);
+        }
+    }
+}
 
 int RgEquipIsEquipable(RgEquipRecord *pEquip, int eType)
 {
