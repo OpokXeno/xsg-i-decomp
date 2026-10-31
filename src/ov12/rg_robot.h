@@ -355,6 +355,8 @@ struct RgStatus {
 
 typedef struct RgRobotStatus RgRobotStatus;
 typedef struct RgCmd RgCmd;
+/* Defined by ov12/tu013 (src/ov12/rg_motion_info_db.h); opaque here. */
+typedef struct RgMotionShotInfo RgMotionShotInfo;
 
 /*
  * A status's command handler: _StatusExecCmd passes the body in $5 and
@@ -411,8 +413,11 @@ typedef void (*RgStatusExitFunc)(RgRobotStatus *status, RgBody *body);
  *                     _ExecCmdInDrop and _DropPassTime (ov12:0x00a05a50/
  *                     0x00a05af0); DashVR's follow-state tag, written 1 by
  *                     _DashVRMainToFollow (ov12:0x00a04e98)
- *   scratch1 (+0x04) Drop's drop-motion id (see _GetDropMotion), read by
- *                     _DropPassTime; Damage's dash-escape gate, read by
+ *   scratch1 (+0x04) Drop's dropMotionInfo: the RgMotionInfoDBGet record
+ *                     for the drop motion, stored by _InitDropStatus (sw
+ *                     $19, 0x4($16), ov12:0x00a05c84) and handed to
+ *                     RgMotionInfoGetActionInTime by _DropPassTime;
+ *                     Damage's dash-escape gate, read by
  *                     _DamageExecCmd (ov12:0x00a05868)
  *   scratch2 (+0x08) Drop's pending spare-weapon-removal flag, read and
  *                     cleared by _ExecCmdInDrop/_DropPassTime
@@ -443,7 +448,10 @@ struct RgRobotStatus {
         int scratch0;                     /* +0x00: integer view for Drop/DashVR statuses */
         float scratch0AsFloat;            /* +0x00: float view for Breaking/Damage statuses */
     };
-    int scratch1;                         /* +0x04 */
+    union {
+        int scratch1;                     /* +0x04 */
+        RgMotionShotInfo *dropMotionInfo; /* +0x04: Drop's motion-info record */
+    };
     int scratch2;                         /* +0x08 */
     float scratchTimer;                   /* +0x0c */
     unsigned char unmodeled_10[8];        /* +0x10 */

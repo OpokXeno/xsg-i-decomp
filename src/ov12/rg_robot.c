@@ -686,7 +686,7 @@ static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
 
 
 static int _GetDropMotion(int eSide);
-static int _InitDropStatus(RgStatus *status, RgBody *body, int motion, int eSide);
+static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion, int eSide);
 
 /*
  * Drop status's own scratch0/scratch2 (see RgRobotStatus): scratch0 is the
@@ -704,13 +704,18 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
         && command->param == 2
         && status->scratch2 != 0) {
         mask |= 0x200;
-        _InitDropStatus((RgStatus *)status, body, _GetDropMotion(2), 2);
+        _InitDropStatus(status, body, _GetDropMotion(2), 2);
     }
     return mask;
 }
 
-extern int RgMotionInfoGetActionInTime(int motion, int actionIndex,
-                                       float elapsedTime);
+typedef struct RgMotionInfoDB RgMotionInfoDB;
+typedef struct RgMotionAction RgMotionAction;
+extern RgMotionInfoDB *InstanceOfRgMotionInfoDB(void);
+extern RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
+                                           int charId);
+extern RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
+                                                   int actionNo, float time);
 static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
 
 /*
@@ -721,13 +726,14 @@ static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
  * body's spare weapon at that side (see _BodySetSpareWeapon, RgBody+0x7c)
  * by handing it to _BodyEquipWeapon.
  */
-static int _DropPassTime(RgRobotStatus *status, RgBody *body)
+static int _DropPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     float elapsedTime;
     int side;
 
+    (void)deltaTime;
     elapsedTime = status->elapsedTime;
-    if (RgMotionInfoGetActionInTime(status->scratch1, 0, elapsedTime) != 0
+    if (RgMotionInfoGetActionInTime(status->dropMotionInfo, 0, elapsedTime) != 0
         && status->scratch2 != 0) {
         side = status->scratch0;
         _BodyEquipWeapon(body, side, body->spareWeapon[side]);
@@ -740,7 +746,46 @@ static int _DropPassTime(RgRobotStatus *status, RgBody *body)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDropStatus);
+extern int RgWeaponGetControlFlag(RgWeapon *weapon);
+extern int RgWeaponIsAttachedShot(RgWeapon *weapon);
+
+/*
+ * The weapon control flag's low three bits give its type; 4 is the unarmed
+ * type (InitRgWeaponUnArmedEssence sets the mode word to 76, whose low bits
+ * are 4; rg_hissatu.c's _IsUnarmed tests the same value).
+ */
+#define RG_WEAPON_CONTROL_TYPE_MASK 7
+#define RG_WEAPON_CONTROL_UNARMED 4
+
+static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
+                           int eSide)
+{
+    RgMotionShotInfo *motionInfo;
+
+    motionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), motion,
+                                   body->charID);
+    if (body->weapon[eSide] == 0) {
+        return 0;
+    }
+    if (motionInfo == 0) {
+        return 0;
+    }
+    if ((RgWeaponGetControlFlag(body->weapon[eSide]) & RG_WEAPON_CONTROL_TYPE_MASK)
+        == RG_WEAPON_CONTROL_UNARMED) {
+        return 0;
+    }
+    if (RgWeaponIsAttachedShot(body->weapon[eSide]) != 0) {
+        return 0;
+    }
+    _SetStatus(status, 9, body);
+    status->execCmdMethod = _ExecCmdInDrop;
+    status->passTimeMethod = _DropPassTime;
+    status->scratch0 = eSide;
+    status->dropMotionInfo = motionInfo;
+    status->scratch2 = 1;
+    _BodyPlayMotion(body, motion);
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _EntryCmdQueue);
 
@@ -1312,10 +1357,7 @@ static int _GetDropMotion(int eSide)
     return motion;
 }
 
-static int _InitDropStatus(RgStatus *status, RgBody *body, int motion,
-                            int eSide);
-
-static int _ExecDropWeaponCmd(RgStatus *status, RgBody *body,
+static int _ExecDropWeaponCmd(RgRobotStatus *status, RgBody *body,
                                RgCmd *command)
 {
     return (_InitDropStatus(status, body, _GetDropMotion(command->param),
