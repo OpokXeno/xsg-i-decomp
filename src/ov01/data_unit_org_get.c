@@ -545,9 +545,13 @@ TecRecord *dataTecGet(int entry)
     return &records[entry - 1];
 }
 
-/* dataMotNameGetMenu reads the weapon's technique id as a short at +0x14. */
+/* dataMotNameGetMenu reads the weapon's technique id as a short at +0x14.
+ * dataUnitFileLoad loads a weapon slot's own technique motion only when the
+ * short at +0xA is 1 (`lh $3,0xA($2)` / `bne $3,$21`, $21 = 1). */
 typedef struct WpnRecord {
-    unsigned char unmodeled_00[0x14];
+    unsigned char unmodeled_00[0xA];
+    short motionType; /* +0xA */
+    unsigned char unmodeled_0c[0x14 - 0xC];
     short tecId; /* +0x14 */
     unsigned char unmodeled_16[0x20 - 0x16];
 } WpnRecord;
@@ -893,7 +897,49 @@ int dataMotNameGet(char *name, ObjectTask *unit, int motionId, int weaponId)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotNameGetSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoad);
+extern int unitCidGet(ObjectTask *unit);
+extern int dataUnitFileLoadMdl(UnitEquipInfo *unit, int charaId, UnitFileInfo *file);
+extern int dataUnitFileLoadWep(ObjectTask *unit, int weaponId, int slot, UnitFileInfo *fileInfo);
+/* The leader's character id (`lw $3,0x0($16)`, $16 = &leaderId), compared
+ * with charaId; a static of the original TU at 0x00a597b8, still asm-owned. */
+extern int leaderId;
+
+/*
+ * Load a unit's model, its weapons (except kind-6 techniques' weapons), its
+ * base motion and the motions of weapons that carry their own (motion type
+ * 1 with a kind-4 technique, into motion slot weapon slot + 1).
+ */
+int dataUnitFileLoad(ObjectTask *unit, int charaId)
+{
+    UnitFileInfo *file;
+    int weaponId;
+    int i;
+
+    file = dataUnitFileGet(unit, charaId);
+    if (file == 0) {
+        return 0;
+    }
+    if (leaderId == charaId && leaderId != calcUPGet(unit)->charaId) {
+        dataLeaderCidReset();
+    }
+    charaId = calcUPGet(unit)->charaId;
+    dataUnitFileLoadMdl((UnitEquipInfo *)unit, unitCidGet(unit), file);
+    for (i = 0; i < 3; i++) {
+        weaponId = calcUPGet(unit)->weaponId[i];
+        if (weaponId != 0 && dataTecGet(dataWpnGet(weaponId)->tecId)->kind != 6) {
+            dataUnitFileLoadWep(unit, weaponId, i, file);
+        }
+    }
+    dataUnitFileLoadMot(unit, charaId, 0, file);
+    for (i = 0; i < 3; i++) {
+        weaponId = calcUPGet(unit)->weaponId[i];
+        if (weaponId != 0 && dataWpnGet(weaponId)->motionType == 1
+            && dataTecGet(dataWpnGet(weaponId)->tecId)->kind == 4) {
+            dataUnitFileLoadMot(unit, dataTecGet(dataWpnGet(weaponId)->tecId)->motionId, i + 1, file);
+        }
+    }
+    return 1;
+}
 
 static const char D_00A45AC8[32];
 

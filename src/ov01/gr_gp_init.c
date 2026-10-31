@@ -83,9 +83,18 @@ typedef struct GrGifRGBA {
     int a; /* +0x0c */
 } GrGifRGBA;
 
+/* The UV quadword grPutFT4 writes: UV coordinates in 12.4 fixed point,
+ * converted from float S/T as unsigned (the c.le.s against 2^31 and the or of
+ * 0x80000000). */
+typedef struct GrGifUV {
+    unsigned int u; /* +0x00 */
+    unsigned int v; /* +0x04 */
+} GrGifUV;
+
 typedef union GrGifQuad {
     GrGifOpenTag tag;
     GrGifSTQ stq;
+    GrGifUV uv;
     GrGifRGBA rgba;
     GrScreenVertex xyz;
 } GrGifQuad;
@@ -554,7 +563,40 @@ void grPutF4(GrPacket *packet, GrF4Vertices *quad, const Matrix4 matrix)
     f4Num += 4;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grPutFT4);
+/* grPutF4 with a UV quadword per corner: S and T (the grPutFT4STQ record)
+ * scaled to 12.4 fixed point. Two cursors walk the corners: point
+ * for the screen-space path and vertex for grRotTransPers (two registers,
+ * each stepped by 0x10 at the loop end, vertex first). */
+void grPutFT4(GrPacket *packet, GrFT4STQVertices *quad, const Matrix4 matrix)
+{
+    int clipFlags = 0;
+    Vector4 *vertex = quad->points;
+    Vector4 *point = quad->points;
+    int *count;
+    int i;
+
+    for (i = 0; i < 4; vertex++, point++, i++) {
+        GR_PACKET_QUAD(packet, packet->count)->uv.u = quad->s[i] * 16.0f;
+        GR_PACKET_QUAD(packet, packet->count++)->uv.v = quad->t[i] * 16.0f;
+        GR_PACKET_QUAD(packet, packet->count)->rgba.r = quad->color[0];
+        GR_PACKET_QUAD(packet, packet->count)->rgba.g = quad->color[1];
+        GR_PACKET_QUAD(packet, packet->count)->rgba.b = quad->color[2];
+        count = &packet->count;
+        GR_PACKET_QUAD(packet, (*count)++)->rgba.a = quad->color[3];
+        if (matrix == 0) {
+            GR_PACKET_QUAD(packet, *count)->xyz.x =
+                (int)(point->x * 16.0f + 0x7000);
+            GR_PACKET_QUAD(packet, *count)->xyz.y =
+                (int)(point->y * 16.0f + 0x7200);
+            GR_PACKET_QUAD(packet, *count)->xyz.z = (int)point->z;
+            GR_PACKET_QUAD(packet, (*count)++)->xyz.flags = 0;
+        } else {
+            grRotTransPers(&GR_PACKET_QUAD(packet, (*count)++)->xyz, matrix,
+                           vertex, &clipFlags);
+        }
+    }
+    ft4Num += 4;
+}
 
 void grPutFT4STQ(GrPacket *packet, GrFT4STQVertices *quad,
                  const Matrix4 matrix)
