@@ -506,7 +506,30 @@ static void _ExitTargettingStatus(RgRobotStatus *status, RgBody *body)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitTargettingStatus);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecCmdInBreaking);
+extern void RgGeomRobotAddRotForce(RgGeomPoint *point, float force);
+
+static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int mask;
+    float delta;
+    int rotateSign;
+
+    mask = _AllowDamageCmd(status, body, command);
+    if (command->type == 1) {
+        delta = *(float *) command;
+        if (delta > 0.0f) {
+            rotateSign = 1;
+        } else if (delta < 0.0f) {
+            rotateSign = -1;
+        } else {
+            rotateSign = 0;
+        }
+        RgGeomRobotAddRotForce(body->geometry,
+                               (float) rotateSign * body->spec->rotateForce * 0.1f);
+        body->flags |= 2;
+    }
+    return mask;
+}
 
 static int _BreakingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -527,8 +550,6 @@ static void _BreakingExit(RgRobotStatus *status, RgBody *body)
     (void)status;
     _BodyPlayMotion(body, 0);
 }
-
-static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *command);
 
 static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
 {
@@ -1174,7 +1195,6 @@ static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
     return 1;
 }
 
-extern void RgGeomRobotAddRotForce(RgGeomPoint *point, float force);
 
 /*
  * The queued command reuses its own +0x00 slot (RgCmd.param) as a plain
