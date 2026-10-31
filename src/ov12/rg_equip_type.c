@@ -20,6 +20,12 @@ const char D_00A53FA8[] = "???";
 
 #define RG_EQUIP_TYPE_COUNT 3
 
+/*
+ * The 8 mount positions RG_EQUIP_POS_LEFT_HAND..RG_EQUIP_POS_BACK_RIGHT
+ * (D_00A53E10; RgEquipAddMount bounds ePos + 1 below 9).
+ */
+#define RG_EQUIP_POS_NUM 8
+
 int RgEquipPosToJntID(int ePos)
 {
     if ((unsigned int)ePos + 1u >= 9u) {
@@ -44,14 +50,9 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", CopyRgEquip);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipAddMount);
 
-extern void RgEquipAddMount(RgEquipRecord *pEquip, int eType, int ePos,
-                            unsigned int posMask);
-
-/*
- * The 8 mount positions RG_EQUIP_POS_LEFT_HAND..RG_EQUIP_POS_BACK_RIGHT
- * (D_00A53E10; RgEquipAddMount bounds ePos + 1 below 9).
- */
-#define RG_EQUIP_POS_NUM 8
+/* Still INCLUDE_ASM above: appends one mount (RgEquipMount). */
+void RgEquipAddMount(RgEquipRecord *pEquip, unsigned int eType, int ePos,
+                     unsigned int posMask);
 
 /* ov12:0x00a53f38 holds "nMount >= 0"; s_aePosToType (.data, still
  * scaffold-owned) maps each of the 8 mount positions to its equip type. */
@@ -143,6 +144,41 @@ static RgEquipMount *_GetMountData(RgEquipRecord *pEquip, int eType)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipMountPos);
+extern int strcmp(const char *s1, const char *s2);
+
+/* ov12:0x00a53fb0/0x00a53fb8/0x00a53fc0 hold the weapon names "BMP45VX",
+ * "SMP53AG" and "CB85VX". */
+extern const char D_00A53FB0[];
+extern const char D_00A53FB8[];
+extern const char D_00A53FC0[];
+
+/* The last mount position (D_00A53E10's RG_EQUIP_POS_BACK_RIGHT). */
+#define RG_EQUIP_POS_BACK_RIGHT (RG_EQUIP_POS_NUM - 1)
+
+int RgEquipMountPos(RgEquipRecord *pEquip, unsigned int eType, int charID,
+                    const char *pszWepName)
+{
+    RgEquipMount *pMount;
+    int ePos;
+
+    if (eType >= RG_EQUIP_TYPE_COUNT) {
+        assert_prog(D_00A53EC8, D_00A53E80, 311);
+    }
+    ePos = -1;
+    pMount = _GetMountData(pEquip, eType);
+    if (pMount != 0) {
+        ePos = pMount->pos;
+    }
+    /* Character 4 carries these three weapons on the back-right mount. */
+    if (charID == 4 && pszWepName != 0) {
+        if (strcmp(pszWepName, D_00A53FB0) == 0
+            || strcmp(pszWepName, D_00A53FB8) == 0) {
+            ePos = RG_EQUIP_POS_BACK_RIGHT;
+        } else if (strcmp(pszWepName, D_00A53FC0) == 0) {
+            ePos = RG_EQUIP_POS_BACK_RIGHT;
+        }
+    }
+    return ePos;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_equip_type", RgEquipMountPosString);
