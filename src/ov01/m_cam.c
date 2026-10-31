@@ -159,7 +159,9 @@ typedef struct MCamCoordMove {
     Vector4 pivot;
     Vector4 startCoord;
     Vector4 endCoord;
-    Vector4 currentCoord;
+    /* MCamVector: MCamExec_Control copies it whole into a point's fixedCoord
+     * (`ld $3,0x390($2)` at 0x00a32240; as a Vector4 it compiled `ld $2,408($16)`). */
+    MCamVector currentCoord;
     int path;
     int mode;
     int duration;
@@ -188,7 +190,10 @@ typedef struct MCamParameterStorage {
     float perspectiveStart;
     unsigned char unmodeled_1F8[0x8];
     MCamCoordMove coordMove[2];
-    unsigned char unmodeled_560[0x18];
+    /* MCamExec_Control passes &camParams + 0x560 (D_00A5B5E0) to
+     * MCamMoveProc_Bank and copies its current (+0x14, `lwc1 $f0,0x574`)
+     * to bank. */
+    MCamMoveState bankMove;
     MCamMoveState perspectiveMove;
     MCamShakeState shake;
 } MCamParameterStorage;
@@ -626,7 +631,67 @@ static float MCamGetDefRange(int id)
     return (float)unit->defRange / 100.0f;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamExec_Control);
+/* Declared in src/ov01/cmd.h; MCamExec_Control hands it a move's target point. */
+extern void MCamSet(int mode, void *params);
+static int MCamMoveProc_Coord(MCamCoordMove *move);
+static int MCamMoveProc_Bank(MCamMoveState *state);
+static int MCamMoveProc_Pers(MCamMoveState *state);
+static void MCamShakeProc(void);
+
+/*
+ * Advances every running move. While a coordinate move runs, its point
+ * follows the move's current coordinate; when it ends, the target goes to
+ * MCamSet and, with the fix flag, the point is pinned to the camera's own
+ * coordinate with no offset.
+ */
+static void MCamExec_Control(void)
+{
+    if (camFlags & CAM_FLAG_MOVE_COORD) {
+        MCamCoordMove *move = &camParams.coordMove[0];
+
+        if (MCamMoveProc_Coord(move)) {
+            camParams.point[0].fixedCoord = camParams.coordMove[0].currentCoord;
+        } else {
+            MCamSet(0, &move->target);
+            if (camFlags & CAM_FLAG_FIX_COORD) {
+                camParams.point[0].mode = MCAM_BASE_FIXED;
+                MCamCopyVector(&camParams.point[0].fixedCoord.vector, &camParams.coord[0]);
+                camParams.point[0].coordOffset.mode = MCAM_OFFSET_NONE;
+            }
+            camFlags &= ~(CAM_FLAG_MOVE_COORD | CAM_FLAG_FIX_COORD);
+        }
+    }
+    if (camFlags & CAM_FLAG_MOVE_TARGET) {
+        MCamCoordMove *move = &camParams.coordMove[1];
+
+        if (MCamMoveProc_Coord(move)) {
+            camParams.point[1].fixedCoord = camParams.coordMove[1].currentCoord;
+        } else {
+            MCamSet(1, &move->target);
+            if (camFlags & CAM_FLAG_FIX_TARGET) {
+                camParams.point[1].mode = MCAM_BASE_FIXED;
+                MCamCopyVector(&camParams.point[1].fixedCoord.vector, &camParams.coord[1]);
+                camParams.point[1].coordOffset.mode = MCAM_OFFSET_NONE;
+            }
+            camFlags &= ~(CAM_FLAG_MOVE_TARGET | CAM_FLAG_FIX_TARGET);
+        }
+    }
+    if (camFlags & CAM_FLAG_MOVE_BANK) {
+        if (!MCamMoveProc_Bank(&camParams.bankMove)) {
+            camFlags &= ~CAM_FLAG_MOVE_BANK;
+        }
+        camParams.bank = camParams.bankMove.current;
+    }
+    if (camFlags & CAM_FLAG_MOVE_PERS) {
+        if (!MCamMoveProc_Pers(&camParams.perspectiveMove)) {
+            camFlags &= ~CAM_FLAG_MOVE_PERS;
+        }
+        camParams.perspectiveStart = camParams.perspectiveMove.current;
+    }
+    if (camFlags & (1 << CAM_SHAKE_BIT)) {
+        MCamShakeProc();
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamExec_SetParams);
 
@@ -678,7 +743,7 @@ static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
     MCamCalcCoord(&move->pivot, other);
     MCamCalcCoord(&move->startCoord, &move->start);
     MCamCalcCoord(&move->endCoord, &move->target);
-    MCamCopyVector(&move->currentCoord, &move->startCoord);
+    MCamCopyVector(&move->currentCoord.vector, &move->startCoord);
     duration = request->duration;
     path = request->path;
     mode = request->mode;
@@ -689,7 +754,7 @@ static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
 
     /* Start the point as a fixed coordinate at the current one, with no offset. */
     params->mode = MCAM_BASE_FIXED;
-    MCamCopyVector(&params->fixedCoord.vector, &move->currentCoord);
+    MCamCopyVector(&params->fixedCoord.vector, &move->currentCoord.vector);
     params->coordOffset.mode = MCAM_OFFSET_NONE;
     camFlags |= moveFlag;
     if (request->fixOnArrival != 0) {

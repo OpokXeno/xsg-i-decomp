@@ -598,14 +598,15 @@ typedef struct McamActorTarget {
  * cmdCamSetAct3 (0x00a21288) reaches the two-unit form at +0x2C/+0x38.
  */
 typedef struct McamParams {
-    int unitTrackMode;                 /* +0x00: mode selector, written 0 by cmdCamCopy (sw $0,0x0($2) at 0x00a20e00) and cmdCamSetPos (sw $0,0x0($17) at 0x00a20e6c), 1 by cmdCamSetAct (sw $19,0x0($18) at 0x00a20f70) and 3 by cmdCamSetAct3 (sw $19,0x0($18) at 0x00a212b0); none of this TU's other C functions rely on further values */
+    int unitTrackMode;                 /* +0x00: mode selector, written 0 by cmdCamCopy (sw $0,0x0($2) at 0x00a20e00) and cmdCamSetPos (sw $0,0x0($17) at 0x00a20e6c), 1 by cmdCamSetAct (sw $19,0x0($18) at 0x00a20f70), 2 by cmdCamSetAct2 (sw $2,0x0($18) at 0x00a210d8) and 3 by cmdCamSetAct3 (sw $19,0x0($18) at 0x00a212b0); none of this TU's other C functions rely on further values */
     unsigned char unmodeled_4[0x10 - 0x4];
     Vector4 lockPosition;              /* +0x10: cmdCamCopy (swc1 0x10/0x14/0x18, w 1.0f at 0x1C) */
     UnitDeadTimeBlock *targetBlock;    /* +0x20: cmdCamSetAct (sw $3,0x20($18) at 0x00a20f8c) */
     int charaId;                       /* +0x24: cmdCamSetAct (sw $4,0x24($18) at 0x00a20fa4) */
     int actId;                         /* +0x28: cmdCamSetAct (sw $2,0x28($18) at 0x00a20fc4) */
     McamActorTarget pairTarget[2];     /* +0x2C/+0x38: cmdCamSetAct3 */
-    unsigned char unmodeled_44[0x70 - 0x44];
+    unsigned char unmodeled_44[0x6C - 0x44];
+    float ratio;                       /* +0x6C: cmdCamSetAct2 (swc1 $f0,0x6C($18) at 0x00a21264), the same offset src/ov01/m_cam.c's MCamPointParams names ratio */
     int offsEnabled;                  /* +0x70 */
     unsigned char unmodeled_74[0x80 - 0x74];
     Vector4 offset;                   /* +0x80: x/y/z scaled by 0.01, w fixed at 1.0 */

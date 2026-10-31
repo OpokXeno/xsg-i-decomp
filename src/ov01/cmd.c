@@ -1404,7 +1404,57 @@ int cmdCamSetAct(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamSetAct2);
+int cmdCamSetAct2(ThinkProcess *proc)
+{
+    McamParams *cam = mcamPtrGet();
+    int firstUnitNo;
+    int secondUnitNo;
+    ObjectTask *unit;
+    float offsX;
+    float offsY;
+    float offsZ;
+    float ratio;
+
+    firstUnitNo = unitNoChk(cmdNum(proc->pc));
+    cam->unitTrackMode = 2;
+    unit = unitPtrGet(firstUnitNo);
+    cam->pairTarget[0].targetBlock = ((UnitDeadTimeRecord *)unit)->target;
+    unit = unitPtrGet(firstUnitNo);
+    cam->pairTarget[0].charaId = calcUPGet(unit)->charaId;
+    proc->pc += 2;
+    cam->pairTarget[0].actId = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    secondUnitNo = unitNoChk(cmdNum(proc->pc));
+    unit = unitPtrGet(secondUnitNo);
+    cam->pairTarget[1].targetBlock = ((UnitDeadTimeRecord *)unit)->target;
+    unit = unitPtrGet(secondUnitNo);
+    cam->pairTarget[1].charaId = calcUPGet(unit)->charaId;
+    proc->pc += 2;
+    cam->pairTarget[1].actId = cmdNum(proc->pc);
+    proc->pc += 2;
+
+    cam->offsEnabled = 1;
+    offsX = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.x = offsX * 0.01f;
+
+    offsY = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.y = offsY * 0.01f;
+
+    offsZ = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->offset.w = 1.0f;
+    cam->offset.z = offsZ * 0.01f;
+
+    ratio = (float)cmdNum(proc->pc);
+    proc->pc += 2;
+    cam->ratio = ratio * 0.01f;
+
+    myMCamSet(camMode, cam);
+    return 0;
+}
 
 /*
  * Two-unit form of cmdCamSetAct. Each unit number has its own variable
@@ -1566,7 +1616,31 @@ int cmdCamUnitHeight(ThinkProcess *proc)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/cmd", cmdCamCoordGet);
+int cmdCamCoordGet(ThinkProcess *proc)
+{
+    McamParams *cam = mcamPtrGet();
+    int regX = thinkRegNo(proc->pc);
+    int regY;
+    int regZ;
+    Vector4 coord;
+
+    proc->pc += 2;
+    regY = thinkRegNo(proc->pc);
+    proc->pc += 2;
+    regZ = thinkRegNo(proc->pc);
+    proc->pc += 2;
+    if (camMode >= 0) {
+        MCamGetCurrentCoord(&coord, camMode);
+    } else {
+        coord.x = cam->lockPosition.x;
+        coord.y = cam->lockPosition.y;
+        coord.z = cam->lockPosition.z;
+    }
+    thinkRegSet(regX & 0xFFFF, (int)(coord.x * 100.0f) & 0xFFFF);
+    thinkRegSet(regY & 0xFFFF, (int)(coord.y * 100.0f) & 0xFFFF);
+    thinkRegSet(regZ & 0xFFFF, (int)(coord.z * 100.0f) & 0xFFFF);
+    return 0;
+}
 
 /*
  * mbankPtrGet (this TU, still asm) returns the bank parameter block
