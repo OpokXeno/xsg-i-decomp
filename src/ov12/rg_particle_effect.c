@@ -146,7 +146,14 @@ void RgParticleEffectEssenceSerialize(RgParticleEffectEssence *essence,
     *destination = *essence;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_particle_effect", RgParticleEffectEssenceResume);
+void RgParticleEffectEssenceResume(RgParticleEffectEssence *essence,
+                                   RgParticleEffectEssence *source)
+{
+    if (essence == 0) {
+        assert_prog(D_00A54368, D_00A542D8, 375);
+    }
+    *essence = *source;
+}
 
 void RgParticleEffectSetShootLocal(RgParticleEffect *effect, RgMatrix local)
 {
