@@ -86,6 +86,33 @@ typedef struct MenuEventTimerWork {
 void menuATBEnvMake(void *packet);
 void menuEventTimerDispSub(ObjectTask *task, GrPacket *packet);
 
+/*
+ * One entry of a battle window's command list (src/main/e_battle_win_open.h
+ * BattleWinCommand, 0xC bytes, TU-local there): menuResultEth/menuResultItm
+ * read the chosen entry's id as a halfword (lh $2,0xA($2) after
+ * selection * 0xC).
+ */
+typedef struct MenuWinCommand {
+    unsigned char unmodeled_00[0xA];
+    short id;                         /* +0x0A */
+} MenuWinCommand;
+
+/*
+ * The ether/item window's parameter record, eBattleWinOpen's argument and
+ * eBattleWinMain's (src/main/endou_test.c EndouBattleWindowParams, the same
+ * layout; e_battle_win_open.h BattleWinTask names +0x1C/+0x20). The result
+ * functions load commands (lw 0x14), store the pad word (sw 0x1C) and read
+ * the selection (lw 0x20, -1 for none).
+ */
+typedef struct MenuBattleWin {
+    unsigned char unmodeled_00[0x14];
+    MenuWinCommand *commands;         /* +0x14 */
+    unsigned char unmodeled_18[4];
+    int buttons;                      /* +0x1C */
+    int selection;                    /* +0x20 */
+    unsigned char unmodeled_24[4];
+} MenuBattleWin;
+
 /* Keep source-owned local BSS objects in their original address order;
  * intervening original-only storage remains scaffold-owned between runs. */
 static ObjectTask *pMenuBat;
@@ -101,8 +128,8 @@ static int eventTimerX;
 static float RingRot;
 static int mapHDist;
 static int menuResBat;
-static unsigned char ethWin[0x28];
-static unsigned char itmWin[0x28];
+static MenuBattleWin ethWin;
+static MenuBattleWin itmWin;
 
 void menuInitBat(void) {
     pMenuBat = 0;
@@ -145,7 +172,88 @@ void menuBatObj(ObjectTask *task) {
     work = task->work;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBatObjFree);
+/*
+ * unitLoad and unitActupdate test this bit of the battle actor's flags word
+ * to tell an enemy-controlled unit from a player-controlled one
+ * (src/ov01/unit_cmd.h documents it as ACTOR_FLAG_ENEMY); ov01/tu013 snd.c's
+ * sndConvSe already reuses the same evidenced mask off calcUPGet(unit)->flags.
+ */
+#define ACTOR_FLAG_ENEMY 0x40u
+
+/*
+ * The battle menu's command tables, one 0x10-byte row per menu line
+ * (sll $2,$2,4 on menuSel); menuBatObjFree reads only the command id at +0x04
+ * (lw $5,0x4($2)), which menuCmdExecChk checks and menuResultBat returns.
+ * chaTbl serves units without CalcUnitParam flag 0x40, agwsTbl units with
+ * it (lhu 0x1C; andi 0x40 selects %lo(agwsTbl_00A3F088)). Data still asm-owned.
+ */
+typedef struct MenuBatCmdEntry {
+    unsigned char unmodeled_00[4];
+    int command;                      /* +0x04 */
+    unsigned char unmodeled_08[8];
+} MenuBatCmdEntry;
+extern MenuBatCmdEntry chaTbl_00A3F038[];
+extern MenuBatCmdEntry agwsTbl_00A3F088[];
+
+/* The battle menu task's work: the unit the menu commands (lw $16,0x80($2)). */
+typedef struct MenuBatWork {
+    unsigned char unmodeled_00[0x80];
+    ObjectTask *unit;                 /* +0x80 */
+} MenuBatWork;
+
+/* The highlighted menu line (0..4, wrapping) and its blink counter (bss still
+ * scaffold-owned between mapHDist and menuResBat; original ELF symbol names). */
+extern int menuSel;
+extern int menuSelCnt;
+
+extern int dataPadRead(int padNo);
+int menuCmdExecChk(ObjectTask *unit, int command);
+
+void menuBatObjFree(ObjectTask *task)
+{
+    ObjectTask *unit;
+    MenuBatCmdEntry *table;
+
+    unit = ((MenuBatWork *)task->work)->unit;
+    if (calcUPGet(unit)->flags & ACTOR_FLAG_ENEMY) {
+        table = agwsTbl_00A3F088;
+    } else {
+        table = chaTbl_00A3F038;
+    }
+    if (dataPadRead(1) & 0x4000) {
+        /* A local, not a literal: the original compares with the 4 held in
+         * a register (addiu $3,$0,4; slt $3,$3,$2), where `menuSel > 4`
+         * folds to slti $2,$3,5. */
+        int lastLine = 4;
+
+        menuSel++;
+        if (menuSel > lastLine) {
+            menuSel = 0;
+        }
+        menuSelCnt = 0;
+        sndSysSePlay(3);
+    } else if (dataPadRead(1) & 0x1000) {
+        menuSel--;
+        if (menuSel < 0) {
+            menuSel = 4;
+        }
+        menuSelCnt = 0;
+        sndSysSePlay(3);
+    }
+    if (dataPadRead(1) & 0x20) {
+        if (menuCmdExecChk(unit, table[menuSel].command) != 0) {
+            menuResBat = table[menuSel].command;
+            sndSysSePlay(1);
+        } else {
+            sndSysSePlay(5);
+        }
+        return;
+    }
+    if (dataPadRead(1) & 0x40) {
+        sndSysSePlay(2);
+    }
+    menuResBat = 0;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBatObjDraw);
 
@@ -175,20 +283,81 @@ INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuOpenEth);
 void eBattleWinClose(void *window);
 
 void menuCloseEth(void) {
-    eBattleWinClose(ethWin);
+    eBattleWinClose(&ethWin);
     sndSysSePlay(8);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuResultEth);
+/*
+ * The ether window's result: pad 2's direction bits (0xF000) replace pad
+ * 1's before eBattleWinMain reads them; the chosen ether's id (0 for an
+ * unusable line, -1 for no selection) goes to *ethId, with the confirm
+ * (0x20) and cancel (0x40) sounds. buttons is or-ed in its own statement
+ * (and $17 then or $17,$17,$16: held keeps $16) and the function has one
+ * return (each path ends at the shared daddu $2,$17,$0).
+ */
+void eBattleWinMain(void *window);
+
+int menuResultEth(int *ethId)
+{
+    int held;
+    int buttons;
+
+    held = dataPadRead(2) & 0xF000;
+    buttons = dataPadRead(1) & ~0xF000;
+    buttons |= held;
+    ethWin.buttons = buttons;
+    eBattleWinMain(&ethWin);
+    if (ethWin.selection == -1) {
+        *ethId = ethWin.selection;
+    } else {
+        *ethId = ethWin.commands[ethWin.selection].id;
+        if (buttons & 0x20) {
+            if (*ethId != 0) {
+                sndSysSePlay(1);
+            } else {
+                sndSysSePlay(5);
+            }
+        } else if (buttons & 0x40) {
+            sndSysSePlay(2);
+        }
+    }
+    return buttons;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuOpenItm);
 
 void menuCloseItm(void) {
-    eBattleWinClose(itmWin);
+    eBattleWinClose(&itmWin);
     sndSysSePlay(8);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuResultItm);
+/* menuResultEth for the item window. */
+int menuResultItm(int *itmId)
+{
+    int held;
+    int buttons;
+
+    held = dataPadRead(2) & 0xF000;
+    buttons = dataPadRead(1) & ~0xF000;
+    buttons |= held;
+    itmWin.buttons = buttons;
+    eBattleWinMain(&itmWin);
+    if (itmWin.selection == -1) {
+        *itmId = itmWin.selection;
+    } else {
+        *itmId = itmWin.commands[itmWin.selection].id;
+        if (buttons & 0x20) {
+            if (*itmId != 0) {
+                sndSysSePlay(1);
+            } else {
+                sndSysSePlay(5);
+            }
+        } else if (buttons & 0x40) {
+            sndSysSePlay(2);
+        }
+    }
+    return buttons;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatDispCreate);
 
@@ -244,7 +413,110 @@ void menuStatPreObjDraw(void) {
     menuStatTexTrans();
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuATBObj);
+int objCmdNext(ObjectTask *task);
+int objHatoVec(ObjectTask *task, int direction);
+int objStdMove(ObjectTask *task);
+
+/*
+ * objCmdPtrGet's return, as far as menuCritObj reads it: `lw $3,0x0($2)`
+ * loads the word at +0x00. obj.c's own view of the same 20-byte record
+ * (src/ov01/obj.h ObjectCommandEntry.selector) already names that word;
+ * this TU cannot redefine that tag, so it names its own bounded view of
+ * the same record instead.
+ */
+typedef struct MenuCmdEntryView MenuCmdEntryView;
+struct MenuCmdEntryView {
+    int selector; /* +0x00 */
+    int argument; /* +0x04: menuATBObj counts it down under selector 1
+                   * (lw $2,0x4($4); addiu $2,$2,-1; sw $2,0x4($4)) */
+};
+
+/*
+ * The battle map's height value (bss still scaffold-owned, like ETRotDist;
+ * original ELF symbol name). menuStatDispCreate starts it and mapHDist at
+ * 0x40 (`sw $5,%lo(mapH)` / `sw $5,%lo(mapHDist)` at 0x00a26df0..0x00a26df4),
+ * menuMapHSet below moves mapHDist to 0x14 or 0x40, and menuATBObj
+ * steps mapH by 8 per update toward mapHDist (0x00a27320..0x00a2733c).
+ * menuMapDisp offsets the map by 0x40 - mapH (0x00a2848c); menuATBObjDraw
+ * draws the map item and target line only while it is 0x40 (0x00a283d4),
+ * menuCritObjDraw the critical indicator only while it is 0x14
+ * (`bnel` against 0x14). The two rest values are MENU_MAP_H_SET/RESET.
+ */
+extern int mapH;
+
+/* The two values mapH rests at: menuMapHSet(nonzero) sends it to 0x14
+ * (`addiu $2,$0,0x14` at 0x00a28428), menuMapHSet(0) and menuStatDispCreate
+ * to 0x40 (0x00a28438, 0x00a26ddc). */
+enum MenuMapH {
+    MENU_MAP_H_SET = 0x14,
+    MENU_MAP_H_RESET = 0x40
+};
+
+extern float ETRot;
+
+/*
+ * The ATB gauge object's update: runs its queued command (1 waits out the
+ * argument count, 2 moves the gauge), steps mapH by 8 toward mapHDist inside
+ * the two rest heights, and turns the event-timer ring (ETRot) by 8 degrees
+ * per update toward ETRotDist, snapping once within one step.
+ */
+void menuATBObj(ObjectTask *task)
+{
+    MenuCmdEntryView *entry;
+    float step;
+    float twoPi;
+    float rot;
+    float distance;
+
+    entry = objCmdPtrGet(task);
+    /* Unsigned equality chain (beql 1, beqz 0, bnel 2); the case 2 body is
+     * laid out ahead of the case 1 body, as written here. */
+    switch ((unsigned int)entry->selector) {
+    case 0:
+        break;
+    case 2:
+        objHatoVec(task, 8);
+        if (objStdMove(task) != 0) {
+            objCmdNext(task);
+        }
+        break;
+    case 1:
+        entry->argument--;
+        if (entry->argument < 0) {
+            objCmdNext(task);
+        }
+        break;
+    }
+    if (mapH != mapHDist) {
+        if (mapH > mapHDist) {
+            mapH -= 8;
+        } else {
+            mapH += 8;
+        }
+        if (mapH > MENU_MAP_H_RESET) {
+            mapH = MENU_MAP_H_RESET;
+        }
+        if (mapH < MENU_MAP_H_SET) {
+            mapH = MENU_MAP_H_SET;
+        }
+    }
+    step = 0.13962634f;
+    if (ETRot != ETRotDist) {
+        twoPi = 6.2831855f;
+        rot = ETRot + step;
+        ETRot = rot;
+        if (rot > twoPi) {
+            ETRot = rot - twoPi;
+        }
+        distance = ETRot - ETRotDist;
+        /* The absolute value inside the condition: the original tests
+         * against step on both arms (two c.lt.s $f0,$f2) and reloads
+         * ETRotDist at the join. */
+        if (((distance < 0.0f) ? -distance : distance) < step) {
+            ETRot = ETRotDist;
+        }
+    }
+}
 
 /* 0x00a27438: `jr $31; nop`, an empty body in the original. */
 void menuKeyGuideObj(void) {
@@ -254,15 +526,18 @@ void menuKeyGuideObj(void) {
  * through include/ov01/battle_init.h. menuKeyGuideDisp null-checks
  * unitTask, then reads a flag (bit 3) from unitTask->work, and compares
  * controlPhase against 0xb and 0x1a. */
-void menuKeyGuideDisp(GrPacket *packet, ObjectTask *task, int phase);
+/* The first parameter was spelled GrPacket *packet: menuKeyGuideDisp loads
+ * its work (lw $2,0x10($17)) and the position floats there (lwc1 0x98/0x90
+ * at 0x00A2A6E0), so it is the key guide object's own task. */
+void menuKeyGuideDisp(ObjectTask *guideTask, ObjectTask *unitTask, int phase);
 
-void menuKeyGuideObjDraw(GrPacket *packet) {
+void menuKeyGuideObjDraw(ObjectTask *guideTask) {
     ObjectTask *task;
     int phase;
 
     task = manWorkGet()->unitTask;
     phase = manWorkGet()->controlPhase;
-    menuKeyGuideDisp(packet, task, phase);
+    menuKeyGuideDisp(guideTask, task, phase);
 }
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStatObj);
@@ -319,34 +594,21 @@ void menuBoostDisp(int enabled)
     *(int *)pBoostObj->work |= 4; /* set hidden bit 2 */
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuCritDispOn);
-
-/*
- * The critical-indicator display object (data still asm-owned; original
- * ELF symbol name). Its work record's first word is a flag set; bit 2 (0x4) hides it.
- */
-extern ObjectTask *pCritObj;
-
-void menuCritDispOff(void)
-{
-    *(int *)pCritObj->work |= 4; /* set hidden bit 2 */
-}
-
-int objCmdNext(ObjectTask *task);
-int objHatoVec(ObjectTask *task, int direction);
-int objStdMove(ObjectTask *task);
-
-/*
- * objCmdPtrGet's return, as far as menuCritObj reads it: `lw $3,0x0($2)`
- * loads the word at +0x00. obj.c's own view of the same 20-byte record
- * (src/ov01/obj.h ObjectCommandEntry.selector) already names that word;
- * this TU cannot redefine that tag, so it names its own bounded view of
- * the same record instead.
- */
-typedef struct MenuCmdEntryView MenuCmdEntryView;
-struct MenuCmdEntryView {
-    int selector; /* +0x00 */
-};
+/* The +0x90 movement block of an object's work record (src/ov01/obj.h's
+ * ObjectWorkTransform restates the same span; TU-local there): the current
+ * position and the target objStdMove moves it toward. Shared by the stock
+ * faces (MenuStockWork) and the critical indicator (MenuCritWork). */
+typedef struct MenuObjTransform {
+    Vector4 position;                  /* +0x00: addiu $16,$16,0x90, then
+                                        * swc1 0x0/0x8 and sw $0,0x4 */
+    unsigned char unmodeled_10[0x50];
+    Vector4 target;                    /* +0x60: where the object moves to
+                                        * (menuStockDead/menuStockNext
+                                        * sw $0,0x64; menuCritDispOn
+                                        * swc1 0x60/0x68 from work+0x90) */
+    unsigned char unmodeled_70[0x10];  /* +0x70: ObjectWorkTransform's tail,
+                                        * not accessed here */
+} MenuObjTransform;
 
 /*
  * The critical-indicator object's work, one record for menuCritObj and
@@ -370,7 +632,10 @@ typedef struct MenuCritWork {
     unsigned char unmodeled_04[0x7C];
     int count;                        /* +0x80: 0 draws the plain banner */
     unsigned char unmodeled_84[0xC];
-    Vector4 position;                 /* +0x90 */
+    MenuObjTransform transform;       /* +0x90: menuCritObjDraw reads
+                                       * position.x/z; menuCritDispOn
+                                       * takes work+0x90 once (addiu
+                                       * $3,$3,0x90) and seeds both points */
 } MenuCritWork;
 
 /* Bit of MenuCritWork.flags that hides the indicator: menuCritDispOff sets
@@ -380,6 +645,68 @@ typedef struct MenuCritWork {
 enum MenuCritWorkFlag {
     MENU_CRIT_HIDDEN = 0x4
 };
+
+/* A record view read from the work slot as an int-sized word, like
+ * menuStockWorkGet below: menuCritDispOn reloads the slot after each int
+ * store (lw $2,0x10($4) after sw $5,0x0($2); lw $5,0x10($4) after
+ * sw $16,0x80($2)). */
+static __inline__ MenuCritWork *menuCritWorkGet(ObjectTask *task)
+{
+    /* Read as a u32 on purpose: `(MenuCritWork *)task->work` compiles the
+     * callers' loads differently and OV01.OVL stops matching. */
+    return (MenuCritWork *)*(u32 *)&task->work;
+}
+
+void *objCmdPush(ObjectTask *task);
+
+/*
+ * Shows the critical indicator with count: unless it is already showing that
+ * count, queues command 1 (move in from x 576 to x 376 at z 310) and clears
+ * the hidden bit. The three constants are locals assigned in the original's
+ * load order (576.0f -> $f2, 310.0f -> $f1, 376.0f -> $f0); written inline
+ * in the stores, 310.0f takes $f2 instead.
+ */
+void menuCritDispOn(int count)
+{
+    MenuCmdEntryView *entry;
+    MenuObjTransform *transform;
+    float startX;
+    float z;
+    float endX;
+
+    if ((menuCritWorkGet(pCritObj)->flags & MENU_CRIT_HIDDEN) == 0 &&
+        menuCritWorkGet(pCritObj)->count == count) {
+        return;
+    }
+    entry = objCmdPush(pCritObj);
+    startX = 576.0f;
+    z = 310.0f;
+    endX = 376.0f;
+    transform = &menuCritWorkGet(pCritObj)->transform;
+    entry->selector = 1;
+    menuCritWorkGet(pCritObj)->count = count;
+    transform->position.x = startX;
+    transform->position.y = 0.0f;
+    transform->position.z = z;
+    transform->target.x = endX;
+    transform->target.y = 0.0f;
+    transform->target.z = z;
+    menuCritWorkGet(pCritObj)->flags &= ~MENU_CRIT_HIDDEN;
+}
+
+/*
+ * The critical-indicator display object (data still asm-owned; original
+ * ELF symbol name). Its work record's first word is a flag set; bit 2 (0x4) hides it.
+ */
+extern ObjectTask *pCritObj;
+
+void menuCritDispOff(void)
+{
+    menuCritWorkGet(pCritObj)->flags |= MENU_CRIT_HIDDEN;
+}
+
+
+
 
 /* The work slot holds the address of the indicator's MenuCritWork.
  * menuCritObj reads the slot once (lw $2,0x10($16) at 0x00A281F4) and so
@@ -407,26 +734,7 @@ int menuCritObj(ObjectTask *task)
 }
 
 void menuStatIconEnvMake(void *packet);
-/*
- * The battle map's height value (bss still scaffold-owned, like ETRotDist;
- * original ELF symbol name). menuStatDispCreate starts it and mapHDist at
- * 0x40 (`sw $5,%lo(mapH)` / `sw $5,%lo(mapHDist)` at 0x00a26df0..0x00a26df4),
- * menuMapHSet below moves mapHDist to 0x14 or 0x40, and menuATBObj (still
- * asm) steps mapH by 8 per update toward mapHDist (0x00a27320..0x00a2733c).
- * menuMapDisp offsets the map by 0x40 - mapH (0x00a2848c); menuATBObjDraw
- * draws the map item and target line only while it is 0x40 (0x00a283d4),
- * menuCritObjDraw the critical indicator only while it is 0x14
- * (`bnel` against 0x14). The two rest values are MENU_MAP_H_SET/RESET.
- */
-extern int mapH;
 
-/* The two values mapH rests at: menuMapHSet(nonzero) sends it to 0x14
- * (`addiu $2,$0,0x14` at 0x00a28428), menuMapHSet(0) and menuStatDispCreate
- * to 0x40 (0x00a28438, 0x00a26ddc). */
-enum MenuMapH {
-    MENU_MAP_H_SET = 0x14,
-    MENU_MAP_H_RESET = 0x40
-};
 
 /* Defined by ov01/tu008 (src/ov01/gr_gp_init.c). Declared here because
  * menuCritObjDraw calls them ahead of the declarations further down; without
@@ -455,8 +763,8 @@ void menuCritObjDraw(ObjectTask *task)
     if ((((MenuCritWork *)task->work)->flags & MENU_CRIT_HIDDEN) == 0 && mapH == MENU_MAP_H_SET) {
         grGpInit(&packet);
         menuStatIconEnvMake(&packet);
-        x = (int)((MenuCritWork *)task->work)->position.x;
-        z = (int)((MenuCritWork *)task->work)->position.z;
+        x = (int)((MenuCritWork *)task->work)->transform.position.x;
+        z = (int)((MenuCritWork *)task->work)->transform.position.z;
         grOpenSpr(&packet);
         menuStatSprite(&packet, x, z, 0x84, 0x18, 0x7C, 0);
         count = ((MenuCritWork *)task->work)->count;
@@ -525,19 +833,79 @@ void menuMapItemDisp(ObjectTask *task, GrPacket *packet)
     grCloseSpr();
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuTgtLineDisp);
+/* The ATB gauge object's work: its screen position (lwc1 0x98/0x90). */
+typedef struct MenuATBWork {
+    unsigned char unmodeled_00[0x90];
+    Vector4 position;                 /* +0x90 */
+} MenuATBWork;
+
+/* The target line's screen end point (bss still scaffold-owned between
+ * pStockObj and eventTimer; original ELF symbol names); 0 means unset. */
+extern int selX;
+extern int selY;
+
+BattleUnit *tgtUnitGet(void);
+extern int calcLineChk(ObjectTask *unit);
+extern int calcSkillEquChkAll(int skillId);
+void menuSelLine(GrPacket *packet, int x0, int y0, int x1, int y1, int blocked);
+void menuNumPut(GrPacket *packet, int x, int y, int value, int digits, int style);
+void menuStatEnvMake(void *packet);
+
+/*
+ * Draws the line from the ATB gauge to the selected target, an enemy mark
+ * for an enemy target, and the target's HP: style 1 while it is below
+ * 10000 and skill 0x41 is equipped, style 3 otherwise.
+ */
+void menuTgtLineDisp(ObjectTask *task, GrPacket *packet)
+{
+    MenuATBWork *work;
+    ObjectTask *target;
+    BattleActor *actor;
+    CalcUnitParam *up;
+    int x;
+    int y;
+    int srcX;
+    int srcY;
+    int hp;
+    int style;
+
+    work = task->work;
+    x = (int)work->position.x;
+    y = (int)work->position.z;
+    if (selX != 0 && selY != 0) {
+        target = (ObjectTask *)tgtUnitGet();
+        menuSelLine(packet, x + 0x80, y - 4, selX + 8, selY + 8, calcLineChk(target) == 0);
+        actor = target->work;
+        if (actor->flags & ACTOR_FLAG_ENEMY) {
+            grOpenSpr(packet);
+            up = calcUPGet(target);
+            if (up->flags & 0x4000) {
+                srcX = 0xF0;
+                srcY = 0x20;
+            } else if (up->flags & 0x2000) {
+                srcX = 0xE0;
+                srcY = 0x30;
+            } else {
+                srcX = 0xF0;
+                srcY = 0x30;
+            }
+            menuStatSprite(packet, x + 0x70, y - 0x12, 0x10, 0x10, srcX, srcY);
+            grCloseSpr();
+        }
+        hp = (short)calcUPGet(target)->currentHp;
+        if (hp < 10000 && calcSkillEquChkAll(0x41) != 0) {
+            style = 1;
+        } else {
+            style = 3;
+        }
+        menuStatEnvMake(packet);
+        grOpenSpr(packet);
+        menuNumPut(packet, x + 0x48, y - 0x12, hp, 4, style);
+        grCloseSpr();
+    }
+}
 
 extern int *actStockGet(void);
-
-typedef struct MenuStockTransform {
-    Vector4 position;                  /* +0x00: addiu $16,$16,0x90, then
-                                        * swc1 0x0/0x8 and sw $0,0x4 */
-    unsigned char unmodeled_10[0x50];
-    Vector4 target;                    /* +0x60: menuStockDead sets where
-                                        * this face's face moves to */
-    unsigned char unmodeled_70[0x10];  /* +0x70: ObjectWorkTransform's tail,
-                                        * not accessed here */
-} MenuStockTransform;
 
 typedef struct MenuStockWork {
     u32 flags;                         /* +0x00: bit 0x4 hides the face
@@ -576,7 +944,7 @@ typedef struct MenuStockWork {
      * menuStockDead takes this address once (addiu $8,$9,0x90) and writes
      * target through it (sw $0,0x64($8) / swc1 0x60/0x68($8)).
      */
-    MenuStockTransform transform;      /* +0x90 */
+    MenuObjTransform transform;      /* +0x90 */
 } MenuStockWork;
 
 /* gr_gp_init.c data (still asm-owned): each face's x/z on screen, read as
@@ -648,9 +1016,65 @@ void menuStockStart(void)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStockNext);
+/*
+ * Moves the first four stock faces one position left (command 1 toward
+ * stockPosTbl[index - 1]); a face already at position 0 stays there and is
+ * hidden. Every record access goes through menuStockWorkGet: the original
+ * reloads the work slot after the int store to index
+ * (lw $3,0x10($16) after sw $0,0x80($5)).
+ */
+void menuStockNext(void)
+{
+    ObjectTask *task;
+    MenuObjTransform *transform;
+    MenuCmdEntryView *entry;
+    int index;
+    int i;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStockBoost);
+    for (i = 0; i < 4; i++) {
+        task = pStockObj[i];
+        transform = &menuStockWorkGet(task)->transform;
+        entry = objCmdTailGet(task);
+        index = menuStockWorkGet(task)->index;
+        if (index <= 0) {
+            menuStockWorkGet(task)->index = 0;
+            menuStockWorkGet(task)->flags |= MENU_STOCK_HIDDEN;
+        } else {
+            index--;
+            transform->target.y = 0.0f;
+            menuStockWorkGet(task)->index = index;
+            entry->selector = 1;
+            transform->target.x = stockPosTbl[index].x;
+            transform->target.z = stockPosTbl[index].z;
+        }
+    }
+}
+
+/*
+ * Brings in the boost face (pStockObj[4]): command 3, shown from its
+ * stockPosTbl slot and moving to the first one. The target is written
+ * before the position (lwc1 0x24 first, swc1 0x0 last), and the work slot
+ * is re-read through menuStockWorkGet after the command store
+ * (lw $4,0x10($17) after sw $4,0x0($2)).
+ */
+void menuStockBoost(void)
+{
+    ObjectTask *task;
+    MenuObjTransform *transform;
+    MenuCmdEntryView *entry;
+
+    task = pStockObj[4];
+    transform = &menuStockWorkGet(task)->transform;
+    entry = objCmdTailGet(task);
+    entry->selector = 3;
+    transform->target.y = 0.0f;
+    transform->position.y = 0.0f;
+    transform->target.x = stockPosTbl[0].x;
+    transform->target.z = stockPosTbl[0].z;
+    transform->position.x = stockPosTbl[4].x;
+    transform->position.z = stockPosTbl[4].z;
+    menuStockWorkGet(task)->flags &= ~MENU_STOCK_HIDDEN;
+}
 
 /*
  * menuStockDead's bounded view of the action-stock record actStockGet
@@ -677,7 +1101,7 @@ void menuStockDead(int dead)
 {
     ObjectTask *task;
     MenuCmdEntryView *entry;
-    MenuStockTransform *transform;
+    MenuObjTransform *transform;
     MenuStockWork *work;
     int index;
     int i;
@@ -737,7 +1161,132 @@ void menuStockObj(ObjectTask *task)
     ((MenuStockWork *)task->work)->frameCount++;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuStockObjDraw);
+/*
+ * menuStockObjDraw's bounded view of the record actStockGet returns (the
+ * MenuActStockView stock array, then the words this function reads).
+ */
+typedef struct MenuActStockDrawView {
+    ObjectTask *stock[4];   /* +0x00: lw $16,0x0(record + slot*4) */
+    ObjectTask *boost[2];   /* +0x10: battle_init.c ActStock.boost */
+    int count;              /* +0x18: lw $3,0x18($4); 0 draws no face */
+    int picked;             /* +0x1C: lw $2,0x1C($4), subtracted from count */
+    ObjectTask *boostUnit;  /* +0x20: lw $16,0x20($4), face 4's unit */
+    int boostState;         /* +0x24: lw $3,0x24($4), compared with 2 */
+} MenuActStockDrawView;
+
+/* A stock unit's actor flags, read as one doubleword (ld $3,0x0($2)). */
+typedef struct MenuStockActor {
+    u64 flags;
+} MenuStockActor;
+
+/* The face's unit must be present (bit 0x1) and not down (bit 0x80). */
+#define MENU_STOCK_ACTOR_MASK 0x81
+#define MENU_STOCK_ACTOR_PRESENT 0x1
+
+/* The boost face: pStockObj[4], hidden by menuStockStart. */
+#define MENU_STOCK_BOOST_FACE 4
+#define MENU_STOCK_BOOST_STATE 2
+
+extern int frameCntGet(void);
+void faceUVGet(ObjectTask *task, int *srcX, int *srcY);
+void menuStatSprite2(GrPacket *packet, int x, int y, int width, int height, int srcLeft, int srcTop, int srcRight, int srcBottom);
+void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, int srcLeft, int srcTop, int srcRight, int srcBottom, const MenuRGBA *rgba);
+
+/*
+ * Draws one stock face beside the ATB gauge: the face of the unit queued in
+ * its action-stock slot (the boost unit for face 4), raised by 4 for the
+ * current target, and its frame; faces 0 and 4 get a pulsing frame.
+ * The colour's initializer is what calls memset and stores a = 0x80 (sb
+ * 0x23), sharing the constant 4 with the face compares ($16). faces is
+ * formed before the count test (subu ahead of beqz $3), inset and the face
+ * corner are their own values (li 10; subu $16 before grOpenSpr, addu
+ * $16,$20,$16 after it), and the pulse is stored b, g, r to get the
+ * original's sb 0x20/0x22/0x21 order.
+ */
+void menuStockObjDraw(ObjectTask *task)
+{
+    GrPacket packet;
+    MenuRGBA color = { 0, 0, 0, 0x80 };
+    int srcX;
+    int srcY;
+    MenuActStockDrawView *stock;
+    MenuStockWork *work;
+    ObjectTask *unit;
+    int index;
+    int slot;
+    int faces;
+    int y;
+    int width;
+    int x;
+    int raise;
+    int faceX;
+    int faceY;
+    int inset;
+    int pulse;
+
+    if (((MenuStockWork *)task->work)->flags & MENU_STOCK_HIDDEN) {
+        return;
+    }
+    stock = (MenuActStockDrawView *)actStockGet();
+    work = task->work;
+    faces = stock->count - stock->picked + 1;
+    index = work->index;
+    slot = work->stockSlot;
+    if (stock->count == 0) {
+        return;
+    }
+    if (index >= faces && index != MENU_STOCK_BOOST_FACE) {
+        return;
+    }
+    if (index == 0 && stock->boostState == MENU_STOCK_BOOST_STATE) {
+        return;
+    }
+    if (index == MENU_STOCK_BOOST_FACE) {
+        if (stock->boostState != MENU_STOCK_BOOST_STATE) {
+            return;
+        }
+        unit = stock->boostUnit;
+    } else {
+        unit = stock->stock[slot];
+    }
+    if (unit == 0) {
+        return;
+    }
+    if ((((MenuStockActor *)unit->work)->flags & MENU_STOCK_ACTOR_MASK) != MENU_STOCK_ACTOR_PRESENT) {
+        return;
+    }
+    x = (int)work->transform.position.x;
+    y = (int)work->transform.position.z;
+    x += ((MenuATBWork *)pAtbObj->work)->position.x;
+    y += ((MenuATBWork *)pAtbObj->work)->position.z;
+    grGpInit(&packet);
+    menuATBEnvMake(&packet);
+    faceUVGet(unit, &srcX, &srcY);
+    raise = -4;
+    if (unit != (ObjectTask *)tgtUnitGet()) {
+        raise = 0;
+    }
+    faceY = y + raise;
+    width = ((MenuStockWork *)task->work)->width.value;
+    inset = 10 - width / 2;
+    grOpenSpr(&packet);
+    faceX = x + inset;
+    menuStatSprite2(&packet, faceX, faceY, width, 0x18, srcX, srcY, srcX + 0x14, srcY + 0x18);
+    if (index == 0 || index == MENU_STOCK_BOOST_FACE) {
+        pulse = (frameCntGet() * 2) & 0x7F;
+        if (pulse >= 0x40) {
+            pulse = 0x7F - pulse;
+        }
+        color.b = pulse + 0x80;
+        color.g = pulse + 0x80;
+        color.r = pulse + 0x80;
+        menuStatSprite2RGB(&packet, faceX - 4, faceY - 4, width + 8, 0x20, 0xD8, 0x40, 0xF4, 0x61, &color);
+    } else {
+        menuStatSprite2(&packet, faceX - 2, faceY - 2, width + 4, 0x1C, 0xC0, 0x20, 0xD9, 0x3D);
+    }
+    grCloseSpr();
+    grPacketSend(&packet);
+}
 
 /*
  * The 3x11 face-icon sheet's per-character source cell: chrId<32 indexes a
@@ -777,7 +1326,55 @@ void faceUVGet(ObjectTask *task, int *srcX, int *srcY)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuMapItemDispSub);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuSelLine);
+/* grPutF2's line (src/ov01/gr_gp_init.c GrF2Vertices, TU-local there): two
+ * end points and one colour at +0x20 (sb 0x20..0x23 in menuSelLine). */
+typedef struct GrF2Vertices {
+    Vector4 points[2]; /* +0x00 */
+    MenuRGBA color;    /* +0x20 */
+} GrF2Vertices;
+
+extern void grOpenF2(GrPacket *packet);
+extern void grPutF2(GrPacket *packet, GrF2Vertices *line, const Matrix4 matrix);
+extern void grCloseF2(void);
+
+/*
+ * The target line: a 0x3A-pixel stub left of (x0, y0), then on to (x1, y1);
+ * green, or magenta when the line is blocked. The depth is converted at run
+ * time (lui/ori 0x00FFFFFC; cvt.s.w into $f20), so it is written as an integer.
+ */
+void menuSelLine(GrPacket *packet, int x0, int y0, int x1, int y1, int blocked)
+{
+    GrF2Vertices line;
+    int depth;
+
+    depth = 0xFFFFFC;
+    line.color.a = 0x80;
+    if (blocked == 0) {
+        line.color.r = 0;
+        line.color.g = 0xFF;
+        line.color.b = 0x80;
+    } else {
+        line.color.r = 0xF0;
+        line.color.g = 0;
+        line.color.b = 0x80;
+    }
+    grOpenF2(packet);
+    line.points[0].x = x0;
+    line.points[0].y = y0;
+    line.points[0].z = depth;
+    line.points[1].x = x0 - 0x3A;
+    line.points[1].y = y0;
+    line.points[1].z = depth;
+    grPutF2(packet, &line, 0);
+    line.points[0].x = line.points[1].x;
+    line.points[0].y = line.points[1].y;
+    line.points[0].z = depth;
+    line.points[1].x = x1;
+    line.points[1].y = y1;
+    line.points[1].z = depth;
+    grPutF2(packet, &line, 0);
+    grCloseF2();
+}
 
 void menuEventTimerDisp(ObjectTask *task, GrPacket *packet)
 {
@@ -880,13 +1477,6 @@ void menuStatObjDraw(ObjectTask *task) {
  * snd.c do. */
 extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
-/*
- * unitLoad and unitActupdate test this bit of the battle actor's flags word
- * to tell an enemy-controlled unit from a player-controlled one
- * (src/ov01/unit_cmd.h documents it as ACTOR_FLAG_ENEMY); ov01/tu013 snd.c's
- * sndConvSe already reuses the same evidenced mask off calcUPGet(unit)->flags.
- */
-#define ACTOR_FLAG_ENEMY 0x40u
 
 /* An enemy unit, or one whose charaId falls in the boss range ov01/tu013
  * snd.c's sndConvSe documents (0xBB..0xC2), reports the linked unit's
@@ -933,7 +1523,45 @@ void menuApBarPut(GrPacket *packet, int x, int y, int amount)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuBpBarPut);
+/* grPutF4's quad (src/ov01/gr_gp_init.c GrF4Vertices, TU-local there): four
+ * corners and one colour at +0x40 (sb 0x40..0x43 in menuBpBarPut). */
+typedef struct GrF4Vertices {
+    Vector4 points[4]; /* +0x00 */
+    MenuRGBA color;    /* +0x40 */
+} GrF4Vertices;
+
+extern void grOpenF4(GrPacket *packet);
+extern void grPutF4(GrPacket *packet, GrF4Vertices *quad, const Matrix4 matrix);
+extern void grCloseF4(void);
+
+/*
+ * The BP bar: an orange quad 4 pixels high, length pixels long, at
+ * (x + 0x49, y + 0x36).
+ */
+void menuBpBarPut(GrPacket *packet, int x, int y, int length)
+{
+    GrF4Vertices quad;
+
+    grOpenF4(packet);
+    quad.color.r = 0xFF;
+    quad.color.g = 0x20;
+    quad.color.b = 0x80;
+    quad.color.a = 0x80;
+    quad.points[0].x = x + 0x49;
+    quad.points[0].y = y + 0x36;
+    quad.points[0].z = SPRITE_Z;
+    quad.points[1].x = x + length + 0x49;
+    quad.points[1].y = y + 0x36;
+    quad.points[1].z = SPRITE_Z;
+    quad.points[2].x = x + 0x49;
+    quad.points[2].y = y + 0x3A;
+    quad.points[2].z = SPRITE_Z;
+    quad.points[3].x = x + length + 0x49;
+    quad.points[3].y = y + 0x3A;
+    quad.points[3].z = SPRITE_Z;
+    grPutF4(packet, &quad, 0);
+    grCloseF4();
+}
 
 /*
  * Index of the first icon entry of the character's table whose flags share a
@@ -1017,9 +1645,170 @@ void menuStatNamePut(ObjectTask *task)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuKeyGuideDisp);
+/*
+ * One line of a key guide list (menu.data keyGuideL, keyGuideNull, ...;
+ * still asm-owned): the pad button icon (uvTbl index, + 4 for its dimmed
+ * variant) and the key command it triggers; a 0 button ends the list.
+ */
+typedef struct KeyGuideLine {
+    int button; /* +0x00: lw $7,0x0($16) */
+    int key;    /* +0x04: lw $6,0x4($16) */
+} KeyGuideLine;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", keyGideDisp);
+/*
+ * One row of keyGuideTblChr/keyGuideTblAgws (8 bytes, sll $3,$16,3): the
+ * guide lines and the 0-terminated button icon list of one guide mode.
+ */
+typedef struct KeyGuideMode {
+    KeyGuideLine *lines; /* +0x00 */
+    int *buttons;        /* +0x04 */
+} KeyGuideMode;
+
+extern KeyGuideMode keyGuideTblChr[];
+extern KeyGuideMode keyGuideTblAgws[];
+
+/* The key guide object's work: its screen position (lwc1 0x98/0x90). */
+typedef struct MenuKeyGuideWork {
+    unsigned char unmodeled_00[0x90];
+    Vector4 position; /* +0x90 */
+} MenuKeyGuideWork;
+
+/* The battle actor flag the key guide requires (lw $2,0x0($3); andi 0x8). */
+#define ACTOR_FLAG_KEY_GUIDE 0x8u
+
+/* Control phase with no guide (beq $16,0x1A). */
+#define KEY_GUIDE_PHASE_NONE 0x1A
+/* First control phase that needs calcTuigekiChk (slti $2,$16,0xB). */
+#define KEY_GUIDE_PHASE_TUIGEKI 0xB
+/* Key command without a check (bne $6,0x1C). */
+#define KEY_CMD_NO_CHECK 0x1C
+
+extern int menuChk(void);
+extern int calcTuigekiChk(ObjectTask *unit);
+extern int keyCmdChk(ObjectTask *unit, BattleUnit *target, int key);
+extern int battleCtrlHelpGet(void);
+extern void grPacketSend(GrPacket *packet);
+void keyGideDisp(GrPacket *packet, int x, int y, int button);
+void menuKeyGuideHelp(GrPacket *packet, ObjectTask *unit, int key, int x, int y);
+void menuKeyGuideVal(GrPacket *packet, ObjectTask *unit, int key, int x, int y);
+
+/*
+ * Draws the key guide of phase for unitTask: the button icons of the phase in a
+ * row, then each guide line with its button (dimmed while keyCmdChk gives
+ * 1, skipped for 2 or more or a negative result) and, unless the help
+ * display is in state 2, its help text and values; then the guide footer.
+ * Each table is read in its own branch, lines before buttons (the original
+ * keeps sll $3,$16,3 in both branches and forms two addresses, addu $4,$2,$3
+ * and addu $3,$3,$2); both lists are walked by index (daddu $16,$7,$0 copies
+ * the base, the element is reloaded at the loop head); the range check is
+ * two nested ifs (slti $2,$3,0x2 then bltzl $3).
+ */
+void menuKeyGuideDisp(ObjectTask *guideTask, ObjectTask *unitTask, int phase)
+{
+    GrPacket packet;
+    MenuKeyGuideWork *work;
+    BattleUnit *target;
+    KeyGuideLine *lines;
+    int *buttons;
+    int x;
+    int y;
+    int i;
+    int check;
+    int icon;
+
+    if (unitTask == 0) {
+        return;
+    }
+    if ((((BattleActor *)unitTask->work)->flags & ACTOR_FLAG_KEY_GUIDE) == 0) {
+        return;
+    }
+    if (menuChk() != 0) {
+        return;
+    }
+    if (phase == KEY_GUIDE_PHASE_NONE) {
+        return;
+    }
+    if (phase >= KEY_GUIDE_PHASE_TUIGEKI && calcTuigekiChk(unitTask) == 0) {
+        return;
+    }
+    work = guideTask->work;
+    x = (int)work->position.x;
+    y = (int)work->position.z;
+    grGpInit(&packet);
+    menuStatEnvMake(&packet);
+    target = tgtUnitGet();
+    if (calcUPGet(unitTask)->flags & 0x40) {
+        lines = keyGuideTblAgws[phase].lines;
+        buttons = keyGuideTblAgws[phase].buttons;
+    } else {
+        lines = keyGuideTblChr[phase].lines;
+        buttons = keyGuideTblChr[phase].buttons;
+    }
+    if (buttons != 0) {
+        for (i = 0; buttons[i] != 0; i++) {
+            keyGideDisp(&packet, x, y, buttons[i]);
+            x += 0x18;
+        }
+    }
+    if (lines != 0) {
+        for (i = 0; lines[i].button != 0; i++) {
+            if (lines[i].key == 0 || lines[i].key == KEY_CMD_NO_CHECK) {
+                check = 0;
+            } else {
+                check = keyCmdChk(unitTask, target, lines[i].key);
+            }
+            if (check < 2) {
+                if (check >= 0) {
+                    if (check == 0) {
+                        icon = lines[i].button;
+                    } else {
+                        icon = lines[i].button + 4;
+                    }
+                    keyGideDisp(&packet, x, y, icon);
+                    if (battleCtrlHelpGet() != 2) {
+                        menuKeyGuideHelp(&packet, unitTask, lines[i].key, x, y);
+                        menuKeyGuideVal(&packet, unitTask, lines[i].key, x, y);
+                    }
+                    x += 4;
+                    y += 0x1C;
+                }
+            }
+        }
+    }
+    grOpenSpr(&packet);
+    menuStatSprite(&packet, 8, 0x1A8, 0xB2, 0xB, 0x4C, 0xAF);
+    grCloseSpr();
+    grPacketSend(&packet);
+}
+
+/*
+ * One pad button icon's cell in the menu sheet (menu.data uvTbl, 8 entries
+ * of 0x10 bytes; still asm-owned): keyGideDisp passes srcX/srcY (lw 0x0/0x4)
+ * and width/height (lw 0x8/0xC) to menuStatSprite.
+ */
+typedef struct UvTblEntry {
+    int srcX;   /* +0x00 */
+    int srcY;   /* +0x04 */
+    int width;  /* +0x08 */
+    int height; /* +0x0C */
+} UvTblEntry;
+
+extern UvTblEntry uvTbl[];
+
+/*
+ * Draws pad button icon button (1-based: uvTbl[0] is button 1) at (x, y).
+ * The index is decremented as its own statement: the original subtracts 1
+ * before the shift (addiu $16,$16,-1; sll $16,$16,4) instead of folding the
+ * -0x10 into the table address.
+ */
+void keyGideDisp(GrPacket *packet, int x, int y, int button)
+{
+    grOpenSpr(packet);
+    button--;
+    menuStatSprite(packet, x, y, uvTbl[button].width, uvTbl[button].height, uvTbl[button].srcX,
+                   uvTbl[button].srcY);
+    grCloseSpr();
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuGuideFrameDisp);
 
@@ -1052,7 +1841,101 @@ void monsNameDisp(void *packet, ObjectTask *unitTask, int x, int y, int isEnemy)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuKeyGuideHelp);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/menu", menuKeyGuideVal);
+/* battle_init.c (ov01), still INCLUDE_ASM there: the weapon slot and the
+ * technique id a key command selects for a unit (-1: no weapon slot). */
+extern int keyCmd2wno(ObjectTask *unit, int key);
+extern int keyCmd2tid(ObjectTask *unit, int key);
+/* calc.c (ov01): a unit's EP cost for a technique. */
+extern int calcTakeEpGet(ObjectTask *unit, int tecId);
+
+/*
+ * dataTecGet's record (src/ov01/data_unit_org_get.c, TecRecord), as far as
+ * menuKeyGuideVal reads it.
+ */
+typedef struct MenuTecData {
+    unsigned char unmodeled_00[0x05];
+    signed char extraRow;   /* +0x05: `lb $8,0x5($2)`, nonzero gives the key
+                             * guide frame its second row */
+    unsigned char unmodeled_06[0x11 - 0x06];
+    signed char kind;       /* +0x11: `lb $3,0x11($2)`, compared with 6 */
+} MenuTecData;
+
+/*
+ * dataWpnGet's record (src/ov01/data_unit_org_get.c, WpnRecord), as far as
+ * menuKeyGuideVal reads it; names follow calc.c's WpnData view.
+ */
+typedef struct MenuWpnData {
+    unsigned char unmodeled_00[0x0F];
+    signed char apCost;     /* +0x0F: `lb $23,0xF($20)` */
+    unsigned char equipped; /* +0x10: `lbu $2,0x10($20)` */
+    unsigned char unmodeled_11[0x14 - 0x11];
+    short tecId;            /* +0x14: `lh $5,0x14($20)`, calcTakeEpGet's argument */
+} MenuWpnData;
+
+extern MenuTecData *dataTecGet(int tecId);
+extern MenuWpnData *dataWpnGet(int weaponId);
+
+/* Technique kind whose AP cost is fixed at 6 instead of the weapon's. */
+#define TEC_KIND_FIXED_AP 6
+
+/*
+ * The value panel of one key guide entry: the weapon slot's count, the EP
+ * cost and the AP cost of the command bound to key. A technique command of
+ * a unit without flag 0x40 shows only for TEC_KIND_FIXED_AP techniques.
+ * The frame position is a variable stepped to the value row (valueX += 8,
+ * valueY += 6): the original keeps y in $16 and adds 6 in place, and draws
+ * the AP cell from that row ($18 + 0x42, + 0x54). The AP cell sits in a
+ * do { } while (0) block: the original calls grCloseSpr with jal and
+ * returns (no `j grCloseSpr` tail call) and sets the sprite's arguments
+ * $5..$10 in order with `daddu $4,$17,$0` in the delay slot; a plain
+ * statement list gives the tail call and another argument order.
+ */
+void menuKeyGuideVal(GrPacket *packet, ObjectTask *unit, int key, int x, int y)
+{
+    MenuWpnData *weapon;
+    int slot;
+    int tecId;
+    int apCost;
+    int valueX;
+    int valueY;
+
+    slot = keyCmd2wno(unit, key);
+    if (slot == -1) {
+        return;
+    }
+    tecId = keyCmd2tid(unit, key);
+    if ((calcUPGet(unit)->flags & 0x40) == 0) {
+        if (tecId == 0) {
+            return;
+        }
+        if (dataTecGet(tecId)->kind != TEC_KIND_FIXED_AP) {
+            return;
+        }
+    }
+    weapon = dataWpnGet(calcUPGet(unit)->weaponId[slot]);
+    valueX = x + 0xC6;
+    valueY = y;
+    menuGuideFrameDisp(packet, valueX, valueY, 0x38, dataTecGet(tecId)->extraRow != 0);
+    valueX += 8;
+    valueY += 6;
+    grGsRegSet(packet, 0x42, 0);
+    grOpenSpr(packet);
+    if (weapon->equipped != 0) {
+        menuNumPut(packet, valueX, valueY, calcUPGet(unit)->wpnSlotValue[slot], 2, 1);
+    }
+    menuStatSprite(packet, x + 0xE6, valueY, 0x12, 0xC, 0x12, 0xAE);
+    menuNumPut(packet, x + 0xF8, valueY, calcTakeEpGet(unit, weapon->tecId), 2, 1);
+    if (dataTecGet(tecId)->kind == TEC_KIND_FIXED_AP) {
+        apCost = 6;
+    } else {
+        apCost = weapon->apCost;
+    }
+    do {
+        menuStatSprite(packet, valueX + 0x42, valueY, 0x12, 0xC, 0x24, 0xAE);
+        menuNumPut(packet, valueX + 0x54, valueY, apCost, 1, 1);
+        grCloseSpr();
+    } while (0);
+}
 
 /* obj.c (ov01/tu001), exact_c: allocates a task from the free list and
  * stores the caller's callback into its ->exec slot. */
