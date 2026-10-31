@@ -231,6 +231,8 @@ void XrgUnitMatrix(RgMatrix destination)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgMulMatrix);
 
+void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
+
 void XrgApplyVector(RgVector destination, RgMatrix matrix, RgVector vector);
 
 void XrgTransMatrix(RgMatrix destination, RgMatrix source, RgVector translation)
@@ -376,11 +378,62 @@ void XrgCalcMatrixXtoZ(RgMatrix matrix, RgVector xAxis, RgVector zAxis)
     XrgOuterVector(matrix + 8, matrix, rowY);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixX);
+extern float sinf(float angle);
+extern float cosf(float angle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixY);
+/*
+ * Each XrgRotMatrix<Axis> multiplies source by a rotation of angle radians
+ * about that axis: a unit matrix with the cosine/sine block written in,
+ * then XrgMulMatrix(destination, source, rotation). The store order is the
+ * original's (ov12:0x00a4d6e8..0x00a4d6f8 for X).
+ */
+void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle)
+{
+    RgMatrix rotation;
+    float sine;
+    float cosine;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixZ);
+    sine = sinf(angle);
+    cosine = cosf(angle);
+    XrgUnitMatrix(rotation);
+    rotation[5] = cosine;
+    rotation[9] = -sine;
+    rotation[6] = sine;
+    rotation[10] = cosine;
+    XrgMulMatrix(destination, source, rotation);
+}
+
+void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle)
+{
+    RgMatrix rotation;
+    float sine;
+    float cosine;
+
+    sine = sinf(angle);
+    cosine = cosf(angle);
+    XrgUnitMatrix(rotation);
+    rotation[2] = -sine;
+    rotation[8] = sine;
+    rotation[10] = cosine;
+    rotation[0] = cosine;
+    XrgMulMatrix(destination, source, rotation);
+}
+
+void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle)
+{
+    RgMatrix rotation;
+    float sine;
+    float cosine;
+
+    sine = sinf(angle);
+    cosine = cosf(angle);
+    XrgUnitMatrix(rotation);
+    rotation[0] = cosine;
+    rotation[4] = -sine;
+    rotation[1] = sine;
+    rotation[5] = cosine;
+    XrgMulMatrix(destination, source, rotation);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgInvMatrix);
 
@@ -422,8 +475,6 @@ void XrgPopMatStack(void)
     s_paTop -= 16;
 }
 
-void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
-
 void XrgMulMatStack(RgMatrix matrix)
 {
     XrgMulMatrix(s_paTop, s_paTop, matrix);
@@ -437,10 +488,6 @@ void XrgTransMatStack(float x, float y, float z)
     XrgApplyVector(translation, s_paTop, translation);
     XrgCopyVector(s_paTop + 12, translation);
 }
-
-void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle);
-void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
-void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle);
 
 void XrgRotMatStack(float angle_x, float angle_y, float angle_z)
 {
