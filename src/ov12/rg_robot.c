@@ -149,7 +149,32 @@ static float _GetSleepTimeHomingThread(RgHomingThread *thread)
     return sleepTime;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _PassTimeHomingThread);
+extern float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
+                            float speed, float turnRate);
+
+static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
+{
+    float actionTime;
+
+    if (thread == 0) {
+        assert_prog(D_00A51830, D_00A51840, 141);
+    }
+    switch (thread->state) {
+    case 1:
+        actionTime = thread->actionTime - deltaTime;
+        thread->actionTime = actionTime;
+        if (actionTime <= 0.0f) {
+            thread->actionTime = 0.0f;
+            thread->state = 2;
+        }
+        RgRobSubHoming(thread->geometry, thread->target, thread->homingSpeed,
+                       deltaTime);
+        break;
+    case 2:
+        thread->sleepTime += deltaTime;
+        break;
+    }
+}
 
 static float _CalcMaxSpeed(RgBody *body, float baseSpeed)
 {
