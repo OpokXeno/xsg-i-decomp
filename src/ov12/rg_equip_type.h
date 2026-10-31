@@ -19,10 +19,18 @@
  */
 typedef struct RgEquipRecord RgEquipRecord;
 
-/* The accessor compares each mount's first word; the rest stays opaque. */
+/*
+ * One mount, as RgEquipAddMount (ov12:0x00a1f008) appends it: the equip
+ * type (sw $17, 0x0), the mount position (sw $18, 0x4; asserted against
+ * RG_EQUIP_POS_LEFT_HAND..RG_EQUIP_POS_BACK_RIGHT or RG_EQUIP_POS_INVALID)
+ * and the mask of positions allowed for that type (sw $19, 0x8;
+ * RgEquipSetDefault passes the masked position set). RgEquipMountPos
+ * reads pos back through _GetMountData.
+ */
 typedef struct RgEquipMount {
     int type;
-    unsigned char unmodeled_004[8];
+    int pos;
+    unsigned int posMask;
 } RgEquipMount;
 
 #define RG_EQUIP_MOUNT_MAX 4

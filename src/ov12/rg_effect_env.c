@@ -63,7 +63,7 @@ extern void *RgLinkDataGet(void *pAna, const char *name);
 
 /*
  * RgParticleEffectEssenceResume is defined by ov12/tu035
- * (src/ov12/rg_particle_effect.c, still scaffold asm there). This function
+ * (src/ov12/rg_particle_effect.c), where it copies one essence record. This function
  * only forwards the current output slot and link-data entry addresses,
  * stepping each on its own by a byte stride (0xB0 for aResult's records,
  * 0x100 for the link-data entries), so opaque views are enough here too.

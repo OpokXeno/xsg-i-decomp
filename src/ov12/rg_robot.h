@@ -113,21 +113,63 @@ typedef struct RgHomingThread {
  *                     RgGeomRobotSetRotResist (lwc1 0x2c($16),
  *                     ov12:0x00a061fc)
  */
+/*
+ * rg_robot_spec.c (ov12/tu008) evidences the rest of the record:
+ *   +0x00 charID   RgRobotDBRead stores RgActorNameToCharID's result here
+ *                  (sw at 0x00a0de5c); InitRgRobotSpec sets -1
+ *   the text keywords RgRobotSpecReadFromText hands to RgTextInfoRead
+ *   (stack table at sp+0x1b0, FLOAT_OFFSET / STRING_OFFSET entries) name
+ *   +0x10 "dash-spd-max", +0x18 "rot-spd-bottom-rate", +0x30 "dash-time",
+ *   +0x38 "dash-cooldown", +0x4c "life", +0x50 "damage-stiff-time",
+ *   +0x54 "body-attack-damage", +0x58 "jet-eff", +0x78 "dash-eff" and
+ *   +0x98 "sude" (32-byte strings up to the 0xb8 RgRobotDBRead allocates)
+ *   +0x3c m_aAutoHoming[2], the name in _AnaAutoHoming's assert
+ *         "nID < sizeof(pSpec->m_aAutoHoming) / ...": per entry a float
+ *         value (atof times pi) and a flag word ORed from "see-target" 1,
+ *         "lock-on" 2, "shot" 4 and "in-scrn" 8
+ * The same table names fields this header already carries under other
+ * names: +0x0c "move-spd-max" (baseSpeed), +0x1c "weight" (speedRating),
+ * +0x20 "engine-power"/"engine-impulse" (accelRate), +0x34 "dash-power"
+ * (attackAdvanceRate); +0x04 (type) receives the "dash-mode" keyword
+ * (normal 0, vr 1, neo 2, neo2 3, neo3 4). They are left unrenamed here.
+ */
+typedef struct RgAutoHoming {
+    float value;
+    unsigned int flags;
+} RgAutoHoming;
+
 typedef struct RgRobotSpec {
-    unsigned char unmodeled_00[4];   /* +0x00 */
+    int charID;                      /* +0x00 */
     int type;                        /* +0x04 */
     unsigned char unmodeled_08[4];   /* +0x08 */
     float baseSpeed;                 /* +0x0c */
-    unsigned char unmodeled_10[4];   /* +0x10 */
+    float dashSpeedMax;              /* +0x10 */
     float turnRate;                  /* +0x14 */
-    unsigned char unmodeled_18[4];   /* +0x18 */
+    float rotSpeedBottomRate;        /* +0x18 */
     float speedRating;                /* +0x1c */
     float accelRate;                 /* +0x20 */
     float rotateForce;               /* +0x24 */
     float moveResist;                /* +0x28 */
     float rotResist;                 /* +0x2c */
-    unsigned char unmodeled_30[4];   /* +0x30 */
+    float dashTime;                  /* +0x30 */
     float attackAdvanceRate;          /* +0x34 */
+    float dashCooldown;              /* +0x38 */
+    RgAutoHoming m_aAutoHoming[2];   /* +0x3c */
+    float life;                      /* +0x4c */
+    float damageStiffTime;           /* +0x50 */
+    float bodyAttackDamage;          /* +0x54 */
+    char jetEffect[0x20];            /* +0x58 */
+    char dashEffect[0x20];           /* +0x78 */
+    /*
+     * InitRgRobotSpec copies its 8-byte default "UNARMED" here with one
+     * aligned ld/sd pair (sd at 0x00a0d268), so the name shares storage
+     * with a doubleword view, as RgBattleNames.weaponStorage does in
+     * rg_main.c; sudeWords is never read on its own.
+     */
+    union {
+        char sude[0x20];
+        unsigned long long sudeWords[4];
+    };                               /* +0x98 */
 } RgRobotSpec;
 
 /*
@@ -312,9 +354,17 @@ struct RgStatus {
 };
 
 typedef struct RgRobotStatus RgRobotStatus;
+typedef struct RgCmd RgCmd;
+/* Defined by ov12/tu013 (src/ov12/rg_motion_info_db.h); opaque here. */
+typedef struct RgMotionShotInfo RgMotionShotInfo;
 
-typedef int (*RgStatusExecCmdFunc)(RgRobotStatus *status, int param,
-                                    RgBody *body);
+/*
+ * A status's command handler: _StatusExecCmd passes the body in $5 and
+ * the command in $6 (ov12:0x00a02b3c), the order every recovered handler
+ * (_ExecCmdInDrop, _ExecCmdInHissatu, _DamageExecCmd, ...) reads them in.
+ */
+typedef int (*RgStatusExecCmdFunc)(RgRobotStatus *status, RgBody *body,
+                                    RgCmd *command);
 typedef int (*RgStatusPassTimeFunc)(RgRobotStatus *status, RgBody *body,
                                      float deltaTime);
 typedef void (*RgStatusDispFunc)(RgRobotStatus *status, RgBody *body);
@@ -363,13 +413,23 @@ typedef void (*RgStatusExitFunc)(RgRobotStatus *status, RgBody *body);
  *                     _ExecCmdInDrop and _DropPassTime (ov12:0x00a05a50/
  *                     0x00a05af0); DashVR's follow-state tag, written 1 by
  *                     _DashVRMainToFollow (ov12:0x00a04e98)
- *   scratch1 (+0x04) Drop's drop-motion id (see _GetDropMotion), read by
- *                     _DropPassTime; Damage's dash-escape gate, read by
+ *   scratch1 (+0x04) Drop's dropMotionInfo: the RgMotionInfoDBGet record
+ *                     for the drop motion, stored by _InitDropStatus (sw
+ *                     $19, 0x4($16), ov12:0x00a05c84) and handed to
+ *                     RgMotionInfoGetActionInTime by _DropPassTime;
+ *                     Damage's dash-escape gate, read by
  *                     _DamageExecCmd (ov12:0x00a05868)
  *   scratch2 (+0x08) Drop's pending spare-weapon-removal flag, read and
  *                     cleared by _ExecCmdInDrop/_DropPassTime
  *   scratchTimer (+0x0c) DashVR's countdown timer, set to 0.1 by
  *                     _DashVRMainToFollow
+ */
+/*
+ * The Dash status's restoreDashTime (+0x30): _InitDashStatus sets it to 1
+ * when the dash starts from the body's full dashTime (sw $2, 0x30($16),
+ * ov12:0x00a04da8) and clears it otherwise (ov12:0x00a04de8/0x00a04e28);
+ * _DashExit refills RgBody's dashTime from the spec only while it is set
+ * (lw 0x30($16), ov12:0x00a04c48).
  */
 /*
  * _AttackExit evidences the Attack status's own reuse of two scratch words
@@ -388,12 +448,17 @@ struct RgRobotStatus {
         int scratch0;                     /* +0x00: integer view for Drop/DashVR statuses */
         float scratch0AsFloat;            /* +0x00: float view for Breaking/Damage statuses */
     };
-    int scratch1;                         /* +0x04 */
+    union {
+        int scratch1;                     /* +0x04 */
+        RgMotionShotInfo *dropMotionInfo; /* +0x04: Drop's motion-info record */
+    };
     int scratch2;                         /* +0x08 */
     float scratchTimer;                   /* +0x0c */
     unsigned char unmodeled_10[8];        /* +0x10 */
     int eSide;                            /* +0x18 */
-    unsigned char unmodeled_1c[0x24];     /* +0x1c */
+    unsigned char unmodeled_1c[0x14];     /* +0x1c */
+    int restoreDashTime;                  /* +0x30 */
+    unsigned char unmodeled_34[0xc];      /* +0x34 */
     int type;                            /* +0x40 */
     float elapsedTime;                   /* +0x44 */
     RgStatusExecCmdFunc execCmdMethod;   /* +0x48 */
@@ -459,7 +524,7 @@ struct RgRobotStatus {
  * _ExecHitByBody through the same casts (ov12:0x00a07c6c/0x00a07c74).
  * Bytes 0x28-0x2f stay unmodeled.
  */
-typedef struct RgCmd {
+struct RgCmd {
     int param;                       /* +0x00 */
     unsigned char unmodeled_04[0xc]; /* +0x04 */
     float scratch0;                  /* +0x10 */
@@ -471,7 +536,7 @@ typedef struct RgCmd {
     unsigned char unmodeled_28[8];   /* +0x28 */
     int type;                        /* +0x30 */
     unsigned char unmodeled_34[0xc]; /* +0x34 */
-} RgCmd;
+};
 
 /*
  * RgStatus's cmdQueue (+0x08) points to this fixed-size ring: _PassTimeRobot
@@ -500,7 +565,7 @@ typedef struct RgCmdQueue {
 extern void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
                            float rotational_scale);
 
-static void _InitBreakingStatus(RgStatus *status, RgBody *body);
+static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body);
 
 /* Returns the accepted entry, or 0 when the ring is full or the type invalid. */
 static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType);

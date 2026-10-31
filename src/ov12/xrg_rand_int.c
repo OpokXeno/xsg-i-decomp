@@ -231,6 +231,8 @@ void XrgUnitMatrix(RgMatrix destination)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgMulMatrix);
 
+void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
+
 void XrgApplyVector(RgVector destination, RgMatrix matrix, RgVector vector);
 
 void XrgTransMatrix(RgMatrix destination, RgMatrix source, RgVector translation)
@@ -376,13 +378,85 @@ void XrgCalcMatrixXtoZ(RgMatrix matrix, RgVector xAxis, RgVector zAxis)
     XrgOuterVector(matrix + 8, matrix, rowY);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixX);
+extern float sinf(float angle);
+extern float cosf(float angle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixY);
+/*
+ * Each XrgRotMatrix<Axis> multiplies source by a rotation of angle radians
+ * about that axis: a unit matrix with the cosine/sine block written in,
+ * then XrgMulMatrix(destination, source, rotation). The store order is the
+ * original's (ov12:0x00a4d6e8..0x00a4d6f8 for X).
+ */
+void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle)
+{
+    RgMatrix rotation;
+    float sine;
+    float cosine;
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgRotMatrixZ);
+    sine = sinf(angle);
+    cosine = cosf(angle);
+    XrgUnitMatrix(rotation);
+    rotation[5] = cosine;
+    rotation[9] = -sine;
+    rotation[6] = sine;
+    rotation[10] = cosine;
+    XrgMulMatrix(destination, source, rotation);
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgInvMatrix);
+void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle)
+{
+    RgMatrix rotation;
+    float sine;
+    float cosine;
+
+    sine = sinf(angle);
+    cosine = cosf(angle);
+    XrgUnitMatrix(rotation);
+    rotation[2] = -sine;
+    rotation[8] = sine;
+    rotation[10] = cosine;
+    rotation[0] = cosine;
+    XrgMulMatrix(destination, source, rotation);
+}
+
+void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle)
+{
+    RgMatrix rotation;
+    float sine;
+    float cosine;
+
+    sine = sinf(angle);
+    cosine = cosf(angle);
+    XrgUnitMatrix(rotation);
+    rotation[0] = cosine;
+    rotation[4] = -sine;
+    rotation[1] = sine;
+    rotation[5] = cosine;
+    XrgMulMatrix(destination, source, rotation);
+}
+
+/*
+ * Inverts a rigid transform: the transposed 3x3 rotation times a
+ * translation by the negated source position.
+ */
+void XrgInvMatrix(RgMatrix destination, const RgMatrix source)
+{
+    RgMatrix rotation;
+    RgMatrix translation;
+    int row;
+    int column;
+
+    XrgUnitMatrix(rotation);
+    for (row = 0; row < 3; row++) {
+        for (column = 0; column < 3; column++) {
+            rotation[column * 4 + row] = source[row * 4 + column];
+        }
+    }
+    XrgUnitMatrix(translation);
+    /* XrgNegateVector only reads its source; its prototype is not const. */
+    XrgNegateVector(translation + 12, (float *) source + 12);
+    XrgMulMatrix(destination, rotation, translation);
+}
 
 extern double atan2(double y, double x);
 
@@ -422,8 +496,6 @@ void XrgPopMatStack(void)
     s_paTop -= 16;
 }
 
-void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right);
-
 void XrgMulMatStack(RgMatrix matrix)
 {
     XrgMulMatrix(s_paTop, s_paTop, matrix);
@@ -437,10 +509,6 @@ void XrgTransMatStack(float x, float y, float z)
     XrgApplyVector(translation, s_paTop, translation);
     XrgCopyVector(s_paTop + 12, translation);
 }
-
-void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle);
-void XrgRotMatrixY(RgMatrix destination, RgMatrix source, float angle);
-void XrgRotMatrixZ(RgMatrix destination, RgMatrix source, float angle);
 
 void XrgRotMatStack(float angle_x, float angle_y, float angle_z)
 {
@@ -489,4 +557,31 @@ INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgIsTriIntersectedByRay);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgQuantAngle);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_rand_int", XrgQuantAngle4);
+/*
+ * Wraps angle into (-pi, pi] and returns its quadrant around the forward
+ * direction: 0 for [-pi/4, pi/4), 1 for [pi/4, 3pi/4), 2 behind (|angle| >= 3pi/4),
+ * 3 for [-3pi/4, -pi/4); -1 is unreachable after the wrap. The bounds are
+ * the original float literals (0x3F490FDB, 0x4016CBE4).
+ */
+int XrgQuantAngle4(float angle)
+{
+    while (angle > 3.1415927f) {
+        angle -= 6.2831855f;
+    }
+    while (angle < -3.1415927f) {
+        angle += 6.2831855f;
+    }
+    if (-0.7853982f <= angle && angle < 0.7853982f) {
+        return 0;
+    }
+    if (0.7853982f <= angle && angle < 2.3561945f) {
+        return 1;
+    }
+    if (2.3561945f <= angle || angle < -2.3561945f) {
+        return 2;
+    }
+    if (-2.3561945f <= angle && angle < -0.7853982f) {
+        return 3;
+    }
+    return -1;
+}

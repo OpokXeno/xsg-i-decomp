@@ -149,7 +149,32 @@ static float _GetSleepTimeHomingThread(RgHomingThread *thread)
     return sleepTime;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _PassTimeHomingThread);
+extern float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
+                            float speed, float turnRate);
+
+static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
+{
+    float actionTime;
+
+    if (thread == 0) {
+        assert_prog(D_00A51830, D_00A51840, 141);
+    }
+    switch (thread->state) {
+    case 1:
+        actionTime = thread->actionTime - deltaTime;
+        thread->actionTime = actionTime;
+        if (actionTime <= 0.0f) {
+            thread->actionTime = 0.0f;
+            thread->state = 2;
+        }
+        RgRobSubHoming(thread->geometry, thread->target, thread->homingSpeed,
+                       deltaTime);
+        break;
+    case 2:
+        thread->sleepTime += deltaTime;
+        break;
+    }
+}
 
 static float _CalcMaxSpeed(RgBody *body, float baseSpeed)
 {
@@ -226,7 +251,7 @@ static void _DisposeStatus(RgRobotStatus *status)
     RgHeapFree(InstanceOfRgHeap(), status, D_00A51840, 648);
 }
 
-static int _StatusExecCmd(RgRobotStatus *status, RgBody *body, int param)
+static int _StatusExecCmd(RgRobotStatus *status, RgCmd *command, RgBody *body)
 {
     RgStatusExecCmdFunc execCmdMethod;
 
@@ -235,7 +260,7 @@ static int _StatusExecCmd(RgRobotStatus *status, RgBody *body, int param)
     }
     execCmdMethod = status->execCmdMethod;
     if (execCmdMethod != 0) {
-        return execCmdMethod(status, param, body);
+        return execCmdMethod(status, body, command);
     }
     return 0;
 }
@@ -272,10 +297,34 @@ static void _StatusDisp(RgRobotStatus *status, RgBody *body)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowAllCmdInMoving);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _AllowDamageCmd);
-
 static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
 static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command);
+
+static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command);
+
+/*
+ * The original range-checks the command type with sltiu (ov12:0x00a02d78)
+ * before splitting the 8/9/14 cases, which GCC only emits for an unsigned
+ * switch operand.
+ */
+static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int result;
+
+    result = 0;
+    switch ((unsigned int) command->type) {
+    case 8:
+        result = _ExecDamageCmd(status, body, command);
+        break;
+    case 9:
+        result = _ExecWeakDamageCmd(status, body, command);
+        break;
+    case 14:
+        result = _ExecHitByBody(status, body, command);
+        break;
+    }
+    return result;
+}
 
 static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -318,7 +367,7 @@ damage:
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _MovingPassTime);
 
-static int _AllowAllCmdInMoving(RgRobotStatus *status, int param, RgBody *body);
+static int _AllowAllCmdInMoving(RgRobotStatus *status, RgBody *body, RgCmd *command);
 static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime);
 
 static void _InitMovingStatus(RgRobotStatus *status, RgBody *body)
@@ -381,7 +430,33 @@ static int _ExecCmdInHissatu(RgRobotStatus *status, RgBody *body, RgCmd *command
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _HissatuPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _HissatuExit);
+extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
+extern void RgRobotEffectTermDash(RgRobotEffect *effect);
+extern void XrgSoundRingStopMoving(int soundID);
+
+static void _HissatuExit(RgRobotStatus *status, RgBody *body)
+{
+    float maxSpeed;
+    void *weapon0;
+    void *weapon1;
+
+    (void)status;
+    weapon0 = body->weapon[0];
+    weapon1 = body->weapon[1];
+    maxSpeed = _CalcMaxSpeed(body, body->spec->baseSpeed);
+    if (weapon0 != 0) {
+        RgWeaponRestartLockon(weapon0);
+        RgWeaponShotStop(weapon0);
+    }
+    if (weapon1 != 0) {
+        RgWeaponRestartLockon(weapon1);
+        RgWeaponShotStop(weapon1);
+    }
+    _StopHomingThread(body->homingThread);
+    RgGeomPointSetMaxXYSpd(body->geometry, maxSpeed);
+    RgRobotEffectTermDash(body->effect);
+    RgRobotEffectTermJet(body->effect);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitStatusHissatu);
 
@@ -431,7 +506,30 @@ static void _ExitTargettingStatus(RgRobotStatus *status, RgBody *body)
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitTargettingStatus);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecCmdInBreaking);
+extern void RgGeomRobotAddRotForce(RgGeomPoint *point, float force);
+
+static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    int mask;
+    float delta;
+    int rotateSign;
+
+    mask = _AllowDamageCmd(status, body, command);
+    if (command->type == 1) {
+        delta = *(float *) command;
+        if (delta > 0.0f) {
+            rotateSign = 1;
+        } else if (delta < 0.0f) {
+            rotateSign = -1;
+        } else {
+            rotateSign = 0;
+        }
+        RgGeomRobotAddRotForce(body->geometry,
+                               (float) rotateSign * body->spec->rotateForce * 0.1f);
+        body->flags |= 2;
+    }
+    return mask;
+}
 
 static int _BreakingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -453,13 +551,34 @@ static void _BreakingExit(RgRobotStatus *status, RgBody *body)
     _BodyPlayMotion(body, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitBreakingStatus);
+static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
+{
+    _StopAllShotThread(body);
+    _SetStatus(status, 8, body);
+    status->execCmdMethod = _ExecCmdInBreaking;
+    status->passTimeMethod = _BreakingPassTime;
+    status->exitMethod = _BreakingExit;
+    status->scratch0AsFloat = 0.3f;
+    _BodyPlayMotion(body, 0x14);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExecCmd);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExit);
+static void _DashExit(RgRobotStatus *status, RgBody *body)
+{
+    RgRobotSpec *spec;
+
+    spec = body->spec;
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+    RgRobotEffectTermJet(body->effect);
+    RgRobotEffectTermDash(body->effect);
+    if (status->restoreDashTime != 0) {
+        body->dashTime = spec->dashTime;
+    }
+    XrgSoundRingStopMoving(body->landingSoundID);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDashStatus);
 
@@ -480,10 +599,6 @@ static void _DashVRMainToFollow(RgRobotStatus *status, RgBody *body)
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRExecCmd);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRPassTime);
-
-extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
-extern void RgRobotEffectTermDash(RgRobotEffect *effect);
-extern void XrgSoundRingStopMoving(int soundID);
 
 static void _DashVRExit(RgRobotStatus *status, RgBody *body)
 {
@@ -526,11 +641,52 @@ static int _DamagePassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 0x10;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDamageStatus);
+extern int RgRobSubGetDamageMotion(RgGeomPoint *geometry, RgVector direction);
+
+/*
+ * stiffScale scales the spec's damage-stiff-time, clamped to 0.1..10 s
+ * through the inline helper (the original keeps the bound in $f1, as
+ * with RgDispLifeSetWin's clamp); a positive stiffTime overrides it, and
+ * dashEscape becomes the Damage status's scratch1.
+ *
+ * The float argument comes before the flag: _ExecDamageCmd loads the
+ * flag (lw $7, ov12:0x00a07c10) ahead of the float (lwc1 $f12 in the
+ * jal delay slot), which GCC only schedules that way for this order.
+ */
+static inline float _ClampStiffTime(float time, float min, float max)
+{
+    return time < min ? min : (time > max ? max : time);
+}
+
+static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
+                              RgCmd *command, float stiffScale, int dashEscape,
+                              float stiffTime)
+{
+    RgRobotSpec *spec;
+    float time;
+
+    spec = body->spec;
+    if (status == 0) {
+        assert_prog(D_00A518F0, D_00A51840, 2478);
+    }
+    _StopAllShotThread(body);
+    _SetStatus(status, 6, body);
+    body->weakHitAccum = 0.0f;
+    body->weakHitWindow = 0.0f;
+    status->execCmdMethod = _DamageExecCmd;
+    status->passTimeMethod = _DamagePassTime;
+    status->scratch0AsFloat = _ClampStiffTime(stiffScale * spec->damageStiffTime,
+                                              0.1f, 10.0f);
+    status->scratch1 = dashEscape;
+    if (stiffTime > 0.0f) {
+        status->scratch0AsFloat = stiffTime;
+    }
+    _BodyPlayMotion(body, RgRobSubGetDamageMotion(body->geometry, (float *) command));
+}
 
 
 static int _GetDropMotion(int eSide);
-static int _InitDropStatus(RgStatus *status, RgBody *body, int motion, int eSide);
+static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion, int eSide);
 
 /*
  * Drop status's own scratch0/scratch2 (see RgRobotStatus): scratch0 is the
@@ -548,13 +704,18 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
         && command->param == 2
         && status->scratch2 != 0) {
         mask |= 0x200;
-        _InitDropStatus((RgStatus *)status, body, _GetDropMotion(2), 2);
+        _InitDropStatus(status, body, _GetDropMotion(2), 2);
     }
     return mask;
 }
 
-extern int RgMotionInfoGetActionInTime(int motion, int actionIndex,
-                                       float elapsedTime);
+typedef struct RgMotionInfoDB RgMotionInfoDB;
+typedef struct RgMotionAction RgMotionAction;
+extern RgMotionInfoDB *InstanceOfRgMotionInfoDB(void);
+extern RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
+                                           int charId);
+extern RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
+                                                   int actionNo, float time);
 static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
 
 /*
@@ -565,13 +726,14 @@ static void _InitMovingStatus(RgRobotStatus *status, RgBody *body);
  * body's spare weapon at that side (see _BodySetSpareWeapon, RgBody+0x7c)
  * by handing it to _BodyEquipWeapon.
  */
-static int _DropPassTime(RgRobotStatus *status, RgBody *body)
+static int _DropPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     float elapsedTime;
     int side;
 
+    (void)deltaTime;
     elapsedTime = status->elapsedTime;
-    if (RgMotionInfoGetActionInTime(status->scratch1, 0, elapsedTime) != 0
+    if (RgMotionInfoGetActionInTime(status->dropMotionInfo, 0, elapsedTime) != 0
         && status->scratch2 != 0) {
         side = status->scratch0;
         _BodyEquipWeapon(body, side, body->spareWeapon[side]);
@@ -584,7 +746,46 @@ static int _DropPassTime(RgRobotStatus *status, RgBody *body)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDropStatus);
+extern int RgWeaponGetControlFlag(RgWeapon *weapon);
+extern int RgWeaponIsAttachedShot(RgWeapon *weapon);
+
+/*
+ * The weapon control flag's low three bits give its type; 4 is the unarmed
+ * type (InitRgWeaponUnArmedEssence sets the mode word to 76, whose low bits
+ * are 4; rg_hissatu.c's _IsUnarmed tests the same value).
+ */
+#define RG_WEAPON_CONTROL_TYPE_MASK 7
+#define RG_WEAPON_CONTROL_UNARMED 4
+
+static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
+                           int eSide)
+{
+    RgMotionShotInfo *motionInfo;
+
+    motionInfo = RgMotionInfoDBGet(InstanceOfRgMotionInfoDB(), motion,
+                                   body->charID);
+    if (body->weapon[eSide] == 0) {
+        return 0;
+    }
+    if (motionInfo == 0) {
+        return 0;
+    }
+    if ((RgWeaponGetControlFlag(body->weapon[eSide]) & RG_WEAPON_CONTROL_TYPE_MASK)
+        == RG_WEAPON_CONTROL_UNARMED) {
+        return 0;
+    }
+    if (RgWeaponIsAttachedShot(body->weapon[eSide]) != 0) {
+        return 0;
+    }
+    _SetStatus(status, 9, body);
+    status->execCmdMethod = _ExecCmdInDrop;
+    status->passTimeMethod = _DropPassTime;
+    status->scratch0 = eSide;
+    status->dropMotionInfo = motionInfo;
+    status->scratch2 = 1;
+    _BodyPlayMotion(body, motion);
+    return 1;
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _EntryCmdQueue);
 
@@ -704,7 +905,22 @@ static int _BodyGetTargetPos(RgBody *body, RgPointVector *position)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _BodySetSpec);
+static void _BodySetSpec(RgBody *body, RgRobotSpec *spec)
+{
+    float life;
+
+    if (body == 0) {
+        assert_prog(D_00A51A68, D_00A51840, 2773);
+    }
+    if (spec != 0) {
+        body->spec = spec;
+        body->dashTime = spec->dashTime;
+        body->lifeMax = body->life = spec->life;
+        RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+        RgRobotEffectSetJetPtclName(body->effect, spec->jetEffect);
+        RgRobotEffectSetDashPtclName(body->effect, spec->dashEffect);
+    }
+}
 
 extern void RgGeomFree(RgGeomPoint *point);
 extern void RgGeomPointSetMoveResist(RgGeomPoint *point, float resist);
@@ -864,7 +1080,7 @@ static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
         assert_prog(D_00A51B48, D_00A51840, 3153);
     }
     body->cmdMask |= 1 << command->type;
-    return _StatusExecCmd(robotStatus, (RgBody *) command, (int) body);
+    return _StatusExecCmd(robotStatus, command, body);
 }
 
 extern float RgGeomPointGetSpeed(RgGeomPoint *point);
@@ -1024,7 +1240,6 @@ static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
     return 1;
 }
 
-extern void RgGeomRobotAddRotForce(RgGeomPoint *point, float force);
 
 /*
  * The queued command reuses its own +0x00 slot (RgCmd.param) as a plain
@@ -1088,7 +1303,7 @@ static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
     return RG_CMD_RESULT_TARGETTING;
 }
 
-static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)
+static int _ExecBreakCmd(RgRobotStatus *status, RgBody *body, void *command)
 {
     float brake_scale = 0.3f;
 
@@ -1142,10 +1357,7 @@ static int _GetDropMotion(int eSide)
     return motion;
 }
 
-static int _InitDropStatus(RgStatus *status, RgBody *body, int motion,
-                            int eSide);
-
-static int _ExecDropWeaponCmd(RgStatus *status, RgBody *body,
+static int _ExecDropWeaponCmd(RgRobotStatus *status, RgBody *body,
                                RgCmd *command)
 {
     return (_InitDropStatus(status, body, _GetDropMotion(command->param),
@@ -1154,14 +1366,24 @@ static int _ExecDropWeaponCmd(RgStatus *status, RgBody *body,
                : 0x200;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _ExecDamageCmd);
-
 extern void CreateRgHitEffectPosDir(RgVector position, RgVector direction,
                                     char *name1, char *name2);
 extern void RgGeomPointAddForce(RgGeomPoint *point, RgVector force);
 extern float XrgNormalizeVector(RgVector destination, RgVector source);
-static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
-                              RgCmd *command, int flag, float p5, float p6);
+
+static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
+{
+    float life;
+
+    life = body->life - command->scratch0;
+    body->life = life;
+    if (life < 0.0f) {
+        body->life = 0.0f;
+    }
+    _InitDamageStatus(status, body, command, command->scratch0,
+                      command->scratch1, 0.0f);
+    return 0x80;
+}
 extern const char D_00A51BA0[];
 
 static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
@@ -1178,7 +1400,7 @@ static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
     if (body->life < 0.0f) {
         body->life = 0.0f;
     }
-    _InitDamageStatus(status, body, command, 1, 0.0f, 0.5f);
+    _InitDamageStatus(status, body, command, 0.0f, 1, 0.5f);
     return 0x400;
 }
 
@@ -1199,7 +1421,7 @@ static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
     accum = body->weakHitAccum + command->scratch0;
     body->weakHitAccum = accum;
     if (*(float *) &command->scratch1 <= accum) {
-        _InitDamageStatus(status, body, command, 1, accum, 0.0f);
+        _InitDamageStatus(status, body, command, accum, 1, 0.0f);
         body->weakHitWindow = 0.0f;
         body->weakHitAccum = 0.0f;
     } else {

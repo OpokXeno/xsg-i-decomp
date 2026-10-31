@@ -8,6 +8,7 @@
 
 const char D_00A52460[16] = "pInfo != NIL";
 const char D_00A52470[32] = "../rg_motion_info_db.euc.c";
+const char D_00A52490[48] = "pInfo->m_uActTblSiz < RG_MOTINFO_ACT_TABLE_SIZE";
 const char D_00A524C0[32] = "pTable->m_uTblSize < ENTRY_MAX";
 const char D_00A524E0[16] = "pDB != NIL";
 const char D_00A52598[16] = "pMotInfo != NIL";
@@ -39,7 +40,23 @@ static void _InitRgMotionShotInfo(RgMotionShotInfo *info, int motionNo)
     info->charId = -1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_motion_info_db", _AddActionRgMotion);
+#define RG_MOTINFO_ACT_TABLE_SIZE 4
+
+static RgMotionAction *_AddActionRgMotion(RgMotionShotInfo *info, int actionNo,
+                                          float startTime, float endTime)
+{
+    RgMotionAction *action;
+
+    if (!((unsigned int)info->actionCount < RG_MOTINFO_ACT_TABLE_SIZE)) {
+        assert_prog(D_00A52490, D_00A52470, 65);
+    }
+    action = &info->actions[info->actionCount++];
+    action->actionNo = actionNo;
+    action->startTime = startTime;
+    action->endTime = endTime;
+    action->shiftMotionNo = -1;
+    return action;
+}
 
 static void _TableInit(RgMotionInfoDB *db)
 {
@@ -144,9 +161,6 @@ static void _TableFree(RgMotionInfoDB *db)
     }
     db->entryCount = 0;
 }
-
-/* Same TU, not part of this allocation. */
-extern void _AddActionRgMotion(RgMotionShotInfo *, int, float, float);
 
 static void _InitDB(RgMotionInfoDB *db) {
     RgMotionShotInfo *info;

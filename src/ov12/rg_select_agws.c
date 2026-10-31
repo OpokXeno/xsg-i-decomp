@@ -531,7 +531,11 @@ extern int XrgPadIsUp(void);
 extern int XrgPadIsDown(void);
 extern void XrgSoundSystemCursor(void);
 
-static void _PassTimeSelWep(SelWep *pSelWep)
+/*
+ * deltaTime is unused here, but _PassTimeSelType passes its own deltaTime
+ * through in $f12 (mov.s $f12, $f20 at 0x00a39548) to this call.
+ */
+static void _PassTimeSelWep(SelWep *pSelWep, float deltaTime)
 {
     int cursor;
     int previousCursor;
@@ -703,12 +707,20 @@ static int _GetConfrictSelType(SelType *pSelType, int charIndex)
     return pSelType->confrict[charIndex];
 }
 
+/*
+ * SelType cursor positions: 0..2 are the equip types (_EquipCurIDToEquipType),
+ * SEL_TYPE_CURSOR_DETERM (3) is the position _SetDetermModeSelType moves to and
+ * _PassTimeSelType never steps onto, SEL_TYPE_CURSOR_LAST (4) the rightmost.
+ */
+#define SEL_TYPE_CURSOR_DETERM 3
+#define SEL_TYPE_CURSOR_LAST 4
+
 static void _SetDetermModeSelType(SelType *pSelType)
 {
     if (pSelType == 0) {
         assert_prog(D_00A56758, D_00A56660, 558);
     }
-    _SetSelTypeCursor(pSelType, 3);
+    _SetSelTypeCursor(pSelType, SEL_TYPE_CURSOR_DETERM);
 }
 
 static void _SetSpecModeSelType(SelType *pSelType, int mode)
@@ -847,7 +859,44 @@ static void _InitByCharSelType(SelType *pSelType, int charID)
     _CheckConfrictSelType(pSelType);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _PassTimeSelType);
+extern int XrgPadIsLeft(void);
+extern int XrgPadIsRight(void);
+
+static void _PassTimeSelType(SelType *pSelType, float deltaTime)
+{
+    int cursor;
+    int newCursor;
+    int eType;
+
+    if (pSelType == 0) {
+        assert_prog(D_00A56758, D_00A56660, 0x2A3);
+    }
+    cursor = pSelType->cursor;
+    newCursor = cursor;
+    eType = _EquipCurIDToEquipType(cursor);
+    if (eType != RG_EQUIP_TYPE_INVALID) {
+        _PassTimeSelWep(&pSelType->wepList[eType], deltaTime);
+    }
+    if (cursor != SEL_TYPE_CURSOR_DETERM) {
+        if (XrgPadIsLeft() != 0 && cursor != 0) {
+            newCursor = cursor - 1;
+            if (newCursor == SEL_TYPE_CURSOR_DETERM) {
+                newCursor = SEL_TYPE_CURSOR_DETERM - 1;
+            }
+        }
+        if (XrgPadIsRight() != 0 && (unsigned int) newCursor < SEL_TYPE_CURSOR_LAST) {
+            newCursor++;
+            if (newCursor == SEL_TYPE_CURSOR_DETERM) {
+                newCursor = SEL_TYPE_CURSOR_DETERM + 1;
+            }
+        }
+    }
+    _SetSelTypeCursor(pSelType, newCursor);
+    if (pSelType->cursor != cursor) {
+        XrgSoundSystemCursor();
+    }
+    _CheckConfrictSelType(pSelType);
+}
 
 static int _DetachWeaponIfConfrictSelType(SelType *pSelType)
 {
@@ -1159,11 +1208,6 @@ static int _GetPlayerModeSelectData(SelDat *pSel)
 
 extern void XrgPadSetID(int pad_id);
 
-/*
- * _PassTimeSelType (above) is still INCLUDE_ASM; declare it so this caller
- * does not see an implicit declaration.
- */
-static void _PassTimeSelType(SelType *pSelType, float deltaTime);
 
 static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
 {
