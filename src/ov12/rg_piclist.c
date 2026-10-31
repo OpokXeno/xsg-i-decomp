@@ -394,7 +394,46 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListWrite);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPicListFromBinary);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListRead);
+/*
+ * The serialized list header RgPicListRead copies out of its read buffer
+ * field by field (unaligned lwl/lwr pairs, ov12:0x00a413f8..0x00a41434):
+ * the picture count drives the read loop, the offsets go straight into the
+ * list, and the fourth word is copied but never read.
+ */
+typedef struct RgPicListHeader {
+    unsigned int num;
+    int reserved;
+} RgPicListHeader;
+
+RgPicList *RgPicListRead(int handle, RgBxx *bxx)
+{
+    unsigned char buffer[0x400];
+    RgPicListHeader header;
+    RgPicList *pList;
+    RgPic *pic;
+    unsigned int i;
+    unsigned char *src;
+
+    extern int XrgHostRead(int handle, void *buffer, int size);
+
+    if (InstanceOfRgDebugFlags()->flags[3] != 0) {
+        pList = CreateRgPicList(bxx);
+        XrgHostRead(handle, buffer, _BinarySizePicList());
+        /* Through a plain pointer, so the copies stay unaligned word moves. */
+        src = buffer;
+        __builtin_memcpy(&header.num, src, 4);
+        __builtin_memcpy(&pList->ofsX, src + 4, 4);
+        __builtin_memcpy(&pList->ofsY, src + 8, 4);
+        __builtin_memcpy(&header.reserved, src + 12, 4);
+        for (i = 0; i < header.num; i++) {
+            pic = RgPicRead(handle, bxx);
+            if (pic != 0)
+                pList->pics[pList->m_uNum++] = pic;
+        }
+        return pList;
+    }
+    return 0;
+}
 
 int RgPicListGetOfsX(RgPicList *pList)
 {
