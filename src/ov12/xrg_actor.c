@@ -710,7 +710,41 @@ void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int eJntID)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/xrg_actor", XrgActorCheckPakaPaka);
+/*
+ * Scaffold-owned (.rodata still owner: asm): ov12:0x00a58b88 holds the
+ * "actor %p Pakapaka %s -> %d : paka base %d" log line.
+ */
+extern const char D_00A58B88[];
+extern const char *RgActorCharIDToName(int charID);
+int _GetPakaPakaBaseJnt(int charID, int attachID);
+extern void XrgLog(const char *format, const char *sourceFile, int line, ...);
+
+void XrgActorCheckPakaPaka(XrgActor *pActor)
+{
+    XrgActor *pParent;
+    int baseJnt;
+    int charID;
+
+    if (pActor == 0) {
+        assert_prog(D_00A589C8.actorNotNil, D_00A587E0, 1240);
+    }
+    pParent = pActor->parent;
+    if (pParent != 0) {
+        baseJnt = _GetPakaPakaBaseJnt(pParent->charID, pActor->attachID);
+        pActor->pakaBaseJnt = baseJnt;
+        if (baseJnt >= 0) {
+            /* Read before the pakaPaka store, as at ov12:0x00a4783c. */
+            charID = pParent->charID;
+            pActor->pakaPaka = 1;
+            /* do/while (0) keeps the original's jal: no sibling call. */
+            do {
+                XrgLog(D_00A58B88, D_00A587E0, 1250, pActor,
+                       RgActorCharIDToName(charID), pActor->attachID,
+                       pActor->pakaBaseJnt);
+            } while (0);
+        }
+    }
+}
 
 extern int RgVectorRemove(void *vector, void *element, const char *source_file,
                           int line);
@@ -812,7 +846,6 @@ XrgRawJntData *_FindRawJntData(int id, int jntID)
  */
 extern const char D_00A58BE0[];
 extern const char D_00A58BE8[];
-extern void XrgLog(const char *format, const char *sourceFile, int line, ...);
 
 int _GetPakaPakaBaseJnt(int charID, int attachID)
 {
