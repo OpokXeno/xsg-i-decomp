@@ -219115,11 +219115,14 @@
      "also_referenced_by_c": [],
      "c_owned_symbols": [
       "D_00A52460",
-      "D_00A52470"
+      "D_00A52470",
+      "D_00A52490",
+      "D_00A524C0",
+      "D_00A524E0"
      ],
      "generated": [
       "0x00a52460",
-      "0x00a52490"
+      "0x00a524f0"
      ],
      "generated_by": [
       "InstanceOfRgMotionInfoDB",
@@ -219130,6 +219133,7 @@
       "RgMotionInfoGetActionInTime",
       "RgMotionInfoIsAfter",
       "RgMotionInfoIsBefore",
+      "_AddActionRgMotion",
       "_DestructDB",
       "_InitDB_00A0F828",
       "_InitRgMotionShotInfo",
@@ -219139,30 +219143,6 @@
      ],
      "range": [
       "0x00a52460",
-      "0x00a52490"
-     ]
-    },
-    {
-     "also_referenced_by_c": [],
-     "c_owned_symbols": [
-      "D_00A524C0",
-      "D_00A524E0"
-     ],
-     "generated": [
-      "0x00a524c0",
-      "0x00a524f0"
-     ],
-     "generated_by": [
-      "RgMotionInfoDBDispose",
-      "RgMotionInfoDBDump",
-      "RgMotionInfoDBGet",
-      "RgMotionInfoDBIsDefaultData",
-      "_DestructDB",
-      "_InitDB_00A0F828",
-      "_TableEntry"
-     ],
-     "range": [
-      "0x00a524c0",
       "0x00a524f0"
      ]
     },
