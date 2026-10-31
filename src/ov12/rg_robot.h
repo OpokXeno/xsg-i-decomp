@@ -414,6 +414,13 @@ typedef void (*RgStatusExitFunc)(RgRobotStatus *status, RgBody *body);
  *                     _DashVRMainToFollow
  */
 /*
+ * The Dash status's restoreDashTime (+0x30): _InitDashStatus sets it to 1
+ * when the dash starts from the body's full dashTime (sw $2, 0x30($16),
+ * ov12:0x00a04da8) and clears it otherwise (ov12:0x00a04de8/0x00a04e28);
+ * _DashExit refills RgBody's dashTime from the spec only while it is set
+ * (lw 0x30($16), ov12:0x00a04c48).
+ */
+/*
  * _AttackExit evidences the Attack status's own reuse of two scratch words
  * and one more field of the 0x10-0x3f span:
  *   scratch1 (+0x04) the ranged weapon handle passed to RgWeaponGetEss and
@@ -435,7 +442,9 @@ struct RgRobotStatus {
     float scratchTimer;                   /* +0x0c */
     unsigned char unmodeled_10[8];        /* +0x10 */
     int eSide;                            /* +0x18 */
-    unsigned char unmodeled_1c[0x24];     /* +0x1c */
+    unsigned char unmodeled_1c[0x14];     /* +0x1c */
+    int restoreDashTime;                  /* +0x30 */
+    unsigned char unmodeled_34[0xc];      /* +0x34 */
     int type;                            /* +0x40 */
     float elapsedTime;                   /* +0x44 */
     RgStatusExecCmdFunc execCmdMethod;   /* +0x48 */
@@ -542,7 +551,7 @@ typedef struct RgCmdQueue {
 extern void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
                            float rotational_scale);
 
-static void _InitBreakingStatus(RgStatus *status, RgBody *body);
+static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body);
 
 /* Returns the accepted entry, or 0 when the ring is full or the type invalid. */
 static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType);

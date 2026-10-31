@@ -477,13 +477,40 @@ static void _BreakingExit(RgRobotStatus *status, RgBody *body)
     _BodyPlayMotion(body, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitBreakingStatus);
+static int _ExecCmdInBreaking(RgRobotStatus *status, int param, RgBody *body);
+
+static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
+{
+    _StopAllShotThread(body);
+    _SetStatus(status, 8, body);
+    status->execCmdMethod = _ExecCmdInBreaking;
+    status->passTimeMethod = _BreakingPassTime;
+    status->exitMethod = _BreakingExit;
+    status->scratch0AsFloat = 0.3f;
+    _BodyPlayMotion(body, 0x14);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExecCmd);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashPassTime);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashExit);
+extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
+extern void RgRobotEffectTermDash(RgRobotEffect *effect);
+extern void XrgSoundRingStopMoving(int soundID);
+
+static void _DashExit(RgRobotStatus *status, RgBody *body)
+{
+    RgRobotSpec *spec;
+
+    spec = body->spec;
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+    RgRobotEffectTermJet(body->effect);
+    RgRobotEffectTermDash(body->effect);
+    if (status->restoreDashTime != 0) {
+        body->dashTime = spec->dashTime;
+    }
+    XrgSoundRingStopMoving(body->landingSoundID);
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _InitDashStatus);
 
@@ -504,10 +531,6 @@ static void _DashVRMainToFollow(RgRobotStatus *status, RgBody *body)
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRExecCmd);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRPassTime);
-
-extern void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxSpeed);
-extern void RgRobotEffectTermDash(RgRobotEffect *effect);
-extern void XrgSoundRingStopMoving(int soundID);
 
 static void _DashVRExit(RgRobotStatus *status, RgBody *body)
 {
@@ -1112,7 +1135,7 @@ static int _ExecTargettingCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
     return RG_CMD_RESULT_TARGETTING;
 }
 
-static int _ExecBreakCmd(RgStatus *status, RgBody *body, void *command)
+static int _ExecBreakCmd(RgRobotStatus *status, RgBody *body, void *command)
 {
     float brake_scale = 0.3f;
 
