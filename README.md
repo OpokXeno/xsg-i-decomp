@@ -13,16 +13,16 @@ The Sony SDK and public libraries do not need to be recovered.
 
 ## Progress
 
-Published source coverage: 6,922 of 7,645 in-scope game functions (90.543%).
+Published source coverage: 7,049 of 7,645 in-scope game functions (92.204%).
 
 | Version | Target | Functions | Progress |
 | --- | --- | ---: | ---: |
 | NTSC-U | `SLUS_204.69` | 3,671 / 3,671 | 100.000% |
-| NTSC-U | `OV01.OVL` | 807 / 1,081 | 74.653% |
+| NTSC-U | `OV01.OVL` | 878 / 1,081 | 81.221% |
 | NTSC-U | `OV02.OVL` | 69 / 110 | 62.727% |
 | NTSC-U | `OV10.OVL` | 225 / 361 | 62.327% |
 | NTSC-U | `OV11.OVL` | 118 / 139 | 84.892% |
-| NTSC-U | `OV12.OVL` | 1,537 / 1,788 | 85.962% |
+| NTSC-U | `OV12.OVL` | 1,593 / 1,788 | 89.094% |
 | NTSC-U | `SSD.IRX` | 442 / 442 | 100.000% |
 | NTSC-U | `RSSD.IRX` | 53 / 53 | 100.000% |
 
