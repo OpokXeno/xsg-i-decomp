@@ -28,7 +28,7 @@ struct RgSelectRobot {
             void *heapBuffer;
         };
         struct {
-            unsigned char unmodeled_00_typed[4];
+            int robotID;                     /* +0x00, RgSelectRobotDisp prints it as "ROB %d" (lw +0x00) */
             unsigned int *actorFlags;        /* +0x04 */
             unsigned char unmodeled_08[0x120]; /* +0x08 */
             int hasActions;                  /* +0x128 */
@@ -45,7 +45,7 @@ struct RgSelectRobot {
 };
 
 typedef struct RgSelectAction {
-    unsigned char unmodeled_00[4];
+    int weaponID;                    /* +0x00, RgSelectRobotDisp prints it as "WEP(%d) %d" (lw +0x00) */
     unsigned int *actorFlags;
 } RgSelectAction;
 

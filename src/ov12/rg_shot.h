@@ -37,9 +37,10 @@ typedef struct RgGeomBall RgGeomBall;
  * texline descriptors at +0x0c/+0x4c/+0x8c/+0xac/+0xb0/+0xc0 it forwards to
  * the shot's effect) and _ShotCommonHitBg (essence->hitEffectFile as the
  * hit-effect particle file name passed to CreateRgHitEffectPos) read.
- * _InitRgShotEssence (ov12:0x00a15c9c) empties the two string slots at
- * +0xd0 and +0xf0 (sb zero), which bounds hitEffectFile to 0x20 bytes; the
- * gap at +0xb4..+0xbf is not evidenced by this allocation.
+ * _InitRgShotEssence (ov12:0x00a15c48) writes the defaults of the common
+ * part up to +0x110; the names of +0xf0..+0x11f follow the keyword fields
+ * _ReadCommon (src/ov12/rg_shot_db.c) fills. The gap at +0xb4..+0xbf is
+ * not evidenced by this allocation.
  */
 typedef struct RgShotEssence RgShotEssence;
 
@@ -58,11 +59,14 @@ struct RgShotEssence {
     float texLineWidth;                  /* +0xac */
     float texLineHeight;                 /* +0xb0 */
     unsigned char unmodeled_0b4[0x0C];   /* +0xb4..+0xbf */
-    unsigned char texLineColor[0x10];    /* +0xc0: quadword copied by
+    int texLineColor[4];                 /* +0xc0: quadword copied by
                                            * RgShotEffectSetTexLineModelColor */
-    char hitEffectFile[0x20];            /* +0xd0: a string slot;
-                                           * _InitRgShotEssence empties it
-                                           * and the next one at +0xF0 */
+    char hitEffectFile[0x20];            /* +0xd0 */
+    char damageParticleFile[0x20];       /* +0xf0 */
+    float notDamLimit;                   /* +0x110 */
+    float notDamTime;                    /* +0x114 */
+    float slowTime;                      /* +0x118 */
+    float slowRate;                      /* +0x11c */
 };
 
 /*
@@ -80,8 +84,7 @@ struct RgShotEssence {
 typedef struct RgNormalShotEssence RgNormalShotEssence;
 
 struct RgNormalShotEssence {
-    RgShotEssence common;                /* +0x00..+0xef */
-    unsigned char unmodeled_0f0[0x30];   /* +0xf0..+0x11f */
+    RgShotEssence common;                /* +0x00..+0x11f */
     float speed;                        /* +0x120 */
 };
 
@@ -94,8 +97,7 @@ struct RgNormalShotEssence {
 typedef struct RgHomingShotEssence RgHomingShotEssence;
 
 struct RgHomingShotEssence {
-    RgShotEssence common;                /* +0x00..+0xef */
-    unsigned char unmodeled_0f0[0x30];   /* +0xf0..+0x11f */
+    RgShotEssence common;                /* +0x00..+0x11f */
     float speed;                         /* +0x120 */
     float turnRate;                      /* +0x124 */
     float cosThreshold;                  /* +0x128 */
@@ -133,8 +135,7 @@ struct RgGrenadeEssence {
 typedef struct RgFireEssence RgFireEssence;
 
 struct RgFireEssence {
-    RgShotEssence common;                /* +0x00..+0xef */
-    unsigned char unmodeled_0f0[0x30];   /* +0xf0..+0x11f */
+    RgShotEssence common;                /* +0x00..+0x11f */
     float speed;                         /* +0x120 */
     float duration;                      /* +0x124 */
     int trailingCount;                   /* +0x128: cleared by
@@ -152,8 +153,7 @@ struct RgFireEssence {
 typedef struct RgBeamEssence RgBeamEssence;
 
 struct RgBeamEssence {
-    RgShotEssence common;                /* +0x00..+0xef */
-    unsigned char unmodeled_0f0[0x30];   /* +0xf0..+0x11f */
+    RgShotEssence common;                /* +0x00..+0x11f */
     float speed;                         /* +0x120 */
     float duration;                      /* +0x124 */
 };

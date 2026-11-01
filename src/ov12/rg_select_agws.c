@@ -206,15 +206,13 @@ static int _CheckEquipWeps(int *essences, int slot)
 
 /*
  * Character-select cursor layout: RG_ACTOR_CHAR_NUM character positions
- * (s_aeCharTbl; also the number of character slots the weapon-name save
- * area holds) plus one more, SEL_CHAR_CURSOR_NOP. That is the position
- * _CharIDToCharCursor returns for an unknown character and
+ * (rg_select_agws.h; s_aeCharTbl) plus one more, SEL_CHAR_CURSOR_NOP. That
+ * is the position _CharIDToCharCursor returns for an unknown character and
  * _CharCursorToCharID maps back to -1 (RG_ACTOR_CHAR_NOP below);
  * _InitSelectChar starts the cursor there and _SetSelectableSelectChar
  * keeps it selectable (SEL_CHAR_CURSOR_NOP_BIT, the 0x40 in
  * selectableMask).
  */
-#define RG_ACTOR_CHAR_NUM 6
 #define SEL_CHAR_CURSOR_NOP RG_ACTOR_CHAR_NUM
 #define SEL_CHAR_CURSOR_NUM (RG_ACTOR_CHAR_NUM + 1)
 #define SEL_CHAR_CURSOR_NOP_BIT (1 << SEL_CHAR_CURSOR_NOP)
@@ -778,9 +776,6 @@ static void _GetAllSelType(SelType *pSelType, int *out)
 
 extern const char D_00A56788[]; /* "aszName != NIL" */
 
-/* One weapon name slot: _GetAllNameOnCursorSelType's own 0x20 stride. */
-#define WEP_NAME_SIZE 0x20
-
 static void _GetAllNameOnCursorSelType(SelType *pSelType, char *aszName)
 {
     unsigned int i;
@@ -1011,7 +1006,27 @@ static void _InitSelectData(SelDat *pSelDat)
     InitRgSelectAGWSData(&pSelType->confrict[3]);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DumpSelect__);
+extern void XrgLog(const char *format, const char *sourceFile, int line, ...);
+/* ov12:0x00a56848 "---------------- %s %d ----------------------\n" */
+extern const char D_00A56848[];
+/* ov12:0x00a56878 "char %d (selectable %x)\n" */
+extern const char D_00A56878[];
+/* ov12:0x00a56898 "   **** char %d type %d : '%s' ***\n" */
+extern const char D_00A56898[];
+
+static void _DumpSelect__(SelDumpData *pData, const char *pszTitle, int nValue)
+{
+    unsigned int i;
+    unsigned int j;
+
+    XrgLog(D_00A56848, D_00A56660, 0x3DD, pszTitle, nValue);
+    XrgLog(D_00A56878, D_00A56660, 0x3DE, pData->selChar.cursor, pData->selChar.selectableMask);
+    for (i = 0; i < RG_ACTOR_CHAR_NUM; i++) {
+        for (j = 0; j < RG_EQUIP_TYPE_NUM; j++) {
+            XrgLog(D_00A56898, D_00A56660, 0x3E1, i, j, pData->weaponName[i][j]);
+        }
+    }
+}
 
 extern const char D_00A568C0[]; /* "pData != NIL" */
 
@@ -1279,11 +1294,34 @@ static int _GetWepSelection(SelDat *pSelDat, int *apCollects)
     return confrictMask;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _DrawPlayerMode);
+extern void *RgBxxGetPic(RgBxx *pBxx, const char *pszName);
+/* ov12:0x00a56938 / 0x00a56948: the picture names for player modes 0 and 1. */
+extern const char D_00A56938[];
+extern const char D_00A56948[];
+
+static void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode)
+{
+    void *pic;
+
+    pic = 0;
+    if (pBxx == 0) {
+        assert_prog(D_00A56928, D_00A56660, 0x4D4);
+    }
+    switch (playerMode) {
+    case 0:
+        pic = RgBxxGetPic(pBxx, D_00A56938);
+        break;
+    case 1:
+        pic = RgBxxGetPic(pBxx, D_00A56948);
+        break;
+    }
+    if (pic != 0) {
+        _disp_pic_pl(paint, pic, 4, 0x2C, playerMode);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_select_agws", _SetCharSelDisp);
 
-extern void *RgBxxGetPic(RgBxx *pBxx, const char *pszName);
 
 extern const char D_00A56968[]; /* "frm11on_ul.bmp" */
 extern const char D_00A56978[]; /* "frm11on_ur.bmp" */

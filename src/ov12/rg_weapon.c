@@ -185,7 +185,24 @@ void _CommonDispose(void)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _CommonPassTime);
+extern int XrgActorIsEndOfMotion(XrgActor *pActor);
+
+void _CommonPassTime(RgWeapon *weapon, float dt)
+{
+    int charID;
+    int motion;
+    int offset;
+
+    charID = _GetParentCharID(weapon);
+    if (weapon->actor != 0 && 0 <= charID && charID < RG_ACTOR_CHAR_ROBNUM) {
+        offset = weapon->shotMotionOffset;
+        motion = weapon->shotEndMotionTable[charID][offset];
+        if (motion != -1 && XrgActorIsEndOfMotion(weapon->actor) != 0) {
+            XrgActorSetMotion(weapon->actor, motion);
+        }
+    }
+    _CheckAttach(&weapon->shotAttach);
+}
 
 /* Opaque here: rg_matrices_effector.c (ov12/tu068) owns MatrixConstraint's definition. */
 typedef struct MatrixConstraint MatrixConstraint;
@@ -476,7 +493,27 @@ RgWeaponAttackType *_CreateWeaponAttackType(RgWeaponAttackEssence *pEss,
     return pWpn;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", InitRgWeaponAttackEssence);
+void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss)
+{
+    RgWeaponAttackEssenceInit *init = (RgWeaponAttackEssenceInit *) pEss;
+    unsigned int i;
+
+    if (pEss == 0) {
+        assert_prog(D_00A53710, D_00A53658, 905);
+    }
+    _InitEssenceCommon(pEss);
+    init->m_pCreateMethod = _CreateWeaponAttackType;
+    for (i = 0; i < RG_ACTOR_CHAR_ROBNUM; i++) {
+        init->shotMotionTable[i][0] = 0x2B;
+        init->shotMotionTable[i][1] = 0x2C;
+        init->shotMotionTable[i][2] = -1;
+    }
+    init->followJoint = 8;
+    init->unmodeled_3b4 = 8;
+    init->controlMode = 0x4A;
+    init->damage = 10.0f;
+    init->hitEffectName[0] = '\0';
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _InitWeaponUnArmedType);
 
@@ -499,8 +536,6 @@ RgWeapon *_CreateWeaponUnArmedType(RgWeaponUnArmedEssence *pEss,
     return pWpn;
 }
 
-extern void InitRgWeaponAttackEssence(void *essence);
-
 void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss)
 {
     /*
@@ -515,7 +550,7 @@ void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss)
     if (pEss == 0) {
         assert_prog(D_00A53710, D_00A53658, 988);
     }
-    InitRgWeaponAttackEssence(pEss);
+    InitRgWeaponAttackEssence((RgWeaponAttackEssence *) pEss);
     init->m_pCreateMethod = _CreateWeaponUnArmedType;
     init->resetFlag = 0;
     init->controlMode = 76;
@@ -645,7 +680,22 @@ RgWeaponEnergyType *_CreateWeaponEnergyType(RgWeaponEnergyEssence *pEss,
     return pWpn;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", InitRgWeaponEnergyEssence);
+void InitRgWeaponEnergyEssence(RgWeaponEnergyEssence *pEss)
+{
+    RgWeaponEnergyEssenceInit *init = (RgWeaponEnergyEssenceInit *) pEss;
+
+    if (pEss == 0) {
+        assert_prog(D_00A53710, D_00A53658, 1318);
+    }
+    _InitEssenceCommon(pEss);
+    init->m_pCreateMethod = _CreateWeaponEnergyType;
+    init->capacity = 200.0f;
+    init->controlMode = 0x20;
+    init->shotEnergy = 1.0f;
+    init->upTemp = 100.0f;
+    init->limitTemp = 100.0f;
+    init->downTemp = 50.0f;
+}
 
 /* ov12:0x00a53768 "pEss != NIL && pInfo != NIL" */
 extern const char D_00A53768[];
