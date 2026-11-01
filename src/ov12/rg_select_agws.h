@@ -224,6 +224,17 @@ typedef struct SelType {
 } SelType;
 
 /*
+ * The 0x248-byte select-data block _DumpSelect__ logs: the character
+ * selector (its "char %d (selectable %x)" line reads cursor and
+ * selectableMask) followed by one 0x20-byte name per character (6) and
+ * equipment type (3), printed with '%s'.
+ */
+typedef struct SelDumpData {
+    SelChar selChar;                 /* +0x000 */
+    char weaponName[6][3][0x20];     /* +0x008 */
+} SelDumpData;
+
+/*
  * The select-data record _CreateSelectData allocates and _DisposeSelectData
  * releases; RgHeapAlloc's own literal 0x8B0 is this allocation's evidence
  * for the total size (used below via sizeof). Four members are evidenced:
