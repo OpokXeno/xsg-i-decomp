@@ -221,7 +221,9 @@ extern void cmdListCansel(ObjectTask *unit);
 /* The three shorts after charaId are CalcUnitParam.weaponId[0..2]. */
 extern void sefSetupPlayer(short charaId, short, short, short);
 extern void sefSetupEnemy(short charaId);
-extern void dataUnitFileLoad(ObjectTask *unit, int mode);
+/* Defined by ov01/tu005 data_unit_org_get.c: returns 0 or 1; charaId is the
+ * dataUnitFileGet key. */
+extern int dataUnitFileLoad(ObjectTask *unit, int charaId);
 extern void dataSndSeRegLoad(ObjectTask *unit);
 
 /* Defined in src/ov01/data_unit_org_get.c, declared there the
