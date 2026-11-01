@@ -509,7 +509,7 @@ void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss)
         init->shotMotionTable[i][2] = -1;
     }
     init->followJoint = 8;
-    init->followParam = 8;
+    init->unmodeled_3b4 = 8;
     init->controlMode = 0x4A;
     init->damage = 10.0f;
     init->hitEffectName[0] = '\0';

@@ -384,7 +384,7 @@ typedef struct RgWeaponAttackEssenceInit {
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     unsigned char unmodeled_f8[0x2b8];
     int followJoint;
-    int followParam;
+    int unmodeled_3b4;
     float damage;
     char hitEffectName[0x24];
 } RgWeaponAttackEssenceInit;
