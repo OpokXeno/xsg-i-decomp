@@ -1759,7 +1759,18 @@ void RgRobotAccelarate(RgStatus *pRobot, RgVector velocity)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotAccelarateRotate);
+void RgRobotAccelarateRotate(RgStatus *pRobot, float rotate)
+{
+    RgCmd *command;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 4382);
+    }
+    command = _EntryCmdQueue(pRobot->cmdQueue, 1);
+    if (command != 0) {
+        *(float *) command = rotate;
+    }
+}
 
 /*
  * ov12:0x00a51a88 contains the range expression
