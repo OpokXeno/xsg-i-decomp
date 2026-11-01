@@ -787,7 +787,43 @@ static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _EntryCmdQueue);
+/* ov12:0x00a4f560, 0x3c bytes: one priority level per command type. */
+#define RG_CMD_TYPE_NUM 15
+extern int s_anCmdLevel[RG_CMD_TYPE_NUM];
+
+static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType)
+{
+    RgCmdQueue *pQ = cmdQueue;
+    int level;
+    int diff;
+    RgCmd *command;
+
+    if (pQ == 0) {
+        assert_prog(D_00A51A58, D_00A51840, 0xA41);
+    }
+    if (pQ->count >= RG_CMD_QUEUE_CAPACITY) {
+        return 0;
+    }
+    if ((unsigned int) cmdType >= RG_CMD_TYPE_NUM) {
+        return 0;
+    }
+    pQ->entryCount++;
+    level = s_anCmdLevel[cmdType];
+    if (pQ->count != 0) {
+        diff = s_anCmdLevel[pQ->cmd[0].type] - level;
+    } else {
+        diff = 0;
+    }
+    if (diff > 0) {
+        return 0;
+    }
+    if (diff < 0) {
+        pQ->count = 0;
+    }
+    command = &pQ->cmd[pQ->count++];
+    command->type = cmdType;
+    return command;
+}
 
 /* ov12:0x00a51a58 contains the assertion expression "pQ != NIL". */
 extern const char D_00A51A58[];
@@ -1702,7 +1738,22 @@ int RgRobotGetCharID(RgStatus *pRobot)
     return pRobot->body->charID;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", RgRobotIsInvalidAttack);
+int RgRobotIsInvalidAttack(RgStatus *pRobot, RgVector direction)
+{
+    float *shield;
+
+    if (pRobot == 0) {
+        assert_prog(D_00A51BB0, D_00A51840, 0x10CF);
+    }
+    if (pRobot->body->shieldActive != 0) {
+        shield = pRobot->body->shieldDirection;
+        /* !(x < 0) keeps the original's c.lt.s/bc1f; x >= 0 compiles to c.le.s. */
+        if (!(direction[0] * shield[0] + direction[1] * shield[1] + direction[2] * shield[2] < 0.0f)) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 float RgRobotGetDashTime(RgStatus *pRobot)
 {
