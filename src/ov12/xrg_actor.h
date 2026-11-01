@@ -67,7 +67,7 @@ typedef struct XenoAct {
  * The game-object wrapper this TU defines.  Only the offsets its own
  * functions read or write are named here; the rest are unmodeled spans.
  * The full object is XRG_ACTOR_SIZE bytes, the RgHeapAlloc request in
- * CreateXrgActor and DuplicateXrgActor; the members past weaponMotionActive
+ * CreateXrgActor and DuplicateXrgActor; the members past pakaBaseJnt
  * are not modeled.
  */
 #define XRG_ACTOR_SIZE 0x170
@@ -90,12 +90,25 @@ typedef struct XrgActor {
                                                    declared here */
     struct XrgActor *parent;                  /* 0x068 */
     int attachID;                              /* 0x06C: -1 when not attached to a parent */
-    unsigned char unmodeled_070[0x104 - 0x070];
+    int charID;                                /* 0x070: set by _LoadXenoActor (sw $18,
+                                                   0x70($17), ov12:0x00a46c74); a parent's
+                                                   charID is what XrgActorCheckPakaPaka passes
+                                                   to _GetPakaPakaBaseJnt and
+                                                   RgActorCharIDToName (ov12:0x00a47824/
+                                                   0x00a4783c) */
+    unsigned char unmodeled_074[0x104 - 0x074];
     RgFileSysData *resourceFiles[4];            /* 0x104: per-index roles beyond the load/cache
                                                    bookkeeping _DupLoadXenoActor performs are not
                                                    evidenced; index 3 is the joint/skeleton file
                                                    _InitSkeMani reads back through pXenoAct */
     int weaponMotionActive;                     /* 0x114 */
+    int pakaPaka;                               /* 0x118: set to 1 by XrgActorCheckPakaPaka
+                                                   once a paka base joint is found (sw
+                                                   0x118, ov12:0x00a47844); cleared by
+                                                   _InitXenoActor and _DupXenoActor */
+    int pakaBaseJnt;                            /* 0x11C: _GetPakaPakaBaseJnt's result for
+                                                   the parent's charID and this attachID,
+                                                   logged as "paka base %d" */
 } XrgActor;
 
 /*

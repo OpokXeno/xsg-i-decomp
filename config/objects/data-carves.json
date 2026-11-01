@@ -218879,11 +218879,57 @@
       "0x00a4f5e4"
      ],
      "generated_by": [
+      "_AnaAutoHoming",
       "_ResetAnaAutoHoming"
      ],
      "range": [
       "0x00a4f5e0",
       "0x00a4f5e4"
+     ]
+    }
+   ],
+   ".rodata": [
+    {
+     "also_referenced_by_c": [
+      "D_00A51E68",
+      "D_00A51E78",
+      "D_00A51E98",
+      "D_00A51EE0",
+      "D_00A51EF0",
+      "D_00A51EF8",
+      "D_00A51F00",
+      "D_00A51F08"
+     ],
+     "c_owned_symbols": [
+      "D_00A51E90"
+     ],
+     "generated": [
+      "0x00a51e90",
+      "0x00a51e98"
+     ],
+     "generated_by": [
+      "InitRgRobotSpec"
+     ],
+     "range": [
+      "0x00a51e90",
+      "0x00a51e98"
+     ]
+    },
+    {
+     "also_referenced_by_c": [],
+     "c_owned_symbols": [
+      "D_00A51F28"
+     ],
+     "generated": [
+      "0x00a51f28",
+      "0x00a51f30"
+     ],
+     "generated_by": [
+      "_AnaAutoHoming"
+     ],
+     "range": [
+      "0x00a51f28",
+      "0x00a51f30"
      ]
     }
    ]
@@ -219069,11 +219115,14 @@
      "also_referenced_by_c": [],
      "c_owned_symbols": [
       "D_00A52460",
-      "D_00A52470"
+      "D_00A52470",
+      "D_00A52490",
+      "D_00A524C0",
+      "D_00A524E0"
      ],
      "generated": [
       "0x00a52460",
-      "0x00a52490"
+      "0x00a524f0"
      ],
      "generated_by": [
       "InstanceOfRgMotionInfoDB",
@@ -219084,6 +219133,7 @@
       "RgMotionInfoGetActionInTime",
       "RgMotionInfoIsAfter",
       "RgMotionInfoIsBefore",
+      "_AddActionRgMotion",
       "_DestructDB",
       "_InitDB_00A0F828",
       "_InitRgMotionShotInfo",
@@ -219093,30 +219143,6 @@
      ],
      "range": [
       "0x00a52460",
-      "0x00a52490"
-     ]
-    },
-    {
-     "also_referenced_by_c": [],
-     "c_owned_symbols": [
-      "D_00A524C0",
-      "D_00A524E0"
-     ],
-     "generated": [
-      "0x00a524c0",
-      "0x00a524f0"
-     ],
-     "generated_by": [
-      "RgMotionInfoDBDispose",
-      "RgMotionInfoDBDump",
-      "RgMotionInfoDBGet",
-      "RgMotionInfoDBIsDefaultData",
-      "_DestructDB",
-      "_InitDB_00A0F828",
-      "_TableEntry"
-     ],
-     "range": [
-      "0x00a524c0",
       "0x00a524f0"
      ]
     },

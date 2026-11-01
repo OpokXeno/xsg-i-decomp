@@ -394,7 +394,42 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListWrite);
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", CreateRgPicListFromBinary);
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicListRead);
+RgPicList *RgPicListRead(int handle, RgBxx *bxx)
+{
+    unsigned char buffer[0x400];
+    unsigned int num;
+    int reserved;
+    RgPicList *pList;
+    RgPic *pic;
+    unsigned int i;
+    unsigned char *src;
+
+    extern int XrgHostRead(int handle, void *buffer, int size);
+
+    if (InstanceOfRgDebugFlags()->flags[3] != 0) {
+        pList = CreateRgPicList(bxx);
+        XrgHostRead(handle, buffer, _BinarySizePicList());
+        /*
+         * The serialized header is four words: picture count, ofsX, ofsY
+         * and a reserved word that is copied but never read. They are
+         * copied through a plain pointer, so the moves stay unaligned
+         * (lwl/lwr, ov12:0x00a413f8..0x00a41434).
+         */
+        src = buffer;
+        __builtin_memcpy(&num, src, 4);
+        __builtin_memcpy(&pList->ofsX, src + 4, 4);
+        __builtin_memcpy(&pList->ofsY, src + 8, 4);
+        __builtin_memcpy(&reserved, src + 12, 4);
+        for (i = 0; i < num; i++) {
+            pic = RgPicRead(handle, bxx);
+            if (pic != 0) {
+                pList->pics[pList->m_uNum++] = pic;
+            }
+        }
+        return pList;
+    }
+    return 0;
+}
 
 int RgPicListGetOfsX(RgPicList *pList)
 {
@@ -451,7 +486,52 @@ void DisposeRgPicDebug(RgPicDebug *pDebug)
     RgHeapFree(InstanceOfRgHeap(), pDebug, D_00A57320, 598);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicDebugEditPosition);
+/*
+ * The pad table in MAIN (0x00490d90); RgPicDebugEditPosition reads the held
+ * buttons at +0x28 (lhu PadData+0x28, ov12:0x00a41750). Button bits as in
+ * src/ov12/xrg_pad.c.
+ */
+extern PadPrefix PadData;
+
+#define PAD_L1    0x0004
+#define PAD_UP    0x1000
+#define PAD_RIGHT 0x2000
+#define PAD_DOWN  0x4000
+#define PAD_LEFT  0x8000
+
+/* L1 moves in steps of 8 and snaps both coordinates to that grid. */
+#define PIC_DEBUG_COARSE_STEP 8
+
+void RgPicDebugEditPosition(int *x, int *y)
+{
+    u16 buttons;
+    int step;
+    int coarse;
+
+    buttons = PadData.half_28;
+    coarse = 0;
+    step = 1;
+    if (buttons & PAD_L1) {
+        step = PIC_DEBUG_COARSE_STEP;
+        coarse = 1;
+    }
+    if (buttons & PAD_UP) {
+        *y -= step;
+    }
+    if (buttons & PAD_DOWN) {
+        *y += step;
+    }
+    if (buttons & PAD_LEFT) {
+        *x -= step;
+    }
+    if (buttons & PAD_RIGHT) {
+        *x += step;
+    }
+    if (coarse) {
+        *x &= ~(PIC_DEBUG_COARSE_STEP - 1);
+        *y &= ~(PIC_DEBUG_COARSE_STEP - 1);
+    }
+}
 
 INCLUDE_ASM("asm/nonmatchings/ov12/rg_piclist", RgPicDebugControl);
 
