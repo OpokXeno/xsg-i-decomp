@@ -109,16 +109,10 @@ build then says which check it relaxed.
 ./configure.py      # generate every unit build directory and build.ninja
 ninja               # build and compare all six originals
 ninja gate          # + per-unit status and the whole-file SHA-256 gate
-ninja report        # compile and link EE inputs for progress measurement
 ```
 
 `ninja gate` writes `build/gate.json`. `"result": "pass"` means every one of the
 six files came out byte for byte identical to your original.
-
-The GitHub progress workflow uses `ninja report` and explicit reporting mode to
-measure nonmatching compiled functions with native objdiff scores. Compilation,
-linking and provenance errors still fail the job; matching differences are
-recorded in the report. This does not change the strict recovery acceptance gate.
 
 Public builds use `config/objects/data-carves.json` to place constants and jump
 tables emitted by the recovered C functions. Terminal object padding is verified
