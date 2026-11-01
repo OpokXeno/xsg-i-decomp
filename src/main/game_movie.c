@@ -1,38 +1,82 @@
 #include "common.h"
-
 #include "game_movie.h"
+#include "shared.h"
+#include "main/xgl_thread.h"
+#include "main/xgl_font.h"
+#include "main/xgl_cd.h"
+#include "main/party.h"
+
+#define MOVIE_FLAG_SKIP_ALL 0x10000000
+#define PAD_BUTTON_SKIP 0x10
+#define PAD_BUTTON_REPLAY 0x20
+#define PAD_BUTTON_START 0x800
+#define PAD_COMBO_ABORT 0x10c
+
+/* Byte-sized settings the Java class xeno.Movie writes through its
+ * "transparent" and "alpha" fields. */
+typedef enum MovieTransparency {
+    MOVIE_TRANSPARENCY_OFF = 0,
+    MOVIE_TRANSPARENCY_ON = 1
+} __attribute__((packed)) MovieTransparency;
+
+typedef enum MovieAlpha {
+    MOVIE_ALPHA_OPAQUE = 0x80
+} __attribute__((packed)) MovieAlpha;
+
+extern MovieGameLoopState GameLoopState;
+extern MovieRenderState sRender;
+extern PadPrefix PadData;
+extern MovieTransparency GameMovieTransparent;
+extern MovieAlpha GameMovieAlpha;
+extern short GameMovieFrame;
 
 /* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
-
 extern int xglMovieClose(void *movie);
 
-static MovieInfo mi;
-
 extern void xglMovieInfoInit(MovieInfo *movie);
-
 extern void *GameResourceAlloc(int size);
 
 /* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
-
 extern int xglMovieOpen(void *movie, char *name);
 
 extern int SCRIPT_getEventActiveFlag(void);
-
 extern int SCRIPT_getFadeTime(void);
-
 extern void SCRIPT_sendMovieSkipSignal(void);
-
 extern void nmlModelSetActiveFadeInCancel(int fadeTime);
+extern int xglMoviePlay(void *movie);
+extern void nmlModelDirectSend(int mode, void *data, int count);
+extern int xglFontGetStringWidth(const char *text);
+extern char *GameResourceGetFreeAddr(void);
+extern void nmlModelSendSignalMovieStart(void);
+extern void nmlModelSendSignalMovieFinish(int mode);
+extern void xglRenderClearDepth(void);
+extern void xglSoundStreamStop(int stream);
+extern void xglSoundStreamMute(void);
+extern void xglSoundEffectNormalDirect(int effect);
+extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
+extern int xglMpeg2Open(void *info, const char *name);
+extern int xglMpeg2Play(void *info);
+extern int xglMpeg2Close(void *info);
+extern void xglRenderCopyDisp2Draw(void);
+extern void xglFontPrintDirect(const char *text);
+extern void GamePauseDispBG(void);
+extern void GamePauseDispEvent(void);
+extern void PartyTimePauseStart(void);
+extern void PartyTimePauseEnd(void);
+static char *caption_nextline(char *cursor);
+static char *caption_getparam(char *cursor, int *time, char *out);
+static void caption_convert(char *text);
 
-#include "shared.h"
+const char movieCaptionControl[] =
+    /* Text: {effect 3}{style 3}{line height 13}{char width 8}{spacing 0,0} */
+    "\015\003\031\003\025\002\001\015\025\002\002\010\025\003\003\000\000";
 
-#include "main/xgl_thread.h"
-
-#include "main/xgl_font.h"
-
-#include "main/xgl_cd.h"
-
-#include "main/party.h"
+const char movieSeekErrorText[] =
+    /* JP: ○ Button: Replay △ Button: Skip
+     * EN: Circle Button: Replay Triangle Button: Skip */
+    "\013\015\003A seek error has occured.\n\n\n"
+    "\014\200  \241\373\014\200\200\200Button: Replay\n\n"
+    "\014 \200 \242\244\014\200\200\200Button: Skip";
 
 static MovieOverlayPacket TestEnv_0_00367980 = {
     { 0, 0x5100000C00000000ULL },
@@ -48,108 +92,7 @@ static MovieOverlayPacket TestEnv_0_00367980 = {
     { 0x8ff8, 0x8df7, 0x00f00000, 0 }
 };
 
-extern MovieGameLoopState GameLoopState;
-
-extern MovieRenderState sRender;
-
-extern PadPrefix PadData;
-
-/* Byte-sized settings the Java class xeno.Movie writes through its
- * "transparent" and "alpha" fields. */
-typedef enum MovieTransparency {
-    MOVIE_TRANSPARENCY_OFF = 0,
-    MOVIE_TRANSPARENCY_ON = 1
-} __attribute__((packed)) MovieTransparency;
-
-typedef enum MovieAlpha {
-    MOVIE_ALPHA_OPAQUE = 0x80
-} __attribute__((packed)) MovieAlpha;
-
-extern MovieTransparency GameMovieTransparent;
-
-extern MovieAlpha GameMovieAlpha;
-
-extern short GameMovieFrame;
-
-const char movieCaptionControl[] =
-    /* Text: {effect 3}{style 3}{line height 13}{char width 8}{spacing 0,0} */
-    "\015\003\031\003\025\002\001\015\025\002\002\010\025\003\003\000\000";
-
-const char movieSeekErrorText[] =
-    /* JP: ○ Button: Replay △ Button: Skip
-     * EN: Circle Button: Replay Triangle Button: Skip */
-    "\013\015\003A seek error has occured.\n\n\n"
-    "\014\200  \241\373\014\200\200\200Button: Replay\n\n"
-    "\014 \200 \242\244\014\200\200\200Button: Skip";
-
-extern int xglMoviePlay(void *movie);
-
-extern void nmlModelDirectSend(int mode, void *data, int count);
-
-extern int xglFontGetStringWidth(const char *text);
-
-extern char *GameResourceGetFreeAddr(void);
-
-extern void nmlModelSendSignalMovieStart(void);
-
-extern void nmlModelSendSignalMovieFinish(int mode);
-
-extern void xglRenderClearDepth(void);
-
-extern void xglSoundStreamStop(int stream);
-
-extern void xglSoundStreamMute(void);
-
-extern void xglSoundEffectNormalDirect(int effect);
-
-extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
-
-extern int xglMpeg2Open(void *info, const char *name);
-
-extern int xglMpeg2Play(void *info);
-
-extern int xglMpeg2Close(void *info);
-
-extern void xglRenderCopyDisp2Draw(void);
-
-extern void xglFontPrintDirect(const char *text);
-
-extern void GamePauseDispBG(void);
-
-extern void GamePauseDispEvent(void);
-
-extern void PartyTimePauseStart(void);
-
-extern void PartyTimePauseEnd(void);
-
-#define MOVIE_FLAG_SKIP_ALL 0x10000000
-
-#define PAD_BUTTON_SKIP 0x10
-
-#define PAD_BUTTON_REPLAY 0x20
-
-#define PAD_BUTTON_START 0x800
-
-#define PAD_COMBO_ABORT 0x10c
-
-static char *caption_nextline(char *cursor);
-
-static char *caption_getparam(char *cursor, int *time, char *out);
-
-static void caption_convert(char *text);
-
-/* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
-
-/* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
-
-/*
- * Reads one caption entry: a time stamp (minutes:seconds:frames, or minutes
- * and seconds only) followed by blanks and the text up to a CR, LF or
- * backslash. The text is written to out with a two byte header (a tag byte
- * of 1 and the complement of half the text width); a backslash starts a
- * further line in the same entry. *time receives the time stamp in frames,
- * or -1 when the line has none. Returns the start of the next entry.
- */
+static MovieInfo mi;
 
 static inline char caption_peek(char *cursor)
 {
@@ -223,6 +166,14 @@ static char *caption_nextline(char *cursor)
     return cursor;
 }
 
+/*
+ * Reads one caption entry: a time stamp (minutes:seconds:frames, or minutes
+ * and seconds only) followed by blanks and the text up to a CR, LF or
+ * backslash. The text is written to out with a two byte header (a tag byte
+ * of 1 and the complement of half the text width); a backslash starts a
+ * further line in the same entry. *time receives the time stamp in frames,
+ * or -1 when the line has none. Returns the start of the next entry.
+ */
 static char *caption_getparam(char *cursor, int *time, char *out)
 {
     int frames;

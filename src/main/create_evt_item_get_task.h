@@ -14,6 +14,7 @@ typedef struct ItemGetWindow {
 } ItemGetWindow;
 
 typedef struct EventItemTask EventItemTask;
+
 struct ItemMapUnit;
 
 /*
@@ -57,16 +58,13 @@ struct EventItemTask {
 typedef unsigned int GameLoopStateWords[];
 
 extern const char evt_item_format_special[];
-
 extern const char evt_item_format_normal[];
-
-extern ItemGetWindow *createItemGetWin(const char *message);
-
-char *dataEvtItmNameGet(int index);
-
 extern unsigned char EvtItemTbl[];
 
 /* GameLoopState is opaque here; only these two scalar offsets are evidenced. */
 extern GameLoopStateWords GameLoopState;
+
+extern ItemGetWindow *createItemGetWin(const char *message);
+char *dataEvtItmNameGet(int index);
 
 #endif

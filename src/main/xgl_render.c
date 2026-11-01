@@ -1,11 +1,19 @@
 #include "common.h"
 #include "main/xgl_2.h"
-
 #include "shared.h"
-
 #include "main/xgl_thread.h"
-
 #include "main/xgl_packet.h"
+
+/* VIF error registers used by the original renderer initialization. */
+#define VIF0_ERR_ADDRESS 0x10003820
+
+#define VIF1_ERR_ADDRESS 0x10003C20
+#define GS_DISPFB2 ((volatile u64 *)0x12000070)
+#define GS_DISPLAY2 ((volatile u64 *)0x12000080)
+#define GS_EXTBUF ((volatile u64 *)0x120000B0)
+#define GS_EXTDATA ((volatile u64 *)0x120000C0)
+#define GS_EXTWRITE ((volatile u64 *)0x120000D0)
+#define GS_CSR ((volatile u64 *)0x12001000)
 
 /*
  * GS clear-environment block (0x004A9080, size 0x60). xglRenderClearDepth
@@ -277,11 +285,6 @@ typedef union GsDrawPacket {
     XglQuadword quadwords[16];
 } GsDrawPacket;
 
-extern GsDrawPacket DrawEnv;
-
-extern GsClearPacket ClearEnv;
-extern GsDispEnv DispEnv;
-
 typedef void (*XglRenderFadeCallback)(XglPacket *packet);
 
 /* One row of asDispReso: the display geometry sceGsSetDefDispEnv and the draw environment take. */
@@ -327,8 +330,6 @@ typedef struct XglRenderState {
     unsigned char unmodeled_59[3];
 } XglRenderState;
 
-extern XglRenderState sRender;
-
 /*
  * One GIF packet quadword on the scratchpad. The halfword view makes the
  * packet stores and the sRender halfword reads share an alias set, so the
@@ -339,72 +340,6 @@ typedef union ScratchpadQuad {
     u16 half[8];
 } ScratchpadQuad;
 
-extern int sceGsSyncV(int mode);
-
-extern int sceGsResetGraph(int mode, int interlace, int output, int ffmode);
-
-extern void sceGsResetPath(void);
-
-extern void xglRenderSetReso(int index);
-
-extern void xglRenderGlobalFadeInit(void);
-
-extern void xglRenderClearOff(void);
-
-extern void nmlModelConstruct(void);
-
-extern int nmlModelIsBackBufferRequest(void);
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
-extern void FlushCache(int mode);
-
-extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
-
-/* VIF error registers used by the original renderer initialization. */
-
-#define VIF0_ERR_ADDRESS 0x10003820
-
-#define VIF1_ERR_ADDRESS 0x10003C20
-
-static int s_nGblFadeInit = 0;
-
-static int s_nGblFade = 0;
-
-static int s_nClearFrame = 0;
-
-int FrameCount = 0;
-
-int LoopCount = 0;
-
-/* The GS VSync interrupt callback increments this counter while
- * xglRenderSyncMove polls it on the render thread. */
-volatile int VSyncCount = 0;
-
-int ScanLineInterpolate = 0;
-
-extern void xglRenderInit(void);
-
-static void xglRenderMove(void);
-
-extern void xglPadRead(void);
-
-extern void xglSendSePacket(void);
-
-extern void SyncDCache(void *start, void *end);
-
-extern int xglRenderVSyncCallback(void);
-
-extern void *sceGsSyncVCallback(int (*func)(void));
-
-extern signed char FLAG_FRAME_60;
-
 /*
  * The packed global fade color that xglRenderGlobalFade (still asm, this TU)
  * draws over the scene: red/green/blue scaled to a byte (0-255) at
@@ -413,7 +348,6 @@ extern signed char FLAG_FRAME_60;
  * above unpacks for ClearEnv's own color fields. Its storage belongs to
  * xglRenderGlobalFadeInit (still asm, this TU).
  */
-
 typedef union GifCommandData {
     u64 value;
     struct {
@@ -465,66 +399,108 @@ typedef union RenderTestPacket {
     TestEnvironmentPacket value;
     XglQuadword quadwords[6];
 } RenderTestPacket;
-static RenderTestPacket TestEnv_0_004A8E80;
 
+extern GsDrawPacket DrawEnv;
+extern GsClearPacket ClearEnv;
+extern GsDispEnv DispEnv;
+extern XglRenderState sRender;
+extern signed char FLAG_FRAME_60;
+
+extern int sceGsSyncV(int mode);
+extern int sceGsResetGraph(int mode, int interlace, int output, int ffmode);
+extern void sceGsResetPath(void);
+extern void xglRenderSetReso(int index);
+extern void xglRenderGlobalFadeInit(void);
+extern void xglRenderClearOff(void);
+extern void nmlModelConstruct(void);
+extern int nmlModelIsBackBufferRequest(void);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void FlushCache(int mode);
+extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
+extern void xglRenderInit(void);
+static void xglRenderMove(void);
+extern void xglPadRead(void);
+extern void xglSendSePacket(void);
+extern void SyncDCache(void *start, void *end);
+extern int xglRenderVSyncCallback(void);
+extern void *sceGsSyncVCallback(int (*func)(void));
 extern int sceGsSyncPath(int mode, int timeout);
-
 extern void xglStudioInit(void);
-
 extern void xglStudioMainCameraInit(void);
-
 extern void nmlModelFlush(void);
-
 extern void nmlModelFlushClear(void);
-
 extern int nmlModelSendPacketChangeSignal(void);
-
 extern void sefDrawEffect3D(void);
-
 extern void xglFontFlush(void);
-
 extern void xglPacketInterpolate(void);
-
 extern void xglPacketMove(void);
-
 extern void xglPacketSend(void);
-
 extern void sceGsSetDefDispEnv(GsDispEnv *env, int psm, int width, int height, int dx, int dy);
-
 extern void sceGsPutDrawEnv(GsDrawEnv *env);
-
 extern void sceGsPutDispEnv(GsDispEnv *env);
 
-#define GS_DISPFB2 ((volatile u64 *)0x12000070)
+static int s_nGblFadeInit = 0;
 
-#define GS_DISPLAY2 ((volatile u64 *)0x12000080)
+static int s_nGblFade = 0;
 
-#define GS_EXTBUF ((volatile u64 *)0x120000B0)
+static int s_nClearFrame = 0;
 
-#define GS_EXTDATA ((volatile u64 *)0x120000C0)
+int FrameCount = 0;
 
-#define GS_EXTWRITE ((volatile u64 *)0x120000D0)
+int LoopCount = 0;
 
-#define GS_CSR ((volatile u64 *)0x12001000)
+/* The GS VSync interrupt callback increments this counter while
+ * xglRenderSyncMove polls it on the render thread. */
+volatile int VSyncCount = 0;
+
+int ScanLineInterpolate = 0;
+
+static RenderTestPacket TestEnv_0_004A8E80;
 
 static XglRenderReso asDispReso[6];
 
 static XglRenderVram asVramBase[6];
 
-/*
- * The packed global fade color that xglRenderGlobalFade (still asm, this TU)
- * draws over the scene: red/green/blue scaled to a byte (0-255) at
- * +0x00/+0x08/+0x10 and alpha scaled to a byte (0-128, the PS2 GS
- * convention) at +0x18, the same GS_RGBAQ-style packing xglRenderClearColor
- * above unpacks for ClearEnv's own color fields. Its storage belongs to
- * xglRenderGlobalFadeInit (still asm, this TU).
- */
+static XglRenderReso asDispReso[6] = {
+    { 0x31, 0, 640, 448 },
+    { 0x31, 0, 512, 448 },
+    { 0x31, 0, 448, 448 },
+    { 0x31, 0, 384, 448 },
+    { 0x31, 0, 320, 448 },
+    { 0x31, 0, 256, 448 },
+};
+
+static XglRenderVram asVramBase[6] = {
+    { 0x0000, { 0x008C, 0x0118, 0x01A4 }, 0x008C, 0x0118, 0x01A4, { 0x0230, 0x02BC, 0x01A4, 0x01C4, 0x01E4 } },
+    { 0x0000, { 0x0070, 0x00E0, 0x0150 }, 0x0070, 0x00E0, 0x0150, { 0x01C0, 0x0230, 0x01C0, 0x01E0, 0x0200 } },
+    { 0x0000, { 0x0062, 0x00C4, 0x0126 }, 0x0062, 0x00C4, 0x0126, { 0x0188, 0x01EA, 0x0188, 0x01A8, 0x01C8 } },
+    { 0x0000, { 0x0054, 0x00A8, 0x00FC }, 0x0054, 0x00A8, 0x00FC, { 0x0150, 0x01A4, 0x01A4, 0x01C4, 0x01E4 } },
+    { 0x0000, { 0x0046, 0x008C, 0x00D2 }, 0x0046, 0x008C, 0x00D2, { 0x0118, 0x015E, 0x01A4, 0x01C4, 0x01E4 } },
+    { 0x0000, { 0x0038, 0x0070, 0x00A8 }, 0x0038, 0x0070, 0x00A8, { 0x00E0, 0x0118, 0x0150, 0x0170, 0x0190 } },
+};
 
 /* VIF DIRECT sends one GIFtag, one A+D PRIM, one RGBAQ and two XYZ2 values. */
+static RenderTestPacket TestEnv_0_004A8E80 = { .value = {
+    .dma_tag = 0,
+    .vif_nop = 0,
+    .vif_direct = 0x51000005,
+    .gif_tag = { 1 | (1 << 15), 0x40034000, 0x551E, 0 },
+    .primitive = { { .value = 0x0000000000071001ULL }, 0x47, 0 },
+    .color = { { .value = 0 }, 0, 0 },
+    .top_left = { 0x6FF8, 0, 0x71F7, 0, 0x40000000, 0 },
+    .bottom_right = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
+} };
 
-/* VIF error registers used by the original renderer initialization. */
+GsDrawPacket DrawEnv = { .value = { 0 } };
 
-/* VIF DIRECT sends one GIFtag, one A+D PRIM, one RGBAQ and two XYZ2 values. */
+GsDispEnv DispEnv = { 0 };
+
+GsClearPacket ClearEnv = { .value = { 0 } };
+
+XglRenderState sRender = { 0 };
 
 void xglRenderDrawFlip(void)
 {
@@ -1099,42 +1075,3 @@ void xglRenderEntry(void)
         xglSleep();
     }
 }
-
-static XglRenderReso asDispReso[6] = {
-    { 0x31, 0, 640, 448 },
-    { 0x31, 0, 512, 448 },
-    { 0x31, 0, 448, 448 },
-    { 0x31, 0, 384, 448 },
-    { 0x31, 0, 320, 448 },
-    { 0x31, 0, 256, 448 },
-};
-
-static XglRenderVram asVramBase[6] = {
-    { 0x0000, { 0x008C, 0x0118, 0x01A4 }, 0x008C, 0x0118, 0x01A4, { 0x0230, 0x02BC, 0x01A4, 0x01C4, 0x01E4 } },
-    { 0x0000, { 0x0070, 0x00E0, 0x0150 }, 0x0070, 0x00E0, 0x0150, { 0x01C0, 0x0230, 0x01C0, 0x01E0, 0x0200 } },
-    { 0x0000, { 0x0062, 0x00C4, 0x0126 }, 0x0062, 0x00C4, 0x0126, { 0x0188, 0x01EA, 0x0188, 0x01A8, 0x01C8 } },
-    { 0x0000, { 0x0054, 0x00A8, 0x00FC }, 0x0054, 0x00A8, 0x00FC, { 0x0150, 0x01A4, 0x01A4, 0x01C4, 0x01E4 } },
-    { 0x0000, { 0x0046, 0x008C, 0x00D2 }, 0x0046, 0x008C, 0x00D2, { 0x0118, 0x015E, 0x01A4, 0x01C4, 0x01E4 } },
-    { 0x0000, { 0x0038, 0x0070, 0x00A8 }, 0x0038, 0x0070, 0x00A8, { 0x00E0, 0x0118, 0x0150, 0x0170, 0x0190 } },
-};
-
-/* VIF DIRECT sends one GIFtag, one A+D PRIM, one RGBAQ and two XYZ2 values. */
-
-static RenderTestPacket TestEnv_0_004A8E80 = { .value = {
-    .dma_tag = 0,
-    .vif_nop = 0,
-    .vif_direct = 0x51000005,
-    .gif_tag = { 1 | (1 << 15), 0x40034000, 0x551E, 0 },
-    .primitive = { { .value = 0x0000000000071001ULL }, 0x47, 0 },
-    .color = { { .value = 0 }, 0, 0 },
-    .top_left = { 0x6FF8, 0, 0x71F7, 0, 0x40000000, 0 },
-    .bottom_right = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
-} };
-
-GsDrawPacket DrawEnv = { .value = { 0 } };
-
-GsDispEnv DispEnv = { 0 };
-
-GsClearPacket ClearEnv = { .value = { 0 } };
-
-XglRenderState sRender = { 0 };

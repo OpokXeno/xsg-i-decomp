@@ -6,10 +6,6 @@
 
 /* The GS slot representation used by nml_packet_add's packet writers.
  * A register slot is stored as a doubleword and read as a low word. */
-
-/* Owner-header proposal for main/tu106's existing LayoutStore.
- * nmlModelSetTransparency witnesses the float member at +0x2c0.
- * The genuine mixed float/int slots and 800-byte extent are retained. */
 #include "main/nml_packet_add.h"
 
 typedef union {
@@ -41,6 +37,7 @@ union NmlStealthUV {
     };
 };
 
+/* The allocator's 31 sixteen-byte records, including actual endpoint vectors. */
 struct NmlStealthGeometry {
     Vector4 endpoints[2];
     float sortClass;
@@ -48,7 +45,6 @@ struct NmlStealthGeometry {
     union NmlStealthXYZ xyz[14];
     union NmlStealthUV uv[14];
 };
-
 
 /* Relative offsets address two arrays of 64-byte joint matrices. */
 struct NmlStealthJointData {
@@ -59,6 +55,12 @@ struct NmlStealthJointData {
     unsigned int jointAuxMatrixOffset;
 };
 
+/* Owner-header proposal for main/tu106's existing LayoutStore.
+ * nmlModelSetTransparency witnesses the float member at +0x2c0.
+ * The genuine mixed float/int slots and 800-byte extent are retained. */
+/* Additive partial owner proposals for the previously untreated producer.
+ * Field names describe observed use, not recovered original declarations.
+ * Only fields this producer accesses are completed; the tail stays unknown. */
 typedef union {
     LayoutSlot slots[200];
     struct {
@@ -91,15 +93,5 @@ typedef union {
         unsigned short mapShadowParts[8];
     } fields;
 } LayoutStore;
-
-/* Additive partial owner proposals for the previously untreated producer.
- * Field names describe observed use, not recovered original declarations. */
-
-
-/* The allocator's 31 sixteen-byte records, including actual endpoint vectors. */
-
-/* Relative offsets address two arrays of 64-byte joint matrices. */
-
-/* Only fields this producer accesses are completed; the tail stays unknown. */
 
 #endif

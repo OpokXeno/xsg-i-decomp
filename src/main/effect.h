@@ -140,11 +140,15 @@ struct EffectUnitPeer {
     NativeEffectPeer *caster_effect; /* +0xE8 */
 };
 
+/* sefRewindEffectCf accepts the SchedulerState record defined by main/tu211. */
+typedef struct SchedulerState SchedulerState;
+
 /* Field-name string constants, byte-identical in the original binary:
    effectIdName "id", effectArgsName "args", effectPeerName "peer", effectPositionXName "px",
    effectPositionYName "py", effectPositionZName "pz", effectRotationXName "rx", effectRotationYName "ry",
    effectRotationZName "rz". None has a config/symbols/main.txt name yet. */
 extern char effectIdName[];
+
 extern char effectArgsName[];
 extern char effectPeerName[];
 extern char effectPositionXName[];
@@ -158,15 +162,13 @@ extern char effectRotationZName[];
    config/symbols/main.txt name yet. */
 extern float radianToDegreeScale;
 
-/* sefRewindEffectCf accepts the SchedulerState record defined by main/tu211. */
-typedef struct SchedulerState SchedulerState;
 extern void sefRewindEffectCf(SchedulerState *scheduler);
 
 /* canon: config/header-canon.json, as src/math/main/002ff538-chr-scl/
    private.h spells them. */
 extern SceneString *loadConstString(const char *bytes, int length);
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern void FX_call(int command, int id, const void *data, int length);
 extern void sefClearEffectCf(void *effect_peer);
 

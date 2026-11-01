@@ -30,18 +30,6 @@ typedef struct LayoutEffectPeer {
     float rotation_y; /* +0x94 */
 } LayoutEffectPeer;
 
-
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
-extern void *loadConstString(const char *bytes, int length);
-/* canon: config/header-canon.json, as src/main/toolkit.h and src/main/chr.h
- * spell it. The former `void *` return here forced every use site to respell
- * the +16 read as a cast. */
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-/* canon: config/header-canon.json (SceneObject/SceneClass are already
- * available through shared.h); restated here since the defining TU's
- * header is not shared. */
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-
 /* The script VM's per-thread context: an opaque pointer this TU's JNI
  * entry points receive but never dereference. */
 typedef struct JThread JThread;
@@ -72,5 +60,18 @@ typedef struct LayoutSetArgs {
  * 0x004DC6B0). The word right after it (0x004DC6B4) has no entry in
  * config/symbols/main.txt and keeps its splat name. */
 extern int layoutManagerId;
+
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+extern void *loadConstString(const char *bytes, int length);
+
+/* canon: config/header-canon.json, as src/main/toolkit.h and src/main/chr.h
+ * spell it. The former `void *` return here forced every use site to respell
+ * the +16 read as a cast. */
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+
+/* canon: config/header-canon.json (SceneObject/SceneClass are already
+ * available through shared.h); restated here since the defining TU's
+ * header is not shared. */
+extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 
 #endif

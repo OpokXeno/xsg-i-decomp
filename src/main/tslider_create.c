@@ -1,7 +1,5 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "tslider_create.h"
 
 typedef struct TsliderLiteralPool {

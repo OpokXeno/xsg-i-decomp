@@ -1,14 +1,12 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "game_debug_menu.h"
+
+char hexIdFormat[];
 
 static const char * tbl_0_00367A50[7] = { cfCameraSwitchLabel, modelNumberTagLabel, snapCreditLabel, snapQualityLabel, modelNumberCheckLabel, alphaOnCaptureLabel, discCheckLabel };
 
 static const char * tbl_1_00367A70[10] = { changeMapLabel, changeLeaderLabel, runBattleLabel, snapLabel, modelFolderLabel, mapFolderLabel, sceneFolderLabel, runCfLabel, runEventLabel, scanlineInterpolationLabel };
-
-char hexIdFormat[];
 
 static void PauseMenuPage0(void)
 {
@@ -30,6 +28,7 @@ static void PauseMenuPage0(void)
     GameResourceDump(1);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: ディスクチェック
  * EN: Disc check */
 const char discCheckLabel[17] = "\245\307\245\243\245\271\245\257\245\301\245\247\245\303\245\257";
@@ -258,6 +257,7 @@ static void PauseMenuPage2(void)
     }
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 char hexIdFormat[8] = "%4x";
 
 /* JP: 走査線補完
@@ -582,6 +582,7 @@ static void PauseMenuPage3(void)
     xglFontDebugPrintf(176, 172, "%f\n%f\n%f", player->x, player->y, player->z);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: なし
  * EN: No */
 char noText[5] = "\244\312\244\267";

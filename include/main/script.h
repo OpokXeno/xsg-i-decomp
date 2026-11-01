@@ -18,9 +18,7 @@ extern void CallMethod(const char *method_name);
 extern void CallMethod_I(const char *method_name, int arg1);
 
 int SCRIPT_getCfTime(void);
-
 void SCRIPT_execTalkto(void *actor);
-
 int SCRIPT_load2(const char *path);
 
 #endif /* INCLUDE_MAIN_SCRIPT_H */

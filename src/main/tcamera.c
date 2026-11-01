@@ -1,17 +1,21 @@
 #include "common.h"
-
 #include "shared.h"
+#include "main/xgl_studio.h"
 
-extern float xglAtan2(float x, float y);
+#define TCAMERA_ROTATION(camera)    (&((TCamera *)(camera))->rotation)
+#define TCAMERA_TRANSLATION(camera) (&((TCamera *)(camera))->translation)
 
-extern float xglSin(float angle);
+/*
+ * TCAMERA_setFov/TCAMERA_fovSPL (this TU, VA 0x00308b58/0x00308f60) evidence
+ * a field-of-view scalar at +0x94.
+ */
+#define TCAMERA_FOV(camera)         (((TCamera *)(camera))->fieldOfView)
 
-extern float xglCos(float angle);
+#define TCAMERA_MPACK_SCRATCH ((void *)0x70000000)
 
 /* Partial camera view: TCAMERA_setFov/fovSPL use fieldOfView at +0x94;
  * TCAMERA_setView uses rotation at +0xa0 and translation at +0xd0.
  * Unevidenced spans remain explicitly unmodeled. */
-
 typedef struct TCamera {
     unsigned char unmodeled_00[0x94];
     float fieldOfView;
@@ -21,16 +25,31 @@ typedef struct TCamera {
     Vector4 translation;
 } TCamera;
 
-#define TCAMERA_ROTATION(camera)    (&((TCamera *)(camera))->rotation)
+typedef unsigned int CameraVectorStorage __attribute__((mode(TI)));
 
-#define TCAMERA_TRANSLATION(camera) (&((TCamera *)(camera))->translation)
+typedef union {
+    Vector4 vector;
+    CameraVectorStorage storage;
+} MpackInterest;
+
+typedef struct {
+    unsigned char unmodeled_00[12];
+    int mode[4];
+    unsigned char unmodeled_1c[0x12c0 - 28];
+} CameraInitRecord;
 
 /*
- * TCAMERA_setFov/TCAMERA_fovSPL (this TU, VA 0x00308b58/0x00308f60) evidence
- * a field-of-view scalar at +0x94.
+ * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
+ * Java_xeno_Camera_create__I (src/main/camera.c) computes the same
+ * `tcamera + camera_id * 0x12c0` address for the same table.
  */
+extern unsigned char tcamera[];
 
-#define TCAMERA_FOV(camera)         (((TCamera *)(camera))->fieldOfView)
+extern PadPrefix PadData[];
+
+extern float xglAtan2(float x, float y);
+extern float xglSin(float angle);
+extern float xglCos(float angle);
 
 /* Every accepted call site of SPL_getValueXYZ (near_dir.c, spl.h) spells this
  * prototype; SPL_getValue has no accepted definition yet, so its second
@@ -39,20 +58,22 @@ typedef struct TCamera {
  * (VA 0x0030931c, 0x00309348) loads into $f12 before calling TCAMERA_rollSPL/
  * TCAMERA_fovSPL, which forward it untouched into SPL_getValue, whose body
  * reads $f12 (c.le.s at 0x0030c0d8). */
-
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 
 extern float SPL_getValue(void *spline, int index, float frame);
-
-/*
- * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
- * Java_xeno_Camera_create__I (src/main/camera.c) computes the same
- * `tcamera + camera_id * 0x12c0` address for the same table.
- */
-
-extern unsigned char tcamera[];
-
 extern StudioCamera *xglStudioGetActiveCamera(void);
+extern void DB_incPos(int x, int y);
+extern void DB_println(const char *format, ...);
+extern void FCV_resetPack(void *pack, void *source);
+extern float FCV_getPackValue(void *pack, float frame);
+extern void FCV2_resetPack(void *pack, void *source);
+extern float FCV2_getPackValue(void *pack, float frame);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+extern void nmlModelSetGlobalFogDist(float start, float end,
+                                     float parameter0, float parameter1);
+
+extern void nmlModelSetGlobalFogCol(const Vector4 *color);
 
 const char translationXFormat[] = "TX %7.3f";
 
@@ -74,58 +95,6 @@ const char rotationZFormat[] = "RZ %7.3f";
 
 const char fovValueFormat[] = "FOV%7.3f";
 
-extern void DB_incPos(int x, int y);
-
-extern void DB_println(const char *format, ...);
-
-typedef unsigned int CameraVectorStorage __attribute__((mode(TI)));
-
-typedef union {
-    Vector4 vector;
-    CameraVectorStorage storage;
-} MpackInterest;
-
-static MpackInterest mpack_interest;
-
-/*
- * TCAMERA_transMPack samples eight consecutive values off the packed curve
- * `source` at `frame` through one FCV_resetPack/FCV_getPackValue cursor
- * (src/main/fcv2.c): translation xyz, an interest-point xyz (the same point
- * TCAMERA_mpackGetInterest reads, this TU), then roll and field of view. The
- * cursor lives in an FCVPack this function places at the EE scratchpad base
- * (docs/ee-reference/memory-dma.md); every call below addresses that same
- * fixed pack, matching the original's repeated `lui $4,0x7000` before each
- * call (FCV_resetPack/FCV_getPackValue's own record types are TU-local to
- * fcv2.c, so the pack and source are reached as opaque pointers here).
- *
- * The interest point and the translation just written feed the same VU0
- * macro-mode subtraction TCAMERA_setView uses to turn a look-at point into
- * yaw/pitch: direction = translation - interest, yaw = atan2(dx, dz), pitch =
- * -atan2(dy, dx*sin(yaw) + dz*cos(yaw)). Roll and field of view are plain
- * degrees-to-radians conversions, each with its own .lit4 pi constant
- * (data_ownership in config/tu-build.json still owns that pool).
- */
-
-#define TCAMERA_MPACK_SCRATCH ((void *)0x70000000)
-
-extern void FCV_resetPack(void *pack, void *source);
-
-extern float FCV_getPackValue(void *pack, float frame);
-
-typedef struct {
-    unsigned char unmodeled_00[12];
-    int mode[4];
-    unsigned char unmodeled_1c[0x12c0 - 28];
-} CameraInitRecord;
-
-#include "main/xgl_studio.h"
-
-extern PadPrefix PadData[];
-
-extern void FCV2_resetPack(void *pack, void *source);
-
-extern float FCV2_getPackValue(void *pack, float frame);
-
 const char translationVectorFormat[24] = "trans (%f %f %f)";
 
 const char rotationVectorFormat[24] = "rotate(%f %f %f)";
@@ -134,12 +103,7 @@ const char fovFormat[24] = "fov (%f)";
 
 static int camDisp = 0;
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern void nmlModelSetGlobalFogDist(float start, float end,
-                                     float parameter0, float parameter1);
-
-extern void nmlModelSetGlobalFogCol(const Vector4 *color);
+static MpackInterest mpack_interest;
 
 TCamera *TCAMERA_get(int camera_id)
 {
@@ -171,6 +135,24 @@ void TCAMERA_info(void)
     DB_println(fovValueFormat, (double)(TCAMERA_FOV(camera) / 3.1415927f * 180.0f));
 }
 
+/*
+ * TCAMERA_transMPack samples eight consecutive values off the packed curve
+ * `source` at `frame` through one FCV_resetPack/FCV_getPackValue cursor
+ * (src/main/fcv2.c): translation xyz, an interest-point xyz (the same point
+ * TCAMERA_mpackGetInterest reads, this TU), then roll and field of view. The
+ * cursor lives in an FCVPack this function places at the EE scratchpad base
+ * (docs/ee-reference/memory-dma.md); every call below addresses that same
+ * fixed pack, matching the original's repeated `lui $4,0x7000` before each
+ * call (FCV_resetPack/FCV_getPackValue's own record types are TU-local to
+ * fcv2.c, so the pack and source are reached as opaque pointers here).
+ *
+ * The interest point and the translation just written feed the same VU0
+ * macro-mode subtraction TCAMERA_setView uses to turn a look-at point into
+ * yaw/pitch: direction = translation - interest, yaw = atan2(dx, dz), pitch =
+ * -atan2(dy, dx*sin(yaw) + dz*cos(yaw)). Roll and field of view are plain
+ * degrees-to-radians conversions, each with its own .lit4 pi constant
+ * (data_ownership in config/tu-build.json still owns that pool).
+ */
 void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
 {
     Vector4 *translation = TCAMERA_TRANSLATION(camera);

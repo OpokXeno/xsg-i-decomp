@@ -10,6 +10,8 @@
  */
 typedef struct JThread JThread;
 
+typedef struct MenuStringData MenuStringData;
+
 /*
  * A java.lang.String argument, as the natives below read it: +0x00 (the
  * class word every object reference begins with) is untouched by this TU,
@@ -18,8 +20,6 @@ typedef struct JThread JThread;
  * StringRef read for their own String arguments; named separately here
  * because those TUs already own that tag, config/header-canon.json).
  */
-typedef struct MenuStringData MenuStringData;
-
 typedef struct MenuStringRef {
     void *unmodeled_00;
     MenuStringData *value;    /* +0x04 */
@@ -70,15 +70,6 @@ typedef struct MenuNative {
     int cursor;                     /* +0x68 */
 } MenuNative;
 
-/* Menu.create writes the SceneObjectClassRef at +0x00 from its SceneClass
- * instance-class-ref field. setLocation converts the integer arguments at
- * +0x04/+0x08 and writes floats at +0x20/+0x24; getSelected reads signed
- * bytes at +0x54/+0x55, using the latter as the negative-status override. */
-
-extern void TMENU_addQuery(MenuNative *menu, const char *text);
-extern void TMENU_addQuery2(MenuNative *menu, char **texts, int count);
-extern void TMENU_addItem(MenuNative *menu, const char *text);
-
 /* The call block of a native taking (java.lang.String): the target menu
    and the string. */
 typedef struct MenuStringCall {
@@ -86,19 +77,40 @@ typedef struct MenuStringCall {
     MenuStringRef *string;
 } MenuStringCall;
 
-void Java_xeno_util_Menu_addQuery__Ljava_lang_String_(JThread *thread,
-                                                       MenuStringCall *arguments,
-                                                       unsigned int *result)
-{
-    TMENU_addQuery(arguments->menu, arguments->string->value->bytes);
-}
-
 /* The call block of Menu.addQuery(String[], int): the target menu and the
    query strings; the trailing int is unused by this native. */
 typedef struct MenuStringArrayCall {
     MenuNative *menu;
     MenuStringArray *array;
 } MenuStringArrayCall;
+
+/* These natives receive VM argument/result slots at four-byte intervals: the
+ * original accesses the object at +0, location integers at +4/+8 and results
+ * at +0. */
+typedef union MenuArgumentSlot {
+    int i;
+    float f;
+    void *ref;
+} MenuArgumentSlot;
+
+/* The call block of Menu.setCursor(int): the target menu and the
+   requested cursor value. */
+typedef struct MenuCursorCall {
+    MenuNative *menu;
+    int cursor;
+} MenuCursorCall;
+
+extern void TMENU_addQuery(MenuNative *menu, const char *text);
+extern void TMENU_addQuery2(MenuNative *menu, char **texts, int count);
+extern void TMENU_addItem(MenuNative *menu, const char *text);
+extern MenuNative *TMENU_create(int menu_kind);
+
+void Java_xeno_util_Menu_addQuery__Ljava_lang_String_(JThread *thread,
+                                                       MenuStringCall *arguments,
+                                                       unsigned int *result)
+{
+    TMENU_addQuery(arguments->menu, arguments->string->value->bytes);
+}
 
 void Java_xeno_util_Menu_addQuery__aLjava_lang_String_I(JThread *thread,
                                                          MenuStringArrayCall *arguments,
@@ -129,17 +141,10 @@ void Java_xeno_util_Menu_addItem__Ljava_lang_String_(JThread *thread,
     TMENU_addItem(arguments->menu, arguments->string->value->bytes);
 }
 
-extern MenuNative *TMENU_create(int menu_kind);
-
-/* These natives receive VM argument/result slots at four-byte intervals: the
- * original accesses the object at +0, location integers at +4/+8 and results
- * at +0. */
-typedef union MenuArgumentSlot {
-    int i;
-    float f;
-    void *ref;
-} MenuArgumentSlot;
-
+/* Menu.create writes the SceneObjectClassRef at +0x00 from its SceneClass
+ * instance-class-ref field. setLocation converts the integer arguments at
+ * +0x04/+0x08 and writes floats at +0x20/+0x24; getSelected reads signed
+ * bytes at +0x54/+0x55, using the latter as the negative-status override. */
 void Java_xeno_util_Menu_create__(JThread *thread, void *arguments,
                                   MenuArgumentSlot *result)
 {
@@ -179,13 +184,6 @@ void Java_xeno_util_Menu_setLocation__II(JThread *thread,
 void Java_xeno_util_Menu_setVisible__Z(void)
 {
 }
-
-/* The call block of Menu.setCursor(int): the target menu and the
-   requested cursor value. */
-typedef struct MenuCursorCall {
-    MenuNative *menu;
-    int cursor;
-} MenuCursorCall;
 
 void Java_xeno_util_Menu_setCursor__I(JThread *thread, MenuCursorCall *arguments,
                                       unsigned int *result)

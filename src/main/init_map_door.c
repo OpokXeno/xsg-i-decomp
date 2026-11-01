@@ -1,59 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "init_map_door.h"
-
-extern signed char printflg;
-
-int printf(const char *, ...);
-
-/*
- * CheckDoorDist is called with no argument from AutoDoorStanbyFunc,
- * EventDoorStanbyFunc and MjDoorStanbyFunc (it is their first call, so $a0
- * still holds their own argument only by coincidence) and with the door
- * pointer from AutoDoorOpenNowFunc/HalfAutoDoorOpenNowFunc, which reload it
- * into $a0 after DoorOpenStanbyFunc clobbers the register. Left unprototyped
- * to admit both call shapes exactly as compiled.
- */
-
-float CheckDoorDist();
-
-void CheckDoorPos();
-
-int CheckDoorSwitch(DoorUnit *door);
-
-void DoorCommonFunc(DoorUnit *door);
-
-void DoorOpenStanbyFunc();
-
-void EventDoorStanbyFunc(DoorUnit *door);
-
-void EventDoorOpenOpeFunc(DoorUnit *door);
-
-void EventDoorOpenNowFunc(DoorUnit *door);
-
-void AutoDoorOpenOpeFunc(DoorUnit *door);
-
-void AutoDoorOpenNowFunc(DoorUnit *door);
-
-void HalfAutoDoorOpenNowFunc(DoorUnit *door);
-
-void MjDoorStanbyFunc(DoorUnit *door);
-
-void AutoDoorStanbyFunc(DoorUnit *door);
-
-extern DoorMapUnit MapUnit[64];
-
-int AutoDoorCloseOpeFunc(DoorUnit *door);
-
-void EventDoorCloseOpeFunc(DoorUnit *door);
-
-int xglSoundEffectCheckID();
-
-void xglSoundEffectPosID();
-
-void xglSoundEffectStopID();
 
 typedef struct DoorPlayerState {
     unsigned char unmodeled_00[0x10];
@@ -68,30 +15,52 @@ typedef struct DoorGameLoopState {
     unsigned char unmodeled_08[0x2a028];
 } DoorGameLoopState;
 
+extern signed char printflg;
+extern DoorMapUnit MapUnit[64];
 extern DoorGameLoopState GameLoopState;
-
 extern PadPrefix PadData;
 
-/* The original uses these as compiler-emitted single-precision constants. */
+int printf(const char *, ...);
 
+/*
+ * CheckDoorDist is called with no argument from AutoDoorStanbyFunc,
+ * EventDoorStanbyFunc and MjDoorStanbyFunc (it is their first call, so $a0
+ * still holds their own argument only by coincidence) and with the door
+ * pointer from AutoDoorOpenNowFunc/HalfAutoDoorOpenNowFunc, which reload it
+ * into $a0 after DoorOpenStanbyFunc clobbers the register. Left unprototyped
+ * to admit both call shapes exactly as compiled.
+ */
+float CheckDoorDist();
+
+void CheckDoorPos();
+int CheckDoorSwitch(DoorUnit *door);
+void DoorCommonFunc(DoorUnit *door);
+void DoorOpenStanbyFunc();
+void EventDoorStanbyFunc(DoorUnit *door);
+void EventDoorOpenOpeFunc(DoorUnit *door);
+void EventDoorOpenNowFunc(DoorUnit *door);
+void AutoDoorOpenOpeFunc(DoorUnit *door);
+void AutoDoorOpenNowFunc(DoorUnit *door);
+void HalfAutoDoorOpenNowFunc(DoorUnit *door);
+void MjDoorStanbyFunc(DoorUnit *door);
+void AutoDoorStanbyFunc(DoorUnit *door);
+int AutoDoorCloseOpeFunc(DoorUnit *door);
+void EventDoorCloseOpeFunc(DoorUnit *door);
+int xglSoundEffectCheckID();
+void xglSoundEffectPosID();
+void xglSoundEffectStopID();
+
+/* The original uses these as compiler-emitted single-precision constants. */
 float CheckDist2D(Vector4 *player_position, DoorPosition *door_position);
 
 float atan2f(float y, float x);
-
 float nearDir(float first, float second);
-
 void GetPartsPos();
-
 void GetPartsSize();
-
 void MAP_updateUnitDoor(DoorUnit *door);
-
 void AutoDoorFunc(DoorUnit *door);
-
 int EventDoorFunc(DoorUnit *door);
-
 int HalfAutoDoorFunc(DoorUnit *door);
-
 int MjDoorFunc(DoorUnit *door);
 
 /* MAP_updateUnitDoor passes the door; DoubleDoorFunc itself takes no parameter. */
@@ -398,6 +367,7 @@ int AutoDoorCloseOpeFunc(DoorUnit *door)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Defined here, after the tables of the functions above, to keep .rodata in original address order. */
 const char doorOpenFormat[16] = "id=%d DoorOpen\n";
 
@@ -655,4 +625,3 @@ void CheckDoorPos(DoorUnit *door, DoorPosition *position)
     position->values.y = door->y;
     position->values.z = door->z - (door->z - target_unit->position.values.z) * 0.5f;
 }
-

@@ -1,37 +1,26 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "xgl_packet.h"
 
-static XglPacket asPacketSource[2];
-
-extern void sceVif1PkInit(XglPacket *packet, u32 buffer_address);
-
-static XglPacket *pCurrentPacket;
-
-static XglPacket *pSendPacket;
-
-extern void xglDmaDirectSrcChain(u32 channel, u32 address);
+#define XGL_SCRATCH ((u64 *)0x70000000)
 
 extern struct XglPacketRenderState sRender;
 
+extern void sceVif1PkInit(XglPacket *packet, u32 buffer_address);
+extern void xglDmaDirectSrcChain(u32 channel, u32 address);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
-
 extern void sceVif1PkAddCode(XglPacket *packet, u32 code);
-
 extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
-
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
 extern void sceVif1PkCloseDirectCode(XglPacket *packet);
-
 extern void sceGsSetDefLoadImage(XglLoadImage *image, short address, short width, short psm, short x, short y, short w, short h);
+extern void sceVif1PkEnd(XglPacket *packet, int mode);
+extern void sceVif1PkTerminate(XglPacket *packet);
+extern void sceVif1PkReset(XglPacket *packet);
+extern void FlushCache(int mode);
 
 /* Direct-mode GS setup block: four quadwords, then (from +0x50) seven more. */
-
 static u64 TestPrim_0_004A8D00[24] = {
     0xb0ab400000008001ULL, 0x0000053531eeeeeeULL,
     0x0000000000000000ULL, 0x000000000000003fULL,
@@ -47,17 +36,11 @@ static u64 TestPrim_0_004A8D00[24] = {
     0x00008df700008ff8ULL, 0x0000000000000000ULL,
 };
 
-#define XGL_SCRATCH ((u64 *)0x70000000)
+static XglPacket asPacketSource[2];
 
-extern void sceVif1PkEnd(XglPacket *packet, int mode);
+static XglPacket *pCurrentPacket;
 
-extern void sceVif1PkTerminate(XglPacket *packet);
-
-extern void sceVif1PkReset(XglPacket *packet);
-
-extern void FlushCache(int mode);
-
-/* Direct-mode GS setup block: four quadwords, then (from +0x50) seven more. */
+static XglPacket *pSendPacket;
 
 void xglPacketTextureTrans(XglTextureTransSet *set)
 {

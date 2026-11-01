@@ -1,30 +1,21 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "disp_on.h"
-
-extern void xglSleep(void);
-
-extern void MapChange(int map_id);
-
-extern char *MapGetName(int map_id);
-
-extern char *strcpy(char *destination, const char *source);
-
-extern char *strcat(char *destination, const char *source);
-
-extern int SCRIPT_load(const char *path);
-
-extern int SCRIPT_exec(void);
 
 const char event_suffix[];
 
+extern void xglSleep(void);
+extern void MapChange(int map_id);
+extern char *MapGetName(int map_id);
+extern char *strcpy(char *destination, const char *source);
+extern char *strcat(char *destination, const char *source);
+extern int SCRIPT_load(const char *path);
+extern int SCRIPT_exec(void);
 extern void GameResourceReset(int reset_mode);
-
 extern void ACT_init(void);
-
 extern void CallMethod(const char *method_name);
+
+const char event_suffix[8] = ".evt";
 
 static int disptest(XglTaskPrefix *task)
 {
@@ -208,5 +199,3 @@ void setEventTimerTaskEntry(const char *method_reference, int countdown)
     task->countdown = countdown;
     task->method_reference = method_reference;
 }
-
-const char event_suffix[8] = ".evt";

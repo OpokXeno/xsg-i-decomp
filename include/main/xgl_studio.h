@@ -3,8 +3,6 @@
 
 #include "shared.h"
 
-extern StudioCamera *xglStudioGetCamera2(int camera_id);
-
 /*
  * The light block of a studio record (0xf0 bytes). This TU owns the
  * definition: every accessor here only ever hands out or receives the
@@ -36,14 +34,11 @@ typedef struct StudioLight {
     unsigned char unmodeled_70[0x80];
 } StudioLight;
 
+extern StudioCamera *xglStudioGetCamera2(int camera_id);
 extern void xglStudioGetLight(StudioLight **light_out);
-
 extern void xglStudioChange(int studio_index);
-
 extern StudioCamera *xglStudioSelectGetActiveCamera(int studio_index);
-
 extern StudioCamera *xglStudioMainCameraMove(void);
-
 extern void xglStudioMove(void);
 
 #endif /* INCLUDE_MAIN_XGL_STUDIO_H */

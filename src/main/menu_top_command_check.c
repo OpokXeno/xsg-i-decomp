@@ -1,9 +1,103 @@
 #include "common.h"
-
-static unsigned short MenuTopCommandLock;
-
 #include "menu_top_command_check.h"
 #include "main/e_battle_win_open.h"
+#include "main/xgl_2.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_task.h"
+
+typedef struct MenuPointaTask {
+    XglTaskPrefix link;
+    unsigned char state;
+    unsigned char enabled;
+    unsigned char initialized;
+    unsigned char index;
+    short previousCommand;
+    short selectedSlot;
+    short formationIndex;
+    signed char paletteIndex;
+    unsigned char unmodeled_1b;
+    struct MenuModelTransform *formation;
+    struct MenuModelTransform *pointer;
+} MenuPointaTask;
+
+extern const MenuFormationPositions menuFormationPositionTable;
+extern const MenuLightingSources pointerLightingSources;
+extern unsigned char *MenuTairetuModelPointerXtxAddr;
+extern unsigned char *MenuTairetuModelPointerLexAddr;
+extern const float pointerScaleRate;
+extern MenuModelTransform *MenuVecMat;
+extern const float menuBackModelFov;
+extern XglTaskScheduler *MenuTask_XMX;
+extern const char *MenuTairetuModelXtxAddr;
+extern int MenuTairetuModelLexAddr;
+extern const char TopMenuFormationDescriptionText[48];
+extern const char TopMenuItemsDescriptionText[80];
+extern const char TopMenuUmnDescriptionText[48];
+extern const char TopMenuGameOptionsDescriptionText[32];
+extern const char TopMenuCommandListText[88];
+extern const char TopMenuEtherDescriptionText[64];
+extern const char TopMenuSkillsDescriptionText[56];
+extern const char TopMenuCharactersDescriptionText[72];
+extern const char TopMenuTechDescriptionText[32];
+extern const char TopMenuAgwsDescriptionText[56];
+extern const char TopMenuSaveLoadDescriptionText[16];
+
+/* Original objects of other TUs referenced by this TU's initialized DATA. */
+extern const char TopMenuTechAttacksText[16];
+
+extern const char TopMenuCharactersText[16];
+extern const char TopMenuAgwsText[16];
+extern const char TopMenuBattleFormationText[24];
+extern const char TopMenuGameOptionsText[16];
+extern const char TopMenuReserveText[24];
+
+extern void xglMatrixStackLoad(float matrix[4][4]);
+char *MenuTagTextGet(int index);
+int MenuMaryIdChange(int id);
+static void tskMenuTaiPointa(MenuPointaTask *task);
+extern void xglCameraInit(StudioCamera *camera);
+void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work);
+void xglLightIntensityAmbient(void *light, void *intensity);
+void xglLightIntensityParallel(void *light, int index, void *intensity);
+void xglLightDirection(void *light, int index, void *direction);
+void xglLightCalcMatrix(void *light);
+void nmlModelSetLight(Matrix4 intensity, Matrix4 direction);
+void nmlModelSetTexture(const char *texture);
+void nmlModelSetPlace(float matrix[4][4]);
+void nmlModelEntry(int model);
+void nmlModelFlush(void);
+
+void xglRotTransPersN(void *destination, Matrix4 *matrix,
+                     const Vector4 *points, int count, int cameraId);
+
+void endPrintDirectLine(MenuModelLinePoint *line);
+int WindowTexAddrGet(int index);
+void eMessageMain(void *message);
+void eCursolSet(MenuSelectCursor *cursor, int mode);
+void eCursolMain(MenuSelectCursor *cursor);
+int xglFontGetStringWidth(const char *text);
+
+static const float pointerTargetRotationVector[4] = {1.57079637f, 0.0f, 0.0f, 1.0f};
+
+static const MenuLightingSources menuLightingDefaults = {
+    .value = {
+        .ambient = {0.5f, 0.5f, 0.5f, 1.0f},
+        .intensity = {
+            {0.8f, 0.8f, 0.8f, 1.0f},
+            {0.8f, 0.8f, 0.8f, 1.0f},
+            {0.8f, 0.8f, 0.8f, 1.0f}
+        },
+        .direction = {
+            {1.0f, 1.0f, 0.5f, 1.0f},
+            {-1.0f, 1.0f, 0.0f, 1.0f},
+            {0.0f, 1.0f, -1.0f, 1.0f}
+        }
+    }
+};
+
+static const char * text[12] = { TopMenuItemsDescriptionText, TopMenuEtherDescriptionText, TopMenuTechDescriptionText, TopMenuSkillsDescriptionText, TopMenuCharactersDescriptionText, TopMenuAgwsDescriptionText, TopMenuFormationDescriptionText, TopMenuUmnDescriptionText, TopMenuGameOptionsDescriptionText, TopMenuSaveLoadDescriptionText, TopMenuCommandListText, TopMenuCommandListText };
+
+static unsigned short MenuTopCommandLock;
 
 static inline int MenuSelectLayoutShift(const MenuTopMenuPanel *panel)
 {
@@ -24,33 +118,6 @@ static inline MenuStatusValuePair MenuStatusEncodeValue(short current, short max
     return value;
 }
 
-extern const MenuFormationPositions menuFormationPositionTable;
-
-extern const MenuLightingSources pointerLightingSources;
-
-extern unsigned char *MenuTairetuModelPointerXtxAddr;
-
-extern unsigned char *MenuTairetuModelPointerLexAddr;
-
-extern const float pointerScaleRate;
-
-extern void xglMatrixStackLoad(float matrix[4][4]);
-
-typedef struct MenuPointaTask {
-    XglTaskPrefix link;
-    unsigned char state;
-    unsigned char enabled;
-    unsigned char initialized;
-    unsigned char index;
-    short previousCommand;
-    short selectedSlot;
-    short formationIndex;
-    signed char paletteIndex;
-    unsigned char unmodeled_1b;
-    struct MenuModelTransform *formation;
-    struct MenuModelTransform *pointer;
-} MenuPointaTask;
-
 static inline unsigned short MenuPointaGuardWord(MenuPointaTask *task)
 {
     MenuTopPartyData *party = (MenuTopPartyData *)PartyDataGet();
@@ -59,27 +126,11 @@ static inline unsigned short MenuPointaGuardWord(MenuPointaTask *task)
         &party->firstTechniqueWord : &party->slot[task->index].id);
 }
 
-char *MenuTagTextGet(int index);
-
-int MenuMaryIdChange(int id);
-
-static void tskMenuTaiPointa(MenuPointaTask *task);
-
-extern MenuModelTransform *MenuVecMat;
-
-extern const float menuBackModelFov;
-
-extern XglTaskScheduler *MenuTask_XMX;
-
-extern void xglCameraInit(StudioCamera *camera);
-
 int MenuTopCommandCheck(int commandId)
 {
     unsigned int commandBit = 1 << (commandId - 1);
     return (commandBit & ~MenuTopCommandLock) != 0;
 }
-
-void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work);
 
 void TopStatusWinMain(void)
 {
@@ -445,42 +496,6 @@ void TopMenu(void)
         xglFontDebugHex(0, 0x40, MenuWork.topCursor, 2);
     }
 }
-
-#include "main/xgl_2.h"
-#include "main/xgl_studio.h"
-#include "main/xgl_task.h"
-
-void xglLightIntensityAmbient(void *light, void *intensity);
-void xglLightIntensityParallel(void *light, int index, void *intensity);
-void xglLightDirection(void *light, int index, void *direction);
-void xglLightCalcMatrix(void *light);
-void nmlModelSetLight(Matrix4 intensity, Matrix4 direction);
-void nmlModelSetTexture(const char *texture);
-void nmlModelSetPlace(float matrix[4][4]);
-void nmlModelEntry(int model);
-void nmlModelFlush(void);
-static const float pointerTargetRotationVector[4] = {1.57079637f, 0.0f, 0.0f, 1.0f};
-static const MenuLightingSources menuLightingDefaults = {
-    .value = {
-        .ambient = {0.5f, 0.5f, 0.5f, 1.0f},
-        .intensity = {
-            {0.8f, 0.8f, 0.8f, 1.0f},
-            {0.8f, 0.8f, 0.8f, 1.0f},
-            {0.8f, 0.8f, 0.8f, 1.0f}
-        },
-        .direction = {
-            {1.0f, 1.0f, 0.5f, 1.0f},
-            {-1.0f, 1.0f, 0.0f, 1.0f},
-            {0.0f, 1.0f, -1.0f, 1.0f}
-        }
-    }
-};
-
-void xglRotTransPersN(void *destination, Matrix4 *matrix,
-                     const Vector4 *points, int count, int cameraId);
-void endPrintDirectLine(MenuModelLinePoint *line);
-extern const char *MenuTairetuModelXtxAddr;
-extern int MenuTairetuModelLexAddr;
 
 static void tskMenuTai(MenuTaiTask *task)
 {
@@ -1351,9 +1366,6 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
     }
 }
 
-int WindowTexAddrGet(int index);
-void eMessageMain(void *message);
-
 /* WindowDX discards this callback's return value. */
 int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
 {
@@ -1487,10 +1499,6 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         break;
     }
 }
-
-void eCursolSet(MenuSelectCursor *cursor, int mode);
-void eCursolMain(MenuSelectCursor *cursor);
-int xglFontGetStringWidth(const char *text);
 
 /* WindowDX discards this callback's return value. */
 int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
@@ -1697,20 +1705,7 @@ void MenuPasWindow(void) {
 
 }
 
-extern const char TopMenuFormationDescriptionText[48];
-extern const char TopMenuItemsDescriptionText[80];
-extern const char TopMenuUmnDescriptionText[48];
-extern const char TopMenuGameOptionsDescriptionText[32];
-extern const char TopMenuCommandListText[88];
-extern const char TopMenuEtherDescriptionText[64];
-extern const char TopMenuSkillsDescriptionText[56];
-extern const char TopMenuCharactersDescriptionText[72];
-extern const char TopMenuTechDescriptionText[32];
-extern const char TopMenuAgwsDescriptionText[56];
-extern const char TopMenuSaveLoadDescriptionText[16];
-
-static const char * text[12] = { TopMenuItemsDescriptionText, TopMenuEtherDescriptionText, TopMenuTechDescriptionText, TopMenuSkillsDescriptionText, TopMenuCharactersDescriptionText, TopMenuAgwsDescriptionText, TopMenuFormationDescriptionText, TopMenuUmnDescriptionText, TopMenuGameOptionsDescriptionText, TopMenuSaveLoadDescriptionText, TopMenuCommandListText, TopMenuCommandListText };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const MenuFormationPositions menuFormationPositionTable = { .vector = { { .x = -0.10000000149011612f, .y = 0.0f, .z = 0.21000000834465027f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.0f, .z = 0.019999999552965164f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.0f, .z = -0.17000000178813934f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = 0.21000000834465027f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = 0.019999999552965164f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = -0.17000000178813934f, .w = 1.0f } } };
 
 const MenuLightingSources pointerLightingSources = { .value = { .ambient = { 1.0f, 1.0f, 1.0f, 1.0f }, .intensity = { { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f, 1.0f }, { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f, 1.0f }, { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f, 1.0f } }, .direction = { { 1.0f, 1.0f, 0.5f, 1.0f }, { -1.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, -1.0f, 1.0f } } } };
@@ -1748,14 +1743,6 @@ MenuTopInfo * TopInfo = 0;
 MenuTopMenuWin * TopMenuWin = 0;
 
 MenuTopFaceEx * TopFaceExWin = 0;
-
-/* Original objects of other TUs referenced by this TU's initialized DATA. */
-extern const char TopMenuTechAttacksText[16];
-extern const char TopMenuCharactersText[16];
-extern const char TopMenuAgwsText[16];
-extern const char TopMenuBattleFormationText[24];
-extern const char TopMenuGameOptionsText[16];
-extern const char TopMenuReserveText[24];
 
 static const char * msg_1_0036C360[3] = { TopMenuReserveText, topMenuTimeText, topMenuMoneyText };
 

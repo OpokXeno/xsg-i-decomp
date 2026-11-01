@@ -36,7 +36,6 @@ typedef struct TimeChart {
 
 extern unsigned int strlen(const char *string);
 extern int strncmp(const char *string1, const char *string2, unsigned int count);
-
 int TCH_getInfoID(TimeChart *chart, const char *name, int length);
 
 #endif

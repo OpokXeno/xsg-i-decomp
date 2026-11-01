@@ -1,12 +1,7 @@
 #include "common.h"
-
-extern unsigned int strlen(const char *string);
-
 #include "shared.h"
-
-static const float s_aCullingBase[9];
-
-static int s_nIgnoreCulling = 0;
+#include "main/nml_packet_add.h"
+#include "main/xgl_2.h"
 
 typedef int s32;
 
@@ -17,7 +12,6 @@ typedef int s32;
  * check_occlusion read back. position.w and scale.w are set to 1.0f by both
  * writers; rotation.w is never written.
  */
-
 typedef struct CullingVolume {
     Vector4 position;
     Vector4 rotation;
@@ -42,7 +36,6 @@ typedef struct CullingVolume {
  * The map argument itself is retained at 0xDE8 and passed back to
  * nmlModelSetMapLastEntry when the last-entry indices are consumed.
  */
-
 typedef struct CullingMap {
     u8 active;
     u8 unmodeled_001[31];
@@ -52,42 +45,7 @@ typedef struct CullingMap {
     s32 cullingMap;
 } CullingMap;
 
-static CullingMap s_inCulling;
-
-/* Empty in this build: the original body is a bare return. */
-
-/*
- * Line-plane intersection. lineStart/lineEnd are the two points of the
- * directed line; normal.xyz is the plane normal and normal.w scales
- * lineStart.w to offset planePoint along the normal before use. The
- * intersection point is destination = lineStart + t * (lineEnd - lineStart),
- * with t = (dot(normal, C) - dot(normal, lineStart)) / dot(normal, lineEnd -
- * lineStart) and C = planePoint + normal.xyz * (normal.w * lineStart.w).
- * Only destination's xyz lanes are computed by the vsub.xyz that produces
- * vf15; destination->w keeps whatever is in vf15's w lane going into that
- * sqc2, unrelated to lineStart/lineEnd/planePoint's own w.
- */
-
-void setup_occlusion(CullingVolume *volume, s32 camera);
-
-/*
- * Rebuilds the occlusion planes of every registered volume for camera, so
- * that the xglCullingCheckSeparate calls that follow only have to test
- * model against them. xglCullingCheck does both steps per volume instead.
- */
-
-/*
- * Declared as an incomplete array, not a scalar: cc1 -G8 would otherwise
- * classify a plain scalar extern as small data and emit a single
- * gp-relative load, but the original site is two absolute hi/lo
- * instructions; an incomplete-extent declaration keeps the target's
- * unknown size ineligible for that optimization.
- */
-
-extern s32 cullingExistFlag[];
-
 /* The map table stores pointers to separately scaffolded volume and index data. */
-
 typedef struct CullingMapEntry {
     const char *name;
     /* The unchanged loop tests these pointer fields only for nullness. */
@@ -96,6 +54,128 @@ typedef struct CullingMapEntry {
     u8 unmodeled_00C[4];
 } CullingMapEntry;
 
+typedef struct CullingMapNameSource {
+    u8 unmodeled_000[0x10];
+    char name_with_prefix[32];
+} CullingMapNameSource;
+
+typedef struct CullingCameraView {
+    u8 unmodeled_000[0x1B0];
+    Matrix4 occlusionTransform;
+} CullingCameraView;
+
+/*
+ * Declared as an incomplete array, not a scalar: cc1 -G8 would otherwise
+ * classify a plain scalar extern as small data and emit a single
+ * gp-relative load, but the original site is two absolute hi/lo
+ * instructions; an incomplete-extent declaration keeps the target's
+ * unknown size ineligible for that optimization.
+ */
+extern s32 cullingExistFlag[];
+
+extern int g_aSubWindow[4];
+extern const char cullingMapVok03Name[16];
+extern const char cullingMapVok04Name[16];
+extern const char cullingMapVok07Name[16];
+extern const char cullingMapVok10Name[16];
+extern const char cullingMapVok11Name[16];
+extern const char cullingMapVok12Name[16];
+extern const char cullingMapVok12bName[16];
+extern const char cullingMapPro02Name[16];
+extern const char cullingMapEls10Name[16];
+extern const char cullingMapEls09Name[16];
+extern const char cullingMapEls02Name[16];
+extern const char cullingMapEls02bName[16];
+extern const char cullingMapEls03Name[16];
+extern const char cullingMapEls04Name[16];
+extern const char cullingMapEls04bName[16];
+extern const char cullingMapEls01Name[16];
+extern const char cullingMapVok24Name[16];
+extern const char cullingMapDyu01Name[16];
+extern const char cullingMapKou01Name[16];
+extern const char cullingMapKou04Name[16];
+extern const char cullingMapKou05Name[16];
+extern const char cullingMapDyu16Name[16];
+extern const char cullingMapDyu15Name[16];
+extern const char cullingMapDyu13Name[16];
+extern const char cullingMapDyu12Name[16];
+extern const char cullingMapDyu10Name[16];
+extern const char cullingMapDyu07Name[16];
+extern const char cullingMapDyu04Name[16];
+extern const char cullingMapKuk02Name[16];
+extern const char cullingMapKuk11Name[16];
+extern const char cullingMapKuk12Name[16];
+extern const char cullingMapKuk16Name[16];
+extern const char cullingMapGnu06Name[16];
+extern const char cullingMapGnu05Name[16];
+extern const char cullingMapGnu04Name[16];
+extern const char cullingMapGnu03Name[16];
+extern const char cullingMapGnu02Name[16];
+extern const char cullingMapGnu01Name[16];
+extern const char cullingMapVok13bName[16];
+extern const char cullingMapVok13Name[16];
+extern const char cullingMapGnk02Name[16];
+extern const char cullingMapGnk21Name[16];
+extern const char cullingMapGnk20Name[16];
+extern const char cullingMapGnk18Name[16];
+extern const char cullingMapGnk15Name[16];
+extern const char cullingMapGnk14Name[16];
+extern const char cullingMapGnk13Name[16];
+extern const char cullingMapGnk12Name[16];
+extern const char cullingMapGnk11Name[16];
+extern const char cullingMapGnk10Name[16];
+extern const char cullingMapGnk09Name[16];
+extern const char cullingMapGnk04Name[16];
+extern const char cullingMapUta17Name[16];
+extern const char cullingMapUta13Name[16];
+extern const char cullingMapUta08Name[16];
+extern const char cullingMapUta07Name[16];
+extern const char cullingMapUta06Name[16];
+extern const char cullingMapUta05Name[16];
+extern const char cullingMapUta04Name[16];
+extern const char cullingMapUta03Name[16];
+extern const char cullingMapKas20Name[16];
+extern const char cullingMapKas19Name[16];
+extern const char cullingMapKas18Name[16];
+extern const char cullingMapKas13Name[16];
+extern const char cullingMapKas12Name[16];
+extern const char cullingMapKas04Name[16];
+extern const char cullingMapKas31Name[16];
+extern const char cullingMapUtk04Name[16];
+extern const char cullingMapUtk05Name[16];
+extern const u64 cullingForwardAxisVector[2];
+extern const u64 cullingCornerLowerLeftVector[2];
+extern const u64 cullingCornerLowerRightVector[2];
+extern const u64 cullingCornerUpperRightVector[2];
+extern const u64 cullingCornerUpperLeftVector[2];
+
+extern unsigned int strlen(const char *string);
+
+void setup_occlusion(CullingVolume *volume, s32 camera);
+
+int strcmp(const char *, const char *);
+
+s32 xglStudioGetActiveCamera(void);
+
+static s32 _ModelCalcClip(s32 model);
+s32 xglCullingCheck(s32 camera, s32 model);
+static s32 _ModelCalcClipMat1(s32 model, s32 matrix);
+static s32 _ModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2);
+s32 xglStudioSelectGetActiveCamera(s32 cameraIndex);
+void xglVectorOuter(Vector4 *out, const Vector4 *a, const Vector4 *b);
+extern void xglMatrixStackInverse(void);
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
+
+extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
+                              float scale);
+
+static const float s_aCullingBase[9];
+
+static int s_nIgnoreCulling = 0;
+
+static CullingMap s_inCulling;
+
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 static const float s_aMapCullingPro02[18] = { -28.9f, -0.0f, 1.0f, 0.0f, 1.5707964f, 0.0f, 1.0f, 3.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
 
 static const float s_aMapCullingVok03[18] = { 0.0f, -0.2f, 25.5f, -1.5184364f, 0.0f, 0.0f, 18.9f, 11.6f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, -1.0f, -1.0f };
@@ -245,135 +325,6 @@ static const s32 s_aMapLastKas31[12] = { 48, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 static const s32 s_aMapLastUtk05[12] = { 23, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
 static const s32 s_aMapLastUtk04[12] = { 54, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-
-int strcmp(const char *, const char *);
-
-/*
- * Finds a named culling-map entry in the current map table and returns its
- * index or minus one. The table ends at the first row with entryCount and
- * source both zero.
- */
-
-/* Empty in this build: the original body is a bare return. */
-
-/*
- * _ModelCalcClipInit: load the pair of 4x4 clip matrices into VU0 macro-mode
- * registers for the callees that read them without reloading.
- *
- * Eight lqc2 loads at decimal offsets 0,16,...,112 off `clip` establish the
- * parameter as two consecutive 16-byte-aligned 4x4 matrices (128 bytes):
- * clip[0]'s four rows land in vf12..vf15 and clip[1]'s four rows land in
- * vf16..vf19, in address order.
- *
- * The registers persist in VU0 state for _ModelCalcClip, _ModelCalcClipMat1
- * and _ModelCalcClipMat2 -- the only three callees that read vf12..vf19
- * without reloading them. This function's own callers are 8 of the 10
- * nmlModelCalcClip* wrappers, which tail-call _ModelCalcClip right after
- * calling this function (nmlModelCalcClip, nmlModelCalcClipNoCulling,
- * nmlModelCalcClipMat1, nmlModelCalcClipMat2, nmlModelCalcClipCam,
- * nmlModelCalcClipStudio, nmlModelCalcClipMat1AllCam,
- * nmlModelCalcClipMat2AllCam); only nmlModelCalcClipMat1Cam and
- * nmlModelCalcClipMat2Cam instead tail-call _ModelCalcClipMat1 and
- * _ModelCalcClipMat2 respectively. All three consumers read vf16..vf19
- * before vf12..vf15 (_ModelCalcClipMat1 at 0x0023f154 then 0x0023f1c0;
- * _ModelCalcClipMat2 at 0x0023f01c then 0x0023f088; _ModelCalcClip at
- * 0x0023f260 then 0x0023f2cc): the bank order does not follow either
- * callee's own "Mat1"/"Mat2" name, so there is no mat1/mat2 register
- * nickname to derive from the consumers -- clip[0] and clip[1] are just
- * the two matrices in address order. nmlModelCalcClipMat1 corroborates the
- * 128-byte extent by passing camera+0x4F0 as this function's argument
- * (0x0023f468).
- *
- * Eight lqc2 loads, nothing else: no branch, no stack frame, no other memory
- * access. cc1 leaves the bare `j $31` delay slot to the assembler; this object
- * is assembled with -g, which disables delay-slot filling, so the return keeps
- * the original `jr $31; nop`.
- */
-
-s32 xglStudioGetActiveCamera(void);
-
-static s32 _ModelCalcClip(s32 model);
-
-s32 xglCullingCheck(s32 camera, s32 model);
-
-static s32 _ModelCalcClipMat1(s32 model, s32 matrix);
-
-static s32 _ModelCalcClipMat2(s32 model, s32 matrix1, s32 matrix2);
-
-s32 xglStudioSelectGetActiveCamera(s32 cameraIndex);
-
-extern int g_aSubWindow[4];
-
-extern const char cullingMapVok03Name[16];
-extern const char cullingMapVok04Name[16];
-extern const char cullingMapVok07Name[16];
-extern const char cullingMapVok10Name[16];
-extern const char cullingMapVok11Name[16];
-extern const char cullingMapVok12Name[16];
-extern const char cullingMapVok12bName[16];
-extern const char cullingMapPro02Name[16];
-extern const char cullingMapEls10Name[16];
-extern const char cullingMapEls09Name[16];
-extern const char cullingMapEls02Name[16];
-extern const char cullingMapEls02bName[16];
-extern const char cullingMapEls03Name[16];
-extern const char cullingMapEls04Name[16];
-extern const char cullingMapEls04bName[16];
-extern const char cullingMapEls01Name[16];
-extern const char cullingMapVok24Name[16];
-extern const char cullingMapDyu01Name[16];
-extern const char cullingMapKou01Name[16];
-extern const char cullingMapKou04Name[16];
-extern const char cullingMapKou05Name[16];
-extern const char cullingMapDyu16Name[16];
-extern const char cullingMapDyu15Name[16];
-extern const char cullingMapDyu13Name[16];
-extern const char cullingMapDyu12Name[16];
-extern const char cullingMapDyu10Name[16];
-extern const char cullingMapDyu07Name[16];
-extern const char cullingMapDyu04Name[16];
-extern const char cullingMapKuk02Name[16];
-extern const char cullingMapKuk11Name[16];
-extern const char cullingMapKuk12Name[16];
-extern const char cullingMapKuk16Name[16];
-extern const char cullingMapGnu06Name[16];
-extern const char cullingMapGnu05Name[16];
-extern const char cullingMapGnu04Name[16];
-extern const char cullingMapGnu03Name[16];
-extern const char cullingMapGnu02Name[16];
-extern const char cullingMapGnu01Name[16];
-extern const char cullingMapVok13bName[16];
-extern const char cullingMapVok13Name[16];
-extern const char cullingMapGnk02Name[16];
-extern const char cullingMapGnk21Name[16];
-extern const char cullingMapGnk20Name[16];
-extern const char cullingMapGnk18Name[16];
-extern const char cullingMapGnk15Name[16];
-extern const char cullingMapGnk14Name[16];
-extern const char cullingMapGnk13Name[16];
-extern const char cullingMapGnk12Name[16];
-extern const char cullingMapGnk11Name[16];
-extern const char cullingMapGnk10Name[16];
-extern const char cullingMapGnk09Name[16];
-extern const char cullingMapGnk04Name[16];
-extern const char cullingMapUta17Name[16];
-extern const char cullingMapUta13Name[16];
-extern const char cullingMapUta08Name[16];
-extern const char cullingMapUta07Name[16];
-extern const char cullingMapUta06Name[16];
-extern const char cullingMapUta05Name[16];
-extern const char cullingMapUta04Name[16];
-extern const char cullingMapUta03Name[16];
-extern const char cullingMapKas20Name[16];
-extern const char cullingMapKas19Name[16];
-extern const char cullingMapKas18Name[16];
-extern const char cullingMapKas13Name[16];
-extern const char cullingMapKas12Name[16];
-extern const char cullingMapKas04Name[16];
-extern const char cullingMapKas31Name[16];
-extern const char cullingMapUtk04Name[16];
-extern const char cullingMapUtk05Name[16];
-#include "main/nml_packet_add.h"
 
 static const CullingMapEntry s_aCullingMap[70] = {
     { cullingMapVok03Name, s_aMapCullingVok03, s_aMapLastVok03, {0, 0, 0, 0} },
@@ -584,37 +535,6 @@ const char cullingMapVok07Name[16] = "MC_VOK07";
 
 const char cullingMapVok04Name[16] = "mc_vok04";
 
-#include "main/xgl_2.h"
-
-void xglVectorOuter(Vector4 *out, const Vector4 *a, const Vector4 *b);
-
-extern const u64 cullingForwardAxisVector[2];
-
-extern const u64 cullingCornerLowerLeftVector[2];
-
-extern const u64 cullingCornerLowerRightVector[2];
-
-extern const u64 cullingCornerUpperRightVector[2];
-
-extern const u64 cullingCornerUpperLeftVector[2];
-
-extern void xglMatrixStackInverse(void);
-
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
-extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
-                              float scale);
-
-typedef struct CullingMapNameSource {
-    u8 unmodeled_000[0x10];
-    char name_with_prefix[32];
-} CullingMapNameSource;
-
-typedef struct CullingCameraView {
-    u8 unmodeled_000[0x1B0];
-    Matrix4 occlusionTransform;
-} CullingCameraView;
-
 static void culling_matrix(CullingVolume *volume)
 {
     u64 axis[2];
@@ -723,6 +643,17 @@ static void culling_cell_disp(CullingVolume *volume)
 {
 }
 
+/*
+ * Line-plane intersection. lineStart/lineEnd are the two points of the
+ * directed line; normal.xyz is the plane normal and normal.w scales
+ * lineStart.w to offset planePoint along the normal before use. The
+ * intersection point is destination = lineStart + t * (lineEnd - lineStart),
+ * with t = (dot(normal, C) - dot(normal, lineStart)) / dot(normal, lineEnd -
+ * lineStart) and C = planePoint + normal.xyz * (normal.w * lineStart.w).
+ * Only destination's xyz lanes are computed by the vsub.xyz that produces
+ * vf15; destination->w keeps whatever is in vf15's w lane going into that
+ * sqc2, unrelated to lineStart/lineEnd/planePoint's own w.
+ */
 void _FacePoint(Vector4 *destination, const Vector4 *lineStart, const Vector4 *lineEnd,
                 const Vector4 *normal, const Vector4 *planePoint) {
     __asm__ __volatile__(
@@ -1023,6 +954,11 @@ s32 xglCullingCheck(s32 camera, s32 model)
     return result;
 }
 
+/*
+ * Rebuilds the occlusion planes of every registered volume for camera, so
+ * that the xglCullingCheckSeparate calls that follow only have to test
+ * model against them. xglCullingCheck does both steps per volume instead.
+ */
 void xglCullingCheckSeparateInit(s32 camera)
 {
     s32 i;
@@ -1075,6 +1011,11 @@ void xglCullingMapInit(void)
     s_inCulling.source = 0;
 }
 
+/*
+ * Finds a named culling-map entry in the current map table and returns its
+ * index or minus one. The table ends at the first row with entryCount and
+ * source both zero.
+ */
 s32 check_culling_map(const char *name) {
     s32 result = -1;
     s32 i;
@@ -1182,10 +1123,44 @@ void xglCullingIgnoreOff(void)
     s_nIgnoreCulling = 0;
 }
 
+/* Empty in this build: the original body is a bare return. */
 void xglCullingMapDebug(void)
 {
 }
 
+/*
+ * _ModelCalcClipInit: load the pair of 4x4 clip matrices into VU0 macro-mode
+ * registers for the callees that read them without reloading.
+ *
+ * Eight lqc2 loads at decimal offsets 0,16,...,112 off `clip` establish the
+ * parameter as two consecutive 16-byte-aligned 4x4 matrices (128 bytes):
+ * clip[0]'s four rows land in vf12..vf15 and clip[1]'s four rows land in
+ * vf16..vf19, in address order.
+ *
+ * The registers persist in VU0 state for _ModelCalcClip, _ModelCalcClipMat1
+ * and _ModelCalcClipMat2 -- the only three callees that read vf12..vf19
+ * without reloading them. This function's own callers are 8 of the 10
+ * nmlModelCalcClip* wrappers, which tail-call _ModelCalcClip right after
+ * calling this function (nmlModelCalcClip, nmlModelCalcClipNoCulling,
+ * nmlModelCalcClipMat1, nmlModelCalcClipMat2, nmlModelCalcClipCam,
+ * nmlModelCalcClipStudio, nmlModelCalcClipMat1AllCam,
+ * nmlModelCalcClipMat2AllCam); only nmlModelCalcClipMat1Cam and
+ * nmlModelCalcClipMat2Cam instead tail-call _ModelCalcClipMat1 and
+ * _ModelCalcClipMat2 respectively. All three consumers read vf16..vf19
+ * before vf12..vf15 (_ModelCalcClipMat1 at 0x0023f154 then 0x0023f1c0;
+ * _ModelCalcClipMat2 at 0x0023f01c then 0x0023f088; _ModelCalcClip at
+ * 0x0023f260 then 0x0023f2cc): the bank order does not follow either
+ * callee's own "Mat1"/"Mat2" name, so there is no mat1/mat2 register
+ * nickname to derive from the consumers -- clip[0] and clip[1] are just
+ * the two matrices in address order. nmlModelCalcClipMat1 corroborates the
+ * 128-byte extent by passing camera+0x4F0 as this function's argument
+ * (0x0023f468).
+ *
+ * Eight lqc2 loads, nothing else: no branch, no stack frame, no other memory
+ * access. cc1 leaves the bare `j $31` delay slot to the assembler; this object
+ * is assembled with -g, which disables delay-slot filling, so the return keeps
+ * the original `jr $31; nop`.
+ */
 static void _ModelCalcClipInit(const Matrix4 clip[2])
 {
     __asm__ __volatile__("lqc2 vf12, 0(%0)"   :: "r"(clip) : "memory");
@@ -1708,6 +1683,7 @@ void _ApplyMatrix2Mat(Vector4 *destination, const Matrix4 matrix1, const Matrix4
     );
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char cullingMapVok03Name[16] = "MC_VOK03";
 
 static const float s_aCullingBase[9] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };

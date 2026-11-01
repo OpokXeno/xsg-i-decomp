@@ -5,6 +5,23 @@
 #ifndef SRC_MAIN_WINDOW_TEX_LOAD_H
 #define SRC_MAIN_WINDOW_TEX_LOAD_H
 
+#include "xgl_render.h"
+#include "main/xgl_studio.h"
+
+/*
+ * Save-record offset of the UMN mail table: one 2-byte entry per mail box,
+ * addressed directly as SaveData + 0x10304 (the same region src/main/party.h
+ * documents as SAVE_UMN_MAIL_DATA).
+ */
+#define SAVE_UMN_MAIL_DATA 0x10304
+
+/* The saved mailbox table begins at the UMN database-state window. */
+#define SAVE_UMN_MAIL_BOXES 0x1025c
+
+#define MENU_BG_CAMERA_ROTATION_X (-0.42479878664016724f)
+#define MENU_BG_CAMERA_ROTATION_Z (2.784193754196167f)
+#define MENU_BG_CAMERA_POSITION_Z (7.0559511184692383f)
+
 /*
  * The UMN database's saved state: the 0x9c-byte window of the save record
  * that build/main/aliases.ld names `UmnDataBaseStateData = SaveData + 66140`
@@ -40,78 +57,6 @@ typedef struct UmnDataBase {
     unsigned char monster_analysed[4];      /* +0x98: one bit per monster id */
 } UmnDataBase;
 
-/*
- * The fourth argument of xglCdReadFile is the completion-callback slot that
- * xglCdReadFilePart stores at +0x0c of the read request (main:0x0021DFAC).
- * It selects a default callback for the small values it tests first - 0 takes
- * the global default, 1 takes xglCdDummyCallback (0x0021D698) and 2 takes
- * xglCdDefaultCallback (0x0021D690), main:0x0021DEFC..0x0021DF50 - and uses
- * any other value as the callback address itself.  The slot is an int, so a
- * caller that supplies its own callback passes its address as one.
- */
-void MenuLoadFile(const char *name, void *buffer);
-
-static void menuCallback(int event);
-
-void UmnDataBaseMonsterSet(int monster_id);
-
-int UmnDataBaseMonsterCheck(int monster_id);
-
-extern unsigned char UmnDataBaseStateData[0x9c];
-
-int MenuLoadSync(void);
-
-extern int MenuLoadCount;
-
-void MenuLoadInit(void);
-
-void MenuLoadEnd(void);
-
-/* Defined in main/xgl_cd.c (main:0x0021e330). */
-extern void xglCdReadCancel(void);
-
-void MenuLoadCancel(void);
-
-extern unsigned char MenuBibrationAct;
-
-extern unsigned char MenuBibrationCount;
-
-extern unsigned char MenuBibrationPad;
-
-extern unsigned char MenuBibrationSpeed;
-
-/*
- * The vibration request MenuBibrationMain replays: while count is non-zero it
- * decrements it and writes speed to actuator act of pad slot pad in PadData.
- * All four are unsigned bytes (MenuBibrationMain reads them with lbu, and
- * subMenuSystemMain passes speed 0x80).
- */
-void MenuBibrationSet(unsigned char pad, unsigned char act, unsigned char speed,
-                      unsigned char count);
-
-void MenuBibrationInit(void);
-
-extern short UmnKosmosSpecialBox[4];
-
-void UmnkosmosSpecialInit(void);
-
-/*
- * Save-record offset of the UMN mail table: one 2-byte entry per mail box,
- * addressed directly as SaveData + 0x10304 (the same region src/main/party.h
- * documents as SAVE_UMN_MAIL_DATA).
- */
-#define SAVE_UMN_MAIL_DATA 0x10304
-
-/* The saved mailbox table begins at the UMN database-state window. */
-#define SAVE_UMN_MAIL_BOXES 0x1025c
-
-unsigned char *UmnMailDataGet(int box_id);
-
-int MenuModelInit(int work_start);
-
-#include "xgl_render.h"
-#include "main/xgl_studio.h"
-
 /* Controller records are 0x68 bytes. The menu reads the trigger and repeat
  * halfwords at +0x32/+0x34 and writes the actuator bytes at +0x50. */
 typedef struct XglPadRecord {
@@ -133,7 +78,6 @@ typedef struct XglPadRecord {
     unsigned char axis_dead_zone[4];
     signed char axis[4];
 } XglPadRecord;
-extern XglPadRecord PadData[2];
 
 /* Only the menu's flags word is accessed here. The defining game TU models
  * the complete GameLoopState object. */
@@ -141,15 +85,6 @@ typedef struct GameLoopStateLayout {
     unsigned char unmodeled_00[0x10];
     int flags;
 } GameLoopStateLayout;
-extern GameLoopStateLayout GameLoopState;
-
-extern XglRenderFadeCallback MenuCfTaiki[8];
-extern const char *file_name_0[3];
-extern void endPrintInit(void);
-extern unsigned char *MenuWinAddr;
-extern int xglFontLoad(int font, void (*callback)(int));
-extern int original_font_no_1;
-extern void xglSoundEffectNormalID(int sound, int channel);
 
 typedef struct {
     u64 initial_word;
@@ -167,27 +102,75 @@ typedef struct {
     float camera_position_z;
     u64 saved_camera_words[0xbe];
 } MenuBgTaskParameters;
-extern MenuBgTaskParameters *MenuBgParam;
-extern int MenuBgCameraId;
-extern u64 *MenuBgKeepCamera;
-extern void *xglTaskInitial(void *pool, int capacity, int flags);
-extern StudioCamera *xglStudioGetActiveCamera(void);
-extern void xglCameraInit(StudioCamera *camera);
-#define MENU_BG_CAMERA_ROTATION_X (-0.42479878664016724f)
-#define MENU_BG_CAMERA_ROTATION_Z (2.784193754196167f)
-#define MENU_BG_CAMERA_POSITION_Z (7.0559511184692383f)
-extern void tyaMenuBgEntry(XglTaskScheduler *scheduler,
-                           MenuBgTaskParameters *work);
 
 typedef struct {
     char path[26];
 } MenuModelPath;
+
+typedef struct {
+    short menu_page[11];
+} UmnTextPageMap;
+
+typedef struct {
+    unsigned short unit_type;
+    unsigned char unmodeled_02[0x16];
+    unsigned short text_type;
+} UmnUnitInitRecord;
+
+typedef struct {
+    int unit_id;
+    unsigned short value;
+    unsigned char property_a;
+    unsigned char property_b;
+    unsigned char property_c;
+    unsigned char unmodeled_09[4];
+    unsigned char name_page;
+    unsigned char description_page;
+    unsigned char unmodeled_0f;
+    unsigned char name_id;
+    unsigned char description_id;
+} UmnUnitTextRecord;
+
+typedef struct {
+    const char *text;
+} UmnTextLookup;
+
+typedef struct {
+    char unit_name[0x20];
+    short unit_type;
+    short duplicate_unit_type;
+    short text_type;
+    unsigned char unmodeled_26[2];
+    unsigned int property_a;
+    unsigned int property_b;
+    unsigned int property_c;
+    int unit_id;
+    unsigned long long value;
+    char name[0x12];
+    char description[0x16];
+} UmnGunoRecord;
+
+extern unsigned char UmnDataBaseStateData[0x9c];
+extern int MenuLoadCount;
+extern unsigned char MenuBibrationAct;
+extern unsigned char MenuBibrationCount;
+extern unsigned char MenuBibrationPad;
+extern unsigned char MenuBibrationSpeed;
+extern short UmnKosmosSpecialBox[4];
+extern XglPadRecord PadData[2];
+extern GameLoopStateLayout GameLoopState;
+extern XglRenderFadeCallback MenuCfTaiki[8];
+extern const char *file_name_0[3];
+extern unsigned char *MenuWinAddr;
+extern int original_font_no_1;
+extern MenuBgTaskParameters *MenuBgParam;
+extern int MenuBgCameraId;
+extern u64 *MenuBgKeepCamera;
 extern const MenuModelPath tairetuTexturePath;
 extern unsigned char *MenuTairetuModelXtxAddr;
 extern unsigned char *MenuTairetuModelLexAddr;
 extern unsigned char *MenuTairetuModelPointerXtxAddr;
 extern unsigned char *MenuTairetuModelPointerLexAddr;
-
 extern int mini_game_no;
 extern int MenuDrillCall;
 extern XglTaskScheduler *MenuTask;
@@ -198,6 +181,55 @@ extern void *UmnGunoDataBaseTop;
 extern XglTaskScheduler *MenuTask_XMX;
 extern unsigned char *MainMenuWorkEnd;
 extern int MenuModelOut[4];
+extern UmnTextPageMap menuTextPageTable;
+extern unsigned char defaultCharacterBuffer[];
+
+/*
+ * The fourth argument of xglCdReadFile is the completion-callback slot that
+ * xglCdReadFilePart stores at +0x0c of the read request (main:0x0021DFAC).
+ * It selects a default callback for the small values it tests first - 0 takes
+ * the global default, 1 takes xglCdDummyCallback (0x0021D698) and 2 takes
+ * xglCdDefaultCallback (0x0021D690), main:0x0021DEFC..0x0021DF50 - and uses
+ * any other value as the callback address itself.  The slot is an int, so a
+ * caller that supplies its own callback passes its address as one.
+ */
+void MenuLoadFile(const char *name, void *buffer);
+
+static void menuCallback(int event);
+void UmnDataBaseMonsterSet(int monster_id);
+int UmnDataBaseMonsterCheck(int monster_id);
+int MenuLoadSync(void);
+void MenuLoadInit(void);
+void MenuLoadEnd(void);
+
+/* Defined in main/xgl_cd.c (main:0x0021e330). */
+extern void xglCdReadCancel(void);
+
+void MenuLoadCancel(void);
+
+/*
+ * The vibration request MenuBibrationMain replays: while count is non-zero it
+ * decrements it and writes speed to actuator act of pad slot pad in PadData.
+ * All four are unsigned bytes (MenuBibrationMain reads them with lbu, and
+ * subMenuSystemMain passes speed 0x80).
+ */
+void MenuBibrationSet(unsigned char pad, unsigned char act, unsigned char speed,
+                      unsigned char count);
+
+void MenuBibrationInit(void);
+void UmnkosmosSpecialInit(void);
+unsigned char *UmnMailDataGet(int box_id);
+int MenuModelInit(int work_start);
+extern void endPrintInit(void);
+extern int xglFontLoad(int font, void (*callback)(int));
+extern void xglSoundEffectNormalID(int sound, int channel);
+extern void *xglTaskInitial(void *pool, int capacity, int flags);
+extern StudioCamera *xglStudioGetActiveCamera(void);
+extern void xglCameraInit(StudioCamera *camera);
+
+extern void tyaMenuBgEntry(XglTaskScheduler *scheduler,
+                           MenuBgTaskParameters *work);
+
 extern void endPrintDirectFrameCopy(XglPacket *, int, int);
 extern void MenuGameDataPush(void);
 extern void MenuGameDataPop(void);
@@ -249,47 +281,6 @@ extern void nmlModelInit(void);
 extern void GameResourceWorkReload(void);
 extern void GameCfPlayerLoadResource(int);
 extern void func_A19750(int category, int item);
-
-typedef struct {
-    short menu_page[11];
-} UmnTextPageMap;
-typedef struct {
-    unsigned short unit_type;
-    unsigned char unmodeled_02[0x16];
-    unsigned short text_type;
-} UmnUnitInitRecord;
-typedef struct {
-    int unit_id;
-    unsigned short value;
-    unsigned char property_a;
-    unsigned char property_b;
-    unsigned char property_c;
-    unsigned char unmodeled_09[4];
-    unsigned char name_page;
-    unsigned char description_page;
-    unsigned char unmodeled_0f;
-    unsigned char name_id;
-    unsigned char description_id;
-} UmnUnitTextRecord;
-typedef struct {
-    const char *text;
-} UmnTextLookup;
-typedef struct {
-    char unit_name[0x20];
-    short unit_type;
-    short duplicate_unit_type;
-    short text_type;
-    unsigned char unmodeled_26[2];
-    unsigned int property_a;
-    unsigned int property_b;
-    unsigned int property_c;
-    int unit_id;
-    unsigned long long value;
-    char name[0x12];
-    char description[0x16];
-} UmnGunoRecord;
-extern UmnTextPageMap menuTextPageTable;
-extern unsigned char defaultCharacterBuffer[];
 extern UmnUnitInitRecord *func_A19270(int unit_id);
 extern UmnUnitTextRecord *func_A1A698(int unit_id);
 extern const char *const *func_A2C828(int unit_id);

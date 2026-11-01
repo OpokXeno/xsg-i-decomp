@@ -1,6 +1,50 @@
 #include "common.h"
 #include "debug_break.h"
 
+#define UNDU_ORIENT(x0, z0, x1, z1, x2, z2) \
+    ((x0) * (z1) + (x1) * (z2) + (x2) * (z0) - (x0) * (z2) - (x1) * (z0) - (x2) * (z1))
+
+#define UNDU_RELOCATE(field, base) \
+    do { \
+        if ((field) != 0) \
+            (field) = (void *)((unsigned char *)(field) + (unsigned int)(base)); \
+    } while (0)
+
+#define UNDU_RELOCATE_HEADER(header, base) \
+    do { \
+        UNDU_RELOCATE((header)->vertexData, base); \
+        UNDU_RELOCATE((header)->normalData, base); \
+        UNDU_RELOCATE((header)->subList, base); \
+        UNDU_RELOCATE((header)->wallAttributeTable, base); \
+    } while (0)
+
+#define UNDU_RELOCATE_HEADERS(header, list, count, index, base) \
+    do { \
+        (header) = (list); \
+        for ((index) = 0; (index) < (count); (index)++, (header)++) \
+            UNDU_RELOCATE_HEADER(header, base); \
+    } while (0)
+
+extern const float unduInitialSlopeTable[];
+extern const char unduParamErrorMessage[];
+extern const char unduAssertFormat[];
+extern const char unduAssertExpression[];
+extern const char unduSourcePath[];
+
+extern float atan2f(float y, float x);
+extern float xglSin(float x);
+extern float xglCos(float x);
+extern int printf(const char *format, ...);
+extern float UnduGet2(int flag, float x, float z);
+
+int StudioEntrySkip = 0;
+
+signed char FLAG_FRAME_60 = 0;
+
+const float unduInitialSlopeTable[1] = { -0.0f };
+
+static unsigned char *CurrentColiHead;
+
 /* The collision solver distinguishes positive and negative zero by their
  * 32-bit IEEE representation; copying bytes avoids incompatible scalar aliases. */
 static __inline__ int unduSlopeBits(const float *value)
@@ -14,7 +58,6 @@ static __inline__ int unduSlopeBits(const float *value)
 /*
  * TU-local declarations of main/tu273 (src/main/Undulate.c).
  */
-
 #ifndef SRC_MAIN_UNDULATE_H
 #define SRC_MAIN_UNDULATE_H
 
@@ -196,55 +239,12 @@ typedef struct UnduQuery {
 
 #endif /* SRC_MAIN_UNDULATE_H */
 
-static unsigned char *CurrentColiHead;
-
-int StudioEntrySkip = 0;
-
-signed char FLAG_FRAME_60 = 0;
-
+/* Declared here, not at the top: moving it up changes the original code. */
 static float UnduCheckSub(UnduWork *work, int subOffset);
 
 static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height);
-
 float UnduCheck(float *sample, void *output, UnduQuery *query);
-
 static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffset);
-
-extern float atan2f(float y, float x);
-extern float xglSin(float x);
-extern float xglCos(float x);
-extern const float unduInitialSlopeTable[];
-extern int printf(const char *format, ...);
-extern const char unduParamErrorMessage[];
-extern const char unduAssertFormat[];
-extern const char unduAssertExpression[];
-extern const char unduSourcePath[];
-
-extern float UnduGet2(int flag, float x, float z);
-
-#define UNDU_ORIENT(x0, z0, x1, z1, x2, z2) \
-    ((x0) * (z1) + (x1) * (z2) + (x2) * (z0) - (x0) * (z2) - (x1) * (z0) - (x2) * (z1))
-
-#define UNDU_RELOCATE(field, base) \
-    do { \
-        if ((field) != 0) \
-            (field) = (void *)((unsigned char *)(field) + (unsigned int)(base)); \
-    } while (0)
-
-#define UNDU_RELOCATE_HEADER(header, base) \
-    do { \
-        UNDU_RELOCATE((header)->vertexData, base); \
-        UNDU_RELOCATE((header)->normalData, base); \
-        UNDU_RELOCATE((header)->subList, base); \
-        UNDU_RELOCATE((header)->wallAttributeTable, base); \
-    } while (0)
-
-#define UNDU_RELOCATE_HEADERS(header, list, count, index, base) \
-    do { \
-        (header) = (list); \
-        for ((index) = 0; (index) < (count); (index)++, (header)++) \
-            UNDU_RELOCATE_HEADER(header, base); \
-    } while (0)
 
 /*
  * Types 1 and 2 are walked through volatile pointers: the original reads every
@@ -1136,6 +1136,7 @@ float UnduGet(float x, float z)
     return UnduGet2(0, x, z);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char unduParamErrorMessage[24] = "sUnduParam->undu error";
 
 const char unduAssertFormat[96] = "\n\n************************\n\nAssert(%s)\n    file = %s  line = %d\n\n************************\n\n\n";
@@ -1143,5 +1144,3 @@ const char unduAssertFormat[96] = "\n\n************************\n\nAssert(%s)\n 
 const char unduAssertExpression[32] = "!\"sUnduParam->undu error\"";
 
 const char unduSourcePath[24] = "../Undulate.euc.c";
-
-const float unduInitialSlopeTable[1] = { -0.0f };

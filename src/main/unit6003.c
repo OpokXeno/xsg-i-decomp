@@ -1,6 +1,23 @@
 #include "common.h"
-
 #include "shared.h"
+#include "main/toolkit.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_2.h"
+
+#define UNIT6003_FRAME_TYPE_ERROR_FORMAT "frame_type error(%d)\n"
+
+/* JP: fm%04d を読み込みます\n
+ * EN: Loading fm%04d\n */
+#define UNIT6003_LOADING_FM_FORMAT \
+    "fm%04d \244\362\306\311\244\337\271\376\244\337\244\336\244\271\n"
+
+/* JP: mvs%04d を読み込みます\n
+ * EN: Loading mvs%04d\n */
+#define UNIT6003_LOADING_MVS_FORMAT \
+    "mvs%04d \244\362\306\311\244\337\271\376\244\337\244\336\244\271\n"
+
+#define UNIT6003_MOVIE_WORK_BROKEN_MESSAGE "movie work broken!\n"
+#define UNIT6003_MOVIE_WORK_ADDRESS_FORMAT "%08x->%08x\n"
 
 typedef struct MovieXtxHeader {
     u32 signature;
@@ -8,7 +25,6 @@ typedef struct MovieXtxHeader {
 } MovieXtxHeader;
 
 /* The movie playback resource owns two contiguous XTX header sequences. */
-
 typedef struct MoviePlaybackWork {
     unsigned char unmodeled_00[0x40];
     unsigned short image_width;
@@ -33,24 +49,10 @@ typedef struct MoviePlaybackWork {
     MovieXtxHeader xtx_headers[0];
 } MoviePlaybackWork;
 
-extern void *GameResourceAlloc(int size);
-
-extern void *GameResourceRealloc(void *resource, int size);
-
-extern void xglMovieInfoInit(MoviePlaybackWork *info);
-
-extern int xglMovieOpen(MoviePlaybackWork *info, int mode);
-
-extern MovieXtxHeader *xglMovieMakeXtxHeader(MoviePlaybackWork *info, MovieXtxHeader *header);
-
-/* The movie playback resource owns two contiguous XTX header sequences. */
-
 enum {
     MOVIE_NEXT_HEADER = 0,
     MOVIE_XTX_DATA = 1,
 };
-
-#include "main/toolkit.h"
 
 typedef struct Unit6003ResourceEntry {
     u32 address;
@@ -104,24 +106,7 @@ typedef struct Unit6003Work {
     MoviePlaybackWork *movie_work;
 } Unit6003Work;
 
-extern Unit6003ResourceEntry GameResource[128];
-
-extern int GameResourceGetIndex(int address);
-
-extern int RES_loadFile(int command, int callback, int resource_id,
-                        int flags);
-
-extern int printf(const char *format, ...);
-
-#include "main/xgl_studio.h"
-
-#include "main/xgl_2.h"
-
 struct MapUnitRecord;
-
-extern void MAP_updateUnitDefault(struct MapUnitRecord *unit);
-
-extern int xglMoviePlay(void *info);
 
 enum {
     UNIT6003_RESOURCE_GROUP_FM = 10000,
@@ -180,18 +165,28 @@ typedef struct Unit6003Scratch {
     float world_height;
 } Unit6003Scratch;
 
+extern Unit6003ResourceEntry GameResource[128];
 extern Unit6003RenderState sRender;
 
+extern void *GameResourceAlloc(int size);
+extern void *GameResourceRealloc(void *resource, int size);
+extern void xglMovieInfoInit(MoviePlaybackWork *info);
+extern int xglMovieOpen(MoviePlaybackWork *info, int mode);
+extern MovieXtxHeader *xglMovieMakeXtxHeader(MoviePlaybackWork *info, MovieXtxHeader *header);
+extern int GameResourceGetIndex(int address);
+
+extern int RES_loadFile(int command, int callback, int resource_id,
+                        int flags);
+
+extern int printf(const char *format, ...);
+extern void MAP_updateUnitDefault(struct MapUnitRecord *unit);
+extern int xglMoviePlay(void *info);
 extern float I2F(int value);
-
 extern void nmlModelDirectSend(int mode, unsigned char *packet, int size);
-
 extern void nmlModelDirectSendXtx(int mode, void *texture);
 
 extern float xglRotTransPers(int *result, float matrix[4][4],
                              float *position, int camera);
-
-#define UNIT6003_FRAME_TYPE_ERROR_FORMAT "frame_type error(%d)\n"
 
 static Unit6003DrawEnvironment TestEnv_0_00490520 = {
     {
@@ -354,20 +349,6 @@ static void unit6003_draw(void *object)
     }
     nmlModelDirectSend(draw_mode, (unsigned char *)&TestEnv_0_00490520, 0x15);
 }
-
-/* JP: fm%04d を読み込みます\n
- * EN: Loading fm%04d\n */
-#define UNIT6003_LOADING_FM_FORMAT \
-    "fm%04d \244\362\306\311\244\337\271\376\244\337\244\336\244\271\n"
-
-/* JP: mvs%04d を読み込みます\n
- * EN: Loading mvs%04d\n */
-#define UNIT6003_LOADING_MVS_FORMAT \
-    "mvs%04d \244\362\306\311\244\337\271\376\244\337\244\336\244\271\n"
-
-#define UNIT6003_MOVIE_WORK_BROKEN_MESSAGE "movie work broken!\n"
-
-#define UNIT6003_MOVIE_WORK_ADDRESS_FORMAT "%08x->%08x\n"
 
 static MoviePlaybackWork *movie_work_setup(void *source_data, int source_size)
 {

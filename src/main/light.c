@@ -3,6 +3,11 @@
 #include "main/jni.h"
 #include "main/nml_model_set.h"
 
+/* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */
+#define PI_F (3.141592741f)
+
+#define HALF_TURN_RADIANS PI_F
+
 typedef struct JThread JThread;
 
 typedef struct LightVectorCall {
@@ -14,19 +19,23 @@ typedef struct LightVectorCall {
 
 extern const char lightIdFieldName[];
 extern const char lightPeerFieldName[];
-/* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */
-#define PI_F (3.141592741f)
-#define HALF_TURN_RADIANS PI_F
 
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
 extern void *xglStudioGetLight2(void);
 extern void xglLightIntensityAmbient(void *light, void *intensity);
 extern void xglLightIntensityParallel(void *light, int index, void *intensity);
 extern void xglLightAngle(void *light, int index, const Vector4 *angles);
+
 extern void xglLightDirection(void *light, unsigned int index,
                               const Vector4 *direction);
+
+/*
+ * nmlModelSetGlobalPointLightReset is defined in src/main/nml_model_set.c
+ * (main/tu106); this TU only tail-calls it, so it keeps a local declaration
+ * here.
+ */
+void nmlModelSetGlobalPointLightReset(void);
 
 void Java_xeno_Light_setColor__FFF(JThread *thread, LightVectorCall *arguments)
 {
@@ -152,18 +161,12 @@ void Java_xeno_Light_setGlobalPointLightPos__IFFF(
         arguments[1].integer, (const float (*)[3])&position);
 }
 
-/*
- * nmlModelSetGlobalPointLightReset is src/main/nml_model_set.c's own
- * INCLUDE_ASM function (main/tu106, still unresolved there); this TU only
- * tail-calls it, so it stays a local extern declaration until that TU
- * converts it.
- */
-void nmlModelSetGlobalPointLightReset(void);
-
 void Java_xeno_Light_setGlobalPointLightReset__(void)
 {
     nmlModelSetGlobalPointLightReset();
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char lightIdFieldName[8] = "id";
+
 const char lightPeerFieldName[8] = "peer";

@@ -1,13 +1,11 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "xgl_light.h"
+#include "main/xgl_2.h"
 
 typedef unsigned int XglLightQuadword __attribute__((mode(TI)));
 
 /* Light vectors occupy aligned quadwords consumed by the VU light matrix program. */
-
 typedef struct {
     XglLightQuadword intensity;
     XglLightQuadword direction;
@@ -18,31 +16,16 @@ typedef struct {
     XglPackedParallelLight parallel[3];
 } XglPackedLightSet;
 
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
-/*
- * xglLightCalcMatrix (ee-vu-cop2): dispatches the VU0 macro-mode
- * Vu0CallLightCalcMatrix microprogram (src/main/vu0/Vu0MicroCode.dvp) on the
- * light set's seven quadwords (ambientIntensity and the three parallel
- * lights' intensity/direction pairs) and writes its two 4x4 output matrices
- * back at lightSet+0x70 and lightSet+0xB0: the first is the transpose of the
- * three light directions (each row padded with w=0, plus a trailing
- * (0,0,0,1) row) and the second has the three light intensities (w=0) and
- * ambientIntensity (w=1) as its columns -- see that file's own comment for
- * the per-lane derivation. Only the VU0 dispatch is inline assembly.
- */
-
-extern char Vu0CallLightCalcMatrix[];
-
-#include "main/xgl_2.h"
-
 /* Light vectors are copied as aligned quadwords and consumed as float
  * components by the direction and rotation helpers. */
-
 typedef union {
     XglLightQuadword quadword;
     Vector4 value;
 } XglLightVector;
+
+extern char Vu0CallLightCalcMatrix[];
+
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 
 void xglLightIntensityAmbient(XglPackedLightSet *lightSet,
                               const XglLightQuadword *intensity);
@@ -54,7 +37,6 @@ void xglLightAngle(XglPackedLightSet *lightSet, unsigned int index,
                    const Vector4 *angle);
 
 /* The row copy is one lq/sq pair through explicit address registers, as the original emits it. */
-
 void xglLightSetDefault(void *lightSet)
 {
     static XglLightVector asIntensity[4] = {
@@ -147,6 +129,17 @@ void xglLightAngle(XglPackedLightSet *lightSet, unsigned int index, const Vector
     }
 }
 
+/*
+ * xglLightCalcMatrix (ee-vu-cop2): dispatches the VU0 macro-mode
+ * Vu0CallLightCalcMatrix microprogram (src/main/vu0/Vu0MicroCode.dvp) on the
+ * light set's seven quadwords (ambientIntensity and the three parallel
+ * lights' intensity/direction pairs) and writes its two 4x4 output matrices
+ * back at lightSet+0x70 and lightSet+0xB0: the first is the transpose of the
+ * three light directions (each row padded with w=0, plus a trailing
+ * (0,0,0,1) row) and the second has the three light intensities (w=0) and
+ * ambientIntensity (w=1) as its columns -- see that file's own comment for
+ * the per-lane derivation. Only the VU0 dispatch is inline assembly.
+ */
 void xglLightCalcMatrix(XglLightSet *lightSet)
 {
     __asm__ __volatile__(

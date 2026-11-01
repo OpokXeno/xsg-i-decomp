@@ -2,12 +2,9 @@
 #define INCLUDE_MAIN_HAIR_TEST_H
 
 #include "common.h"
-
 #include "main/xgl_2.h"
 
 /* Canonical matrix storage from the matrix operation owner. */
-
-
 /* Match the defining owner's storage type and field layout. */
 typedef union PpVector4 {
     Vector4 vector;

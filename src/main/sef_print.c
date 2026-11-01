@@ -1,313 +1,152 @@
 #include "common.h"
 
-typedef char *va_list;
 #define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
 #define va_end(ap) ((void)0)
 
+typedef char *va_list;
+
+extern const unsigned char tracePrintFormat[];
+extern const char sdvOpNameJsrW[8];
+extern const char sdvOpNameGotoW[8];
+extern const char sdvOpNameIfnull[8];
+extern const char sdvOpNameWide[8];
+extern const char sdvOpNameAthrow[8];
+extern const char sdvOpNameNew[8];
+extern const char sdvOpNameReturn[8];
+extern const char sdvOpNameAreturn[8];
+extern const char sdvOpNameDreturn[8];
+extern const char sdvOpNameFreturn[8];
+extern const char sdvOpNameLreturn[8];
+extern const char sdvOpNameIreturn[8];
+extern const char sdvOpNameRet[8];
+extern const char sdvOpNameJsr[8];
+extern const char sdvOpNameGoto[8];
+extern const char sdvOpNameIfle[8];
+extern const char sdvOpNameIfgt[8];
+extern const char sdvOpNameIfge[8];
+extern const char sdvOpNameIflt[8];
+extern const char sdvOpNameIfne[8];
+extern const char sdvOpNameIfeq[8];
+extern const char sdvOpNameDcmpg[8];
+extern const char sdvOpNameDcmpl[8];
+extern const char sdvOpNameFcmpg[8];
+extern const char sdvOpNameFcmpl[8];
+extern const char sdvOpNameLcmp[8];
+extern const char sdvOpNameD2f[8];
+extern const char sdvOpNameD2l[8];
+extern const char sdvOpNameD2i[8];
+extern const char sdvOpNameF2d[8];
+extern const char sdvOpNameF2l[8];
+extern const char sdvOpNameF2i[8];
+extern const char sdvOpNameL2d[8];
+extern const char sdvOpNameL2f[8];
+extern const char sdvOpNameL2i[8];
+extern const char sdvOpNameI2d[8];
+extern const char sdvOpNameI2f[8];
+extern const char sdvOpNameI2l[8];
+extern const char sdvOpNameIinc[8];
+extern const char sdvOpNameLxor[8];
+extern const char sdvOpNameIxor[8];
+extern const char sdvOpNameLor[8];
+extern const char sdvOpNameIor[8];
+extern const char sdvOpNameLand[8];
+extern const char sdvOpNameIand[8];
+extern const char sdvOpNameLushr[8];
+extern const char sdvOpNameIushr[8];
+extern const char sdvOpNameLshr[8];
+extern const char sdvOpNameIshr[8];
+extern const char sdvOpNameLshl[8];
+extern const char sdvOpNameIshl[8];
+extern const char sdvOpNameDneg[8];
+extern const char sdvOpNameFneg[8];
+extern const char sdvOpNameLneg[8];
+extern const char sdvOpNameIneg[8];
+extern const char sdvOpNameDrem[8];
+extern const char sdvOpNameFrem[8];
+extern const char sdvOpNameLrem[8];
+extern const char sdvOpNameIrem[8];
+extern const char sdvOpNameDdiv[8];
+extern const char sdvOpNameFdiv[8];
+extern const char sdvOpNameLdiv[8];
+extern const char sdvOpNameIdiv[8];
+extern const char sdvOpNameDmul[8];
+extern const char sdvOpNameFmul[8];
+extern const char sdvOpNameLmul[8];
+extern const char sdvOpNameImul[8];
+extern const char sdvOpNameDsub[8];
+extern const char sdvOpNameFsub[8];
+extern const char sdvOpNameLsub[8];
+extern const char sdvOpNameIsub[8];
+extern const char sdvOpNameDadd[8];
+extern const char sdvOpNameFadd[8];
+extern const char sdvOpNameLadd[8];
+extern const char sdvOpNameIadd[8];
+extern const char sdvOpNameSwap[8];
+extern const char sdvOpNameDup2X2[8];
+extern const char sdvOpNameDup2X1[8];
+extern const char sdvOpNameDup2[8];
+extern const char sdvOpNameDupX2[8];
+extern const char sdvOpNameDupX1[8];
+extern const char sdvOpNameDup[8];
+extern const char sdvOpNamePop2[8];
+extern const char sdvOpNamePop[8];
+extern const char sdvOpNameSastore[8];
+extern const char sdvOpNameCastore[8];
+extern const char sdvOpNameBastore[8];
+extern const char sdvOpNameAastore[8];
+extern const char sdvOpNameDastore[8];
+extern const char sdvOpNameFastore[8];
+extern const char sdvOpNameLastore[8];
+extern const char sdvOpNameIastore[8];
+extern const char sdvOpNameAstore[8];
+extern const char sdvOpNameDstore[8];
+extern const char sdvOpNameFstore[8];
+extern const char sdvOpNameLstore[8];
+extern const char sdvOpNameIstore[8];
+extern const char sdvOpNameSaload[8];
+extern const char sdvOpNameCaload[8];
+extern const char sdvOpNameBaload[8];
+extern const char sdvOpNameAaload[8];
+extern const char sdvOpNameDaload[8];
+extern const char sdvOpNameFaload[8];
+extern const char sdvOpNameLaload[8];
+extern const char sdvOpNameIaload[8];
+extern const char sdvOpNameAload3[8];
+extern const char sdvOpNameAload2[8];
+extern const char sdvOpNameAload1[8];
+extern const char sdvOpNameAload0[8];
+extern const char sdvOpNameDload3[8];
+extern const char sdvOpNameDload2[8];
+extern const char sdvOpNameDload1[8];
+extern const char sdvOpNameDload0[8];
+extern const char sdvOpNameFload3[8];
+extern const char sdvOpNameFload2[8];
+extern const char sdvOpNameFload1[8];
+extern const char sdvOpNameFload0[8];
+extern const char sdvOpNameLload3[8];
+extern const char sdvOpNameLload2[8];
+extern const char sdvOpNameLload1[8];
+extern const char sdvOpNameLload0[8];
+extern const char sdvOpNameIload3[8];
+extern const char sdvOpNameIload2[8];
+extern const char sdvOpNameIload1[8];
+extern const char sdvOpNameIload0[8];
+extern const char sdvOpNameAload[8];
+extern const char sdvOpNameDload[8];
+extern const char sdvOpNameFload[8];
+extern const char sdvOpNameLload[8];
+extern const char sdvOpNameIload[8];
+extern const char sdvOpNameLdc2w[8];
+extern const char sdvOpNameLdc2[8];
+extern const char sdvOpNameLdc1[8];
+extern const char sdvOpNameSipush[8];
+extern const char sdvOpNameBipush[8];
+extern const char sdvOpNameNop[8];
+extern int vmDebugMask;
+extern const char sdvOpNameUnknown[4];
+
 extern int printf(const char *format, ...);
 extern int vsprintf(char *buffer, const char *format, va_list args);
-extern const unsigned char tracePrintFormat[];
-
-void tracePrint(const char *format, ...) {
-    va_list args;
-    char buffer[0x100];
-
-    va_start(args, format);
-    vsprintf(buffer, format, args);
-    printf(tracePrintFormat, buffer);
-    va_end(args);
-}
-
-/*
- * These exported debug entry points contain no instructions beyond their
- * return sequence.  Their callers are not present in the bounded resident
- * call search, so the historical argument lists remain unresolved; the
- * unspecified C parameter lists preserve that uncertainty without inventing
- * a prototype.  The original symbol spellings are retained.
- */
-void sefPrintVector()
-{
-}
-
-void sefPrintMatrix()
-{
-}
-
-extern const char sdvOpNameJsrW[8];
-
-extern const char sdvOpNameGotoW[8];
-
-extern const char sdvOpNameIfnull[8];
-
-extern const char sdvOpNameWide[8];
-
-extern const char sdvOpNameAthrow[8];
-
-extern const char sdvOpNameNew[8];
-
-extern const char sdvOpNameReturn[8];
-
-extern const char sdvOpNameAreturn[8];
-
-extern const char sdvOpNameDreturn[8];
-
-extern const char sdvOpNameFreturn[8];
-
-extern const char sdvOpNameLreturn[8];
-
-extern const char sdvOpNameIreturn[8];
-
-extern const char sdvOpNameRet[8];
-
-extern const char sdvOpNameJsr[8];
-
-extern const char sdvOpNameGoto[8];
-
-extern const char sdvOpNameIfle[8];
-
-extern const char sdvOpNameIfgt[8];
-
-extern const char sdvOpNameIfge[8];
-
-extern const char sdvOpNameIflt[8];
-
-extern const char sdvOpNameIfne[8];
-
-extern const char sdvOpNameIfeq[8];
-
-extern const char sdvOpNameDcmpg[8];
-
-extern const char sdvOpNameDcmpl[8];
-
-extern const char sdvOpNameFcmpg[8];
-
-extern const char sdvOpNameFcmpl[8];
-
-extern const char sdvOpNameLcmp[8];
-
-extern const char sdvOpNameD2f[8];
-
-extern const char sdvOpNameD2l[8];
-
-extern const char sdvOpNameD2i[8];
-
-extern const char sdvOpNameF2d[8];
-
-extern const char sdvOpNameF2l[8];
-
-extern const char sdvOpNameF2i[8];
-
-extern const char sdvOpNameL2d[8];
-
-extern const char sdvOpNameL2f[8];
-
-extern const char sdvOpNameL2i[8];
-
-extern const char sdvOpNameI2d[8];
-
-extern const char sdvOpNameI2f[8];
-
-extern const char sdvOpNameI2l[8];
-
-extern const char sdvOpNameIinc[8];
-
-extern const char sdvOpNameLxor[8];
-
-extern const char sdvOpNameIxor[8];
-
-extern const char sdvOpNameLor[8];
-
-extern const char sdvOpNameIor[8];
-
-extern const char sdvOpNameLand[8];
-
-extern const char sdvOpNameIand[8];
-
-extern const char sdvOpNameLushr[8];
-
-extern const char sdvOpNameIushr[8];
-
-extern const char sdvOpNameLshr[8];
-
-extern const char sdvOpNameIshr[8];
-
-extern const char sdvOpNameLshl[8];
-
-extern const char sdvOpNameIshl[8];
-
-extern const char sdvOpNameDneg[8];
-
-extern const char sdvOpNameFneg[8];
-
-extern const char sdvOpNameLneg[8];
-
-extern const char sdvOpNameIneg[8];
-
-extern const char sdvOpNameDrem[8];
-
-extern const char sdvOpNameFrem[8];
-
-extern const char sdvOpNameLrem[8];
-
-extern const char sdvOpNameIrem[8];
-
-extern const char sdvOpNameDdiv[8];
-
-extern const char sdvOpNameFdiv[8];
-
-extern const char sdvOpNameLdiv[8];
-
-extern const char sdvOpNameIdiv[8];
-
-extern const char sdvOpNameDmul[8];
-
-extern const char sdvOpNameFmul[8];
-
-extern const char sdvOpNameLmul[8];
-
-extern const char sdvOpNameImul[8];
-
-extern const char sdvOpNameDsub[8];
-
-extern const char sdvOpNameFsub[8];
-
-extern const char sdvOpNameLsub[8];
-
-extern const char sdvOpNameIsub[8];
-
-extern const char sdvOpNameDadd[8];
-
-extern const char sdvOpNameFadd[8];
-
-extern const char sdvOpNameLadd[8];
-
-extern const char sdvOpNameIadd[8];
-
-extern const char sdvOpNameSwap[8];
-
-extern const char sdvOpNameDup2X2[8];
-
-extern const char sdvOpNameDup2X1[8];
-
-extern const char sdvOpNameDup2[8];
-
-extern const char sdvOpNameDupX2[8];
-
-extern const char sdvOpNameDupX1[8];
-
-extern const char sdvOpNameDup[8];
-
-extern const char sdvOpNamePop2[8];
-
-extern const char sdvOpNamePop[8];
-
-extern const char sdvOpNameSastore[8];
-
-extern const char sdvOpNameCastore[8];
-
-extern const char sdvOpNameBastore[8];
-
-extern const char sdvOpNameAastore[8];
-
-extern const char sdvOpNameDastore[8];
-
-extern const char sdvOpNameFastore[8];
-
-extern const char sdvOpNameLastore[8];
-
-extern const char sdvOpNameIastore[8];
-
-extern const char sdvOpNameAstore[8];
-
-extern const char sdvOpNameDstore[8];
-
-extern const char sdvOpNameFstore[8];
-
-extern const char sdvOpNameLstore[8];
-
-extern const char sdvOpNameIstore[8];
-
-extern const char sdvOpNameSaload[8];
-
-extern const char sdvOpNameCaload[8];
-
-extern const char sdvOpNameBaload[8];
-
-extern const char sdvOpNameAaload[8];
-
-extern const char sdvOpNameDaload[8];
-
-extern const char sdvOpNameFaload[8];
-
-extern const char sdvOpNameLaload[8];
-
-extern const char sdvOpNameIaload[8];
-
-extern const char sdvOpNameAload3[8];
-
-extern const char sdvOpNameAload2[8];
-
-extern const char sdvOpNameAload1[8];
-
-extern const char sdvOpNameAload0[8];
-
-extern const char sdvOpNameDload3[8];
-
-extern const char sdvOpNameDload2[8];
-
-extern const char sdvOpNameDload1[8];
-
-extern const char sdvOpNameDload0[8];
-
-extern const char sdvOpNameFload3[8];
-
-extern const char sdvOpNameFload2[8];
-
-extern const char sdvOpNameFload1[8];
-
-extern const char sdvOpNameFload0[8];
-
-extern const char sdvOpNameLload3[8];
-
-extern const char sdvOpNameLload2[8];
-
-extern const char sdvOpNameLload1[8];
-
-extern const char sdvOpNameLload0[8];
-
-extern const char sdvOpNameIload3[8];
-
-extern const char sdvOpNameIload2[8];
-
-extern const char sdvOpNameIload1[8];
-
-extern const char sdvOpNameIload0[8];
-
-extern const char sdvOpNameAload[8];
-
-extern const char sdvOpNameDload[8];
-
-extern const char sdvOpNameFload[8];
-
-extern const char sdvOpNameLload[8];
-
-extern const char sdvOpNameIload[8];
-
-extern const char sdvOpNameLdc2w[8];
-
-extern const char sdvOpNameLdc2[8];
-
-extern const char sdvOpNameLdc1[8];
-
-extern const char sdvOpNameSipush[8];
-
-extern const char sdvOpNameBipush[8];
-
-extern const char sdvOpNameNop[8];
-
-extern int vmDebugMask;
-
-extern const char sdvOpNameUnknown[4];
 
 const unsigned char tracePrintFormat[8] = "%s\n";
 
@@ -586,3 +425,28 @@ const char sdvOpNameSipush[8] = "sipush";
 const char sdvOpNameBipush[8] = "bipush";
 
 const char sdvOpNameNop[8] = "nop";
+
+void tracePrint(const char *format, ...) {
+    va_list args;
+    char buffer[0x100];
+
+    va_start(args, format);
+    vsprintf(buffer, format, args);
+    printf(tracePrintFormat, buffer);
+    va_end(args);
+}
+
+/*
+ * These exported debug entry points contain no instructions beyond their
+ * return sequence.  Their callers are not present in the bounded resident
+ * call search, so the historical argument lists remain unresolved; the
+ * unspecified C parameter lists preserve that uncertainty without inventing
+ * a prototype.  The original symbol spellings are retained.
+ */
+void sefPrintVector()
+{
+}
+
+void sefPrintMatrix()
+{
+}

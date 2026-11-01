@@ -6,8 +6,6 @@
 #include "main/init_vm.h"
 
 /* The byte buffer fields read by the format natives at +0x4 and +0x8. */
-extern const char floatFormat[];
-
 typedef struct FormatByteArray {
     unsigned char unmodeled_00[4];
     int length;
@@ -23,6 +21,9 @@ typedef struct FormatString {
 /* The byte-class handle is owned by init_vm.c; this TU only passes it to
  * newArray, so keep the VM class object opaque here. */
 typedef struct VMClass VMClass;
+
+extern const char floatFormat[];
+
 extern VMClass *classByte;
 extern const char integerFormat[];
 extern FormatString *JAVA_tmpString;

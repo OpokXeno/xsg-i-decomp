@@ -1,12 +1,7 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "format.h"
-
 #include "main/init_vm.h"
-
-FormatString *JAVA_tmpString = 0;
 
 /*
  * The script VM's per-thread context, recovered as `JThread` in
@@ -14,12 +9,15 @@ FormatString *JAVA_tmpString = 0;
  * (thread, arguments, result) as the sibling natives elsewhere in this
  * TU map (and in main/tu238, src/main/runtime.c) show.
  */
-
 typedef struct JThread JThread;
 
 extern unsigned int strlen(const char *string);
 
+FormatString *JAVA_tmpString = 0;
+
 const char integerFormat[4] = "%d";
+
+const char floatFormat[8] = "%f";
 
 void Java_xeno_util_Format_floatToIntBits__F(JThread *thread, int *arguments, unsigned int *result)
 {
@@ -113,5 +111,3 @@ void Java_xeno_util_Format_toString__Z(JThread *thread,
     string_slot = &JAVA_tmpString;
     *result = (int)*string_slot;
 }
-
-const char floatFormat[8] = "%f";

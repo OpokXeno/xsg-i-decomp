@@ -5,6 +5,7 @@
 #define ELEVATOR_SLOT_COUNT 64
 
 typedef struct ElevatorPeer ElevatorPeer;
+
 typedef struct ElevatorMapEntry ElevatorMapEntry;
 
 /* The Unit native records a generic Java "py" field address here; the task

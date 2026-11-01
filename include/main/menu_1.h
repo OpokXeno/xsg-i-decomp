@@ -1,8 +1,6 @@
 #ifndef INCLUDE_MAIN_MENU_1_H
 #define INCLUDE_MAIN_MENU_1_H
 
-int MenuMaryIdChange(int id);
-
 /*
  * MenuTextGet returns a pointer to a per-entry text record of three string
  * pointers. The leading word is the display name: the fallback record
@@ -19,18 +17,13 @@ typedef struct MenuTextEntry {
     const unsigned char *sortName;
 } MenuTextEntry;
 
+int MenuMaryIdChange(int id);
 MenuTextEntry *MenuTextGet(int index);
-
 int MenuScenarioNoGet(void);
-
 int MenuEquipStealMaskCheck(void);
-
 const unsigned char *MenuSaveMapNameGet(int mapId);
-
 int MenuMainCharCheck(int charId);
-
 unsigned short MenuFaceEpidGet(int charId, int smallPortrait);
-
 int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex);
 
 #endif /* INCLUDE_MAIN_MENU_1_H */

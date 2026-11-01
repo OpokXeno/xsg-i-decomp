@@ -1,16 +1,5 @@
 #include "common.h"
-
-static inline int eMessageScaleChannel(unsigned char component,
-                                      unsigned char strength)
-{
-    return (int)((float)component * ((float)strength * 0.0078125f));
-}
-
 #include "e_message.h"
-
-/* Number of message sprites currently allocated by the print routines. */
-
-static int msg_spr_count = 0;
 
 /*
  * The message object eMessageModeChange, eMessageDraw and eMessageMain
@@ -19,7 +8,6 @@ static int msg_spr_count = 0;
  * to +0x1C); only the mode byte eMessageModeChange writes is modelled.
  * eMessageMain dispatches on it with lbu, so it is unsigned.
  */
-
 typedef struct EMessageParam {
     unsigned char flags;
     unsigned char mode;
@@ -40,10 +28,6 @@ typedef struct EMessageParam {
     ECursol cursor;
 } EMessageParam;
 
-int eMessageMain(EMessageParam *message);
-
-char *eMessageNextWaitKeySearch(char *text);
-
 typedef struct EMessageTextParam {
     unsigned char unmodeled_00[0x18];
     char *text;
@@ -60,23 +44,6 @@ typedef struct EMessagePageState {
     unsigned char page_index;
     unsigned char page_count;
 } EMessagePageState;
-
-/* Current write position of the message text being built. */
-
-static char *MessageCpyEnd;
-
-void eMessageCat(char *src);
-
-/* Number of message sprites currently allocated by the print routines. */
-
-/* Current write position of the message text being built. */
-
-char *eMessageNextGyou(const char *text);
-
-static inline int eMessageIsFontCommand(unsigned int code)
-{
-    return code >= 1 && code <= 25;
-}
 
 struct EMessageSetParam {
     unsigned char flags;
@@ -111,34 +78,6 @@ typedef struct EMessageSprite {
     unsigned char colorize;
 } EMessageSprite;
 
-/* Font command/text output buffer, ending where msg_spr begins. */
-static unsigned char moji[4096];
-
-/* Font command defaults copied by eMessageDrawType01. */
-static unsigned char otb[28] = {
-    11,
-    12, 128, 128, 128,      /* RGB channels, scaled by message color. */
-    13, 2,
-    14, 2, 2, 0, 0, 0,
-    15, 68, 0, 127,        /* The last parameter is scaled by message alpha. */
-    24, 0,
-    25, 3,                /* Proportional font width mode. */
-    21, 2, 1, 12,
-    0, 0, 0
-};
-
-static EMessageSprite msg_spr[16];
-
-int xglFontGetStringWidth(const char *text);
-
-void xglFontPrint(int x, int y, int draw_parameter, const char *text);
-
-void endSpriteSet(void *sprite, int attributes);
-
-void endPrintExtFunc(int draw_parameter, int kind, void *object);
-
-void eCursolModeChange(ECursol *cursor, signed char mode);
-
 struct EMessageColor { unsigned char channel[4]; };
 
 union EMessageWrapSlot {
@@ -157,6 +96,54 @@ enum EMessageFontWidthMode {
     EMESSAGE_FONT_WIDTH_FIXED = 0,
     EMESSAGE_FONT_WIDTH_PROPORTIONAL = 3
 };
+
+int eMessageMain(EMessageParam *message);
+char *eMessageNextWaitKeySearch(char *text);
+void eMessageCat(char *src);
+
+char *eMessageNextGyou(const char *text);
+
+int xglFontGetStringWidth(const char *text);
+void xglFontPrint(int x, int y, int draw_parameter, const char *text);
+void endSpriteSet(void *sprite, int attributes);
+void endPrintExtFunc(int draw_parameter, int kind, void *object);
+void eCursolModeChange(ECursol *cursor, signed char mode);
+int xglFontGetSPcodeSize(int code, const unsigned char *text);
+
+/* Number of message sprites currently allocated by the print routines. */
+static int msg_spr_count = 0;
+
+/* Font command defaults copied by eMessageDrawType01. */
+static unsigned char otb[28] = {
+    11,
+    12, 128, 128, 128,      /* RGB channels, scaled by message color. */
+    13, 2,
+    14, 2, 2, 0, 0, 0,
+    15, 68, 0, 127,        /* The last parameter is scaled by message alpha. */
+    24, 0,
+    25, 3,                /* Proportional font width mode. */
+    21, 2, 1, 12,
+    0, 0, 0
+};
+
+/* Current write position of the message text being built. */
+static char *MessageCpyEnd;
+
+/* Font command/text output buffer, ending where msg_spr begins. */
+static unsigned char moji[4096];
+
+static EMessageSprite msg_spr[16];
+
+static inline int eMessageScaleChannel(unsigned char component,
+                                      unsigned char strength)
+{
+    return (int)((float)component * ((float)strength * 0.0078125f));
+}
+
+static inline int eMessageIsFontCommand(unsigned int code)
+{
+    return code >= 1 && code <= 25;
+}
 
 void eMessageSpriteReset(void)
 {
@@ -178,8 +165,6 @@ int eMessageHalfSpaseCheck(unsigned char *text)
     }
     return half_spaces;
 }
-
-int xglFontGetSPcodeSize(int code, const unsigned char *text);
 
 char *eMessageNextGyou(const char *text)
 {
@@ -277,7 +262,6 @@ char *eMessageNextWaitKeySearch(char *text)
 }
 
 /* Partial sprite record: byte 18 is not interpreted by this TU. */
-
 void eMessageDrawType01(EMessageParam *message)
 {
     struct EMessageColor color;
@@ -786,4 +770,3 @@ void eMessageCat(char *src)
         MessageCpyEnd = dst;
     }
 }
-

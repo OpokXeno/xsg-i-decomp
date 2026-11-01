@@ -1,6 +1,8 @@
 #include "common.h"
 #include "xgl_pad.h"
 
+static unsigned char act_align_0[6] = { 0, 1, 255, 255, 255, 255 };
+
 static unsigned char PadDmaBuffer[0x200];
 
 void xglPadInitial(void) {
@@ -411,5 +413,3 @@ void xglPadRead(void)
         }
     }
 }
-
-static unsigned char act_align_0[6] = { 0, 1, 255, 255, 255, 255 };

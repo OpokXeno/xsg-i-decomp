@@ -8,6 +8,21 @@
 #include "shared.h"
 #include "main/jni.h"
 
+#define SCENE_THREAD_CALL_PENDING 0x8u
+#define OBSERVER_TASK_VM_CLAIMED 1u
+
+/*
+ * The actor's own script object, 0x4c0 bytes into the engine's 0xa70-strided
+ * actor record (src/main/near_dir.h, `Actor`): SCRIPT_execTalkto reads it to
+ * check the actor is a xeno/Chr instance before it queues the talk task (lw
+ * 0x4c0 at 0x00261540) and DB_evtMonitor reads it to find the actor's VM
+ * thread (lw 0x4c0 at 0x0026443c).  The recovered head of `Actor` ends at
+ * +0x70 and nothing between there and +0x4c0 is recovered, so this offset
+ * cannot become a member without inventing that span (docs/naming.md) and
+ * takes docs/style.md rule 2's named-offset fallback.
+ */
+#define ACTOR_SCRIPT_OBJECT_OFFSET 0x4c0
+
 /*
  * MINIMAL PARTIAL VIEW (explicit limitation, per review 16064):
  * GameModeCfEvent reads only three evidenced offsets, so only those are
@@ -29,14 +44,12 @@ typedef struct {
     u32 flags;
 } GameLoopFlagsPrefix;
 
-
 /*
  * This common address view is used only for the proved pointer-sized access at
  * byte offset +8 and for addressed scalar accesses.  It is not a complete
  * GameLoopState layout or a claim about elements at offsets +0/+4.
  */
 typedef void *GameLoopStateAddressView[];
-
 
 /* An actor record of the engine's actor table; the records are 0xa70 bytes
  * apart.  +0x86 is the in-use id that ACT_loadMotion and ACT_loadResource
@@ -53,7 +66,6 @@ typedef struct ScriptActorRecord {
     SceneObject script_object;          /* +0x4c0: the actor's own script object */
     unsigned char unmodeled_4c4[0xa70 - 0x4c4];
 } ScriptActorRecord;
-
 
 /* Game-loop members used by this unit: task scheduler at +8, mode at +c,
  * and flags at +10. Remaining storage belongs to the game-loop owner. */
@@ -84,7 +96,6 @@ typedef struct ScriptGameLoopState {
     unsigned short saved_kind;   /* +0x29f60: mode restored when a debug task returns to the menu */
 } ScriptGameLoopState;
 
-
 /* The held/pressed button halfwords of the first PadData record. */
 typedef struct ScriptPadButtons {
     unsigned char unmodeled_00[0x28];
@@ -92,7 +103,6 @@ typedef struct ScriptPadButtons {
     unsigned short pressed;
     unsigned short repeat;
 } ScriptPadButtons;
-
 
 /* Render state prefix: +0x58 is the flag PauseSkipCheck raises while the
  * pause screen copies the frame. */
@@ -103,13 +113,11 @@ typedef struct ScriptRenderState {
     unsigned char scene_disabled;
 } ScriptRenderState;
 
-
 /* Native actor peer used for the talk method's JNI argument. */
 typedef struct Actor {
     unsigned char unmodeled_00[0x4c0];
     void *peer;
 } Actor;
-
 
 /* Window prefix shared by the close-state store and TWIN_dispose. */
 typedef struct TComponent {
@@ -119,7 +127,6 @@ typedef struct TComponent {
     unsigned short state;
 } TComponent;
 
-
 /* PadData contains two 0x68-byte records. Talk cancellation tests the
  * packed input word at +28 in the first record. */
 typedef struct ScriptPadRecord {
@@ -128,7 +135,6 @@ typedef struct ScriptPadRecord {
     unsigned char unmodeled_30[0x68 - 0x30];
 } ScriptPadRecord;
 
-
 /* JNI argument slots are references or integers according to the method
  * signature, matching the VM's four-byte reference/integer value slots. */
 typedef union ScriptMethodArgument {
@@ -136,9 +142,7 @@ typedef union ScriptMethodArgument {
     void *reference;
 } ScriptMethodArgument;
 
-
 typedef struct ScriptObserverTask ScriptObserverTask;
-
 
 /*
  * The VM thread, completed from the two evidenced words this unit reads.
@@ -181,6 +185,7 @@ typedef struct ScriptCallFrame {
     SceneMethod *method;
     unsigned char unmodeled_08[0x18 - 8];
 } ScriptCallFrame;
+
 struct SceneThread {
     unsigned char unmodeled_00[16];      /* +0x00 */
     SceneObject object;                  /* +0x10 */
@@ -193,10 +198,6 @@ struct SceneThread {
     unsigned char unmodeled_30[0x3e - 0x30];
     short frame_depth;                  /* +0x3e: signed call-stack depth */
 };
-
-
-#define SCENE_THREAD_CALL_PENDING 0x8u
-
 
 /*
  * The observer task of the script system, behind the scheduler's 0x80-byte
@@ -274,8 +275,6 @@ struct ScriptObserverTask {
     SceneMethod *method;             /* +0x3c */
 };
 
-
-
 /* Task node of sceneObserver and sceneObserver2, which wait for a script
  * thread to finish and then fade the scene out and back in. */
 typedef struct ScriptSceneTask {
@@ -287,7 +286,6 @@ typedef struct ScriptSceneTask {
     int fade_started;                /* +0x20: set once the fade-out has begun */
     int elapsed_frames;              /* +0x24: frames since the fade-out began */
 } ScriptSceneTask;
-
 
 /* Window records the debug menus create (TMENU_create / TSLIDER_create). */
 typedef struct ScriptWindow {
@@ -308,7 +306,6 @@ typedef struct ScriptWindow {
     int max_value;                /* +0x60 */
 } ScriptWindow;
 
-
 /* The file browser state xglCdFileSelect drives; 0x268 bytes in its owner
  * (src/main/set_path.c). */
 typedef struct ScriptFileSelect {
@@ -319,7 +316,6 @@ typedef struct ScriptFileSelect {
     char file_path[1];            /* +0x11c */
     unsigned char unmodeled_11d[0x268 - 0x11d];
 } ScriptFileSelect;
-
 
 /* Task node of the debug menu tasks (SCRIPT_debugMenu and the DB_ tasks). */
 typedef struct ScriptMenuTask {
@@ -333,33 +329,12 @@ typedef struct ScriptMenuTask {
     int loaded_map;                  /* +0x28 */
 } ScriptMenuTask;
 
-
-static void DB_light(ScriptMenuTask *task);
-static void DB_memory(ScriptMenuTask *task);
-void XTK_setResourceID(int id);
-
 /* Wind debug parameter block, shared with the engine's wind module; only its
  * address is taken in this unit. */
 typedef struct ScriptWindParams ScriptWindParams;
 
-
-#define OBSERVER_TASK_VM_CLAIMED 1u
-
-
-/*
- * The actor's own script object, 0x4c0 bytes into the engine's 0xa70-strided
- * actor record (src/main/near_dir.h, `Actor`): SCRIPT_execTalkto reads it to
- * check the actor is a xeno/Chr instance before it queues the talk task (lw
- * 0x4c0 at 0x00261540) and DB_evtMonitor reads it to find the actor's VM
- * thread (lw 0x4c0 at 0x0026443c).  The recovered head of `Actor` ends at
- * +0x70 and nothing between there and +0x4c0 is recovered, so this offset
- * cannot become a member without inventing that span (docs/naming.md) and
- * takes docs/style.md rule 2's named-offset fallback.
- */
-#define ACTOR_SCRIPT_OBJECT_OFFSET 0x4c0
-
-
-
-
+static void DB_light(ScriptMenuTask *task);
+static void DB_memory(ScriptMenuTask *task);
+void XTK_setResourceID(int id);
 
 #endif /* SRC_MAIN_SCRIPT_H */

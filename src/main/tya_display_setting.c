@@ -3,6 +3,11 @@
 #include "main/xgl_packet.h"
 #include "tya_display_setting.h"
 
+#define PLAY_RESET_SOUND_EFFECT()                                       \
+    do {                                                                \
+        xglSoundEffectNormalDirect(1);                                  \
+    } while (0)
+
 /*
  * sRender's destination-buffer selector: folded (with a fixed high bit)
  * into the register DrawImage primes at TestEnv0[4] before the two-part
@@ -14,11 +19,6 @@ typedef struct {
     u8 unmodeled_00[0x20];
     u16 buffer_select;
 } DrawImageRenderState;
-
-extern DrawImageRenderState sRender;
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 
 typedef union {
     u64 value;
@@ -67,6 +67,15 @@ typedef struct {
     GifAdCommand finish;
 } FlushEnvironmentPacket;
 
+extern DrawImageRenderState sRender;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+
+const char displaySettingImagePath[24] = "data\\yajima\\mnt_set.jpg";
+
+const char displayHalfwordFormat[20] = "%04x %04x\n%04x %04x";
+
 static TestEnvironmentPacket TestEnv_0_0036ABC0 = {
     .dma_tag = 0,
     .vif_nop = 0,
@@ -93,11 +102,6 @@ static FlushEnvironmentPacket FlushEnv_2_0036AC40 = {
     .gif_tag = { 0x00008001, 0x10000000, 0x0000000E, 0 },
     .finish = { { .value = 0 }, 0x3F, 0 },
 };
-
-#define PLAY_RESET_SOUND_EFFECT()                                       \
-    do {                                                                \
-        xglSoundEffectNormalDirect(1);                                  \
-    } while (0)
 
 static void DrawImage(u8 *framebuffer)
 {
@@ -237,7 +241,3 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
     }
     xglSleep();
 }
-
-const char displaySettingImagePath[24] = "data\\yajima\\mnt_set.jpg";
-
-const char displayHalfwordFormat[20] = "%04x %04x\n%04x %04x";

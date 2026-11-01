@@ -1,6 +1,7 @@
 #include "common.h"
-
 #include "shared.h"
+
+#define E_NUMBER_STORE_STRING(destination, string) (*(destination) = (string))
 
 /*
  * Partial view of the object eNumberSet initialises. eNumberMain (still
@@ -12,7 +13,6 @@
  * nibble of mode is 3 and reads flag[0] to pick a display format; the other
  * unmodeled bytes are untouched by eNumberSet.
  */
-
 typedef struct ENumber {
     u8 unmodeled_000[8];    /* +0x00..0x07 */
     signed char color[4];   /* +0x08..0x0b */
@@ -24,7 +24,6 @@ typedef struct ENumber {
 /* The first 16 bytes are the fields initialized by eSpriteSet. The following
  * coordinates, work word, and color quad form the descriptor submitted by
  * eSpriteMain. */
-
 typedef struct ESpriteMainData {
     signed char state;
     u8 unmodeled_001[3];
@@ -40,10 +39,6 @@ typedef struct ESpriteMainData {
     signed char renderColor[4];
 } ESpriteMainData;
 
-extern void endSpriteSet(void *sprite, int mode);
-
-extern void endPrintExtFunc(int work, int mode, void *descriptor);
-
 /*
  * Partial view of the object eSpriteSet initialises. eSpriteMain copies x,
  * y and work verbatim into its own render fields, and copies mode together
@@ -52,7 +47,6 @@ extern void endPrintExtFunc(int work, int mode, void *descriptor);
  * scalar mode plus three unrelated bytes; eTagFontMain evidences the same
  * grouping at the same offsets.
  */
-
 typedef struct ESprite {
     signed char state;      /* +0x00 */
     u8 unmodeled_001[3];    /* +0x01..0x03 */
@@ -68,7 +62,6 @@ typedef struct ESprite {
  * Partial view of the object eRibbonModeChange writes, limited to the mode
  * field it evidences.
  */
-
 typedef struct ERibbonEntry {
     u8 unmodeled_000[0xc]; /* +0x00..0x0b */
     signed char mode;      /* +0x0c */
@@ -128,7 +121,6 @@ typedef struct ELineSetData {
 
 /* The source color quad is copied into the descriptor with its two middle
  * channels exchanged. Opcode 7 reads the descriptor's trailing text pointer. */
-
 typedef struct ETagFontMainData {
     u8 unmodeled_000[4];
     short x;
@@ -149,7 +141,6 @@ typedef struct ETagFontMainData {
  * the same 4-byte color quad at +0xc..+0xf into its own render buffer that
  * eSpriteMain copies from its object (same offsets, same grouping).
  */
-
 typedef struct ETagFont {
     signed char state;      /* +0x00 */
     signed char subState;   /* +0x01 */
@@ -237,7 +228,8 @@ typedef struct ENumberMainData {
     ENumberSpriteDescriptor separators[2];
 } ENumberMainData;
 
-#define E_NUMBER_STORE_STRING(destination, string) (*(destination) = (string))
+extern void endSpriteSet(void *sprite, int mode);
+extern void endPrintExtFunc(int work, int mode, void *descriptor);
 
 void eNumberMain(ENumberMainData *number)
 {
@@ -771,6 +763,7 @@ void eTagFontSet(ETagFont *tag, const char *text)
     tag->text = text;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char TopMenuCommandListText[88] = "Items\nEther\nTech Attack\nSkills\nCharacters\nA.G.W.S.\nBattle Formation\nU.M.N.\nGame Options";
 
 const char TopMenuSaveLoadDescriptionText[16] = "Save/Load data.";

@@ -1,21 +1,790 @@
 #include "common.h"
-
 #include "shared.h"
 #include "main/find_native_method.h"
 #include "main/init_vm.h"
-
 #include "main/party.h"
-
-/* Runtime native lookup pairs: method signature followed by its entry point. */
 
 #define RUNTIME_UMN_BOX_OFFSET 0x1025C
 
 #define RUNTIME_UMN_BOX_SLOTS 128
 
+/* Runtime native lookup pairs: method signature followed by its entry point. */
 typedef struct RuntimeNativeBinding {
     const char *signature;
     void (*entry)();
 } RuntimeNativeBinding;
+
+/*
+ * The script VM's per-thread context, recovered as `JThread` in
+ * src/main/chr.h (main's chr TU). Every Java native receives
+ * (thread, arguments, result) as the sibling natives of this TU show
+ * (a1 read as the argument block, a2 written as the result); these
+ * wrappers only need the tag.
+ */
+typedef struct JThread JThread;
+
+/* The call block of a native taking three plain ints (java signature "(III)"). */
+typedef struct {
+    int first;
+    int second;
+    int third;
+} IntTripleCall;
+
+/*
+ * An 8-byte-aligned view of Vector4, so a whole-vector assignment compiles
+ * to the aligned ld/sd pair the original uses instead of an unaligned
+ * ldl/ldr sequence (config/compiler-patterns.json CP-0237, same technique
+ * as src/main/pp_init.c's PpVector4).
+ */
+typedef union RuntimeVector4 {
+    Vector4 vector;
+    unsigned long long words[2];
+} RuntimeVector4;
+
+/*
+ * A partial, TU-local view of the engine's actor record (the same object
+ * fully recovered as `Actor` in src/main/chr.h, src/main/near_dir.h and
+ * src/main/set_motion.h for main's chr/near_dir/set_motion TUs) for the two
+ * members scriptReset_evsExit touches: the position vector at +0x10 and the
+ * status flags word at +0x4D0, both documented for the same object in
+ * chr.h. Named separately from those TUs' `Actor` tag because it collides
+ * with the canonical spelling elsewhere (config/header-canon.json).
+ */
+typedef struct RuntimeActor {
+    unsigned char unmodeled_00[0x10];
+    RuntimeVector4 position;              /* +0x10, ld/sd at
+                                              0x002f76bc..0x002f76d8
+                                              (scriptReset_evsExit) */
+    unsigned char unmodeled_20[0x86 - 0x20];
+    short state_flags;
+    unsigned char unmodeled_88[0x4D0 - 0x88];
+    unsigned short status_flags;          /* +0x4D0, lhu/sh at
+                                              0x002f76c0..0x002f76e0
+                                              (scriptReset_evsExit) */
+    unsigned char unmodeled_4d2[0x8D0 - 0x4D2];
+    int resource_guard;
+} RuntimeActor;
+
+/*
+ * GameLoopState offsets this TU touches. GameLoopState is a TU-local
+ * divergent view (config/header-canon.json "GameLoopState"): every unit
+ * models only the offsets its own bytes evidence, and no shared header
+ * declares it.
+ */
+typedef struct {
+    unsigned char unmodeled_00[4];
+    RuntimeActor *player;                  /* +0x04, lw at 0x002f76b0
+                                              (scriptReset_evsExit) */
+    XglTaskScheduler *task_scheduler;     /* +0x08, lw/beq at 0x002f7350
+                                              (setLocation) */
+    unsigned short scene_kind;
+    unsigned short deferred_jump_pending; /* +0x0E, sh $0 at 0x002f767c */
+    unsigned int flags;                   /* +0x10, lw/nor/and/sw at
+                                              0x002f74a4..0x002f74bc (disable),
+                                              lw/or/sw at 0x002f74c4..0x002f74d8
+                                              (enable), lw/sw at
+                                              0x002f74e4..0x002f74ec
+                                              (getGameState) */
+    unsigned char unmodeled_14[4];
+    int current_event_id;
+    unsigned char unmodeled_1c[4];
+    unsigned int shoot_control;           /* +0x20, lw/ori/sw and lw/and/sw at
+                                              0x002f78a0..0x002f78c8
+                                              (setShootFlag, bit 0),
+                                              0x002f78dc..0x002f7904
+                                              (setShootHeightCheck, bit 1),
+                                              0x002f791c..0x002f7944
+                                              (setShootIDCheck, bit 2),
+                                              0x002f795c..0x002f7984
+                                              (setShootUwaCheck, bit 3) */
+    unsigned char unmodeled_24[0x52 - 0x24];
+    short entrance;                       /* +0x52, lh at 0x002f7424 */
+    int scene_reset_counter;
+    unsigned char unmodeled_58[0xA0 - 0x58];
+    float fade_red;
+    float fade_green;
+    float fade_blue;
+    float fade_frames;
+    unsigned char unmodeled_b0[0xC1 - 0xB0];
+    unsigned char player_flags;           /* +0xC1, lbu/ori/sb at
+                                              0x002f7448..0x002f7460
+                                              (setPlayerControl, bit 0x20) */
+    unsigned char unmodeled_c2[0x29F44 - 0xC2];
+    float shoot_range;                    /* +0x29F44, swc1 at 0x002f799c */
+    unsigned char unmodeled_29f48[0x2A018 - 0x29F48];
+    int active_event_id;                  /* +0x2A018, lw at 0x002f8730 */
+    unsigned char unmodeled_2a01c[0x2A020 - 0x2A01C];
+    RuntimeVector4 saved_position;        /* +0x2A020, ld/sd at
+                                              0x002f76bc..0x002f76d8
+                                              (scriptReset_evsExit) */
+} GameLoopStateRuntimeView;
+
+/*
+ * A partial view of the script VM thread (JThread, fully recovered in
+ * src/main/chr.h for main/tu248) for the three words evsExit touches: the
+ * state word at +0x24 and the resume/frame counters at +0x3C/+0x3E chr.h
+ * documents for the same object. Modeled separately here because chr.h is
+ * TU-local to tu248.
+ */
+typedef struct {
+    unsigned char unmodeled_00[0x24];
+    unsigned int flags;              /* +0x24 */
+    unsigned char unmodeled_28[0x3C - 0x24 - 4];
+    unsigned short resume_frames;    /* +0x3C */
+    unsigned short frame_depth;      /* +0x3E */
+} RuntimeThreadState;
+
+/* setLocation below touches the same three RuntimeThreadState words as
+   evsExit: resume_frames takes frame_depth and flags gains bit 0x8
+   (native-call block) and 0x1 (generic wait) (0x002f7388..0x002f739c). */
+/* The call block of a native taking two plain ints (java signature "(II)"). */
+typedef struct {
+    int first;
+    int second;
+} IntPairCall;
+
+/* The call block of Java_xeno_util_Runtime_setFlags__III, the xglFlagsSet
+   operands the native passes through unchanged and in order. */
+typedef struct {
+    int bit_offset;
+    int bit_count;
+    int value;
+} FlagsSetCall;
+
+/* The call block of a native taking three plain floats (java signature "(FFF)"). */
+typedef struct {
+    float walk_threshold;
+    float run_threshold;
+    float vector_rate;
+} PlayerMoveParamCall;
+
+/*
+ * A java.lang.String argument, as CaptureStart/setEventTimer below read it:
+ * offset +0x00 (the class word every object reference begins with, per
+ * shared.h) is untouched by this TU, and +0x04 holds the interned string
+ * record the String was loaded from (lw v1,4(v0) at 0x002f7514/0x002f78ac).
+ */
+typedef struct {
+    void *unmodeled_00;
+    struct InternedString *value;
+} StringRef;
+
+/*
+ * The interned constant-string record `StringRef.value` points to, modeled
+ * here only for the `bytes` pointer both natives below read at +0x08 (lw
+ * v0,8(v0) at 0x002f7518/0x002f78b0). Same object as `ConstString` of
+ * src/main/string_utf_get_hash.h (main/tu224): next-in-bucket link and
+ * packed hash/length occupy the same leading 8 bytes there.
+ */
+struct InternedString {
+    unsigned char unmodeled_00[4];
+    int length;
+    char *bytes;
+};
+
+/* The call block of a native taking (java.lang.String, int). */
+typedef struct {
+    StringRef *string;
+    int value;
+} StringArgCall;
+
+/* The deferred script jump scriptReset_jump below executes once scheduled. */
+typedef struct {
+    int destination;
+    int argument;
+} DeferredJumpCall;
+
+/* The call block of a native taking four plain ints (java signature "(IIII)"). */
+typedef struct {
+    int first;
+    int second;
+    int third;
+    int fourth;
+} IntQuadCall;
+
+/*
+ * A partial, TU-local view of the Java int-array object (the same object
+ * fully recovered as `VMArray` in src/main/init_vm.c) for the `data` pointer
+ * setDefocus below reads at +0x08 (lw at 0x002f7800).
+ */
+typedef struct {
+    unsigned char unmodeled_00[8];
+    int *data;                            /* +0x08 */
+} RuntimeIntArray;
+
+/* The call block of setDefocus (java signature "(II[I)"): two plain ints and
+   an optional int-array reference, null when the caller passes none. */
+typedef struct {
+    int mode;
+    int strength;
+    RuntimeIntArray *table;
+} DefocusCall;
+
+/*
+ * The leader's battle id: read directly out of SaveData (lui/lhu at
+ * 0x002f7bd0/0x002f7bd4, no call) rather than through PartyDataGet(), which
+ * getPartyDataOfs below shows returns SaveData + 0x10078, so this offset is
+ * that region's own +0x2C.
+ */
+typedef struct RuntimeSavedPartyPrefix {
+    unsigned char unmodeled_00[0x100a4];
+    unsigned short leader_battle_id;
+} RuntimeSavedPartyPrefix;
+
+typedef struct {
+    int mode;
+    float power;
+    float time;
+    float z;
+    float w;
+} RuntimeWindCall;
+
+/* Native argument and result words share the VM operand-slot storage. */
+typedef struct RuntimeIdLightSet {
+    unsigned char unmodeled_00[0xF0];
+} RuntimeIdLightSet;
+
+extern GameLoopStateRuntimeView GameLoopState;
+extern void (*jthreadResetFunc)(void);
+
+/* A defocus parameter table of seventeen-entry rows, one word ahead of the
+   symbol (index 0 is untouched by this TU). */
+extern int GameDefocusParam[];
+
+extern void *classByte;
+extern RuntimeIdLightSet GameIdLight[];
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+extern void *tiSymbol[12];
+
+extern const char *tiAlgName[6];
+extern const char JTHREADAlgDefaultName[24];
+extern const char JTHREADAlgChrName[16];
+extern const char JTHREADAlgSceneName[24];
+extern const char JTHREADAlgSystemName[24];
+extern const char JTHREADAlgUnitName[24];
+extern const char JTHREADAlgStageName[24];
+
+extern void Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II();
+extern void Java_xeno_vm_System_sleep__I();
+extern void Java_xeno_vm_System_println__Ljava_lang_String_();
+extern void Java_xeno_vm_System_waitFor__Ljava_lang_Object_();
+extern void Java_xeno_vm_System_methodSignal__I();
+extern void Java_xeno_vm_Thread_create__();
+extern void Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_();
+extern void Java_xeno_vm_Thread_start__();
+extern void Java_xeno_vm_Thread_stop__();
+extern void Java_xeno_vm_Math_random__();
+extern void Java_xeno_vm_Math_atan2__FF();
+extern void Java_xeno_vm_Math_cos__F();
+extern void Java_xeno_vm_Math_sin__F();
+extern void Java_xeno_util_Spline_create__();
+extern void Java_xeno_util_Spline_setCtrlVertex__aFIII();
+extern void Java_xeno_util_Spline_getValue__I();
+extern void Java_xeno_util_Format_floatToIntBits__F();
+extern void Java_xeno_util_Format_intBitsToFloat__I();
+extern void Java_xeno_util_Format_toInt__Ljava_lang_String_();
+extern void Java_xeno_util_Format_toString__C();
+extern void Java_xeno_util_Format_toString__F();
+extern void Java_xeno_util_Format_toString__I();
+extern void Java_xeno_util_Format_toString__Z();
+extern void Java_xeno_util_Input_create__I();
+extern void Java_xeno_util_Input_getButton__();
+extern void Java_xeno_util_Input_getEdge__();
+extern void Java_xeno_util_Input_getRepeat__();
+extern void Java_xeno_util_Layout_set__Ljava_lang_Object_I();
+extern void Java_xeno_util_Layout_getManager__I();
+extern void Java_xeno_util_Runtime_execBattle__II();
+extern void Java_xeno_util_Runtime_getFlags__II();
+extern void Java_xeno_util_Runtime_setFlags__III();
+extern void Java_xeno_util_Runtime_setLocation__III();
+extern void Java_xeno_util_Runtime_getLocation__();
+extern void Java_xeno_util_Runtime_setRegister__II();
+extern void Java_xeno_util_Runtime_getRegister__I();
+extern void Java_xeno_util_Runtime_getEntrance__();
+extern void Java_xeno_util_Runtime_setPlayerControl__Z();
+extern void Java_xeno_util_Runtime_setPlayerMoveParam__FFF();
+extern void Java_xeno_util_Runtime_disable__I();
+extern void Java_xeno_util_Runtime_enable__I();
+extern void Java_xeno_util_Runtime_getGameState__();
+extern void Java_xeno_util_Runtime_CaptureEnd__();
+extern void Java_xeno_util_Runtime_CaptureStart__Ljava_lang_String_I();
+extern void Java_xeno_util_Runtime_jumpCF__II();
+extern void Java_xeno_util_Runtime_jumpEvent__I();
+extern void Java_xeno_util_Runtime_setDefocusQuick__IIII();
+extern void Java_xeno_util_Runtime_setDefocus__IIaI();
+extern void Java_xeno_util_Runtime_setDefocusParam__III();
+extern void Java_xeno_util_Runtime_setEventTimer__Ljava_lang_String_I();
+extern void Java_xeno_util_Runtime_setMap__II();
+extern void Java_xeno_util_Runtime_setShootFlag__Z();
+extern void Java_xeno_util_Runtime_setShootHeightCheck__Z();
+extern void Java_xeno_util_Runtime_setShootIDCheck__Z();
+extern void Java_xeno_util_Runtime_setShootUwaCheck__Z();
+extern void Java_xeno_util_Runtime_setShootRange__F();
+extern void Java_xeno_util_Runtime_addItem__II();
+extern void Java_xeno_util_Runtime_addItemWin__II();
+extern void Java_xeno_util_Runtime_removeItem__II();
+extern void Java_xeno_util_Runtime_checkItem__II();
+extern void Java_xeno_util_Runtime_getItemName__II();
+extern void Java_xeno_util_Runtime_addGold__I();
+extern void Java_xeno_util_Runtime_removeGold__I();
+extern void Java_xeno_util_Runtime_checkGold__();
+extern void Java_xeno_util_Runtime_progressEffect__I();
+extern void Java_xeno_util_Runtime_enterShop__I();
+extern void Java_xeno_util_Runtime_getLeader__();
+extern void Java_xeno_util_Runtime_getPartyData__I();
+extern void Java_xeno_util_Runtime_setPartyData__II();
+extern void Java_xeno_util_Runtime_setFriend__I();
+extern void Java_xeno_util_Runtime_resetFriend__I();
+extern void Java_xeno_util_Runtime_checkFriend__I();
+extern void Java_xeno_util_Runtime_setLockParty__I();
+extern void Java_xeno_util_Runtime_resetLockParty__I();
+extern void Java_xeno_util_Runtime_checkLockParty__I();
+extern void Java_xeno_util_Runtime_setOutFriend__I();
+extern void Java_xeno_util_Runtime_resetOutFriend__I();
+extern void Java_xeno_util_Runtime_checkOutFriend__I();
+extern void Java_xeno_util_Runtime_setTakeAgws__I();
+extern void Java_xeno_util_Runtime_resetTakeAgws__I();
+extern void Java_xeno_util_Runtime_checkTakeAgws__I();
+extern void Java_xeno_util_Runtime_battleChangeParty__I();
+extern void Java_xeno_util_Runtime_setIdLightCol__IIFFF();
+extern void Java_xeno_util_Runtime_setIdLightDir__IIFFF();
+extern void Java_xeno_util_Runtime_setIdLightVec__IIFFF();
+extern void Java_xeno_util_Runtime_setWindParam__IFFFF();
+extern void Java_xeno_util_Runtime_mpeg2__Ljava_lang_String_();
+extern void Java_xeno_util_Runtime_mpeg2AfterCrossFade__I();
+extern void Java_xeno_util_Runtime_mailFlag__I();
+extern void Java_xeno_util_Runtime_mailExec__I();
+extern void Java_xeno_util_Runtime_minigameExec__I();
+extern void Java_xeno_util_Runtime_setMenuLock__();
+extern void Java_xeno_util_Runtime_evsSetRetPoint__();
+extern void Java_xeno_util_Runtime_evsExit__();
+extern void Java_xeno_util_Runtime_etherTecSet__I();
+extern void Java_xeno_util_Runtime_charAllRecovery__();
+extern void Java_xeno_util_Runtime_AGWSAllRecovery__();
+extern void Java_xeno_util_Window_getSignal__();
+extern void Java_xeno_util_Window_signal__I();
+extern void Java_xeno_util_Window_clear__();
+extern void Java_xeno_util_Window_close__();
+extern void Java_xeno_util_Window_waitkey__I();
+extern void Java_xeno_util_Window_wait__I();
+extern void Java_xeno_util_Window_create__I();
+extern void Java_xeno_util_Window_setSize__II();
+extern void Java_xeno_util_Window_setLocation__II();
+extern void Java_xeno_util_Window_print__Ljava_lang_String_();
+extern void Java_xeno_util_Window_print__aLjava_lang_String_I();
+extern void Java_xeno_util_Window_setName__Ljava_lang_String_();
+extern void Java_xeno_util_Window_closeWaitKey__();
+extern void Java_xeno_util_Menu_addQuery__Ljava_lang_String_();
+extern void Java_xeno_util_Menu_addQuery__aLjava_lang_String_I();
+extern void Java_xeno_util_Menu_addItem__Ljava_lang_String_();
+extern void Java_xeno_util_Menu_create__();
+extern void Java_xeno_util_Menu_getSelected__();
+extern void Java_xeno_util_Menu_setLocation__II();
+extern void Java_xeno_util_Menu_setVisible__Z();
+extern void Java_xeno_util_Menu_setCursor__I();
+extern void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_();
+extern void Java_xeno_util_Toolkit_call__Ljava_lang_Object_Ljava_lang_String_();
+extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I();
+extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_String_();
+extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I();
+extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II();
+extern void Java_xeno_util_Toolkit_peerSetGroup__II();
+extern void Java_xeno_Sound_sequencePlay__I();
+extern void Java_xeno_Sound_sequencePlay__II();
+extern void Java_xeno_Sound_sequenceStop__I();
+extern void Java_xeno_Sound_sequenceStop__II();
+extern void Java_xeno_Sound_effectPlay__III();
+extern void Java_xeno_Sound_effectStop__I();
+extern void Java_xeno_Sound_streamPlay__IIII();
+extern void Java_xeno_Movie_init__I();
+extern void Java_xeno_Movie_start__I();
+extern void Java_xeno_Movie_stop__();
+extern void Java_xeno_Movie_update__();
+extern void Java_xeno_PlayControl_create__();
+extern void Java_xeno_PlayControl_getSignal__();
+extern void Java_xeno_PlayControl_signal__I();
+extern void Java_xeno_PlayControl_init__II();
+extern void Java_xeno_PlayControl_init__IIIIF();
+extern void Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_();
+extern void Java_xeno_PlayControl_loadTimeChart__Ljava_lang_Object_();
+extern void Java_xeno_PlayControl_start__();
+extern void Java_xeno_PlayControl_stop__();
+extern void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_();
+extern void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Ljava_lang_String_();
+extern void Java_xeno_PlayControl_getParams__();
+extern void Java_xeno_Effect_call__I();
+extern void Java_xeno_Effect_disp__Z();
+extern void Java_xeno_Effect_setScale__FFF();
+extern void Java_xeno_Effect_getScale__();
+extern void Java_xeno_Effect_getTranslate__();
+extern void Java_xeno_Effect_setTranslate__();
+extern void Java_xeno_Effect_getRotate__();
+extern void Java_xeno_Effect_setRotate__();
+extern void Java_xeno_Effect_setCaster__Lxeno_Chr_();
+extern void Java_xeno_Effect_setTarget__Lxeno_Chr_();
+extern void Java_xeno_Effect_setCaster__Lxeno_Unit_();
+extern void Java_xeno_Effect_setTarget__Lxeno_Unit_();
+extern void Java_xeno_Effect_setTransOffset__FFF();
+extern void Java_xeno_Effect_getForceLoop__();
+extern void Java_xeno_Effect_setForceLoop__Z();
+extern void Java_xeno_Effect_getClip__();
+extern void Java_xeno_Effect_setClip__Z();
+extern void Java_xeno_Effect_clearEffect__();
+extern void Java_xeno_Effect_setMotion__Z();
+extern void Java_xeno_Effect_noAttach__Z();
+extern void Java_xeno_Camera_getRotateX__();
+extern void Java_xeno_Camera_getRotateY__();
+extern void Java_xeno_Camera_getRotateZ__();
+extern void Java_xeno_Camera_getTranslateX__();
+extern void Java_xeno_Camera_getTranslateY__();
+extern void Java_xeno_Camera_getTranslateZ__();
+extern void Java_xeno_Camera_fovSPL__aFI();
+extern void Java_xeno_Camera_change__();
+extern void Java_xeno_Camera_rotateSPL__aFI();
+extern void Java_xeno_Camera_rotateSPL__aFIII();
+extern void Java_xeno_Camera_setActive__Z();
+extern void Java_xeno_Camera_create__I();
+extern void Java_xeno_Camera_transCNS__Ljava_lang_Object_FFF();
+extern void Java_xeno_Camera_transSPL__aFI();
+extern void Java_xeno_Camera_transSPL__aFIII();
+extern void Java_xeno_Camera_viewCNS__Ljava_lang_Object_FFF();
+extern void Java_xeno_Camera_viewSPL__aFI();
+extern void Java_xeno_Camera_viewSPL__aFIII();
+extern void Java_xeno_Camera_rollSPL__aFI();
+extern void Java_xeno_Camera_setRotate__FFF();
+extern void Java_xeno_Camera_setRoll__F();
+extern void Java_xeno_Camera_setTranslate__FFF();
+extern void Java_xeno_Camera_setFov__F();
+extern void Java_xeno_Camera_getFov__();
+extern void Java_xeno_Camera_setView__FFF();
+extern void Java_xeno_Camera_start__ILjava_lang_Object_();
+extern void Java_xeno_Camera_setCFAngle__IFFFF();
+extern void Java_xeno_Camera_setCFAnglePers__IFFFFF();
+extern void Java_xeno_Camera_setCFHokan__IFF();
+extern void Java_xeno_Camera_setCFLock__IIFFF();
+extern void Java_xeno_Camera_setCFOffset__IFFFIFIF();
+extern void Java_xeno_Camera_setMode__I();
+extern void Java_xeno_Camera_getMode__();
+extern void Java_xeno_Camera_setCFPedestal__IFFFFFFFF();
+extern void Java_xeno_Camera_setCFPedestalHokan__II();
+extern void Java_xeno_Camera_changeID__III();
+extern void Java_xeno_Camera_setFog__IFFFFIIII();
+extern void Java_xeno_Camera_resetFog__I();
+extern void Java_xeno_Camera_setClipRange__FF();
+extern void Java_xeno_Light_setColor__FFF();
+extern void Java_xeno_Light_setDirection__FFF();
+extern void Java_xeno_Light_setDirection2__FFF();
+extern void Java_xeno_Light_setGlobalPointLightCol__IFFF();
+extern void Java_xeno_Light_setGlobalPointLightPos__IFFF();
+extern void Java_xeno_Light_setGlobalPointLightReset__();
+extern void Java_xeno_Chr_getPlayer__();
+extern void Java_xeno_Chr_setPlayer__();
+extern void Java_xeno_Chr_move__IFFZ();
+extern void Java_xeno_Chr_move__FFFZ();
+extern void Java_xeno_Chr_move__ILjava_lang_Object_Z();
+extern void Java_xeno_Chr_move__Ljava_lang_Object_FZ();
+extern void Java_xeno_Chr_move__Lxeno_util_Spline_IZ();
+extern void Java_xeno_Chr_rotate__Lxeno_util_Spline_IZ();
+extern void Java_xeno_Chr_rotX__FFZ();
+extern void Java_xeno_Chr_rotX__IFZ();
+extern void Java_xeno_Chr_rotX__ILjava_lang_Object_Z();
+extern void Java_xeno_Chr_rotX__Ljava_lang_Object_FZ();
+extern void Java_xeno_Chr_rotY__FFZ();
+extern void Java_xeno_Chr_rotY__IFZ();
+extern void Java_xeno_Chr_rotY__ILjava_lang_Object_Z();
+extern void Java_xeno_Chr_rotY__Ljava_lang_Object_FZ();
+extern void Java_xeno_Chr_rotZ__FFZ();
+extern void Java_xeno_Chr_rotZ__IFZ();
+extern void Java_xeno_Chr_rotZ__ILjava_lang_Object_Z();
+extern void Java_xeno_Chr_rotZ__Ljava_lang_Object_FZ();
+extern void Java_xeno_Chr_start__ILjava_lang_Object_();
+extern void Java_xeno_Chr_stop__();
+extern void Java_xeno_Chr_mtn__IIIIIFZ();
+extern void Java_xeno_Chr_mtn__IIFZ();
+extern void Java_xeno_Chr_signal__I();
+extern void Java_xeno_Chr_getSignal__();
+extern void Java_xeno_Chr_setRotate__();
+extern void Java_xeno_Chr_setTranslate__();
+extern void Java_xeno_Chr_getRotate__();
+extern void Java_xeno_Chr_getTranslate__();
+extern void Java_xeno_Chr_setVisible__Z();
+extern void Java_xeno_Chr_setVisible__IZ();
+extern void Java_xeno_Chr_setCollision__Z();
+extern void Java_xeno_Chr_setHand__I();
+extern void Java_xeno_Chr_setArgs__III();
+extern void Java_xeno_Chr_getArgs__II();
+extern void Java_xeno_Chr_setArgs__ILjava_lang_Object_I();
+extern void Java_xeno_Chr_getSerial__();
+extern void Java_xeno_Chr_getState__();
+extern void Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_();
+extern void Java_xeno_Chr_setScale__FFF();
+extern void Java_xeno_Chr_getScale__();
+extern void Java_xeno_Chr_scale__Lxeno_util_Spline_IZ();
+extern void Java_xeno_Chr_sclX__FFZ();
+extern void Java_xeno_Chr_sclX__IFZ();
+extern void Java_xeno_Chr_sclY__FFZ();
+extern void Java_xeno_Chr_sclY__IFZ();
+extern void Java_xeno_Chr_sclZ__FFZ();
+extern void Java_xeno_Chr_sclZ__IFZ();
+extern void Java_xeno_Chr_rotCNS__ILjava_lang_Object_();
+extern void Java_xeno_Chr_rotCNS__IFFF();
+extern void Java_xeno_Chr_setRotCNSParam__IFFFFF();
+extern void Java_xeno_Chr_relax__II();
+extern void Java_xeno_Chr_getFlags__();
+extern void Java_xeno_Chr_setFlags__I();
+extern void Java_xeno_Chr_setEdgeFall__I();
+extern void Java_xeno_Chr_setShadow__II();
+extern void Java_xeno_Chr_setShadow__aB();
+extern void Java_xeno_Chr_setID__I();
+extern void Java_xeno_Chr_setElevatorMode__I();
+extern void Java_xeno_Chr_setParent__Lxeno_Chr_III();
+extern void Java_xeno_Chr_setMotionFlags__IZ();
+extern void Java_xeno_Chr_setFilter__I();
+extern void Java_xeno_Chr_setFilterParam__aF();
+extern void Java_xeno_Chr_setClip__I();
+extern void Java_xeno_Chr_setSymmetryY__I();
+extern void Java_xeno_Chr_setSortOffset__F();
+extern void Java_xeno_Chr_setPointLightCol__IFFF();
+extern void Java_xeno_Chr_setPointLightPos__IFFF();
+extern void Java_xeno_Chr_setPointLightReset__();
+extern void Java_xeno_Chr_talkto__Ljava_lang_String_();
+extern void Java_xeno_Chr_touchto__Ljava_lang_String_();
+extern void Java_xeno_Chr_childGetPeer__II();
+extern void Java_xeno_Chr_setPeer__Ljava_lang_Object_();
+extern void Java_xeno_Chr_dispRadar__Z();
+extern void Java_xeno_Chr_look_camera__();
+extern void Java_xeno_Chr_look_char__Ljava_lang_Object_();
+extern void Java_xeno_Chr_look_unit__Ljava_lang_Object_();
+extern void Java_xeno_Chr_look_default__();
+extern void Java_xeno_Chr_look_point__FFF();
+extern void Java_xeno_Chr_look_eye_set__FF();
+extern void Java_xeno_Chr_look_eye_control__I();
+extern void Java_xeno_Chr_look_speed__F();
+extern void Java_xeno_Chr_look_eye_speed__F();
+extern void Java_xeno_Chr_renderCommand__I();
+extern void Java_xeno_Chr_shadow_clip_scale__F();
+extern void Java_xeno_Chr_shadow_map_id__I();
+extern void Java_xeno_Chr_shadow_map_reset__();
+extern void Java_xeno_Chr_hairStop__II();
+extern void Java_xeno_Chr_pixelAlpha__I();
+extern void Java_xeno_Chr_pixelAlphaParts__II();
+extern void Java_xeno_Chr_pixelAlphaPartsReset__();
+extern void Java_xeno_Chr_setMotNoUpdate__I();
+extern void Java_xeno_Chr_setWeaponR__Lxeno_Chr_();
+extern void Java_xeno_Chr_resetWeaponR__Lxeno_Chr_();
+extern void Java_xeno_Chr_resetHand__();
+extern void Java_xeno_Chr_resetEnv__();
+extern void Java_xeno_Chr_ignoreShape__I();
+extern void Java_xeno_Unit_rotYCNS__Ljava_lang_Object_IFFF();
+extern void Java_xeno_Unit_transCNS__Ljava_lang_Object_IFFF();
+extern void Java_xeno_Unit_getRotate__();
+extern void Java_xeno_Unit_getSignal__();
+extern void Java_xeno_Unit_getTranslate__();
+extern void Java_xeno_Unit_invalidate__();
+extern void Java_xeno_Unit_move__FFFZ();
+extern void Java_xeno_Unit_move__IFFZ();
+extern void Java_xeno_Unit_move__Lxeno_util_Spline_IZ();
+extern void Java_xeno_Unit_rotate__Lxeno_util_Spline_IZ();
+extern void Java_xeno_Unit_move__ILjava_lang_Object_Z();
+extern void Java_xeno_Unit_move__Ljava_lang_Object_FZ();
+extern void Java_xeno_Unit_mtn__IIFZ();
+extern void Java_xeno_Unit_mtn__IIIIIFZ();
+extern void Java_xeno_Unit_rotX__FFZ();
+extern void Java_xeno_Unit_rotX__IFZ();
+extern void Java_xeno_Unit_rotX__ILjava_lang_Object_Z();
+extern void Java_xeno_Unit_rotX__Ljava_lang_Object_FZ();
+extern void Java_xeno_Unit_rotY__FFZ();
+extern void Java_xeno_Unit_rotY__IFZ();
+extern void Java_xeno_Unit_rotY__ILjava_lang_Object_Z();
+extern void Java_xeno_Unit_rotY__Ljava_lang_Object_FZ();
+extern void Java_xeno_Unit_rotZ__FFZ();
+extern void Java_xeno_Unit_rotZ__IFZ();
+extern void Java_xeno_Unit_rotZ__ILjava_lang_Object_Z();
+extern void Java_xeno_Unit_rotZ__Ljava_lang_Object_FZ();
+extern void Java_xeno_Unit_scale__Lxeno_util_Spline_IZ();
+extern void Java_xeno_Unit_sclX__FFZ();
+extern void Java_xeno_Unit_sclX__IFZ();
+extern void Java_xeno_Unit_sclY__FFZ();
+extern void Java_xeno_Unit_sclY__IFZ();
+extern void Java_xeno_Unit_sclZ__FFZ();
+extern void Java_xeno_Unit_sclZ__IFZ();
+extern void Java_xeno_Unit_setCollision__Z();
+extern void Java_xeno_Unit_setRotate__();
+extern void Java_xeno_Unit_setTranslate__();
+extern void Java_xeno_Unit_setVisible__IZ();
+extern void Java_xeno_Unit_setVisible__Z();
+extern void Java_xeno_Unit_signal__I();
+extern void Java_xeno_Unit_start__ILjava_lang_Object_();
+extern void Java_xeno_Unit_stop__();
+extern void Java_xeno_Unit_validate__();
+extern void Java_xeno_Unit_setParent__Ljava_lang_Object_I();
+extern void Java_xeno_Unit_setArgs__III();
+extern void Java_xeno_Unit_getArgs__II();
+extern void Java_xeno_Unit_setArgs__ILjava_lang_Object_I();
+extern void Java_xeno_Unit_setArgs__IIIII();
+extern void Java_xeno_Unit_getScale__();
+extern void Java_xeno_Unit_setScale__FFF();
+extern void Java_xeno_Unit_getSerial__();
+extern void Java_xeno_Unit_mtnSetMask__I();
+extern void Java_xeno_Unit_mtnGetRoot__ILxeno_util_Vector4f_();
+extern void Java_xeno_Unit_getState__();
+extern void Java_xeno_Unit_getPivot__Lxeno_util_Vector4f_();
+extern void Java_xeno_Unit_setPivot__FFF();
+extern void Java_xeno_Unit_getAxis__Lxeno_util_Vector4f_();
+extern void Java_xeno_Unit_setAxis__FFFF();
+extern void Java_xeno_Unit_suspend__I();
+extern void Java_xeno_Unit_resume__I();
+extern void Java_xeno_Unit_initElevatorFunc__();
+extern void Java_xeno_Unit_map_shadow__I();
+extern void Java_xeno_Unit_renderCommand__I();
+extern void Java_xeno_Unit_setFilter__I();
+extern void Java_xeno_Unit_setFilterParam__aF();
+extern void Java_xeno_Unit_setShadow__II();
+extern void Java_xeno_Unit_shadow_clip_scale__F();
+extern void Java_xeno_Unit_shadow_map_id__I();
+extern void Java_xeno_Unit_shadow_map_reset__();
+extern void Java_xeno_Unit_setSortOffset__F();
+extern void Java_xeno_Unit_setClip__I();
+extern void Java_xeno_Unit_setMonitorPrio__I();
+extern void Java_xeno_Scene_start__ILjava_lang_Object_();
+extern void Java_xeno_Scene_stop__();
+extern void Java_xeno_Stage_start__ILjava_lang_Object_();
+extern void Java_xeno_Stage_stop__();
+extern void Java_xeno_Stage_play__Ljava_lang_String_();
+extern void Java_xeno_Stage_setPartsLast__I();
+extern void Java_xeno_Stage_setPartsLastReset__();
+extern void Java_xeno_Stage_setColor__FFF();
+extern void Java_xeno_Stage_setFade__IIFFF();
+extern void Java_xeno_Stage_setEventFade__IFFFIFFF();
+extern void Java_xeno_Stage_setFrameRender__II();
+extern void Java_xeno_Stage_setFadeCancel__I();
+extern void Java_xeno_Stage_setVisible__IZ();
+extern void Java_xeno_Stage_setCFBG__II_F();
+extern void Java_xeno_Stage_setEffectRender__I();
+extern void Java_xeno_Stage_renderCommand__I();
+extern void Java_xeno_Stage_setBgColor__FFF();
+extern void Java_xeno_Stage_setBgClip__I();
+extern void Java_xeno_Stage_clrBackBuffer__();
+extern void SCRIPT_sceneChangeTimeSet(int value);
+extern void CharactorAllRecovery(void);
+extern void AgwsAllRecovery(void);
+extern void tyaCaptureEnd(void);
+extern int xglFlagsGet(int group, int bit);
+extern int xglFlagsSet(int bit_offset, int bit_count, int value);
+extern void LoadMapOnly(int map_id);
+extern void MapChange2(int map_id);
+extern int MapGetNo(void);
+
+extern void GameCfPlayerMoveParamSet(float walk_threshold, float run_threshold,
+                                      float vector_rate);
+
+extern void tyaCaptureStart(const char *name, int count);
+extern void Java_xeno_util_Runtime_jump_sub(int destination, int argument);
+extern void SCRIPT_talkIgnoreSet(void);
+extern void GameDefocusQuickSet(int first, int second, int third, int fourth);
+extern void GameDefocusSet(int mode, int strength, int *table);
+extern void setEventTimerTaskEntry(const char *method_reference, int countdown);
+extern void MapChangeResource(int map_id, int resource_id);
+extern int dataBoxInc(int item, int count);
+extern int CreateEvtItemGetTask(int item, int count);
+extern int dataBoxDec(int item, int count);
+extern int dataBoxChk(int item, int count);
+extern int dataMoneyBoxInc(int amount);
+extern int dataMoneyBoxDec(int amount);
+extern int dataMoneyBoxChk(void);
+extern void sefProgressEffect(int frame_count);
+extern void GameStateRestoreCameraLight(void);
+extern void GameStateSaveCameraLight(void);
+extern void MenuShopMain(int shop);
+
+/* Converts a Java character id to the one-based battle-party index used by
+   the Party* entry points below. */
+extern void PartyFriendOn(int battle_index);
+
+extern void PartyFriendOff(int battle_index);
+extern int PartyFriendCheck(int battle_index);
+extern void PartyLockPartyOn(int battle_index);
+extern void PartyLockPartyOff(int battle_index);
+extern int PartyLockPartyCheck(int battle_index);
+extern void PartyOutFriendOn(int battle_index);
+extern void PartyOutFriendOff(int battle_index);
+extern int PartyOutFriendCheck(int battle_index);
+extern void PartyTakeAgwsOn(int battle_index);
+extern void PartyTakeAgwsOff(int battle_index);
+extern int PartyTakeAgwsCheck(int battle_index);
+extern void PartyBattleChange(int battle_index);
+extern void nmlModelSetMpeg2CrossFadeTime(int time);
+extern void UmnMailMain(int mail);
+extern void xglCullingIgnore(void);
+extern void xglCullingIgnoreOff(void);
+static void scriptReset_evsExit(void);
+extern void dataEtherTecSet(int value);
+
+extern unsigned char xglFontLoad(int font, int option);
+
+extern void GameStateSave(void);
+extern void GameStateRestore(void);
+extern void func_00A0B728(int map);
+extern void func_00A0B708(int monster_set);
+extern void func_A22668(void);
+extern void ACT_resourceInit(void);
+extern void ACT_initScene(void);
+extern void ACT_initMTNResource(void);
+extern void nmlModelSetFadeIn(int frames, int option);
+extern void FX_ScreenMask(int mask, unsigned int color, int frames, int mode);
+
+extern char *GetItemName(int item, int language);
+
+extern void *newArray(void *element_class, int length);
+extern unsigned int strlen(const char *string);
+
+extern void xglSoundStreamStop(int stream);
+
+extern void GameMovieStop(void);
+extern void xglSoundSequenceFadeOut2(int sequence, int duration);
+extern void InitCfSystem(void);
+extern void UnduInit(unsigned char *data);
+extern void SCRIPT_reset(int mode);
+extern void GameResourceLoad(int event);
+extern void ACT_setModelWrapper(void *actor, int model);
+extern void ACT_setHumanHand(void *actor, int hand);
+
+extern void xglSleep(void);
+
+extern void GameCfPlayerLoadResource(int load);
+extern void EXM_StopWind(void);
+extern void EXM_SetShakePower(float power);
+extern void EXM_SetShakeTime(float time);
+extern void EXM_SetDirectionalWind(const Vector4 *wind);
+extern void EXM_SetPointWind(const Vector4 *wind);
+extern int SCRIPT_fadeGet(void);
+extern int GameMpeg2Play(const char *path, int mode);
+extern void Vibration_Stop(void);
+extern void xglPadRead(void);
+extern void Game_Data_Push(void);
+extern void Game_Data_Pop(void);
+extern void ACT_init(void);
+extern void xglCdLoadOverlay(int overlay);
+extern void func_00A01EA8(void);
+extern void func_00A00338(void);
+extern void func_00A00070(void);
+extern void xglRenderClearDepth(void);
+extern void xglLightIntensityAmbient(void *light, const void *intensity);
+
+extern void xglLightIntensityParallel(void *light, unsigned int index,
+                                      const void *intensity);
+
+extern void xglLightAngle(void *light, unsigned int index, const Vector4 *angle);
+
+extern void xglLightDirection(void *light, unsigned int index,
+                              const Vector4 *direction);
+
+void JTHREAD_defaultUnit(struct JThread *thread);
+void JTHREAD_defaultChr(struct JThread *thread);
+void JTHREAD_default(struct JThread *thread);
+void JTHREAD_defaultScene(struct JThread *thread);
+void JTHREAD_defaultStage(struct JThread *thread);
 
 const char javaSystemArraycopyName[80] = "Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II";
 
@@ -819,810 +1588,7 @@ const char stageSetBgClipName[32] = "Java_xeno_Stage_setBgClip__I";
 
 const char stageClrBackBufferName[32] = "Java_xeno_Stage_clrBackBuffer__";
 
-extern void Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II();
-
-extern void Java_xeno_vm_System_sleep__I();
-
-extern void Java_xeno_vm_System_println__Ljava_lang_String_();
-
-extern void Java_xeno_vm_System_waitFor__Ljava_lang_Object_();
-
-extern void Java_xeno_vm_System_methodSignal__I();
-
-extern void Java_xeno_vm_Thread_create__();
-
-extern void Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_();
-
-extern void Java_xeno_vm_Thread_start__();
-
-extern void Java_xeno_vm_Thread_stop__();
-
-extern void Java_xeno_vm_Math_random__();
-
-extern void Java_xeno_vm_Math_atan2__FF();
-
-extern void Java_xeno_vm_Math_cos__F();
-
-extern void Java_xeno_vm_Math_sin__F();
-
-extern void Java_xeno_util_Spline_create__();
-
-extern void Java_xeno_util_Spline_setCtrlVertex__aFIII();
-
-extern void Java_xeno_util_Spline_getValue__I();
-
-extern void Java_xeno_util_Format_floatToIntBits__F();
-
-extern void Java_xeno_util_Format_intBitsToFloat__I();
-
-extern void Java_xeno_util_Format_toInt__Ljava_lang_String_();
-
-extern void Java_xeno_util_Format_toString__C();
-
-extern void Java_xeno_util_Format_toString__F();
-
-extern void Java_xeno_util_Format_toString__I();
-
-extern void Java_xeno_util_Format_toString__Z();
-
-extern void Java_xeno_util_Input_create__I();
-
-extern void Java_xeno_util_Input_getButton__();
-
-extern void Java_xeno_util_Input_getEdge__();
-
-extern void Java_xeno_util_Input_getRepeat__();
-
-extern void Java_xeno_util_Layout_set__Ljava_lang_Object_I();
-
-extern void Java_xeno_util_Layout_getManager__I();
-
-extern void Java_xeno_util_Runtime_execBattle__II();
-
-extern void Java_xeno_util_Runtime_getFlags__II();
-
-extern void Java_xeno_util_Runtime_setFlags__III();
-
-extern void Java_xeno_util_Runtime_setLocation__III();
-
-extern void Java_xeno_util_Runtime_getLocation__();
-
-extern void Java_xeno_util_Runtime_setRegister__II();
-
-extern void Java_xeno_util_Runtime_getRegister__I();
-
-extern void Java_xeno_util_Runtime_getEntrance__();
-
-extern void Java_xeno_util_Runtime_setPlayerControl__Z();
-
-extern void Java_xeno_util_Runtime_setPlayerMoveParam__FFF();
-
-extern void Java_xeno_util_Runtime_disable__I();
-
-extern void Java_xeno_util_Runtime_enable__I();
-
-extern void Java_xeno_util_Runtime_getGameState__();
-
-extern void Java_xeno_util_Runtime_CaptureEnd__();
-
-extern void Java_xeno_util_Runtime_CaptureStart__Ljava_lang_String_I();
-
-extern void Java_xeno_util_Runtime_jumpCF__II();
-
-extern void Java_xeno_util_Runtime_jumpEvent__I();
-
-extern void Java_xeno_util_Runtime_setDefocusQuick__IIII();
-
-extern void Java_xeno_util_Runtime_setDefocus__IIaI();
-
-extern void Java_xeno_util_Runtime_setDefocusParam__III();
-
-extern void Java_xeno_util_Runtime_setEventTimer__Ljava_lang_String_I();
-
-extern void Java_xeno_util_Runtime_setMap__II();
-
-extern void Java_xeno_util_Runtime_setShootFlag__Z();
-
-extern void Java_xeno_util_Runtime_setShootHeightCheck__Z();
-
-extern void Java_xeno_util_Runtime_setShootIDCheck__Z();
-
-extern void Java_xeno_util_Runtime_setShootUwaCheck__Z();
-
-extern void Java_xeno_util_Runtime_setShootRange__F();
-
-extern void Java_xeno_util_Runtime_addItem__II();
-
-extern void Java_xeno_util_Runtime_addItemWin__II();
-
-extern void Java_xeno_util_Runtime_removeItem__II();
-
-extern void Java_xeno_util_Runtime_checkItem__II();
-
-extern void Java_xeno_util_Runtime_getItemName__II();
-
-extern void Java_xeno_util_Runtime_addGold__I();
-
-extern void Java_xeno_util_Runtime_removeGold__I();
-
-extern void Java_xeno_util_Runtime_checkGold__();
-
-extern void Java_xeno_util_Runtime_progressEffect__I();
-
-extern void Java_xeno_util_Runtime_enterShop__I();
-
-extern void Java_xeno_util_Runtime_getLeader__();
-
-extern void Java_xeno_util_Runtime_getPartyData__I();
-
-extern void Java_xeno_util_Runtime_setPartyData__II();
-
-extern void Java_xeno_util_Runtime_setFriend__I();
-
-extern void Java_xeno_util_Runtime_resetFriend__I();
-
-extern void Java_xeno_util_Runtime_checkFriend__I();
-
-extern void Java_xeno_util_Runtime_setLockParty__I();
-
-extern void Java_xeno_util_Runtime_resetLockParty__I();
-
-extern void Java_xeno_util_Runtime_checkLockParty__I();
-
-extern void Java_xeno_util_Runtime_setOutFriend__I();
-
-extern void Java_xeno_util_Runtime_resetOutFriend__I();
-
-extern void Java_xeno_util_Runtime_checkOutFriend__I();
-
-extern void Java_xeno_util_Runtime_setTakeAgws__I();
-
-extern void Java_xeno_util_Runtime_resetTakeAgws__I();
-
-extern void Java_xeno_util_Runtime_checkTakeAgws__I();
-
-extern void Java_xeno_util_Runtime_battleChangeParty__I();
-
-extern void Java_xeno_util_Runtime_setIdLightCol__IIFFF();
-
-extern void Java_xeno_util_Runtime_setIdLightDir__IIFFF();
-
-extern void Java_xeno_util_Runtime_setIdLightVec__IIFFF();
-
-extern void Java_xeno_util_Runtime_setWindParam__IFFFF();
-
-extern void Java_xeno_util_Runtime_mpeg2__Ljava_lang_String_();
-
-extern void Java_xeno_util_Runtime_mpeg2AfterCrossFade__I();
-
-extern void Java_xeno_util_Runtime_mailFlag__I();
-
-extern void Java_xeno_util_Runtime_mailExec__I();
-
-extern void Java_xeno_util_Runtime_minigameExec__I();
-
-extern void Java_xeno_util_Runtime_setMenuLock__();
-
-extern void Java_xeno_util_Runtime_evsSetRetPoint__();
-
-extern void Java_xeno_util_Runtime_evsExit__();
-
-extern void Java_xeno_util_Runtime_etherTecSet__I();
-
-extern void Java_xeno_util_Runtime_charAllRecovery__();
-
-extern void Java_xeno_util_Runtime_AGWSAllRecovery__();
-
-extern void Java_xeno_util_Window_getSignal__();
-
-extern void Java_xeno_util_Window_signal__I();
-
-extern void Java_xeno_util_Window_clear__();
-
-extern void Java_xeno_util_Window_close__();
-
-extern void Java_xeno_util_Window_waitkey__I();
-
-extern void Java_xeno_util_Window_wait__I();
-
-extern void Java_xeno_util_Window_create__I();
-
-extern void Java_xeno_util_Window_setSize__II();
-
-extern void Java_xeno_util_Window_setLocation__II();
-
-extern void Java_xeno_util_Window_print__Ljava_lang_String_();
-
-extern void Java_xeno_util_Window_print__aLjava_lang_String_I();
-
-extern void Java_xeno_util_Window_setName__Ljava_lang_String_();
-
-extern void Java_xeno_util_Window_closeWaitKey__();
-
-extern void Java_xeno_util_Menu_addQuery__Ljava_lang_String_();
-
-extern void Java_xeno_util_Menu_addQuery__aLjava_lang_String_I();
-
-extern void Java_xeno_util_Menu_addItem__Ljava_lang_String_();
-
-extern void Java_xeno_util_Menu_create__();
-
-extern void Java_xeno_util_Menu_getSelected__();
-
-extern void Java_xeno_util_Menu_setLocation__II();
-
-extern void Java_xeno_util_Menu_setVisible__Z();
-
-extern void Java_xeno_util_Menu_setCursor__I();
-
-extern void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_();
-
-extern void Java_xeno_util_Toolkit_call__Ljava_lang_Object_Ljava_lang_String_();
-
-extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I();
-
-extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_String_();
-
-extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I();
-
-extern void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II();
-
-extern void Java_xeno_util_Toolkit_peerSetGroup__II();
-
-extern void Java_xeno_Sound_sequencePlay__I();
-
-extern void Java_xeno_Sound_sequencePlay__II();
-
-extern void Java_xeno_Sound_sequenceStop__I();
-
-extern void Java_xeno_Sound_sequenceStop__II();
-
-extern void Java_xeno_Sound_effectPlay__III();
-
-extern void Java_xeno_Sound_effectStop__I();
-
-extern void Java_xeno_Sound_streamPlay__IIII();
-
-extern void Java_xeno_Movie_init__I();
-
-extern void Java_xeno_Movie_start__I();
-
-extern void Java_xeno_Movie_stop__();
-
-extern void Java_xeno_Movie_update__();
-
-extern void Java_xeno_PlayControl_create__();
-
-extern void Java_xeno_PlayControl_getSignal__();
-
-extern void Java_xeno_PlayControl_signal__I();
-
-extern void Java_xeno_PlayControl_init__II();
-
-extern void Java_xeno_PlayControl_init__IIIIF();
-
-extern void Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_();
-
-extern void Java_xeno_PlayControl_loadTimeChart__Ljava_lang_Object_();
-
-extern void Java_xeno_PlayControl_start__();
-
-extern void Java_xeno_PlayControl_stop__();
-
-extern void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_();
-
-extern void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Ljava_lang_String_();
-
-extern void Java_xeno_PlayControl_getParams__();
-
-extern void Java_xeno_Effect_call__I();
-
-extern void Java_xeno_Effect_disp__Z();
-
-extern void Java_xeno_Effect_setScale__FFF();
-
-extern void Java_xeno_Effect_getScale__();
-
-extern void Java_xeno_Effect_getTranslate__();
-
-extern void Java_xeno_Effect_setTranslate__();
-
-extern void Java_xeno_Effect_getRotate__();
-
-extern void Java_xeno_Effect_setRotate__();
-
-extern void Java_xeno_Effect_setCaster__Lxeno_Chr_();
-
-extern void Java_xeno_Effect_setTarget__Lxeno_Chr_();
-
-extern void Java_xeno_Effect_setCaster__Lxeno_Unit_();
-
-extern void Java_xeno_Effect_setTarget__Lxeno_Unit_();
-
-extern void Java_xeno_Effect_setTransOffset__FFF();
-
-extern void Java_xeno_Effect_getForceLoop__();
-
-extern void Java_xeno_Effect_setForceLoop__Z();
-
-extern void Java_xeno_Effect_getClip__();
-
-extern void Java_xeno_Effect_setClip__Z();
-
-extern void Java_xeno_Effect_clearEffect__();
-
-extern void Java_xeno_Effect_setMotion__Z();
-
-extern void Java_xeno_Effect_noAttach__Z();
-
-extern void Java_xeno_Camera_getRotateX__();
-
-extern void Java_xeno_Camera_getRotateY__();
-
-extern void Java_xeno_Camera_getRotateZ__();
-
-extern void Java_xeno_Camera_getTranslateX__();
-
-extern void Java_xeno_Camera_getTranslateY__();
-
-extern void Java_xeno_Camera_getTranslateZ__();
-
-extern void Java_xeno_Camera_fovSPL__aFI();
-
-extern void Java_xeno_Camera_change__();
-
-extern void Java_xeno_Camera_rotateSPL__aFI();
-
-extern void Java_xeno_Camera_rotateSPL__aFIII();
-
-extern void Java_xeno_Camera_setActive__Z();
-
-extern void Java_xeno_Camera_create__I();
-
-extern void Java_xeno_Camera_transCNS__Ljava_lang_Object_FFF();
-
-extern void Java_xeno_Camera_transSPL__aFI();
-
-extern void Java_xeno_Camera_transSPL__aFIII();
-
-extern void Java_xeno_Camera_viewCNS__Ljava_lang_Object_FFF();
-
-extern void Java_xeno_Camera_viewSPL__aFI();
-
-extern void Java_xeno_Camera_viewSPL__aFIII();
-
-extern void Java_xeno_Camera_rollSPL__aFI();
-
-extern void Java_xeno_Camera_setRotate__FFF();
-
-extern void Java_xeno_Camera_setRoll__F();
-
-extern void Java_xeno_Camera_setTranslate__FFF();
-
-extern void Java_xeno_Camera_setFov__F();
-
-extern void Java_xeno_Camera_getFov__();
-
-extern void Java_xeno_Camera_setView__FFF();
-
-extern void Java_xeno_Camera_start__ILjava_lang_Object_();
-
-extern void Java_xeno_Camera_setCFAngle__IFFFF();
-
-extern void Java_xeno_Camera_setCFAnglePers__IFFFFF();
-
-extern void Java_xeno_Camera_setCFHokan__IFF();
-
-extern void Java_xeno_Camera_setCFLock__IIFFF();
-
-extern void Java_xeno_Camera_setCFOffset__IFFFIFIF();
-
-extern void Java_xeno_Camera_setMode__I();
-
-extern void Java_xeno_Camera_getMode__();
-
-extern void Java_xeno_Camera_setCFPedestal__IFFFFFFFF();
-
-extern void Java_xeno_Camera_setCFPedestalHokan__II();
-
-extern void Java_xeno_Camera_changeID__III();
-
-extern void Java_xeno_Camera_setFog__IFFFFIIII();
-
-extern void Java_xeno_Camera_resetFog__I();
-
-extern void Java_xeno_Camera_setClipRange__FF();
-
-extern void Java_xeno_Light_setColor__FFF();
-
-extern void Java_xeno_Light_setDirection__FFF();
-
-extern void Java_xeno_Light_setDirection2__FFF();
-
-extern void Java_xeno_Light_setGlobalPointLightCol__IFFF();
-
-extern void Java_xeno_Light_setGlobalPointLightPos__IFFF();
-
-extern void Java_xeno_Light_setGlobalPointLightReset__();
-
-extern void Java_xeno_Chr_getPlayer__();
-
-extern void Java_xeno_Chr_setPlayer__();
-
-extern void Java_xeno_Chr_move__IFFZ();
-
-extern void Java_xeno_Chr_move__FFFZ();
-
-extern void Java_xeno_Chr_move__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Chr_move__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Chr_move__Lxeno_util_Spline_IZ();
-
-extern void Java_xeno_Chr_rotate__Lxeno_util_Spline_IZ();
-
-extern void Java_xeno_Chr_rotX__FFZ();
-
-extern void Java_xeno_Chr_rotX__IFZ();
-
-extern void Java_xeno_Chr_rotX__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Chr_rotX__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Chr_rotY__FFZ();
-
-extern void Java_xeno_Chr_rotY__IFZ();
-
-extern void Java_xeno_Chr_rotY__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Chr_rotY__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Chr_rotZ__FFZ();
-
-extern void Java_xeno_Chr_rotZ__IFZ();
-
-extern void Java_xeno_Chr_rotZ__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Chr_rotZ__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Chr_start__ILjava_lang_Object_();
-
-extern void Java_xeno_Chr_stop__();
-
-extern void Java_xeno_Chr_mtn__IIIIIFZ();
-
-extern void Java_xeno_Chr_mtn__IIFZ();
-
-extern void Java_xeno_Chr_signal__I();
-
-extern void Java_xeno_Chr_getSignal__();
-
-extern void Java_xeno_Chr_setRotate__();
-
-extern void Java_xeno_Chr_setTranslate__();
-
-extern void Java_xeno_Chr_getRotate__();
-
-extern void Java_xeno_Chr_getTranslate__();
-
-extern void Java_xeno_Chr_setVisible__Z();
-
-extern void Java_xeno_Chr_setVisible__IZ();
-
-extern void Java_xeno_Chr_setCollision__Z();
-
-extern void Java_xeno_Chr_setHand__I();
-
-extern void Java_xeno_Chr_setArgs__III();
-
-extern void Java_xeno_Chr_getArgs__II();
-
-extern void Java_xeno_Chr_setArgs__ILjava_lang_Object_I();
-
-extern void Java_xeno_Chr_getSerial__();
-
-extern void Java_xeno_Chr_getState__();
-
-extern void Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_();
-
-extern void Java_xeno_Chr_setScale__FFF();
-
-extern void Java_xeno_Chr_getScale__();
-
-extern void Java_xeno_Chr_scale__Lxeno_util_Spline_IZ();
-
-extern void Java_xeno_Chr_sclX__FFZ();
-
-extern void Java_xeno_Chr_sclX__IFZ();
-
-extern void Java_xeno_Chr_sclY__FFZ();
-
-extern void Java_xeno_Chr_sclY__IFZ();
-
-extern void Java_xeno_Chr_sclZ__FFZ();
-
-extern void Java_xeno_Chr_sclZ__IFZ();
-
-extern void Java_xeno_Chr_rotCNS__ILjava_lang_Object_();
-
-extern void Java_xeno_Chr_rotCNS__IFFF();
-
-extern void Java_xeno_Chr_setRotCNSParam__IFFFFF();
-
-extern void Java_xeno_Chr_relax__II();
-
-extern void Java_xeno_Chr_getFlags__();
-
-extern void Java_xeno_Chr_setFlags__I();
-
-extern void Java_xeno_Chr_setEdgeFall__I();
-
-extern void Java_xeno_Chr_setShadow__II();
-
-extern void Java_xeno_Chr_setShadow__aB();
-
-extern void Java_xeno_Chr_setID__I();
-
-extern void Java_xeno_Chr_setElevatorMode__I();
-
-extern void Java_xeno_Chr_setParent__Lxeno_Chr_III();
-
-extern void Java_xeno_Chr_setMotionFlags__IZ();
-
-extern void Java_xeno_Chr_setFilter__I();
-
-extern void Java_xeno_Chr_setFilterParam__aF();
-
-extern void Java_xeno_Chr_setClip__I();
-
-extern void Java_xeno_Chr_setSymmetryY__I();
-
-extern void Java_xeno_Chr_setSortOffset__F();
-
-extern void Java_xeno_Chr_setPointLightCol__IFFF();
-
-extern void Java_xeno_Chr_setPointLightPos__IFFF();
-
-extern void Java_xeno_Chr_setPointLightReset__();
-
-extern void Java_xeno_Chr_talkto__Ljava_lang_String_();
-
-extern void Java_xeno_Chr_touchto__Ljava_lang_String_();
-
-extern void Java_xeno_Chr_childGetPeer__II();
-
-extern void Java_xeno_Chr_setPeer__Ljava_lang_Object_();
-
-extern void Java_xeno_Chr_dispRadar__Z();
-
-extern void Java_xeno_Chr_look_camera__();
-
-extern void Java_xeno_Chr_look_char__Ljava_lang_Object_();
-
-extern void Java_xeno_Chr_look_unit__Ljava_lang_Object_();
-
-extern void Java_xeno_Chr_look_default__();
-
-extern void Java_xeno_Chr_look_point__FFF();
-
-extern void Java_xeno_Chr_look_eye_set__FF();
-
-extern void Java_xeno_Chr_look_eye_control__I();
-
-extern void Java_xeno_Chr_look_speed__F();
-
-extern void Java_xeno_Chr_look_eye_speed__F();
-
-extern void Java_xeno_Chr_renderCommand__I();
-
-extern void Java_xeno_Chr_shadow_clip_scale__F();
-
-extern void Java_xeno_Chr_shadow_map_id__I();
-
-extern void Java_xeno_Chr_shadow_map_reset__();
-
-extern void Java_xeno_Chr_hairStop__II();
-
-extern void Java_xeno_Chr_pixelAlpha__I();
-
-extern void Java_xeno_Chr_pixelAlphaParts__II();
-
-extern void Java_xeno_Chr_pixelAlphaPartsReset__();
-
-extern void Java_xeno_Chr_setMotNoUpdate__I();
-
-extern void Java_xeno_Chr_setWeaponR__Lxeno_Chr_();
-
-extern void Java_xeno_Chr_resetWeaponR__Lxeno_Chr_();
-
-extern void Java_xeno_Chr_resetHand__();
-
-extern void Java_xeno_Chr_resetEnv__();
-
-extern void Java_xeno_Chr_ignoreShape__I();
-
-extern void Java_xeno_Unit_rotYCNS__Ljava_lang_Object_IFFF();
-
-extern void Java_xeno_Unit_transCNS__Ljava_lang_Object_IFFF();
-
-extern void Java_xeno_Unit_getRotate__();
-
-extern void Java_xeno_Unit_getSignal__();
-
-extern void Java_xeno_Unit_getTranslate__();
-
-extern void Java_xeno_Unit_invalidate__();
-
-extern void Java_xeno_Unit_move__FFFZ();
-
-extern void Java_xeno_Unit_move__IFFZ();
-
-extern void Java_xeno_Unit_move__Lxeno_util_Spline_IZ();
-
-extern void Java_xeno_Unit_rotate__Lxeno_util_Spline_IZ();
-
-extern void Java_xeno_Unit_move__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Unit_move__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Unit_mtn__IIFZ();
-
-extern void Java_xeno_Unit_mtn__IIIIIFZ();
-
-extern void Java_xeno_Unit_rotX__FFZ();
-
-extern void Java_xeno_Unit_rotX__IFZ();
-
-extern void Java_xeno_Unit_rotX__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Unit_rotX__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Unit_rotY__FFZ();
-
-extern void Java_xeno_Unit_rotY__IFZ();
-
-extern void Java_xeno_Unit_rotY__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Unit_rotY__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Unit_rotZ__FFZ();
-
-extern void Java_xeno_Unit_rotZ__IFZ();
-
-extern void Java_xeno_Unit_rotZ__ILjava_lang_Object_Z();
-
-extern void Java_xeno_Unit_rotZ__Ljava_lang_Object_FZ();
-
-extern void Java_xeno_Unit_scale__Lxeno_util_Spline_IZ();
-
-extern void Java_xeno_Unit_sclX__FFZ();
-
-extern void Java_xeno_Unit_sclX__IFZ();
-
-extern void Java_xeno_Unit_sclY__FFZ();
-
-extern void Java_xeno_Unit_sclY__IFZ();
-
-extern void Java_xeno_Unit_sclZ__FFZ();
-
-extern void Java_xeno_Unit_sclZ__IFZ();
-
-extern void Java_xeno_Unit_setCollision__Z();
-
-extern void Java_xeno_Unit_setRotate__();
-
-extern void Java_xeno_Unit_setTranslate__();
-
-extern void Java_xeno_Unit_setVisible__IZ();
-
-extern void Java_xeno_Unit_setVisible__Z();
-
-extern void Java_xeno_Unit_signal__I();
-
-extern void Java_xeno_Unit_start__ILjava_lang_Object_();
-
-extern void Java_xeno_Unit_stop__();
-
-extern void Java_xeno_Unit_validate__();
-
-extern void Java_xeno_Unit_setParent__Ljava_lang_Object_I();
-
-extern void Java_xeno_Unit_setArgs__III();
-
-extern void Java_xeno_Unit_getArgs__II();
-
-extern void Java_xeno_Unit_setArgs__ILjava_lang_Object_I();
-
-extern void Java_xeno_Unit_setArgs__IIIII();
-
-extern void Java_xeno_Unit_getScale__();
-
-extern void Java_xeno_Unit_setScale__FFF();
-
-extern void Java_xeno_Unit_getSerial__();
-
-extern void Java_xeno_Unit_mtnSetMask__I();
-
-extern void Java_xeno_Unit_mtnGetRoot__ILxeno_util_Vector4f_();
-
-extern void Java_xeno_Unit_getState__();
-
-extern void Java_xeno_Unit_getPivot__Lxeno_util_Vector4f_();
-
-extern void Java_xeno_Unit_setPivot__FFF();
-
-extern void Java_xeno_Unit_getAxis__Lxeno_util_Vector4f_();
-
-extern void Java_xeno_Unit_setAxis__FFFF();
-
-extern void Java_xeno_Unit_suspend__I();
-
-extern void Java_xeno_Unit_resume__I();
-
-extern void Java_xeno_Unit_initElevatorFunc__();
-
-extern void Java_xeno_Unit_map_shadow__I();
-
-extern void Java_xeno_Unit_renderCommand__I();
-
-extern void Java_xeno_Unit_setFilter__I();
-
-extern void Java_xeno_Unit_setFilterParam__aF();
-
-extern void Java_xeno_Unit_setShadow__II();
-
-extern void Java_xeno_Unit_shadow_clip_scale__F();
-
-extern void Java_xeno_Unit_shadow_map_id__I();
-
-extern void Java_xeno_Unit_shadow_map_reset__();
-
-extern void Java_xeno_Unit_setSortOffset__F();
-
-extern void Java_xeno_Unit_setClip__I();
-
-extern void Java_xeno_Unit_setMonitorPrio__I();
-
-extern void Java_xeno_Scene_start__ILjava_lang_Object_();
-
-extern void Java_xeno_Scene_stop__();
-
-extern void Java_xeno_Stage_start__ILjava_lang_Object_();
-
-extern void Java_xeno_Stage_stop__();
-
-extern void Java_xeno_Stage_play__Ljava_lang_String_();
-
-extern void Java_xeno_Stage_setPartsLast__I();
-
-extern void Java_xeno_Stage_setPartsLastReset__();
-
-extern void Java_xeno_Stage_setColor__FFF();
-
-extern void Java_xeno_Stage_setFade__IIFFF();
-
-extern void Java_xeno_Stage_setEventFade__IFFFIFFF();
-
-extern void Java_xeno_Stage_setFrameRender__II();
-
-extern void Java_xeno_Stage_setFadeCancel__I();
-
-extern void Java_xeno_Stage_setVisible__IZ();
-
-extern void Java_xeno_Stage_setCFBG__II_F();
-
-extern void Java_xeno_Stage_setEffectRender__I();
-
-extern void Java_xeno_Stage_renderCommand__I();
-
-extern void Java_xeno_Stage_setBgColor__FFF();
-
-extern void Java_xeno_Stage_setBgClip__I();
-
-extern void Java_xeno_Stage_clrBackBuffer__();
-
 /* Retail's local table precedes the native binding table in the data section. */
-
 RuntimeNativeBinding default_native[] = {
     { javaSystemArraycopyName, (void (*)())Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II },
     { javaSystemSleepName, (void (*)())Java_xeno_vm_System_sleep__I },
@@ -2028,489 +1994,17 @@ RuntimeNativeBinding default_native[] = {
     { 0x00000000, (void (*)())0x00000000 },
 };
 
-/*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives of this TU show
- * (a1 read as the argument block, a2 written as the result); these
- * wrappers only need the tag.
- */
-
-typedef struct JThread JThread;
-
-extern void SCRIPT_sceneChangeTimeSet(int value);
-
-extern void CharactorAllRecovery(void);
-
-extern void AgwsAllRecovery(void);
-
-extern void tyaCaptureEnd(void);
-
-/* The call block of a native taking three plain ints (java signature "(III)"). */
-
-typedef struct {
-    int first;
-    int second;
-    int third;
-} IntTripleCall;
-
-/*
- * An 8-byte-aligned view of Vector4, so a whole-vector assignment compiles
- * to the aligned ld/sd pair the original uses instead of an unaligned
- * ldl/ldr sequence (config/compiler-patterns.json CP-0237, same technique
- * as src/main/pp_init.c's PpVector4).
- */
-
-typedef union RuntimeVector4 {
-    Vector4 vector;
-    unsigned long long words[2];
-} RuntimeVector4;
-
-/*
- * A partial, TU-local view of the engine's actor record (the same object
- * fully recovered as `Actor` in src/main/chr.h, src/main/near_dir.h and
- * src/main/set_motion.h for main's chr/near_dir/set_motion TUs) for the two
- * members scriptReset_evsExit touches: the position vector at +0x10 and the
- * status flags word at +0x4D0, both documented for the same object in
- * chr.h. Named separately from those TUs' `Actor` tag because it collides
- * with the canonical spelling elsewhere (config/header-canon.json).
- */
-
-typedef struct RuntimeActor {
-    unsigned char unmodeled_00[0x10];
-    RuntimeVector4 position;              /* +0x10, ld/sd at
-                                              0x002f76bc..0x002f76d8
-                                              (scriptReset_evsExit) */
-    unsigned char unmodeled_20[0x86 - 0x20];
-    short state_flags;
-    unsigned char unmodeled_88[0x4D0 - 0x88];
-    unsigned short status_flags;          /* +0x4D0, lhu/sh at
-                                              0x002f76c0..0x002f76e0
-                                              (scriptReset_evsExit) */
-    unsigned char unmodeled_4d2[0x8D0 - 0x4D2];
-    int resource_guard;
-} RuntimeActor;
-
-/*
- * GameLoopState offsets this TU touches. GameLoopState is a TU-local
- * divergent view (config/header-canon.json "GameLoopState"): every unit
- * models only the offsets its own bytes evidence, and no shared header
- * declares it.
- */
-
-typedef struct {
-    unsigned char unmodeled_00[4];
-    RuntimeActor *player;                  /* +0x04, lw at 0x002f76b0
-                                              (scriptReset_evsExit) */
-    XglTaskScheduler *task_scheduler;     /* +0x08, lw/beq at 0x002f7350
-                                              (setLocation) */
-    unsigned short scene_kind;
-    unsigned short deferred_jump_pending; /* +0x0E, sh $0 at 0x002f767c */
-    unsigned int flags;                   /* +0x10, lw/nor/and/sw at
-                                              0x002f74a4..0x002f74bc (disable),
-                                              lw/or/sw at 0x002f74c4..0x002f74d8
-                                              (enable), lw/sw at
-                                              0x002f74e4..0x002f74ec
-                                              (getGameState) */
-    unsigned char unmodeled_14[4];
-    int current_event_id;
-    unsigned char unmodeled_1c[4];
-    unsigned int shoot_control;           /* +0x20, lw/ori/sw and lw/and/sw at
-                                              0x002f78a0..0x002f78c8
-                                              (setShootFlag, bit 0),
-                                              0x002f78dc..0x002f7904
-                                              (setShootHeightCheck, bit 1),
-                                              0x002f791c..0x002f7944
-                                              (setShootIDCheck, bit 2),
-                                              0x002f795c..0x002f7984
-                                              (setShootUwaCheck, bit 3) */
-    unsigned char unmodeled_24[0x52 - 0x24];
-    short entrance;                       /* +0x52, lh at 0x002f7424 */
-    int scene_reset_counter;
-    unsigned char unmodeled_58[0xA0 - 0x58];
-    float fade_red;
-    float fade_green;
-    float fade_blue;
-    float fade_frames;
-    unsigned char unmodeled_b0[0xC1 - 0xB0];
-    unsigned char player_flags;           /* +0xC1, lbu/ori/sb at
-                                              0x002f7448..0x002f7460
-                                              (setPlayerControl, bit 0x20) */
-    unsigned char unmodeled_c2[0x29F44 - 0xC2];
-    float shoot_range;                    /* +0x29F44, swc1 at 0x002f799c */
-    unsigned char unmodeled_29f48[0x2A018 - 0x29F48];
-    int active_event_id;                  /* +0x2A018, lw at 0x002f8730 */
-    unsigned char unmodeled_2a01c[0x2A020 - 0x2A01C];
-    RuntimeVector4 saved_position;        /* +0x2A020, ld/sd at
-                                              0x002f76bc..0x002f76d8
-                                              (scriptReset_evsExit) */
-} GameLoopStateRuntimeView;
-
-extern GameLoopStateRuntimeView GameLoopState;
-
-/*
- * A partial view of the script VM thread (JThread, fully recovered in
- * src/main/chr.h for main/tu248) for the three words evsExit touches: the
- * state word at +0x24 and the resume/frame counters at +0x3C/+0x3E chr.h
- * documents for the same object. Modeled separately here because chr.h is
- * TU-local to tu248.
- */
-
-typedef struct {
-    unsigned char unmodeled_00[0x24];
-    unsigned int flags;              /* +0x24 */
-    unsigned char unmodeled_28[0x3C - 0x24 - 4];
-    unsigned short resume_frames;    /* +0x3C */
-    unsigned short frame_depth;      /* +0x3E */
-} RuntimeThreadState;
-
-/* setLocation below touches the same three RuntimeThreadState words as
-   evsExit: resume_frames takes frame_depth and flags gains bit 0x8
-   (native-call block) and 0x1 (generic wait) (0x002f7388..0x002f739c). */
-
-/* The call block of a native taking two plain ints (java signature "(II)"). */
-
-typedef struct {
-    int first;
-    int second;
-} IntPairCall;
-
-extern int xglFlagsGet(int group, int bit);
-
-/* The call block of Java_xeno_util_Runtime_setFlags__III, the xglFlagsSet
-   operands the native passes through unchanged and in order. */
-
-typedef struct {
-    int bit_offset;
-    int bit_count;
-    int value;
-} FlagsSetCall;
-
-extern int xglFlagsSet(int bit_offset, int bit_count, int value);
-
-extern void LoadMapOnly(int map_id);
-
-extern void MapChange2(int map_id);
-
-extern int MapGetNo(void);
-
-/* The script VM's 32-entry general register file, indexed with the low 5
-   bits of the requested register number (VMRegister[index & 0x1F]). */
-
-int VMRegister[32];
-
-/* The call block of a native taking three plain floats (java signature "(FFF)"). */
-
-typedef struct {
-    float walk_threshold;
-    float run_threshold;
-    float vector_rate;
-} PlayerMoveParamCall;
-
-extern void GameCfPlayerMoveParamSet(float walk_threshold, float run_threshold,
-                                      float vector_rate);
-
-/*
- * A java.lang.String argument, as CaptureStart/setEventTimer below read it:
- * offset +0x00 (the class word every object reference begins with, per
- * shared.h) is untouched by this TU, and +0x04 holds the interned string
- * record the String was loaded from (lw v1,4(v0) at 0x002f7514/0x002f78ac).
- */
-
-typedef struct {
-    void *unmodeled_00;
-    struct InternedString *value;
-} StringRef;
-
-/*
- * The interned constant-string record `StringRef.value` points to, modeled
- * here only for the `bytes` pointer both natives below read at +0x08 (lw
- * v0,8(v0) at 0x002f7518/0x002f78b0). Same object as `ConstString` of
- * src/main/string_utf_get_hash.h (main/tu224): next-in-bucket link and
- * packed hash/length occupy the same leading 8 bytes there.
- */
-
-struct InternedString {
-    unsigned char unmodeled_00[4];
-    int length;
-    char *bytes;
-};
-
-/* The call block of a native taking (java.lang.String, int). */
-
-typedef struct {
-    StringRef *string;
-    int value;
-} StringArgCall;
-
-extern void tyaCaptureStart(const char *name, int count);
-
-extern void Java_xeno_util_Runtime_jump_sub(int destination, int argument);
-
-/* The deferred script jump scriptReset_jump below executes once scheduled. */
-
-typedef struct {
-    int destination;
-    int argument;
-} DeferredJumpCall;
-
-static DeferredJumpCall args_jump;
-
-extern void (*jthreadResetFunc)(void);
-
-extern void SCRIPT_talkIgnoreSet(void);
-
-/* The call block of a native taking four plain ints (java signature "(IIII)"). */
-
-typedef struct {
-    int first;
-    int second;
-    int third;
-    int fourth;
-} IntQuadCall;
-
-extern void GameDefocusQuickSet(int first, int second, int third, int fourth);
-
-/*
- * A partial, TU-local view of the Java int-array object (the same object
- * fully recovered as `VMArray` in src/main/init_vm.c) for the `data` pointer
- * setDefocus below reads at +0x08 (lw at 0x002f7800).
- */
-
-typedef struct {
-    unsigned char unmodeled_00[8];
-    int *data;                            /* +0x08 */
-} RuntimeIntArray;
-
-/* The call block of setDefocus (java signature "(II[I)"): two plain ints and
-   an optional int-array reference, null when the caller passes none. */
-
-typedef struct {
-    int mode;
-    int strength;
-    RuntimeIntArray *table;
-} DefocusCall;
-
-extern void GameDefocusSet(int mode, int strength, int *table);
-
-/* A defocus parameter table of seventeen-entry rows, one word ahead of the
-   symbol (index 0 is untouched by this TU). */
-
-extern int GameDefocusParam[];
-
-extern void setEventTimerTaskEntry(const char *method_reference, int countdown);
-
-extern void MapChangeResource(int map_id, int resource_id);
-
-extern int dataBoxInc(int item, int count);
-
-extern int CreateEvtItemGetTask(int item, int count);
-
-extern int dataBoxDec(int item, int count);
-
-extern int dataBoxChk(int item, int count);
-
-extern int dataMoneyBoxInc(int amount);
-
-extern int dataMoneyBoxDec(int amount);
-
-extern int dataMoneyBoxChk(void);
-
-extern void sefProgressEffect(int frame_count);
-
-extern void GameStateRestoreCameraLight(void);
-
-extern void GameStateSaveCameraLight(void);
-
-extern void MenuShopMain(int shop);
-
-/*
- * The leader's battle id: read directly out of SaveData (lui/lhu at
- * 0x002f7bd0/0x002f7bd4, no call) rather than through PartyDataGet(), which
- * getPartyDataOfs below shows returns SaveData + 0x10078, so this offset is
- * that region's own +0x2C.
- */
-
-typedef struct RuntimeSavedPartyPrefix {
-    unsigned char unmodeled_00[0x100a4];
-    unsigned short leader_battle_id;
-} RuntimeSavedPartyPrefix;
-
-/* Converts a Java character id to the one-based battle-party index used by
-   the Party* entry points below. */
-
-extern void PartyFriendOn(int battle_index);
-
-extern void PartyFriendOff(int battle_index);
-
-extern int PartyFriendCheck(int battle_index);
-
-extern void PartyLockPartyOn(int battle_index);
-
-extern void PartyLockPartyOff(int battle_index);
-
-extern int PartyLockPartyCheck(int battle_index);
-
-extern void PartyOutFriendOn(int battle_index);
-
-extern void PartyOutFriendOff(int battle_index);
-
-extern int PartyOutFriendCheck(int battle_index);
-
-extern void PartyTakeAgwsOn(int battle_index);
-
-extern void PartyTakeAgwsOff(int battle_index);
-
-extern int PartyTakeAgwsCheck(int battle_index);
-
-extern void PartyBattleChange(int battle_index);
-
-extern void nmlModelSetMpeg2CrossFadeTime(int time);
-
 static int s_nMpeg2ReserveCrossFade = 0;
-
-extern void UmnMailMain(int mail);
-
-extern void xglCullingIgnore(void);
-
-extern void xglCullingIgnoreOff(void);
-
-static void scriptReset_evsExit(void);
-
-extern void dataEtherTecSet(int value);
-
-/* Runtime native lookup pairs: method signature followed by its entry point. */
-
-/* Retail's local table precedes the native binding table in the data section. */
 
 static char base_1[18] = "data\\movie\\mpeg2\\";
 
-/* The call block of a native taking three plain ints (java signature "(III)"). */
-
-/* setLocation below touches the same three RuntimeThreadState words as
-   evsExit: resume_frames takes frame_depth and flags gains bit 0x8
-   (native-call block) and 0x1 (generic wait) (0x002f7388..0x002f739c). */
-
-extern unsigned char xglFontLoad(int font, int option);
-
-extern void GameStateSave(void);
-
-extern void GameStateRestore(void);
-
-extern void func_00A0B728(int map);
-
-extern void func_00A0B708(int monster_set);
-
-extern void func_A22668(void);
-
-extern void ACT_resourceInit(void);
-
-extern void ACT_initScene(void);
-
-extern void ACT_initMTNResource(void);
-
-extern void nmlModelSetFadeIn(int frames, int option);
-
-extern void FX_ScreenMask(int mask, unsigned int color, int frames, int mode);
-
-/* The call block of a native taking two plain ints (java signature "(II)"). */
-
-/* The call block of Java_xeno_util_Runtime_setFlags__III, the xglFlagsSet
-   operands the native passes through unchanged and in order. */
+static char ext_2_004DC078[5] = ".pss";
 
 /* The script VM's 32-entry general register file, indexed with the low 5
    bits of the requested register number (VMRegister[index & 0x1F]). */
+int VMRegister[32];
 
-/* The call block of a native taking three plain floats (java signature "(FFF)"). */
-
-extern char *GetItemName(int item, int language);
-
-extern void *classByte;
-
-extern void *newArray(void *element_class, int length);
-
-extern unsigned int strlen(const char *string);
-
-/* The call block of a native taking (java.lang.String, int). */
-
-extern void xglSoundStreamStop(int stream);
-
-extern void GameMovieStop(void);
-
-extern void xglSoundSequenceFadeOut2(int sequence, int duration);
-
-extern void InitCfSystem(void);
-
-extern void UnduInit(unsigned char *data);
-
-extern void SCRIPT_reset(int mode);
-
-extern void GameResourceLoad(int event);
-
-extern void ACT_setModelWrapper(void *actor, int model);
-
-extern void ACT_setHumanHand(void *actor, int hand);
-
-/* The deferred script jump scriptReset_jump below executes once scheduled. */
-
-/* The call block of a native taking four plain ints (java signature "(IIII)"). */
-
-/* The call block of setDefocus (java signature "(II[I)"): two plain ints and
-   an optional int-array reference, null when the caller passes none. */
-
-/* A defocus parameter table of seventeen-entry rows, one word ahead of the
-   symbol (index 0 is untouched by this TU). */
-
-extern void xglSleep(void);
-
-extern void GameCfPlayerLoadResource(int load);
-
-/* Converts a Java character id to the one-based battle-party index used by
-   the Party* entry points below. */
-
-typedef struct {
-    int mode;
-    float power;
-    float time;
-    float z;
-    float w;
-} RuntimeWindCall;
-
-extern void EXM_StopWind(void);
-
-extern void EXM_SetShakePower(float power);
-
-extern void EXM_SetShakeTime(float time);
-
-extern void EXM_SetDirectionalWind(const Vector4 *wind);
-
-extern void EXM_SetPointWind(const Vector4 *wind);
-
-extern int SCRIPT_fadeGet(void);
-
-extern int GameMpeg2Play(const char *path, int mode);
-
-static char ext_2_004DC078[5] = ".pss";
-
-extern void Vibration_Stop(void);
-
-extern void xglPadRead(void);
-
-extern void Game_Data_Push(void);
-
-extern void Game_Data_Pop(void);
-
-extern void ACT_init(void);
-
-extern void xglCdLoadOverlay(int overlay);
-
-extern void func_00A01EA8(void);
-
-extern void func_00A00338(void);
-
-extern void func_00A00070(void);
-
-extern void xglRenderClearDepth(void);
+static DeferredJumpCall args_jump;
 
 static __inline__ unsigned short *runtime_party_id_table(void)
 {
@@ -3039,21 +2533,6 @@ void Java_xeno_util_Runtime_battleChangeParty__I(JThread *thread, int *arguments
     PartyBattleChange(cid2bic(*arguments));
 }
 
-/* Native argument and result words share the VM operand-slot storage. */
-
-typedef struct RuntimeIdLightSet {
-    unsigned char unmodeled_00[0xF0];
-} RuntimeIdLightSet;
-
-extern RuntimeIdLightSet GameIdLight[];
-
-extern void xglLightIntensityAmbient(void *light, const void *intensity);
-extern void xglLightIntensityParallel(void *light, unsigned int index,
-                                      const void *intensity);
-extern void xglLightAngle(void *light, unsigned int index, const Vector4 *angle);
-extern void xglLightDirection(void *light, unsigned int index,
-                              const Vector4 *direction);
-
 static inline void runtimeLightVector(Vector4 *value, float x, float y, float z)
 {
     value->x = x;
@@ -3340,6 +2819,7 @@ void Java_xeno_util_Runtime_AGWSAllRecovery__(JThread *thread, void *arguments,
     AgwsAllRecovery();
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char jthreadDefaultName[16] = "JTHREAD_default";
 
 const char jthreadDefaultStageName[24] = "JTHREAD_defaultStage";
@@ -3350,23 +2830,6 @@ const char jthreadDefaultChrName[24] = "JTHREAD_defaultChr";
 
 const char jthreadDefaultUnitName[24] = "JTHREAD_defaultUnit";
 
-/* Original storage of this TU without a C reader; typed from its original bytes. */
-extern void *tiSymbol[12];
-extern const char *tiAlgName[6];
-
-extern const char JTHREADAlgDefaultName[24];
-extern const char JTHREADAlgChrName[16];
-extern const char JTHREADAlgSceneName[24];
-extern const char JTHREADAlgSystemName[24];
-extern const char JTHREADAlgUnitName[24];
-extern const char JTHREADAlgStageName[24];
-
 const char * tiAlgName[6] = { JTHREADAlgSystemName, JTHREADAlgChrName, JTHREADAlgStageName, JTHREADAlgSceneName, JTHREADAlgDefaultName, JTHREADAlgUnitName };
-
-void JTHREAD_defaultUnit(struct JThread *thread);
-void JTHREAD_defaultChr(struct JThread *thread);
-void JTHREAD_default(struct JThread *thread);
-void JTHREAD_defaultScene(struct JThread *thread);
-void JTHREAD_defaultStage(struct JThread *thread);
 
 void *tiSymbol[12] = { (void *)JTHREAD_defaultUnit, (void *)jthreadDefaultUnitName, (void *)JTHREAD_defaultChr, (void *)jthreadDefaultChrName, (void *)JTHREAD_defaultScene, (void *)jthreadDefaultSceneName, (void *)JTHREAD_defaultStage, (void *)jthreadDefaultStageName, (void *)JTHREAD_default, (void *)jthreadDefaultName, 0, 0 };

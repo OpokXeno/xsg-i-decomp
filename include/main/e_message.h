@@ -23,8 +23,6 @@ typedef struct EMessageParam {
     ECursol cursor;
 } EMessageParam;
 
-int eMessageMain(EMessageParam *message);
-
 struct EMessageSetParam {
     unsigned char flags;
     unsigned char mode;
@@ -48,6 +46,7 @@ struct EMessageSetParam {
     ECursol cursor;
 };
 
+int eMessageMain(EMessageParam *message);
 void eMessageSet(struct EMessageSetParam *message, char *text);
 
 #endif /* INCLUDE_MAIN_E_MESSAGE_H */

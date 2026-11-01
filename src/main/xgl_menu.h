@@ -7,6 +7,10 @@
 
 #include "shared.h"
 
+#define EE_SCRATCHPAD_BASE ((XglMenuDrawContext *)0x70000000)
+#define MENU_LIST_INDENT 8
+#define MENU_TABLE_COUNT 16
+
 typedef struct XglMenuNode XglMenuNode;
 
 typedef struct XglMenuRow {
@@ -64,15 +68,6 @@ typedef struct XglMenuParams {
     int *result_out;
 } XglMenuParams;
 
-#define EE_SCRATCHPAD_BASE ((XglMenuDrawContext *)0x70000000)
-
-#define MENU_LIST_INDENT 8
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char darkRedTextFormat[];
-extern const char dimTextFormat[];
-extern const char plainTextFormat[];
-
 /*
  * Partial view of one entry of the menutbl array (main 0x0021ce18/0x0021ce7c,
  * a 0x80-byte stride): xglMenuDrawType0 only touches the active flag at
@@ -101,8 +96,11 @@ typedef struct {
     short sprite_row_marks[18];
 } XglMenuEntry;
 
-#define MENU_TABLE_COUNT 16
-
+extern const char darkRedTextFormat[];
+extern const char dimTextFormat[];
+extern const char plainTextFormat[];
 extern XglMenuEntry menutbl[MENU_TABLE_COUNT];
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 #endif

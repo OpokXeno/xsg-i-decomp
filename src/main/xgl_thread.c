@@ -4,13 +4,6 @@
 #include "xgl_thread.h"
 
 /*
- * xglCreateSignal is file-local (LOCAL in the original symbol table).  Declare
- * it static before the shared header's `extern` prototype so the static
- * definition below does not follow a non-static declaration.
- */
-static int xglCreateSignal(void);
-
-/*
  * TU-local thread descriptor view (config/header-canon.json: ee_thread_t is
  * tu_local; xglThreadInitial reproduces only with the `entry` member).
  * The original allocation is 48 bytes, but this TU uses only its known prefix.
@@ -33,16 +26,13 @@ typedef struct {
     u32 wakeupCount;
 } ee_thread_t;
 
-static int iRotateSignal;
-static unsigned int iCurrentThread;
 /*
- * Storage-capacity hypothesis for original asActiveThreadList (0x00880fe8).
- * Its original ELF size is unspecified. A 400-byte allocation followed by
- * eight alignment bytes ends at the next TU's FS storage (0x00881180).
- * Only the first four records are used by the original consumers below;
- * this capacity does not establish twenty logical or initialized threads.
+ * xglCreateSignal is file-local (LOCAL in the original symbol table).  Declare
+ * it static before the shared header's `extern` prototype so the static
+ * definition below does not follow a non-static declaration.
  */
-static active_thread_t asActiveThreadList[20];
+static int xglCreateSignal(void);
+
 extern int CreateThread(ee_thread_t *thread);
 extern void xglRenderEntry(void *argument);
 extern void xglCdControlThread(void *argument);
@@ -55,6 +45,20 @@ static system_thread_entry_t asSystemThreadList[4] = {
     { xglStudioEntry, 0, 0x1000, 12, 0 },
     { ControlEntry, 0, 0x10000, 11, 0 },
 };
+
+static int iRotateSignal;
+
+static unsigned int iCurrentThread;
+
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+/*
+ * Storage-capacity hypothesis for original asActiveThreadList (0x00880fe8).
+ * Its original ELF size is unspecified. A 400-byte allocation followed by
+ * eight alignment bytes ends at the next TU's FS storage (0x00881180).
+ * Only the first four records are used by the original consumers below;
+ * this capacity does not establish twenty logical or initialized threads.
+ */
+static active_thread_t asActiveThreadList[20];
 
 static int xglCreateSignal(void)
 {

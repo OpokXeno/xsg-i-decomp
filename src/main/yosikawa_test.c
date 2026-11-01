@@ -1,7 +1,7 @@
 #include "common.h"
-
 #include "shared.h"
 #include "main/xgl_thread.h"
+
 typedef struct YosikawaPadInputPrefix {
     u8 unmodeled_00[0x28];
     union {
@@ -14,19 +14,30 @@ typedef struct YosikawaPadInputPrefix {
         } buttons;
     } input;
 } YosikawaPadInputPrefix;
+
 extern YosikawaPadInputPrefix PadData;
-static int csr;
 extern const char yosikawaTestCursorControl[];
-extern void HairTest(void);
-extern void WindTest(void);
-extern void ColliTest(void);
-static void (*funclist[3])(void);
 extern const char CallJavaMethodYosikawaTestText[];
 extern const char CallJavaMethodHairTestLabel[];
 extern const char CallJavaMethodWindTestLabel[];
 extern const char CallJavaMethodColliTestLabel[];
+
+extern void HairTest(void);
+extern void WindTest(void);
+extern void ColliTest(void);
 extern void xglRenderClearFrame(void);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+static int csr;
+
+static void (*funclist[3])(void);
+
+static int csr = 0;
+
+/* Text: {reset}{glyph 28} */
+const char yosikawaTestCursorControl[8] = "\013\033\034";
+
+static void (*funclist[3])(void) = { HairTest, WindTest, ColliTest };
 
 void YosikawaTest(void)
 {
@@ -87,8 +98,3 @@ void YosikawaTest(void)
         xglSleep();
     }
 }
-
-static int csr = 0;
-/* Text: {reset}{glyph 28} */
-const char yosikawaTestCursorControl[8] = "\013\033\034";
-static void (*funclist[3])(void) = { HairTest, WindTest, ColliTest };

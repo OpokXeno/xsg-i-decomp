@@ -1,14 +1,8 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "stage_1.h"
 
-/* Twenty-four halfwords occupy the stage peer block returned by STAGE_create. */
-
 #include "main/jni.h"
-
-static u16 defaultStage[24];
 
 /* CameraWork's independently evidenced prefix: creation fills the object tag
  * and camera id; TCAMERA_update reads the four channel modes and frames. */
@@ -31,8 +25,6 @@ typedef struct StageClassField {
     union { void *address; int offset; int initial_value; } location;
 } StageClassField;
 
-/* Twenty-four halfwords occupy the stage peer block returned by STAGE_create. */
-
 const char cameraClassName[12] = "xeno/Camera";
 
 const char cameraInstanceName[8] = "cam0";
@@ -40,6 +32,9 @@ const char cameraInstanceName[8] = "cam0";
 const char initMethodName[8] = "init";
 
 const char initMethodSignature[8] = "()V";
+
+/* Twenty-four halfwords occupy the stage peer block returned by STAGE_create. */
+static u16 defaultStage[24];
 
 void *STAGE_create(u16 stage_id)
 {

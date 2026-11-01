@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_SPLINE_H
 
 #include "shared.h"
-
 #include "main/jni.h"
 
 typedef struct Spline {

@@ -2,14 +2,23 @@
 #include "main/act_1.h"
 #include "main/open_close_main.h"
 #include "main/e_number_main.h"
-
 #include "shared.h"
-
 #include "endou_test.h"
+#include "main/control_entry.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_font.h"
 
-static int Select_82;
+/* Clear the CPU button state before the render thread samples it again. */
+#define ENDOU_PAD_BUTTONS ((EndouPadDataPrefix *)(void *)&PadData)
 
-static int TopMode_86;
+/* Volatile input view: the separate xglRenderEntry thread calls xglPadRead,
+ * which writes the decoded controller words. xglSleep yields between reads. */
+#define ENDOU_PAD_INPUT ((volatile EndouPadDataPrefix *)(void *)&PadData)
+
+#define ENDOU_CLEAR_ENV ((EndouClearEnvironment *)(void *)&ClearEnv)
+#define NULL ((void *)0)
+#define ENDOU_MODEL_PAD ((EndouModelPadState *)(void *)&PadData)
+#define ENDOU_MODEL_MESSAGE ((EndouModelMessagePrefix *)(void *)&msg_11)
 
 typedef struct PartyAttackSlot {
     unsigned short character;
@@ -21,20 +30,6 @@ typedef struct PartyDataView {
     unsigned char unmodeled_00[0x30];
     PartyAttackSlot attack_slots[3];
 } PartyDataView;
-
-extern const char attackerHeadingLabel[];
-
-extern const char attackerControlsLabel[];
-
-static const char * text00_83[10];
-
-static const char * text01_84[3];
-
-static const char * text02_85[] ;
-
-extern const char partyDebugTitleLabel[];
-
-extern const char partyDebugToggleLabel[];
 
 typedef struct EndouBattleWindowParams {
     int x;
@@ -91,28 +86,6 @@ typedef struct BattleWinCommand {
     unsigned char unmodeled_0a[2];
 } BattleWinCommand;
 
-static BattleWinCommand data_15[20];
-
-static const char * tag_16[] ;
-
-static char text_17[171] ;
-
-static const char * msg_19[] ;
-
-static char tag_20[17] ;
-
-static int count_18;
-
-extern const char battleWindowTestLabel[];
-
-extern const char condorPasaName[];
-
-extern const char battleWindowTitleText[];
-
-extern const char padRepeatFormat[];
-
-extern void xglSleep(void);
-
 /* ld at +0x28 and lhu/sh at +0x28/+0x2a access the same button storage. */
 typedef struct PadDataButtonView {
     u8 unmodeled_00[0x28];
@@ -127,57 +100,12 @@ typedef struct PadDataButtonView {
     } buttons;
 } PadDataButtonView;
 
-extern PadDataButtonView PadData;
-
-extern void xglCdLoadOverlay(int overlayId);
-
-extern void SeisanInit(void);
-
-extern int SeisanMain(void);
-
-extern void SeisanDisp(void);
-
-extern void xglRenderClearFrame(void);
-
 typedef struct EModelTestState {
     unsigned char unmodeled_00[0x11];
     unsigned char isReady;
     unsigned char unmodeled_12[1];
     unsigned char extFuncFlag;
 } EModelTestState;
-
-extern void MenuModelUnitOpen(void *unit, int drawType);
-
-extern void MenuModelControl(void *unit);
-
-extern void ACT_init(void);
-
-extern void MenuLoadInit(void);
-
-extern void *MenuModelInit(void *work_start);
-
-extern void MenuModelMemoryInit(void *base, int size);
-
-extern void MenuModelMemorySet(int count);
-
-extern void MenuModelCreate(int *model, int character_id);
-
-extern void MenuModelExtFuncSet(int model,
-                                void (*callback)(EModelTestState *),
-                                int argument);
-
-extern void MenuModelMain(void);
-
-/* EUC-JP bytes for the model-test diagnostic with its leading control byte. */
-
-/* JP: モデルテスト
- * EN: Model test */
-const unsigned char eModelTestLabel[16] =
-    "\x0B\xA5\xE2\xA5\xC7\xA5\xEB\xA5\xC6\xA5\xB9\xA5\xC8";
-
-static const char not_found_format[16] = "%s/NotFound";
-
-static const char read_error_format[24] = "%s/ReadError";
 
 typedef struct GifPackedTag {
     unsigned int loop_count_and_eop;
@@ -238,46 +166,6 @@ enum {
     BG_TEST_COMMAND_HIGH_SHIFT = 19
 };
 
-extern BgTestRenderState sRender;
-
-static BgTestEnvironment TestEnv_47 = {
-    { 0, 0, 0 }, 0x50000009,
-    { 0x00008001, 0x808B4000, 0x0000000053531EEEULL },
-    { 0x20, 0x14 },
-    { 0, 0x6 },
-    { 0x00050000, 0x47 },
-    { 0x80, 0x80, 0x80, 0x80 },
-    { 0, 0, 0, 0 },
-    { 0x6FF8, 0x71F8, 0, 0 },
-    { 0x2000, 0x1C00, 0, 0 },
-    { 0x8FF8, 0x8DF8, 0, 0 },
-};
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-void *test_data = 0;
-
-static char fname_67[64];
-
-static float size_68;
-
-static unsigned int TestEnv_66[32] = {
-    0x00008001, 0x208B4000, 0x000000EE, 0x00000000,
-    0x00000000, 0x00000000, 0x0000003F, 0x00000000,
-    0xDD343840, 0x20070005, 0x00000006, 0x00000000,
-    0x00000080, 0x00000080, 0x00000080, 0x00000080,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00007C00, 0x00007BF8, 0x10000000, 0x00000000,
-    0x00000800, 0x00000800, 0x00000000, 0x00000000,
-    0x00008400, 0x000083F8, 0x10000000, 0x00000000
-};
-
 typedef struct WinTexEnvironment {
     unsigned int vif_nop_before_flush;
     unsigned int vif_nop_before_direct;
@@ -291,29 +179,14 @@ typedef struct WinTexEnvironment {
     GifAdWrite transfer_direction;
 } WinTexEnvironment;
 
-/* VIF DIRECTHL carries a GIF PACKED tag and five GS A+D register writes. */
-
-static WinTexEnvironment WinTexEnv_65 = {
-    0, 0, 0x11000000, 0x51000006,
-    { 0x00008005, 0x10000000, 0x000000000000000EULL },
-    { 0x0000000000000000ULL, 0x000000000000003FULL },
-    { 0x0008380000000000ULL, 0x0000000000000050ULL },
-    { 0x0000000000000000ULL, 0x0000000000000051ULL },
-    { 0x0000008000000200ULL, 0x0000000000000052ULL },
-    { 0x0000000000000000ULL, 0x0000000000000053ULL },
-};
-
 /*
  * The context e_test's argument points to: only the VIF packet pointer at
  * +0x00 is evidenced here (main VA 0x002728f8, lw $4,0x0($16) before each
  * sceVif1Pk* call); the rest stays an unmodeled span (docs/naming.md).
  */
-
 typedef struct ETestContext {
     XglPacket *packet;
 } ETestContext;
-
-extern void xglFontReloadTexture(ETestContext *context, int mode);
 
 /*
  * The original PadData object is 0xD0 bytes at 0x00490D90. EndouTest uses the
@@ -321,7 +194,6 @@ extern void xglFontReloadTexture(ETestContext *context, int mode);
  * 64-bit exit-chord word; this local prefix models only that evidenced view.
  * SeisanTest keeps its separate full-width declaration above unchanged.
  */
-
 typedef struct EndouPadDataPrefix {
     u8 unmodeled_00[0x28];
     union {
@@ -342,78 +214,9 @@ typedef struct EndouClearEnvironment {
     u32 color_a;
 } EndouClearEnvironment;
 
-extern EndouClearEnvironment ClearEnv;
-
-extern const char settlementScreenTestLabel[];
-
-extern const char textTestSquareLabel[];
-
-extern const char messageTestCrossLabel[];
-
-extern const char miscTestCircleLabel[];
-
-extern const char modelTestL1Label[];
-
-extern const char loadTestL2Label[];
-
-extern const char textureTestR1Label[];
-
-extern const char jpegTestR2Label[];
-
-extern const char battleWindowTestUpLabel[];
-
-extern const char saveTestDownLabel[];
-
-extern const char modelTestRightLabel[];
-
-extern const char shopTestLeftLabel[];
-
-extern const char GameEndouTestTitleText[];
-
-extern void endPrintInit(void);
-
-void SeisanTest(void);
-
-void eMessageTest(void);
-
-void eNumberTest(void);
-
-void eModelTest(void);
-
-void TexturTest(void);
-
-void JpegTest(void);
-
-void BattleWindowTest(void);
-
-void ModelTest(void);
-
-void TextTest(void);
-
-void ShopTest(void);
-
-extern int MenuFileMain(int mode);
-
 typedef struct ShopDataRecord {
     u16 values[0xb8];
 } ShopDataRecord;
-
-extern void PartyFriendOn(int party_id);
-
-extern void PartyTakeAgwsOn(int characterId);
-
-/* Clear the CPU button state before the render thread samples it again. */
-
-#define ENDOU_PAD_BUTTONS ((EndouPadDataPrefix *)(void *)&PadData)
-
-/* Volatile input view: the separate xglRenderEntry thread calls xglPadRead,
- * which writes the decoded controller words. xglSleep yields between reads. */
-
-#define ENDOU_PAD_INPUT ((volatile EndouPadDataPrefix *)(void *)&PadData)
-
-#define ENDOU_CLEAR_ENV ((EndouClearEnvironment *)(void *)&ClearEnv)
-
-/* EUC-JP bytes for the model-test diagnostic with its leading control byte. */
 
 typedef struct EMessageTestWindow {
     u8 unmodeled_00;
@@ -433,44 +236,6 @@ typedef struct EMessageTestWindow {
     u8 unmodeled_1d[0x33];
 } EMessageTestWindow;
 
-extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
-
-extern void eMessageSet(void *message, const char *text);
-
-extern void eMessageTextChange(void *message, const char *text);
-
-extern int eMessageNextPage(void *message, int mode);
-
-extern void eMessageDraw(void *message);
-
-extern void eMessageMain(void *message);
-
-extern void endPrintExtFunc(int mode, int amount, void *data);
-
-extern void xglFontDebugHex(int x, int y, int value, int digits);
-
-static const char * msg_45[5];
-
-static char text00_46[176];
-
-extern const char eMessageTestLabel[];
-
-#include "main/control_entry.h"
-
-#include "main/xgl_cd.h"
-
-#include "main/xgl_font.h"
-
-extern const char reLoadTestFloorPath[];
-
-extern const char reLoadTestLabel[];
-
-extern const char kanjiTestText[];
-
-extern void xglFontPrintExtFunc(unsigned int mask,
-                                void (*callback)(ETestContext *),
-                                void *context);
-
 typedef struct UmnEventTextRecord {
     u32 unmodeled_00;
     const char *message_text;
@@ -486,16 +251,6 @@ typedef struct TextTestMessage {
     u8 unmodeled_1d[0x33];
 } TextTestMessage;
 
-extern u8 *UmnEventTextInit(u8 *work_end);
-
-extern int UmnEventTextMake(int mode);
-
-extern UmnEventTextRecord *UmnEventTextNextGet(int index);
-
-extern void eMessageModeChange(void *message, u8 mode);
-
-extern const char textTestLabel[];
-
 typedef struct UmnMailDisplayParams {
     int mode;
     u8 unmodeled_04[4];
@@ -510,14 +265,6 @@ typedef struct UmnMailDisplayParams {
     u16 view_height;
     u8 unmodeled_20[0x20];
 } UmnMailDisplayParams;
-
-extern void tyaUmlDispInit(void);
-
-extern void tyaUmlDispParamReset(UmnMailDisplayParams *params, int mode);
-
-extern void tyaUmlDispMain(UmnMailDisplayParams *params);
-
-extern const char umnMailDispTestLabel[];
 
 typedef struct JpegTestDecodeRequest {
     void *source;
@@ -541,104 +288,11 @@ typedef struct JpegTestDisplay {
     void *image_data;
 } JpegTestDisplay;
 
-extern int GameSnapShotSaveThumbnail(int quality, void *jpeg_buffer);
-
-extern const char jpegTestLabel[];
-
-static int Select_74;
-
-static int Select_76;
-
-static int Select_78;
-
-static int Select_80;
-
-extern const char takeAgwsHeadingLabel[];
-
-extern const char takeAgwsControlsLabel[];
-
-extern const char lockPartyHeadingLabel[];
-
-extern const char toggleControlsLabel[];
-
-extern const char outFriendHeadingLabel[];
-
-extern const char friendHeadingLabel[];
-
-extern const char friendControlsLabel[];
-
-extern const char menuCursorText[];
-
-static const char * text00_75[] ;
-
-static const char * text00_77[] ;
-
-static const char * text00_79[] ;
-
-static const char * text00_81[] ;
-
-extern char *MenuCharNameGet(int characterId);
-
-extern int PartyTakeAgwsCheck(int characterId);
-
-extern void PartyTakeAgwsOff(int characterId);
-
-extern int PartyLockPartyCheck(int characterId);
-
-extern void PartyLockPartyOn(int characterId);
-
-extern void PartyLockPartyOff(int characterId);
-
-extern void func_A22628(void);
-
-extern int dataMoneyBoxInc(int amount);
-
-extern void MenuShopMain(int menu_selection);
-
-extern const char shopDataPath[];
-extern const char shopTestLabel[];
-extern const char shopNumberChangeLabel[];
-extern const char shopRunQuitLabel[];
-extern const char shopNoFormat[];
-
-extern char shopHeadingIText[];
-extern const char shopHeadingCwText[];
-extern const char shopHeadingCaText[];
-extern const char shopHeadingCbText[];
-extern const char shopHeadingAwText[];
-
-extern const char shopHeadingAaText[];
-extern const char shopHeadingAbText[];
-extern const char shopHeadingAfText[];
-extern const char shopHeadingAeText[];
-extern char shopHeadingAText[];
-
-extern const char shopRowNumberFormat[];
-
-static inline void endouShopHeading(int y, const char *format, int shop_number)
-{
-    xglFontDebugPrintf(0, y, format, shop_number);
-}
-
 typedef struct FileLoadState {
     int state;
     void *buffer;
     unsigned char unmodeled_08[0x40];
 } FileLoadState;
-
-static FileLoadState files;
-
-static u64 eNumberTexEnv_69[12];
-
-static u64 TestEnv_70[20];
-
-static int x_71;
-
-extern const char fileLoadTestMenuPath[];
-
-extern const char fileLoadTestLabel[];
-
-extern void (*xglCdSetCallback(void (*callback)(int, int)))(int, int);
 
 typedef int s32;
 
@@ -647,6 +301,7 @@ typedef s32 M2C_UNK;
 typedef struct StudioLight StudioLight;
 
 typedef Vector4 EndouVector __attribute__((aligned(16)));
+
 typedef struct EndouModelActor {
     unsigned char unmodeled_00[0x10];
     EndouVector position;
@@ -664,95 +319,11 @@ typedef struct EndouModelActor {
     unsigned long long draw_alpha;
 } EndouModelActor;
 
-M2C_UNK ACT_initMotion();
-
-void ACT_modelDraw(EndouModelActor *actor);
-
-EndouModelActor *ACT_setArms(EndouModelActor *actor, EndouModelActor *parent,
-                             unsigned int accessory_id, int flags);
-
-void ACT_setModelWrapper(EndouModelActor *actor, int unused);
-
-void ACT_setMotion(EndouModelActor *actor, int motion_id);
-
-void ACT_updateMotion(EndouModelActor *actor);
-
-void GameResourceInit(unsigned int address, int size);
-
-void RES_GetMdlFileName(char *filename, int resource_kind);
-
-void nmlModelFlush(void);
-
-char *strcpy(char *destination, const char *source);
-
-void xglRotTransPersN(void *destination, const Matrix4 matrix,
-                      const void *points, int count, int cameraId);
-
-void xglStudioChange(int studio_index);
-
-StudioCamera *xglStudioGetActiveCamera(void);
-
-void xglLightDirection(void *light, unsigned int index,
-                       const Vector4 *direction);
-void xglLightIntensityAmbient(void *light, const void *intensity);
-void xglLightIntensityParallel(void *light, unsigned int index,
-                               const void *intensity);
-void xglStudioGetLight(StudioLight **light_out);
-
 typedef struct EndouTestLighting {
     unsigned long long ambient[2];
     unsigned long long parallel_intensity[3][2];
     Vector4 direction[3];
 } EndouTestLighting;
-
-static inline void endModelCameraPosition(StudioCamera *camera,
-                                         float x, float y, float z)
-{
-    camera->position.x = x;
-    camera->position.y = y;
-    camera->position.z = z;
-}
-
-static __inline__ void EndouApplyModelLighting(StudioLight **light_slot,
-                                              EndouTestLighting profile)
-{
-    xglStudioGetLight(light_slot);
-    xglLightIntensityAmbient(*light_slot, profile.ambient);
-    xglLightIntensityParallel(*light_slot, 0, profile.parallel_intensity[0]);
-    xglLightDirection(*light_slot, 0, &profile.direction[0]);
-    xglLightIntensityParallel(*light_slot, 1, profile.parallel_intensity[1]);
-    xglLightDirection(*light_slot, 1, &profile.direction[1]);
-    xglLightIntensityParallel(*light_slot, 2, profile.parallel_intensity[2]);
-    xglLightDirection(*light_slot, 2, &profile.direction[2]);
-}
-
-extern const EndouTestLighting modelTestLighting;
-
-extern const char modelTestFpkName[152];
-
-extern const char modelTestMotionName[];
-
-extern const unsigned long long modelTestQuadWordTable[8];
-
-extern const char modelTestLexExtension[8];
-
-extern const char modelTestXtxExtension[8];
-
-extern const char modelTestJntExtension[];
-
-static float ang_0[4];
-
-static const char * msg00_14[4];
-
-static unsigned char msg_11[80];
-
-static s32 no_13;
-
-static f32 pipo_2;
-
-static float pos_1[4];
-
-static s32 time_10;
 
 typedef struct EndouModelLineVertex {
     int x;
@@ -767,35 +338,15 @@ typedef struct EndouModelLinePoint {
     unsigned char unmodeled_14[12];
 } EndouModelLinePoint;
 
-static EndouModelLinePoint line00_3[7];
-
-static EndouModelLinePoint line01_4[7];
-
-static EndouModelLinePoint line02_5[7];
-
-static EndouModelLinePoint line03_6[7];
-
-static EndouModelLinePoint line10_7[7];
-
-static EndouModelLinePoint line11_8[7];
-
-static EndouModelLinePoint line12_9[7];
-
 typedef struct EndouOrientationStorage {
     EndouVector rotation;
     EndouVector scale;
 } EndouOrientationStorage;
 
-extern unsigned char modelTestColumnAlphaTable[];
-
-extern unsigned char modelTestRowAlphaTable[];
-
 typedef struct EndouModelBackQuad {
     int vertices[4][4];
     float uv[4];
 } EndouModelBackQuad;
-
-static EndouModelBackQuad bsp_12;
 
 typedef struct EndouPrintLinePoint {
     int x;
@@ -825,8 +376,6 @@ typedef struct EndouELineSetData {
     EndouELinePoint points[5];
 } EndouELineSetData;
 
-void eLineSet(EndouELineSetData *line, int unused);
-
 typedef struct EndouELineEntry {
     u8 state;
     u8 unmodeled_001[2];
@@ -837,23 +386,6 @@ typedef struct EndouELineEntry {
     u32 count;
     EndouELinePoint render[5];
 } EndouELineEntry;
-
-void eLineMain(EndouELineEntry *line);
-
-void endPrintDirectLine(EndouPrintLinePoint *line);
-
-void endSpriteSet(void *sprite, int mode);
-
-void eSpriteMain(ESpriteMainData *sprite);
-void eSpriteSet(ESprite *sprite, int flags);
-
-void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
-
-static u8 time_37;
-
-extern const char eNumberTestLabel[];
-
-static ECursolMainData cur_25;
 
 typedef struct EndouSpriteQuadVertex {
     int x;
@@ -871,32 +403,12 @@ typedef struct EndouSpriteQuad {
     unsigned char unmodeled_050[16];
 } EndouSpriteQuad;
 
-static EndouSpriteQuad d_28;
-
-static ENumberSpriteDescriptor d_33;
-
-static ENumberSpriteDescriptor d_35[2];
-
-static ENumberSpriteDescriptor d_36;
-
-static ENumberSpriteDescriptor d_38;
-
-static ENumberRenderDescriptor d_39;
-
-static ENumberRenderDescriptor d_40;
-
-static ENumberSpriteDescriptor d_41;
-
 typedef struct EndouPrintPoint {
     short x;
     unsigned short y;
     int depth;
     unsigned char color[4];
 } EndouPrintPoint;
-
-static EndouPrintPoint d_42[7];
-
-static EndouPrintPoint d_43;
 
 typedef struct EndouQuadColor {
     signed char red;
@@ -917,24 +429,6 @@ typedef struct EndouQuadDescriptor {
     unsigned int format;
 } EndouQuadDescriptor;
 
-static EndouQuadDescriptor d_44;
-
-static EndouELineEntry line_23[4];
-
-static EndouPrintPoint line_34[6];
-
-static unsigned char moji2_27[27];
-
-static unsigned char moji_26[27];
-
-static ENumberMainData num_29[1];
-
-static ENumberMainData num_30[1];
-
-static ENumberMainData num_31[1];
-
-static ENumberMainData num_32[1];
-
 typedef struct EndouRibbonRecord {
     short x;
     short y;
@@ -949,26 +443,10 @@ typedef struct EndouRibbonRecord {
     unsigned char unmodeled_058[0x18];
 } EndouRibbonRecord;
 
-static EndouRibbonRecord rbn_21[4];
-
-static ESprite spr_22[4];
-
 typedef union EndouTagFontViews {
     ETagFont control;
     ETagFontMainData draw;
 } EndouTagFontViews;
-
-static EndouTagFontViews tgf_24[2];
-
-static unsigned char * buffer_72;
-
-static char mm_73[352];
-
-extern const char umlTestFilePath[];
-extern const char umlTestLabel[];
-extern const char umlTestColorControl[];
-
-#define NULL ((void *)0)
 
 typedef struct EndouModelPadState {
     unsigned char unmodeled_00[0x28];
@@ -978,7 +456,6 @@ typedef struct EndouModelPadState {
     unsigned char unmodeled_30[8];
     signed char stick_axis[4];
 } EndouModelPadState;
-#define ENDOU_MODEL_PAD ((EndouModelPadState *)(void *)&PadData)
 
 typedef struct EndouModelMessagePrefix {
     unsigned char flags;
@@ -989,7 +466,6 @@ typedef struct EndouModelMessagePrefix {
     short y;
     int draw_parameter;
 } EndouModelMessagePrefix;
-#define ENDOU_MODEL_MESSAGE ((EndouModelMessagePrefix *)(void *)&msg_11)
 
 enum FileLoadDrawState {
     FILE_DRAW_UNINITIALIZED = -1,
@@ -1006,6 +482,899 @@ struct FileLoadDrawEnvironment {
     unsigned char unmodeled_00[0x30];
     unsigned long long texture_parameters;
 };
+
+typedef struct TexturTestHeader {
+    u8 unmodeled_00[8];
+    int entry_count;
+    u32 entries_offset;
+} TexturTestHeader;
+
+typedef struct TexturTestEntry {
+    u32 width_and_pitch;
+    u32 height;
+    u32 vram_offset;
+    int data_quadwords;
+    u32 data_offset;
+} TexturTestEntry;
+
+typedef struct TexturTestUploadEnvironment {
+    u8 unmodeled_00[0x20];
+    u64 destination_parameters;
+    u8 unmodeled_28[0x18];
+    u64 transfer_dimensions;
+    u8 unmodeled_48[0x18];
+} TexturTestUploadEnvironment;
+
+typedef struct TexturTestDrawEnvironment {
+    u8 unmodeled_00[0x50];
+    u64 texture_parameters;
+    u8 unmodeled_58[0x68];
+} TexturTestDrawEnvironment;
+
+extern const char attackerHeadingLabel[];
+extern const char attackerControlsLabel[];
+static const char * text02_85[] ;
+extern const char partyDebugTitleLabel[];
+extern const char partyDebugToggleLabel[];
+static const char * tag_16[] ;
+static const char * msg_19[] ;
+extern const char battleWindowTestLabel[];
+extern const char condorPasaName[];
+extern const char battleWindowTitleText[];
+extern const char padRepeatFormat[];
+extern PadDataButtonView PadData;
+extern BgTestRenderState sRender;
+extern EndouClearEnvironment ClearEnv;
+extern const char settlementScreenTestLabel[];
+extern const char textTestSquareLabel[];
+extern const char messageTestCrossLabel[];
+extern const char miscTestCircleLabel[];
+extern const char modelTestL1Label[];
+extern const char loadTestL2Label[];
+extern const char textureTestR1Label[];
+extern const char jpegTestR2Label[];
+extern const char battleWindowTestUpLabel[];
+extern const char saveTestDownLabel[];
+extern const char modelTestRightLabel[];
+extern const char shopTestLeftLabel[];
+extern const char GameEndouTestTitleText[];
+extern const char eMessageTestLabel[];
+extern const char reLoadTestFloorPath[];
+extern const char reLoadTestLabel[];
+extern const char kanjiTestText[];
+extern const char textTestLabel[];
+extern const char umnMailDispTestLabel[];
+extern const char jpegTestLabel[];
+extern const char takeAgwsHeadingLabel[];
+extern const char takeAgwsControlsLabel[];
+extern const char lockPartyHeadingLabel[];
+extern const char toggleControlsLabel[];
+extern const char outFriendHeadingLabel[];
+extern const char friendHeadingLabel[];
+extern const char friendControlsLabel[];
+extern const char menuCursorText[];
+static const char * text00_75[] ;
+static const char * text00_77[] ;
+static const char * text00_79[] ;
+static const char * text00_81[] ;
+extern const char shopDataPath[];
+extern const char shopTestLabel[];
+extern const char shopNumberChangeLabel[];
+extern const char shopRunQuitLabel[];
+extern const char shopNoFormat[];
+extern char shopHeadingIText[];
+extern const char shopHeadingCwText[];
+extern const char shopHeadingCaText[];
+extern const char shopHeadingCbText[];
+extern const char shopHeadingAwText[];
+extern const char shopHeadingAaText[];
+extern const char shopHeadingAbText[];
+extern const char shopHeadingAfText[];
+extern const char shopHeadingAeText[];
+extern char shopHeadingAText[];
+extern const char shopRowNumberFormat[];
+extern const char fileLoadTestMenuPath[];
+extern const char fileLoadTestLabel[];
+extern void (*xglCdSetCallback(void (*callback)(int, int)))(int, int);
+extern const EndouTestLighting modelTestLighting;
+extern const char modelTestFpkName[152];
+extern const char modelTestMotionName[];
+extern const unsigned long long modelTestQuadWordTable[8];
+extern const char modelTestLexExtension[8];
+extern const char modelTestXtxExtension[8];
+extern const char modelTestJntExtension[];
+extern unsigned char modelTestColumnAlphaTable[];
+extern unsigned char modelTestRowAlphaTable[];
+extern const char eNumberTestLabel[];
+extern const char umlTestFilePath[];
+extern const char umlTestLabel[];
+extern const char umlTestColorControl[];
+extern const char textureTestNewdMenuPath[];
+extern const char textureTestDataMenuPath[];
+extern const char textureTestLabel[];
+extern const char modelTestHiraganaKatakanaText[16];
+extern const char modelTestKatakanaHiraganaText[16];
+extern const char modelTestHiraganaText[16];
+extern const char modelTestKatakanaText[16];
+extern const char gradeOneTagText[8];
+extern const char temptationMessageText[16];
+extern const char slowMessageText[40];
+extern const char yesText[8];
+extern const char endouTestNoText[8];
+extern const char offText[8];
+extern const char onText[8];
+extern const char absentText[8];
+extern const char presentText[8];
+extern const char a1Text[8];
+extern const char p4Text[8];
+extern const char a2Text[8];
+extern const char p6Text[8];
+extern const char nullText[16];
+extern const char p1Text[8];
+extern const char p3Text[8];
+extern const char p5Text[8];
+extern const char p2Text[8];
+extern const char a3Text[8];
+extern const char number3Text[8];
+extern const char number2Text[8];
+extern const char number1Text[8];
+extern const char characterText[8];
+extern const char positionText[16];
+extern const char grandPrixText[16];
+extern const char arimaKinenText[16];
+extern const char twoYearOldFilliesChampionText[24];
+extern const char hanshinJuvenileFilliesText[16];
+extern const char olderHorsesRoyalRoadText[24];
+extern const char japanCupText[16];
+extern const char autumnMileChampionshipText[24];
+extern const char mileChampionshipText[16];
+extern const char filliesMaresChampionshipText[16];
+extern const char queenElizabethIiCupText[24];
+extern const char olderHorsesCursedTennoShoText[24];
+extern const char tennoShoAutumnText[16];
+extern const char coltsClassicsThirdLegText[24];
+extern const char filliesClassicsThirdLegText[24];
+extern const char autumnSprintChampionshipText[24];
+extern const char sprintersStakesText[24];
+extern const char springGrandPrixText[16];
+extern const char takarazukaKinenText[16];
+extern const char springMileChampionshipText[24];
+extern const char yasudaKinenText[16];
+extern const char coltsClassicsSecondLegText[32];
+extern const char japaneseDerbyText[16];
+extern const char filliesClassicsSecondLegText[32];
+extern const char oaksText[16];
+extern const char foreignBredMilersChampionshipText[32];
+extern const char nhkMileCupText[16];
+extern const char springLongDistanceChampionshipText[24];
+extern const char tennoShoSpringText[16];
+extern const char coltsClassicsFirstLegText[24];
+extern const char filliesClassicsFirstLegText[24];
+extern const char springSprintChampionshipText[24];
+extern const char takamatsunomiyaKinenText[16];
+extern const char dirtChampionshipText[16];
+extern const char februaryStakesText[16];
+extern const char horseNameListText[64];
+extern const char vowelKanaListText[24];
+extern const char winningRaceListText[144];
+extern const char deviceListText[144];
+extern const char shukaShoText[8];
+extern const char satsukiShoText[8];
+extern const char okaShoText[8];
+extern const char kikukaShoText[8];
+
+extern void xglSleep(void);
+extern void xglCdLoadOverlay(int overlayId);
+extern void SeisanInit(void);
+extern int SeisanMain(void);
+extern void SeisanDisp(void);
+extern void xglRenderClearFrame(void);
+extern void MenuModelUnitOpen(void *unit, int drawType);
+extern void MenuModelControl(void *unit);
+extern void ACT_init(void);
+extern void MenuLoadInit(void);
+extern void *MenuModelInit(void *work_start);
+extern void MenuModelMemoryInit(void *base, int size);
+extern void MenuModelMemorySet(int count);
+extern void MenuModelCreate(int *model, int character_id);
+
+extern void MenuModelExtFuncSet(int model,
+                                void (*callback)(EModelTestState *),
+                                int argument);
+
+extern void MenuModelMain(void);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern void xglFontReloadTexture(ETestContext *context, int mode);
+extern void endPrintInit(void);
+void SeisanTest(void);
+void eMessageTest(void);
+void eNumberTest(void);
+void eModelTest(void);
+void TexturTest(void);
+void JpegTest(void);
+void BattleWindowTest(void);
+void ModelTest(void);
+void TextTest(void);
+void ShopTest(void);
+extern int MenuFileMain(int mode);
+extern void PartyFriendOn(int party_id);
+extern void PartyTakeAgwsOn(int characterId);
+extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
+extern void eMessageSet(void *message, const char *text);
+extern void eMessageTextChange(void *message, const char *text);
+extern int eMessageNextPage(void *message, int mode);
+extern void eMessageDraw(void *message);
+extern void eMessageMain(void *message);
+extern void endPrintExtFunc(int mode, int amount, void *data);
+extern void xglFontDebugHex(int x, int y, int value, int digits);
+
+extern void xglFontPrintExtFunc(unsigned int mask,
+                                void (*callback)(ETestContext *),
+                                void *context);
+
+extern u8 *UmnEventTextInit(u8 *work_end);
+extern int UmnEventTextMake(int mode);
+extern UmnEventTextRecord *UmnEventTextNextGet(int index);
+extern void eMessageModeChange(void *message, u8 mode);
+extern void tyaUmlDispInit(void);
+extern void tyaUmlDispParamReset(UmnMailDisplayParams *params, int mode);
+extern void tyaUmlDispMain(UmnMailDisplayParams *params);
+extern int GameSnapShotSaveThumbnail(int quality, void *jpeg_buffer);
+extern char *MenuCharNameGet(int characterId);
+extern int PartyTakeAgwsCheck(int characterId);
+extern void PartyTakeAgwsOff(int characterId);
+extern int PartyLockPartyCheck(int characterId);
+extern void PartyLockPartyOn(int characterId);
+extern void PartyLockPartyOff(int characterId);
+extern void func_A22628(void);
+extern int dataMoneyBoxInc(int amount);
+extern void MenuShopMain(int menu_selection);
+M2C_UNK ACT_initMotion();
+void ACT_modelDraw(EndouModelActor *actor);
+
+EndouModelActor *ACT_setArms(EndouModelActor *actor, EndouModelActor *parent,
+                             unsigned int accessory_id, int flags);
+
+void ACT_setModelWrapper(EndouModelActor *actor, int unused);
+void ACT_setMotion(EndouModelActor *actor, int motion_id);
+void ACT_updateMotion(EndouModelActor *actor);
+void GameResourceInit(unsigned int address, int size);
+void RES_GetMdlFileName(char *filename, int resource_kind);
+void nmlModelFlush(void);
+char *strcpy(char *destination, const char *source);
+
+void xglRotTransPersN(void *destination, const Matrix4 matrix,
+                      const void *points, int count, int cameraId);
+
+void xglStudioChange(int studio_index);
+StudioCamera *xglStudioGetActiveCamera(void);
+
+void xglLightDirection(void *light, unsigned int index,
+                       const Vector4 *direction);
+
+void xglLightIntensityAmbient(void *light, const void *intensity);
+
+void xglLightIntensityParallel(void *light, unsigned int index,
+                               const void *intensity);
+
+void xglStudioGetLight(StudioLight **light_out);
+void eLineSet(EndouELineSetData *line, int unused);
+void eLineMain(EndouELineEntry *line);
+void endPrintDirectLine(EndouPrintLinePoint *line);
+void endSpriteSet(void *sprite, int mode);
+void eSpriteMain(ESpriteMainData *sprite);
+void eSpriteSet(ESprite *sprite, int flags);
+void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+extern void eBattleWinOpen(EndouBattleWindowParams *params);
+extern int eBattleWinMain(EndouBattleWindowParams *params);
+extern void eBattleWinOpen2(EndouBattleRewardParams *params);
+extern int eBattleWinMain2(void);
+extern void eBattleWinOpen3(EndouBattleAnalysisParams *params);
+extern int eBattleWinMain3(void);
+extern void eBattleWinOpen4(EndouBattleMessageParams *params);
+extern int eBattleWinMain4(void);
+extern XglPacket *xglPacketGetCurrent(void);
+extern void xglRenderClearDepth(void);
+extern void FlushCache(int mode);
+
+/* EUC-JP bytes for the model-test diagnostic with its leading control byte. */
+/* JP: モデルテスト
+ * EN: Model test */
+const unsigned char eModelTestLabel[16] =
+    "\x0B\xA5\xE2\xA5\xC7\xA5\xEB\xA5\xC6\xA5\xB9\xA5\xC8";
+
+static const char not_found_format[16] = "%s/NotFound";
+
+static const char read_error_format[24] = "%s/ReadError";
+
+static int Select_82;
+
+static int TopMode_86;
+
+static const char * text00_83[10];
+
+static const char * text01_84[3];
+
+static BattleWinCommand data_15[20];
+
+static char text_17[171] ;
+
+static char tag_20[17] ;
+
+static int count_18;
+
+static BgTestEnvironment TestEnv_47 = {
+    { 0, 0, 0 }, 0x50000009,
+    { 0x00008001, 0x808B4000, 0x0000000053531EEEULL },
+    { 0x20, 0x14 },
+    { 0, 0x6 },
+    { 0x00050000, 0x47 },
+    { 0x80, 0x80, 0x80, 0x80 },
+    { 0, 0, 0, 0 },
+    { 0x6FF8, 0x71F8, 0, 0 },
+    { 0x2000, 0x1C00, 0, 0 },
+    { 0x8FF8, 0x8DF8, 0, 0 },
+};
+
+void *test_data = 0;
+
+static unsigned int TestEnv_66[32] = {
+    0x00008001, 0x208B4000, 0x000000EE, 0x00000000,
+    0x00000000, 0x00000000, 0x0000003F, 0x00000000,
+    0xDD343840, 0x20070005, 0x00000006, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00007C00, 0x00007BF8, 0x10000000, 0x00000000,
+    0x00000800, 0x00000800, 0x00000000, 0x00000000,
+    0x00008400, 0x000083F8, 0x10000000, 0x00000000
+};
+
+/* VIF DIRECTHL carries a GIF PACKED tag and five GS A+D register writes. */
+static WinTexEnvironment WinTexEnv_65 = {
+    0, 0, 0x11000000, 0x51000006,
+    { 0x00008005, 0x10000000, 0x000000000000000EULL },
+    { 0x0000000000000000ULL, 0x000000000000003FULL },
+    { 0x0008380000000000ULL, 0x0000000000000050ULL },
+    { 0x0000000000000000ULL, 0x0000000000000051ULL },
+    { 0x0000008000000200ULL, 0x0000000000000052ULL },
+    { 0x0000000000000000ULL, 0x0000000000000053ULL },
+};
+
+static const char * msg_45[5];
+
+static char text00_46[176];
+
+static int Select_74;
+
+static int Select_76;
+
+static int Select_78;
+
+static int Select_80;
+
+static FileLoadState files;
+
+static u64 eNumberTexEnv_69[12];
+
+static u64 TestEnv_70[20];
+
+static int x_71;
+
+static float ang_0[4];
+
+static const char * msg00_14[4];
+
+static s32 no_13;
+
+static f32 pipo_2;
+
+static float pos_1[4];
+
+static s32 time_10;
+
+static u8 time_37;
+
+static EndouPrintPoint d_42[7];
+
+static EndouPrintPoint d_43;
+
+static EndouPrintPoint line_34[6];
+
+static unsigned char moji2_27[27];
+
+static unsigned char moji_26[27];
+
+static TexturTestUploadEnvironment eNumberTexEnv_48;
+
+static TexturTestDrawEnvironment TestEnv_52;
+
+static int x_53;
+
+static float ang_0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+static float pos_1[4] = { 0.0f, 0.0f, 4.0f, 1.0f };
+
+static const char * msg00_14[4] = { modelTestKatakanaText, modelTestHiraganaKatakanaText, modelTestKatakanaHiraganaText, modelTestHiraganaText };
+
+static const char * tag_16[] = { gradeOneTagText };
+
+static const char * msg_19[] = { slowMessageText, temptationMessageText };
+
+static char tag_20[17] = "BattleWindowTest";
+
+static unsigned char moji_26[27] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+static unsigned char moji2_27[27] = "abcdefghijklmnopqrstuvwxyz";
+
+static EndouPrintPoint line_34[6] = { { .x = 64, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 128, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 256, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 128 } }, { .x = 384, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 448, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
+
+static EndouPrintPoint d_42[7] = { { .x = 100, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 100, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 200, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 112 } }, { .x = 200, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 128 } }, { .x = 400, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 400, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
+
+static EndouPrintPoint d_43 = { .x = 256, .y = 256, .depth = 268435455, .color = { 255, 255, 255, 128 } };
+
+static u64 eNumberTexEnv_69[12] = { 0ULL, 5836665138832211968ULL, 1152921504606846980ULL, 14ULL, 2317770511351808ULL, 80ULL, 0ULL, 81ULL, 549755814400ULL, 82ULL, 0ULL, 83ULL };
+
+static const char * text00_75[] = { endouTestNoText, yesText };
+
+static const char * text00_77[] = { offText, onText };
+
+static const char * text00_79[] = { offText, onText };
+
+static const char * text00_81[] = { absentText, presentText };
+
+static const char * text00_83[10] = { nullText, p1Text, p2Text, p3Text, p4Text, p5Text, p6Text, a1Text, a2Text, a3Text };
+
+static const char * text01_84[3] = { number1Text, number2Text, number3Text };
+
+static const char * text02_85[] = { characterText, positionText };
+
+const char shopRowNumberFormat[8] = "%3d";
+
+const char modelTestJntExtension[8] = ".jnt";
+
+static f32 pipo_2 = 0.0f;
+
+static s32 time_10 = 0;
+
+static s32 no_13 = 0;
+
+const char gradeOneTagText[8] = "G One";
+
+const char battleWindowTitleText[8] = "Test";
+
+static int count_18 = 0;
+
+const char padRepeatFormat[3] = "%d";
+
+static u8 time_37 = 0;
+
+static int x_53 = 56832;
+
+static int x_71 = 52992;
+
+static int Select_74 = 0;
+
+/* JP: あり
+ * EN: Yes */
+const char yesText[8] = "\244\242\244\352";
+
+/* JP: なし
+ * EN: No */
+const char endouTestNoText[8] = "\244\312\244\267";
+
+/* JP: ＞
+ * EN: > */
+const char menuCursorText[4] = "\241\344";
+
+static int Select_76 = 0;
+
+/* JP: オン
+ * EN: On */
+const char onText[8] = "\245\252\245\363";
+
+/* JP: オフ
+ * EN: Off */
+const char offText[8] = "\245\252\245\325";
+
+static int Select_78 = 0;
+
+static int Select_80 = 0;
+
+/* JP: いる
+ * EN: Present */
+const char presentText[8] = "\244\244\244\353";
+
+/* JP: いない
+ * EN: Absent */
+const char absentText[8] = "\244\244\244\312\244\244";
+
+static int Select_82 = 0;
+
+/* JP: Ａ３
+ * EN: A3 */
+const char a3Text[8] = "\243\301\243\263";
+
+/* JP: Ａ２
+ * EN: A2 */
+const char a2Text[8] = "\243\301\243\262";
+
+/* JP: Ａ１
+ * EN: A1 */
+const char a1Text[8] = "\243\301\243\261";
+
+/* JP: Ｐ６
+ * EN: P6 */
+const char p6Text[8] = "\243\320\243\266";
+
+/* JP: Ｐ５
+ * EN: P5 */
+const char p5Text[8] = "\243\320\243\265";
+
+/* JP: Ｐ４
+ * EN: P4 */
+const char p4Text[8] = "\243\320\243\264";
+
+/* JP: Ｐ３
+ * EN: P3 */
+const char p3Text[8] = "\243\320\243\263";
+
+/* JP: Ｐ２
+ * EN: P2 */
+const char p2Text[8] = "\243\320\243\262";
+
+/* JP: Ｐ１
+ * EN: P1 */
+const char p1Text[8] = "\243\320\243\261";
+
+/* JP: ３．
+ * EN: 3. */
+const char number3Text[8] = "\243\263\241\245";
+
+/* JP: ２．
+ * EN: 2. */
+const char number2Text[8] = "\243\262\241\245";
+
+/* JP: １．
+ * EN: 1. */
+const char number1Text[8] = "\243\261\241\245";
+
+/* JP: キャラ
+ * EN: Character */
+const char characterText[8] = "\245\255\245\343\245\351";
+
+static int TopMode_86 = 0;
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+static unsigned int TestEnv_49[48];
+
+static BgTestEnvironment TestEnv_54;
+
+static unsigned int TestEnv_56[44];
+
+static unsigned int TestEnv_58[48];
+
+static unsigned int TestEnv_59[44];
+
+static unsigned int TestEnv_60[48];
+
+static unsigned int TestEnv_61[44];
+
+static unsigned int TestEnv_63[68];
+
+static unsigned int TestEnv_64[52];
+
+static int x_50;
+
+static int x_51;
+
+static int x_55;
+
+static int x_57;
+
+static int xx_62;
+
+static const char * msg_45[5] = { deviceListText, winningRaceListText, vowelKanaListText, horseNameListText, 0 };
+
+static BgTestEnvironment TestEnv_54 = { .vif_nop = { 0U, 0U, 0U }, .vif_directhl_nine_quadwords = 1358954505U, .tag = { .loop_count_and_eop = 32769U, .primitive_flags_and_register_count = 2156609536U, .register_descriptors = 1397956334ULL }, .texture_setup = { .value = 68ULL, .register_id = 66ULL }, .packet_write = { .value = 2308076694620355584ULL, .register_id = 6ULL }, .primitive_setup = { .value = 327680ULL, .register_id = 71ULL }, .color = { .red = 128U, .green = 128U, .blue = 128U, .alpha = 128U }, .first_uv = { .u = 4096U, .v = 0U, .q = 0U, .reserved = 0U }, .first_vertex = { .x = 32760U, .y = 32760U, .z = 262144U, .fog = 0U }, .second_uv = { .u = 8192U, .v = 4096U, .q = 0U, .reserved = 0U }, .second_vertex = { .x = 36856U, .y = 36344U, .z = 262144U, .fog = 0U } };
+
+static unsigned int TestEnv_58[48] = { 0U, 0U, 0U, 1358954507U, 32769U, 2710257664U, 893316846U, 229U, 262624U, 0U, 77U, 0U, 0U, 0U, 25U, 0U, 4278194175U, 0U, 9U, 0U, 1744911360U, 6U, 7U, 0U, 200705U, 0U, 72U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 4096U, 4096U, 0U, 0U, 2048U, 4096U, 0U, 0U, 0U, 0U, 63U, 0U };
+
+static unsigned int TestEnv_61[44] = { 0U, 0U, 0U, 1358954506U, 32769U, 2425044992U, 892464878U, 5U, 68U, 0U, 66U, 0U, 4278194175U, 0U, 8U, 0U, 0U, 0U, 6U, 0U, 327680U, 0U, 71U, 0U, 128U, 128U, 128U, 128U, 0U, 0U, 0U, 0U, 28664U, 32760U, 262144U, 0U, 8192U, 4096U, 0U, 0U, 36856U, 36344U, 262144U, 0U };
+
+static unsigned int TestEnv_63[68] = { 0U, 0U, 0U, 1358954512U, 32770U, 268435456U, 14U, 0U, 68U, 0U, 66U, 0U, 327680U, 0U, 71U, 0U, 32774U, 539410432U, 81U, 0U, 128U, 128U, 128U, 128U, 32768U, 32768U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U };
+
+static unsigned int TestEnv_64[52] = { 0U, 0U, 0U, 1358954508U, 32770U, 268435456U, 14U, 0U, 68U, 0U, 66U, 0U, 327680U, 0U, 71U, 0U, 32769U, 2149990400U, 1364283857U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 35328U, 16777215U, 0U };
+
+const char modelTestLexExtension[8] = ".lex";
+
+const char modelTestXtxExtension[8] = ".xtx";
+
+/* JP: 秋華賞
+ * EN: Shuka Sho */
+const char shukaShoText[8] = "\275\251\262\332\276\336";
+
+/* JP: 皐月賞
+ * EN: Satsuki Sho */
+const char satsukiShoText[8] = "\273\251\267\356\276\336";
+
+/* JP: 桜花賞
+ * EN: Oka Sho */
+const char okaShoText[8] = "\272\371\262\326\276\336";
+
+static int x_50 = 0;
+
+static int x_51 = 56832;
+
+static int x_55 = 57088;
+
+static int x_57 = 56832;
+
+static int xx_62 = 0;
+
+static FileLoadState files = { .state = -1, .buffer = 0, .unmodeled_08 = { 100, 97, 116, 97, 92, 101, 110, 100, 111, 117, 92, 109, 101, 110, 117, 48, 48, 46, 120, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
+
+static BattleWinCommand data_15[20] = {
+    { februaryStakesText, dirtChampionshipText, 1, 2 },
+    { takamatsunomiyaKinenText, springSprintChampionshipText, 1, 3 },
+    { okaShoText, filliesClassicsFirstLegText, 1, 4 },
+    { satsukiShoText, coltsClassicsFirstLegText, 1, 4 },
+    { tennoShoSpringText, springLongDistanceChampionshipText, 1, 4 },
+    { nhkMileCupText, foreignBredMilersChampionshipText, 1, 5 },
+    { oaksText, filliesClassicsSecondLegText, 0, 5 },
+    { japaneseDerbyText, coltsClassicsSecondLegText, 0, 5 },
+    { yasudaKinenText, springMileChampionshipText, 0, 5 },
+    { takarazukaKinenText, springGrandPrixText, 0, 6 },
+    { sprintersStakesText, autumnSprintChampionshipText, 0, 10 },
+    { shukaShoText, filliesClassicsThirdLegText, 0, 10 },
+    { kikukaShoText, coltsClassicsThirdLegText, 0, 10 },
+    { tennoShoAutumnText, olderHorsesCursedTennoShoText, 0, 10 },
+    { queenElizabethIiCupText, filliesMaresChampionshipText, 0, 11 },
+    { mileChampionshipText, autumnMileChampionshipText, 0, 11 },
+    { japanCupText, olderHorsesRoyalRoadText, 0, 11 },
+    { hanshinJuvenileFilliesText, twoYearOldFilliesChampionText, 0, 11 },
+    { arimaKinenText, grandPrixText, 0, 11 },
+    { 0, 0, 0, 0 }
+};
+
+/* JP: あ あああ / い　い  ボタン  いいい  いいいいい /  赤赤赤赤赤赤赤赤赤赤赤 青青青青青青青青青青青 う / えええ ┐┐ おおおおおおおおおおおおおおおおお おおお！！
+ * EN: A aaa / I  I  button  iii (test text) Iiiii / Red red red... Blue blue blue... U / Eee (test text) Ooooo... Ooooh!! */
+static char text_17[171] = "\244\242\037\244\242\244\242\244\242\012\244\244\241\241\244\244\241\241\036\001\245\334\245\277\245\363\241\241\241\241\244\244\244\244\244\244\241\241\241\241"
+    "\241\241\244\244\244\244\244\244\244\244\244\244\012\014\200\000\000\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\014"
+    "\000\000\200\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\037\014\200\200\200\244\246\012\244\250\244\250\244\250\244"
+    "\250\244\250\244\250\037\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252"
+    "\244\252\244\252\244\252\241\252\241\252";
+
+/* JP: Ｐｌ :ａｙ / Ｓｔａｔｉｏｎ２ : ;エ < ル =コ >ン ?ド ル  / パ サ ー スペ シャルウィーク グラスワンダー ! "セイウンスカイ キングヘイローーーー ーーーーーー あ
+ * EN: PlayStation 2 / (control codes) El Condor / Pasa / Spe(cial) Shall Week / Grass Wonder Seiun Sky / King Halo ------ A */
+static char text00_46[176] = "\031\001\243\320\243\354\036:\243\341\243\371\012\243\323\243\364\243\341\243\364\243\351\243\357\243\356\243\262\037\031\000\036:\036;\245\250\036<"
+    "\245\353\036=\245\263\036>\245\363\036\077\245\311\036\011\245\353\036\012\245\321\036\013\245\265\036\014\241\274\037\036\001\245\271\245\332\036\033\036"
+    "\034\036\035\036\036\245\267\245\343\245\353\245\246\245\243\241\274\245\257\037\036\002\245\260\245\351\245\271\245\357\245\363\245\300\241\274\037\036\037\036"
+    " \036!\036\042\245\273\245\244\245\246\245\363\245\271\245\253\245\244\037\245\255\245\363\245\260\245\330\245\244\245\355\241\274\241\274\241\274\241\274"
+    "\241\274\241\274\241\274\241\274\241\274\241\274\037\244\242";
+
+static TexturTestUploadEnvironment eNumberTexEnv_48 = {
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x05, 0x00, 0x00, 0x51,
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    0x00083c0000000000ULL,
+    {
+        0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x51, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    0x0000008000000400ULL,
+    {
+        0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+};
+
+static unsigned int TestEnv_49[48] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
+    0x00008001, 0xB08B4000, 0x31EEEEEE, 0x00000535,
+    0x003FFFF0, 0x00000000, 0x00000008, 0x00000000,
+    0x00000044, 0x00000000, 0x00000042, 0x00000000,
+    0x69343C00, 0x2007E786, 0x00000006, 0x00000000,
+    0x00030003, 0x00000000, 0x00000047, 0x00000000,
+    0x00000000, 0x00000000, 0x0000003F, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00006FF8, 0x00007FF8, 0x00040000, 0x00000000,
+    0x00003000, 0x00001000, 0x00000000, 0x00000000,
+    0x00008FF8, 0x00008DF8, 0x00040000, 0x00000000
+};
+
+static TexturTestDrawEnvironment TestEnv_52 = {
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x51,
+        0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x0b, 0xa0, 0xee, 0xee, 0x1e, 0x42, 0x42, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0xff, 0x01, 0x00, 0x00, 0xbf, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    0x0000000000000000ULL,
+    {
+        0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+        0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x6f, 0x00, 0x00, 0xf8, 0x71, 0x00, 0x00,
+        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x80, 0x3f,
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x8f, 0x00, 0x00, 0xf8, 0x8d, 0x00, 0x00,
+        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00 }
+};
+
+static unsigned int TestEnv_56[44] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
+    0x00008001, 0x908B4000, 0x3531EEEE, 0x00000005,
+    0x00000044, 0x00000000, 0x00000042, 0x00000000,
+    0x003FDFF0, 0x00000000, 0x00000008, 0x00000000,
+    0x69343C00, 0x2007EF06, 0x00000006, 0x00000000,
+    0x00050000, 0x00000000, 0x00000047, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00006FF8, 0x000071F8, 0x00040000, 0x00000000,
+    0x00003000, 0x00001000, 0x00000000, 0x00000000,
+    0x00008FF8, 0x00007FF8, 0x00040000, 0x00000000
+};
+
+static unsigned int TestEnv_59[44] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
+    0x00008001, 0x908B4000, 0x3531EEEE, 0x00000005,
+    0x00000044, 0x00000000, 0x00000042, 0x00000000,
+    0x003FDFF0, 0x00000000, 0x00000008, 0x00000000,
+    0x69343C00, 0x2007EF06, 0x00000006, 0x00000000,
+    0x00050000, 0x00000000, 0x00000047, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00006FF8, 0x000071F8, 0x00040000, 0x00000000,
+    0x00002000, 0x00001000, 0x00000000, 0x00000000,
+    0x00008FF8, 0x00007FF8, 0x00040000, 0x00000000
+};
+
+static unsigned int TestEnv_60[48] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000B,
+    0x00008001, 0xA18B4000, 0x353EEEEE, 0x000000E5,
+    0x00000000, 0x00000000, 0x0000004D, 0x00000000,
+    0x00000000, 0x00000000, 0x00000019, 0x00000000,
+    0x007FDFF0, 0x00000000, 0x00000009, 0x00000000,
+    0x69343C00, 0x2007EF06, 0x00000007, 0x00000000,
+    0x00031001, 0x00000000, 0x00000048, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00002000, 0x00001000, 0x00000000, 0x00000000,
+    0x00002000, 0x00001000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x0000003F, 0x00000000
+};
+
+static u64 TestEnv_70[20] = {
+    0x0000000000000000ULL, 0x5100000900000000ULL,
+    0x80AB400000008001ULL, 0x0000000053531EEEULL,
+    0x0000000000000044ULL, 0x0000000000000042ULL,
+    0x2007EF8669343C00ULL, 0x0000000000000006ULL,
+    0x0000000000050000ULL, 0x0000000000000047ULL,
+    0x0000008000000080ULL, 0x0000008000000080ULL,
+    0x0000000000001000ULL, 0x0000000000000000ULL,
+    0x00007FF800007FF8ULL, 0x0000000040000000ULL,
+    0x0000100000002000ULL, 0x0000000000000000ULL,
+    0x00008DF800008FF8ULL, 0x0000000040000000ULL
+};
+
+/* Text: {reset}I */
+char shopHeadingIText[8] = "\013I ";
+
+/* Text: {reset}CW */
+const char shopHeadingCwText[8] = "\013CW\000\000\000\000";
+
+/* Text: {reset}CA */
+const char shopHeadingCaText[8] = "\013CA\000\000\000\000";
+
+/* Text: {reset}CB */
+const char shopHeadingCbText[8] = "\013CB\000\000\000\000";
+
+/* Text: {reset}AW */
+const char shopHeadingAwText[8] = "\013AW\000\000\000\000";
+
+/* Text: {reset}AA */
+const char shopHeadingAaText[8] = "\013AA\000\000\000\000";
+
+/* Text: {reset}AB */
+const char shopHeadingAbText[8] = "\013AB\000\000\000\000";
+
+/* Text: {reset}AF */
+const char shopHeadingAfText[8] = "\013AF\000\000\000\000";
+
+/* Text: {reset}AE */
+const char shopHeadingAeText[8] = "\013AE\000\000\000\000";
+
+/* Text: {reset}A */
+char shopHeadingAText[8] = "\013A ";
+
+static char fname_67[64];
+
+static float size_68;
+
+static unsigned char msg_11[80];
+
+static EndouModelLinePoint line00_3[7];
+
+static EndouModelLinePoint line01_4[7];
+
+static EndouModelLinePoint line02_5[7];
+
+static EndouModelLinePoint line03_6[7];
+
+static EndouModelLinePoint line10_7[7];
+
+static EndouModelLinePoint line11_8[7];
+
+static EndouModelLinePoint line12_9[7];
+
+static EndouModelBackQuad bsp_12;
+
+static ECursolMainData cur_25;
+
+static EndouSpriteQuad d_28;
+
+static ENumberSpriteDescriptor d_33;
+
+static ENumberSpriteDescriptor d_35[2];
+
+static ENumberSpriteDescriptor d_36;
+
+static ENumberSpriteDescriptor d_38;
+
+static ENumberRenderDescriptor d_39;
+
+static ENumberRenderDescriptor d_40;
+
+static ENumberSpriteDescriptor d_41;
+
+static EndouQuadDescriptor d_44;
+
+static EndouELineEntry line_23[4];
+
+static ENumberMainData num_29[1];
+
+static ENumberMainData num_30[1];
+
+static ENumberMainData num_31[1];
+
+static ENumberMainData num_32[1];
+
+static EndouRibbonRecord rbn_21[4];
+
+static ESprite spr_22[4];
+
+static EndouTagFontViews tgf_24[2];
+
+static unsigned char * buffer_72;
+
+static char mm_73[352];
+
+static inline void endouShopHeading(int y, const char *format, int shop_number)
+{
+    xglFontDebugPrintf(0, y, format, shop_number);
+}
+
+static inline void endModelCameraPosition(StudioCamera *camera,
+                                         float x, float y, float z)
+{
+    camera->position.x = x;
+    camera->position.y = y;
+    camera->position.z = z;
+}
+
+static __inline__ void EndouApplyModelLighting(StudioLight **light_slot,
+                                              EndouTestLighting profile)
+{
+    xglStudioGetLight(light_slot);
+    xglLightIntensityAmbient(*light_slot, profile.ambient);
+    xglLightIntensityParallel(*light_slot, 0, profile.parallel_intensity[0]);
+    xglLightDirection(*light_slot, 0, &profile.direction[0]);
+    xglLightIntensityParallel(*light_slot, 1, profile.parallel_intensity[1]);
+    xglLightDirection(*light_slot, 1, &profile.direction[1]);
+    xglLightIntensityParallel(*light_slot, 2, profile.parallel_intensity[2]);
+    xglLightDirection(*light_slot, 2, &profile.direction[2]);
+}
 
 void EndouTest(void)
 {
@@ -1751,15 +2120,6 @@ void ModelTest(void) {
     }
 }
 
-extern void eBattleWinOpen(EndouBattleWindowParams *params);
-extern int eBattleWinMain(EndouBattleWindowParams *params);
-extern void eBattleWinOpen2(EndouBattleRewardParams *params);
-extern int eBattleWinMain2(void);
-extern void eBattleWinOpen3(EndouBattleAnalysisParams *params);
-extern int eBattleWinMain3(void);
-extern void eBattleWinOpen4(EndouBattleMessageParams *params);
-extern int eBattleWinMain4(void);
-
 void BattleWindowTest(void)
 {
     EndouBattleWindowParams window;
@@ -2354,44 +2714,6 @@ void BgTest(void)
     sceVif1PkRef(packet, &TestEnv_47, 10, 0, 0, 0);
 }
 
-typedef struct TexturTestHeader {
-    u8 unmodeled_00[8];
-    int entry_count;
-    u32 entries_offset;
-} TexturTestHeader;
-
-typedef struct TexturTestEntry {
-    u32 width_and_pitch;
-    u32 height;
-    u32 vram_offset;
-    int data_quadwords;
-    u32 data_offset;
-} TexturTestEntry;
-
-typedef struct TexturTestUploadEnvironment {
-    u8 unmodeled_00[0x20];
-    u64 destination_parameters;
-    u8 unmodeled_28[0x18];
-    u64 transfer_dimensions;
-    u8 unmodeled_48[0x18];
-} TexturTestUploadEnvironment;
-
-typedef struct TexturTestDrawEnvironment {
-    u8 unmodeled_00[0x50];
-    u64 texture_parameters;
-    u8 unmodeled_58[0x68];
-} TexturTestDrawEnvironment;
-
-static TexturTestUploadEnvironment eNumberTexEnv_48;
-static TexturTestDrawEnvironment TestEnv_52;
-static int x_53;
-extern const char textureTestNewdMenuPath[];
-extern const char textureTestDataMenuPath[];
-extern const char textureTestLabel[];
-extern XglPacket *xglPacketGetCurrent(void);
-extern void xglRenderClearDepth(void);
-extern void FlushCache(int mode);
-
 void TexturTest(void)
 {
     u8 *work_start = WorkEnd;
@@ -2603,8 +2925,6 @@ static void endCallback(int result, int amount)
         break;
     }
 }
-
-extern XglPacket *xglPacketGetCurrent(void);
 
 void FileLoadTest(void)
 {
@@ -3047,73 +3367,7 @@ void PauseMenuPagePartyDebug(void)
     }
 }
 
-extern const char modelTestHiraganaKatakanaText[16];
-extern const char modelTestKatakanaHiraganaText[16];
-extern const char modelTestHiraganaText[16];
-extern const char modelTestKatakanaText[16];
-extern const char gradeOneTagText[8];
-extern const char temptationMessageText[16];
-extern const char slowMessageText[40];
-extern const char yesText[8];
-extern const char endouTestNoText[8];
-extern const char offText[8];
-extern const char onText[8];
-extern const char absentText[8];
-extern const char presentText[8];
-extern const char a1Text[8];
-extern const char p4Text[8];
-extern const char a2Text[8];
-extern const char p6Text[8];
-extern const char nullText[16];
-extern const char p1Text[8];
-extern const char p3Text[8];
-extern const char p5Text[8];
-extern const char p2Text[8];
-extern const char a3Text[8];
-extern const char number3Text[8];
-extern const char number2Text[8];
-extern const char number1Text[8];
-extern const char characterText[8];
-extern const char positionText[16];
-
-static float ang_0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-static float pos_1[4] = { 0.0f, 0.0f, 4.0f, 1.0f };
-
-static const char * msg00_14[4] = { modelTestKatakanaText, modelTestHiraganaKatakanaText, modelTestKatakanaHiraganaText, modelTestHiraganaText };
-
-static const char * tag_16[] = { gradeOneTagText };
-
-static const char * msg_19[] = { slowMessageText, temptationMessageText };
-
-static char tag_20[17] = "BattleWindowTest";
-
-static unsigned char moji_26[27] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-static unsigned char moji2_27[27] = "abcdefghijklmnopqrstuvwxyz";
-
-static EndouPrintPoint line_34[6] = { { .x = 64, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 128, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 256, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 128 } }, { .x = 384, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 448, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
-
-static EndouPrintPoint d_42[7] = { { .x = 100, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 100, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 200, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 112 } }, { .x = 200, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 128 } }, { .x = 400, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 400, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
-
-static EndouPrintPoint d_43 = { .x = 256, .y = 256, .depth = 268435455, .color = { 255, 255, 255, 128 } };
-
-static u64 eNumberTexEnv_69[12] = { 0ULL, 5836665138832211968ULL, 1152921504606846980ULL, 14ULL, 2317770511351808ULL, 80ULL, 0ULL, 81ULL, 549755814400ULL, 82ULL, 0ULL, 83ULL };
-
-static const char * text00_75[] = { endouTestNoText, yesText };
-
-static const char * text00_77[] = { offText, onText };
-
-static const char * text00_79[] = { offText, onText };
-
-static const char * text00_81[] = { absentText, presentText };
-
-static const char * text00_83[10] = { nullText, p1Text, p2Text, p3Text, p4Text, p5Text, p6Text, a1Text, a2Text, a3Text };
-
-static const char * text01_84[3] = { number1Text, number2Text, number3Text };
-
-static const char * text02_85[] = { characterText, positionText };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: 清算画面テスト  △
  * EN: Settlement screen test  Triangle */
 const char settlementScreenTestLabel[24] = "\013\300\266\273\273\262\350\314\314\245\306\245\271\245\310\241\241\241\241\242\244";
@@ -3322,191 +3576,6 @@ const char partyDebugTitleLabel[40] = "\241\341\241\341\241\241\245\321\241\274\
  * EN: Square: toggle setting */
 const char partyDebugToggleLabel[32] = "\242\242\241\247\300\337\304\352\300\332\244\352\302\330\244\250";
 
-const char shopRowNumberFormat[8] = "%3d";
-
-const char modelTestJntExtension[8] = ".jnt";
-
-static f32 pipo_2 = 0.0f;
-
-static s32 time_10 = 0;
-
-static s32 no_13 = 0;
-
-const char gradeOneTagText[8] = "G One";
-
-const char battleWindowTitleText[8] = "Test";
-
-static int count_18 = 0;
-
-const char padRepeatFormat[3] = "%d";
-
-static u8 time_37 = 0;
-
-static int x_53 = 56832;
-
-static int x_71 = 52992;
-
-static int Select_74 = 0;
-
-/* JP: あり
- * EN: Yes */
-const char yesText[8] = "\244\242\244\352";
-
-/* JP: なし
- * EN: No */
-const char endouTestNoText[8] = "\244\312\244\267";
-
-/* JP: ＞
- * EN: > */
-const char menuCursorText[4] = "\241\344";
-
-static int Select_76 = 0;
-
-/* JP: オン
- * EN: On */
-const char onText[8] = "\245\252\245\363";
-
-/* JP: オフ
- * EN: Off */
-const char offText[8] = "\245\252\245\325";
-
-static int Select_78 = 0;
-
-static int Select_80 = 0;
-
-/* JP: いる
- * EN: Present */
-const char presentText[8] = "\244\244\244\353";
-
-/* JP: いない
- * EN: Absent */
-const char absentText[8] = "\244\244\244\312\244\244";
-
-static int Select_82 = 0;
-
-/* JP: Ａ３
- * EN: A3 */
-const char a3Text[8] = "\243\301\243\263";
-
-/* JP: Ａ２
- * EN: A2 */
-const char a2Text[8] = "\243\301\243\262";
-
-/* JP: Ａ１
- * EN: A1 */
-const char a1Text[8] = "\243\301\243\261";
-
-/* JP: Ｐ６
- * EN: P6 */
-const char p6Text[8] = "\243\320\243\266";
-
-/* JP: Ｐ５
- * EN: P5 */
-const char p5Text[8] = "\243\320\243\265";
-
-/* JP: Ｐ４
- * EN: P4 */
-const char p4Text[8] = "\243\320\243\264";
-
-/* JP: Ｐ３
- * EN: P3 */
-const char p3Text[8] = "\243\320\243\263";
-
-/* JP: Ｐ２
- * EN: P2 */
-const char p2Text[8] = "\243\320\243\262";
-
-/* JP: Ｐ１
- * EN: P1 */
-const char p1Text[8] = "\243\320\243\261";
-
-/* JP: ３．
- * EN: 3. */
-const char number3Text[8] = "\243\263\241\245";
-
-/* JP: ２．
- * EN: 2. */
-const char number2Text[8] = "\243\262\241\245";
-
-/* JP: １．
- * EN: 1. */
-const char number1Text[8] = "\243\261\241\245";
-
-/* JP: キャラ
- * EN: Character */
-const char characterText[8] = "\245\255\245\343\245\351";
-
-static int TopMode_86 = 0;
-
-/* Original storage of this TU without a C reader; typed from its original bytes. */
-static unsigned int TestEnv_49[48];
-static BgTestEnvironment TestEnv_54;
-static unsigned int TestEnv_56[44];
-static unsigned int TestEnv_58[48];
-static unsigned int TestEnv_59[44];
-static unsigned int TestEnv_60[48];
-static unsigned int TestEnv_61[44];
-static unsigned int TestEnv_63[68];
-static unsigned int TestEnv_64[52];
-extern const char grandPrixText[16];
-extern const char arimaKinenText[16];
-extern const char twoYearOldFilliesChampionText[24];
-extern const char hanshinJuvenileFilliesText[16];
-extern const char olderHorsesRoyalRoadText[24];
-extern const char japanCupText[16];
-extern const char autumnMileChampionshipText[24];
-extern const char mileChampionshipText[16];
-extern const char filliesMaresChampionshipText[16];
-extern const char queenElizabethIiCupText[24];
-extern const char olderHorsesCursedTennoShoText[24];
-extern const char tennoShoAutumnText[16];
-extern const char coltsClassicsThirdLegText[24];
-extern const char filliesClassicsThirdLegText[24];
-extern const char autumnSprintChampionshipText[24];
-extern const char sprintersStakesText[24];
-extern const char springGrandPrixText[16];
-extern const char takarazukaKinenText[16];
-extern const char springMileChampionshipText[24];
-extern const char yasudaKinenText[16];
-extern const char coltsClassicsSecondLegText[32];
-extern const char japaneseDerbyText[16];
-extern const char filliesClassicsSecondLegText[32];
-extern const char oaksText[16];
-extern const char foreignBredMilersChampionshipText[32];
-extern const char nhkMileCupText[16];
-extern const char springLongDistanceChampionshipText[24];
-extern const char tennoShoSpringText[16];
-extern const char coltsClassicsFirstLegText[24];
-extern const char filliesClassicsFirstLegText[24];
-extern const char springSprintChampionshipText[24];
-extern const char takamatsunomiyaKinenText[16];
-extern const char dirtChampionshipText[16];
-extern const char februaryStakesText[16];
-extern const char horseNameListText[64];
-extern const char vowelKanaListText[24];
-extern const char winningRaceListText[144];
-extern const char deviceListText[144];
-extern const char shukaShoText[8];
-extern const char satsukiShoText[8];
-extern const char okaShoText[8];
-static int x_50;
-static int x_51;
-static int x_55;
-static int x_57;
-static int xx_62;
-
-static const char * msg_45[5] = { deviceListText, winningRaceListText, vowelKanaListText, horseNameListText, 0 };
-
-static BgTestEnvironment TestEnv_54 = { .vif_nop = { 0U, 0U, 0U }, .vif_directhl_nine_quadwords = 1358954505U, .tag = { .loop_count_and_eop = 32769U, .primitive_flags_and_register_count = 2156609536U, .register_descriptors = 1397956334ULL }, .texture_setup = { .value = 68ULL, .register_id = 66ULL }, .packet_write = { .value = 2308076694620355584ULL, .register_id = 6ULL }, .primitive_setup = { .value = 327680ULL, .register_id = 71ULL }, .color = { .red = 128U, .green = 128U, .blue = 128U, .alpha = 128U }, .first_uv = { .u = 4096U, .v = 0U, .q = 0U, .reserved = 0U }, .first_vertex = { .x = 32760U, .y = 32760U, .z = 262144U, .fog = 0U }, .second_uv = { .u = 8192U, .v = 4096U, .q = 0U, .reserved = 0U }, .second_vertex = { .x = 36856U, .y = 36344U, .z = 262144U, .fog = 0U } };
-
-static unsigned int TestEnv_58[48] = { 0U, 0U, 0U, 1358954507U, 32769U, 2710257664U, 893316846U, 229U, 262624U, 0U, 77U, 0U, 0U, 0U, 25U, 0U, 4278194175U, 0U, 9U, 0U, 1744911360U, 6U, 7U, 0U, 200705U, 0U, 72U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 4096U, 4096U, 0U, 0U, 2048U, 4096U, 0U, 0U, 0U, 0U, 63U, 0U };
-
-static unsigned int TestEnv_61[44] = { 0U, 0U, 0U, 1358954506U, 32769U, 2425044992U, 892464878U, 5U, 68U, 0U, 66U, 0U, 4278194175U, 0U, 8U, 0U, 0U, 0U, 6U, 0U, 327680U, 0U, 71U, 0U, 128U, 128U, 128U, 128U, 0U, 0U, 0U, 0U, 28664U, 32760U, 262144U, 0U, 8192U, 4096U, 0U, 0U, 36856U, 36344U, 262144U, 0U };
-
-static unsigned int TestEnv_63[68] = { 0U, 0U, 0U, 1358954512U, 32770U, 268435456U, 14U, 0U, 68U, 0U, 66U, 0U, 327680U, 0U, 71U, 0U, 32774U, 539410432U, 81U, 0U, 128U, 128U, 128U, 128U, 32768U, 32768U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U };
-
-static unsigned int TestEnv_64[52] = { 0U, 0U, 0U, 1358954508U, 32770U, 268435456U, 14U, 0U, 68U, 0U, 66U, 0U, 327680U, 0U, 71U, 0U, 32769U, 2149990400U, 1364283857U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 35328U, 16777215U, 0U };
-
 /* JP: グランプリ
  * EN: Grand Prix */
 const char grandPrixText[16] = "\245\260\245\351\245\363\245\327\245\352";
@@ -3643,178 +3712,6 @@ const char dirtChampionshipText[16] = "\245\300\241\274\245\310\262\246\267\350\
  * EN: February Stakes */
 const char februaryStakesText[16] = "\245\325\245\247\245\326\245\351\245\352\241\274\243\323";
 
-const char modelTestLexExtension[8] = ".lex";
-
-const char modelTestXtxExtension[8] = ".xtx";
-
-/* JP: 秋華賞
- * EN: Shuka Sho */
-const char shukaShoText[8] = "\275\251\262\332\276\336";
-
-/* JP: 皐月賞
- * EN: Satsuki Sho */
-const char satsukiShoText[8] = "\273\251\267\356\276\336";
-
-/* JP: 桜花賞
- * EN: Oka Sho */
-const char okaShoText[8] = "\272\371\262\326\276\336";
-
-static int x_50 = 0;
-
-static int x_51 = 56832;
-
-static int x_55 = 57088;
-
-static int x_57 = 56832;
-
-static int xx_62 = 0;
-
-static FileLoadState files = { .state = -1, .buffer = 0, .unmodeled_08 = { 100, 97, 116, 97, 92, 101, 110, 100, 111, 117, 92, 109, 101, 110, 117, 48, 48, 46, 120, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
-
-extern const char kikukaShoText[8];
-
-static BattleWinCommand data_15[20] = {
-    { februaryStakesText, dirtChampionshipText, 1, 2 },
-    { takamatsunomiyaKinenText, springSprintChampionshipText, 1, 3 },
-    { okaShoText, filliesClassicsFirstLegText, 1, 4 },
-    { satsukiShoText, coltsClassicsFirstLegText, 1, 4 },
-    { tennoShoSpringText, springLongDistanceChampionshipText, 1, 4 },
-    { nhkMileCupText, foreignBredMilersChampionshipText, 1, 5 },
-    { oaksText, filliesClassicsSecondLegText, 0, 5 },
-    { japaneseDerbyText, coltsClassicsSecondLegText, 0, 5 },
-    { yasudaKinenText, springMileChampionshipText, 0, 5 },
-    { takarazukaKinenText, springGrandPrixText, 0, 6 },
-    { sprintersStakesText, autumnSprintChampionshipText, 0, 10 },
-    { shukaShoText, filliesClassicsThirdLegText, 0, 10 },
-    { kikukaShoText, coltsClassicsThirdLegText, 0, 10 },
-    { tennoShoAutumnText, olderHorsesCursedTennoShoText, 0, 10 },
-    { queenElizabethIiCupText, filliesMaresChampionshipText, 0, 11 },
-    { mileChampionshipText, autumnMileChampionshipText, 0, 11 },
-    { japanCupText, olderHorsesRoyalRoadText, 0, 11 },
-    { hanshinJuvenileFilliesText, twoYearOldFilliesChampionText, 0, 11 },
-    { arimaKinenText, grandPrixText, 0, 11 },
-    { 0, 0, 0, 0 }
-};
-
-/* JP: あ あああ / い　い  ボタン  いいい  いいいいい /  赤赤赤赤赤赤赤赤赤赤赤 青青青青青青青青青青青 う / えええ ┐┐ おおおおおおおおおおおおおおおおお おおお！！
- * EN: A aaa / I  I  button  iii (test text) Iiiii / Red red red... Blue blue blue... U / Eee (test text) Ooooo... Ooooh!! */
-static char text_17[171] = "\244\242\037\244\242\244\242\244\242\012\244\244\241\241\244\244\241\241\036\001\245\334\245\277\245\363\241\241\241\241\244\244\244\244\244\244\241\241\241\241"
-    "\241\241\244\244\244\244\244\244\244\244\244\244\012\014\200\000\000\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\014"
-    "\000\000\200\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\037\014\200\200\200\244\246\012\244\250\244\250\244\250\244"
-    "\250\244\250\244\250\037\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252"
-    "\244\252\244\252\244\252\241\252\241\252";
-
-/* JP: Ｐｌ :ａｙ / Ｓｔａｔｉｏｎ２ : ;エ < ル =コ >ン ?ド ル  / パ サ ー スペ シャルウィーク グラスワンダー ! "セイウンスカイ キングヘイローーーー ーーーーーー あ
- * EN: PlayStation 2 / (control codes) El Condor / Pasa / Spe(cial) Shall Week / Grass Wonder Seiun Sky / King Halo ------ A */
-static char text00_46[176] = "\031\001\243\320\243\354\036:\243\341\243\371\012\243\323\243\364\243\341\243\364\243\351\243\357\243\356\243\262\037\031\000\036:\036;\245\250\036<"
-    "\245\353\036=\245\263\036>\245\363\036\077\245\311\036\011\245\353\036\012\245\321\036\013\245\265\036\014\241\274\037\036\001\245\271\245\332\036\033\036"
-    "\034\036\035\036\036\245\267\245\343\245\353\245\246\245\243\241\274\245\257\037\036\002\245\260\245\351\245\271\245\357\245\363\245\300\241\274\037\036\037\036"
-    " \036!\036\042\245\273\245\244\245\246\245\363\245\271\245\253\245\244\037\245\255\245\363\245\260\245\330\245\244\245\355\241\274\241\274\241\274\241\274"
-    "\241\274\241\274\241\274\241\274\241\274\241\274\037\244\242";
-
-static TexturTestUploadEnvironment eNumberTexEnv_48 = {
-    {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x05, 0x00, 0x00, 0x51,
-        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    0x00083c0000000000ULL,
-    {
-        0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x51, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    0x0000008000000400ULL,
-    {
-        0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
-};
-
-static unsigned int TestEnv_49[48] = {
-    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
-    0x00008001, 0xB08B4000, 0x31EEEEEE, 0x00000535,
-    0x003FFFF0, 0x00000000, 0x00000008, 0x00000000,
-    0x00000044, 0x00000000, 0x00000042, 0x00000000,
-    0x69343C00, 0x2007E786, 0x00000006, 0x00000000,
-    0x00030003, 0x00000000, 0x00000047, 0x00000000,
-    0x00000000, 0x00000000, 0x0000003F, 0x00000000,
-    0x00000080, 0x00000080, 0x00000080, 0x00000080,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00006FF8, 0x00007FF8, 0x00040000, 0x00000000,
-    0x00003000, 0x00001000, 0x00000000, 0x00000000,
-    0x00008FF8, 0x00008DF8, 0x00040000, 0x00000000
-};
-
-static TexturTestDrawEnvironment TestEnv_52 = {
-    {
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x51,
-        0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x0b, 0xa0, 0xee, 0xee, 0x1e, 0x42, 0x42, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0xff, 0x01, 0x00, 0x00, 0xbf, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-    0x0000000000000000ULL,
-    {
-        0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
-        0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x6f, 0x00, 0x00, 0xf8, 0x71, 0x00, 0x00,
-        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x80, 0x3f,
-        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x8f, 0x00, 0x00, 0xf8, 0x8d, 0x00, 0x00,
-        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00 }
-};
-
-static unsigned int TestEnv_56[44] = {
-    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
-    0x00008001, 0x908B4000, 0x3531EEEE, 0x00000005,
-    0x00000044, 0x00000000, 0x00000042, 0x00000000,
-    0x003FDFF0, 0x00000000, 0x00000008, 0x00000000,
-    0x69343C00, 0x2007EF06, 0x00000006, 0x00000000,
-    0x00050000, 0x00000000, 0x00000047, 0x00000000,
-    0x00000080, 0x00000080, 0x00000080, 0x00000080,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00006FF8, 0x000071F8, 0x00040000, 0x00000000,
-    0x00003000, 0x00001000, 0x00000000, 0x00000000,
-    0x00008FF8, 0x00007FF8, 0x00040000, 0x00000000
-};
-
-static unsigned int TestEnv_59[44] = {
-    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
-    0x00008001, 0x908B4000, 0x3531EEEE, 0x00000005,
-    0x00000044, 0x00000000, 0x00000042, 0x00000000,
-    0x003FDFF0, 0x00000000, 0x00000008, 0x00000000,
-    0x69343C00, 0x2007EF06, 0x00000006, 0x00000000,
-    0x00050000, 0x00000000, 0x00000047, 0x00000000,
-    0x00000080, 0x00000080, 0x00000080, 0x00000080,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00006FF8, 0x000071F8, 0x00040000, 0x00000000,
-    0x00002000, 0x00001000, 0x00000000, 0x00000000,
-    0x00008FF8, 0x00007FF8, 0x00040000, 0x00000000
-};
-
-static unsigned int TestEnv_60[48] = {
-    0x00000000, 0x00000000, 0x00000000, 0x5100000B,
-    0x00008001, 0xA18B4000, 0x353EEEEE, 0x000000E5,
-    0x00000000, 0x00000000, 0x0000004D, 0x00000000,
-    0x00000000, 0x00000000, 0x00000019, 0x00000000,
-    0x007FDFF0, 0x00000000, 0x00000009, 0x00000000,
-    0x69343C00, 0x2007EF06, 0x00000007, 0x00000000,
-    0x00031001, 0x00000000, 0x00000048, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x00000000, 0x00000000,
-    0x00002000, 0x00001000, 0x00000000, 0x00000000,
-    0x00002000, 0x00001000, 0x00000000, 0x00000000,
-    0x00000000, 0x00000000, 0x0000003F, 0x00000000
-};
-
-static u64 TestEnv_70[20] = {
-    0x0000000000000000ULL, 0x5100000900000000ULL,
-    0x80AB400000008001ULL, 0x0000000053531EEEULL,
-    0x0000000000000044ULL, 0x0000000000000042ULL,
-    0x2007EF8669343C00ULL, 0x0000000000000006ULL,
-    0x0000000000050000ULL, 0x0000000000000047ULL,
-    0x0000008000000080ULL, 0x0000008000000080ULL,
-    0x0000000000001000ULL, 0x0000000000000000ULL,
-    0x00007FF800007FF8ULL, 0x0000000040000000ULL,
-    0x0000100000002000ULL, 0x0000000000000000ULL,
-    0x00008DF800008FF8ULL, 0x0000000040000000ULL
-};
-
 const char modelTestFpkName[152] = { 110, 101, 119, 100, 92, 121, 97, 109, 97, 109, 111, 116, 111, 92, 102, 112, 107, 92, 97, 103, 48, 50, 46, 102, 112, 107, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -51, -52, 76, 62, -51, -52, 76, 62, -51, -52, 76, 62, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63 };
 
 /* JP: スペシャルウィーク /  グラスワンダー / エルコンドルパサー
@@ -3836,36 +3733,6 @@ const char deviceListText[144] = "\015\002\031\001\031\002\243\320\243\354\243\3
     "\261\012\031\001\014\000\200\000\243\315\243\305\243\315\243\317\243\322\243\331\243\303\243\301\243\322\243\304\012\031\000\272\271\271\376\270\375\243\262\037"
     "\031\000\014\000\000\200\245\317\241\274\245\311\245\307\245\243\245\271\245\257\000\000\000";
 
-/* Text: {reset}I */
-char shopHeadingIText[8] = "\013I ";
-
-/* Text: {reset}CW */
-const char shopHeadingCwText[8] = "\013CW\000\000\000\000";
-
-/* Text: {reset}CA */
-const char shopHeadingCaText[8] = "\013CA\000\000\000\000";
-
-/* Text: {reset}CB */
-const char shopHeadingCbText[8] = "\013CB\000\000\000\000";
-
-/* Text: {reset}AW */
-const char shopHeadingAwText[8] = "\013AW\000\000\000\000";
-
-/* Text: {reset}AA */
-const char shopHeadingAaText[8] = "\013AA\000\000\000\000";
-
-/* Text: {reset}AB */
-const char shopHeadingAbText[8] = "\013AB\000\000\000\000";
-
-/* Text: {reset}AF */
-const char shopHeadingAfText[8] = "\013AF\000\000\000\000";
-
-/* Text: {reset}AE */
-const char shopHeadingAeText[8] = "\013AE\000\000\000\000";
-
-/* Text: {reset}A */
-char shopHeadingAText[8] = "\013A ";
-
 unsigned char modelTestColumnAlphaTable[8] = { 0, 96, 128, 96, 0, 0, 0, 0 };
 
 unsigned char modelTestRowAlphaTable[8] = { 0, 96, 128, 128, 96, 0, 0, 0 };
@@ -3873,4 +3740,3 @@ unsigned char modelTestRowAlphaTable[8] = { 0, 96, 128, 128, 96, 0, 0, 0 };
 /* JP: 菊花賞
  * EN: Kikuka Sho */
 const char kikukaShoText[8] = "\265\306\262\326\276\336";
-

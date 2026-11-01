@@ -14,15 +14,10 @@ unsigned char *PartyDataGet(void);
 extern void PartyDataInit(void);
 
 void PartyFriendOff(int id);
-
 int PartyFriendCheck(int id);
-
 void PartyOutFriendOn(int id);
-
 void PartyOutFriendOff(int id);
-
 int PartyOutFriendCheck(int id);
-
 int PartyFriendLockCheck(int id, int flag);
 
 /* Collects party member ids into out[] and returns how many were stored.

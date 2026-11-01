@@ -1,10 +1,9 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_sound.h"
-
 #include "main/xgl_studio.h"
+#include "main/control_entry.h"
+#include "main/xgl_cd.h"
 
 typedef struct CfActor {
     u32 flags;
@@ -73,7 +72,6 @@ typedef struct TextureTransferHeader {
 
 /* The original loads read PadData at +0x28 as a 64-bit snapshot and as
  * halfwords at +0x2a and +0x2c. */
-
 typedef struct SePacketPad {
     u8 unmodeled_00[0x28];
     union {
@@ -86,70 +84,6 @@ typedef struct SePacketPad {
         } buttons;
     } input;
 } SePacketPad;
-
-extern SePacketPad PadData;
-
-extern struct SoundWork SoundWork;
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern void xglSoundLoadEffect(const char *name, int address, int bank);
-
-extern void xglMakeSePacket(int command, int handle, int volume, ...);
-
-const char saveDataSizeFormat[];
-
-const char actorSizeFormat[];
-
-const char mapUnitSizeFormat[];
-
-const char enepcSizeFormat[];
-
-const char sefSchedulerSizeFormat[];
-
-/* EUC-JP circle, triangle and square font codes prefix these test labels. */
-
-const char cfTestText[];
-
-const char texTestText[];
-
-const char sePacketTestText[];
-
-const char returnText[];
-
-const char bufferAddressFormat[];
-
-const char registCfEffectName[];
-
-const char soVok05EffectName[];
-
-/* EUC-JP sound-packet test label with the font's line-start control byte. */
-
-const char soundPacketTestText[];
-
-const char soundIdFormat[];
-
-const char soundPitchVolumePanFormat[];
-
-/* Font control byte followed by the EUC-JP title 唐鎌. */
-
-const char karakamaText[];
-
-const char envVokEffectName[];
-
-extern int printf(const char *format, ...);
-
-extern CfClearEnvironment ClearEnv;
-
-extern void xglRenderClearFrame(void);
-
-extern void xglRenderClearDepth(void);
-
-static void CfTest(void);
-
-extern void SePacketTest(void);
-
-static void TexTest(void);
 
 typedef struct ScratchpadPrimitiveVertex {
     int x;
@@ -169,60 +103,6 @@ typedef struct ScratchpadPrimitiveBuffer {
     void *colors;
 } ScratchpadPrimitiveBuffer;
 
-extern int FrameCount;
-
-static u64 rgba_0;
-
-extern float I2F(int value);
-
-extern void xglPrimAddGouraudStripN(void *buffer, int count);
-
-static CfActor *tActor;
-
-signed char printflg;
-
-signed char collflg;
-
-extern CfGameLoopState GameLoopState;
-
-extern void xglLightSetDefault(StudioLight *light);
-
-extern void xglCdInitial(void);
-
-extern void xglCdReset(void);
-
-extern void xglCdSetCallback(int callback);
-
-extern void GameResourceInit(int resource_bytes, int work_bytes);
-
-extern void ACT_init(void);
-
-extern void ACT_DrawShadowInit(void);
-
-extern void MSG_init(void);
-
-extern void TWSYS_init(void);
-
-extern void MapInit(void);
-
-extern void MAP_initUnit(void);
-
-extern void Enemy_SystemInit(void);
-
-extern void InitUwamonoSys(void);
-
-extern void GameCfPlayerMoveInit(void);
-
-extern CfActor *ACT_create(int type, int id);
-
-extern void ACT_initMotion(CfActor *actor);
-
-extern void ACT_loadMotion(CfActor *actor, int motion_id, int category);
-
-extern void ACT_loadResource(CfActor *actor, int resource_id);
-
-extern void ACT_setMotion(CfActor *actor, int motion_id);
-
 typedef struct GifAdEntry {
     u64 value;
     u64 register_address;
@@ -233,20 +113,6 @@ typedef struct TexTestPacket {
     u64 register_descriptors;
     GifAdEntry registers[4];
 } TexTestPacket;
-
-static TexTestPacket TestEnv_2_0036DE40;
-
-extern void FlushCache(int mode);
-
-extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
-
-#include "main/control_entry.h"
-
-#include "main/xgl_cd.h"
-
-const char chaHitTexturePath[];
-
-const char texDataNotFoundFormat[];
 
 typedef struct GifPackedColor {
     u32 red;
@@ -281,17 +147,134 @@ typedef struct TexTestSprite {
     GifPackedVertex xyz1;
 } TexTestSprite;
 
+extern SePacketPad PadData;
+extern struct SoundWork SoundWork;
+const char saveDataSizeFormat[];
+const char actorSizeFormat[];
+const char mapUnitSizeFormat[];
+const char enepcSizeFormat[];
+const char sefSchedulerSizeFormat[];
+
+/* EUC-JP circle, triangle and square font codes prefix these test labels. */
+const char cfTestText[];
+
+const char texTestText[];
+const char sePacketTestText[];
+const char returnText[];
+const char bufferAddressFormat[];
+const char registCfEffectName[];
+const char soVok05EffectName[];
+
+/* EUC-JP sound-packet test label with the font's line-start control byte. */
+const char soundPacketTestText[];
+
+const char soundIdFormat[];
+const char soundPitchVolumePanFormat[];
+
+/* Font control byte followed by the EUC-JP title 唐鎌. */
+const char karakamaText[];
+
+const char envVokEffectName[];
+extern CfClearEnvironment ClearEnv;
+extern int FrameCount;
+extern CfGameLoopState GameLoopState;
+const char chaHitTexturePath[];
+const char texDataNotFoundFormat[];
+const char setMapUnitTestFormat[];
+extern int MapNo;
+extern u8 UseTestPath;
+extern const char initCfCompleteFormat[];
+extern const char initCompleteFormat[];
+extern const char mapUndulationFormat[];
+extern const char actorPositionFormat[];
+extern const char nameFormat[];
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern void xglSoundLoadEffect(const char *name, int address, int bank);
+extern void xglMakeSePacket(int command, int handle, int volume, ...);
+extern int printf(const char *format, ...);
+extern void xglRenderClearFrame(void);
+extern void xglRenderClearDepth(void);
+static void CfTest(void);
+extern void SePacketTest(void);
+static void TexTest(void);
+extern float I2F(int value);
+extern void xglPrimAddGouraudStripN(void *buffer, int count);
+extern void xglLightSetDefault(StudioLight *light);
+extern void xglCdInitial(void);
+extern void xglCdReset(void);
+extern void xglCdSetCallback(int callback);
+extern void GameResourceInit(int resource_bytes, int work_bytes);
+extern void ACT_init(void);
+extern void ACT_DrawShadowInit(void);
+extern void MSG_init(void);
+extern void TWSYS_init(void);
+extern void MapInit(void);
+extern void MAP_initUnit(void);
+extern void Enemy_SystemInit(void);
+extern void InitUwamonoSys(void);
+extern void GameCfPlayerMoveInit(void);
+extern CfActor *ACT_create(int type, int id);
+extern void ACT_initMotion(CfActor *actor);
+extern void ACT_loadMotion(CfActor *actor, int motion_id, int category);
+extern void ACT_loadResource(CfActor *actor, int resource_id);
+extern void ACT_setMotion(CfActor *actor, int motion_id);
+extern void FlushCache(int mode);
+extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
+extern int sceGsSyncPath(int mode, int timeout);
+extern void xglFontDebugHex(int x, int y, int value, int digits);
+extern void TexTrans(TextureTransferHeader *texture);
+extern void CreateUwamono(int unit_id, float x, float y, float z, float rotation_y);
+extern void InitCf(void);
+extern void SetMapUnitTest(void);
+extern void PrimTest(void);
+extern void GameCameraReset(void);
+extern void GameCamera(void);
+extern void GameCfPlayerMove(void);
+extern void ACT_update(void);
+extern void MAP_updateUnit(void);
+extern void DispDebugUwamono(void);
+extern void GameDrawSync(void);
+extern void MapChange(int map_id);
+extern void xglStudioGetCamera(CfCamera **camera_out, int camera_index);
+extern void *memset(void *destination, int value, unsigned int length);
+extern double fptodp(float value);
+
+static u64 rgba_0;
+
+signed char printflg;
+
+signed char collflg;
+
+static TexTestPacket TestEnv_2_0036DE40;
+
 static TexTestSprite TestEnv_1_0036DDB0;
 
-extern int sceGsSyncPath(int mode, int timeout);
+static TexTestPacket TestEnv_2_0036DE40 = {
+    0x4000000000008001ULL,
+    0x000000000000EEEEULL,
+    {
+        {0x0004380000000000ULL, 0x50},
+        {0, 0x51},
+        {0x0000010000000100ULL, 0x52},
+        {0, 0x53}
+    }
+};
 
-extern void xglFontDebugHex(int x, int y, int value, int digits);
+static TexTestSprite TestEnv_1_0036DDB0 = {
+    0x80AB400000008001ULL,
+    0x0000000053531EEEULL,
+    {0x44, 0x42},
+    {0x3FDFF0, 0x08},
+    {0, 0x06},
+    {0x80, 0x80, 0x80, 0x80},
+    {0, 0, {0, 0}},
+    {0x6FF8, 0x71F8, 0x40000000, 0},
+    {0x1000, 0x1000, {0, 0}},
+    {0x8FF8, 0x8DF8, 0x40000000, 0}
+};
 
-extern void TexTrans(TextureTransferHeader *texture);
-
-extern void CreateUwamono(int unit_id, float x, float y, float z, float rotation_y);
-
-const char setMapUnitTestFormat[];
+static CfActor *tActor;
 
 void KarakamaTest(void)
 {
@@ -343,33 +326,6 @@ void KarakamaTest(void)
     }
     xglRenderClearDepth();
 }
-
-extern void InitCf(void);
-extern void SetMapUnitTest(void);
-extern void PrimTest(void);
-extern void GameCameraReset(void);
-extern void GameCamera(void);
-extern void GameCfPlayerMove(void);
-extern void ACT_update(void);
-extern void MAP_updateUnit(void);
-extern void DispDebugUwamono(void);
-extern void GameDrawSync(void);
-extern void MapChange(int map_id);
-extern void xglStudioGetCamera(CfCamera **camera_out, int camera_index);
-extern void *memset(void *destination, int value, unsigned int length);
-extern double fptodp(float value);
-extern int MapNo;
-extern u8 UseTestPath;
-
-extern const char initCfCompleteFormat[];
-
-extern const char initCompleteFormat[];
-
-extern const char mapUndulationFormat[];
-
-extern const char actorPositionFormat[];
-
-extern const char nameFormat[];
 
 static void CfTest(void)
 {
@@ -801,64 +757,65 @@ void TexTrans(TextureTransferHeader *texture)
     xglDmaDirectNormal(2, (u32)texture->payload, width / 4 + 1);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char saveDataSizeFormat[] = "sizeof(sSaveData):%d\n";
+
 const char actorSizeFormat[] = "sizeof(sActor):%d\n";
+
 const char mapUnitSizeFormat[] = "sizeof(sMapUnit):%d\n";
+
 const char enepcSizeFormat[] = "sizeof(sEnepc):%d\n";
+
 const char sefSchedulerSizeFormat[] = "sizeof(sefScheduler)%d\n";
+
 /* JP: ○ CF Test
  * EN: (Circle) CF Test */
 const char cfTestText[16] = "\xA1\xFB CF Test";
+
 /* JP: △ Tex Test
  * EN: (Triangle) Tex Test */
 const char texTestText[16] = "\xA2\xA4 Tex Test";
+
 /* JP: □ SePacket Test
  * EN: (Square) SePacket Test */
 const char sePacketTestText[24] = "\xA2\xA2 SePacket Test";
+
 /* JP: × return
  * EN: (Cross) return */
 const char returnText[] = "\xA1\xDF return\0\0\0\0\0\0";
+
 const char bufferAddressFormat[] = "buffer:%08x\n";
+
 const char registCfEffectName[] = "REGISTCF";
+
 const char soVok05EffectName[] = "SO_VOK05";
+
 /* JP: サウンドパケットテスト
  * EN: Sound packet test */
 const char soundPacketTestText[24] = "\x0B\xA5\xB5\xA5\xA6\xA5\xF3\xA5\xC9\xA5\xD1\xA5\xB1\xA5\xC3\xA5\xC8\xA5\xC6\xA5\xB9\xA5\xC8";
+
 /* Text: {reset}SE=%8x\n */
 const char soundIdFormat[] = "\x0BSE=%8x\n";
+
 /* Text: {reset}ID=%8x vol=%3d pan=%3d\n */
 const char soundPitchVolumePanFormat[] = "\x0BID=%8x vol=%3d pan=%3d\n";
+
 /* JP: 唐鎌
  * EN: Karakama */
 const char karakamaText[] = "\x0B\xC5\xE2\xB3\xF9";
+
 const char envVokEffectName[] = "ENV_VOK";
+
 static u64 rgba_0 = 0x0000FF00000000FFULL;
+
 signed char printflg = 0;
+
 signed char collflg = 0;
-static TexTestPacket TestEnv_2_0036DE40 = {
-    0x4000000000008001ULL,
-    0x000000000000EEEEULL,
-    {
-        {0x0004380000000000ULL, 0x50},
-        {0, 0x51},
-        {0x0000010000000100ULL, 0x52},
-        {0, 0x53}
-    }
-};
+
 const char chaHitTexturePath[] = "data\\karakama\\cha_hit.xtx";
+
 const char texDataNotFoundFormat[] = "tex data not found %d\n";
-static TexTestSprite TestEnv_1_0036DDB0 = {
-    0x80AB400000008001ULL,
-    0x0000000053531EEEULL,
-    {0x44, 0x42},
-    {0x3FDFF0, 0x08},
-    {0, 0x06},
-    {0x80, 0x80, 0x80, 0x80},
-    {0, 0, {0, 0}},
-    {0x6FF8, 0x71F8, 0x40000000, 0},
-    {0x1000, 0x1000, {0, 0}},
-    {0x8FF8, 0x8DF8, 0x40000000, 0}
-};
+
 const char setMapUnitTestFormat[16] = "SetMapUnitTest\n";
 
 const char initCfCompleteFormat[24] = "InitCf complete\n";

@@ -22,15 +22,10 @@ struct DataBuffer {
 };
 
 int DataBuffer_getBytes(DataBuffer *buffer, DataBufferByte *destination, int length);
-
 DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
-
 unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
-
 DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer);
-
 DataBufferWord DataBuffer_LittleEndian_getUIntegerAt(DataBuffer *buffer, int length);
-
 DataBufferWord DataBuffer_BigEndian_getUIntegerAt(DataBuffer *buffer, int length);
 
 #endif /* SRC_MAIN_DATA_BUFFER_H */

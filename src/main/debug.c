@@ -11,6 +11,14 @@ typedef struct ShadowDefinitionToken {
     signed char parameter_2;
 } ShadowDefinitionToken;
 
+/* DrawDropShadow selects a stream when (actor_flags & mask) == value,
+ * reading mask/value with lhu and the pointer with lw, then advancing 8. */
+typedef struct DropShadowDefinition {
+    unsigned short mask;
+    unsigned short value;
+    ShadowDefinitionToken *tokens;
+} DropShadowDefinition;
+
 static ShadowDefinitionToken human_default[30] = {
     {13, 8, 10},
     {26, 5, 7},
@@ -708,13 +716,6 @@ static ShadowDefinitionToken debug7[80] = {
     {255, 0, 0}
 };
 
-/* DrawDropShadow selects a stream when (actor_flags & mask) == value,
- * reading mask/value with lhu and the pointer with lw, then advancing 8. */
-typedef struct DropShadowDefinition {
-    unsigned short mask;
-    unsigned short value;
-    ShadowDefinitionToken *tokens;
-} DropShadowDefinition;
 DropShadowDefinition DropShadowDefineTable[10] = {
     {0, 65535, debug0},
     {0, 65535, debug1},

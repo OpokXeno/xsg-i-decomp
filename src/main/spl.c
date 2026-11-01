@@ -1,8 +1,8 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "spl.h"
+
+float minCardinalInterval = 9.9999999747524271e-07f;
 
 void SPL_init(SplineState *spline, unsigned int weight_mode,
               const float *samples, unsigned int sample_count,
@@ -453,5 +453,3 @@ void SPL_getValueXYZ(float *destination, void *state, float frame)
         return;
     }
 }
-
-float minCardinalInterval = 9.9999999747524271e-07f;

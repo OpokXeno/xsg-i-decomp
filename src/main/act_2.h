@@ -7,34 +7,6 @@
 
 #include "shared.h"
 
-/*
- * The engine's actor record. `actor` is the 64-entry array at main
- * 0x0043c1e0 with a 0xa70 stride (readelf: 0043c1e0 OBJECT GLOBAL actor
- * size 0x29c00 = 64 * 0xa70). src/main/near_dir.h, src/main/chr.h and
- * src/main/set_motion.h each carry the same recovered +0x00..+0x70 head,
- * with the field-by-field evidence for it; it is repeated verbatim here.
- * The selected ACT_* bodies add fields at their original displacements below.
- */
-
-/*
- * +0x8dc animPackTables: eight per-category animation pack-table pointers,
- * right after move. ACT_animGetData selects one with bits 8-10 of its packed
- * id (main:0x003081c8, andi a1,a1,0x7ff; srl v0,a1,0x8; sll v0,v0,0x2; lw
- * a0,0x8dc(v0)) and tail calls PACK_getEntry(table, id & 0xff) on it, so
- * each slot is a pointer.
- */
-
-/*
- * +0x6f0 animSlot: ACT_animGetCurrent takes its address (main:0x003081fc,
- * addiu a0,v1,0x6F0) and hands it to ANM_getEntry as the entry's owning
- * slot, so it is an embedded record, not a pointer. Only its +0x14 halfword
- * is read (main:0x00308200, lhu v0,20(a0)): bits 8-10 of that packed value
- * select an animPackTables slot the same way ACT_animGetData's dataId does
- * (srl v0,v0,0x6; andi v0,v0,0x1c is (currentDataId>>8&7)<<2 folded into one
- * shift), so it caches a dataId like the one ACT_animGetData is called with.
- * ACT_setMotion also writes the following halfword at +0x16 as the next data
- * id (main:0x00307ee0..0x00307ee4).
- */
 /* ACT_setMotion (main:0x00307e80..0x00307f50) also uses the flags, playback
  * bounds, speed, and frame in the prefix. The queued-animation flags halfword
  * at slot+0x22 is included from the original store's slot-relative address;
@@ -142,6 +114,14 @@ typedef struct ActorCalculatedLight {
     Matrix4 direction;
 } ActorCalculatedLight;
 
+/*
+ * The engine's actor record. `actor` is the 64-entry array at main
+ * 0x0043c1e0 with a 0xa70 stride (readelf: 0043c1e0 OBJECT GLOBAL actor
+ * size 0x29c00 = 64 * 0xa70). src/main/near_dir.h, src/main/chr.h and
+ * src/main/set_motion.h each carry the same recovered +0x00..+0x70 head,
+ * with the field-by-field evidence for it; it is repeated verbatim here.
+ * The selected ACT_* bodies add fields at their original displacements below.
+ */
 typedef struct Actor {
     u32 flags;
     void (*update)(struct Actor *actor);
@@ -180,6 +160,17 @@ typedef struct Actor {
     ActorAttachment attachments[8];
     signed char attachmentUsed[8];
     unsigned char unmodeled_6e8[0x6f0 - 0x6e8];
+    /*
+     * +0x6f0 animSlot: ACT_animGetCurrent takes its address (main:0x003081fc,
+     * addiu a0,v1,0x6F0) and hands it to ANM_getEntry as the entry's owning
+     * slot, so it is an embedded record, not a pointer. Only its +0x14 halfword
+     * is read (main:0x00308200, lhu v0,20(a0)): bits 8-10 of that packed value
+     * select an animPackTables slot the same way ACT_animGetData's dataId does
+     * (srl v0,v0,0x6; andi v0,v0,0x1c is (currentDataId>>8&7)<<2 folded into one
+     * shift), so it caches a dataId like the one ACT_animGetData is called with.
+     * ACT_setMotion also writes the following halfword at +0x16 as the next data
+     * id (main:0x00307ee0..0x00307ee4).
+     */
     ActorAnimationState animation;
     int transitionFrames; /* +0x754 */
     int holdFrames; /* +0x758 */
@@ -202,6 +193,13 @@ typedef struct Actor {
     void *modelResource;
     void *matrixResource;
     void *move;
+    /*
+     * +0x8dc animPackTables: eight per-category animation pack-table pointers,
+     * right after move. ACT_animGetData selects one with bits 8-10 of its packed
+     * id (main:0x003081c8, andi a1,a1,0x7ff; srl v0,a1,0x8; sll v0,v0,0x2; lw
+     * a0,0x8dc(v0)) and tail calls PACK_getEntry(table, id & 0xff) on it, so
+     * each slot is a pointer.
+     */
     void *animPackTables[8];
     struct Actor *parent;
     int childCount;
@@ -214,21 +212,13 @@ typedef struct Actor {
 /* ACT_setVisible's third argument is forwarded to both MDL tail calls. */
 void ACT_setVisible(Actor *actor, int part, int visible);
 static void ACT_updateMotionSub(Actor *actor, int pause);
-
 int ACT_jointGetMoveElementID(Actor *actor);
-
 void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
-
 Actor *ACT_setFace(Actor *actor, Actor *parent, int faceId);
-
 void *ACT_animGetUserData(Actor *actor);
-
 int ACT_animCheckData(Actor *actor);
-
 void ACT_initMTNResource(void);
-
 void ACT_resourceInit(void);
-
 void ACT_animGetCurrent(Actor *actor);
 
 #endif /* SRC_MAIN_ACT_2_H */

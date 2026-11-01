@@ -1,9 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_2.h"
-
 #include "outer_product.h"
 
 typedef union {
@@ -15,7 +12,6 @@ extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                                const Vector4 *third, Vector4 *vertical);
 
 extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
 extern void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
 
 void OuterProduct(const OuterProductVector *left, const OuterProductVector *right,

@@ -6,13 +6,6 @@
 #define SRC_MAIN_GAME_H
 
 #include "shared.h"
-
-extern float atan2f(float y, float x);
-extern float nearDir(float from, float to);
-
-/* TU-local native-TI storage/copy type; ordinary functions use scalar C. */
-typedef unsigned int Quadword __attribute__((mode(TI)));
-
 #include "main/xgl_studio.h"
 #include "main/sef.h"
 #include "main/xgl_2.h"
@@ -21,12 +14,13 @@ typedef unsigned int Quadword __attribute__((mode(TI)));
 #include "main/get.h"
 #include "main/init_vm.h"
 
+/* TU-local native-TI storage/copy type; ordinary functions use scalar C. */
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
 /* Canonical defining-owner proposal from src/main/party.h:10 and308-317.
  * PartyDataGet returns the serialized SaveData party region. Existing
  * party.c consumers use this exact typed prefix at that boundary; the
  * generated owner header does not yet transport these declarations. */
-
-
 /* Private caller proposal: MenuGameDataPop passes actor and zero.
  * The accepted defining body in act_2.c retains its one-argument signature.
  * This explicit owner-interface conflict requires later transport; no
@@ -37,26 +31,9 @@ struct Actor;
  * Matrix's genuine owner tag stays distinct from Matrix4. The diagnostic
  * body retains nominal boundary warnings until coherent owner transport. */
 typedef union Matrix Matrix;
-void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right);
-float xglRotTransPers(Vector4 *out, const Matrix4 matrix,
-                     Vector4 *point, int camera_id);
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-static char str_0[12];
-static char str_1[12];
-/* The eight-byte format prefix is evidenced. Its complete source-object
- * extent is unknown; the following EOB string is not an invented tail. */
-extern const char dispTagFormat[];
 
 /* Actor record tag defined by main/tu121; only its pointer is used here. */
 struct LookAtPlayerActor;
-
-extern void sefInitEffectCf(void);
-extern StudioLight *xglStudioGetLight2(void);
-extern int UseVMFlag;
-/* Private defining-owner proposals: sef.c2078..2086 returns/releases
- * SchedulerState pointers. These declarations need later owner transport. */
-
-extern int shopNo;
 
 typedef void (*GameModeCameraCallback)(void);
 
@@ -85,17 +62,45 @@ typedef struct PadDataDebugLayout {
     u8 vibrationStatus; /* +0xbe */
 } PadDataDebugLayout;
 
-int getScriptFlag(SceneObject object);
+/* Game's caller/owner declarations. Unpublished raw arena construction
+ * and common-actor factory boundaries remain explicitly diagnostic. */
+struct ActorHead;
 
+/* The eight-byte format prefix is evidenced. Its complete source-object
+ * extent is unknown; the following EOB string is not an invented tail. */
+extern const char dispTagFormat[];
+
+extern int UseVMFlag;
+
+/* Private defining-owner proposals: sef.c2078..2086 returns/releases
+ * SchedulerState pointers. These declarations need later owner transport. */
+extern int shopNo;
+
+extern const char cfRegistSoundName[9];
+extern struct SoundWork SoundWork;
+extern int UmnSimulationNo;
+extern int MenuDrillCall;
+
+extern float atan2f(float y, float x);
+extern float nearDir(float from, float to);
+void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right);
+
+float xglRotTransPers(Vector4 *out, const Matrix4 matrix,
+                     Vector4 *point, int camera_id);
+
+void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern void sefInitEffectCf(void);
+extern StudioLight *xglStudioGetLight2(void);
+int getScriptFlag(SceneObject object);
 int xglSoundSendSwd(void *swd, int bank);
+
 /* The original leaves the sequence result word in v0, including 0xffff
  * when no sequence data is supplied. */
 int xglSoundSendSmd2(void *smd, int bank);
+
 int SsdResetSegmentAllocMode(int segment);
 int SsdSetSegmentAllocMode(int segment, int mode);
 void xglSoundLoadEffect(const char *name, void *segment, int bank);
-extern const char cfRegistSoundName[9];
-extern struct SoundWork SoundWork;
 int SsdGetSeqPlayStatus(int sequence);
 int SsdGetResultValue(int *value);
 void xglSoundSequenceStop2(int channel);
@@ -104,12 +109,6 @@ void *GameResourceGetFreeAddr(void);
 const char *RES_GetEnemySeName(int index);
 void RES_GetMapEnvSeName(char *name);
 void xglSoundSequenceNormal2(int channel, int volume);
-extern int UmnSimulationNo;
-extern int MenuDrillCall;
-
-/* Game's caller/owner declarations. Unpublished raw arena construction
- * and common-actor factory boundaries remain explicitly diagnostic. */
-struct Actor;
 void GamePopSaveDataUser(void);
 void GameDrawSync(void);
 
@@ -119,11 +118,13 @@ void GameDrawSync(void);
  * Native dispatch supplies thread, arguments and result. The normal owner
  * header currently does not carry these declarations. */
 void GameStateSaveCameraLight(void);
-struct ActorHead;
+
 void actSequenceClear(struct ActorHead *actor);
 void checkTalkPoint(void);
 struct LookAtPlayerActor *XTK_getWindowOwner(void);
 
-/* GameRadarDraw reads x/y, RGB and four unsigned RGBA bytes at+12..15. */
+static char str_0[12];
+
+static char str_1[12];
 
 #endif /* SRC_MAIN_GAME_H */

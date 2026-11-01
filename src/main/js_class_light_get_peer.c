@@ -2,6 +2,11 @@
 #include "shared.h"
 #include "main/xgl_studio.h"
 
+typedef union {
+    int integer;
+    float real;
+} JsLightColor;
+
 /*
  * The wrapper object stores the color mode at +0x0c, the light selector at
  * +0x28, and three values at +0x2c. The values are either integer color
@@ -9,11 +14,6 @@
  * three floats also carry a light's direction components when the object is
  * used with JS_classLight_setDirection2.
  */
-typedef union {
-    int integer;
-    float real;
-} JsLightColor;
-
 typedef struct {
     unsigned char unmodeled_00[12];
     int color_mode;
@@ -23,7 +23,10 @@ typedef struct {
 } JsClassLight;
 
 extern char jsClassLightGetPeerLightClassName[];
+
 extern void initLight2(void);
+
+char jsClassLightGetPeerLightClassName[8] = "light";
 
 void *JS_classLight_getPeer(int identifier)
 {
@@ -83,5 +86,3 @@ int JS_classLight_setDirection2(void *peer)
     initLight2();
     return 0;
 }
-
-char jsClassLightGetPeerLightClassName[8] = "light";

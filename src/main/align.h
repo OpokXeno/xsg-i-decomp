@@ -8,7 +8,6 @@
 #include "shared.h"
 
 extern float xglAtan2(float x, float y);
-
 void alignXAxisEuler(const Vector4 *direction, Vector4 *euler);
 
 #endif

@@ -2,10 +2,6 @@
 #include "shared.h"
 #include "main/jni.h"
 
-/* GameMovieStop is defined in main/tu125 (src/main/game_movie.c), not yet
- * recovered. */
-extern void GameMovieStop(void);
-
 /*
  * The script VM's per-thread context, recovered as `JThread` in
  * src/main/chr.h (main's chr TU). Every Java native receives
@@ -19,14 +15,18 @@ typedef struct MovieObjectCall {
     unsigned char *object;
 } MovieObjectCall;
 
-/* Runtime class-field helpers are still assembly; keep the established ABI. */
-extern SceneString *loadConstString(const char *bytes, int length);
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
 extern short GameMovieFrame;
 extern unsigned char GameMovieTransparent;
 extern unsigned char GameMovieAlpha;
 
+/* GameMovieStop is defined in main/tu125 (src/main/game_movie.c), not yet
+ * recovered. */
+extern void GameMovieStop(void);
+
+/* Runtime class-field helpers are still assembly; keep the established ABI. */
+extern SceneString *loadConstString(const char *bytes, int length);
+
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern void GameMoviePlay(char *path);
 
 /* GameMovieInit is defined in main/tu125 (src/main/game_movie.c), not yet

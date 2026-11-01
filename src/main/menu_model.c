@@ -1,43 +1,44 @@
 #include "common.h"
 #include "main/xgl_studio.h"
-
 #include "shared.h"
-
 #include "main/xgl_task.h"
 #include "main/act_1.h"
-
-void *func_A1C910(void *packed_file);
 #include "main/xgl_2.h"
 #include "main/xgl_pad.h"
+
+#define MENU_MODEL_ACTOR_DRAW_STATE_OFFSET 0xc0
+
+#define MENU_MODEL_ACTOR_DRAW_STATE(actor) \
+    ((unsigned char *)(actor) + MENU_MODEL_ACTOR_DRAW_STATE_OFFSET)
+
+#define MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET 0x60
+#define MENU_MODEL_DRAW_STATE_FUNC_OFFSET     0x64
+
+#define MENU_MODEL_DRAW_STATE_PROGRESS(state) \
+    ((float *)((state) + MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET))
+
+#define MENU_MODEL_DRAW_STATE_FUNC(state) \
+    ((void (**)(MenuModelActor *))((state) + MENU_MODEL_DRAW_STATE_FUNC_OFFSET))
+
 typedef struct Actor Actor;
 
-void ACT_modelDraw(Actor *actor);
-
-/* The two controller records are 0x68 bytes; the menu controls read +0x30. */
 typedef struct MenuModelScaleLimits {
     float value[2];
 } MenuModelScaleLimits;
 
+/* The two controller records are 0x68 bytes; the menu controls read +0x30. */
 typedef struct MenuModelPadRecord {
     unsigned char unmodeled_00[0x30];
     unsigned short buttons;
     unsigned char unmodeled_32[0x36];
 } MenuModelPadRecord;
 
-extern MenuModelPadRecord PadData[2];
-static unsigned short guno_eid_tbl[29];
-extern const MenuModelScaleLimits minimumScaleTable[];
-extern const MenuModelScaleLimits maximumScaleTable[];
-
 /*
  * The model actor MenuModelDrawTypeSet (0x00280dd0) configures: it takes the
  * actor in a0 and the draw type (0..4, a jump table) in a1 and writes the
  * actor's +0x60/+0x64 fields. Only pointers to it are used here.
  */
-
 typedef struct MenuModelActor MenuModelActor;
-
-void ACT_updateDefault(MenuModelActor *actor);
 
 typedef struct MenuModelDrawTypeState {
     unsigned char unmodeled_00[0x60];
@@ -46,18 +47,17 @@ typedef struct MenuModelDrawTypeState {
 } MenuModelDrawTypeState;
 
 /*
- * Partial layout of the menu model "unit" object (main/tu165), recovered from
- * this allocation's own field accesses: MenuModelUnitOpen (+0x20),
- * MenuModelExtFuncSet (+0x13, +0x40, +0x44) and MenuModelWeaponActorGet's
- * dereferenced weapon slot array (+0x34). Only these offsets are evidenced;
- * the unmodeled_XX spans are untouched by this allocation.
+ * +0x1: MenuModelSubWindowBreak forces this to -1 immediately before tail-
+ * calling MenuModelSubWindowMainSub (0x0027fc88), which loads the same
+ * pointer from MenuModelUnit.subWindow and reads this byte to decide how to
+ * tear the subwindow down.
  */
-
 typedef struct MenuModelSubWindowState {
     unsigned char unmodeled_00[1];
     signed char closeFlag;
 } MenuModelSubWindowState;
 
+/* The external unit-resource record fields consulted while naming a weapon motion. */
 typedef struct MenuModelUnitResourceData {
     unsigned char unmodeled_00[0x5A];
     signed char weaponCharacter[3];       /* +0x5A */
@@ -65,6 +65,23 @@ typedef struct MenuModelUnitResourceData {
     short weaponResource[3];             /* +0x5E */
 } MenuModelUnitResourceData;
 
+/*
+ * Partial layout of the menu model "unit" object (main/tu165), recovered from
+ * this allocation's own field accesses: MenuModelUnitOpen (+0x20),
+ * MenuModelExtFuncSet (+0x13, +0x40, +0x44) and MenuModelWeaponActorGet's
+ * dereferenced weapon slot array (+0x34). Only these offsets are evidenced;
+ * the unmodeled_XX spans are untouched by this allocation.
+ */
+/*
+ * +0x24/+0x2C: a second (actor, resource) pair, recovered from
+ * MenuModelUnitDispose, which passes &actor2/&resource2 to
+ * ActorAndResourceDispose with mode 1, alongside the existing +0x20/+0x28
+ * pair passed with mode 0. MenuModelUnitActorSet (main:0x002800b0) stores a
+ * second ACT_create(-2) result at +0x24 (the first, ACT_create(-1), goes to
+ * +0x20) and loads a pointer from +0x28. +0x11, +0x14, +0x1C/+0x1D, +0x30
+ * and +0x48 are recovered only as bytes CreateInit clears; no other function
+ * in this allocation reads or writes them.
+ */
 typedef struct MenuModelUnit {
     unsigned char unmodeled_00[0x10];
     signed char taskPhase;                /* +0x10: forced to -1 by MenuModelUnitBreak once its pending resource request is cancelled */
@@ -118,26 +135,6 @@ typedef struct MenuModelWeapon {
     unsigned char unmodeled_4C[4];        /* task allocation initialized by CreateInit */
 } MenuModelWeapon;
 
-/*
- * +0x1: MenuModelSubWindowBreak forces this to -1 immediately before tail-
- * calling MenuModelSubWindowMainSub (0x0027fc88), which loads the same
- * pointer from MenuModelUnit.subWindow and reads this byte to decide how to
- * tear the subwindow down.
- */
-
-/* The external unit-resource record fields consulted while naming a weapon motion. */
-
-/*
- * +0x24/+0x2C: a second (actor, resource) pair, recovered from
- * MenuModelUnitDispose, which passes &actor2/&resource2 to
- * ActorAndResourceDispose with mode 1, alongside the existing +0x20/+0x28
- * pair passed with mode 0. MenuModelUnitActorSet (main:0x002800b0) stores a
- * second ACT_create(-2) result at +0x24 (the first, ACT_create(-1), goes to
- * +0x20) and loads a pointer from +0x28. +0x11, +0x14, +0x1C/+0x1D, +0x30
- * and +0x48 are recovered only as bytes CreateInit clears; no other function
- * in this allocation reads or writes them.
- */
-
 typedef struct MenuModelWeaponLoadTask {
     unsigned char unmodeled_00[0x18];
     unsigned short resourceId;            /* +0x18 */
@@ -153,12 +150,6 @@ typedef struct MenuModelWeaponLoadTask {
  * The object bound to a menu model draw task, recovered from
  * MenuModelDrawTypeMain's own access. Only +0x20 is evidenced.
  */
-
-typedef struct MenuModelDrawable {
-    unsigned char unmodeled_00[0x124];
-    void (*drawFunc)(struct MenuModelDrawable *self); /* +0x124 */
-} MenuModelDrawable;
-
 typedef struct MenuModelDrawContext {
     unsigned char unmodeled_00[0x20];
     struct MenuModelDrawable *drawable; /* +0x20 */
@@ -168,20 +159,10 @@ typedef struct MenuModelDrawContext {
  * The object MenuModelDrawTypeMain calls through, recovered from that
  * function's own access. Only +0x124 is evidenced.
  */
-
-/*
- * Body for the actor tag this TU's own prelude only forward-declares above.
- * MenuModelAlphaDraw reads the float at +0x120 (mtc1 0x3f800000 compared with
- * c.lt.s against it at 0x00280018) before adjusting the model's transparency;
- * no other offset of this type is evidenced by this allocation.
- */
-
-/*
- * +0x86: nonzero gates ACT_dispose in ActorAndResourceDispose, which clears
- * it afterward. MenuModelUnitActorSet (main:0x002800e0) also reads/writes
- * this halfword and extracts its top nibble as a type selector, so it packs
- * more than a plain boolean; only the zero/nonzero state is evidenced here.
- */
+typedef struct MenuModelDrawable {
+    unsigned char unmodeled_00[0x124];
+    void (*drawFunc)(struct MenuModelDrawable *self); /* +0x124 */
+} MenuModelDrawable;
 
 typedef union MenuModelTransformVector {
     struct {
@@ -208,19 +189,35 @@ typedef struct MenuModelTransformControl {
 } MenuModelTransformControl;
 
 typedef unsigned int XglLightQuadword __attribute__((mode(TI)));
+
 typedef struct {
     XglLightQuadword intensity;
     XglLightQuadword direction;
 } XglPackedParallelLight;
+
 typedef struct {
     XglLightQuadword ambientIntensity;
     XglPackedParallelLight parallel[3];
 } XglPackedLightSet;
+
 typedef struct MenuModelActorLight {
     XglPackedLightSet source;
     Matrix4 directionMatrix;
     Matrix4 intensityMatrix;
 } MenuModelActorLight;
+
+/*
+ * Body for the actor tag this TU's own prelude only forward-declares above.
+ * MenuModelAlphaDraw reads the float at +0x120 (mtc1 0x3f800000 compared with
+ * c.lt.s against it at 0x00280018) before adjusting the model's transparency;
+ * no other offset of this type is evidenced by this allocation.
+ */
+/*
+ * +0x86: nonzero gates ACT_dispose in ActorAndResourceDispose, which clears
+ * it afterward. MenuModelUnitActorSet (main:0x002800e0) also reads/writes
+ * this halfword and extracts its top nibble as a type selector, so it packs
+ * more than a plain boolean; only the zero/nonzero state is evidenced here.
+ */
 struct MenuModelActor {
     unsigned int actorFlags; /* +0x00: update/draw state flags */
     void (*update)(MenuModelActor *actor); /* +0x04 */
@@ -254,7 +251,6 @@ struct MenuModelActor {
 };
 
 /* A partial actor view used only to form the recovered draw-state address. */
-
 typedef struct MenuModelActorDrawTypeView {
     unsigned char unmodeled_00[0xC0];
     MenuModelDrawTypeState drawTypeState;
@@ -284,70 +280,7 @@ typedef struct MenuModelMotionTarget {
     MenuModelMotionActor *actor;
 } MenuModelMotionTarget;
 
-void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loadParam);
-void MenuModelUnitActorSet(MenuModelUnit *unit);
-
-void nmlModelUseSubWindow(unsigned int studioId, int enabled);
-
-void nmlModelSetWindow(unsigned int studioId);
-
-void xglCameraInit(StudioCamera *camera);
-
-void xglCameraSetWindow(StudioCamera *camera, int x, int y, int width, int height);
-
-void xglStudioChange(int studioId);
-
-void ACT_setMotion(MenuModelMotionActor *actor, unsigned int dataId);
-
-extern char *MenuFileNameGet(short resourceId, int fileType);
-
-extern void MenuLoadFile(const char *name, void *buffer);
-
-/* With OV01 loaded, this import resolves to dataMotNameGetMenu. */
-
-extern int func_A1ADC8(char *name, int modelId, int weaponIndex);
-
-XglTaskScheduler *MenuModelTask = 0;
-
-int MenuModelFlag = 0;
-
-static void MenuModelDrawTypeSet(MenuModelActor *actor, int drawType);
-
-void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex);
-
-void MenuModelResourceMain(void);
-
-void MenuModelResourceInit(void);
-
-void MenuModelSubWindowinit(void);
-
-void MenuModelResourceCancel(void);
-
-void MenuModelResourceCancel3(MenuModelUnit *unit);
-
-int MenuLoadSync(void);
-
-void MenuLoadCancel(void);
-
-static void MenuModelSubWindowMainSub(MenuModelUnit *unit);
-
-static void ActorAndResourceDispose(MenuModelActor **actorSlot, void **resourceSlot, int mode);
-
-/* Builds a task list of `capacity` 0x80-byte tasks at `pool` and returns the
- * first byte after them (0 when capacity is 0), see 0x0021c528. */
-
-void *xglTaskInitial(void *pool, int capacity, int flags);
-
-/* nml_model_set.c (main); no header is published for it yet. */
-
-extern void nmlModelSetToumei(int enabled);
-
-extern void nmlModelSetTransparency(float transparency);
-
-extern void nmlModelSetZwrite(int enabled);
-
 /* One 0x1C-byte memory region returned by MenuModelMemoryGet. */
-
 typedef struct MenuModelResourceAccess {
     unsigned char status;                 /* +0x0 */
     unsigned char memoryType;             /* +0x1 */
@@ -361,24 +294,12 @@ typedef struct MenuModelResourceAccess {
  * size; MenuModelMemoryGet and MenuModelResourceCancel3 establish the sixteen
  * 0x1C-byte resource regions at +0xC.
  */
-
 typedef struct MenuModelMemoryStateBuffer {
     int state; /* +0x0: memory-state code; 10-12 or 20 support menu motion */
     void *base; /* +0x4 */
     int size; /* +0x8 */
     MenuModelResourceAccess regions[16]; /* +0xC */
 } MenuModelMemoryStateBuffer;
-
-/* First .data object of the original TU (0x0036D2F0): MenuModelCreate reads
-   it through a folded base 34 entries before its start. */
-static unsigned short guno_eid_tbl[29] = {
-    0x4001, 0x4002, 0x4003, 0x4004, 0x4005, 0x4006, 0x4007, 0x4008,
-    0x4009, 0x400A, 0x400B, 0x400C, 0x400D, 0x400E, 0x400F, 0x4010,
-    0x4011, 0x4012, 0x4013, 0x4014, 0x4015, 0x4016, 0x4017, 0x4018,
-    0x4019, 0x4001, 0x4002, 0x4003, 0x4037
-};
-
-MenuModelMemoryStateBuffer MenuModelMemoryState = {0};
 
 /* Record zero is the active request; the remaining fifteen records are queued.
  * MenuModelResourceMain moves a queued record into zero and forwards loadParam.
@@ -396,52 +317,11 @@ typedef struct MenuModelResourceStateBuffer {
     int motionHandle;
 } MenuModelResourceStateBuffer;
 
-MenuModelResourceStateBuffer MenuModelResourceState = {0};
-
-MenuModelSubWindowAccess MenuModelSubWindow[3] = {{0}};
-
-const char wpMeqpMotionPath[0x18] = "data\\motion\\wp_meqp.fpk";
-
 typedef struct MenuModelResource {
     unsigned char status; /* +0x0 */
     unsigned char unmodeled_01[1];
     short handle; /* +0x2 */
 } MenuModelResource;
-
-void ACT_dispose(MenuModelActor *actor);
-
-#define MENU_MODEL_ACTOR_DRAW_STATE_OFFSET 0xc0
-
-#define MENU_MODEL_ACTOR_DRAW_STATE(actor) \
-    ((unsigned char *)(actor) + MENU_MODEL_ACTOR_DRAW_STATE_OFFSET)
-
-#define MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET 0x60
-
-#define MENU_MODEL_DRAW_STATE_FUNC_OFFSET     0x64
-
-#define MENU_MODEL_DRAW_STATE_PROGRESS(state) \
-    ((float *)((state) + MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET))
-
-#define MENU_MODEL_DRAW_STATE_FUNC(state) \
-    ((void (**)(MenuModelActor *))((state) + MENU_MODEL_DRAW_STATE_FUNC_OFFSET))
-
-/* Shared fade-step values used by the draw-type routines below. */
-
-float modelDrawOpen01Step
-    = 0.1f;
-
-float modelDrawClose01Step
-    = 0.1f;
-
-float modelDrawClose02Step
-    = 0.1f;
-
-float modelDrawClose02MinProgress
-    = 0.2f;
-
-extern int MenuRWeaponCheck(int weaponId, long equipType);
-
-extern int func_A1A330(int weaponId);
 
 typedef struct MenuModelTaskWork {
     unsigned char unmodeled_00[0x10];
@@ -472,24 +352,10 @@ typedef struct MenuModelZClearVertex {
     unsigned int fog;
 } MenuModelZClearVertex;
 
-extern void nmlModelDirectSend(int mode, unsigned char *data, int count);
-
 typedef union {
     XglLightQuadword quadword;
     Vector4 value;
 } XglLightVector;
-
-void ACT_setModelWrapper(MenuModelActor *actor, int mode);
-
-void ACT_initMotion(MenuModelActor *actor);
-
-int ACT_setFace(MenuModelActor *face, MenuModelActor *parent, int mode);
-
-void ACT_setHand(MenuModelActor *actor, int mask);
-
-void xglLightIntensityAmbient(XglPackedLightSet *lightSet, const XglLightQuadword *intensity);
-
-void xglLightIntensityParallel(XglPackedLightSet *lightSet, unsigned int index, const XglLightQuadword *intensity);
 
 typedef struct {
     Vector4 intensity;
@@ -501,7 +367,107 @@ typedef struct {
     XglParallelLight parallel[3];
 } XglLightSet;
 
+extern MenuModelPadRecord PadData[2];
+extern const MenuModelScaleLimits minimumScaleTable[];
+extern const MenuModelScaleLimits maximumScaleTable[];
+extern const char navelRotationXFormat[16];
+extern const char navelRotationYFormat[16];
+extern const char navelRotationZFormat[16];
+extern const char navelScaleXFormat[16];
+
+void *func_A1C910(void *packed_file);
+void ACT_modelDraw(Actor *actor);
+void ACT_updateDefault(MenuModelActor *actor);
+void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loadParam);
+void MenuModelUnitActorSet(MenuModelUnit *unit);
+void nmlModelUseSubWindow(unsigned int studioId, int enabled);
+void nmlModelSetWindow(unsigned int studioId);
+void xglCameraInit(StudioCamera *camera);
+void xglCameraSetWindow(StudioCamera *camera, int x, int y, int width, int height);
+void xglStudioChange(int studioId);
+void ACT_setMotion(MenuModelMotionActor *actor, unsigned int dataId);
+extern char *MenuFileNameGet(short resourceId, int fileType);
+extern void MenuLoadFile(const char *name, void *buffer);
+
+/* With OV01 loaded, this import resolves to dataMotNameGetMenu. */
+extern int func_A1ADC8(char *name, int modelId, int weaponIndex);
+
+static void MenuModelDrawTypeSet(MenuModelActor *actor, int drawType);
+void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex);
+void MenuModelResourceMain(void);
+void MenuModelResourceInit(void);
+void MenuModelSubWindowinit(void);
+void MenuModelResourceCancel(void);
+void MenuModelResourceCancel3(MenuModelUnit *unit);
+int MenuLoadSync(void);
+void MenuLoadCancel(void);
+static void MenuModelSubWindowMainSub(MenuModelUnit *unit);
+static void ActorAndResourceDispose(MenuModelActor **actorSlot, void **resourceSlot, int mode);
+
+/* Builds a task list of `capacity` 0x80-byte tasks at `pool` and returns the
+ * first byte after them (0 when capacity is 0), see 0x0021c528. */
+void *xglTaskInitial(void *pool, int capacity, int flags);
+
+/* nml_model_set.c (main); no header is published for it yet. */
+extern void nmlModelSetToumei(int enabled);
+
+extern void nmlModelSetTransparency(float transparency);
+extern void nmlModelSetZwrite(int enabled);
+void ACT_dispose(MenuModelActor *actor);
+extern int MenuRWeaponCheck(int weaponId, long equipType);
+extern int func_A1A330(int weaponId);
+extern void nmlModelDirectSend(int mode, unsigned char *data, int count);
+void ACT_setModelWrapper(MenuModelActor *actor, int mode);
+void ACT_initMotion(MenuModelActor *actor);
+int ACT_setFace(MenuModelActor *face, MenuModelActor *parent, int mode);
+void ACT_setHand(MenuModelActor *actor, int mask);
+void xglLightIntensityAmbient(XglPackedLightSet *lightSet, const XglLightQuadword *intensity);
+void xglLightIntensityParallel(XglPackedLightSet *lightSet, unsigned int index, const XglLightQuadword *intensity);
 void xglLightDirection(XglLightSet *lightSet, unsigned int index, const Vector4 *source);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+static void CreateInit(MenuModelUnit *unit);
+void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon);
+void ACT_updateMotion(MenuModelActor *actor);
+int MenuScenarioNoGet(void);
+int func_A1A2E8(int modelId);
+MenuModelUnitResourceData *func_A191C0(int modelId);
+
+static unsigned short guno_eid_tbl[29];
+
+XglTaskScheduler *MenuModelTask = 0;
+
+int MenuModelFlag = 0;
+
+/* First .data object of the original TU (0x0036D2F0): MenuModelCreate reads
+   it through a folded base 34 entries before its start. */
+static unsigned short guno_eid_tbl[29] = {
+    0x4001, 0x4002, 0x4003, 0x4004, 0x4005, 0x4006, 0x4007, 0x4008,
+    0x4009, 0x400A, 0x400B, 0x400C, 0x400D, 0x400E, 0x400F, 0x4010,
+    0x4011, 0x4012, 0x4013, 0x4014, 0x4015, 0x4016, 0x4017, 0x4018,
+    0x4019, 0x4001, 0x4002, 0x4003, 0x4037
+};
+
+MenuModelMemoryStateBuffer MenuModelMemoryState = {0};
+
+MenuModelResourceStateBuffer MenuModelResourceState = {0};
+
+MenuModelSubWindowAccess MenuModelSubWindow[3] = {{0}};
+
+/* Shared fade-step values used by the draw-type routines below. */
+float modelDrawOpen01Step
+    = 0.1f;
+
+float modelDrawClose01Step
+    = 0.1f;
+
+float modelDrawClose02Step
+    = 0.1f;
+
+float modelDrawClose02MinProgress
+    = 0.2f;
+
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
+const char wpMeqpMotionPath[0x18] = "data\\motion\\wp_meqp.fpk";
 
 void MenuModelMemorySet(int state)
 {
@@ -1408,12 +1374,6 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
     }
 }
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char navelRotationXFormat[16];
-extern const char navelRotationYFormat[16];
-extern const char navelRotationZFormat[16];
-extern const char navelScaleXFormat[16];
-
 void MenuModelNavelMove(MenuModelUnit *unit)
 {
     Matrix4 matrix;
@@ -1563,10 +1523,6 @@ void MenuModelDrawTypeMain(MenuModelDrawContext *context)
         }
     }
 }
-
-static void CreateInit(MenuModelUnit *unit);
-void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon);
-void ACT_updateMotion(MenuModelActor *actor);
 
 static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
 {
@@ -1843,10 +1799,6 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
     return (XglTaskPrefix *)weapon;
 }
 
-int MenuScenarioNoGet(void);
-int func_A1A2E8(int modelId);
-MenuModelUnitResourceData *func_A191C0(int modelId);
-
 void MenuModelCreate(int *result, int modelId)
 {
     MenuModelUnit *unit;
@@ -1945,7 +1897,6 @@ void *MenuModelInit(void *pool)
 }
 
 /* VIF DIRECT header followed by a packed GIF TEST_2 and two XYZF vertices. */
-
 void MenuModelDirectSendZClear(void)
 {
     typedef union MenuModelZClearRecord {
@@ -1992,6 +1943,7 @@ void MenuModelDirectSendZClear(void)
     nmlModelDirectSend(1, (unsigned char *)0x70000000, 5);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char navelRotationXFormat[16] = "rot : x=%f";
 
 const char navelRotationYFormat[16] = "    : y=%f";

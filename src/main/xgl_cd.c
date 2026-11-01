@@ -1,15 +1,30 @@
 #include "common.h"
-
 #include "shared.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_thread.h"
+#include "main/xgl_hdd.h"
+
+/* StrList holds a single global stream slot; queue_next's stream scan below
+ * walks it as a one-entry list, as xglCdStreamClose already does. */
+#define STR_LIST_LAST_INDEX 0
+
+/* Keep the direct state expression used by both queue loops. */
+#define CD_READ_CONTROL (&LW)
+
+/* A CD sector is fixed at 2048 bytes on this drive/read path (see also
+ * xglCdStreamReadRing's own `& -2048` sector rounding later in this TU). */
+#define CD_SECTOR_BYTES 2048
+
+#define ARC_RECORD_EXTENDED        0x80
+
+#define ARC_RECORD_TYPE_EXTENDED   0x40
+#define ARC_RECORD_LENGTH_MASK     0x3f
+#define ARC_RECORD_HEADER_BYTES    7
+#define ARC_RECORD_TYPE_EXTRA_BYTES 3
+#define ARC_TABLE_ALIGN_BYTES      64
+#define CD_PACKED_MAGIC 0x585241
 
 typedef void CdCompletionCallback(int event, int value);
-static CdCompletionCallback *callback;
-
-#include "main/xgl_cd.h"
-
-#include "main/xgl_thread.h"
-
-extern void xglHddErrorScreen(void);
 
 typedef struct StreamXssBuffer StreamXssBuffer;
 
@@ -54,23 +69,6 @@ typedef struct CdReadMode {
     unsigned char data_pattern;
 } CdReadMode;
 
-/* SDK entry points used by this translation unit. */
-extern int sceCdGetDiskType(void);
-extern int sceCdStatus(void);
-extern int sceCdReadDvdDualInfo(int *on_dual);
-extern int sceCdBreak(void);
-extern int sceCdInit(int mode);
-extern int sceCdMmode(int media);
-extern int sceCdStStat(void);
-extern int sceCdStInit(unsigned int buffer_count, unsigned int bank_count,
-                       int buffer);
-extern int sceCdStStart(unsigned int lbn, CdReadMode *read_mode);
-extern int sceOpen(const char *path, int flags, ...);
-extern int sceSifLoadModule(const char *path, int args_length, const char *args);
-extern int sceSifLoadElf(const char *path, void *exec_data);
-extern int sceSifAllocIopHeap(int bytes);
-extern void FlushCache(int mode);
-
 /* Only the fields xglCdArcInitSub1 writes are evidenced here. */
 typedef struct CdArchiveEntry {
     unsigned char state;
@@ -98,108 +96,6 @@ typedef struct CdFilePosition {
     int size_bytes;
 } CdFilePosition;
 
-/* Defined later in this file (INCLUDE_ASM); declared here, like BCD2INT
- * above, so its LOCAL definition does not follow a non-static declaration. */
-static CdFilePosition *xglCdGetFilePos(CdFilePosition *file_position, const char *path,
-                           void (*callback)(int event, int value));
-
-int xglCdGetFileSize(const char *path);
-
-void xglCdPowerOffCB(void);
-
-extern signed char ReadClockInterval;
-
-extern unsigned char PresentTime[8];
-
-extern int sceCdReadClock(unsigned char *clock);
-
-int xglCdSync(void);
-
-extern CdStreamParam *StrList;
-
-int sceCdStSeek(int descriptor);
-
-int sceLseek(int descriptor, int offset, int whence);
-
-int sceCdStStop(void);
-
-int sceSifFreeIopHeap(void *buffer);
-
-void xglCdStreamReadRingCore(CdStreamParam *stream);
-
-int xglCdStreamReadRing(CdStreamParam *stream, int bytes);
-
-int xglCdStreamRewind(CdStreamParam *stream);
-
-int xglCdStreamClose(CdStreamParam *stream);
-
-void xglCdStreamParamInit(CdStreamParam *param);
-
-extern int sceCdSync(int mode);
-
-extern int sceCdDiskReady(int mode);
-
-extern int sceCdRead(int lbn, int sectors, void *destination, CdReadMode *read_mode);
-
-void xglCdArcCheck(void);
-
-static void xglCdArcInit(void);
-
-/*
- * File-local functions (LOCAL in the original symbol table) that the shared
- * header declares `extern`: declare them static first so their static
- * definitions below do not follow a non-static declaration.
- */
-
-static int BCD2INT(unsigned char x);
-
-/* extract (below) is still INCLUDE_ASM; declare it so its callers do not see
- * an implicit declaration. */
-
-static void extract(u32 *destination, u32 *source, int byte_count);
-
-extern int xglArxExtract(u32 *dest, u32 *src);
-
-extern int sceCdStRead(int sectors, void *buffer, int mode, int *result);
-
-extern int sceRead(int descriptor, void *buffer, int bytes);
-
-extern const char xglMenuPfs0Path[];
-
-extern const char xglMenuPfs1Path[];
-
-extern const char xglMenuHddPath[];
-
-extern const char fileSelectPathFormat[];
-extern const char fileSelectUpArrowText[];
-extern const char fileSelectCursorText[];
-extern const char fileSelectParentText[];
-extern const char fileSelectDownArrowText[];
-
-/* StrList holds a single global stream slot; queue_next's stream scan below
- * walks it as a one-entry list, as xglCdStreamClose already does. */
-
-#define STR_LIST_LAST_INDEX 0
-
-/* Keep the direct state expression used by both queue loops. */
-
-#define CD_READ_CONTROL (&LW)
-
-/* Twelve month lengths followed by twelve cumulative month offsets. */
-
-static unsigned short monthday[24] = {
-    31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-    0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
-};
-
-unsigned char system_cnf[80] = {0};
-
-static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sectors);
-
-static void StreamReadRingCoreNormal(CdStreamParam *stream);
-
-static void StreamReadRingCoreXss(CdStreamParam *stream);
-
 /*
  * The queue entries occupy 0x80 bytes; only their used prefix is named.
  * xglCdReadFilePart (0x0021DEB8..0x0021E30C, still INCLUDE_ASM) enqueues by
@@ -209,7 +105,6 @@ static void StreamReadRingCoreXss(CdStreamParam *stream);
  * fields back to it in that same order, matching xglCdReadFile's
  * (name, buffer, ...) shape in shared.h.
  */
-
 typedef struct CdRequestPartial {
     void *buffer;
     int offset;
@@ -225,7 +120,6 @@ typedef struct CdRequestPartial {
  * project (e.g. src/main/game.c, src/main/ssd_init.h) instead of inventing
  * members to complete the struct's size.
  */
-
 typedef struct CdReadControl {
     int active_file_descriptor;                 /* +0x00 */
     u8 *write_cursor;                            /* +0x04 */
@@ -251,131 +145,11 @@ typedef struct CdReadControl {
     CdRequestPartial requests[32];               /* +0x40..0x103f */
 } CdReadControl;
 
-static CdReadControl LW;
-
 /* Four 0x18-byte archive slots; the initialization helper models each prefix. */
-
 typedef union CdArchiveStorage {
     CdArchiveEntry entry;
     unsigned char bytes[0x18];
 } CdArchiveStorage;
-
-static CdArchiveStorage ArcHeader[4];
-
-static CdCompletionCallback *callback;
-
-static signed char ReadClockInterval;
-
-static unsigned char PresentTime[8];
-
-static CdStreamParam *StrList;
-
-extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
-                             CdCompletionCallback *callback, int offset, int length);
-
-extern int sceDevctl(const char *device, int command, const void *input,
-                     unsigned int input_size, void *output, unsigned int output_size);
-
-extern int sceCdPause(void);
-
-extern int sceCdPowerOff(u32 *result);
-
-extern u32 sceCdGetReadPos(void);
-
-/*
- * Converts a calendar record to the number of seconds elapsed since
- * 2000-01-01 00:00:00.  monthday[12..23] holds the cumulative day offset of
- * each month; the leap day of the current year counts from March onwards,
- * and ((year - 1997) >> 2) counts the leap days of the whole years before it.
- */
-
-/* A CD sector is fixed at 2048 bytes on this drive/read path (see also
- * xglCdStreamReadRing's own `& -2048` sector rounding earlier in this TU). */
-
-#define CD_SECTOR_BYTES 2048
-
-/*
- * Archive table-of-contents walk: archive_data is a header buffer filled by
- * xglCdArcInitSub1/xglCdArcInit, and this finds the byte right after the
- * table's last record so the caller can place fresh data there.
- *
- * Each record begins with a one-byte length/flags field:
- *   - ARC_RECORD_EXTENDED set: no fixed header past this byte.
- *   - ARC_RECORD_EXTENDED clear: a fixed ARC_RECORD_HEADER_BYTES-byte header
- *     follows, extended by ARC_RECORD_TYPE_EXTRA_BYTES more bytes when
- *     ARC_RECORD_TYPE_EXTENDED is also set.
- *   - ARC_RECORD_LENGTH_MASK (the low bits) is the record's payload length,
- *     walked past after the fixed header, if any.
- * A zero length/flags byte ends the table.
- */
-
-#define ARC_RECORD_EXTENDED        0x80
-
-#define ARC_RECORD_TYPE_EXTENDED   0x40
-
-#define ARC_RECORD_LENGTH_MASK     0x3f
-
-#define ARC_RECORD_HEADER_BYTES    7
-
-#define ARC_RECORD_TYPE_EXTRA_BYTES 3
-
-#define ARC_TABLE_ALIGN_BYTES      64
-
-#include "main/xgl_hdd.h"
-
-/*
- * File-local functions (LOCAL in the original symbol table) that the shared
- * header declares `extern`: declare them static first so their static
- * definitions below do not follow a non-static declaration.
- */
-
-/* extract (below) is still INCLUDE_ASM; declare it so its callers do not see
- * an implicit declaration. */
-
-extern int sceCdStatus(void);
-
-extern int sceOpen(const char *path, int flags, ...);
-
-extern int sceCdBreak(void);
-
-extern int sceSifAllocIopHeap(int size);
-
-extern int sceCdStStat(void);
-
-extern int sceCdInit(int mode);
-
-extern int sceCdMmode(int media);
-
-extern int sceCdReadDvdDualInfo(int *on_dual);
-
-extern void FlushCache(int mode);
-
-extern int sceSifLoadElf(const char *path, void *exec_data);
-
-extern int sceSifLoadModule(const char *path, int args_length, const char *args);
-
-extern int sceCdGetDiskType(void);
-
-/* StrList holds a single global stream slot; queue_next's stream scan below
- * walks it as a one-entry list, as xglCdStreamClose already does. */
-
-/* Keep the direct state expression used by both queue loops. */
-
-/* Twelve month lengths followed by twelve cumulative month offsets. */
-
-const char xenosagaArc10Name[16] = "xenosaga.10";
-
-const char xenosagaArc20Name[16] = "xenosaga.20";
-
-const char xenosagaArc30Name[16] = "xenosaga.30";
-
-const char systemConfigName[16] = "system.cnf";
-
-static char listname_7[] = ".filelist";
-
-static char head_8[] = "cdrom0:\\IOP\\";
-
-static char head_10[] = "cdrom0:\\";
 
 typedef struct CdFileSelect {
     int x;                                         /* +0x000 */
@@ -396,23 +170,142 @@ typedef struct CdFileSelect {
     unsigned char unmodeled_22c[0x268 - 0x22c];    /* +0x22c */
 } CdFileSelect;
 
-/* Four 0x18-byte archive slots; the initialization helper models each prefix. */
+typedef struct CdPackedHeader {
+    int magic;
+    int size_bytes;
+    int unmodeled_08;
+    int mode;
+} CdPackedHeader;
 
-static unsigned char loaded_overlay;
+/* FileSelect reads the first pad record at +0x2a and +0x2c. */
+typedef struct CdSelectPad {
+    unsigned char unmodeled_00[0x28];
+    unsigned short held;
+    unsigned short pressed;
+    unsigned short repeated;
+    unsigned char unmodeled_2e[0x3a];
+} CdSelectPad;
+
+extern const char xglMenuPfs0Path[];
+extern const char xglMenuPfs1Path[];
+extern const char xglMenuHddPath[];
+extern const char fileSelectPathFormat[];
+extern const char fileSelectUpArrowText[];
+extern const char fileSelectCursorText[];
+extern const char fileSelectParentText[];
+extern const char fileSelectDownArrowText[];
+extern const char xenosagaPfs0Path[];
+extern const char xenosagaArc00Name[];
+extern CdSelectPad PadData;
+
+extern void xglHddErrorScreen(void);
+
+/* SDK entry points used by this translation unit. */
+extern int sceCdGetDiskType(void);
+extern int sceCdStatus(void);
+extern int sceCdReadDvdDualInfo(int *on_dual);
+extern int sceCdBreak(void);
+extern int sceCdInit(int mode);
+extern int sceCdMmode(int media);
+extern int sceCdStStat(void);
+
+extern int sceCdStInit(unsigned int buffer_count, unsigned int bank_count,
+                       int buffer);
+
+extern int sceCdStStart(unsigned int lbn, CdReadMode *read_mode);
+extern int sceOpen(const char *path, int flags, ...);
+extern int sceSifLoadModule(const char *path, int args_length, const char *args);
+extern int sceSifLoadElf(const char *path, void *exec_data);
+extern int sceSifAllocIopHeap(int bytes);
+extern void FlushCache(int mode);
+
+/* Defined later in this file (INCLUDE_ASM); declared here, like BCD2INT
+ * below, so its LOCAL definition does not follow a non-static declaration. */
+static CdFilePosition *xglCdGetFilePos(CdFilePosition *file_position, const char *path,
+                           void (*callback)(int event, int value));
+
+int xglCdGetFileSize(const char *path);
+void xglCdPowerOffCB(void);
+extern int sceCdReadClock(unsigned char *clock);
+int xglCdSync(void);
+int sceCdStSeek(int descriptor);
+int sceLseek(int descriptor, int offset, int whence);
+int sceCdStStop(void);
+int sceSifFreeIopHeap(void *buffer);
+void xglCdStreamReadRingCore(CdStreamParam *stream);
+int xglCdStreamReadRing(CdStreamParam *stream, int bytes);
+int xglCdStreamRewind(CdStreamParam *stream);
+int xglCdStreamClose(CdStreamParam *stream);
+void xglCdStreamParamInit(CdStreamParam *param);
+extern int sceCdSync(int mode);
+extern int sceCdDiskReady(int mode);
+extern int sceCdRead(int lbn, int sectors, void *destination, CdReadMode *read_mode);
+void xglCdArcCheck(void);
+static void xglCdArcInit(void);
+
+/*
+ * File-local functions (LOCAL in the original symbol table) that the shared
+ * header declares `extern`: declare them static first so their static
+ * definitions below do not follow a non-static declaration.
+ */
+static int BCD2INT(unsigned char x);
+
+/* extract (below) is still INCLUDE_ASM; declare it so its callers do not see
+ * an implicit declaration. */
+static void extract(u32 *destination, u32 *source, int byte_count);
+
+extern int xglArxExtract(u32 *dest, u32 *src);
+extern int sceCdStRead(int sectors, void *buffer, int mode, int *result);
+extern int sceRead(int descriptor, void *buffer, int bytes);
+static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sectors);
+static void StreamReadRingCoreNormal(CdStreamParam *stream);
+static void StreamReadRingCoreXss(CdStreamParam *stream);
+
+extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
+                             CdCompletionCallback *callback, int offset, int length);
+
+extern int sceDevctl(const char *device, int command, const void *input,
+                     unsigned int input_size, void *output, unsigned int output_size);
+
+extern int sceCdPause(void);
+extern int sceCdPowerOff(u32 *result);
+extern u32 sceCdGetReadPos(void);
+
+extern int sceCdGetError(void);
+extern int sceCdLayerSearchFile(CdFilePosition *file, const char *name, int layer);
+extern int xglHddCheck(void);
+
+const char xenosagaArc10Name[16] = "xenosaga.10";
+
+const char xenosagaArc20Name[16] = "xenosaga.20";
+
+const char xenosagaArc30Name[16] = "xenosaga.30";
+
+const char systemConfigName[16] = "system.cnf";
+
+const char fileSelectPathFormat[16] = "PATH:/%s";
+
+const char xenosagaPfs0Path[24] = "pfs0:/xenosaga.00";
+
+const char xenosagaArc00Name[16] = "xenosaga.00";
+
+/* Twelve month lengths followed by twelve cumulative month offsets. */
+static unsigned short monthday[24] = {
+    31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
+};
+
+unsigned char system_cnf[80] = {0};
+
+static char listname_7[] = ".filelist";
+
+static char head_8[] = "cdrom0:\\IOP\\";
+
+static char head_10[] = "cdrom0:\\";
 
 static char root_0[] = "data\\";
 
 static char hdd_head_6[] = "pfs0:/";
-
-extern int sceCdGetError(void);
-
-extern int sceCdLayerSearchFile(CdFilePosition *file, const char *name, int layer);
-
-extern int xglHddCheck(void);
-
-extern const char xenosagaPfs0Path[];
-
-extern const char xenosagaArc00Name[];
 
 static char arcname_1[] = "xenosaga.00";
 
@@ -428,14 +321,37 @@ static char tail_9[] = ".IRX;1";
 
 static char tail_11[] = ".OVL;1";
 
-#define CD_PACKED_MAGIC 0x585241
+const char fileSelectUpArrowText[8] = "^";
 
-typedef struct CdPackedHeader {
-    int magic;
-    int size_bytes;
-    int unmodeled_08;
-    int mode;
-} CdPackedHeader;
+const char fileSelectCursorText[8] = ">";
+
+const char fileSelectParentText[8] = "..";
+
+const char fileSelectDownArrowText[8] = "v";
+
+static CdCompletionCallback *callback;
+
+static CdReadControl LW;
+
+static CdArchiveStorage ArcHeader[4];
+
+static CdCompletionCallback *callback;
+
+static signed char ReadClockInterval;
+
+static unsigned char PresentTime[8];
+
+static CdStreamParam *StrList;
+
+static unsigned char loaded_overlay;
+
+static unsigned char loaded_overlay;
+
+/* Declared here, not at the top: moving it up changes the original code. */
+extern signed char ReadClockInterval;
+
+extern unsigned char PresentTime[8];
+extern CdStreamParam *StrList;
 
 static void hdd_error(void)
 {
@@ -602,6 +518,12 @@ void xglClockRead(XglClock *clock)
     clock->status = 0;
 }
 
+/*
+ * Converts a calendar record to the number of seconds elapsed since
+ * 2000-01-01 00:00:00.  monthday[12..23] holds the cumulative day offset of
+ * each month; the leap day of the current year counts from March onwards,
+ * and ((year - 1997) >> 2) counts the leap days of the whole years before it.
+ */
 unsigned int xglClockDayTime2UInt(XglClock *clock_time)
 {
     unsigned int seconds;
@@ -1654,16 +1576,6 @@ static void FileSelectSub(CdFileSelect *select)
     }
 }
 
-/* FileSelect reads the first pad record at +0x2a and +0x2c. */
-typedef struct CdSelectPad {
-    unsigned char unmodeled_00[0x28];
-    unsigned short held;
-    unsigned short pressed;
-    unsigned short repeated;
-    unsigned char unmodeled_2e[0x3a];
-} CdSelectPad;
-extern CdSelectPad PadData;
-
 int xglCdFileSelect(CdFileSelect *select)
 {
     int index;
@@ -1899,6 +1811,20 @@ static int xglCdArcInitSub1(CdArchiveEntry *archive_entry,
     return header_count + 1;
 }
 
+/*
+ * Archive table-of-contents walk: archive_data is a header buffer filled by
+ * xglCdArcInitSub1/xglCdArcInit, and this finds the byte right after the
+ * table's last record so the caller can place fresh data there.
+ *
+ * Each record begins with a one-byte length/flags field:
+ *   - ARC_RECORD_EXTENDED set: no fixed header past this byte.
+ *   - ARC_RECORD_EXTENDED clear: a fixed ARC_RECORD_HEADER_BYTES-byte header
+ *     follows, extended by ARC_RECORD_TYPE_EXTRA_BYTES more bytes when
+ *     ARC_RECORD_TYPE_EXTENDED is also set.
+ *   - ARC_RECORD_LENGTH_MASK (the low bits) is the record's payload length,
+ *     walked past after the fixed header, if any.
+ * A zero length/flags byte ends the table.
+ */
 static unsigned char *xglCdArcInitSub2(unsigned char *archive_data)
 {
     unsigned char *cursor = archive_data + 1;
@@ -2018,19 +1944,3 @@ void xglCdInitial(void)
     xglHddMount();
     xglCdArcInit();
 }
-
-const char fileSelectPathFormat[16] = "PATH:/%s";
-
-const char xenosagaPfs0Path[24] = "pfs0:/xenosaga.00";
-
-const char xenosagaArc00Name[16] = "xenosaga.00";
-
-const char fileSelectUpArrowText[8] = "^";
-
-const char fileSelectCursorText[8] = ">";
-
-const char fileSelectParentText[8] = "..";
-
-const char fileSelectDownArrowText[8] = "v";
-
-static unsigned char loaded_overlay;

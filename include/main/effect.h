@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_EFFECT_H
 
 #include "shared.h"
-
 #include "main/jni.h"
 
 struct UnitScaleVector {

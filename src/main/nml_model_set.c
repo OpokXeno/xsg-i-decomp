@@ -1,89 +1,42 @@
 #include "common.h"
 #include "main/xgl_render.h"
 #include "main/xgl_2.h"
-
 #include "shared.h"
-
 #include "nml_model_set.h"
 #include "main/xgl_studio.h"
 #include "main/get.h"
 
-static unsigned char s_aDispVisible[1024];
+#define NML_RENDER_MAP_ENTRY 0x10000u
 
-int g_aSubWindow[4] = { 0 };
+/* ACT_modelDrawSub supplies alpha as a signed word from its actor at +0x9a8. */
+#define NML_RENDER_STENCIL 0x4u
 
-LayoutStore s_inLayout = { 0 };
-
-static void *s_pMapLast = 0;
-
-static int s_nParentBuf = 0;
-
-static int s_nToumeiNum = 0;
-
-static unsigned int s_nShadowVec = 0;
-
-static int s_nMapShadowParts = 0;
-
-static float s_fSortOffsetEntry = 0.0f;
-
-static int s_nParent = 0;
-
-static int s_nClip = 0;
-
-static int s_nShapeNum = 0;
-
-static int s_nMapClip = 0;
-
-static int s_nPacketSignal = 0;
-
-static int s_nUseZwrite = 0;
-
-static int s_nUseBackBuffer = 0;
-
-static int s_nEffectWrite = 1;
-
-static int s_nMapLast = 0;
-
-static int s_nFadeDoit = 0;
-
-static int s_nPause = 0;
-
-static int s_nMenu = 0;
-
-static int s_nFrameLockOff = 0;
-
-static int s_nRenderCancelOld = 0;
-
-int g_nGsEntry = 0;
-
-static int s_nAlphaGroup;
-
-static int s_nNonAlphaGroup;
-
-static int s_aToumeiId[16];
-
-static float s_aToumei[16];
-
-static int s_aShapeId[32];
-
-static float s_aShapeWeight[32];
-
-static int s_aMapLast[12];
-
-static Vector4 s_inShadowVec;
-
-static Vector4 s_inGblPos;
+#define NML_RENDER_ZWRITE 0x8u
+#define NML_RENDER_TOUMEI 0x20u
 
 /*
- * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
- * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
- * Keep its definition between s_inGblPos and s_inProReal, matching the
- * original local-storage order. set_circle_shadow_ratio writes entries 0-7
- * and 16-23. The original storage is 0x1000 bytes (no other label until
- * s_aAlphaGroup at 0x00957940); only the first 0x400 are read.
+ * Bounds and alignment a model texture pointer must satisfy: the pointer
+ * lands inside main RAM at or above the executable's own load base
+ * (config/tu/main/tu000.json "start": "0x00200000") and at or below the top
+ * of the 32 MiB EE RAM, and it is qword (16-byte) aligned as GIF/DMA
+ * texture transfers require.
  */
+#define NML_TEXTURE_RAM_BASE 0x00200000u
 
-static int circleShadowRatioTable[1024];
+#define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
+#define NML_TEXTURE_ALIGN_MASK 0xfu
+#define NML_RENDER_FOG 0x2u
+#define NML_NAME_MATCH_PREFIX 1
+#define NML_NAME_MATCH_EXACT 2
+#define NML_NAME_MATCH_SUBSTRING 3
+
+#define LAYOUT_W(off) (s_inLayout.slots[(off) / 4].f)
+
+#define LAYOUT_S32(off) (s_inLayout.slots[(off) / 4].i)
+
+/* Measurement proxy only: stands in for the StudioCamera scissor members
+ * (float at +0x60 x0, +0x64 y0, +0x68 x1, +0x6c y1) until the owner adds them. */
+#define SCISSOR_F(c, i) (*(float *)((char *)(c) + 0x60 + 4 * (i)))
 
 /*
  * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
@@ -91,7 +44,6 @@ static int circleShadowRatioTable[1024];
  * projection_entry at +0x1c0. No C body names the earlier float slots; their
  * meanings stay unknown, so that region is explicit unmodeled storage.
  */
-
 typedef struct NmlProRealFields {
     Matrix4 matrix_000;
     Matrix4 inverseTransform;
@@ -135,94 +87,10 @@ typedef struct NmlProRealState {
     unsigned char unmodeled_1d8[0x1e0 - 0x1d8];
 } NmlProRealState;
 
-static NmlProRealState s_inProReal[1];
-
-static int s_inBackBuffer[10];
-
-static int s_inMapHandle[4];
-
-static FadeControl s_inFadeOut;
-
-static FadeControl s_inFadeIn;
-
-static FadeControl s_inActiveFadeOut;
-
-static FadeControl s_inActiveFadeIn;
-
-#define NML_RENDER_MAP_ENTRY 0x10000u
-
-static void CONSTRUCT_MODELSYSTEM(void);
-
-/* INIT_BACK_BUFFER (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. */
-
-static void INIT_BACK_BUFFER(void);
-
-/*
- * TU-local partial view of the shared render-state global sRender (main
- * 0x004A90E0, size 0x5C; see src/main/game_over.c's DrawImageRenderState,
- * src/main/map_1.c's MapRenderState, src/main/window_tex_load.c's
- * UmnRenderSize and src/main/game_defocus.c's DefocusRenderState for other
- * TUs' views of the same object). Only the halfword at +0x22 is evidenced
- * here: nmlModelSendSignalMovieFinish below forwards it unchanged as the
- * "ownerIndex" argument of nmlModelSetBackBuffer and
- * nmlModelSetBackBufferToBattle.
- */
-
-/*
- * nmlModelSetFadeInCancel/nmlModelSetFadeOutCancel/nmlModelSetBackBuffer
- * (below, this TU) and nmlModelSetBackBufferToBattle (still INCLUDE_ASM)
- * are used before their definitions; declare them so these calls do not
- * see an implicit declaration.
- */
-
-void nmlModelSetFadeInCancel(int frames);
-
-void nmlModelSetFadeOutCancel(int frames);
-
-void nmlModelSetBackBuffer(int modelId, int duration, int ownerIndex, int value);
-
-void nmlModelSetBackBufferToBattle(int ownerIndex);
-
-static void fade_render(NmlPacket packet, FadeControl *control);
-
-/*
- * fadeOutLockedFlag is main:0x0095DB90, the same byte the FadeControl comment above
- * ties to s_inFadeOut's "locked" field at +0x30 (0x0095DB60 + 0x30): cited
- * there only as evidence, not as claimed source. Addressing it through
- * &s_inFadeOut+0x30 rather than its own symbol changes the emitted %lo
- * immediate (sw v0,48(v1) for the original's sw v0,0(v1)), so this
- * function keeps the flat scaffold symbol, as an unsized array so -G8
- * small-data gp-relative addressing does not apply to it either (matching
- * nmlModelBackBufferRequestFlags/nmlModelMpeg2CrossFadeTime above).
- */
-
-extern int fadeOutLockedFlag[];
-
-/* activeFadeInCancelFrames is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
- * fadeOutLockedFlag comment above for why it stays a flat scaffold symbol. */
-
-extern int activeFadeInCancelFrames[];
-
-/* fadeInCancelFrames is s_inFadeIn's "cancelFrames" byte (+0x28). */
-
-extern int fadeInCancelFrames[];
-
-/* activeFadeOutCancelFrames is s_inActiveFadeOut's "cancelFrames" byte (+0x28). */
-
-extern int activeFadeOutCancelFrames[];
-
-/* fadeOutCancelFrames is s_inFadeOut's "cancelFrames" byte (+0x28). */
-
-extern int fadeOutCancelFrames[];
-
-/* fadeOutDisposeFlag is s_inFadeOut's "dispose" byte (+0x24). */
-
-extern int fadeOutDisposeFlag[];
-
-/* fadeInDisposeFlag is s_inFadeIn's "dispose" byte (+0x24). */
-
-extern int fadeInDisposeFlag[];
+typedef struct {
+    float color[3];
+    float duration;
+} NmlFadeValues;
 
 /*
  * TU-local partial view of GameLoopState (main 0x00338680, size 0x2a030;
@@ -230,12 +98,6 @@ extern int fadeInDisposeFlag[];
  * setter reads are modeled: the fade level at +0x58 and the three fade
  * color components at +0x90, both forwarded to fade_set unchanged.
  */
-
-typedef struct {
-    float color[3];
-    float duration;
-} NmlFadeValues;
-
 typedef struct {
     unsigned char unmodeled_000[0xc - 0x0];
     unsigned short stealthMode; /* +0xc */
@@ -252,170 +114,20 @@ typedef struct {
     NmlFadeValues previousFade; /* +0xa0 */
 } NmlGameLoopState;
 
-extern NmlGameLoopState GameLoopState;
-
-/* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
- * this caller does not see an implicit declaration. */
-
-static void fade_set(FadeControl *, float *, int, int, int, int, int);
-
-/* ACT_modelDrawSub supplies alpha as a signed word from its actor at +0x9a8. */
-
-#define NML_RENDER_STENCIL 0x4u
-
-#define NML_RENDER_ZWRITE 0x8u
-
-#define NML_RENDER_TOUMEI 0x20u
-
-/*
- * Bounds and alignment a model texture pointer must satisfy: the pointer
- * lands inside main RAM at or above the executable's own load base
- * (config/tu/main/tu000.json "start": "0x00200000") and at or below the top
- * of the 32 MiB EE RAM, and it is qword (16-byte) aligned as GIF/DMA
- * texture transfers require.
- */
-
-#define NML_TEXTURE_RAM_BASE 0x00200000u
-
-#define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
-
-#define NML_TEXTURE_ALIGN_MASK 0xfu
-
-/*
- * Stores the current model matrix pointer in the pointer-width s_inLayout
- * word at byte offset 0x23c (slot 143 of the shared LayoutStore view, which
- * gives that slot no pointer member).
- */
-
-/* nmlModelFogPara (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. */
-
-static void nmlModelFogPara(Vector4 *fog, float fogNear, float fogFar, float fogMin, float fogMax);
-
-#define NML_RENDER_FOG 0x2u
-
-/* The four fog distances of RgFog.dist (defaults 50, 250, 0, 1). */
-
-/* The map callers pass halfword part IDs; the layout has eight shadow slots. */
-
-extern unsigned int strlen(const char *string);
-
-extern int memcmp(const void *left, const void *right, unsigned int count);
-
-extern int strcmp(const char *left, const char *right);
-
-extern char *strstr(const char *string, const char *pattern);
-
-/* nmlModelLexDataCheck remains assembly-owned below. */
-
-int nmlModelLexDataCheck(NmlModel *model);
-
-#define NML_NAME_MATCH_PREFIX 1
-
-#define NML_NAME_MATCH_EXACT 2
-
-#define NML_NAME_MATCH_SUBSTRING 3
-
-/* nmlModelDirectXtxSub (above) is still INCLUDE_ASM; declare it so this
- * caller does not see an implicit declaration. */
-
-static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId);
-
-/*
- * Callers (GameRadarDraw main 0x00252fc8, unit6003_draw main 0x003211a0;
- * both still INCLUDE_ASM) never inspect the result -- the tail call below
- * matches the compiled form, so this is void.
- */
-
-#define LAYOUT_W(off) (s_inLayout.slots[(off) / 4].f)
-
-#define LAYOUT_S32(off) (s_inLayout.slots[(off) / 4].i)
-
-/*
- * CONSTRUCT_CIRCLR_SHADOW (near the top of this TU) is still INCLUDE_ASM
- * and nmlModelClear is defined below (this TU); declare them, and the
- * s_inMapHandle array nmlModelClear also declares nearer its own use, so
- * this caller does not see an implicit declaration.
- */
-
-static void CONSTRUCT_CIRCLR_SHADOW(void);
-
-void nmlModelClear(void);
-
-/* CLEAR_LAYOUT_MODEL and CLEAR_MODEL_ENTRY (near the top of this TU) are
- * still INCLUDE_ASM; declare them so this caller does not see an implicit
- * declaration. */
-
-static void CLEAR_LAYOUT_MODEL(LayoutStore *arg0);
-
-static void CLEAR_MODEL_ENTRY(void);
-
-/* FLUSH_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so this
- * caller does not see an implicit declaration. */
-
-static void FLUSH_MODELSYSTEM(void);
-
-/*
- * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
- * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
- * Keep its definition between s_inGblPos and s_inProReal, matching the
- * original local-storage order. set_circle_shadow_ratio writes entries 0-7
- * and 16-23.
- */
-
-/*
- * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
- * with count 0x1e, so the copied extent is established.  ProjectMap and
- * ProjectCircle access the listed float slots; nmlModelClear clears the word
- * at +0x1c0.  Other bytes remain unnamed because their roles are not shown
- * by this TU's C callers.
- */
-
-static int s_nDispVisible;
-
-static char s_aTexName[32];
-
 typedef struct NmlMaterialName {
     char text[32];
 } NmlMaterialName;
-static NmlMaterialName s_aMatName;
-
-static Matrix4 s_inGblPlace;
-
-extern void xglStudioChange(int);
-
-extern void xglLightCalcMatrix(StudioLight *);
-
-extern void xglStudioChange(int);
-
-extern void xglLightCalcMatrix(StudioLight *);
 
 struct NmlShadowTexture {
     unsigned int uploadHeader[8];
     unsigned char pixels[64][64];
 };
 
-static struct NmlShadowTexture s_aCircleShadow;
-
-static unsigned int s_aCircleShadowClut[8];
-
-static int s_nCircleShadow;
-
-extern float xglPointLength(Vector4 *first, Vector4 *second);
-
-extern float nonLinearCameraMinAngleY;
-
-extern float nonLinearCameraMaxAngleY;
-
 typedef struct NmlDirectRecord {
     void *data;
     s16 count;
     s16 attribute;
 } NmlDirectRecord;
-
-static NmlDirectRecord s_aDirect[5500];
-
-extern u8 *nmlPacketSetAttributeData16N(const void *data, int count);
 
 typedef struct {
     unsigned char unmodeled_00[8];
@@ -431,36 +143,6 @@ typedef struct {
     int dataOffset;
 } NmlDirectXtxEntry;
 
-static u64 TestEnv_0_004A9170[12];
-
-extern void nmlFilterStealthMake(int, f32, void *, LayoutSlot *);
-
-extern f32 stealthDepthScale;
-
-extern f32 tanf(f32);
-
-extern f32 stealthSortThreshold;
-
-extern f32 stealthDistanceTolerance;
-
-static void * s_apBlock[4096];
-
-static unsigned short s_aBlockLayout[4096];
-
-static void * s_apBlockLast[32];
-
-static unsigned short s_aBlockLayoutLast[32];
-
-static LayoutStore * s_apModelLayout[512];
-
-static int s_nCount;
-
-static int s_aShapeMathPara[10];
-
-static Vector4 s_inMulColor;
-
-extern f32 shapeWeightEpsilon;
-
 typedef struct NmlModelSampleView {
     unsigned char unmodeled_000[0x48];
     int sampleCount;
@@ -470,34 +152,6 @@ typedef struct NmlModelSampleView {
     unsigned char unmodeled_060[0x90 - 0x60];
     Vector4 samplePosition;
 } NmlModelSampleView;
-
-extern int nmlModelCalcClipStudio(Vector4 *, int);
-
-extern f32 entryClipWidthScale;
-
-extern f32 entryClipPoolHead;
-
-extern f32 entryClipPoolBody;
-
-extern f32 entryClipPoolTail;
-
-extern f32 entryClipPoolInner;
-
-extern f32 entryClipPoolOuter;
-
-extern f32 entryClipPoolUpper;
-
-extern f32 entryClipPoolLower;
-
-extern f32 entryClipPoolMid;
-
-extern f32 entryClipPoolRear;
-
-extern char faceNameSuffix[];
-
-static float deapth_for_studio(int studio, Vector4 *position, float scale);
-
-extern float calcSampleThreshold;
 
 typedef struct {
     unsigned char unmodeled_00[0x94];
@@ -517,81 +171,10 @@ struct NmlModelRenderRange {
     LayoutStore *layout;
 };
 
-extern void nmlPacketGsInit(void);
-
-extern void nmlPacketAddGsZbuf(int);
-
-extern void nmlPacketAddGsFBA(int);
-
-extern void nmlPacketAddGsFlush(void);
-
-extern void nmlPacketAddGsPixeltest(int);
-
-extern void nmlPacketAddGsAlpha(u64 alpha);
-
-extern void nmlPacketAddGifTagStandard(int, int);
-
-extern void nmlPacketAddScreen(NmlModelRenderState *);
-
-extern void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *,
-                                       const NmlModelRenderState *);
-
-extern void nmlPacketAddExecProg(NmlMaterialRenderState *,
-                                 NmlModelRenderState *, int, int);
-
-extern StudioCamera *nmlPacketAddParts(NmlMaterialRenderState *,
-                                       NmlModelRenderState *, StudioCamera *);
-
-extern void nmlPacketAddBlockMaterial(NmlMaterialRenderState *,
-                                      NmlModelRenderState *, int, int);
-
-extern void nmlFilterSetFrameAlphaClear(void);
-
-static int s_nStencilVal;
-
-extern void nmlPacketAddGsFrame(int, int);
-
-extern void nmlPacketAddGsFrame1(int, int);
-
-extern void nmlPacketAddGsFBA1(unsigned int);
-
-extern void nmlFilterSetFrameToBuffer(int);
-
-static int s_nRenderCancel;
-
-extern int g_nPacketOver;
-
-static void AlphaGroupSort(void);
-
-extern void nmlPacketAddTransMicrocodeInit(void);
-
-extern void nmlPacketAddGsZbuf1(unsigned int);
-
-extern void nmlPacketAddGsPixeltest1(unsigned int);
-
-extern void nmlPacketAddGsAlpha1(unsigned long long);
-
-extern void nmlPacketAddGsTexture(void);
-
-extern void nmlPacketAddGsClamp(unsigned int);
-
-extern void nmlFilterSetBufferRender(float);
-
-extern void sefDrawEffect(void);
-
-void xglMatrixScale(Matrix4 destination, const Matrix4 source, const float scale[4]);
-
-extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
-                            const Vector4 *vector);
-
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
 typedef struct NmlProRealOrigin {
     u64 word0;
     u64 word8;
 } NmlProRealOrigin;
-
-extern const NmlProRealOrigin proRealOrigin;
 
 typedef struct {
     short x;                            /* +0x00 */
@@ -614,20 +197,6 @@ typedef struct {
     float viewLimit;                    /* +0x26c */
 } NmlCircleOwnerView;
 
-static int nmlModelRenderProreal(LayoutStore *model, int frame);
-
-void nmlPacketSendCircleTexture(void *shadow, void *clut);
-
-extern float circleViewLimitMin;
-
-static void set_circle_shadow_ratio(int scale);
-
-static void _WeightToGlobalVec(Vector4 *destination, const Matrix4 matrix, const Matrix4 weights);
-
-void nmlFadePacketWrite(NmlPacket packet);
-
-void nmlModelDirectSend(int mode, const void *data, int count);
-
 typedef struct NmlCircleLayout {
     unsigned char unmodeled_000[0x250];
     u32 renderFlags;
@@ -637,19 +206,6 @@ typedef struct NmlCircleLayout {
     unsigned char unmodeled_274[0x2c0 - 0x274];
     float ratioScale;
 } NmlCircleLayout;
-
-void nmlModelFlushClear(void);
-
-static void AlphaGroupLastEntry(void);
-
-static int nmlModelRenderTexture(struct NmlModelRenderRange *, int, int);
-
-static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int frame);
-
-static int nmlModelRenderDropCircle(const NmlCircleOrigin *, int, StudioCamera *);
-
-static StudioCamera *nmlModelRenderDrop(struct NmlModelRenderRange *range,
-                                        int step, StudioCamera *screen, int mode);
 
 typedef struct NmlFlushMaterialView {
     char name[0x20];
@@ -665,8 +221,6 @@ typedef struct NmlDirectEntry {
     unsigned short size;
     unsigned short type;
 } NmlDirectEntry;
-
-extern const char magicCarpetComeName[];
 
 /* The block range is reached through a union (alias set 0): in
  * nmlModelEntryEffect the original keeps the blockCount store ahead of the
@@ -686,39 +240,11 @@ typedef struct NmlNonAlphaGroup {
     } owner;             /* +0x0c */
 } NmlNonAlphaGroup;
 
-static NmlNonAlphaGroup s_aNonAlphaGroup[512];
-
-extern const char eyeMaterialName[];
-
-extern void nmlPacketClrModelCache(void);
-
-extern void nmlPacketAddGsFogCol(const float color[3]);
-
-extern void nmlPacketAddGifTag(NmlMaterialRenderState *, NmlModelRenderState *, int);
-
-extern void nmlPacketAddTextureParam(NmlMaterialRenderState *, NmlModelRenderState *);
-
-extern void nmlPacketAddPixelControl(NmlMaterialRenderState *, NmlModelRenderState *, int);
-
-extern int nmlPacketAddTexture(NmlModelRenderState *);
-
-extern void nmlPacketAddReflectParam(NmlMaterialRenderState *, NmlModelRenderState *);
-
-extern void nmlPacketAddFog(NmlModelRenderState *, int);
-
-extern void nmlPacketAddReflRot(NmlMaterialRenderState *, NmlModelRenderState *);
-
 typedef struct NmlPartFlagData {
     unsigned char unmodeled_00[0x1c];
     unsigned int flags; /* +0x1c */
     unsigned char unmodeled_20[0x40 - 0x20];
 } NmlPartFlagData;
-
-extern void nmlFilterBackClear(void);
-
-extern void nmlFilterSetFlatRender(LayoutStore *);
-
-extern void nmlFilterSetPacket(LayoutStore *, int);
 
 typedef union GifCommandData {
     u64 value;
@@ -728,13 +254,461 @@ typedef union GifCommandData {
     } words;
 } GifCommandData;
 
+typedef union { Vector4 v; u64 q[2]; } ProjectionQuad;
+
+/* A block whose material flag 0x10 is set keeps its bounding-box corner
+ * offsets at +0x70/+0x80, in the bytes a weighted block uses for its matrix
+ * index list. */
+typedef union NmlModelBlockBounds {
+    NmlModelBlock block;
+    struct {
+        unsigned char unmodeled_00[0x70];
+        Vector4 boxMinOffset; /* +0x70 */
+        Vector4 boxMaxOffset; /* +0x80 */
+    } bounds;
+} NmlModelBlockBounds;
+
+/*
+ * fadeOutLockedFlag is main:0x0095DB90, the same byte the FadeControl comment above
+ * ties to s_inFadeOut's "locked" field at +0x30 (0x0095DB60 + 0x30): cited
+ * there only as evidence, not as claimed source. Addressing it through
+ * &s_inFadeOut+0x30 rather than its own symbol changes the emitted %lo
+ * immediate (sw v0,48(v1) for the original's sw v0,0(v1)), so this
+ * function keeps the flat scaffold symbol, as an unsized array so -G8
+ * small-data gp-relative addressing does not apply to it either (matching
+ * nmlModelBackBufferRequestFlags/nmlModelMpeg2CrossFadeTime above).
+ */
+extern int fadeOutLockedFlag[];
+
+/* activeFadeInCancelFrames is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
+ * fadeOutLockedFlag comment above for why it stays a flat scaffold symbol. */
+extern int activeFadeInCancelFrames[];
+
+/* fadeInCancelFrames is s_inFadeIn's "cancelFrames" byte (+0x28). */
+extern int fadeInCancelFrames[];
+
+/* activeFadeOutCancelFrames is s_inActiveFadeOut's "cancelFrames" byte (+0x28). */
+extern int activeFadeOutCancelFrames[];
+
+/* fadeOutCancelFrames is s_inFadeOut's "cancelFrames" byte (+0x28). */
+extern int fadeOutCancelFrames[];
+
+/* fadeOutDisposeFlag is s_inFadeOut's "dispose" byte (+0x24). */
+extern int fadeOutDisposeFlag[];
+
+/* fadeInDisposeFlag is s_inFadeIn's "dispose" byte (+0x24). */
+extern int fadeInDisposeFlag[];
+
+extern NmlGameLoopState GameLoopState;
+extern float nonLinearCameraMinAngleY;
+extern float nonLinearCameraMaxAngleY;
+extern f32 stealthDepthScale;
+extern f32 stealthSortThreshold;
+extern f32 stealthDistanceTolerance;
+extern f32 shapeWeightEpsilon;
+extern f32 entryClipWidthScale;
+extern f32 entryClipPoolHead;
+extern f32 entryClipPoolBody;
+extern f32 entryClipPoolTail;
+extern f32 entryClipPoolInner;
+extern f32 entryClipPoolOuter;
+extern f32 entryClipPoolUpper;
+extern f32 entryClipPoolLower;
+extern f32 entryClipPoolMid;
+extern f32 entryClipPoolRear;
+extern char faceNameSuffix[];
+extern float calcSampleThreshold;
+extern int g_nPacketOver;
+extern const NmlProRealOrigin proRealOrigin;
+extern float circleViewLimitMin;
+extern const char magicCarpetComeName[];
+extern const char eyeMaterialName[];
+extern float entryPartsClipScale;
+
+static void CONSTRUCT_MODELSYSTEM(void);
+
+/* INIT_BACK_BUFFER (above) is still INCLUDE_ASM; declare it so its caller
+ * does not see an implicit declaration. */
+static void INIT_BACK_BUFFER(void);
+
+/*
+ * nmlModelSetFadeInCancel/nmlModelSetFadeOutCancel/nmlModelSetBackBuffer
+ * (below, this TU) and nmlModelSetBackBufferToBattle (still INCLUDE_ASM)
+ * are used before their definitions; declare them so these calls do not
+ * see an implicit declaration.
+ */
+void nmlModelSetFadeInCancel(int frames);
+void nmlModelSetFadeOutCancel(int frames);
+void nmlModelSetBackBuffer(int modelId, int duration, int ownerIndex, int value);
+void nmlModelSetBackBufferToBattle(int ownerIndex);
+static void fade_render(NmlPacket packet, FadeControl *control);
+
+/* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
+ * this caller does not see an implicit declaration. */
+static void fade_set(FadeControl *, float *, int, int, int, int, int);
+
+/* nmlModelFogPara (above) is still INCLUDE_ASM; declare it so its caller
+ * does not see an implicit declaration. */
+static void nmlModelFogPara(Vector4 *fog, float fogNear, float fogFar, float fogMin, float fogMax);
+
+extern unsigned int strlen(const char *string);
+
+extern int memcmp(const void *left, const void *right, unsigned int count);
+extern int strcmp(const char *left, const char *right);
+extern char *strstr(const char *string, const char *pattern);
+
+/* nmlModelLexDataCheck remains assembly-owned below. */
+int nmlModelLexDataCheck(NmlModel *model);
+
+/* nmlModelDirectXtxSub (above) is still INCLUDE_ASM; declare it so this
+ * caller does not see an implicit declaration. */
+static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId);
+
+/*
+ * CONSTRUCT_CIRCLR_SHADOW (near the top of this TU) is still INCLUDE_ASM
+ * and nmlModelClear is defined below (this TU); declare them, and the
+ * s_inMapHandle array nmlModelClear also declares nearer its own use, so
+ * this caller does not see an implicit declaration.
+ */
+static void CONSTRUCT_CIRCLR_SHADOW(void);
+void nmlModelClear(void);
+
+/* CLEAR_LAYOUT_MODEL and CLEAR_MODEL_ENTRY (near the top of this TU) are
+ * still INCLUDE_ASM; declare them so this caller does not see an implicit
+ * declaration. */
+static void CLEAR_LAYOUT_MODEL(LayoutStore *arg0);
+static void CLEAR_MODEL_ENTRY(void);
+
+/* FLUSH_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so this
+ * caller does not see an implicit declaration. */
+static void FLUSH_MODELSYSTEM(void);
+
+extern void xglStudioChange(int);
+extern void xglLightCalcMatrix(StudioLight *);
+extern float xglPointLength(Vector4 *first, Vector4 *second);
+extern u8 *nmlPacketSetAttributeData16N(const void *data, int count);
+extern void nmlFilterStealthMake(int, f32, void *, LayoutSlot *);
+extern f32 tanf(f32);
+extern int nmlModelCalcClipStudio(Vector4 *, int);
+static float deapth_for_studio(int studio, Vector4 *position, float scale);
+extern void nmlPacketGsInit(void);
+extern void nmlPacketAddGsZbuf(int);
+extern void nmlPacketAddGsFBA(int);
+extern void nmlPacketAddGsFlush(void);
+extern void nmlPacketAddGsPixeltest(int);
+extern void nmlPacketAddGsAlpha(u64 alpha);
+extern void nmlPacketAddGifTagStandard(int, int);
+extern void nmlPacketAddScreen(NmlModelRenderState *);
+
+extern void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *,
+                                       const NmlModelRenderState *);
+
+extern void nmlPacketAddExecProg(NmlMaterialRenderState *,
+                                 NmlModelRenderState *, int, int);
+
+extern StudioCamera *nmlPacketAddParts(NmlMaterialRenderState *,
+                                       NmlModelRenderState *, StudioCamera *);
+
+extern void nmlPacketAddBlockMaterial(NmlMaterialRenderState *,
+                                      NmlModelRenderState *, int, int);
+
+extern void nmlFilterSetFrameAlphaClear(void);
+extern void nmlPacketAddGsFrame(int, int);
+extern void nmlPacketAddGsFrame1(int, int);
+extern void nmlPacketAddGsFBA1(unsigned int);
+extern void nmlFilterSetFrameToBuffer(int);
+static void AlphaGroupSort(void);
+extern void nmlPacketAddTransMicrocodeInit(void);
+extern void nmlPacketAddGsZbuf1(unsigned int);
+extern void nmlPacketAddGsPixeltest1(unsigned int);
+extern void nmlPacketAddGsAlpha1(unsigned long long);
+extern void nmlPacketAddGsTexture(void);
+extern void nmlPacketAddGsClamp(unsigned int);
+extern void nmlFilterSetBufferRender(float);
+extern void sefDrawEffect(void);
+void xglMatrixScale(Matrix4 destination, const Matrix4 source, const float scale[4]);
+
+extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
+                            const Vector4 *vector);
+
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
+static int nmlModelRenderProreal(LayoutStore *model, int frame);
+void nmlPacketSendCircleTexture(void *shadow, void *clut);
+static void set_circle_shadow_ratio(int scale);
+static void _WeightToGlobalVec(Vector4 *destination, const Matrix4 matrix, const Matrix4 weights);
+void nmlFadePacketWrite(NmlPacket packet);
+void nmlModelDirectSend(int mode, const void *data, int count);
+void nmlModelFlushClear(void);
+static void AlphaGroupLastEntry(void);
+static int nmlModelRenderTexture(struct NmlModelRenderRange *, int, int);
+static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int frame);
+static int nmlModelRenderDropCircle(const NmlCircleOrigin *, int, StudioCamera *);
+
+static StudioCamera *nmlModelRenderDrop(struct NmlModelRenderRange *range,
+                                        int step, StudioCamera *screen, int mode);
+
+extern void nmlPacketClrModelCache(void);
+extern void nmlPacketAddGsFogCol(const float color[3]);
+extern void nmlPacketAddGifTag(NmlMaterialRenderState *, NmlModelRenderState *, int);
+extern void nmlPacketAddTextureParam(NmlMaterialRenderState *, NmlModelRenderState *);
+extern void nmlPacketAddPixelControl(NmlMaterialRenderState *, NmlModelRenderState *, int);
+extern int nmlPacketAddTexture(NmlModelRenderState *);
+extern void nmlPacketAddReflectParam(NmlMaterialRenderState *, NmlModelRenderState *);
+extern void nmlPacketAddFog(NmlModelRenderState *, int);
+extern void nmlPacketAddReflRot(NmlMaterialRenderState *, NmlModelRenderState *);
+extern void nmlFilterBackClear(void);
+extern void nmlFilterSetFlatRender(LayoutStore *);
+extern void nmlFilterSetPacket(LayoutStore *, int);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
-
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+
+extern void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
+                                       const StudioCamera *camera);
+
+extern int nmlModelCalcClip(Vector4 *);
+extern int nmlModelCalcClipNoCulling(Vector4 *);
+extern void _ApplyMatrix(Vector4 *, const Matrix4, const Vector4 *);
+void nmlPacketSetCurrent(void);
+void xglMatrixReverse(Matrix4 destination, const Matrix4 source);
+void xglCullingMapLastCheck(void);
+void xglMemCopy2(void *destination, const void *source, int count);
+void xglMemCopy4(void *destination, const void *source, int count);
+void *nmlPacketSetAttributeAlloc16N(int count);
+u8 *nmlPacketSetAttributeData64N(const void *data, int count);
+unsigned char nmlModelCalcClipMat2AllCam(const void *a, const void *b, void *c);
+extern int nmlFilterSetVolumeCubeRender(Vector4 *, Vector4 *);
+
+int g_aSubWindow[4] = { 0 };
+
+LayoutStore s_inLayout = { 0 };
+
+static void *s_pMapLast = 0;
+
+/*
+ * Allocation counter CONSTRUCT_PARENT_BUF/FLUSH_PARENT_BUF reset to zero:
+ * an index into the s_aParentBuf entries (main 0x0095bb50), also still
+ * INCLUDE_ASM in this TU.
+ */
+static int s_nParentBuf = 0;
+
+static int s_nToumeiNum = 0;
+
+static unsigned int s_nShadowVec = 0;
+
+static int s_nMapShadowParts = 0;
+
+static float s_fSortOffsetEntry = 0.0f;
+
+static int s_nParent = 0;
+
+static int s_nClip = 0;
+
+static int s_nShapeNum = 0;
+
+static int s_nMapClip = 0;
+
+static int s_nPacketSignal = 0;
+
+static int s_nUseZwrite = 0;
+
+static int s_nUseBackBuffer = 0;
+
+static int s_nEffectWrite = 1;
+
+static int s_nMapLast = 0;
+
+static int s_nFadeDoit = 0;
+
+static int s_nPause = 0;
+
+static int s_nMenu = 0;
+
+static int s_nFrameLockOff = 0;
+
+static int s_nRenderCancelOld = 0;
+
+int g_nGsEntry = 0;
+
+static int s_nDispVisible;
+
+static int s_nCircleShadow;
+
+static u64 TestEnv_0_004A9170[12];
+
+static int s_nCount;
+
+static int s_aShapeMathPara[10];
+
+static int s_nStencilVal;
+
+static int s_nRenderCancel;
+
+static int s_aShapeMathPara[10] = { 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048 };
+
+float nonLinearCameraMinAngleY = 1.0471975803375244f;
+
+float nonLinearCameraMaxAngleY = 5.235987663269043f;
+
+f32 shapeWeightEpsilon = 0.0010000000474974513f;
+
+f32 stealthDepthScale = 0.018999999389052391f;
+
+f32 stealthSortThreshold = 0.0099999997764825821f;
+
+f32 stealthDistanceTolerance = 0.10000000149011612f;
+
+float calcSampleThreshold = 0.0099999997764825821f;
+
+f32 entryClipWidthScale = 1.2999999523162842f;
+
+float entryPartsClipScale = 1.2000000476837158f;
+
+float textureTransparencyMin = 0.0010000000474974513f;
+
+float circleViewLimitMin = 0.0010000000474974513f;
+
+static int s_nCircleShadow = 0;
+
+static float s_fSortOffset = 0.0f;
+
+static int s_nDispVisible = -1;
+
+static int s_nStencilVal = -2147483648;
+
+static int s_nCount = 0;
+
+static int s_nModel = 0;
+
+static int s_nBlocks = 1;
+
+static int s_nDirect = 0;
+
+static int s_nBlocksAlpha = 0;
+
+static int s_nBlocksAlphaLast = 0;
+
+static int s_nAnotherStudio = 0;
+
+static int s_nUseStealth = 0;
+
+static int s_nUseGnosys = 0;
+
+static int s_nMapAlphaEntry = 0;
+
+static int s_nMainCameraWarp = 0;
+
+static int s_nRenderCancel = 0;
+
+char faceNameSuffix[8] = "_face";
+
+const char eyeMaterialName[8] = "eye";
+
+int g_nPacketOver = 0;
+
+static u64 TestEnv_0_004A9170[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x4000000000008001ULL, 0x000000000000eeeeULL, 0x0000000000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x0000000000000000ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
+
+static unsigned char s_aDispVisible[1024];
+
+static int s_nAlphaGroup;
+
+static int s_nNonAlphaGroup;
+
+static int s_aToumeiId[16];
+
+static float s_aToumei[16];
+
+static int s_aShapeId[32];
+
+static float s_aShapeWeight[32];
+
+static int s_aMapLast[12];
+
+static Vector4 s_inShadowVec;
+
+static Vector4 s_inGblPos;
+
+/*
+ * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
+ * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
+ * Keep its definition between s_inGblPos and s_inProReal, matching the
+ * original local-storage order. set_circle_shadow_ratio writes entries 0-7
+ * and 16-23. The original storage is 0x1000 bytes (no other label until
+ * s_aAlphaGroup at 0x00957940); only the first 0x400 are read.
+ */
+static int circleShadowRatioTable[1024];
+
+/*
+ * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
+ * with count 0x1e, so the copied extent is established.  ProjectMap and
+ * ProjectCircle access the listed float slots; nmlModelClear clears the word
+ * at +0x1c0.  Other bytes remain unnamed because their roles are not shown
+ * by this TU's C callers.
+ */
+static NmlProRealState s_inProReal[1];
+
+static int s_inBackBuffer[10];
+
+static int s_inMapHandle[4];
+
+static FadeControl s_inFadeOut;
+
+static FadeControl s_inFadeIn;
+
+static FadeControl s_inActiveFadeOut;
+
+static FadeControl s_inActiveFadeIn;
+
+static char s_aTexName[32];
+
+static NmlMaterialName s_aMatName;
+
+static Matrix4 s_inGblPlace;
+
+static struct NmlShadowTexture s_aCircleShadow;
+
+static unsigned int s_aCircleShadowClut[8];
+
+static NmlDirectRecord s_aDirect[5500];
+
+static void * s_apBlock[4096];
+
+static unsigned short s_aBlockLayout[4096];
+
+static void * s_apBlockLast[32];
+
+static unsigned short s_aBlockLayoutLast[32];
+
+static LayoutStore * s_apModelLayout[512];
+
+static Vector4 s_inMulColor;
+
+static NmlNonAlphaGroup s_aNonAlphaGroup[512];
+
+static unsigned short s_aBLsave[256];
+
+static unsigned int s_aBPsave[256];
+
+static float s_aTexOffset[2];
+
+static Vector4 s_inScale;
+
+static NmlParentBuffer s_aParentBuf[512];
+
+static Vector4 s_inGblPointC[4];
+
+static Vector4 s_inGblFogPara;
+
+static Vector4 s_inMainCameraPos;
+
+static Vector4 s_inMainCameraAng;
+
+static NmlAlphaGroup s_aAlphaGroup[512];
+
+static NmlPointQuadword s_inGblPointP[4];
+
+static NmlPointQuadword s_inGblFogCol[1];
 
 static inline GifCommandData *fade_packet_begin(GifCommandData *gif,
     u64 tagWord, u64 registerList)
@@ -761,9 +735,6 @@ static inline int fade_packet_close(GifCommandData *gif,
     gif[0].value += qwordCount - 1;
     return qwordCount;
 }
-
-extern void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
-                                       const StudioCamera *camera);
 
 static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
 {
@@ -1415,6 +1386,16 @@ static inline void NmlMovieRestoreSavedBuffer(void)
     nmlModelSetFadeInCancel(30);
 }
 
+/*
+ * TU-local partial view of the shared render-state global sRender (main
+ * 0x004A90E0, size 0x5C; see src/main/game_over.c's DrawImageRenderState,
+ * src/main/map_1.c's MapRenderState, src/main/window_tex_load.c's
+ * UmnRenderSize and src/main/game_defocus.c's DefocusRenderState for other
+ * TUs' views of the same object). Only the halfword at +0x22 is evidenced
+ * here: nmlModelSendSignalMovieFinish forwards it unchanged as the
+ * "ownerIndex" argument of nmlModelSetBackBuffer and
+ * nmlModelSetBackBufferToBattle.
+ */
 void nmlModelSendSignalMovieFinish(int mode)
 {
     switch (mode - 1) {
@@ -2302,6 +2283,7 @@ void nmlModelSetFogCol(const Vector4 *color)
     s_inLayout.fields.render_status |= NML_RENDER_FOG;
 }
 
+/* The four fog distances of RgFog.dist (defaults 50, 250, 0, 1). */
 static void nmlModelFogPara(Vector4 *fog, float fogNear, float fogFar, float fogMin, float fogMax)
 {
     float shadeMax;
@@ -2434,6 +2416,7 @@ void nmlModelSetShadowMapEntry(void) {
     s_inLayout.fields.render_status |= 0x10000;
 }
 
+/* The map callers pass halfword part IDs; the layout has eight shadow slots. */
 void nmlModelSetMapShadowParts(int partId)
 {
     if (s_nMapShadowParts < 8) {
@@ -2633,6 +2616,11 @@ static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId)
     }
 }
 
+/*
+ * Callers (GameRadarDraw main 0x00252fc8, unit6003_draw main 0x003211a0;
+ * both still INCLUDE_ASM) never inspect the result -- the tail call below
+ * matches the compiled form, so this is void.
+ */
 void nmlModelDirectSendXtx(int modelId, void *data)
 {
     const signed char *bytes = data;
@@ -3333,8 +3321,6 @@ static void nmlModelCalcDropShadow(NmlModel *model)
     }
 }
 
-typedef union { Vector4 v; u64 q[2]; } ProjectionQuad;
-
 static void nmlModelCalcEntryProjectCircle(NmlModel *model)
 {
     extern void nmlModelSetProreal(NmlProRealState *);
@@ -3656,11 +3642,6 @@ static inline void nmlModelWeightAttributeVector(
     _WeightToGlobalVec(destination, (const void *)transform, (const void *)weights);
 }
 
-extern float entryPartsClipScale;
-extern int nmlModelCalcClip(Vector4 *);
-extern int nmlModelCalcClipNoCulling(Vector4 *);
-extern void _ApplyMatrix(Vector4 *, const Matrix4, const Vector4 *);
-
 static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
 {
     /* Four original initialized words have no observed subsequent reader. */
@@ -3731,17 +3712,6 @@ static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
         }
     }
 }
-
-void nmlPacketSetCurrent(void);
-void xglMatrixReverse(Matrix4 destination, const Matrix4 source);
-void xglCullingMapLastCheck(void);
-void xglMemCopy2(void *destination, const void *source, int count);
-void xglMemCopy4(void *destination, const void *source, int count);
-void *nmlPacketSetAttributeAlloc16N(int count);
-u8 *nmlPacketSetAttributeData64N(const void *data, int count);
-unsigned char nmlModelCalcClipMat2AllCam(const void *a, const void *b, void *c);
-static unsigned short s_aBLsave[256];
-static unsigned int s_aBPsave[256];
 
 void nmlModelEntry(NmlModel *model)
 {
@@ -4169,11 +4139,6 @@ void nmlModelEntryEffect(NmlModel *model)
     nmlModelClear();
 }
 
-void nmlPacketSetCurrent(void);
-void xglMatrixReverse(Matrix4 destination, const Matrix4 source);
-void *nmlPacketSetAttributeAlloc16N(int count);
-u8 *nmlPacketSetAttributeData64N(const void *data, int count);
-
 void nmlModelEntryCard(NmlModel *model)
 {
     LayoutStore *layout;
@@ -4283,20 +4248,6 @@ void nmlModelEntryCard(NmlModel *model)
     }
     nmlModelClear();
 }
-
-extern int nmlFilterSetVolumeCubeRender(Vector4 *, Vector4 *);
-
-/* A block whose material flag 0x10 is set keeps its bounding-box corner
- * offsets at +0x70/+0x80, in the bytes a weighted block uses for its matrix
- * index list. */
-typedef union NmlModelBlockBounds {
-    NmlModelBlock block;
-    struct {
-        unsigned char unmodeled_00[0x70];
-        Vector4 boxMinOffset; /* +0x70 */
-        Vector4 boxMaxOffset; /* +0x80 */
-    } bounds;
-} NmlModelBlockBounds;
 
 static int nmlModelRenderProreal(LayoutStore *model, int frame)
 {
@@ -4975,10 +4926,6 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
     return result;
 }
 
-/* Measurement proxy only: stands in for the StudioCamera scissor members
- * (float at +0x60 x0, +0x64 y0, +0x68 x1, +0x6c y1) until the owner adds them. */
-#define SCISSOR_F(c, i) (*(float *)((char *)(c) + 0x60 + 4 * (i)))
-
 static int nmlModelFlushSub(int viewport)
 {
     int result;
@@ -5320,8 +5267,7 @@ void nmlModelFlushClear(void) {
     nmlModelClear();
 }
 
-static int s_aShapeMathPara[10] = { 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048 };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const NmlProRealOrigin proRealOrigin = { .word0 = 0ULL, .word8 = 4575657222557270016ULL };
 
 const char magicCarpetComeName[16] = "MagicCarpetCome";
@@ -5337,85 +5283,3 @@ const NmlVector4Overlay mapScaleVector = { .v = { .x = 128.0f, .y = -128.0f, .z 
 const NmlVector4Overlay mapCenterVector = { .v = { .x = 256.0f, .y = 224.0f, .z = 1.0f, .w = 1.0f } };
 
 const NmlVector4Overlay mapOffsetVector = { .v = { .x = 2045.5f, .y = 2046.0f, .z = 0.0f, .w = 1.0f } };
-
-float nonLinearCameraMinAngleY = 1.0471975803375244f;
-
-float nonLinearCameraMaxAngleY = 5.235987663269043f;
-
-f32 shapeWeightEpsilon = 0.0010000000474974513f;
-
-f32 stealthDepthScale = 0.018999999389052391f;
-
-f32 stealthSortThreshold = 0.0099999997764825821f;
-
-f32 stealthDistanceTolerance = 0.10000000149011612f;
-
-float calcSampleThreshold = 0.0099999997764825821f;
-
-f32 entryClipWidthScale = 1.2999999523162842f;
-
-float entryPartsClipScale = 1.2000000476837158f;
-
-float textureTransparencyMin = 0.0010000000474974513f;
-
-float circleViewLimitMin = 0.0010000000474974513f;
-
-static int s_nCircleShadow = 0;
-
-static float s_fSortOffset = 0.0f;
-
-static int s_nDispVisible = -1;
-
-static int s_nStencilVal = -2147483648;
-
-static int s_nCount = 0;
-
-static int s_nModel = 0;
-
-static int s_nBlocks = 1;
-
-static int s_nDirect = 0;
-
-static int s_nBlocksAlpha = 0;
-
-static int s_nBlocksAlphaLast = 0;
-
-static int s_nAnotherStudio = 0;
-
-static int s_nUseStealth = 0;
-
-static int s_nUseGnosys = 0;
-
-static int s_nMapAlphaEntry = 0;
-
-static int s_nMainCameraWarp = 0;
-
-static int s_nRenderCancel = 0;
-
-char faceNameSuffix[8] = "_face";
-
-const char eyeMaterialName[8] = "eye";
-
-int g_nPacketOver = 0;
-
-static float s_aTexOffset[2];
-
-static Vector4 s_inScale;
-
-static NmlParentBuffer s_aParentBuf[512];
-
-static Vector4 s_inGblPointC[4];
-
-static Vector4 s_inGblFogPara;
-
-static Vector4 s_inMainCameraPos;
-
-static Vector4 s_inMainCameraAng;
-
-static NmlAlphaGroup s_aAlphaGroup[512];
-
-static u64 TestEnv_0_004A9170[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x4000000000008001ULL, 0x000000000000eeeeULL, 0x0000000000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x0000000000000000ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
-
-static NmlPointQuadword s_inGblPointP[4];
-
-static NmlPointQuadword s_inGblFogCol[1];

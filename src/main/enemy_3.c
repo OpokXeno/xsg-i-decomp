@@ -1,6 +1,9 @@
 #include "common.h"
-
 #include "shared.h"
+
+#define ENEMY_RANDOM_DIRECTION_SCALE 0.0625f
+#define ENEMY_FULL_TURN (6.2831855f)
+
 enum {
     ENEMY_ACTION_ENABLED = 0x00010000,
     ENEMY_ACTION_COUNT = 16,
@@ -43,7 +46,7 @@ enum {
     ENEMY_SOUND_ACTION = 7,
     ENEMY_ACTION_SPECIAL_SOUND_ID = 0x2201
 };
-#define ENEMY_RANDOM_DIRECTION_SCALE 0.0625f
+
 typedef struct EnemyActionMotion {
     unsigned char unmodeled_00[0x18];
     u16 idle_motion_id;
@@ -51,6 +54,7 @@ typedef struct EnemyActionMotion {
     u16 reaction_motion_id;
     unsigned char unmodeled_1e[2];
 } EnemyActionMotion;
+
 typedef struct EnemyActionActor {
     u32 flags;
     unsigned char unmodeled_04[0x0c];
@@ -67,33 +71,44 @@ typedef struct EnemyActionActor {
     float target_angle;
     float wall_check_parameter;
 } EnemyActionActor;
+
 typedef struct EnemyActionEffect {
     unsigned char unmodeled_00[0x6bc];
     EnemyActionActor *owner;
     unsigned char unmodeled_6c0[0x3cc];
     u32 flags;
 } EnemyActionEffect;
-#include "enemy_3.h"
+
 typedef struct EnemyActionGameLoopState {
     unsigned char unmodeled_00[0x2a014];
     EnemyActionEffect *shared_effect;
     unsigned char unmodeled_2a018[0x18];
 } EnemyActionGameLoopState;
+
 extern EnemyActionGameLoopState GameLoopState;
-#define ENEMY_FULL_TURN (6.2831855f)
+
 extern short Get_DefaultMotion(EnemyActionActor *actor, short motion_number);
 extern void Set_Motion(EnemyActionActor *actor, short motion_id, short blend);
+
 extern void EnemySound(EnemyActionActor *actor, short sound_index,
                        signed char play, signed char ignore_type);
+
 extern void EnemySoundEnd(EnemyActionActor *actor, short sound_offset);
+
 extern void Check_Wall(float distance_scale, float wall_parameter,
                        float *position, signed char wall_status[16],
                        int status_count, int wall_mask, u8 actor_number, int mode);
+
 extern float xglFRand(void);
+
 extern EnemyActionEffect *sefCreateEffectCf(int effect_id, int effect_number,
                                              int value);
+
 extern void sefDeleteEffectCf(EnemyActionEffect *effect);
 extern void Vibration_Set_Weak(int duration);
+
+/* Declared here, not at the top: moving it up changes the original code. */
+#include "enemy_3.h"
 
 void Enemy_ActionReady(EnemyActionActor *actor, signed char action)
 {

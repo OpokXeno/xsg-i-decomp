@@ -3,222 +3,42 @@
 #include "string_utf_get_hash.h"
 #include "map_2.h"
 #include "unit.h"
-
 #include "shared.h"
 #include "main/jni.h"
-
 #include "main/xgl_cd.h"
 #include "main/xgl_thread.h"
 #include "main/xgl_2.h"
 
+#define call_method_signature_void sig_2
+#define call_method_signature_int sig_3
+#define call_method_signature_int_int sig_4
+
+/* PadData (0x00490d90, 0xd0 bytes) read as one doubleword at +0x28, the
+ * shared half_28/half_2a pair (original: lui 0x49; ld 3512). */
+#define PAD_DATA_DOUBLEWORD_AT_28 (PadData[0].packed_input)
+
+#define SCRIPT_FADE_COLOR(red, green, blue)                                    \
+    (0x7F000000 + ((int)((red) * 127.0f) << 16) +                              \
+     ((int)((green) * 127.0f) << 8) + (int)((blue) * 127.0f))
+
 /* GNU EE native TI storage type: one 16-byte store clears the debug menu storage. */
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
-#include "script.h"
-
-extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
-                                       int (*callback)(XglTaskPrefix *task),
-                                       XglTaskPrefix *entry);
-
-extern int xglTaskRemove(XglTaskPrefix *task);
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern SceneString *loadConstString(const char *bytes, int length);
-
-extern void *PLAY_getCurrent(void);
-extern void PLAY_setupDefault(void *play);
-extern void TCAMERA_init(void);
-extern void *newObject(SceneClass *scene_class);
-extern SceneClass *loadClass(SceneString *name, int initialize);
-extern void STAGE_instance(SceneVm *vm, SceneObject stage_object);
-extern void SCENE_instance(SceneVm *vm, SceneObject scene_object);
-extern void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
-                        const char *method_name);
-
-extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
-                               void *signature_or_type);
-
-extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
-                           SceneObject *arguments, int *output);
-
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-
-extern void JNI_initThread(SceneVm *vm);
-
-extern void JNI_catchException(void);
-
-extern int getScriptFlag(SceneObject object);
-
-void XTK_setWindowOwner(int owner);
-
-void talkCancel(ScriptObserverTask *task);
-
-extern void actTalkAfter(SceneObject object);
-
-extern void initVM(void);
-
-extern void nmlModelSetFadeOut(int frames, int option);
-
-extern void nmlModelSetFadeIn(int frames, int option);
-
-extern void FX_ScreenMask(int unused, int color, int frames, int mode);
-
-extern void nmlModelSetBackBufferToBattle(int owner_index);
-
-extern void nmlModelSetFadeInCancel(int frames);
-
-extern void nmlModelSetFadeOutCancel(int frames);
-
-extern void nmlModelSetEffectWrite(int enabled);
-
-extern void nmlModelSendSignalEventFinish(void);
-
-extern void nmlModelSetGlobalPointLightReset(void);
-
-extern void MAP_initUnit(void);
-
-extern void ACT_initScene(void);
-
-extern void ACT_initMTNResource(void);
-
-extern void TWSYS_init(void);
-
-extern void MSG_init(void);
-
-extern void xglRenderClearColor(u32 color);
-
-extern void SCENE_cleanup(SceneVm *vm, SceneObject scene_object);
-
-extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
-
-extern void xglCameraClipRangeDefault(StudioCamera *camera);
-
-JThread *defaultVM;
-
-extern JThread *JNI_createThread(int kind, int stack_words,
-                                     int frame_words);
-
-extern void JNI_pushFrame(void);
-
-extern void JNI_loadNativeClass(void);
-
-int UseVMFlag;
-
-JThread *stageVM;
-
-JThread *evtVM[2];
-
-void createTalkTask(void *actor, const char *method_name);
-
-void sceneObserver2(ScriptSceneTask *task);
-
-static char sig0_0[16] ;
-
-static char sig1_1[34] ;
-
-extern void Before_Talk(Actor *actor);
-
-extern void TWIN_initCF(void *window);
-
-extern SceneWindow *TWIN_create2(int component_id);
-
-void talktoObserver(ScriptObserverTask *task);
-
-const char lightSetColorMethodName[] = "setColor";
-
-const char lightSetDirection2MethodName[] = "setDirection2";
-
-#define call_method_signature_void sig_2
-
-#define call_method_signature_int sig_3
-
-#define call_method_signature_int_int sig_4
-
-/* EUC-JP text below means "event in progress". */
-
-/* Event running. */
-const char func_observer_debug_text[16] =
-    "\xa5\xa4\xa5\xd9\xa5\xf3\xa5\xc8\xbc\xc2\xb9\xd4\xc3\xe6";
-
-void funcObserver(ScriptObserverTask *task);
-
-int getEmptyVM(ScriptObserverTask *observer);
-
-extern ScriptPadRecord PadData[2];
-
-extern const char debugBaseDirPath[];
-
-static const char *debugBasePath = debugBaseDirPath;
-
-static unsigned int s_nScriptFadeOutTime = 30;
-
-static unsigned int s_nScriptFadeRequest = 0;
-
-static unsigned char s_nScriptChangeTime = 0;
-
-static unsigned int s_nScriptSequenceReset = 0;
-
-static unsigned int s_nScriptFrameLockEntry = 0;
-
-static unsigned int s_nScriptEventSkipEntry = 0;
-
-static unsigned int s_nScriptCfTime = 0;
-
-static unsigned int s_nScriptEventFin = 0;
-
-static unsigned int s_nScriptEventActive = 0;
-
-static unsigned int s_nScriptTalkLock = 0;
-
-extern const char lightClassName[];
-const char lightClassName[8] = "light";
-
-static const char sig_2[4] = "()V";
-
-static const char sig_3[5] = "(I)V";
-
-static const char sig_4[6] = "(II)V";
-
-static int windowOwner = 0;
-
 typedef void (*JSNativeMethod)(void);
-
-extern void JS_init(int state, int class_capacity, int method_capacity);
-
-extern int JS_loadClass(const char *class_name);
-
-extern void JS_classSetup(int class_id, JSNativeMethod get_peer);
-
-extern void JS_classAddMethod(int class_id, const char *name,
-                              JSNativeMethod method);
-
-extern void JS_classLight_getPeer(void);
-
-extern void JS_classLight_setColor(void);
-
-extern void JS_classLight_setDirection2(void);
 
 /* Only the halfword at GameLoopState+0xC is evidenced by
  * SCRIPT_sendMovieSkipSignal; the rest of the game-state record remains
  * scaffold-owned. */
-
 typedef struct GameLoopMovieStatePrefix {
     u8 unmodeled_00[0xC];
     unsigned short movie_state;
 } GameLoopMovieStatePrefix;
 
-static int currentScriptDB;
-
-static int resourceID;
-
 /* TU-local observer and CallMethod declarations. */
-
 /* Proposal: the script table indexed by currentScriptDB. Only the two fields
  * this allocation touches are modeled; scriptDB's element stride (0x1C bytes,
  * evidenced by *7*4 in every CallMethod family function) is fixed by that
  * indexing arithmetic, not invented. */
-
 typedef struct ScriptDbEntry {
     void *class_image;   /* +0x0: class database image read from the script file */
     void *motion_data;   /* +0x4: extra-motion pack read next to the script file (.fpk) */
@@ -229,14 +49,10 @@ typedef struct ScriptDbEntry {
     int skip_count;      /* +0x18: class-name skip count JNI_searchClasses reported */
 } ScriptDbEntry;
 
-static ScriptDbEntry scriptDB[2];
-
 typedef struct ScriptPdbFile {
     u8 unmodeled_00[8];
     int data;
 } ScriptPdbFile;
-
-extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
 
 /*
  * TU-local partial view of the engine's actor record (the 0xa70-strided
@@ -262,7 +78,6 @@ extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
  *   +0x9f8 touch_method_name  the method SCRIPT_execTouchto passes instead,
  *                             once the same +0x9f4 gate lets it through.
  */
-
 typedef struct ScriptActorMethods {
     u8 unmodeled_00[0x4c0];
     SceneObject script_object;      /* +0x4c0 */
@@ -271,196 +86,11 @@ typedef struct ScriptActorMethods {
     const char *touch_method_name;  /* +0x9f8 */
 } ScriptActorMethods;
 
-/* Reused TU-local declaration (src/core/main-0025a9c0/private.h and every
- * other GameLoopState-family accepted source in this unit). */
-
-extern ScriptGameLoopState GameLoopState;
-
-/* Proposal: per-function JNI method-signature literals. Each is a duplicate
- * function-local `static const char sig[]`, so the assembler disambiguates
- * with the original ELF's own dup-static suffixing: "sig.2"/"sig.3"/"sig.4". */
-
-/* "(II)V"  @ 0x004da478, ELF name "sig.4" */
-
-/* PadData (0x00490d90, 0xd0 bytes) read as one doubleword at +0x28, the
- * shared half_28/half_2a pair (original: lui 0x49; ld 3512). */
-
-#define PAD_DATA_DOUBLEWORD_AT_28 (PadData[0].packed_input)
-
-/* Drop the task from the scheduler and leave the task body. The usual
- * do/while (0) statement-macro idiom; its loop notes are part of the
- * original's code generation. */
-
-int loadScriptCD(ScriptDbEntry *entry, const char *path);
-
-int loadScriptCD2(ScriptDbEntry *entry, const char *path);
-
-void SCRIPT_load_DBG(const char *path);
-
-static int PauseSkipCheck(void);
-
-extern char *strcpy(char *destination, const char *source);
-
-extern unsigned int strlen(const char *string);
-
-extern ScriptRenderState sRender;
-
-/* Queue a debug menu task for `callback` and give it the owner and an empty
- * window, the way every debug entry point does. */
-
-int rcFile;
-
-static int lightFileNum;
-
-static ScriptFileSelect * fileSelect;
-
-extern ScriptActorRecord actor[64];
-
-extern void TWSYS_setGRPStatus(int group, int status);
-
-extern ScriptWindow *TMENU_create(int component_id);
-
-extern ScriptWindow *TSLIDER_create(int component_id);
-
-extern void TMENU_addItem(ScriptWindow *menu, const char *text);
-
-extern void initCursor(void);
-
-extern int sprintf(char *buffer, const char *format, ...);
-
-extern void DB_reset(int x, int y);
-
-extern void DB_println(const char *format, ...);
-
-extern void DB_lightWrite(int descriptor);
-
-extern void RSRC_init(int rc);
-
-extern char *RSRC_loadFile2(int rc, const char *directory, const char *name);
-
-extern int *RSRC_getItem(int rc, char *handle);
-
-extern void JS_exec(char *begin, char *end);
-
-extern int xglCdFileSelect(ScriptFileSelect *state);
-
-extern int strncmp(const char *a, const char *b, unsigned int length);
-
-extern int MapGetNo(void);
-
-extern char *MapGetName(int map_no);
-
-extern void LoadMap2(int map_no, int entrance);
-
-ScriptDbEntry *SCRIPT_exec(void);
-
-static char *getStrIndex(char *string, unsigned int length, int ch);
-
-extern void TWIN_dispose(TComponent *window);
-
-void attrObserver(ScriptObserverTask *task);
-
-extern int sceOpen(const char *path, int flags, ...);
-
-extern int sceClose(int descriptor);
-
-extern char *strrchr(const char *string, int ch);
-
-extern const char systemEvtPath[];
-
-extern const char baseEvtPath[];
-
 typedef struct ScriptEventDebugState {
     int mode;
     unsigned int flags;
     int selected;
 } ScriptEventDebugState;
-
-static ScriptEventDebugState evtDebug;
-
-extern unsigned char xglFontLoad(int font_id, int flags);
-
-const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *path);
-
-extern void GamePauseDispEvent(void);
-
-extern void PartyTimePauseEnd(void);
-
-extern void PartyTimePauseStart(void);
-
-extern void xglRenderCopyDisp2Draw(void);
-
-extern void xglSoundStreamMute(void);
-
-extern void xglSoundStreamStop(int stream);
-
-extern void xglSoundEffectNormalDirect(int effect_id);
-
-extern u32 xheap_info(u8 *heap_info);
-
-static u32 heapUsed;
-
-static unsigned char heapInfo[136];
-
-extern const unsigned char memoryUsageFormat[];
-
-extern void drawBox2(Matrix4 *matrix, int color);
-
-extern void drawRect2(Matrix4 *matrix, int color);
-
-extern ScriptActorRecord *ACT_create(int resource_id, int flags);
-
-extern int ACT_initMotion(void *actor);
-
-extern int ACT_loadMotion(ScriptActorRecord *actor, int resource_id, int flags);
-
-extern void ACT_loadResource(ScriptActorRecord *actor, int resource_id);
-
-extern void ACT_matrixInit(void);
-
-extern void InitCfSystem(void);
-
-extern void UnduInit(unsigned char *state);
-
-extern void ACT_init(void);
-
-extern void nmlModelInit(void);
-
-extern void GameResourceReset(int mode);
-
-void sceneObserver(XglTaskPrefix *task_prefix);
-
-extern unsigned char scriptSceneStartName[];
-
-extern void GameMovieStop(void);
-
-extern void GameDefocusSet(int a, int b, int c);
-
-extern void MapChange2(int map_no);
-
-static int lightSave;
-
-static int lightActFlags[4];
-
-extern void initLight2(void);
-
-extern void initLight3(void);
-
-extern int updateLight(int mode);
-
-extern int DebugMenuResourceSizeAdd;
-
-extern char *MAP_getPath(void);
-
-extern void ACT_initExMotion(int, int, void *);
-
-extern const char *JNI_searchClasses(void *, const char *, int, int *);
-
-extern const char sceneStageClassPath[];
-
-extern char fpkExtension[];
-
-extern char arcExtension[];
 
 typedef union ScriptPathPrefix {
     char bytes[16];
@@ -472,51 +102,310 @@ typedef union ScriptPathBuffer {
     unsigned long long words[0x100 / 8];
 } ScriptPathBuffer;
 
-extern const ScriptPathPrefix mtnpackPathPrefix;
-
-extern void *RES_loadFile(int, int, const char *, int);
-
-extern int sceRead(int descriptor, void *buffer, unsigned int size);
-
-extern int sceLseek(int descriptor, int offset, int whence);
-
-extern void DB_cmode(int mode);
-
-extern void RES_GetMdlFileName(char *path, int resource_id);
-
-extern SceneThread *JTHREAD_get(SceneObject object);
-
-extern const char evtMonitorLabel[];
-
-extern const char evtActorFormat[];
-
-extern const char evtFlagsFormat[];
-
-extern const char evtPositionFormat[];
-
-extern const char evtRotationFormat[];
-
-extern const char evtUnitFormat[];
-
-extern char unknownBaseName[];
-
-extern char cmdLabel[];
-
-extern char moveLabel[];
-
-extern char separatorLabel[];
-
 enum ScriptDebugWord {
     SCRIPT_DEBUG_MODE,
     SCRIPT_DEBUG_FLAGS,
     SCRIPT_DEBUG_SELECTION
 };
 
-extern void JNI_initSystem(void *heap_base, int heap_size);
+struct ScriptWindParams {
+    char mode;
+    unsigned char unmodeled_01[7];
+    unsigned long long unmodeled_08;
+    Vector4 direction;
+    float shake_power;
+    float shake_time;
+    float shake_rad;
+    unsigned char unmodeled_2c[4];
+};
 
+extern const char debugBaseDirPath[];
+extern const char lightClassName[];
+extern const char systemEvtPath[];
+extern const char baseEvtPath[];
+extern const unsigned char memoryUsageFormat[];
+extern unsigned char scriptSceneStartName[];
+extern int DebugMenuResourceSizeAdd;
+extern const char sceneStageClassPath[];
+extern char fpkExtension[];
+extern char arcExtension[];
+extern const ScriptPathPrefix mtnpackPathPrefix;
+extern const char evtMonitorLabel[];
+extern const char evtActorFormat[];
+extern const char evtFlagsFormat[];
+extern const char evtPositionFormat[];
+extern const char evtRotationFormat[];
+extern const char evtUnitFormat[];
+extern char unknownBaseName[];
+extern char cmdLabel[];
+extern char moveLabel[];
+extern char separatorLabel[];
 extern const char evtFrameFormat[];
-
 extern char classMethodFormat[];
+extern int vmDebugMask;
+extern const char fileOffText[24];
+extern const char execOffText[24];
+extern const char execOnText[24];
+extern const char monitorOffText[24];
+extern const char initOnText[24];
+extern const char memoryOnText[24];
+extern const char memoryOffText[24];
+extern const char initOffText[24];
+extern const char monitorOnText[24];
+extern const char fileOnText[24];
+
+extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
+                                       int (*callback)(XglTaskPrefix *task),
+                                       XglTaskPrefix *entry);
+
+extern int xglTaskRemove(XglTaskPrefix *task);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern SceneString *loadConstString(const char *bytes, int length);
+extern void *PLAY_getCurrent(void);
+extern void PLAY_setupDefault(void *play);
+extern void TCAMERA_init(void);
+extern void *newObject(SceneClass *scene_class);
+extern SceneClass *loadClass(SceneString *name, int initialize);
+extern void STAGE_instance(SceneVm *vm, SceneObject stage_object);
+extern void SCENE_instance(SceneVm *vm, SceneObject scene_object);
+
+extern void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
+                        const char *method_name);
+
+extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+                               void *signature_or_type);
+
+extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
+                           SceneObject *arguments, int *output);
+
+extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
+extern void JNI_initThread(SceneVm *vm);
+extern void JNI_catchException(void);
+extern int getScriptFlag(SceneObject object);
+void XTK_setWindowOwner(int owner);
+extern void actTalkAfter(SceneObject object);
+extern void initVM(void);
+extern void nmlModelSetFadeOut(int frames, int option);
+extern void nmlModelSetFadeIn(int frames, int option);
+extern void FX_ScreenMask(int unused, int color, int frames, int mode);
+extern void nmlModelSetBackBufferToBattle(int owner_index);
+extern void nmlModelSetFadeInCancel(int frames);
+extern void nmlModelSetFadeOutCancel(int frames);
+extern void nmlModelSetEffectWrite(int enabled);
+extern void nmlModelSendSignalEventFinish(void);
+extern void nmlModelSetGlobalPointLightReset(void);
+extern void MAP_initUnit(void);
+extern void ACT_initScene(void);
+extern void ACT_initMTNResource(void);
+extern void TWSYS_init(void);
+extern void MSG_init(void);
+extern void xglRenderClearColor(u32 color);
+extern void SCENE_cleanup(SceneVm *vm, SceneObject scene_object);
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+extern void xglCameraClipRangeDefault(StudioCamera *camera);
+
+extern JThread *JNI_createThread(int kind, int stack_words,
+                                     int frame_words);
+
+extern void JNI_pushFrame(void);
+extern void JNI_loadNativeClass(void);
+void createTalkTask(void *actor, const char *method_name);
+extern void TWIN_initCF(void *window);
+extern SceneWindow *TWIN_create2(int component_id);
+extern void JS_init(int state, int class_capacity, int method_capacity);
+extern int JS_loadClass(const char *class_name);
+extern void JS_classSetup(int class_id, JSNativeMethod get_peer);
+
+extern void JS_classAddMethod(int class_id, const char *name,
+                              JSNativeMethod method);
+
+extern void JS_classLight_getPeer(void);
+extern void JS_classLight_setColor(void);
+extern void JS_classLight_setDirection2(void);
+extern ScriptPdbFile *PDB_findFile(void *pdb, const char *path);
+
+int loadScriptCD(ScriptDbEntry *entry, const char *path);
+
+int loadScriptCD2(ScriptDbEntry *entry, const char *path);
+void SCRIPT_load_DBG(const char *path);
+static int PauseSkipCheck(void);
+extern char *strcpy(char *destination, const char *source);
+extern unsigned int strlen(const char *string);
+extern void TWSYS_setGRPStatus(int group, int status);
+extern void initCursor(void);
+extern int sprintf(char *buffer, const char *format, ...);
+extern void DB_reset(int x, int y);
+extern void DB_println(const char *format, ...);
+extern void DB_lightWrite(int descriptor);
+extern void RSRC_init(int rc);
+extern char *RSRC_loadFile2(int rc, const char *directory, const char *name);
+extern int *RSRC_getItem(int rc, char *handle);
+extern void JS_exec(char *begin, char *end);
+extern int strncmp(const char *a, const char *b, unsigned int length);
+extern int MapGetNo(void);
+extern char *MapGetName(int map_no);
+extern void LoadMap2(int map_no, int entrance);
+ScriptDbEntry *SCRIPT_exec(void);
+static char *getStrIndex(char *string, unsigned int length, int ch);
+extern int sceOpen(const char *path, int flags, ...);
+extern int sceClose(int descriptor);
+extern char *strrchr(const char *string, int ch);
+extern unsigned char xglFontLoad(int font_id, int flags);
+const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *path);
+extern void GamePauseDispEvent(void);
+extern void PartyTimePauseEnd(void);
+extern void PartyTimePauseStart(void);
+extern void xglRenderCopyDisp2Draw(void);
+extern void xglSoundStreamMute(void);
+extern void xglSoundStreamStop(int stream);
+extern void xglSoundEffectNormalDirect(int effect_id);
+extern u32 xheap_info(u8 *heap_info);
+extern void drawBox2(Matrix4 *matrix, int color);
+extern void drawRect2(Matrix4 *matrix, int color);
+extern int ACT_initMotion(void *actor);
+extern void ACT_matrixInit(void);
+extern void InitCfSystem(void);
+extern void UnduInit(unsigned char *state);
+extern void ACT_init(void);
+extern void nmlModelInit(void);
+extern void GameResourceReset(int mode);
+void sceneObserver(XglTaskPrefix *task_prefix);
+extern void GameMovieStop(void);
+extern void GameDefocusSet(int a, int b, int c);
+extern void MapChange2(int map_no);
+extern void initLight2(void);
+extern void initLight3(void);
+extern int updateLight(int mode);
+extern char *MAP_getPath(void);
+extern void ACT_initExMotion(int, int, void *);
+extern const char *JNI_searchClasses(void *, const char *, int, int *);
+extern void *RES_loadFile(int, int, const char *, int);
+extern int sceRead(int descriptor, void *buffer, unsigned int size);
+extern int sceLseek(int descriptor, int offset, int whence);
+extern void DB_cmode(int mode);
+extern void RES_GetMdlFileName(char *path, int resource_id);
+extern SceneThread *JTHREAD_get(SceneObject object);
+extern void JNI_initSystem(void *heap_base, int heap_size);
+extern void JNI_loadClassDB(int slot, void *image);
+extern void EXM_ClearWindStruct(void);
+
+const char lightSetColorMethodName[] = "setColor";
+
+const char lightSetDirection2MethodName[] = "setDirection2";
+
+/* EUC-JP text below means "event in progress". */
+/* Event running. */
+const char func_observer_debug_text[16] =
+    "\xa5\xa4\xa5\xd9\xa5\xf3\xa5\xc8\xbc\xc2\xb9\xd4\xc3\xe6";
+
+static char sig0_0[16] ;
+
+static char sig1_1[34] ;
+
+static const char *debugBasePath = debugBaseDirPath;
+
+static unsigned int s_nScriptFadeOutTime = 30;
+
+static unsigned int s_nScriptFadeRequest = 0;
+
+static unsigned char s_nScriptChangeTime = 0;
+
+static unsigned int s_nScriptSequenceReset = 0;
+
+static unsigned int s_nScriptFrameLockEntry = 0;
+
+static unsigned int s_nScriptEventSkipEntry = 0;
+
+static unsigned int s_nScriptCfTime = 0;
+
+static unsigned int s_nScriptEventFin = 0;
+
+static unsigned int s_nScriptEventActive = 0;
+
+static unsigned int s_nScriptTalkLock = 0;
+
+const char lightClassName[8] = "light";
+
+/* Proposal: per-function JNI method-signature literals. Each is a duplicate
+ * function-local `static const char sig[]`, so the assembler disambiguates
+ * with the original ELF's own dup-static suffixing: "sig.2"/"sig.3"/"sig.4". */
+static const char sig_2[4] = "()V";
+
+static const char sig_3[5] = "(I)V";
+
+/* "(II)V"  @ 0x004da478, ELF name "sig.4" */
+static const char sig_4[6] = "(II)V";
+
+static int windowOwner = 0;
+
+static const char * vmSwitchStr[12];
+
+static char sig0_0[16] = "(Lxeno/Enepc;)V";
+
+static char sig1_1[34] = "(Lxeno/Enepc;Lxeno/util/Window;)V";
+
+static const char * vmSwitchStr[12] = { memoryOffText, memoryOnText, initOffText, initOnText, fileOffText, fileOnText, execOffText, execOnText, monitorOffText, monitorOnText, 0, 0 };
+
+JThread *defaultVM;
+
+int UseVMFlag;
+
+JThread *stageVM;
+
+JThread *evtVM[2];
+
+static int currentScriptDB;
+
+static int resourceID;
+
+static ScriptDbEntry scriptDB[2];
+
+int rcFile;
+
+static int lightFileNum;
+
+static ScriptEventDebugState evtDebug;
+
+static unsigned char heapInfo[136];
+
+static int lightActFlags[4];
+
+/* Declared here, not at the top: moving it up changes the original code. */
+#include "script.h"
+
+void talkCancel(ScriptObserverTask *task);
+void sceneObserver2(ScriptSceneTask *task);
+extern void Before_Talk(Actor *actor);
+void talktoObserver(ScriptObserverTask *task);
+void funcObserver(ScriptObserverTask *task);
+int getEmptyVM(ScriptObserverTask *observer);
+
+extern ScriptPadRecord PadData[2];
+
+/* Reused TU-local declaration (src/core/main-0025a9c0/private.h and every
+ * other GameLoopState-family accepted source in this unit). */
+extern ScriptGameLoopState GameLoopState;
+
+extern ScriptRenderState sRender;
+
+static ScriptFileSelect * fileSelect;
+
+extern ScriptActorRecord actor[64];
+
+extern ScriptWindow *TMENU_create(int component_id);
+extern ScriptWindow *TSLIDER_create(int component_id);
+extern void TMENU_addItem(ScriptWindow *menu, const char *text);
+extern int xglCdFileSelect(ScriptFileSelect *state);
+extern void TWIN_dispose(TComponent *window);
+void attrObserver(ScriptObserverTask *task);
+
+static u32 heapUsed;
+
+extern ScriptActorRecord *ACT_create(int resource_id, int flags);
+extern int ACT_loadMotion(ScriptActorRecord *actor, int resource_id, int flags);
+extern void ACT_loadResource(ScriptActorRecord *actor, int resource_id);
+
+static int lightSave;
 
 static void initJS(int state)
 {
@@ -671,8 +560,6 @@ void SCRIPT_reset(void)
     JNI_pushFrame();
     JNI_loadNativeClass();
 }
-
-extern void JNI_loadClassDB(int slot, void *image);
 
 void *SCRIPT_init(void *heap_base)
 {
@@ -1040,6 +927,9 @@ void CallMethod_II(const char *method_name, int argument1, int argument2)
     }
 }
 
+/* Drop the task from the scheduler and leave the task body. The usual
+ * do/while (0) statement-macro idiom; its loop notes are part of the
+ * original's code generation. */
 void funcObserver(ScriptObserverTask *task)
 {
     unsigned int owner_flags;
@@ -1280,10 +1170,6 @@ static int PauseSkipCheck(void)
     return 0;
 }
 
-#define SCRIPT_FADE_COLOR(red, green, blue)                                    \
-    (0x7F000000 + ((int)((red) * 127.0f) << 16) +                              \
-     ((int)((green) * 127.0f) << 8) + (int)((blue) * 127.0f))
-
 void sceneObserver2(ScriptSceneTask *task)
 {
     SceneThread *thread;
@@ -1367,8 +1253,6 @@ void sceneObserver2(ScriptSceneTask *task)
                   (int)GameLoopState.fade_frames, 3);
     xglTaskRemove(&task->task);
 }
-
-extern int MapGetNo(void);
 
 void sceneObserver(XglTaskPrefix *task_prefix)
 {
@@ -1503,14 +1387,10 @@ void sceneObserver(XglTaskPrefix *task_prefix)
     xglTaskRemove(task_prefix);
 }
 
-extern int vmDebugMask;
-
-static const char * vmSwitchStr[12];
-
+/* Declared here, not at the top: moving it up changes the original code. */
 extern void TMENU_setItem(ScriptWindow *menu, int index, const char *text);
 
 int DB_lightSave(ScriptFileSelect *state);
-
 void DB_evtMonitor(ScriptMenuTask *task);
 
 static void DB_light(ScriptMenuTask *task)
@@ -1825,27 +1705,12 @@ static int DB_scriptFileSelect(ScriptMenuTask *task)
     }
 }
 
-struct ScriptWindParams {
-    char mode;
-    unsigned char unmodeled_01[7];
-    unsigned long long unmodeled_08;
-    Vector4 direction;
-    float shake_power;
-    float shake_time;
-    float shake_rad;
-    unsigned char unmodeled_2c[4];
-};
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 static ScriptWindParams dbgWind;
 
 extern void updateWind(ScriptWindParams *params);
-
 extern void EXM_GetWindPara(ScriptWindParams *params);
-
 extern void EXM_SetWindStruct(ScriptWindParams *params);
-
-extern void EXM_ClearWindStruct(void);
-
 extern void EXM_SetWindPara(ScriptWindParams *params);
 
 static int DB_wind(ScriptMenuTask *task)
@@ -1871,6 +1736,8 @@ static int DB_wind(ScriptMenuTask *task)
     }
 }
 
+/* Queue a debug menu task for `callback` and give it the owner and an empty
+ * window, the way every debug entry point does. */
 void SCRIPT_debugMenu(ScriptMenuTask *task)
 {
     ScriptWindow *menu = task->window;
@@ -2066,10 +1933,6 @@ int loadScriptCD2(ScriptDbEntry *entry, const char *path)
     entry->skip_count = skip_count;
     return (int)entry->pdb;
 }
-
-extern int sceOpen(const char *path, int flags, ...);
-
-extern int sceClose(int descriptor);
 
 const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *path)
 {
@@ -2673,23 +2536,7 @@ int XTK_findFile(const char *path)
     return 0;
 }
 
-extern const char fileOffText[24];
-extern const char execOffText[24];
-extern const char execOnText[24];
-extern const char monitorOffText[24];
-extern const char initOnText[24];
-extern const char memoryOnText[24];
-extern const char memoryOffText[24];
-extern const char initOffText[24];
-extern const char monitorOnText[24];
-extern const char fileOnText[24];
-
-static char sig0_0[16] = "(Lxeno/Enepc;)V";
-
-static char sig1_1[34] = "(Lxeno/Enepc;Lxeno/util/Window;)V";
-
-static const char * vmSwitchStr[12] = { memoryOffText, memoryOnText, initOffText, initOnText, fileOffText, fileOnText, execOffText, execOnText, monitorOffText, monitorOnText, 0, 0 };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char systemEvtPath[16] = "data\\system.evt";
 
 const char baseEvtPath[16] = "data\\base.evt";
@@ -2779,4 +2626,3 @@ const char DBCursorModeXzLabel[8] = "XZ  ";
 const char DBCursorModeYzLabel[8] = "YZ  ";
 
 const char DBCursorModeFreeLabel[8] = "FREE";
-

@@ -1,17 +1,16 @@
 #include "common.h"
-
 #include "shared.h"
 
-/* These cursors begin at the sentinel used before a resource table is found. */
-
-static int infoIndex;
-
-static int infoLength;
-
-extern char EWDefaultResourcePath[];
-
-static char *rsrcDefaultPath;
-
+/*
+ * The arena is one contiguous block carved out of the caller's memory:
+ * general heap allocations grow upward from `memory`, the fixed-size
+ * item table (item_capacity RsrcItem slots) sits directly below the
+ * manager, and the manager struct itself occupies the last
+ * sizeof(RsrcManager) bytes of the block. `items` is therefore reached
+ * by walking back item_capacity RsrcItem slots from `manager`, and
+ * `heap_bound` is the byte offset where the item table begins, i.e. the
+ * heap's usable limit.
+ */
 typedef struct RsrcManager {
     u8 *heap_origin;
     u8 *heap_cursor;
@@ -31,20 +30,34 @@ typedef struct RsrcItem {
     u32 key : 32;
 } RsrcItem;
 
-/*
- * The arena is one contiguous block carved out of the caller's memory:
- * general heap allocations grow upward from `memory`, the fixed-size
- * item table (item_capacity RsrcItem slots) sits directly below the
- * manager, and the manager struct itself occupies the last
- * sizeof(RsrcManager) bytes of the block. `items` is therefore reached
- * by walking back item_capacity RsrcItem slots from `manager`, and
- * `heap_bound` is the byte offset where the item table begins, i.e. the
- * heap's usable limit.
- */
+extern char EWDefaultResourcePath[];
+extern const char rsrcBlankText[];
+extern const char rsrcDirtyMarkText[];
+extern const char dimColorTag[];
+extern const char spaceText[];
+extern const char grayColorTag[];
 
 extern void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name);
 
+extern u32 strlen(const char *s);
+extern int strncmp(const char *a, const char *b, u32 n);
+extern char *strcat(char *destination, const char *source);
+extern void *memcpy(void *destination, const void *source, u32 size);
+extern char *DB_pathGetShortPath(char *destination, const char *path, int size);
+extern RsrcItem *RSRC_getDirtyItem(RsrcManager *manager, u32 size);
+extern char *strcpy(char *destination, const char *source);
+extern int sceOpen(const char *path, int flags, ...);
+extern int sceLseek(int fd, int offset, int whence);
+extern int sceRead(int fd, void *buffer, int size);
+extern int sceClose(int fd);
+extern void *RSRC_searchFile(RsrcManager *manager, char *name);
+
 /* These cursors begin at the sentinel used before a resource table is found. */
+static int infoIndex;
+
+static int infoLength;
+
+static char *rsrcDefaultPath;
 
 static char * markedSTR[2][2];
 
@@ -54,29 +67,31 @@ static char * unselectedSTR[2][2];
 
 static char * normalSTR[2][2];
 
-extern u32 strlen(const char *s);
+static char * markedSTR[2][2] = { { (char *)rsrcDirtyMarkText, (char *)rsrcBlankText }, { (char *)rsrcDirtyMarkText, (char *)rsrcBlankText } };
 
-extern int strncmp(const char *a, const char *b, u32 n);
+static char * selectedSTR[2][2] = { { (char *)rsrcBlankText, (char *)rsrcBlankText }, { (char *)grayColorTag, (char *)dimColorTag } };
 
-extern char *strcat(char *destination, const char *source);
+static char * unselectedSTR[2][2] = { { (char *)rsrcBlankText, (char *)rsrcBlankText }, { (char *)dimColorTag, (char *)dimColorTag } };
 
-extern void *memcpy(void *destination, const void *source, u32 size);
+static char * normalSTR[2][2] = { { (char *)spaceText, (char *)rsrcBlankText }, { (char *)spaceText, (char *)rsrcBlankText } };
 
-extern char *DB_pathGetShortPath(char *destination, const char *path, int size);
+static int infoIndex = -1;
 
-extern RsrcItem *RSRC_getDirtyItem(RsrcManager *manager, u32 size);
+static int infoLength = -1;
 
-extern char *strcpy(char *destination, const char *source);
+const char rsrcBlankText[8] = "";
 
-extern int sceOpen(const char *path, int flags, ...);
+const char rsrcDirtyMarkText[8] = "*";
 
-extern int sceLseek(int fd, int offset, int whence);
+/* Text: {color #404040} */
+const char dimColorTag[8] = "\014@@@";
 
-extern int sceRead(int fd, void *buffer, int size);
+/* Text: {color #808080} */
+const char grayColorTag[8] = "\014\200\200\200";
 
-extern int sceClose(int fd);
+const char spaceText[4] = " ";
 
-extern void *RSRC_searchFile(RsrcManager *manager, char *name);
+static char *rsrcDefaultPath = EWDefaultResourcePath;
 
 void RSRC_inactiveSource(RsrcManager *manager, int source)
 {
@@ -456,36 +471,3 @@ RsrcItem *RSRC_getDirtyItem(RsrcManager *manager, u32 size)
     }
     return 0;
 }
-
-extern const char rsrcBlankText[];
-extern const char rsrcDirtyMarkText[];
-extern const char dimColorTag[];
-extern const char spaceText[];
-
-extern const char grayColorTag[];
-
-static char * markedSTR[2][2] = { { (char *)rsrcDirtyMarkText, (char *)rsrcBlankText }, { (char *)rsrcDirtyMarkText, (char *)rsrcBlankText } };
-
-static char * selectedSTR[2][2] = { { (char *)rsrcBlankText, (char *)rsrcBlankText }, { (char *)grayColorTag, (char *)dimColorTag } };
-
-static char * unselectedSTR[2][2] = { { (char *)rsrcBlankText, (char *)rsrcBlankText }, { (char *)dimColorTag, (char *)dimColorTag } };
-
-static char * normalSTR[2][2] = { { (char *)spaceText, (char *)rsrcBlankText }, { (char *)spaceText, (char *)rsrcBlankText } };
-
-static int infoIndex = -1;
-
-static int infoLength = -1;
-
-const char rsrcBlankText[8] = "";
-
-const char rsrcDirtyMarkText[8] = "*";
-
-/* Text: {color #404040} */
-const char dimColorTag[8] = "\014@@@";
-
-/* Text: {color #808080} */
-const char grayColorTag[8] = "\014\200\200\200";
-
-const char spaceText[4] = " ";
-
-static char *rsrcDefaultPath = EWDefaultResourcePath;

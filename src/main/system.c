@@ -1,39 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
 #include "system.h"
-struct SystemClassName {
-    unsigned char unmodeled_00[8];
-    signed char *characters;
-};
-struct SystemArrayClass {
-    unsigned char unmodeled_00[4];
-    struct SystemClassName *name;
-    unsigned char unmodeled_08[2];
-    unsigned short flags;
-    unsigned char unmodeled_0c[0x2e];
-    unsigned char element_width;
-    unsigned char unmodeled_3b;
-    struct SystemArrayClass *element_class;
-};
-struct SystemArrayReference {
-    struct SystemArrayClass *klass;
-};
-struct SystemArray {
-    struct SystemArrayReference *reference;
-    unsigned char unmodeled_04[4];
-    unsigned char *data;
-};
-struct SystemArrayCopyEndpoint {
-    struct SystemArray *array;
-    int index;
-};
-struct SystemArrayCopyArguments {
-    struct SystemArrayCopyEndpoint source;
-    struct SystemArrayCopyEndpoint destination;
-    unsigned int count;
-};
-extern void *memcpy(void *destination, const void *source, unsigned int size);
 
 #define SYSTEM_MARK_SUSPENDED(thread, flagsValue) do { \
     (thread)->flags = (flagsValue); \
@@ -45,6 +12,60 @@ extern void *memcpy(void *destination, const void *source, unsigned int size);
     (thread)->resume_frames = (frameValue); \
     SYSTEM_MARK_SUSPENDED(thread, flagsValue); \
 } while (0)
+
+struct SystemClassName {
+    unsigned char unmodeled_00[8];
+    signed char *characters;
+};
+
+struct SystemArrayClass {
+    unsigned char unmodeled_00[4];
+    struct SystemClassName *name;
+    unsigned char unmodeled_08[2];
+    unsigned short flags;
+    unsigned char unmodeled_0c[0x2e];
+    unsigned char element_width;
+    unsigned char unmodeled_3b;
+    struct SystemArrayClass *element_class;
+};
+
+struct SystemArrayReference {
+    struct SystemArrayClass *klass;
+};
+
+struct SystemArray {
+    struct SystemArrayReference *reference;
+    unsigned char unmodeled_04[4];
+    unsigned char *data;
+};
+
+struct SystemArrayCopyEndpoint {
+    struct SystemArray *array;
+    int index;
+};
+
+struct SystemArrayCopyArguments {
+    struct SystemArrayCopyEndpoint source;
+    struct SystemArrayCopyEndpoint destination;
+    unsigned int count;
+};
+
+extern void *memcpy(void *destination, const void *source, unsigned int size);
+
+/*
+ * The script VM's per-thread context, recovered as `JThread` in
+ * src/main/chr.h (main's chr TU). Every Java native receives
+ * (thread, arguments, result) as the sibling natives elsewhere in this
+ * TU map show.
+ */
+static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
+                           int wait_parameter);
+
+extern void SCRIPT_methodClearSet(void);
+
+const char systemFloatFormat[6] = "%8.2f";
+
+static char tmpString[512];
 
 void *Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II(
     void *thread, void *argument_block)
@@ -248,15 +269,6 @@ static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
     }
 }
 
-/*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in this
- * TU map show.
- */
-static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
-                           int wait_parameter);
-
 void Java_xeno_vm_System_waitFor__Ljava_lang_Object_(JThread *thread, void *arguments,
                                                       unsigned int *result)
 {
@@ -264,8 +276,6 @@ void Java_xeno_vm_System_waitFor__Ljava_lang_Object_(JThread *thread, void *argu
 
     System_waitFor(thread, *object, 0, 0);
 }
-
-extern void SCRIPT_methodClearSet(void);
 
 void Java_xeno_vm_System_methodSignal__I(JThread *thread, void *arguments,
                                          unsigned int *result)
@@ -276,7 +286,3 @@ void Java_xeno_vm_System_methodSignal__I(JThread *thread, void *arguments,
         SCRIPT_methodClearSet();
     }
 }
-
-const char systemFloatFormat[6] = "%8.2f";
-
-static char tmpString[512];

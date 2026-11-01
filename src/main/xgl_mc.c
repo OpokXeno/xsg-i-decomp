@@ -3,9 +3,6 @@
 #include "main/xgl_cd.h"
 #include "xgl_mc.h"
 
-/* The request routines zero and use this complete memory-card save workspace. */
-unsigned char SaveData[0x163B0] = { 0 };
-
 /* The state machine uses both a word and per-slot halfwords at offset 4. */
 typedef struct McRequestState {
     unsigned char phase;
@@ -28,32 +25,13 @@ typedef struct McRequestStorage {
     McRequestState state;
     unsigned char fullPath[0x60];
 } McRequestStorage;
-static McRequestStorage mw;
-
-static unsigned char queue_top;
-static unsigned char queue_end;
-
-static unsigned char mapNameBuffer[17 * 2];
-static unsigned char base_0_00491770[18];
-static unsigned char n_1[10];
-static unsigned char n_2[14];
-
-int sceMcOpen(int port, int slot, const char *name, int mode);
-int sceMcClose(int fd);
-int sceMcRead(int fd, void *buffer, int size);
-int sceMcWrite(int fd, const void *buffer, int size);
-int sceMcSync(int mode, int *command, int *result);
-int sceMcGetInfo(int port, int slot, int *type, int *free, int *format);
-
-/* One queued memory-card request; the request routines fill the queue slot. */
-
-/* The caller's request parameters: file slot, name, data and size. */
 
 typedef union McRequestPath {
     int empty;
     unsigned char bytes[108];
 } McRequestPath;
 
+/* The caller's request parameters: file slot, name, data and size. */
 typedef struct McRequestArguments {
     int slot;
     const unsigned char *path;
@@ -61,6 +39,7 @@ typedef struct McRequestArguments {
     int size;
 } McRequestArguments;
 
+/* One queued memory-card request; the request routines fill the queue slot. */
 typedef struct McRequestEntry {
     short card;
     short operation;
@@ -70,25 +49,6 @@ typedef struct McRequestEntry {
     int size;
     McRequestPath path;
 } McRequestEntry;
-
-static McRequestEntry queue[8];
-
-int sceMcGetDir(int port, int slot, unsigned char *entries, int mode,
-                int max_entries, int reserved);
-
-int sceMcMkdir(int port, int slot, unsigned char *path);
-
-int sceMcFormat(int port, int slot);
-
-int sceMcUnformat(int port, int slot);
-
-static void execute(McRequestEntry *request);
-
-static int create_sub2(int result);
-
-unsigned char *xglMcSetFullPath(int card, int selector);
-
-void xglMcWriteMapName(char *buffer, int slot);
 
 typedef struct McSavePayload {
     unsigned char unmodeled_00[4];
@@ -118,18 +78,6 @@ typedef struct McWorkspaceView {
     McRequestEntry request;
 } McWorkspaceView;
 
-extern float checksumNoiseScale;
-
-float xglFRand(void);
-
-void FlushCache(int mode);
-
-int sceMcDelete(int port, int slot, const char *path);
-
-extern int mcMainStatus[];
-
-static McRequestEntry savedMcRequest;
-
 typedef struct McDirectoryEntry {
     unsigned char unmodeled_00[9];
     unsigned char second;
@@ -141,6 +89,57 @@ typedef struct McDirectoryEntry {
     unsigned char unmodeled_10[32];
     unsigned char name[16];
 } McDirectoryEntry;
+
+extern float checksumNoiseScale;
+extern int mcMainStatus[];
+
+int sceMcOpen(int port, int slot, const char *name, int mode);
+int sceMcClose(int fd);
+int sceMcRead(int fd, void *buffer, int size);
+int sceMcWrite(int fd, const void *buffer, int size);
+int sceMcSync(int mode, int *command, int *result);
+int sceMcGetInfo(int port, int slot, int *type, int *free, int *format);
+
+int sceMcGetDir(int port, int slot, unsigned char *entries, int mode,
+                int max_entries, int reserved);
+
+int sceMcMkdir(int port, int slot, unsigned char *path);
+int sceMcFormat(int port, int slot);
+int sceMcUnformat(int port, int slot);
+static void execute(McRequestEntry *request);
+static int create_sub2(int result);
+unsigned char *xglMcSetFullPath(int card, int selector);
+void xglMcWriteMapName(char *buffer, int slot);
+float xglFRand(void);
+void FlushCache(int mode);
+int sceMcDelete(int port, int slot, const char *path);
+
+/* The request routines zero and use this complete memory-card save workspace. */
+unsigned char SaveData[0x163B0] = { 0 };
+
+static unsigned char base_0_00491770[18];
+
+static unsigned char n_1[10];
+
+static unsigned char n_2[14];
+
+static unsigned char base_0_00491770[18] = "/BASLUS-20469Xeno";
+
+static unsigned char n_1[10] = "/icon.sys";
+
+static unsigned char n_2[14] = "/xenosaga.ico";
+
+static McRequestStorage mw;
+
+static unsigned char queue_top;
+
+static unsigned char queue_end;
+
+static unsigned char mapNameBuffer[17 * 2];
+
+static McRequestEntry queue[8];
+
+static McRequestEntry savedMcRequest;
 
 int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
                  int *result)
@@ -806,11 +805,5 @@ void xglMcInitial(void)
     xglMcReset();
 }
 
-static unsigned char base_0_00491770[18] = "/BASLUS-20469Xeno";
-
-static unsigned char n_1[10] = "/icon.sys";
-
-static unsigned char n_2[14] = "/xenosaga.ico";
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 float checksumNoiseScale = 0.60000002384185791f;
-

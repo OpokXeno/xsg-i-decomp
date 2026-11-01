@@ -1,9 +1,9 @@
 #include "common.h"
 #include "layout.h"
-
 #include "main/jni.h"
 
 static int defaultLayout;
+
 int layoutManagerId;
 
 void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)

@@ -10,11 +10,8 @@
 #include "main/xgl_task.h"
 
 void MenuGameDataPush(void);
-
 void MenuGameDataPop(void);
-
 void GamePushSaveDataUser(void);
-
 void Game(void);
 
 #endif /* INCLUDE_MAIN_GAME_H */

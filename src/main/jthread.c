@@ -1,10 +1,99 @@
 #include "common.h"
 #include "shared.h"
 #include "jthread.h"
-
 #include "main/jni.h"
 
+/*
+ * This TU's own view of the VM thread list node that src/main/chr.h (main's
+ * chr TU) defines in full as `JThread`; only the fields the functions below
+ * read are named here (chr.h's `previous` at +0x04 stays unmodeled):
+ *
+ *   +0x08 next           JTHREAD_info, JTHREAD_get (lw a1,8(a1) at
+ *                        0x00305970) and JTHREAD_cntl (lw s0,8(s0) at
+ *                        0x003058f8/0x0030590c/0x0030592c) all walk it from
+ *                        jthreadTop.
+ *   +0x0c kind           JTHREAD_cntl runs a node's reset hook only when
+ *                        this is nonzero (lbu v0,12(s0) at 0x003058fc).
+ *   +0x0d wait_kind      JTHREAD_waitFor switches on `wait_kind & 0xf`
+ *                        (lbu v0,13(a1) at 0x00305734).
+ *   +0x10 object         JTHREAD_get compares it with its own argument
+ *                        (lw v1,16(a1) at 0x00305964).
+ *   +0x14 reset          the per-node hook JTHREAD_cntl calls with the node
+ *                        itself (lw v0,20(s0); jalr v0 at
+ *                        0x00305910/0x0030591c).
+ *   +0x24 flags          JTHREAD_cntl only considers nodes carrying bit
+ *                        0x10 (lw v0,36(s0) at 0x003058e0); JTHREAD_waitFor
+ *                        updates it once a wait is satisfied.
+ *   +0x30 wait_target    what JTHREAD_waitFor's node waits on, per
+ *                        wait_kind (lw at 0x00305760/0x00305788/0x003057a8/
+ *                        0x003057e0/0x00305800).
+ *   +0x34 wait_parameter the wait's second operand: a frame count or a
+ *                        motion number (lw at 0x00305764/0x00305804).
+ */
+typedef struct JThreadNode {
+    unsigned char unmodeled_00[8];
+    struct JThreadNode *next;           /* +0x08 */
+    unsigned char kind;                 /* +0x0c */
+    unsigned char wait_kind;             /* +0x0d */
+    unsigned char unmodeled_0e[0x10 - 0x0e];
+    SceneObject object;                 /* +0x10 */
+    void (*reset)(struct JThreadNode *thread); /* +0x14 */
+    unsigned char unmodeled_18[0x24 - 0x18];
+    unsigned int flags;                 /* +0x24 */
+    unsigned char unmodeled_28[0x30 - 0x28];
+    void *wait_target;                  /* +0x30 */
+    int wait_parameter;                 /* +0x34 */
+} JThreadNode;
+
+/*
+ * The actor JTHREAD_waitFor's wait_target points at when wait_kind is 4 or
+ * 6. src/main/chr.h (main's chr TU) completes the whole record as `Actor`;
+ * only the two words this function reads are restated here, under this
+ * TU's own tag: `flags` bit 1 (0x2) gates cases 4/6 (andi 0x2 at
+ * 0x003057e8/0x003057fc) and the byte at +0x81 is the motion value case 5
+ * compares against wait_parameter (lbu v1,129(v0) at 0x00305808).
+ */
+typedef struct JThreadActorRef {
+    unsigned int flags; /* +0x00 */
+    unsigned char unmodeled_04[0x81 - 0x04];
+    unsigned char motion; /* +0x81 */
+} JThreadActorRef;
+
+/*
+ * The menu or window object JTHREAD_waitFor's wait_target points at when
+ * wait_kind is 3. Several TUs complete this family of objects in full
+ * (e.g. src/main/tslider_create.h's own `state` at the same +0x14); only
+ * that one halfword is restated here, under this TU's own tag (lhu
+ * v1,20(v0) at 0x00305790, compared against 2).
+ */
+typedef struct JThreadWindowRef {
+    unsigned char unmodeled_00[0x14];
+    unsigned short state; /* +0x14 */
+} JThreadWindowRef;
+
+/*
+ * One entry of a thread's symbol chain: JTHREAD_getSymbol scans a flat
+ * array of these, terminated by a zero `valid` word (lw 4(a0) at
+ * 0x00305888/0x003058a4).
+ */
+typedef struct JThreadSymbol {
+    int id;    /* +0x00 */
+    int valid; /* +0x04, zero terminates the chain */
+} JThreadSymbol;
+
+extern JThreadNode *jthreadTop;
+
+/*
+ * The thread-list reset hook: jthreadResetFunc collects a pending
+ * whole-runtime reset request that a node's own reset hook may raise. This
+ * runs the reset hook of every active (kind != 0), pending-work (flags &
+ * 0x10) node in turn, stopping early the moment that happens, then runs the
+ * collected runtime reset once and clears it.
+ */
+extern void (*jthreadResetFunc)(void);
+
 const char jthreadPeerName[] = "peer";
+
 const char jthreadDottedNameFormat[8] = "%s.%s";
 
 /*
@@ -178,76 +267,6 @@ void JTHREAD_init(void)
 }
 
 /*
- * This TU's own view of the VM thread list node that src/main/chr.h (main's
- * chr TU) defines in full as `JThread`; only the fields the functions below
- * read are named here (chr.h's `previous` at +0x04 stays unmodeled):
- *
- *   +0x08 next           JTHREAD_info, JTHREAD_get (lw a1,8(a1) at
- *                        0x00305970) and JTHREAD_cntl (lw s0,8(s0) at
- *                        0x003058f8/0x0030590c/0x0030592c) all walk it from
- *                        jthreadTop.
- *   +0x0c kind           JTHREAD_cntl runs a node's reset hook only when
- *                        this is nonzero (lbu v0,12(s0) at 0x003058fc).
- *   +0x0d wait_kind      JTHREAD_waitFor switches on `wait_kind & 0xf`
- *                        (lbu v0,13(a1) at 0x00305734).
- *   +0x10 object         JTHREAD_get compares it with its own argument
- *                        (lw v1,16(a1) at 0x00305964).
- *   +0x14 reset          the per-node hook JTHREAD_cntl calls with the node
- *                        itself (lw v0,20(s0); jalr v0 at
- *                        0x00305910/0x0030591c).
- *   +0x24 flags          JTHREAD_cntl only considers nodes carrying bit
- *                        0x10 (lw v0,36(s0) at 0x003058e0); JTHREAD_waitFor
- *                        updates it once a wait is satisfied.
- *   +0x30 wait_target    what JTHREAD_waitFor's node waits on, per
- *                        wait_kind (lw at 0x00305760/0x00305788/0x003057a8/
- *                        0x003057e0/0x00305800).
- *   +0x34 wait_parameter the wait's second operand: a frame count or a
- *                        motion number (lw at 0x00305764/0x00305804).
- */
-typedef struct JThreadNode {
-    unsigned char unmodeled_00[8];
-    struct JThreadNode *next;           /* +0x08 */
-    unsigned char kind;                 /* +0x0c */
-    unsigned char wait_kind;             /* +0x0d */
-    unsigned char unmodeled_0e[0x10 - 0x0e];
-    SceneObject object;                 /* +0x10 */
-    void (*reset)(struct JThreadNode *thread); /* +0x14 */
-    unsigned char unmodeled_18[0x24 - 0x18];
-    unsigned int flags;                 /* +0x24 */
-    unsigned char unmodeled_28[0x30 - 0x28];
-    void *wait_target;                  /* +0x30 */
-    int wait_parameter;                 /* +0x34 */
-} JThreadNode;
-
-extern JThreadNode *jthreadTop;
-
-/*
- * The actor JTHREAD_waitFor's wait_target points at when wait_kind is 4 or
- * 6. src/main/chr.h (main's chr TU) completes the whole record as `Actor`;
- * only the two words this function reads are restated here, under this
- * TU's own tag: `flags` bit 1 (0x2) gates cases 4/6 (andi 0x2 at
- * 0x003057e8/0x003057fc) and the byte at +0x81 is the motion value case 5
- * compares against wait_parameter (lbu v1,129(v0) at 0x00305808).
- */
-typedef struct JThreadActorRef {
-    unsigned int flags; /* +0x00 */
-    unsigned char unmodeled_04[0x81 - 0x04];
-    unsigned char motion; /* +0x81 */
-} JThreadActorRef;
-
-/*
- * The menu or window object JTHREAD_waitFor's wait_target points at when
- * wait_kind is 3. Several TUs complete this family of objects in full
- * (e.g. src/main/tslider_create.h's own `state` at the same +0x14); only
- * that one halfword is restated here, under this TU's own tag (lhu
- * v1,20(v0) at 0x00305790, compared against 2).
- */
-typedef struct JThreadWindowRef {
-    unsigned char unmodeled_00[0x14];
-    unsigned short state; /* +0x14 */
-} JThreadWindowRef;
-
-/*
  * Blocks the calling thread's script method until the condition its own
  * wait_kind names is satisfied, then clears flag 0x4 (and, for the actor
  * waits, 0x1 too) and sets flag 0x2 on it. Out-of-range wait_kind values do
@@ -318,16 +337,6 @@ void JTHREAD_info(void)
 }
 
 /*
- * One entry of a thread's symbol chain: JTHREAD_getSymbol scans a flat
- * array of these, terminated by a zero `valid` word (lw 4(a0) at
- * 0x00305888/0x003058a4).
- */
-typedef struct JThreadSymbol {
-    int id;    /* +0x00 */
-    int valid; /* +0x04, zero terminates the chain */
-} JThreadSymbol;
-
-/*
  * Searches the given symbol chain for an entry whose id matches, returning
  * that entry or 0 once the chain's terminating zero `valid` word is
  * reached.
@@ -342,15 +351,6 @@ JThreadSymbol *JTHREAD_getSymbol(JThreadSymbol *symbols, int id)
     }
     return 0;
 }
-
-/*
- * The thread-list reset hook: jthreadResetFunc collects a pending
- * whole-runtime reset request that a node's own reset hook may raise. This
- * runs the reset hook of every active (kind != 0), pending-work (flags &
- * 0x10) node in turn, stopping early the moment that happens, then runs the
- * collected runtime reset once and clears it.
- */
-extern void (*jthreadResetFunc)(void);
 
 void JTHREAD_cntl(void)
 {
@@ -392,6 +392,7 @@ JThreadNode *JTHREAD_get(SceneObject object)
     return 0;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char JTHREADAlgUnitName[24] = "JTHREAD_ALG_UNIT";
 
 const char JTHREADAlgDefaultName[24] = "JTHREAD_ALG_DEFAULT";

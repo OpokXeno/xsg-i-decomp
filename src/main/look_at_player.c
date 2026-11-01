@@ -1,9 +1,17 @@
 #include "common.h"
-
 #include "shared.h"
 #include "debug_break.h"
-
 #include "main/near_dir.h"
+#include "main/get.h"
+
+#define DEFAULT_VECTOR_RATE 0.0007999999798f
+
+/* HitCheckActor's minimum collision radius and maximum vertical separation
+ * thresholds. These literal-pool values are read once for each actor scan. */
+#define HIT_CHECK_MIN_BODY_RADIUS (0.0099999997764825821f)
+
+#define HIT_CHECK_MAX_HEIGHT_DIFFERENCE (1.8999999761581421f)
+#define NYURU_REACH_MARGIN (0.0099999997764825821f)
 
 typedef struct ActorUndulation {
     u8 unmodeled_00[8];
@@ -74,8 +82,6 @@ typedef struct LookAtPlayerActor {
     u8 unmodeled_a34[0xa70 - 0xa34];
 } LookAtPlayerActor;
 
-extern PlayerEnemyWork enepc[16];
-
 typedef struct PlayerLookAtState {
     u32 unmodeled_00;
     void *player_actor;
@@ -107,8 +113,6 @@ typedef struct PlayerAimMapUnit {
     u8 unmodeled_20[0x2e0];
 } PlayerAimMapUnit;
 
-extern PlayerLookAtState GameLoopState;
-
 typedef struct LookAtSavedPartyPrefix {
     unsigned char unmodeled_00[0x100a4];
     u16 player_character_id;
@@ -120,1505 +124,6 @@ typedef struct LookAtGameResource {
     int handle;
     int state;
 } LookAtGameResource;
-
-extern unsigned char SaveData[];
-
-extern LookAtGameResource GameResource[128];
-
-void GameCfPlayerLoadResource(int use_cache);
-
-void *GameResourceAlloc(int size);
-
-void *GameResourceGetFreeAddr(void);
-
-void RES_GetLeaderSeName(char *name);
-
-char *RES_GetMotBaseName(int id);
-
-void RES_GetMdlFileName(char *name, int id);
-
-int xglCdReadFile(const char *name, void *address, int size, int arg);
-
-void xglSoundSendEffect(void *first, void *second, int id);
-
-void xglSoundLoadEffect(const char *name, void *address, int id);
-
-int xglFlagsGet(int flag, int value);
-
-void ACT_setModelWrapper(LookAtPlayerActor *player_actor, int mode);
-
-void ACT_setHumanHand(LookAtPlayerActor *player_actor, int mode);
-
-extern LookAtPlayerActor actor[64];
-
-extern PlayerAimMapUnit MapUnit[64];
-
-int Get_MostNear_Actor(LookAtPlayerActor *player_actor);
-
-void Actor_LookAt_Set(LookAtPlayerActor *player_actor, int mode, Vector4 *target);
-
-void Actor_LookAt_Release(LookAtPlayerActor *player_actor, int mode);
-
-void Actor_LookAt(LookAtPlayerActor *player_actor);
-
-void PlayerLookAtAim(void);
-
-/* Player-movement speed thresholds and vector scaling rate GameCfPlayerMove
- * compares/applies each frame; GameCfPlayerMoveInit restores their defaults. */
-
-static int WALK_THRESHOLD_I;
-
-static float WALK_THRESHOLD_F;
-
-static int RUN_THRESHOLD_I;
-
-static float RUN_THRESHOLD_F;
-
-static float VECTOR_RATE;
-
-extern int F2I(float value);
-
-#define DEFAULT_VECTOR_RATE 0.0007999999798f
-
-extern const char ResShion6HName[16];
-
-extern const char ResShion5HShion1HName[24];
-
-extern const char ResShion4HShionHName[24];
-
-extern const char ResShion3HName[16];
-
-extern const char ResShion2HName[16];
-
-extern const char ResShion1HShion5HName[24];
-
-extern const char ResKosmosH6Name[16];
-
-extern const char ResKosmosH5Name[16];
-
-extern const char ResKosmosH4Name[16];
-
-extern const char ResKosmosH3Name[16];
-
-extern const char ResKosmosH2Name[16];
-
-extern const char ResKosmosH1Name[16];
-
-extern const char ResShitanHName[16];
-
-extern const char ResKosmosHName[16];
-
-extern const char ResShionHShion4HName[24];
-
-extern const char ResShion5Shion1Name[16];
-
-extern const char ResShion1Shion5Name[16];
-
-extern const char ResShionChName[16];
-
-extern const char ResShionShion4Name[16];
-
-extern const char ResAlbelt3HName[16];
-
-extern const char ResHammerHHammerName[24];
-
-extern const char ResTonnyHTonnyName[16];
-
-extern const char ResGaignunHName[16];
-
-extern const char ResAndrewHAndrew6Name[24];
-
-extern const char ResAndrewHAndrew5Name[24];
-
-extern const char ResAndrewHAndrew4Name[24];
-
-extern const char ResAndrewHAndrew3Name[24];
-
-extern const char ResAndrewHAndrew2Name[24];
-
-extern const char ResAndrewHAndrew1Name[24];
-
-extern const char ResAndrewHAndrewName[24];
-
-extern const char ResVirgil3HName[16];
-
-extern const char ResVirgil1HName[16];
-
-extern const char ResAlbelt2HName[16];
-
-extern const char ResVirgil4HName[16];
-
-extern const char ResVirgil2HName[16];
-
-extern const char ResKebin1HName[16];
-
-extern const char ResMatehwsHMatehwsName[24];
-
-extern const char ResVirgilHName[16];
-
-extern const char ResAlbeltHName[16];
-
-extern const char ResMarglisHName[16];
-
-extern const char ResJoachim1Name[16];
-
-extern const char ResCecilia1Name[16];
-
-extern const char ResAndDaugName[16];
-
-extern const char ResAndWifeName[16];
-
-extern const char ResMoriyamaName[16];
-
-extern const char ResStepMamName[16];
-
-extern const char ResMatehws1Name[16];
-
-extern const char ResGaignun1Name[16];
-
-extern const char ResMarglis1Name[16];
-
-extern const char ResBrealW1Name[16];
-
-extern const char ResBrealM4Name[16];
-
-extern const char ResBrealM3Name[16];
-
-extern const char ResBrealM2Name[16];
-
-extern const char ResBrealM1Name[16];
-
-extern const char ResKingCatName[16];
-
-extern const char ResPilotNoName[16];
-
-extern const char ResInnGirlName[16];
-
-extern const char ResBreadChName[16];
-
-extern const char ResKidswB2Name[16];
-
-extern const char ResKidswB1Name[16];
-
-extern const char ResKidswA2Name[16];
-
-extern const char ResKidswA1Name[16];
-
-extern const char ResKidsmB2Name[16];
-
-extern const char ResKidsmB1Name[16];
-
-extern const char ResKidsmA2Name[16];
-
-extern const char ResKidsmA1Name[16];
-
-extern const char ResGrFinalName[16];
-
-extern const char ResEwpHg01Name[16];
-
-extern const char ResBossBossPath[16];
-
-extern const char ResFereFerePath[16];
-
-extern const char ResFesoFesoPath[16];
-
-extern const char ResFeroFeroPath[16];
-
-extern const char ResFemaFemaPath[16];
-
-extern const char ResUtroUtroPath[16];
-
-extern const char ResUtsoUtsoPath[16];
-
-extern const char ResUtreUtrePath[16];
-
-extern const char ResUtmaUtmaPath[16];
-
-extern const char ResGunoGunoPath[16];
-
-extern const char ResMobj000MobjPath[16];
-
-extern const char ResAobj000AccPath[16];
-
-extern const char ResMusobjMusPath[16];
-
-extern const char ResMufobjMufPath[16];
-
-extern const char ResMuxobjMuxPath[16];
-
-extern const char ResTreobjTrePath[16];
-
-extern const char ResMuwobjMuwPath[16];
-
-extern const char ResMuobjMUPath[16];
-
-extern const char ResDataSceneItaiPath[24];
-
-extern const char ResDataSceneYagiPath[24];
-
-extern const char ResDataSceneSugisawaPath[24];
-
-extern const char ResDataSceneSatoPath[24];
-
-extern const char ResDataSceneKeiichiPath[24];
-
-extern const char ResDataSceneKuramotoPath[24];
-
-extern const char ResDataSceneYajimaPath[24];
-
-extern const char ResDataSceneNakaharaPath[24];
-
-extern const char ResDataSceneNvYonePath[24];
-
-extern const char ResDataSceneKojiPath[24];
-
-extern const char ResDataSceneKonishiPath[24];
-
-extern const char ResDataSceneSakisakoPath[24];
-
-extern const char ResDataSceneKojimaPath[24];
-
-extern const char ResDataSceneFujiPath[24];
-
-extern const char ResDataSceneGashPath[24];
-
-extern const char ResDataSceneEventPath[24];
-
-extern const char ResDataSceneCfPath[16];
-
-extern const char ResDataSceneCheckPath[24];
-
-extern const char ResDataSceneTestPath[24];
-
-extern const char ResDataScenePath[16];
-
-extern const char ResMomo6Name[8];
-
-extern const char ResMomo5HName[8];
-
-extern const char ResMomo5Name[8];
-
-extern const char ResJr1HName[8];
-
-extern const char ResZiggyHName[8];
-
-extern const char ResJrHName[8];
-
-extern const char ResMomoHName[8];
-
-extern const char ResChaosHName[8];
-
-extern const char ResShitan2Name[8];
-
-extern const char ResShitan1Name[8];
-
-extern const char ResZiggy1Name[8];
-
-extern const char ResJr3Name[8];
-
-extern const char ResJr2Name[8];
-
-extern const char ResJr1Name[8];
-
-extern const char ResMomo4Name[8];
-
-extern const char ResMomo3Name[8];
-
-extern const char ResMomo2Name[8];
-
-extern const char ResMomo1Name[8];
-
-extern const char ResChaos2Name[8];
-
-extern const char ResChaos1Name[8];
-
-extern const char ResKosmos5Name[8];
-
-extern const char ResKosmos3Name[8];
-
-extern const char ResKosmos2Name[8];
-
-extern const char ResKosmos1Name[8];
-
-extern const char ResShionName[8];
-
-extern const char ResShion3Name[8];
-
-extern const char ResShion2Name[8];
-
-extern const char ResShitanName[8];
-
-extern const char ResZiggyName[8];
-
-extern const char ResMomoName[8];
-
-extern const char ResChaosName[8];
-
-extern const char ResKosmosName[8];
-
-extern const char ResAndrew9Name[8];
-
-extern const char ResFeb1Name[8];
-
-extern const char ResAndrew8Name[8];
-
-extern const char ResAndrew7Name[8];
-
-extern const char ResAndrew6Name[8];
-
-extern const char ResAndrew5Name[8];
-
-extern const char ResEllyHName[8];
-
-extern const char ResFriedHName[8];
-
-extern const char ResKebinHName[8];
-
-extern const char ResAllenHName[8];
-
-extern const char ResCath1Name[8];
-
-extern const char ResChiefName[8];
-
-extern const char ResVanName[8];
-
-extern const char ResElly2Name[8];
-
-extern const char ResKJoachName[8];
-
-extern const char ResShalronName[8];
-
-extern const char ResHynlinName[8];
-
-extern const char ResTogashiName[8];
-
-extern const char ResPelegriName[8];
-
-extern const char ResShiMamName[8];
-
-extern const char ResShiDadName[8];
-
-extern const char ResCathName[8];
-
-extern const char ResCeciliaName[8];
-
-extern const char ResLapisName[8];
-
-extern const char ResMiyukiName[8];
-
-extern const char ResVoyagerName[8];
-
-extern const char ResHelmerName[8];
-
-extern const char ResAbelName[8];
-
-extern const char ResShelleyName[8];
-
-extern const char ResMaryName[8];
-
-extern const char ResSellersName[8];
-
-extern const char ResJoachimName[8];
-
-extern const char ResYuriName[8];
-
-extern const char ResFebName[8];
-
-extern const char ResAndrew4Name[8];
-
-extern const char ResAndrew3Name[8];
-
-extern const char ResAndrew2Name[8];
-
-extern const char ResAndrew1Name[8];
-
-extern const char ResAndrewName[8];
-
-extern const char ResHammerName[8];
-
-extern const char ResTonnyName[8];
-
-extern const char ResMatehwsName[8];
-
-extern const char ResEllyName[8];
-
-extern const char ResFriedName[8];
-
-extern const char ResVirgil4Name[8];
-
-extern const char ResVirgil3Name[8];
-
-extern const char ResVirgil2Name[8];
-
-extern const char ResVirgil1Name[8];
-
-extern const char ResVirgilName[8];
-
-extern const char ResKebin2Name[8];
-
-extern const char ResKebin1Name[8];
-
-extern const char ResKebinName[8];
-
-extern const char ResAllen1Name[8];
-
-extern const char ResAllenName[8];
-
-extern const char ResAlbelt1Name[8];
-
-extern const char ResAlbeltName[8];
-
-extern const char ResGaignunName[8];
-
-extern const char ResMarglisName[8];
-
-extern const char ResBrealWName[8];
-
-extern const char ResBrealMName[8];
-
-extern const char ResEsoldName[8];
-
-extern const char ResRwW2Name[8];
-
-extern const char ResRwW1Name[8];
-
-extern const char ResRwWName[8];
-
-extern const char ResRwM2Name[8];
-
-extern const char ResRwM1Name[8];
-
-extern const char ResRwMName[8];
-
-extern const char ResSuukiName[8];
-
-extern const char ResEngOffName[8];
-
-extern const char ResEngName[8];
-
-extern const char ResSoldName[8];
-
-extern const char ResPilotName[8];
-
-extern const char ResOffW1Name[8];
-
-extern const char ResOffWName[8];
-
-extern const char ResOffM3Name[8];
-
-extern const char ResOffM2Name[8];
-
-extern const char ResOffM1Name[8];
-
-extern const char ResOffMName[8];
-
-extern const char ResVecW1Name[8];
-
-extern const char ResVecWName[8];
-
-extern const char ResVecM2Name[8];
-
-extern const char ResVecM1Name[8];
-
-extern const char ResVecMName[8];
-
-extern const char ResSpaceName[8];
-
-extern const char ResUSoldsName[8];
-
-extern const char ResRealW2Name[8];
-
-extern const char ResRealW1Name[8];
-
-extern const char ResRealWName[8];
-
-extern const char ResRealM2Name[8];
-
-extern const char ResRealM1Name[8];
-
-extern const char ResRealMName[8];
-
-extern const char ResUSpaceName[8];
-
-extern const char ResUSoldName[8];
-
-extern const char ResGoveW2Name[8];
-
-extern const char ResGoveW1Name[8];
-
-extern const char ResGoveWName[8];
-
-extern const char ResCommi5Name[8];
-
-extern const char ResCommi4Name[8];
-
-extern const char ResCommi3Name[8];
-
-extern const char ResCommi2Name[8];
-
-extern const char ResCommi1Name[8];
-
-extern const char ResCommiName[8];
-
-extern const char ResAssM4Name[8];
-
-extern const char ResAssM3Name[8];
-
-extern const char ResKanchoName[8];
-
-extern const char ResGoveM2Name[8];
-
-extern const char ResGoveM1Name[8];
-
-extern const char ResGoveMName[8];
-
-extern const char ResAssWName[8];
-
-extern const char ResAssM2Name[8];
-
-extern const char ResAssM1Name[8];
-
-extern const char ResAssMName[8];
-
-extern const char ResHyakuName[8];
-
-extern const char ResDu2Name[8];
-
-extern const char ResDu1Name[8];
-
-extern const char ResPolWName[8];
-
-extern const char ResPolMName[8];
-
-extern const char ResUticW2Name[8];
-
-extern const char ResUticW1Name[8];
-
-extern const char ResUticWName[8];
-
-extern const char ResUticM2Name[8];
-
-extern const char ResUticM1Name[8];
-
-extern const char ResUticMName[8];
-
-extern const char ResContName[8];
-
-extern const char ResEngOjiName[8];
-
-extern const char ResScotName[8];
-
-extern const char ResInnOjiName[8];
-
-extern const char ResSpyName[8];
-
-extern const char ResBartenName[8];
-
-extern const char ResGoroName[8];
-
-extern const char ResMouthName[8];
-
-extern const char ResCleObaName[8];
-
-extern const char ResKingName[8];
-
-extern const char ResRobotName[8];
-
-extern const char ResCleChName[8];
-
-extern const char ResNurseName[8];
-
-extern const char ResDoctorName[8];
-
-extern const char ResBarMName[8];
-
-extern const char ResBarOjiName[8];
-
-extern const char ResBreadName[8];
-
-extern const char ResGirlB2Name[8];
-
-extern const char ResGirlB1Name[8];
-
-extern const char ResGirlBName[8];
-
-extern const char ResGirlA2Name[8];
-
-extern const char ResGirlA1Name[8];
-
-extern const char ResGirlAName[8];
-
-extern const char ResKidswBName[8];
-
-extern const char ResKidswAName[8];
-
-extern const char ResBabaB2Name[8];
-
-extern const char ResBabaB1Name[8];
-
-extern const char ResBabaBName[8];
-
-extern const char ResBabaA2Name[8];
-
-extern const char ResBabaA1Name[8];
-
-extern const char ResBabaAName[8];
-
-extern const char ResObaB2Name[8];
-
-extern const char ResObaB1Name[8];
-
-extern const char ResObaBName[8];
-
-extern const char ResObaA2Name[8];
-
-extern const char ResObaA1Name[8];
-
-extern const char ResObaAName[8];
-
-extern const char ResWmanB2Name[8];
-
-extern const char ResWmanB1Name[8];
-
-extern const char ResWmanBName[8];
-
-extern const char ResWmanA2Name[8];
-
-extern const char ResWmanA1Name[8];
-
-extern const char ResWmanAName[8];
-
-extern const char ResBoyB2Name[8];
-
-extern const char ResBoyB1Name[8];
-
-extern const char ResBoyBName[8];
-
-extern const char ResBoyA2Name[8];
-
-extern const char ResBoyA1Name[8];
-
-extern const char ResBoyAName[8];
-
-extern const char ResKidsmBName[8];
-
-extern const char ResKidsmAName[8];
-
-extern const char ResJijiB2Name[8];
-
-extern const char ResJijiB1Name[8];
-
-extern const char ResJijiBName[8];
-
-extern const char ResJijiA2Name[8];
-
-extern const char ResJijiA1Name[8];
-
-extern const char ResJijiAName[8];
-
-extern const char ResOjiB2Name[8];
-
-extern const char ResOjiB1Name[8];
-
-extern const char ResOjiBName[8];
-
-extern const char ResOjiA2Name[8];
-
-extern const char ResOjiA1Name[8];
-
-extern const char ResOjiAName[8];
-
-extern const char ResManB2Name[8];
-
-extern const char ResManB1Name[8];
-
-extern const char ResManBName[8];
-
-extern const char ResManA2Name[8];
-
-extern const char ResManA1Name[8];
-
-extern const char ResManAName[8];
-
-extern const char ResFile02HoName[8];
-
-extern const char ResFile01Ho2Name[8];
-
-extern const char ResFile01HoName[8];
-
-extern const char ResFile01CvName[8];
-
-extern const char ResSuffix03Name[8];
-
-extern const char ResSuffix02Name[8];
-
-extern const char ResSuffix01Name[8];
-
-extern const char ResGrLegName[8];
-
-extern const char ResGrBodyName[8];
-
-extern const char ResGrHandName[8];
-
-extern const char ResGrHeadName[8];
-
-extern const char ResUkunSName[8];
-
-extern const char ResUkunBName[8];
-
-extern const char ResTs01Name[8];
-
-extern const char ResVx1MName[8];
-
-extern const char ResUknGName[8];
-
-extern const char ResBw04Name[8];
-
-extern const char ResBw03Name[8];
-
-extern const char ResBw02Name[8];
-
-extern const char ResBw01Name[8];
-
-extern const char ResHw06Name[8];
-
-extern const char ResHw05Name[8];
-
-extern const char ResHw04Name[8];
-
-extern const char ResHw03Name[8];
-
-extern const char ResHw02Name[8];
-
-extern const char ResHw01Name[8];
-
-extern const char ResRd17Name[8];
-
-extern const char ResRd16Name[8];
-
-extern const char ResRd15Name[8];
-
-extern const char ResRd14Name[8];
-
-extern const char ResRd13Name[8];
-
-extern const char ResRd12Name[8];
-
-extern const char ResRd11Name[8];
-
-extern const char ResRd10Name[8];
-
-extern const char ResRd09Name[8];
-
-extern const char ResRd08Name[8];
-
-extern const char ResRd07Name[8];
-
-extern const char ResRd06Name[8];
-
-extern const char ResRd05Name[8];
-
-extern const char ResRd04Name[8];
-
-extern const char ResRd03Name[8];
-
-extern const char ResRd02Name[8];
-
-extern const char ResRd01Name[8];
-
-extern const char ResSw01Name[8];
-
-extern const char ResJrHg08Name[8];
-
-extern const char ResJrHg07Name[8];
-
-extern const char ResJrHg06Name[8];
-
-extern const char ResGun05Name[8];
-
-extern const char ResGun04Name[8];
-
-extern const char ResGun03Name[8];
-
-extern const char ResGun02Name[8];
-
-extern const char ResGun01Name[8];
-
-extern const char ResSw05Name[8];
-
-extern const char ResSw04Name[8];
-
-extern const char ResSw03Name[8];
-
-extern const char ResSw02Name[8];
-
-extern const char ResMboxName[8];
-
-extern const char ResMsp02RName[8];
-
-extern const char ResHb00RName[8];
-
-extern const char ResGlg00RName[8];
-
-extern const char ResDeff00Name[8];
-
-extern const char ResSol00Name[8];
-
-extern const char ResWire00Name[8];
-
-extern const char ResSmp01Name[8];
-
-extern const char ResEcm02Name[8];
-
-extern const char ResEcm01Name[8];
-
-extern const char ResEad00Name[8];
-
-extern const char ResBw00Name[8];
-
-extern const char ResBbc00Name[8];
-
-extern const char ResVsd00Name[8];
-
-extern const char ResFsd00Name[8];
-
-extern const char ResShb00Name[8];
-
-extern const char ResMsp03Name[8];
-
-extern const char ResMsp01Name[8];
-
-extern const char ResAmp02Name[8];
-
-extern const char ResLgc00Name[8];
-
-extern const char ResBp00Name[8];
-
-extern const char ResEac00Name[8];
-
-extern const char ResCb00Name[8];
-
-extern const char ResBl00Name[8];
-
-extern const char ResMsp02Name[8];
-
-extern const char ResMsp00Name[8];
-
-extern const char ResHb00Name[8];
-
-extern const char ResGlg00Name[8];
-
-extern const char ResGnd00Name[8];
-
-extern const char ResFl00Name[8];
-
-extern const char ResPbk00Name[8];
-
-extern const char ResLsr00Name[8];
-
-extern const char ResDrl01Name[8];
-
-extern const char ResDrl00Name[8];
-
-extern const char ResBs00Name[8];
-
-extern const char ResBam00Name[8];
-
-extern const char ResRf02Name[8];
-
-extern const char ResRf01Name[8];
-
-extern const char ResRf00Name[8];
-
-extern const char ResMg01Name[8];
-
-extern const char ResMg00Name[8];
-
-extern const char ResHmr02Name[8];
-
-extern const char ResDlc00Name[8];
-
-extern const char ResHmr00Name[8];
-
-extern const char ResHg01Name[8];
-
-extern const char ResHg00Name[8];
-
-extern const char ResWct00Name[8];
-
-extern const char ResBd01Name[8];
-
-extern const char ResBd00Name[8];
-
-extern const char ResAx00Name[8];
-
-extern const char ResAcc036Name[8];
-
-extern const char ResAcc035Name[8];
-
-extern const char ResAcc034Name[8];
-
-extern const char ResAcc033Name[8];
-
-extern const char ResAcc032Name[8];
-
-extern const char ResAcc031Name[8];
-
-extern const char ResAcc030Name[8];
-
-extern const char ResAcc029Name[8];
-
-extern const char ResAcc028Name[8];
-
-extern const char ResAcc018Name[8];
-
-extern const char ResWingName[8];
-
-extern const char ResFile323Name[8];
-
-extern const char ResFile322Name[8];
-
-extern const char ResFile321Name[8];
-
-extern const char ResFile320Name[8];
-
-extern const char ResFile313Name[8];
-
-extern const char ResFile312Name[8];
-
-extern const char ResFile311Name[8];
-
-extern const char ResFile310Name[8];
-
-extern const char ResFile303Name[8];
-
-extern const char ResFile302Name[8];
-
-extern const char ResFile301Name[8];
-
-extern const char ResFile023Name[8];
-
-extern const char ResFile021Name[8];
-
-extern const char ResFile020Name[8];
-
-extern const char ResFile012Name[8];
-
-extern const char ResFile011Name[8];
-
-extern const char ResFile010Name[8];
-
-extern const char ResFile003Name[8];
-
-extern const char ResFile002Name[8];
-
-extern const char ResFile001Name[8];
-
-extern const char ResFile033Name[8];
-
-extern const char ResFile032Name[8];
-
-extern const char ResFile031Name[8];
-
-extern const char ResFile030Name[8];
-
-extern const char ResFile180Name[8];
-
-extern const char ResFile173Name[8];
-
-extern const char ResFile172Name[8];
-
-extern const char ResFile171Name[8];
-
-extern const char ResFile170Name[8];
-
-extern const char ResFile163Name[8];
-
-extern const char ResFile162Name[8];
-
-extern const char ResFile161Name[8];
-
-extern const char ResFile160Name[8];
-
-extern const char ResFile153Name[8];
-
-extern const char ResFile152Name[8];
-
-extern const char ResFile151Name[8];
-
-extern const char ResFile150Name[8];
-
-extern const char ResFile143Name[8];
-
-extern const char ResFile142Name[8];
-
-extern const char ResFile141Name[8];
-
-extern const char ResFile140Name[8];
-
-extern const char ResFile133Name[8];
-
-extern const char ResFile132Name[8];
-
-extern const char ResFile131Name[8];
-
-extern const char ResFile130Name[8];
-
-extern const char ResFile123Name[8];
-
-extern const char ResFile122Name[8];
-
-extern const char ResFile121Name[8];
-
-extern const char ResFile120Name[8];
-
-extern const char ResFile113Name[8];
-
-extern const char ResFile112Name[8];
-
-extern const char ResFile111Name[8];
-
-extern const char ResFile110Name[8];
-
-extern const char ResFile103Name[8];
-
-extern const char ResFile102Name[8];
-
-extern const char ResFile101Name[8];
-
-extern const char ResFile100Name[8];
-
-extern const char ResFile093Name[8];
-
-extern const char ResFile092Name[8];
-
-extern const char ResFile090Name[8];
-
-extern const char ResFile082Name[8];
-
-extern const char ResFile081Name[8];
-
-extern const char ResFile080Name[8];
-
-extern const char ResFile073Name[8];
-
-extern const char ResFile072Name[8];
-
-extern const char ResFile071Name[8];
-
-extern const char ResFile070Name[8];
-
-extern const char ResFile063Name[8];
-
-extern const char ResFile062Name[8];
-
-extern const char ResFile061Name[8];
-
-extern const char ResFile060Name[8];
-
-extern const char ResFile052Name[8];
-
-extern const char ResFile051Name[8];
-
-extern const char ResFile050Name[8];
-
-extern const char ResFile043Name[8];
-
-extern const char ResFile042Name[8];
-
-extern const char ResFile041Name[8];
-
-extern const char ResCitiPath[8];
-
-extern const char ResPplPath[8];
-
-extern const char ResNpcPath[8];
-
-extern const char ResPcPath[8];
-
-extern const char ResEtcPath[8];
-
-extern const char ResAgAgPath[8];
-
-extern const char ResVxVxPath[8];
-
-extern const char ResVxName[8];
-
-extern const char ResPcChoPath[8];
-
-extern const char ResChoName[8];
-
-extern const char ResEnemyPath[8];
-
-extern const char ResRoboPath[8];
-
-extern const char ResPcSonPath[8];
-
-extern const char ResSonName[8];
-
-extern const char ResPcStnPath[8];
-
-extern const char ResStnName[8];
-
-extern const char ResPcJrPath[8];
-
-extern const char ResJrPrefixName[8];
-
-extern const char ResPcZigPath[8];
-
-extern const char ResZigName[8];
-
-extern const char ResPcMmoPath[8];
-
-extern const char ResMmoName[8];
-
-extern const char ResPcKosPath[8];
-
-extern const char ResKosName[8];
-
-extern const char ResBossName[8];
-
-extern const char ResFereName[8];
-
-extern const char ResFesoName[8];
-
-extern const char ResFeroName[8];
-
-extern const char ResFemaName[8];
-
-extern const char ResUtroName[8];
-
-extern const char ResUtsoName[8];
-
-extern const char ResUtreName[8];
-
-extern const char ResUtmaName[8];
-
-extern const char ResGunoName[8];
-
-extern const char ResMusName[8];
-
-extern const char ResMufName[8];
-
-extern const char ResMuxName[8];
-
-extern const char ResTreName[8];
-
-extern const char ResMuwName[8];
-
-extern const char ResMuName[8];
-
-extern const char ResAidName[8];
-
-extern const char ResObjPath[8];
-
-extern const char ResMidName[8];
-
-extern const char ResEidName[8];
-
-extern const char ResWeaponPath[8];
-
-extern const char ResWidName[8];
-
-extern const char ResRidName[8];
-
-extern const char ResCharPath[8];
-
-extern const char ResCidName[8];
-
-extern const char ResJr4Name[8];
-
-extern const char ResJrName[8];
-
-extern const char ResDuName[8];
-
-extern const char ResFile06Name[8];
-
-extern const char ResFile05Name[8];
-
-extern const char ResFile04Name[8];
-
-extern const char ResFile03Name[8];
-
-extern const char ResFile02Name[8];
-
-extern const char ResFile01Name[8];
-
-extern const char ResFile09Name[8];
-
-extern const char ResFile08Name[8];
-
-extern const char ResFile07Name[8];
-
-extern const char ResSuffix06Name[8];
-
-extern const char ResSuffix05Name[8];
-
-extern const char ResSuffix04Name[8];
-
-extern const char ResFile114Name[8];
-
-extern const char ResEmptyName[8];
-
-extern const char ResFile325Name[8];
-
-extern const char ResFile324Name[8];
-
-extern const char ResFile319Name[8];
-
-extern const char ResFile318Name[8];
-
-extern const char ResFile317Name[8];
-
-extern const char ResFile316Name[8];
-
-extern const char ResFile315Name[8];
-
-extern const char ResFile314Name[8];
-
-extern const char ResFile309Name[8];
-
-extern const char ResFile308Name[8];
-
-extern const char ResFile307Name[8];
-
-extern const char ResFile306Name[8];
-
-extern const char ResFile305Name[8];
-
-extern const char ResFile304Name[8];
-
-extern const char ResFile025Name[8];
-
-extern const char ResFile024Name[8];
-
-extern const char ResFile022Name[8];
-
-extern const char ResFile019Name[8];
-
-extern const char ResFile018Name[8];
-
-extern const char ResFile017Name[8];
-
-extern const char ResFile016Name[8];
-
-extern const char ResFile015Name[8];
-
-extern const char ResFile014Name[8];
-
-extern const char ResFile013Name[8];
-
-extern const char ResFile009Name[8];
-
-extern const char ResFile008Name[8];
-
-extern const char ResFile007Name[8];
-
-extern const char ResFile006Name[8];
-
-extern const char ResFile005Name[8];
-
-extern const char ResFile004Name[8];
-
-extern const char ResFile029Name[8];
-
-extern const char ResFile028Name[8];
-
-extern const char ResFile027Name[8];
-
-extern const char ResFile026Name[8];
-
-extern const char ResFile179Name[8];
-
-extern const char ResFile178Name[8];
-
-extern const char ResFile177Name[8];
-
-extern const char ResFile176Name[8];
-
-extern const char ResFile175Name[8];
-
-extern const char ResFile174Name[8];
-
-extern const char ResFile169Name[8];
-
-extern const char ResFile168Name[8];
-
-extern const char ResFile167Name[8];
-
-extern const char ResFile166Name[8];
-
-extern const char ResFile165Name[8];
-
-extern const char ResFile164Name[8];
-
-extern const char ResFile159Name[8];
-
-extern const char ResFile158Name[8];
-
-extern const char ResFile157Name[8];
-
-extern const char ResFile156Name[8];
-
-extern const char ResFile155Name[8];
-
-extern const char ResFile154Name[8];
-
-extern const char ResFile149Name[8];
-
-extern const char ResFile148Name[8];
-
-extern const char ResFile147Name[8];
-
-extern const char ResFile146Name[8];
-
-extern const char ResFile145Name[8];
-
-extern const char ResFile144Name[8];
-
-extern const char ResFile139Name[8];
-
-extern const char ResFile138Name[8];
-
-extern const char ResFile137Name[8];
-
-extern const char ResFile136Name[8];
-
-extern const char ResFile135Name[8];
-
-extern const char ResFile134Name[8];
-
-extern const char ResFile129Name[8];
-
-extern const char ResFile128Name[8];
-
-extern const char ResFile127Name[8];
-
-extern const char ResFile126Name[8];
-
-extern const char ResFile125Name[8];
-
-extern const char ResFile124Name[8];
-
-extern const char ResFile119Name[8];
-
-extern const char ResFile118Name[8];
-
-extern const char ResFile117Name[8];
-
-extern const char ResFile116Name[8];
-
-extern const char ResFile115Name[8];
-
-extern const char ResFile109Name[8];
-
-extern const char ResFile108Name[8];
-
-extern const char ResFile107Name[8];
-
-extern const char ResFile106Name[8];
-
-extern const char ResFile105Name[8];
-
-extern const char ResFile104Name[8];
-
-extern const char ResFile099Name[8];
-
-extern const char ResFile098Name[8];
-
-extern const char ResFile097Name[8];
-
-extern const char ResFile096Name[8];
-
-extern const char ResFile095Name[8];
-
-extern const char ResFile094Name[8];
-
-extern const char ResFile091Name[8];
-
-extern const char ResFile089Name[8];
-
-extern const char ResFile088Name[8];
-
-extern const char ResFile087Name[8];
-
-extern const char ResFile086Name[8];
-
-extern const char ResFile085Name[8];
-
-extern const char ResFile084Name[8];
-
-extern const char ResFile083Name[8];
-
-extern const char ResFile079Name[8];
-
-extern const char ResFile078Name[8];
-
-extern const char ResFile077Name[8];
-
-extern const char ResFile076Name[8];
-
-extern const char ResFile075Name[8];
-
-extern const char ResFile074Name[8];
-
-extern const char ResFile069Name[8];
-
-extern const char ResFile068Name[8];
-
-extern const char ResFile067Name[8];
-
-extern const char ResFile066Name[8];
-
-extern const char ResFile065Name[8];
-
-extern const char ResFile064Name[8];
-
-extern const char ResFile059Name[8];
-
-extern const char ResFile058Name[8];
-
-extern const char ResFile057Name[8];
-
-extern const char ResFile056Name[8];
-
-extern const char ResFile055Name[8];
-
-extern const char ResFile054Name[8];
-
-extern const char ResFile053Name[8];
-
-extern const char ResFile049Name[8];
-
-extern const char ResFile048Name[8];
-
-extern const char ResFile047Name[8];
-
-extern const char ResFile046Name[8];
-
-extern const char ResFile045Name[8];
-
-extern const char ResFile044Name[8];
-
-extern const char ResFile040Name[8];
-
-extern const char ResFile039Name[8];
-
-extern const char ResFile038Name[8];
-
-extern const char ResFile037Name[8];
-
-extern const char ResFile036Name[8];
-
-extern const char ResFile035Name[8];
-
-extern const char ResFile034Name[8];
-
-extern const char ResFile000Name[8];
-
-extern const char ResAgName[8];
-
-extern const char ResSeparatorName[8];
 
 typedef struct PlayerPadView {
     u8 unmodeled_00[0x28];
@@ -1633,93 +138,857 @@ typedef struct CameraDefinition {
     float yaw;
 } CameraDefinition;
 
+extern PlayerEnemyWork enepc[16];
+extern PlayerLookAtState GameLoopState;
+extern unsigned char SaveData[];
+extern LookAtGameResource GameResource[128];
+extern LookAtPlayerActor actor[64];
+extern PlayerAimMapUnit MapUnit[64];
+extern const char ResShion6HName[16];
+extern const char ResShion5HShion1HName[24];
+extern const char ResShion4HShionHName[24];
+extern const char ResShion3HName[16];
+extern const char ResShion2HName[16];
+extern const char ResShion1HShion5HName[24];
+extern const char ResKosmosH6Name[16];
+extern const char ResKosmosH5Name[16];
+extern const char ResKosmosH4Name[16];
+extern const char ResKosmosH3Name[16];
+extern const char ResKosmosH2Name[16];
+extern const char ResKosmosH1Name[16];
+extern const char ResShitanHName[16];
+extern const char ResKosmosHName[16];
+extern const char ResShionHShion4HName[24];
+extern const char ResShion5Shion1Name[16];
+extern const char ResShion1Shion5Name[16];
+extern const char ResShionChName[16];
+extern const char ResShionShion4Name[16];
+extern const char ResAlbelt3HName[16];
+extern const char ResHammerHHammerName[24];
+extern const char ResTonnyHTonnyName[16];
+extern const char ResGaignunHName[16];
+extern const char ResAndrewHAndrew6Name[24];
+extern const char ResAndrewHAndrew5Name[24];
+extern const char ResAndrewHAndrew4Name[24];
+extern const char ResAndrewHAndrew3Name[24];
+extern const char ResAndrewHAndrew2Name[24];
+extern const char ResAndrewHAndrew1Name[24];
+extern const char ResAndrewHAndrewName[24];
+extern const char ResVirgil3HName[16];
+extern const char ResVirgil1HName[16];
+extern const char ResAlbelt2HName[16];
+extern const char ResVirgil4HName[16];
+extern const char ResVirgil2HName[16];
+extern const char ResKebin1HName[16];
+extern const char ResMatehwsHMatehwsName[24];
+extern const char ResVirgilHName[16];
+extern const char ResAlbeltHName[16];
+extern const char ResMarglisHName[16];
+extern const char ResJoachim1Name[16];
+extern const char ResCecilia1Name[16];
+extern const char ResAndDaugName[16];
+extern const char ResAndWifeName[16];
+extern const char ResMoriyamaName[16];
+extern const char ResStepMamName[16];
+extern const char ResMatehws1Name[16];
+extern const char ResGaignun1Name[16];
+extern const char ResMarglis1Name[16];
+extern const char ResBrealW1Name[16];
+extern const char ResBrealM4Name[16];
+extern const char ResBrealM3Name[16];
+extern const char ResBrealM2Name[16];
+extern const char ResBrealM1Name[16];
+extern const char ResKingCatName[16];
+extern const char ResPilotNoName[16];
+extern const char ResInnGirlName[16];
+extern const char ResBreadChName[16];
+extern const char ResKidswB2Name[16];
+extern const char ResKidswB1Name[16];
+extern const char ResKidswA2Name[16];
+extern const char ResKidswA1Name[16];
+extern const char ResKidsmB2Name[16];
+extern const char ResKidsmB1Name[16];
+extern const char ResKidsmA2Name[16];
+extern const char ResKidsmA1Name[16];
+extern const char ResGrFinalName[16];
+extern const char ResEwpHg01Name[16];
+extern const char ResBossBossPath[16];
+extern const char ResFereFerePath[16];
+extern const char ResFesoFesoPath[16];
+extern const char ResFeroFeroPath[16];
+extern const char ResFemaFemaPath[16];
+extern const char ResUtroUtroPath[16];
+extern const char ResUtsoUtsoPath[16];
+extern const char ResUtreUtrePath[16];
+extern const char ResUtmaUtmaPath[16];
+extern const char ResGunoGunoPath[16];
+extern const char ResMobj000MobjPath[16];
+extern const char ResAobj000AccPath[16];
+extern const char ResMusobjMusPath[16];
+extern const char ResMufobjMufPath[16];
+extern const char ResMuxobjMuxPath[16];
+extern const char ResTreobjTrePath[16];
+extern const char ResMuwobjMuwPath[16];
+extern const char ResMuobjMUPath[16];
+extern const char ResDataSceneItaiPath[24];
+extern const char ResDataSceneYagiPath[24];
+extern const char ResDataSceneSugisawaPath[24];
+extern const char ResDataSceneSatoPath[24];
+extern const char ResDataSceneKeiichiPath[24];
+extern const char ResDataSceneKuramotoPath[24];
+extern const char ResDataSceneYajimaPath[24];
+extern const char ResDataSceneNakaharaPath[24];
+extern const char ResDataSceneNvYonePath[24];
+extern const char ResDataSceneKojiPath[24];
+extern const char ResDataSceneKonishiPath[24];
+extern const char ResDataSceneSakisakoPath[24];
+extern const char ResDataSceneKojimaPath[24];
+extern const char ResDataSceneFujiPath[24];
+extern const char ResDataSceneGashPath[24];
+extern const char ResDataSceneEventPath[24];
+extern const char ResDataSceneCfPath[16];
+extern const char ResDataSceneCheckPath[24];
+extern const char ResDataSceneTestPath[24];
+extern const char ResDataScenePath[16];
+extern const char ResMomo6Name[8];
+extern const char ResMomo5HName[8];
+extern const char ResMomo5Name[8];
+extern const char ResJr1HName[8];
+extern const char ResZiggyHName[8];
+extern const char ResJrHName[8];
+extern const char ResMomoHName[8];
+extern const char ResChaosHName[8];
+extern const char ResShitan2Name[8];
+extern const char ResShitan1Name[8];
+extern const char ResZiggy1Name[8];
+extern const char ResJr3Name[8];
+extern const char ResJr2Name[8];
+extern const char ResJr1Name[8];
+extern const char ResMomo4Name[8];
+extern const char ResMomo3Name[8];
+extern const char ResMomo2Name[8];
+extern const char ResMomo1Name[8];
+extern const char ResChaos2Name[8];
+extern const char ResChaos1Name[8];
+extern const char ResKosmos5Name[8];
+extern const char ResKosmos3Name[8];
+extern const char ResKosmos2Name[8];
+extern const char ResKosmos1Name[8];
+extern const char ResShionName[8];
+extern const char ResShion3Name[8];
+extern const char ResShion2Name[8];
+extern const char ResShitanName[8];
+extern const char ResZiggyName[8];
+extern const char ResMomoName[8];
+extern const char ResChaosName[8];
+extern const char ResKosmosName[8];
+extern const char ResAndrew9Name[8];
+extern const char ResFeb1Name[8];
+extern const char ResAndrew8Name[8];
+extern const char ResAndrew7Name[8];
+extern const char ResAndrew6Name[8];
+extern const char ResAndrew5Name[8];
+extern const char ResEllyHName[8];
+extern const char ResFriedHName[8];
+extern const char ResKebinHName[8];
+extern const char ResAllenHName[8];
+extern const char ResCath1Name[8];
+extern const char ResChiefName[8];
+extern const char ResVanName[8];
+extern const char ResElly2Name[8];
+extern const char ResKJoachName[8];
+extern const char ResShalronName[8];
+extern const char ResHynlinName[8];
+extern const char ResTogashiName[8];
+extern const char ResPelegriName[8];
+extern const char ResShiMamName[8];
+extern const char ResShiDadName[8];
+extern const char ResCathName[8];
+extern const char ResCeciliaName[8];
+extern const char ResLapisName[8];
+extern const char ResMiyukiName[8];
+extern const char ResVoyagerName[8];
+extern const char ResHelmerName[8];
+extern const char ResAbelName[8];
+extern const char ResShelleyName[8];
+extern const char ResMaryName[8];
+extern const char ResSellersName[8];
+extern const char ResJoachimName[8];
+extern const char ResYuriName[8];
+extern const char ResFebName[8];
+extern const char ResAndrew4Name[8];
+extern const char ResAndrew3Name[8];
+extern const char ResAndrew2Name[8];
+extern const char ResAndrew1Name[8];
+extern const char ResAndrewName[8];
+extern const char ResHammerName[8];
+extern const char ResTonnyName[8];
+extern const char ResMatehwsName[8];
+extern const char ResEllyName[8];
+extern const char ResFriedName[8];
+extern const char ResVirgil4Name[8];
+extern const char ResVirgil3Name[8];
+extern const char ResVirgil2Name[8];
+extern const char ResVirgil1Name[8];
+extern const char ResVirgilName[8];
+extern const char ResKebin2Name[8];
+extern const char ResKebin1Name[8];
+extern const char ResKebinName[8];
+extern const char ResAllen1Name[8];
+extern const char ResAllenName[8];
+extern const char ResAlbelt1Name[8];
+extern const char ResAlbeltName[8];
+extern const char ResGaignunName[8];
+extern const char ResMarglisName[8];
+extern const char ResBrealWName[8];
+extern const char ResBrealMName[8];
+extern const char ResEsoldName[8];
+extern const char ResRwW2Name[8];
+extern const char ResRwW1Name[8];
+extern const char ResRwWName[8];
+extern const char ResRwM2Name[8];
+extern const char ResRwM1Name[8];
+extern const char ResRwMName[8];
+extern const char ResSuukiName[8];
+extern const char ResEngOffName[8];
+extern const char ResEngName[8];
+extern const char ResSoldName[8];
+extern const char ResPilotName[8];
+extern const char ResOffW1Name[8];
+extern const char ResOffWName[8];
+extern const char ResOffM3Name[8];
+extern const char ResOffM2Name[8];
+extern const char ResOffM1Name[8];
+extern const char ResOffMName[8];
+extern const char ResVecW1Name[8];
+extern const char ResVecWName[8];
+extern const char ResVecM2Name[8];
+extern const char ResVecM1Name[8];
+extern const char ResVecMName[8];
+extern const char ResSpaceName[8];
+extern const char ResUSoldsName[8];
+extern const char ResRealW2Name[8];
+extern const char ResRealW1Name[8];
+extern const char ResRealWName[8];
+extern const char ResRealM2Name[8];
+extern const char ResRealM1Name[8];
+extern const char ResRealMName[8];
+extern const char ResUSpaceName[8];
+extern const char ResUSoldName[8];
+extern const char ResGoveW2Name[8];
+extern const char ResGoveW1Name[8];
+extern const char ResGoveWName[8];
+extern const char ResCommi5Name[8];
+extern const char ResCommi4Name[8];
+extern const char ResCommi3Name[8];
+extern const char ResCommi2Name[8];
+extern const char ResCommi1Name[8];
+extern const char ResCommiName[8];
+extern const char ResAssM4Name[8];
+extern const char ResAssM3Name[8];
+extern const char ResKanchoName[8];
+extern const char ResGoveM2Name[8];
+extern const char ResGoveM1Name[8];
+extern const char ResGoveMName[8];
+extern const char ResAssWName[8];
+extern const char ResAssM2Name[8];
+extern const char ResAssM1Name[8];
+extern const char ResAssMName[8];
+extern const char ResHyakuName[8];
+extern const char ResDu2Name[8];
+extern const char ResDu1Name[8];
+extern const char ResPolWName[8];
+extern const char ResPolMName[8];
+extern const char ResUticW2Name[8];
+extern const char ResUticW1Name[8];
+extern const char ResUticWName[8];
+extern const char ResUticM2Name[8];
+extern const char ResUticM1Name[8];
+extern const char ResUticMName[8];
+extern const char ResContName[8];
+extern const char ResEngOjiName[8];
+extern const char ResScotName[8];
+extern const char ResInnOjiName[8];
+extern const char ResSpyName[8];
+extern const char ResBartenName[8];
+extern const char ResGoroName[8];
+extern const char ResMouthName[8];
+extern const char ResCleObaName[8];
+extern const char ResKingName[8];
+extern const char ResRobotName[8];
+extern const char ResCleChName[8];
+extern const char ResNurseName[8];
+extern const char ResDoctorName[8];
+extern const char ResBarMName[8];
+extern const char ResBarOjiName[8];
+extern const char ResBreadName[8];
+extern const char ResGirlB2Name[8];
+extern const char ResGirlB1Name[8];
+extern const char ResGirlBName[8];
+extern const char ResGirlA2Name[8];
+extern const char ResGirlA1Name[8];
+extern const char ResGirlAName[8];
+extern const char ResKidswBName[8];
+extern const char ResKidswAName[8];
+extern const char ResBabaB2Name[8];
+extern const char ResBabaB1Name[8];
+extern const char ResBabaBName[8];
+extern const char ResBabaA2Name[8];
+extern const char ResBabaA1Name[8];
+extern const char ResBabaAName[8];
+extern const char ResObaB2Name[8];
+extern const char ResObaB1Name[8];
+extern const char ResObaBName[8];
+extern const char ResObaA2Name[8];
+extern const char ResObaA1Name[8];
+extern const char ResObaAName[8];
+extern const char ResWmanB2Name[8];
+extern const char ResWmanB1Name[8];
+extern const char ResWmanBName[8];
+extern const char ResWmanA2Name[8];
+extern const char ResWmanA1Name[8];
+extern const char ResWmanAName[8];
+extern const char ResBoyB2Name[8];
+extern const char ResBoyB1Name[8];
+extern const char ResBoyBName[8];
+extern const char ResBoyA2Name[8];
+extern const char ResBoyA1Name[8];
+extern const char ResBoyAName[8];
+extern const char ResKidsmBName[8];
+extern const char ResKidsmAName[8];
+extern const char ResJijiB2Name[8];
+extern const char ResJijiB1Name[8];
+extern const char ResJijiBName[8];
+extern const char ResJijiA2Name[8];
+extern const char ResJijiA1Name[8];
+extern const char ResJijiAName[8];
+extern const char ResOjiB2Name[8];
+extern const char ResOjiB1Name[8];
+extern const char ResOjiBName[8];
+extern const char ResOjiA2Name[8];
+extern const char ResOjiA1Name[8];
+extern const char ResOjiAName[8];
+extern const char ResManB2Name[8];
+extern const char ResManB1Name[8];
+extern const char ResManBName[8];
+extern const char ResManA2Name[8];
+extern const char ResManA1Name[8];
+extern const char ResManAName[8];
+extern const char ResFile02HoName[8];
+extern const char ResFile01Ho2Name[8];
+extern const char ResFile01HoName[8];
+extern const char ResFile01CvName[8];
+extern const char ResSuffix03Name[8];
+extern const char ResSuffix02Name[8];
+extern const char ResSuffix01Name[8];
+extern const char ResGrLegName[8];
+extern const char ResGrBodyName[8];
+extern const char ResGrHandName[8];
+extern const char ResGrHeadName[8];
+extern const char ResUkunSName[8];
+extern const char ResUkunBName[8];
+extern const char ResTs01Name[8];
+extern const char ResVx1MName[8];
+extern const char ResUknGName[8];
+extern const char ResBw04Name[8];
+extern const char ResBw03Name[8];
+extern const char ResBw02Name[8];
+extern const char ResBw01Name[8];
+extern const char ResHw06Name[8];
+extern const char ResHw05Name[8];
+extern const char ResHw04Name[8];
+extern const char ResHw03Name[8];
+extern const char ResHw02Name[8];
+extern const char ResHw01Name[8];
+extern const char ResRd17Name[8];
+extern const char ResRd16Name[8];
+extern const char ResRd15Name[8];
+extern const char ResRd14Name[8];
+extern const char ResRd13Name[8];
+extern const char ResRd12Name[8];
+extern const char ResRd11Name[8];
+extern const char ResRd10Name[8];
+extern const char ResRd09Name[8];
+extern const char ResRd08Name[8];
+extern const char ResRd07Name[8];
+extern const char ResRd06Name[8];
+extern const char ResRd05Name[8];
+extern const char ResRd04Name[8];
+extern const char ResRd03Name[8];
+extern const char ResRd02Name[8];
+extern const char ResRd01Name[8];
+extern const char ResSw01Name[8];
+extern const char ResJrHg08Name[8];
+extern const char ResJrHg07Name[8];
+extern const char ResJrHg06Name[8];
+extern const char ResGun05Name[8];
+extern const char ResGun04Name[8];
+extern const char ResGun03Name[8];
+extern const char ResGun02Name[8];
+extern const char ResGun01Name[8];
+extern const char ResSw05Name[8];
+extern const char ResSw04Name[8];
+extern const char ResSw03Name[8];
+extern const char ResSw02Name[8];
+extern const char ResMboxName[8];
+extern const char ResMsp02RName[8];
+extern const char ResHb00RName[8];
+extern const char ResGlg00RName[8];
+extern const char ResDeff00Name[8];
+extern const char ResSol00Name[8];
+extern const char ResWire00Name[8];
+extern const char ResSmp01Name[8];
+extern const char ResEcm02Name[8];
+extern const char ResEcm01Name[8];
+extern const char ResEad00Name[8];
+extern const char ResBw00Name[8];
+extern const char ResBbc00Name[8];
+extern const char ResVsd00Name[8];
+extern const char ResFsd00Name[8];
+extern const char ResShb00Name[8];
+extern const char ResMsp03Name[8];
+extern const char ResMsp01Name[8];
+extern const char ResAmp02Name[8];
+extern const char ResLgc00Name[8];
+extern const char ResBp00Name[8];
+extern const char ResEac00Name[8];
+extern const char ResCb00Name[8];
+extern const char ResBl00Name[8];
+extern const char ResMsp02Name[8];
+extern const char ResMsp00Name[8];
+extern const char ResHb00Name[8];
+extern const char ResGlg00Name[8];
+extern const char ResGnd00Name[8];
+extern const char ResFl00Name[8];
+extern const char ResPbk00Name[8];
+extern const char ResLsr00Name[8];
+extern const char ResDrl01Name[8];
+extern const char ResDrl00Name[8];
+extern const char ResBs00Name[8];
+extern const char ResBam00Name[8];
+extern const char ResRf02Name[8];
+extern const char ResRf01Name[8];
+extern const char ResRf00Name[8];
+extern const char ResMg01Name[8];
+extern const char ResMg00Name[8];
+extern const char ResHmr02Name[8];
+extern const char ResDlc00Name[8];
+extern const char ResHmr00Name[8];
+extern const char ResHg01Name[8];
+extern const char ResHg00Name[8];
+extern const char ResWct00Name[8];
+extern const char ResBd01Name[8];
+extern const char ResBd00Name[8];
+extern const char ResAx00Name[8];
+extern const char ResAcc036Name[8];
+extern const char ResAcc035Name[8];
+extern const char ResAcc034Name[8];
+extern const char ResAcc033Name[8];
+extern const char ResAcc032Name[8];
+extern const char ResAcc031Name[8];
+extern const char ResAcc030Name[8];
+extern const char ResAcc029Name[8];
+extern const char ResAcc028Name[8];
+extern const char ResAcc018Name[8];
+extern const char ResWingName[8];
+extern const char ResFile323Name[8];
+extern const char ResFile322Name[8];
+extern const char ResFile321Name[8];
+extern const char ResFile320Name[8];
+extern const char ResFile313Name[8];
+extern const char ResFile312Name[8];
+extern const char ResFile311Name[8];
+extern const char ResFile310Name[8];
+extern const char ResFile303Name[8];
+extern const char ResFile302Name[8];
+extern const char ResFile301Name[8];
+extern const char ResFile023Name[8];
+extern const char ResFile021Name[8];
+extern const char ResFile020Name[8];
+extern const char ResFile012Name[8];
+extern const char ResFile011Name[8];
+extern const char ResFile010Name[8];
+extern const char ResFile003Name[8];
+extern const char ResFile002Name[8];
+extern const char ResFile001Name[8];
+extern const char ResFile033Name[8];
+extern const char ResFile032Name[8];
+extern const char ResFile031Name[8];
+extern const char ResFile030Name[8];
+extern const char ResFile180Name[8];
+extern const char ResFile173Name[8];
+extern const char ResFile172Name[8];
+extern const char ResFile171Name[8];
+extern const char ResFile170Name[8];
+extern const char ResFile163Name[8];
+extern const char ResFile162Name[8];
+extern const char ResFile161Name[8];
+extern const char ResFile160Name[8];
+extern const char ResFile153Name[8];
+extern const char ResFile152Name[8];
+extern const char ResFile151Name[8];
+extern const char ResFile150Name[8];
+extern const char ResFile143Name[8];
+extern const char ResFile142Name[8];
+extern const char ResFile141Name[8];
+extern const char ResFile140Name[8];
+extern const char ResFile133Name[8];
+extern const char ResFile132Name[8];
+extern const char ResFile131Name[8];
+extern const char ResFile130Name[8];
+extern const char ResFile123Name[8];
+extern const char ResFile122Name[8];
+extern const char ResFile121Name[8];
+extern const char ResFile120Name[8];
+extern const char ResFile113Name[8];
+extern const char ResFile112Name[8];
+extern const char ResFile111Name[8];
+extern const char ResFile110Name[8];
+extern const char ResFile103Name[8];
+extern const char ResFile102Name[8];
+extern const char ResFile101Name[8];
+extern const char ResFile100Name[8];
+extern const char ResFile093Name[8];
+extern const char ResFile092Name[8];
+extern const char ResFile090Name[8];
+extern const char ResFile082Name[8];
+extern const char ResFile081Name[8];
+extern const char ResFile080Name[8];
+extern const char ResFile073Name[8];
+extern const char ResFile072Name[8];
+extern const char ResFile071Name[8];
+extern const char ResFile070Name[8];
+extern const char ResFile063Name[8];
+extern const char ResFile062Name[8];
+extern const char ResFile061Name[8];
+extern const char ResFile060Name[8];
+extern const char ResFile052Name[8];
+extern const char ResFile051Name[8];
+extern const char ResFile050Name[8];
+extern const char ResFile043Name[8];
+extern const char ResFile042Name[8];
+extern const char ResFile041Name[8];
+extern const char ResCitiPath[8];
+extern const char ResPplPath[8];
+extern const char ResNpcPath[8];
+extern const char ResPcPath[8];
+extern const char ResEtcPath[8];
+extern const char ResAgAgPath[8];
+extern const char ResVxVxPath[8];
+extern const char ResVxName[8];
+extern const char ResPcChoPath[8];
+extern const char ResChoName[8];
+extern const char ResEnemyPath[8];
+extern const char ResRoboPath[8];
+extern const char ResPcSonPath[8];
+extern const char ResSonName[8];
+extern const char ResPcStnPath[8];
+extern const char ResStnName[8];
+extern const char ResPcJrPath[8];
+extern const char ResJrPrefixName[8];
+extern const char ResPcZigPath[8];
+extern const char ResZigName[8];
+extern const char ResPcMmoPath[8];
+extern const char ResMmoName[8];
+extern const char ResPcKosPath[8];
+extern const char ResKosName[8];
+extern const char ResBossName[8];
+extern const char ResFereName[8];
+extern const char ResFesoName[8];
+extern const char ResFeroName[8];
+extern const char ResFemaName[8];
+extern const char ResUtroName[8];
+extern const char ResUtsoName[8];
+extern const char ResUtreName[8];
+extern const char ResUtmaName[8];
+extern const char ResGunoName[8];
+extern const char ResMusName[8];
+extern const char ResMufName[8];
+extern const char ResMuxName[8];
+extern const char ResTreName[8];
+extern const char ResMuwName[8];
+extern const char ResMuName[8];
+extern const char ResAidName[8];
+extern const char ResObjPath[8];
+extern const char ResMidName[8];
+extern const char ResEidName[8];
+extern const char ResWeaponPath[8];
+extern const char ResWidName[8];
+extern const char ResRidName[8];
+extern const char ResCharPath[8];
+extern const char ResCidName[8];
+extern const char ResJr4Name[8];
+extern const char ResJrName[8];
+extern const char ResDuName[8];
+extern const char ResFile06Name[8];
+extern const char ResFile05Name[8];
+extern const char ResFile04Name[8];
+extern const char ResFile03Name[8];
+extern const char ResFile02Name[8];
+extern const char ResFile01Name[8];
+extern const char ResFile09Name[8];
+extern const char ResFile08Name[8];
+extern const char ResFile07Name[8];
+extern const char ResSuffix06Name[8];
+extern const char ResSuffix05Name[8];
+extern const char ResSuffix04Name[8];
+extern const char ResFile114Name[8];
+extern const char ResEmptyName[8];
+extern const char ResFile325Name[8];
+extern const char ResFile324Name[8];
+extern const char ResFile319Name[8];
+extern const char ResFile318Name[8];
+extern const char ResFile317Name[8];
+extern const char ResFile316Name[8];
+extern const char ResFile315Name[8];
+extern const char ResFile314Name[8];
+extern const char ResFile309Name[8];
+extern const char ResFile308Name[8];
+extern const char ResFile307Name[8];
+extern const char ResFile306Name[8];
+extern const char ResFile305Name[8];
+extern const char ResFile304Name[8];
+extern const char ResFile025Name[8];
+extern const char ResFile024Name[8];
+extern const char ResFile022Name[8];
+extern const char ResFile019Name[8];
+extern const char ResFile018Name[8];
+extern const char ResFile017Name[8];
+extern const char ResFile016Name[8];
+extern const char ResFile015Name[8];
+extern const char ResFile014Name[8];
+extern const char ResFile013Name[8];
+extern const char ResFile009Name[8];
+extern const char ResFile008Name[8];
+extern const char ResFile007Name[8];
+extern const char ResFile006Name[8];
+extern const char ResFile005Name[8];
+extern const char ResFile004Name[8];
+extern const char ResFile029Name[8];
+extern const char ResFile028Name[8];
+extern const char ResFile027Name[8];
+extern const char ResFile026Name[8];
+extern const char ResFile179Name[8];
+extern const char ResFile178Name[8];
+extern const char ResFile177Name[8];
+extern const char ResFile176Name[8];
+extern const char ResFile175Name[8];
+extern const char ResFile174Name[8];
+extern const char ResFile169Name[8];
+extern const char ResFile168Name[8];
+extern const char ResFile167Name[8];
+extern const char ResFile166Name[8];
+extern const char ResFile165Name[8];
+extern const char ResFile164Name[8];
+extern const char ResFile159Name[8];
+extern const char ResFile158Name[8];
+extern const char ResFile157Name[8];
+extern const char ResFile156Name[8];
+extern const char ResFile155Name[8];
+extern const char ResFile154Name[8];
+extern const char ResFile149Name[8];
+extern const char ResFile148Name[8];
+extern const char ResFile147Name[8];
+extern const char ResFile146Name[8];
+extern const char ResFile145Name[8];
+extern const char ResFile144Name[8];
+extern const char ResFile139Name[8];
+extern const char ResFile138Name[8];
+extern const char ResFile137Name[8];
+extern const char ResFile136Name[8];
+extern const char ResFile135Name[8];
+extern const char ResFile134Name[8];
+extern const char ResFile129Name[8];
+extern const char ResFile128Name[8];
+extern const char ResFile127Name[8];
+extern const char ResFile126Name[8];
+extern const char ResFile125Name[8];
+extern const char ResFile124Name[8];
+extern const char ResFile119Name[8];
+extern const char ResFile118Name[8];
+extern const char ResFile117Name[8];
+extern const char ResFile116Name[8];
+extern const char ResFile115Name[8];
+extern const char ResFile109Name[8];
+extern const char ResFile108Name[8];
+extern const char ResFile107Name[8];
+extern const char ResFile106Name[8];
+extern const char ResFile105Name[8];
+extern const char ResFile104Name[8];
+extern const char ResFile099Name[8];
+extern const char ResFile098Name[8];
+extern const char ResFile097Name[8];
+extern const char ResFile096Name[8];
+extern const char ResFile095Name[8];
+extern const char ResFile094Name[8];
+extern const char ResFile091Name[8];
+extern const char ResFile089Name[8];
+extern const char ResFile088Name[8];
+extern const char ResFile087Name[8];
+extern const char ResFile086Name[8];
+extern const char ResFile085Name[8];
+extern const char ResFile084Name[8];
+extern const char ResFile083Name[8];
+extern const char ResFile079Name[8];
+extern const char ResFile078Name[8];
+extern const char ResFile077Name[8];
+extern const char ResFile076Name[8];
+extern const char ResFile075Name[8];
+extern const char ResFile074Name[8];
+extern const char ResFile069Name[8];
+extern const char ResFile068Name[8];
+extern const char ResFile067Name[8];
+extern const char ResFile066Name[8];
+extern const char ResFile065Name[8];
+extern const char ResFile064Name[8];
+extern const char ResFile059Name[8];
+extern const char ResFile058Name[8];
+extern const char ResFile057Name[8];
+extern const char ResFile056Name[8];
+extern const char ResFile055Name[8];
+extern const char ResFile054Name[8];
+extern const char ResFile053Name[8];
+extern const char ResFile049Name[8];
+extern const char ResFile048Name[8];
+extern const char ResFile047Name[8];
+extern const char ResFile046Name[8];
+extern const char ResFile045Name[8];
+extern const char ResFile044Name[8];
+extern const char ResFile040Name[8];
+extern const char ResFile039Name[8];
+extern const char ResFile038Name[8];
+extern const char ResFile037Name[8];
+extern const char ResFile036Name[8];
+extern const char ResFile035Name[8];
+extern const char ResFile034Name[8];
+extern const char ResFile000Name[8];
+extern const char ResAgName[8];
+extern const char ResSeparatorName[8];
 extern PlayerPadView PadData;
-
 extern CameraDefinition CfCameraDefine;
-
 extern Vector4 EnemyTarget;
-
 extern short EfTab_Code[15];
-
 extern short EfTab_Intr[15];
-
 extern short EfTab_Loop[15];
+extern const char ResGuno307Name[16];
+extern const char ResGuno325Name[16];
+extern const char ResGuno324Name[16];
+extern const char ResGuno323Name[16];
+extern const char ResGuno305Name[16];
+extern const char ResGuno304Name[16];
+extern const char ResGuno303Name[16];
+extern const char ResGuno302Name[16];
+extern const char ResGuno301Name[16];
+extern const char ResGuno001CfName[16];
+extern const char ResYoungwCfName[16];
+extern const char ResYoungmCfName[16];
+extern const char ResWomanCfName[16];
+extern const char ResSoldiermCfName[16];
+extern const char ResSoldierwCfName[16];
+extern const char ResMiddlewCfName[16];
+extern const char ResMiddlemCfName[16];
+extern const char ResAllenCfName[16];
+extern const char ResShitanCfName[16];
+extern const char ResZiggyCfName[16];
+extern const char ResChaosCfName[16];
+extern const char ResKosmosCfName[16];
+extern const char ResShionCfName[16];
+extern const char ResOldmCfName[8];
+extern const char ResOldwCfName[8];
+extern const char ResJrCfName[8];
+extern const char ResMomoCfName[8];
+extern const char ResSaveName[8];
+extern const char ResDiskName[8];
+extern const char ResNpcseName[8];
+extern const char ResEneseName[8];
+extern const char ResMpeg2Name[8];
+extern const char ResLoadsmdName[8];
+extern const char ResLoadseName[8];
+extern const char ResDummyName[8];
+extern const char ResPlayerName[8];
+extern const char ResScriptName[8];
+extern const char ResLoadeneName[8];
+extern const char ResLoadtexName[8];
+extern const char ResLoadmotName[8];
+extern const char ResLoadactName[8];
+extern const char ResLoadmapName[8];
+extern const char ResResetName[8];
+extern const char ResZ8Name[8];
+extern const char ResJRName[8];
+extern const char ResMOName[8];
+extern const char ResCSName[8];
+extern const char ResKMName[8];
+extern const char ResSOName[8];
 
+void GameCfPlayerLoadResource(int use_cache);
+void *GameResourceAlloc(int size);
+void *GameResourceGetFreeAddr(void);
+void RES_GetLeaderSeName(char *name);
+char *RES_GetMotBaseName(int id);
+void RES_GetMdlFileName(char *name, int id);
+int xglCdReadFile(const char *name, void *address, int size, int arg);
+void xglSoundSendEffect(void *first, void *second, int id);
+void xglSoundLoadEffect(const char *name, void *address, int id);
+int xglFlagsGet(int flag, int value);
+void ACT_setModelWrapper(LookAtPlayerActor *player_actor, int mode);
+void ACT_setHumanHand(LookAtPlayerActor *player_actor, int mode);
+int Get_MostNear_Actor(LookAtPlayerActor *player_actor);
+void Actor_LookAt_Set(LookAtPlayerActor *player_actor, int mode, Vector4 *target);
+void Actor_LookAt_Release(LookAtPlayerActor *player_actor, int mode);
+void Actor_LookAt(LookAtPlayerActor *player_actor);
+void PlayerLookAtAim(void);
+extern int F2I(float value);
 int Check_EnemyBurn(void);
-
 int Check_EnemyElec(void);
-
 int Check_EnemyFound(void);
-
 int xglSoundEffectCheckID(int id, int arg);
-
 void xglSoundEffectStopID(int id, int arg);
-
 void sefDeleteEffectCf(void *effect);
-
 PlayerEffect *sefCreateEffectCf(int code, int a, int b);
-
 int Ladder_Main(LookAtPlayerActor *player_actor);
-
 int SCRIPT_getCfTime(void);
-
 float I2F(int value);
-
 float atan2f(float y, float x);
-
 float floorf(float value);
-
 float xglSin(float angle);
-
 void xglMatrixStackRotY(float angle);
-
 float xglCos(float angle);
-
 int Get_Attr(const Vector4 *position, int map_index, int attr_mask);
-
 int Get_EffectCode(int attribute);
-
 void ACT_setMotion2(LookAtPlayerActor *player_actor, int motion, int blend);
-
 void Enemy_FindByEar(LookAtPlayerActor *player_actor, const Vector4 *position);
-
 void HitCheckMapUnitWithNyuru(LookAtPlayerActor *player_actor);
-
 static short HitCheckActor(LookAtPlayerActor *player_actor);
-
 static int NyuruActor(LookAtPlayerActor *player_actor, LookAtPlayerActor *other);
-
 float UnduCheck(const Vector4 *position, void *velocity, ActorUndulation *undulation);
-
 int HitCheckMapUnit(LookAtPlayerActor *player_actor);
-
 float Get_Cursol_by_Reduce_Speed_Angle_Loop(float cursor, float target, float rate);
-
 void ShootMapUnit(void);
-
 void ACT_updateMotion(LookAtPlayerActor *player_actor);
-
 void GameIdLightSet(LookAtPlayerActor *player_actor, int arg);
-
 void Set_Shadow(LookAtPlayerActor *player_actor);
-
 void Get_EnemyIDPos(const Vector4 *position, Vector4 *target);
-
 void Check_Locater(LookAtPlayerActor *player_actor);
-
-#include "main/get.h"
-
 int CheckActorExist(LookAtPlayerActor *target);
-
 float Get_Angle(const Point4 *first, const Point4 *second);
+void Actor_LookAt_Init(LookAtPlayerActor *player_actor);
+extern void UnduParamInit(void *undulation);
 
-/* HitCheckActor's minimum collision radius and maximum vertical separation
- * thresholds. These literal-pool values are read once for each actor scan. */
-#define HIT_CHECK_MIN_BODY_RADIUS (0.0099999997764825821f)
+/* Player-movement speed thresholds and vector scaling rate GameCfPlayerMove
+ * compares/applies each frame; GameCfPlayerMoveInit restores their defaults. */
+static int WALK_THRESHOLD_I;
 
-#define HIT_CHECK_MAX_HEIGHT_DIFFERENCE (1.8999999761581421f)
+static float WALK_THRESHOLD_F;
 
-#define NYURU_REACH_MARGIN (0.0099999997764825821f)
+static int RUN_THRESHOLD_I;
+
+static float RUN_THRESHOLD_F;
+
+static float VECTOR_RATE;
+
+static u16 GameCfPlayerLoadResource_preCID;
+
+static u8 GameCfPlayerLoadResource_preCurry;
 
 void LookAt_Player(LookAtPlayerActor *player_actor)
 {
@@ -1751,9 +1020,6 @@ void LookAt_Player(LookAtPlayerActor *player_actor)
     }
     Actor_LookAt_Release(player_actor, 1);
 }
-
-void Actor_LookAt_Init(LookAtPlayerActor *player_actor);
-extern void UnduParamInit(void *undulation);
 
 void Player_System_Init(LookAtPlayerActor *player_actor)
 {
@@ -2132,10 +1398,6 @@ void PlayerLookAtAim(void)
     Actor_LookAt(player_actor);
 }
 
-static u16 GameCfPlayerLoadResource_preCID;
-
-static u8 GameCfPlayerLoadResource_preCurry;
-
 void GameCfPlayerLoadResource(int use_cache)
 {
     char path[256];
@@ -2229,104 +1491,7 @@ void GameCfPlayerLoadResource(int use_cache)
     ACT_setHumanHand(player, 0);
 }
 
-extern const char ResGuno307Name[16];
-
-extern const char ResGuno325Name[16];
-
-extern const char ResGuno324Name[16];
-
-extern const char ResGuno323Name[16];
-
-extern const char ResGuno305Name[16];
-
-extern const char ResGuno304Name[16];
-
-extern const char ResGuno303Name[16];
-
-extern const char ResGuno302Name[16];
-
-extern const char ResGuno301Name[16];
-
-extern const char ResGuno001CfName[16];
-
-extern const char ResYoungwCfName[16];
-
-extern const char ResYoungmCfName[16];
-
-extern const char ResWomanCfName[16];
-
-extern const char ResSoldiermCfName[16];
-
-extern const char ResSoldierwCfName[16];
-
-extern const char ResMiddlewCfName[16];
-
-extern const char ResMiddlemCfName[16];
-
-extern const char ResAllenCfName[16];
-
-extern const char ResShitanCfName[16];
-
-extern const char ResZiggyCfName[16];
-
-extern const char ResChaosCfName[16];
-
-extern const char ResKosmosCfName[16];
-
-extern const char ResShionCfName[16];
-
-extern const char ResOldmCfName[8];
-
-extern const char ResOldwCfName[8];
-
-extern const char ResJrCfName[8];
-
-extern const char ResMomoCfName[8];
-
-extern const char ResSaveName[8];
-
-extern const char ResDiskName[8];
-
-extern const char ResNpcseName[8];
-
-extern const char ResEneseName[8];
-
-extern const char ResMpeg2Name[8];
-
-extern const char ResLoadsmdName[8];
-
-extern const char ResLoadseName[8];
-
-extern const char ResDummyName[8];
-
-extern const char ResPlayerName[8];
-
-extern const char ResScriptName[8];
-
-extern const char ResLoadeneName[8];
-
-extern const char ResLoadtexName[8];
-
-extern const char ResLoadmotName[8];
-
-extern const char ResLoadactName[8];
-
-extern const char ResLoadmapName[8];
-
-extern const char ResResetName[8];
-
-extern const char ResZ8Name[8];
-
-extern const char ResJRName[8];
-
-extern const char ResMOName[8];
-
-extern const char ResCSName[8];
-
-extern const char ResKMName[8];
-
-extern const char ResSOName[8];
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char ResShion6HName[16] = "shion6_h";
 
 const char ResShion5HShion1HName[24] = "+shion5_h,shion1_h";

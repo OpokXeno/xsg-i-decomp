@@ -1,6 +1,8 @@
 #include "common.h"
-
 #include "ssd_4.h"
+
+/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
+#define RSSD_FLAG_SUCCESS 0x20
 
 typedef struct RssdRpcResponse {
     short error_code;              /* +0x00: negative -> per-command error */
@@ -126,11 +128,6 @@ typedef struct RssdWorkFlags {
     void *stream_end_callback_arg;        /* +0x1fc: SsdSetStreamEndCallback arg1 */
 } RssdWorkFlags;
 
-/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
-extern RssdWorkFlags RssdWork;
-
 /*
  * One argument word of an RSSD request. Most commands pass plain integers;
  * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence
@@ -165,71 +162,6 @@ typedef struct RssdRequest {
 } RssdRequest;
 
 /*
- * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
- * `request` may be null, otherwise it is copied as above, and `size` bytes
- * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
- * Returns -1 when the rounded payload exceeds the buffer, otherwise the
- * sceSifCallRpc result.
- */
-
-/*
- * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
- * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
- * result, else flag bit 5) through the registered one-shot completion
- * callback, then signals the waiting thread's semaphore.
- *
- * It runs from the SIF RPC interrupt context, so it ends with the
- * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
- * orders every earlier load/store, including the iSignalSema effects, before
- * `ei` re-enables interrupts on the way out.
- */
-
-/*
- * libkernel syscall stubs (main:0x00208fe0 / main:0x00209028).
- */
-
-extern int DIntr(void);
-
-extern int EIntr(void);
-
-/*
- * iSsdNewMemoryPtr is this TU's own low-address block allocator (its body is
- * still scaffold below, main:0x00242150). `tag` is stored verbatim at +0xc of
- * the returned block's header; nothing recovered in this TU reads it back.
- */
-
-extern void *iSsdNewMemoryPtr(int size, int tag);
-
-/*
- * iSsdNewMemoryPtr2 is this TU's own high-address block allocator (its body
- * is still scaffold below, main:0x00242278); same header convention as
- * iSsdNewMemoryPtr.
- */
-
-extern void *iSsdNewMemoryPtr2(int size, int tag);
-
-/*
- * iSsdDisposeMemoryPtr is this TU's own block-release routine (its body is
- * still scaffold below, main:0x002423b0): `ptr` minus the fixed 0x40-byte
- * header size is the block header, returned to the free list.
- */
-
-extern void iSsdDisposeMemoryPtr(void *ptr);
-
-/*
- * Returns the payload size recorded in a sound-memory allocation header:
- * `ptr` minus one SsdMemoryBlock header is the header itself (same
- * convention as SsdDisposeMemoryPtr above), and `end` is the absolute
- * address just past the payload.
- */
-
-/*
- * libkernel syscall stubs (main:0x00208fe0 / main:0x00209028).
- */
-
-void SsdClearMemory(void *buffer, int size);
-
-/*
  * View of the sentinel node SsdInitMemoryManager writes at the arena start:
  * the same 0x40-byte node as SsdMemoryBlock. Here  is only cleared as
  * a word and  holds an address (the first byte after the node).
@@ -243,6 +175,56 @@ typedef struct SsdMemoryNode {
     int tag;                            /* +0x0c */
     unsigned char _unmodeled_10[0x30];  /* +0x10..0x3f */
 } SsdMemoryNode;
+
+extern RssdWorkFlags RssdWork;
+
+/*
+ * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
+ * `request` may be null, otherwise it is copied as above, and `size` bytes
+ * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
+ * Returns -1 when the rounded payload exceeds the buffer, otherwise the
+ * sceSifCallRpc result.
+ */
+/*
+ * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
+ * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
+ * result, else flag bit 5) through the registered one-shot completion
+ * callback, then signals the waiting thread's semaphore.
+ *
+ * It runs from the SIF RPC interrupt context, so it ends with the
+ * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
+ * orders every earlier load/store, including the iSignalSema effects, before
+ * `ei` re-enables interrupts on the way out.
+ */
+/*
+ * libkernel syscall stubs (main:0x00208fe0 / main:0x00209028).
+ */
+extern int DIntr(void);
+
+extern int EIntr(void);
+
+/*
+ * iSsdNewMemoryPtr is this TU's own low-address block allocator (its body is
+ * still scaffold below, main:0x00242150). `tag` is stored verbatim at +0xc of
+ * the returned block's header; nothing recovered in this TU reads it back.
+ */
+extern void *iSsdNewMemoryPtr(int size, int tag);
+
+/*
+ * iSsdNewMemoryPtr2 is this TU's own high-address block allocator (its body
+ * is still scaffold below, main:0x00242278); same header convention as
+ * iSsdNewMemoryPtr.
+ */
+extern void *iSsdNewMemoryPtr2(int size, int tag);
+
+/*
+ * iSsdDisposeMemoryPtr is this TU's own block-release routine (its body is
+ * still scaffold below, main:0x002423b0): `ptr` minus the fixed 0x40-byte
+ * header size is the block header, returned to the free list.
+ */
+extern void iSsdDisposeMemoryPtr(void *ptr);
+
+void SsdClearMemory(void *buffer, int size);
 
 void SsdInitMemoryManager(int address, int size)
 {
@@ -411,6 +393,12 @@ void iSsdDisposeMemoryPtr(void *ptr)
     previous->next = block->next;
 }
 
+/*
+ * Returns the payload size recorded in a sound-memory allocation header:
+ * `ptr` minus one SsdMemoryBlock header is the header itself (same
+ * convention as SsdDisposeMemoryPtr above), and `end` is the absolute
+ * address just past the payload.
+ */
 int SsdGetBlockMemorySize(void *ptr)
 {
     SsdMemoryBlock *block;

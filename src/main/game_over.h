@@ -6,6 +6,7 @@
 #define SRC_MAIN_GAME_OVER_H
 
 #include "main/xgl_2.h"
+#include "shared.h"
 
 typedef union GameOverDmaPacket4 {
     u64 words[4];
@@ -26,11 +27,6 @@ typedef union GameOverDmaPacket20 {
     u64 words[20];
     XglQuadword quadwords[10];
 } GameOverDmaPacket20;
-
-
-static int copyframe(void);
-
-#include "shared.h"
 
 /* GameLoopState is the global game-loop record. Only the two fields this
  * TU touches are modeled: scene_id at +0x18 (read by GameOver, compared
@@ -66,22 +62,11 @@ typedef struct {
     u8 unmodeled_08[0x18];
 } JpegDecodeRequest;
 
-extern void xglSoundEffectNormalDirect(int effect_id);
-
 extern PadPrefix PadData;
-
-/* The game-over screen: show the game-over image with its stream, then
- * fade picture and stream volume out together. */
-void GameOver(void);
-
 extern const char GameEndImagePath[];
-
 extern const char GameEndQuestion[];
-
 extern const char GameEndSaveQuestion[];
-
 extern const char GameOverImagePath[];
-
 extern const char GameOverStreamPath[];
 
 /* Function-local VIF fade-command scratch packets. GCC's assembler names
@@ -93,28 +78,24 @@ extern GameOverDmaPacket12 TestEnv4;
 
 extern GameOverDmaPacket12 TestEnv5;
 
+static int copyframe(void);
+extern void xglSoundEffectNormalDirect(int effect_id);
+
+/* The game-over screen: show the game-over image with its stream, then
+ * fade picture and stream volume out together. */
+void GameOver(void);
+
 extern int xglJpegDecode(JpegDecodeRequest *request);
-
 extern void xglRenderDrawFlipPk(XglPacket *packet);
-
 static void DrawImage(void *framebuffer);
-
 static void DrawBack(int alpha);
-
 static void redraw_frame(void *framebuffer);
-
 extern void xglStudioMainCameraInit(void);
-
 extern int MenuFileMain(int mode);
-
 extern void FlushCache(int mode);
-
 extern int xglSoundStreamOpenVagStereoParam(int channel, const char *path, int size, int volume);
-
 extern int xglSoundStreamMain(void);
-
 extern void SsdSetVagStreamVolume(int channel, int volume, int pan);
-
 extern void xglSoundStreamStop(int channel);
 
 #endif /* SRC_MAIN_GAME_OVER_H */

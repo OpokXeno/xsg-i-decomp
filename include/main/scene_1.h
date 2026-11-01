@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_SCENE_1_H
 
 #include "shared.h"
-
 #include "main/find_native_method.h"
 #include "main/jni.h"
 

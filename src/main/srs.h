@@ -37,17 +37,13 @@ typedef struct SrsMemRes {
 extern SrsMemRes _srsMemRes;
 
 void srsSetLoadMode(int load_mode);
+int srsGetLoadMode(void);
+char *srsGetEsdData(int index);
+char *srsGetEffectName(int effectNo);
+static int fileLoad(void *buffer, const char *name, int mode);
 
 static int srsLoadMode = 0;
 
-int srsGetLoadMode(void);
-
-char *srsGetEsdData(int index);
-
 static int _nRead;
-
-char *srsGetEffectName(int effectNo);
-
-static int fileLoad(void *buffer, const char *name, int mode);
 
 #endif /* SRC_MAIN_SRS_H */

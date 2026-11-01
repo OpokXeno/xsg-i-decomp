@@ -1,6 +1,43 @@
 #include "common.h"
-
 #include "shared.h"
+
+/*
+ * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
+ * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
+ * src/main/enemy_2.h, src/main/set_motion.h and src/main/db_light_write.h,
+ * which names the same two fields for the same reason). tyaCaptureShadow
+ * only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the in-use id
+ * ACT_create writes and ACT_update skips a slot on when it is zero; the
+ * offsets between them are not evidenced by this TU and stay unmodeled.
+ */
+#define ACTOR_COUNT 64
+
+#define ACTOR_IN_USE_ID_OFFSET 0x86
+
+/*
+ * MapUnit[] entries are game-wide unit records (src/main/init_drill.c,
+ * src/main/init_uwamono_sys.c and src/main/map_create_unit_peer.h keep
+ * their own views of the same array); only the field this TU touches is
+ * named. tyaCaptureUnit reads +0xA4 serial, the same field
+ * src/main/init_uwamono_sys.c's UwamonoCommonUnit and
+ * src/main/init_drill.c's DrillMapUnit name.
+ */
+#define MAP_UNIT_COUNT 64
+
+#define MAP_UNIT_SERIAL_OFFSET 0xA4
+#define SCRATCHPAD ((u8 *)0x70000000)
+#define SPR_COLOR ((u32 *)0x70000070)
+#define SPR_DEPTH ((u32 *)0x70000870)
+#define SPR_RLE ((u8 *)0x70001070)
+#define RGB_MASK 0xFFFFFF
+#define ALPHA_MASK 0xFF000000
+
+/* The GS CSR is a 64-bit MMIO status register. Capture waits for its
+ * FINISH bit, so each iteration must read the hardware again. */
+#define GS_CSR_ADDRESS 0x12001000
+
+#define CAPTURE_WIDTH 512
+#define CAPTURE_HEIGHT 448
 
 typedef struct ActorModelParam {
     float scale;
@@ -18,30 +55,12 @@ typedef struct {
     u64 buffer_select;
 } TyaDisplayEnvironment;
 
-extern TyaDisplayEnvironment DispEnv;
-
 typedef struct {
     u8 unmodeled_00[8];
     u16 depth_base_page;
     u8 unmodeled_0a[0x12 - 0x0A];
     u16 framebuffer_base_page[2];
 } TyaFramebufferState;
-
-extern TyaFramebufferState sRender;
-
-/*
- * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
- * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
- * src/main/enemy_2.h, src/main/set_motion.h and src/main/db_light_write.h,
- * which names the same two fields for the same reason). tyaCaptureShadow
- * only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the in-use id
- * ACT_create writes and ACT_update skips a slot on when it is zero; the
- * offsets between them are not evidenced by this TU and stay unmodeled.
- */
-
-#define ACTOR_COUNT 64
-
-#define ACTOR_IN_USE_ID_OFFSET 0x86
 
 typedef struct {
     u32 flags;
@@ -57,30 +76,6 @@ typedef struct {
     ActorModelParam model;
 } ActorHead;
 
-extern ActorHead actor[ACTOR_COUNT];
-static char * pnum;
-
-/* Defined in src/main/act_3.c (main/tu265). */
-
-void ACT_DrawShadowBegin(void);
-
-void ACT_DrawShadow(ActorHead *unit);
-
-void ACT_DrawShadowEnd(void);
-
-/*
- * MapUnit[] entries are game-wide unit records (src/main/init_drill.c,
- * src/main/init_uwamono_sys.c and src/main/map_create_unit_peer.h keep
- * their own views of the same array); only the field this TU touches is
- * named. tyaCaptureUnit reads +0xA4 serial, the same field
- * src/main/init_uwamono_sys.c's UwamonoCommonUnit and
- * src/main/init_drill.c's DrillMapUnit name.
- */
-
-#define MAP_UNIT_COUNT 64
-
-#define MAP_UNIT_SERIAL_OFFSET 0xA4
-
 typedef struct {
     u8 unmodeled_00[MAP_UNIT_SERIAL_OFFSET];
     short serial;
@@ -88,12 +83,6 @@ typedef struct {
     ActorHead *owner;
     u8 unmodeled_100[0x300 - 0x100];
 } MapUnitHead;
-
-extern MapUnitHead MapUnit[MAP_UNIT_COUNT];
-
-/* Defined in src/main/map_2.c (main/tu269). */
-
-void MAP_drawUnitAt(MapUnitHead *unit);
 
 typedef int (*TyaCaptureCallback)(int);
 
@@ -105,37 +94,6 @@ typedef struct TyaGameLoop {
     int (*captureTask)(int);
 } TyaGameLoop;
 
-extern TyaGameLoop GameLoopState;
-
-extern u8 *WorkEnd;
-
-/* The scene's active capture layer, compared against each array's base. */
-
-int sceGsSyncPath(int mode, int timeout);
-
-int sceOpen(const char *path, int flags, ...);
-
-int sceClose(int fd);
-
-int sceWrite(int fd, const void *buffer, int size);
-
-int sceGsSetDefStoreImage(void *image, short sbp, short sbw, short spsm, short x, short y,
-                          short w, short h);
-
-int sceGsExecStoreImage(void *image, void *destination);
-
-void *memcpy(void *destination, const void *source, unsigned int size);
-
-int printf(const char *format, ...);
-
-float I2F(int value);
-
-int xglFontGetFlags(void);
-
-void xglFontSetFlags(int flags);
-
-void *GameResourceGetFreeAddr(void);
-
 /* Capture transfers reuse 0x16C0 scratchpad bytes. Save and restore that
  * whole block in WorkEnd around the GS image/depth reads. */
 enum { CAPTURE_SCRATCHPAD_SIZE = 0x16C0 };
@@ -145,48 +103,43 @@ typedef struct {
     float depth_result;
 } TyaScratchpadDepthResult;
 
-#define SCRATCHPAD ((u8 *)0x70000000)
-
-#define SPR_COLOR ((u32 *)0x70000070)
-
-#define SPR_DEPTH ((u32 *)0x70000870)
-
-#define SPR_RLE ((u8 *)0x70001070)
-
-#define RGB_MASK 0xFFFFFF
-
-#define ALPHA_MASK 0xFF000000
-
-/* The GS CSR is a 64-bit MMIO status register. Capture waits for its
- * FINISH bit, so each iteration must read the hardware again. */
-#define GS_CSR_ADDRESS 0x12001000
-
-#define CAPTURE_WIDTH 512
-
-#define CAPTURE_HEIGHT 448
-
-static char * pext;
-
-static TyaCaptureCallback cascade;
-
-static void * TmpBuffer;
-
-/* The scene's active capture layer: compared against a per-array base
- * (0x200 for the actor array here, 0x300 for MapUnit below) plus the slot
- * index, so only the one actor or map unit the current capture pass wants
- * is drawn. */
-
-static u16 layer;
-
-static u16 zpicf;
-
-static int alpha;
-
 typedef struct { int v; } TyaAlpha;
 
-static int transparency;
+extern TyaDisplayEnvironment DispEnv;
+extern TyaFramebufferState sRender;
+extern ActorHead actor[ACTOR_COUNT];
+extern MapUnitHead MapUnit[MAP_UNIT_COUNT];
+extern TyaGameLoop GameLoopState;
+extern u8 *WorkEnd;
 
-static char outpath[256];
+/* Defined in src/main/act_3.c (main/tu265). */
+void ACT_DrawShadowBegin(void);
+
+void ACT_DrawShadow(ActorHead *unit);
+void ACT_DrawShadowEnd(void);
+
+/* Defined in src/main/map_2.c (main/tu269). */
+void MAP_drawUnitAt(MapUnitHead *unit);
+
+int sceGsSyncPath(int mode, int timeout);
+
+int sceOpen(const char *path, int flags, ...);
+int sceClose(int fd);
+int sceWrite(int fd, const void *buffer, int size);
+
+int sceGsSetDefStoreImage(void *image, short sbp, short sbw, short spsm, short x, short y,
+                          short w, short h);
+
+int sceGsExecStoreImage(void *image, void *destination);
+void *memcpy(void *destination, const void *source, unsigned int size);
+int printf(const char *format, ...);
+float I2F(int value);
+int xglFontGetFlags(void);
+void xglFontSetFlags(int flags);
+void *GameResourceGetFreeAddr(void);
+void ACT_filterGuno(void *unit);
+void ACT_modelDraw(ActorHead *unit);
+int F2I(float value);
 
 static u8 BmpHeader[0x36] = {
     'B', 'M', 0x36, 0x80, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
@@ -206,11 +159,28 @@ static u8 SiPicHeader[0x70] = {
     0x00, 0x03, 0x00, 0x00, 0x01, 0x08, 0x02, 0xE0, 0x00, 0x08, 0x02, 0x10,
 };
 
-void ACT_filterGuno(void *unit);
+static char outpath[256];
 
-void ACT_modelDraw(ActorHead *unit);
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+static char * pnum;
 
-int F2I(float value);
+static char * pext;
+
+static TyaCaptureCallback cascade;
+
+static void * TmpBuffer;
+
+/* The scene's active capture layer: compared against a per-array base
+ * (0x200 for the actor array here, 0x300 for MapUnit below) plus the slot
+ * index, so only the one actor or map unit the current capture pass wants
+ * is drawn. */
+static u16 layer;
+
+static u16 zpicf;
+
+static int alpha;
+
+static int transparency;
 
 static int getfbp(void)
 {
@@ -766,4 +736,3 @@ void tyaCaptureEnd(void)
     xglFontSetFlags((unsigned short)(xglFontGetFlags() | 3));
     GameLoopState.flags &= 0xFAFFFFFF;
 }
-

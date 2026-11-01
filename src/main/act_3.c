@@ -1,6 +1,39 @@
 #include "common.h"
-
 #include "shared.h"
+#include "main/xgl_2.h"
+#include "main/xgl_studio.h"
+
+#define GIF_TAG_NLOOP_1 1u
+#define GIF_TAG_EOP (1u << 15)
+#define GIF_TAG_PRE (1u << 14)
+#define GIF_TAG_PRIM_SPRITE (6u << 15)
+#define GIF_TAG_NREG_8 (8u << 28)
+#define GIF_TAG_NREG_1 (1u << 28)
+#define GIF_REG_A_D 0xEu
+#define GIF_REG_RGBAQ 0x1u
+#define GIF_REG_XYZ2 0x5u
+
+#define SHADOW_GIF_REGISTERS \
+    ((GIF_REG_A_D << 0) | (GIF_REG_A_D << 4) | \
+     (GIF_REG_A_D << 8) | (GIF_REG_A_D << 12) | \
+     (GIF_REG_RGBAQ << 16) | (GIF_REG_XYZ2 << 20) | \
+     (GIF_REG_XYZ2 << 24) | (GIF_REG_A_D << 28))
+
+#define GS_CLAMP_REGION_REPEAT 2u
+#define GS_CLAMP_MIN_U 0u
+#define GS_CLAMP_MAX_U 511u
+#define GS_CLAMP_MIN_V 0u
+#define GS_CLAMP_MAX_V 447u
+
+#define GS_CLAMP_1_VALUE \
+    ((u64)GS_CLAMP_REGION_REPEAT | ((u64)GS_CLAMP_REGION_REPEAT << 2) | \
+     ((u64)GS_CLAMP_MIN_U << 4) | ((u64)GS_CLAMP_MAX_U << 14) | \
+     ((u64)GS_CLAMP_MIN_V << 24) | ((u64)GS_CLAMP_MAX_V << 34))
+
+#define DROP_SHADOW_TEXTURE_U_ORIGIN 0x6ff8
+
+#define DROP_SHADOW_TEXTURE_V_ORIGIN 0x71f7
+#define DROP_SHADOW_TEXTURE_COORDINATE_SCALE (1.0f / 8192.0f)
 
 typedef union {
     u64 value;
@@ -38,47 +71,7 @@ typedef struct {
     u32 unused;
 } GifXyz2;
 
-#define GIF_TAG_NLOOP_1 1u
-
-#define GIF_TAG_EOP (1u << 15)
-
-#define GIF_TAG_PRE (1u << 14)
-
-#define GIF_TAG_PRIM_SPRITE (6u << 15)
-
-#define GIF_TAG_NREG_8 (8u << 28)
-
-#define GIF_TAG_NREG_1 (1u << 28)
-
-#define GIF_REG_A_D 0xEu
-
-#define GIF_REG_RGBAQ 0x1u
-
-#define GIF_REG_XYZ2 0x5u
-
-#define SHADOW_GIF_REGISTERS \
-    ((GIF_REG_A_D << 0) | (GIF_REG_A_D << 4) | \
-     (GIF_REG_A_D << 8) | (GIF_REG_A_D << 12) | \
-     (GIF_REG_RGBAQ << 16) | (GIF_REG_XYZ2 << 20) | \
-     (GIF_REG_XYZ2 << 24) | (GIF_REG_A_D << 28))
-
-#define GS_CLAMP_REGION_REPEAT 2u
-
-#define GS_CLAMP_MIN_U 0u
-
-#define GS_CLAMP_MAX_U 511u
-
-#define GS_CLAMP_MIN_V 0u
-
-#define GS_CLAMP_MAX_V 447u
-
-#define GS_CLAMP_1_VALUE \
-    ((u64)GS_CLAMP_REGION_REPEAT | ((u64)GS_CLAMP_REGION_REPEAT << 2) | \
-     ((u64)GS_CLAMP_MIN_U << 4) | ((u64)GS_CLAMP_MAX_U << 14) | \
-     ((u64)GS_CLAMP_MIN_V << 24) | ((u64)GS_CLAMP_MAX_V << 34))
-
 /* DMA TTE carries DIRECT; its payload is one GIFtag and eight packed registers. */
-
 typedef struct {
     u64 dma_tag;
     u32 vif_nop;
@@ -95,7 +88,6 @@ typedef struct {
 } ActShadowCommand;
 
 /* The final direct packet has one packed A+D register write. */
-
 typedef struct {
     u64 dma_tag;
     u32 vif_nop;
@@ -105,14 +97,12 @@ typedef struct {
 } ActShadowEndPacket;
 
 /* The render-state halfword read by the shadow command builder is at +0x20. */
-
 typedef struct {
     u8 unmodeled_00[0x20];
     u16 shadow_state;
 } ActShadowRenderState;
 
 /* Each source point contributes three words to the rear-shadow packet. */
-
 typedef struct {
     int x;
     int y;
@@ -131,7 +121,6 @@ typedef struct {
 } DropShadowPacketPoint;
 
 /* Only the packet words and four 16-byte output points written here are modeled. */
-
 typedef struct {
     u8 unmodeled_00[0x0c];
     u32 packet_tag_0c;
@@ -149,17 +138,12 @@ typedef struct {
 } DropShadowBackPacket;
 
 /* Status bytes and 16-byte source records immediately precede the sent packet. */
-
 typedef struct {
     u8 unmodeled_00[0x11a0];
     u8 back_shadow_status[16];
     DropShadowBackEntry back_shadow_entries[17];
     DropShadowBackPacket back_shadow_packet;
 } ActDropShadowState;
-
-extern ActShadowRenderState sRender;
-
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
 typedef unsigned int ActShadowQuadword __attribute__((mode(TI)));
 
@@ -168,22 +152,6 @@ typedef union {
     u32 words[4];
     ActShadowQuadword quad;
 } ActShadowPacketQuadword;
-
-/* DMA TTE carries DIRECT; its payload is one GIFtag and eight packed registers. */
-
-/* The final direct packet has one packed A+D register write. */
-
-/* The render-state halfword read by the shadow command builder is at +0x20. */
-
-/* Each source point contributes three words to the rear-shadow packet. */
-
-/* Only the packet words and four 16-byte output points written here are modeled. */
-
-/* Status bytes and 16-byte source records immediately precede the sent packet. */
-
-#include "main/xgl_2.h"
-
-#include "main/xgl_studio.h"
 
 typedef struct {
     u64 dma_tag;
@@ -255,13 +223,6 @@ typedef struct {
     ActDropShadowPacket packet;
 } ActDropShadowWorkspace;
 
-extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
-
-extern void xglRotTransPersN(void *destination, const Matrix4 matrix,
-                             const void *vertices, int count, int camera_index);
-
-extern float I2F(int value);
-
 typedef struct {
     u8 quad_indices[14][4];
 } DrawDropCircleIndexTable;
@@ -326,18 +287,6 @@ typedef struct {
     ActZeldaShadowPacket packet;
 } ActShadowScratchpad;
 
-static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
-                              ActShadowMatrix *matrix);
-
-extern void xglMatrixStackUnit(void);
-
-extern void xglMatrixStackTrans(const float translation[4]);
-
-extern void xglMatrixStackRotY(float angle);
-
-extern void xglMatrixStackMulVector(Vector4 *destination,
-                                    const Vector4 *source);
-
 typedef struct {
     u32 flags;
     u8 unmodeled_04[0xc];
@@ -373,8 +322,6 @@ typedef struct {
     u8 unmodeled_08[0x2a028];
 } ActFootstepGameState;
 
-extern ActFootstepGameState GameLoopState;
-
 typedef struct {
     u8 unmodeled_00[0x100a4];
     u16 language;
@@ -386,8 +333,6 @@ typedef struct {
     u8 unmodeled_37a3[0x10d];
 } ActFootstepEnemyWork;
 
-extern ActFootstepEnemyWork enepc[16];
-
 typedef struct {
     u8 unmodeled_00[8];
     u16 flags;
@@ -397,23 +342,6 @@ typedef struct {
     u64 material;
     u8 unmodeled_28[0x18];
 } ActFootstepCollision;
-
-extern u8 *actNullPointerTable[];
-static u8 *foot_tbl[6];
-
-extern float footstepFrameTime;
-
-extern int F2I(float value);
-
-extern void UnduParamInit(void *collision);
-
-extern void UnduCheck(const float *position, void *unused, void *collision);
-
-extern void *UnduDataGetHeader(int map_index, int unit_index);
-
-extern int RES_GetEnemySeBank(int kind);
-
-extern void xglSoundEffectNormalID(int sound, int flags);
 
 typedef struct {
     u32 color[4];
@@ -429,7 +357,6 @@ typedef struct {
 } CircleShadowPacket;
 
 /* Owner type from src/main/xgl_2.h:10-15; include-layer transport is pending. */
-
 /* Private partial layouts: DrawDropShadowSub accesses actor +0x14/+0x91/+0xa0/
    +0x4dc/+0x824, and aligned matrices at scratch +0x60/+0xa0/+0xe0/
    +0x120/+0x160. Their defining-owner header transport remains pending. */
@@ -539,20 +466,6 @@ typedef struct {
     ActZeldaShadowPacket packet;
 } ActZeldaStorageScratchpad;
 
-/* Original aligned matrices at scratchpad +0x60 and +0xa0. */
-
-static const DrawDropCircleIndexTable dropShadowIndexTable = {
-    {
-    0x04, 0x00, 0x01, 0x06, 0x01, 0x06, 0x07, 0x02,
-    0x07, 0x02, 0x03, 0x05, 0x0c, 0x09, 0x08, 0x0f,
-    0x08, 0x0f, 0x0e, 0x0b, 0x0e, 0x0b, 0x0a, 0x0d,
-    0x00, 0x04, 0x08, 0x0c, 0x04, 0x01, 0x0c, 0x09,
-    0x01, 0x07, 0x09, 0x0f, 0x07, 0x03, 0x0f, 0x0b,
-    0x03, 0x05, 0x0b, 0x0d, 0x05, 0x02, 0x0d, 0x0a,
-    0x02, 0x06, 0x0a, 0x0e, 0x06, 0x00, 0x0e, 0x08,
-    }
-};
-
 typedef union {
     struct {
         signed char end_width;
@@ -568,9 +481,6 @@ typedef struct {
     u8 matrix_index;
     DropShadowContactPayload payload;
 } DropShadowContactRecord;
-
-static u8 *DrawDropShadowSub(ActShadowActor *actor,
-                            ActDropShadowWorkspace *work, u8 *contacts);
 
 typedef struct {
     u8 unmodeled_00[0x20];
@@ -592,32 +502,6 @@ typedef struct {
     ActShadowMatrixSet *shadow_matrices;
 } ActDrawShadowActor;
 
-static void DrawCircleShadow(void *actor_pointer);
-
-static void DrawDropCircle(ActShadowActor *actor);
-
-static void DrawDropShadow(void *actor_pointer);
-
-extern ActShadowLight *xglStudioGetLight2(void);
-
-/* DMA TTE carries DIRECT; its payload is one GIFtag and eight packed registers. */
-
-/* The final direct packet has one packed A+D register write. */
-
-/* The render-state halfword read by the shadow command builder is at +0x20. */
-
-/* Each source point contributes three words to the rear-shadow packet. */
-
-/* Only the packet words and four 16-byte output points written here are modeled. */
-
-/* Status bytes and 16-byte source records immediately precede the sent packet. */
-
-#define DROP_SHADOW_TEXTURE_U_ORIGIN 0x6ff8
-
-#define DROP_SHADOW_TEXTURE_V_ORIGIN 0x71f7
-
-#define DROP_SHADOW_TEXTURE_COORDINATE_SCALE (1.0f / 8192.0f)
-
 typedef struct {
     float temporary[4];
     Matrix transform;
@@ -628,28 +512,6 @@ typedef struct {
     u8 unmodeled_294[0xc];
     CircleShadowPacket packet;
 } CircleShadowMatrixScratchpad;
-
-extern void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
-
-static ActShadowPacketQuadword Head_1[5];
-
-static u32 Tail_2[12];
-
-static u8 rgbaw_0[16];
-
-extern const float contactCoordScale;
-
-extern void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
-                            const float translation[4]);
-
-extern void xglVectorOuter(Vector4 *destination, const Vector4 *left,
-                            const Vector4 *right);
-
-extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
-                               float scale);
-
-extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
-                             const Vector4 *source);
 
 typedef struct {
     u8 unmodeled_000[0x86];
@@ -676,23 +538,100 @@ typedef struct {
     DropShadowContactRecord *contacts;
 } DropShadowContactDefinition;
 
+typedef float ActShadowMatrixRow[4];
+
+extern ActShadowRenderState sRender;
+extern ActFootstepGameState GameLoopState;
+extern ActFootstepEnemyWork enepc[16];
+extern u8 *actNullPointerTable[];
+extern float footstepFrameTime;
+extern const float contactCoordScale;
+extern DropShadowContactDefinition DropShadowDefineTable[10];
+extern const DrawDropCircleIndexTable dropCircleIndexTable;
+extern const float dropCircleCornerScale;
+extern const float dropCircleHeightOffset;
+extern float zeldaShadowMinRadius;
+
+extern void nmlModelDirectSend(int mode, u8 *data, int count);
+extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
+
+extern void xglRotTransPersN(void *destination, const Matrix4 matrix,
+                             const void *vertices, int count, int camera_index);
+
+extern float I2F(int value);
+
+static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
+                              ActShadowMatrix *matrix);
+
+extern void xglMatrixStackUnit(void);
+extern void xglMatrixStackTrans(const float translation[4]);
+extern void xglMatrixStackRotY(float angle);
+
+extern void xglMatrixStackMulVector(Vector4 *destination,
+                                    const Vector4 *source);
+
+extern int F2I(float value);
+extern void UnduParamInit(void *collision);
+extern void UnduCheck(const float *position, void *unused, void *collision);
+extern void *UnduDataGetHeader(int map_index, int unit_index);
+extern int RES_GetEnemySeBank(int kind);
+extern void xglSoundEffectNormalID(int sound, int flags);
+
+static u8 *DrawDropShadowSub(ActShadowActor *actor,
+                            ActDropShadowWorkspace *work, u8 *contacts);
+
+static void DrawCircleShadow(void *actor_pointer);
+static void DrawDropCircle(ActShadowActor *actor);
+static void DrawDropShadow(void *actor_pointer);
+extern ActShadowLight *xglStudioGetLight2(void);
+extern void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
+
+extern void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
+                            const float translation[4]);
+
+extern void xglVectorOuter(Vector4 *destination, const Vector4 *left,
+                            const Vector4 *right);
+
+extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
+                               float scale);
+
+extern void xglVectorMulMat(Vector4 *destination, const Matrix4 matrix,
+                             const Vector4 *source);
+
+extern float atan2f(float x, float z);
+
+/* Original aligned matrices at scratchpad +0x60 and +0xa0. */
+static const DrawDropCircleIndexTable dropShadowIndexTable = {
+    {
+    0x04, 0x00, 0x01, 0x06, 0x01, 0x06, 0x07, 0x02,
+    0x07, 0x02, 0x03, 0x05, 0x0c, 0x09, 0x08, 0x0f,
+    0x08, 0x0f, 0x0e, 0x0b, 0x0e, 0x0b, 0x0a, 0x0d,
+    0x00, 0x04, 0x08, 0x0c, 0x04, 0x01, 0x0c, 0x09,
+    0x01, 0x07, 0x09, 0x0f, 0x07, 0x03, 0x0f, 0x0b,
+    0x03, 0x05, 0x0b, 0x0d, 0x05, 0x02, 0x0d, 0x0a,
+    0x02, 0x06, 0x0a, 0x0e, 0x06, 0x00, 0x0e, 0x08,
+    }
+};
+
+const DrawDropCircleIndexTable dropCircleIndexTable = { .quad_indices = { { 4, 0, 1, 6 }, { 1, 6, 7, 2 }, { 7, 2, 3, 5 }, { 12, 9, 8, 15 }, { 8, 15, 14, 11 }, { 14, 11, 10, 13 }, { 0, 4, 8, 12 }, { 4, 1, 12, 9 }, { 1, 7, 9, 15 }, { 7, 3, 15, 11 }, { 3, 5, 11, 13 }, { 5, 2, 13, 10 }, { 2, 6, 10, 14 }, { 6, 0, 14, 8 } } };
+
+static u8 *foot_tbl[6];
+
+static ActShadowPacketQuadword Head_1[5];
+
+static u32 Tail_2[12];
+
+static u8 rgbaw_0[16];
+
 static DropShadowHeadPacket Head_4_00478DB0;
 
 static ActShadowEndPacket Tail_5;
-
-extern DropShadowContactDefinition DropShadowDefineTable[10];
 
 static DropShadowHeadPacket Head_6_00478E30;
 
 static u32 TestEnv_7[12];
 
 static ActShadowEndPacket Tail_8;
-
-extern const DrawDropCircleIndexTable dropCircleIndexTable;
-
-extern const float dropCircleCornerScale;
-
-extern const float dropCircleHeightOffset;
 
 /* Original DATA order; zero alignment is supplied by allocation metadata. */
 static u8 foot_sion[] = { 2, 16, 1, 12 };
@@ -773,7 +712,7 @@ static ActShadowEndPacket Tail_10 = {
     .set_shadow_register = { { .value = 0x31000000 }, 0x4E, 0 },
 };
 
-const DrawDropCircleIndexTable dropCircleIndexTable = { .quad_indices = { { 4, 0, 1, 6 }, { 1, 6, 7, 2 }, { 7, 2, 3, 5 }, { 12, 9, 8, 15 }, { 8, 15, 14, 11 }, { 14, 11, 10, 13 }, { 0, 4, 8, 12 }, { 4, 1, 12, 9 }, { 1, 7, 9, 15 }, { 7, 3, 15, 11 }, { 3, 5, 11, 13 }, { 5, 2, 13, 10 }, { 2, 6, 10, 14 }, { 6, 0, 14, 8 } } };
+u8 * actNullPointerTable[] = { 0 };
 
 static void Footstep(ActShadowActor *actor)
 {
@@ -837,8 +776,6 @@ static void Footstep(ActShadowActor *actor)
         }
     }
 }
-
-typedef float ActShadowMatrixRow[4];
 
 static inline ActShadowMatrixRow *ActShadowMatrixRows(Matrix *matrix)
 {
@@ -1067,9 +1004,6 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
     scratchpad->packet.trailer[1] = 0x4e;
     nmlModelDirectSend(1, (u8 *)&scratchpad->packet, 0x12);
 }
-
-extern float atan2f(float x, float z);
-extern float zeldaShadowMinRadius;
 
 static void DrawZeldaShadow(void *actor_pointer)
 {
@@ -1768,6 +1702,7 @@ void ACT_DrawShadowInit(void)
 {
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 /* Explicit scalar literals retained at the original compiler-mapped locations. */
 float footstepFrameTime = 0.033333335071802139f;
 
@@ -1778,5 +1713,3 @@ const float contactCoordScale = 0.0099999997764825821f;
 const float dropCircleCornerScale = 0.69999998807907104f;
 
 const float dropCircleHeightOffset = 0.20000000298023224f;
-
-u8 * actNullPointerTable[] = { 0 };

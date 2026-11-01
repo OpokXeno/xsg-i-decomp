@@ -27,6 +27,8 @@ typedef struct TyaGaugePacket {
     u32 unfilled_vertices[2][TYA_GAUGE_VERTEX_WORD_COUNT];
 } TyaGaugePacket;
 
+extern void nmlModelDirectSend(int mode, u8 *data, int count);
+
 static TyaGaugePacket TestEnv_0_0036AC70[] = {
     {
         {0, 0, 0, 0x51000008},
@@ -38,7 +40,6 @@ static TyaGaugePacket TestEnv_0_0036AC70[] = {
         {{0, 0, 0xFFFFFFFF, 0}, {0, 0, 0xFFFFFFFF, 0}},
     }
 };
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
 void tyaDrawGauge(TyaGaugeArgs *gauge)
 {

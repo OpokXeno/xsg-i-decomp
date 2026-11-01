@@ -1,32 +1,15 @@
 #include "common.h"
-
 #include "shared.h"
-#ifndef MAIN_INIT_CLASS_DB_PRIVATE_H
-#define MAIN_INIT_CLASS_DB_PRIVATE_H
-
-#include "shared.h"
-#include "main/string_utf_get_hash.h"
-
-/* This entry point is defined with this prototype by string_utf_get_hash.c. */
-extern SceneString *loadConstString(const char *bytes, int length);
-
-#endif
-
 #include "init_class_db.h"
-
-int classDB[8];
-
-extern void *xmalloc(int size, int type);
+#include "main/init_vm.h"
+#include "main/find_native_method.h"
+#include "main/scene_1.h"
 
 typedef struct ClassFileMemberHeader {
     u16 access_flags;
     u16 name_index;
     u16 descriptor_index;
 } ClassFileMemberHeader;
-
-ClassFieldRecord *addField(ClassDescriptor *class_info, const ClassFileMemberHeader *field_info);
-
-SceneMethod *addMethod(ClassDescriptor *class_info, ClassFileMemberHeader *method_info);
 
 typedef struct ClassFilePath {
     unsigned char unmodeled_00[6];
@@ -45,42 +28,44 @@ typedef struct ClassFile {
 } ClassFile;
 
 const char classFileExtension[];
+extern SceneString *NAME_Constructor;
+extern SceneString *ATTR_Code;
+extern SceneString *ATTR_Exceptions;
+extern SceneString *ATTR_LineNumberTable;
+extern SceneString *ATTR_ConstantValue;
 
-ConstString **constStringTable;
-
+extern void *xmalloc(int size, int type);
+ClassFieldRecord *addField(ClassDescriptor *class_info, const ClassFileMemberHeader *field_info);
+SceneMethod *addMethod(ClassDescriptor *class_info, ClassFileMemberHeader *method_info);
 extern char *strncpy(char *dest, const char *src, unsigned int count);
-
 extern char *strcat(char *dest, const char *src);
-
 extern ClassFile *PDB_findFile(int volume, const char *name);
 
 extern void DataBuffer_init(DataBuffer *buffer, unsigned char *bytes,
                             int length, int big_endian);
 
-#include "main/init_vm.h"
-
-#include "main/find_native_method.h"
-
-#include "main/scene_1.h"
-
 /* classFromSig resolves both reference classes and primitive type records. */
-
 extern void *getClassFromSignature(const char *signature, void *class_loader);
 
 extern void methodDescripter(u8 *descriptor, s16 *paramSize, s16 *returnSize,
                             signed char *returnType);
 
-extern SceneString *NAME_Constructor;
-
-extern SceneString *ATTR_Code;
-
-extern SceneString *ATTR_Exceptions;
-
-extern SceneString *ATTR_LineNumberTable;
-
-extern SceneString *ATTR_ConstantValue;
-
 void setFieldValue(SceneField *field, unsigned int value);
+
+ConstString **constStringTable;
+
+int classDB[8];
+
+#ifndef MAIN_INIT_CLASS_DB_PRIVATE_H
+#define MAIN_INIT_CLASS_DB_PRIVATE_H
+
+#include "shared.h"
+#include "main/string_utf_get_hash.h"
+
+/* This entry point is defined with this prototype by string_utf_get_hash.c. */
+extern SceneString *loadConstString(const char *bytes, int length);
+
+#endif
 
 void initClassDB(void)
 {
@@ -496,5 +481,7 @@ void setupClass(ClassDescriptor *class_info, u32 this_class_index,
     }
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char classFileExtension[] = ".class";
+
 ConstString **constStringTable = 0;

@@ -1,16 +1,8 @@
 #include "common.h"
 
-/*
- * EW_create (main:0x0026c0e0) indexes a fixed table of 40-byte (0x28)
- * ewComponent slots (index*5*8); each slot holds a 0x10-byte shared
- * header (flags at +0x00, widget type at +0x02) followed by 0x18 bytes
- * of type-specific storage. It calls one of frame_init/sprt_init/
- * container_init/mask_init with a pointer to that type-specific storage
- * to initialize a newly created widget (type 1, 5, 4 and 8/10
- * respectively, per the jump table at 0x004c2360).
- */
-
 #include "ew_sprt_set_cursor_uv.h"
+
+#include "shared.h"
 
 typedef struct EwFrameState {
     /* +0x00: cleared by frame_init; no reader found among this TU's own
@@ -36,43 +28,6 @@ typedef struct EwSpriteState {
     unsigned short v;
 } EwSpriteState;
 
-/*
- * Shared 0x28-byte ewComponent table-slot header (top-of-file comment):
- * flags encodes both the widget type and its enabled bit. EW_sendPacket
- * and EW_draw test the type via (flags & 0xE000) == 0xC000; EW_drawContainer
- * tests only the enabled bit via flags & 0x4000.
- */
-
-void EW_drawComoponent(int context, EwWidget *widget);
-
-/* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
- * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
-
-EwWidget ewComponent[64];
-
-static void EW_setDrawEnv(int context);
-
-extern void xglFontReloadTexture(int context, int mode);
-
-static int ew_send_mode = 0;
-
-/* The font queue invokes callbacks with its render context and the saved
- * argument. EW_draw registers EW_sendPacket with a null saved argument. */
-
-extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(int, void *), void *arg);
-
-#include "shared.h"
-
-/*
- * EW_create (main:0x0026c0e0) indexes a fixed table of 40-byte (0x28)
- * ewComponent slots (index*5*8); each slot holds a 0x10-byte shared
- * header (flags at +0x00, widget type at +0x02) followed by 0x18 bytes
- * of type-specific storage. It calls one of frame_init/sprt_init/
- * container_init/mask_init with a pointer to that type-specific storage
- * to initialize a newly created widget (type 1, 5, 4 and 8/10
- * respectively, per the jump table at 0x004c2360).
- */
-
 typedef struct EwSpriteWidget {
     unsigned short flags;
     unsigned short type;
@@ -84,13 +39,6 @@ typedef struct EwSpriteWidget {
     EwSpriteState sprite;
     unsigned char unmodeled_18[0x10];
 } EwSpriteWidget;
-
-static u64 sprt_base_register[4] = {
-    0x2007EF0669343C00ULL, 0x2007EF0669343C00ULL,
-    0x2007EF0669343C00ULL, 0x2007EF0669343C00ULL
-};
-
-extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
 
 typedef struct EwDrawContext {
     XglPacket *packet;
@@ -143,51 +91,44 @@ typedef struct EwTextWidget {
     EwTextState text;
 } EwTextWidget;
 
-static void container_init(EwContainerState *container);
-
-const unsigned char labelFontStyleTable[0x20] = {
-    0x0D, 0x02, 0x0E, 0x02, 0x03, 0x18, 0x18, 0x18,
-    0x0F, 0x00, 0x00, 0x80, 0x0C, 0x80, 0x80, 0x80,
-    0x15, 0x02, 0x02, 0x04, 0x19, 0x03, 0x15, 0x03,
-    0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
 /*
- * Shared 0x28-byte ewComponent table-slot header (top-of-file comment):
+ * Shared 0x28-byte ewComponent table-slot header:
  * flags encodes both the widget type and its enabled bit. EW_sendPacket
  * and EW_draw test the type via (flags & 0xE000) == 0xC000; EW_drawContainer
  * tests only the enabled bit via flags & 0x4000.
  */
+void EW_drawComoponent(int context, EwWidget *widget);
+
+static void EW_setDrawEnv(int context);
+extern void xglFontReloadTexture(int context, int mode);
+
+/* The font queue invokes callbacks with its render context and the saved
+ * argument. EW_draw registers EW_sendPacket with a null saved argument. */
+extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(int, void *), void *arg);
+
+extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
+static void container_init(EwContainerState *container);
 
 static void frame_put(int context, EwWidget *widget);
 
 static void label_put(EwDrawContext *context, EwLabelWidget *widget);
-
 static void mask_put(int context, void *arg);
-
 static void set_clip(int context, void *arg);
-
 static void sprt_put(int context, EwSpriteWidget *widget);
-
 extern void xglFontPrint(int x, int y, int color, const char *text);
+
+static int ew_send_mode = 0;
+
+static u64 sprt_base_register[4] = {
+    0x2007EF0669343C00ULL, 0x2007EF0669343C00ULL,
+    0x2007EF0669343C00ULL, 0x2007EF0669343C00ULL
+};
 
 /* Mutable font colour command. Opcode 0x0f consumes three parameter bytes,
  * including the embedded zero, before the terminal zero. */
 char mutableFontColorCommand[5] = "\017D\000\200";
 
 static char *tmp_0 = mutableFontColorCommand;
-
-/* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
- * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
-
-/*
- * Draws a mask widget as one four-vertex Gouraud triangle strip (GIF
- * PRIM 0x20264000 with the ALPHA_1 value held in the mask state). The
- * top edge is filled with the intensity in bits 16-23 of the mask's fix
- * word and the bottom-right edge with bits 8-15; bit 0x100 of the blend
- * word swaps the two middle vertices, which turns the gradient from
- * vertical to horizontal.
- */
 
 static unsigned int frameUV[8][4] = {
     { 0x000, 0x800, 0x800, 0x900 },
@@ -200,13 +141,17 @@ static unsigned int frameUV[8][4] = {
     { 0x900, 0x900, 0xA00, 0xA00 },
 };
 
-/*
- * Draws a label widget: a four-vertex Gouraud-shaded sprite strip over the
- * widget rectangle (a power-of-two side widened by one pixel, as in
- * frame_put), then the border pieces of frameUV selected by the bits of
- * 0x3D: the top, left and right edges and all four corners, but not the
- * bottom edge.
- */
+/* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
+ * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
+EwWidget ewComponent[64];
+
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
+const unsigned char labelFontStyleTable[0x20] = {
+    0x0D, 0x02, 0x0E, 0x02, 0x03, 0x18, 0x18, 0x18,
+    0x0F, 0x00, 0x00, 0x80, 0x0C, 0x80, 0x80, 0x80,
+    0x15, 0x02, 0x02, 0x04, 0x19, 0x03, 0x15, 0x03,
+    0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 
 void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell)
 {
@@ -292,6 +237,15 @@ static void EW_setDrawEnv(int context)
     xglPrimAddGifTagDirect(((EwDrawContext *) context)->packet, env, 7);
 }
 
+/*
+ * EW_create (main:0x0026c0e0) indexes a fixed table of 40-byte (0x28)
+ * ewComponent slots (index*5*8); each slot holds a 0x10-byte shared
+ * header (flags at +0x00, widget type at +0x02) followed by 0x18 bytes
+ * of type-specific storage. It calls one of frame_init/sprt_init/
+ * container_init/mask_init with a pointer to that type-specific storage
+ * to initialize a newly created widget (type 1, 5, 4 and 8/10
+ * respectively, per the jump table at 0x004c2360).
+ */
 EwWidget *EW_create(int index, int type)
 {
     EwWidget *widget;
@@ -652,6 +606,14 @@ static void container_init(EwContainerState *container)
     container->unusedByContainer[1] = 0;
 }
 
+/*
+ * Draws a mask widget as one four-vertex Gouraud triangle strip (GIF
+ * PRIM 0x20264000 with the ALPHA_1 value held in the mask state). The
+ * top edge is filled with the intensity in bits 16-23 of the mask's fix
+ * word and the bottom-right edge with bits 8-15; bit 0x100 of the blend
+ * word swaps the two middle vertices, which turns the gradient from
+ * vertical to horizontal.
+ */
 static void mask_put(int context, void *arg)
 {
     EwDrawContext *drawContext;
@@ -1058,6 +1020,13 @@ static void frame_put(int context, EwWidget *widget)
     xglPrimAddGifTagDirect(((EwDrawContext *) context)->packet, gif, (qword - gif) / 4);
 }
 
+/*
+ * Draws a label widget: a four-vertex Gouraud-shaded sprite strip over the
+ * widget rectangle (a power-of-two side widened by one pixel, as in
+ * frame_put), then the border pieces of frameUV selected by the bits of
+ * 0x3D: the top, left and right edges and all four corners, but not the
+ * bottom edge.
+ */
 static void label_put(EwDrawContext *context, EwLabelWidget *widget)
 {
     int xs[16];
@@ -1242,5 +1211,6 @@ static void label_put(EwDrawContext *context, EwLabelWidget *widget)
     xglPrimAddGifTagDirect(context->packet, gif, (qword - gif) / 4);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* The original default resource path is stored in this TU's read-only data. */
 const char EWDefaultResourcePath[23] = "host0:/home/xeno/work/";

@@ -35,9 +35,7 @@ typedef struct CheckActorGameLoopState {
 } CheckActorGameLoopState;
 
 extern CheckActorRecord actor[64];
-
 extern EnemyWorkEntry enepc[16];
-
 extern CheckActorGameLoopState GameLoopState;
 
 float Get_Distance(const Vector4 *from, const Vector4 *to);

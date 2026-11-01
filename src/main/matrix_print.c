@@ -1,18 +1,13 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "matrix_print.h"
 
 extern int printf(const char *format, ...);
+void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);
+static void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation);
+void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation);
 
 const char matrixPrintMatrixRowFormat[] = "\t%8.3f %8.3f %8.3f %8.3f\n";
-
-void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);
-
-static void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation);
-
-void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation);
 
 int MATRIX_print(const float matrix[4][4])
 {

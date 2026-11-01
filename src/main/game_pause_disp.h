@@ -5,10 +5,6 @@
 #ifndef SRC_MAIN_GAME_PAUSE_DISP_H
 #define SRC_MAIN_GAME_PAUSE_DISP_H
 
-extern void PauseMenu(void);
-
-extern void GamePauseDispBG(void);
-
 typedef union GifCommandData {
     u64 value;
     struct {
@@ -42,12 +38,6 @@ typedef struct PauseShadowCommand {
     GifAdCommand set_shadow_color;
 } PauseShadowCommand;
 
-
-/*
- * Only the packet handle at +0x00 is evidenced (DrawShadow). The rest of the
- * structure is populated by DrawCredit, which is still unresolved; this is
- * an explicit partial type and does not claim the layout beyond +0x00.
- */
 /* DrawCredit writes the 128-byte direct-data payload beginning at +0x30. */
 typedef struct PauseCreditData {
     unsigned int initial_words[4];
@@ -56,21 +46,16 @@ typedef struct PauseCreditData {
     int body_words[20];
 } PauseCreditData;
 
+/*
+ * Only the packet handle at +0x00 is evidenced (DrawShadow). The rest of the
+ * structure is populated by DrawCredit, which is still unresolved; this is
+ * an explicit partial type and does not claim the layout beyond +0x00.
+ */
 typedef struct PauseDrawContext {
     void *packet;
     unsigned char unmodeled_04[0x2C];
     PauseCreditData credit_data;
 } PauseDrawContext;
-
-extern void sceVif1PkAddDirectDataN(void *packet, const void *data, int count);
-
-extern void GamePauseDispCf(void);
-
-extern int xglFontGetStringWidth(const char *text);
-
-
-void GamePauseDispEvent(void);
-
 
 /* The pause menu reads these fields from the game loop's global state. */
 typedef struct PauseGameLoopState {
@@ -86,11 +71,20 @@ typedef struct PauseGameLoopState {
 extern PauseGameLoopState GameLoopState;
 extern unsigned char SnapDrawCreditFlag;
 extern int ScanLineInterpolate;
+
+extern void PauseMenu(void);
+extern void GamePauseDispBG(void);
+extern void sceVif1PkAddDirectDataN(void *packet, const void *data, int count);
+extern void GamePauseDispCf(void);
+extern int xglFontGetStringWidth(const char *text);
+void GamePauseDispEvent(void);
 extern int GameSnapShotSave(signed char slot, int work);
 extern int GameSnapShotSaveFile(int slot, int work, int size);
+
 extern void xglFontPrintExtFunc(unsigned int flags,
                                 void (*draw)(PauseDrawContext *context),
                                 void *context);
+
 extern void xglFontSetFlags(int flags);
 
 #endif /* SRC_MAIN_GAME_PAUSE_DISP_H */

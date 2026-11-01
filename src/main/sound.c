@@ -9,15 +9,6 @@
  */
 typedef struct JThread JThread;
 
-/* xglSoundSequenceNormal is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceNormal(int volume);
-
-void Java_xeno_Sound_sequencePlay__I(JThread *thread, int *arguments,
-                                     unsigned int *result)
-{
-    xglSoundSequenceNormal(*arguments);
-}
-
 /* The call block of Sound.sequencePlay(int, int): the channel to play the
    sequence on and its playback volume. */
 typedef struct SoundChannelVolumeCall {
@@ -25,41 +16,12 @@ typedef struct SoundChannelVolumeCall {
     int volume;
 } SoundChannelVolumeCall;
 
-/* xglSoundSequenceNormal2 is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceNormal2(int channel, int volume);
-
-void Java_xeno_Sound_sequencePlay__II(JThread *thread,
-                                      SoundChannelVolumeCall *arguments,
-                                      unsigned int *result)
-{
-    xglSoundSequenceNormal2(arguments->channel, arguments->volume);
-}
-
-/* xglSoundSequenceFadeOut is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceFadeOut(int time);
-
-void Java_xeno_Sound_sequenceStop__I(JThread *thread, int *arguments,
-                                     unsigned int *result)
-{
-    xglSoundSequenceFadeOut(*arguments);
-}
-
 /* The call block of Sound.sequenceStop(int, int): the channel to fade out
    and the fade-out time. */
 typedef struct SoundChannelTimeCall {
     int channel;
     int time;
 } SoundChannelTimeCall;
-
-/* xglSoundSequenceFadeOut2 is defined in main/tu098 (src/main/xgl_sound.c). */
-extern void xglSoundSequenceFadeOut2(int channel, int time);
-
-void Java_xeno_Sound_sequenceStop__II(JThread *thread,
-                                      SoundChannelTimeCall *arguments,
-                                      unsigned int *result)
-{
-    xglSoundSequenceFadeOut2(arguments->channel, arguments->time);
-}
 
 /* The call block of Sound.effectPlay(int, int, int): the effect sound ID,
    its volume and its pan; the engine call's trailing flags argument is
@@ -70,12 +32,73 @@ typedef struct SoundEffectPlayCall {
     int pan;
 } SoundEffectPlayCall;
 
+/* The call block for Sound.streamPlay(int, int, int, int). */
+typedef struct SoundStreamPlayCall {
+    int source_id;
+    int pitch;
+    int volume;
+    int pan;
+} SoundStreamPlayCall;
+
+/* xglSoundSequenceNormal is defined in main/tu098 (src/main/xgl_sound.c). */
+extern void xglSoundSequenceNormal(int volume);
+
+/* xglSoundSequenceNormal2 is defined in main/tu098 (src/main/xgl_sound.c). */
+extern void xglSoundSequenceNormal2(int channel, int volume);
+
+/* xglSoundSequenceFadeOut is defined in main/tu098 (src/main/xgl_sound.c). */
+extern void xglSoundSequenceFadeOut(int time);
+
+/* xglSoundSequenceFadeOut2 is defined in main/tu098 (src/main/xgl_sound.c). */
+extern void xglSoundSequenceFadeOut2(int channel, int time);
+
 /*
  * xglSoundEffectParamID is not yet recovered (still INCLUDE_ASM in
  * main/tu098, src/main/xgl_sound.c); declared with the (sound_id, volume,
  * pan, flags) shape src/ov12/xrg_sound.h and this call site agree on.
  */
 extern void xglSoundEffectParamID(int sound_id, int volume, int pan, int flags);
+
+/*
+ * xglSoundEffectStopID is not yet recovered (still INCLUDE_ASM in
+ * main/tu098, src/main/xgl_sound.c); declared with the (sound_id, flags)
+ * shape src/ov12/xrg_sound.h and this call site agree on.
+ */
+extern void xglSoundEffectStopID(int sound_id, int flags);
+
+void xglSoundStreamStop(int channel);
+
+void xglSoundStreamOpenVagMultiParam(int stream, const char *path, int pitch,
+                                     int volume, int pan);
+
+void xglSoundStreamOpenVagStereoParam(int stream, const char *path, int pitch,
+                                     int volume);
+
+void Java_xeno_Sound_sequencePlay__I(JThread *thread, int *arguments,
+                                     unsigned int *result)
+{
+    xglSoundSequenceNormal(*arguments);
+}
+
+void Java_xeno_Sound_sequencePlay__II(JThread *thread,
+                                      SoundChannelVolumeCall *arguments,
+                                      unsigned int *result)
+{
+    xglSoundSequenceNormal2(arguments->channel, arguments->volume);
+}
+
+void Java_xeno_Sound_sequenceStop__I(JThread *thread, int *arguments,
+                                     unsigned int *result)
+{
+    xglSoundSequenceFadeOut(*arguments);
+}
+
+void Java_xeno_Sound_sequenceStop__II(JThread *thread,
+                                      SoundChannelTimeCall *arguments,
+                                      unsigned int *result)
+{
+    xglSoundSequenceFadeOut2(arguments->channel, arguments->time);
+}
 
 void Java_xeno_Sound_effectPlay__III(JThread *thread,
                                      SoundEffectPlayCall *arguments,
@@ -85,32 +108,11 @@ void Java_xeno_Sound_effectPlay__III(JThread *thread,
                           arguments->pan, 0);
 }
 
-/*
- * xglSoundEffectStopID is not yet recovered (still INCLUDE_ASM in
- * main/tu098, src/main/xgl_sound.c); declared with the (sound_id, flags)
- * shape src/ov12/xrg_sound.h and this call site agree on.
- */
-extern void xglSoundEffectStopID(int sound_id, int flags);
-
 void Java_xeno_Sound_effectStop__I(JThread *thread, int *arguments,
                                    unsigned int *result)
 {
     xglSoundEffectStopID(*arguments, 0);
 }
-
-/* The call block for Sound.streamPlay(int, int, int, int). */
-typedef struct SoundStreamPlayCall {
-    int source_id;
-    int pitch;
-    int volume;
-    int pan;
-} SoundStreamPlayCall;
-
-void xglSoundStreamStop(int channel);
-void xglSoundStreamOpenVagMultiParam(int stream, const char *path, int pitch,
-                                     int volume, int pan);
-void xglSoundStreamOpenVagStereoParam(int stream, const char *path, int pitch,
-                                     int volume);
 
 void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
                                       SoundStreamPlayCall *arguments,

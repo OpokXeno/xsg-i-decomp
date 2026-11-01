@@ -1,5 +1,9 @@
 #include "common.h"
 
+#define MC_TAG_FREE 0x1234
+#define MC_TAG_USED 0x5678
+#define SM_ALLOC_ALIGNMENT 2048U
+
 /* Free-list node walked by smAlloc/smFree/smPrintInfo; nMemCell counts them. */
 typedef struct MemCell {
     int tag;
@@ -17,13 +21,19 @@ typedef struct SmMemInfo {
     unsigned int largestBlockBytes;
 } SmMemInfo;
 
-#define MC_TAG_FREE 0x1234
-#define MC_TAG_USED 0x5678
-#define SM_ALLOC_ALIGNMENT 2048U
+/* The six modeled statistics occupy the prefix of a 32-byte retail slot. */
+typedef union SmMemInfoStorage {
+    SmMemInfo info;
+    unsigned char bytes[0x20];
+} SmMemInfoStorage;
+
+void smPrintInfo(void);
 
 static MemCell *pmcHead;
 
 static unsigned int nMemCell;
+
+static SmMemInfoStorage stMemInfo;
 
 static void smInitMemInfo(SmMemInfo *info)
 {
@@ -36,13 +46,6 @@ static void smInitMemInfo(SmMemInfo *info)
     info->allocatedBytes = 0;
     info->largestBlockBytes = pool_bytes;
 }
-
-/* The six modeled statistics occupy the prefix of a 32-byte retail slot. */
-typedef union SmMemInfoStorage {
-    SmMemInfo info;
-    unsigned char bytes[0x20];
-} SmMemInfoStorage;
-static SmMemInfoStorage stMemInfo;
 
 void smInitilize(MemCell *pool, unsigned int poolSize)
 {
@@ -58,8 +61,6 @@ void smInitilize(MemCell *pool, unsigned int poolSize)
 
     smInitMemInfo(&stMemInfo.info);
 }
-
-void smPrintInfo(void);
 
 void *smAlloc(unsigned int size)
 {

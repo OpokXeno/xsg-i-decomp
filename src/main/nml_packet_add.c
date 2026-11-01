@@ -1,14 +1,17 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_2.h"
-
 #include "nml_packet_add.h"
-
 #include "main/xgl_packet.h"
-
 #include "main/ssd_init.h"
+
+/* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
+#define VIF_CODE_MSCAL 0x14000000
+
+/* VIF command FLUSH: wait for the VU1 microprogram to finish. */
+#define VIF_CODE_FLUSH 0x11000000
+
+#define VIF_CODE_MSCNT 0x17000000
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -18,21 +21,7 @@ typedef union NmlPacketData128 {
     Quadword quad;
 } NmlPacketData128;
 
-extern const u32 D_004AE5A0[];
-
-extern const u8 D_004AE5B0[];
-
-static int s_nPixelTestType;
-
-static int s_nModelParts;
-
-static NmlPacketData128 s_inLc0[4];
-
 typedef unsigned int GameLoopStateWords[];
-
-extern GameLoopStateWords GameLoopState;
-
-extern const float inReflRotYStep;
 
 typedef struct XglLoadImage {
     u64 giftag;
@@ -51,6 +40,174 @@ typedef union NmlCurrentPacket {
     XglPacket *sdk;
     NmlAttributePacket *attributes;
 } NmlCurrentPacket;
+
+/*
+ * One s_aUcodeTbl row (0x1c bytes; the 168-byte symbol holds six rows).
+ * programs[type - 1] lists the VU1 program byte addresses of microcode family
+ * `type`, indexed by the material's variant slot.
+ */
+typedef struct UcodeTableRow {
+    u32 *programs[7];
+} UcodeTableRow;
+
+/* The allocation cursor addresses byte payloads and aligned quadword
+ * payloads in the same packet buffer. Both views are used below. */
+typedef union NmlAttributeCursor {
+    u8 *bytes;
+    Quadword *quadwords;
+} NmlAttributeCursor;
+
+struct NmlAttributePacket {
+    unsigned char unmodeled_00[0x20];
+    u32 limit;
+    NmlAttributeCursor cursor;
+};
+
+typedef struct NmlPixelTestPacket {
+    u32 loops;
+    u32 format;
+    u32 registers;
+    u32 register_high;
+    u64 first_value;
+    u64 first_address;
+    u64 second_value;
+    u64 second_address;
+} NmlPixelTestPacket;
+
+typedef struct NmlZbufRenderState {
+    unsigned char unmodeled_00[2];
+    short frame_psm;
+    short frame_width;
+    short frame_height; /* +0x6 */
+    u16 depth_buffer_base;
+    unsigned char unmodeled_0a[0x10]; /* +0xa */
+    u16 texture_buffer_base; /* +0x1a */
+    unsigned char unmodeled_1c[4]; /* +0x1c */
+    u16 display_buffer_base; /* +0x20 */
+} NmlZbufRenderState;
+
+typedef union NmlReflectionPacketTag {
+    u32 words[4];
+    u64 halves[2];
+} NmlReflectionPacketTag;
+
+typedef union NmlCircleVector {
+    Vector4 vector;
+    int words[4];
+    u32 unsigned_words[4];
+} NmlCircleVector;
+
+typedef union NmlCircleOffsetTable {
+    float values[4];
+    u64 pairs[2];
+} NmlCircleOffsetTable;
+
+typedef struct NmlCircleScratchpad {
+    NmlCircleVector position[4];
+    NmlCircleVector transform[4];
+    NmlCircleVector projected[4];
+    NmlCircleVector perspective[4];
+} NmlCircleScratchpad;
+
+typedef struct NmlCircleGsRecord {
+    GsTag value;
+    GsTag address;
+} NmlCircleGsRecord;
+
+typedef union NmlPartsScratchMatrix {
+    Matrix4 values;
+    Matrix xgl_matrix;
+    NmlScreenQuadword quadwords[4];
+    Vector4 rows[4];
+    float elements[16];
+} NmlPartsScratchMatrix;
+
+typedef struct NmlPartsLightPayload {
+    Vector4 rows[3];
+    Vector4 current_point;
+} NmlPartsLightPayload;
+
+typedef struct NmlPartsWorkingScratch {
+    NmlPartsScratchMatrix part;
+    NmlPartsScratchMatrix normal;
+    NmlPartsReferenceScratch reference_point;
+    NmlPartsLightPayload light_payload;
+    NmlPartsScratchMatrix inverse_part;
+    NmlPartsScratchMatrix projected_placement;
+    NmlPartsScratchMatrix clip;
+} NmlPartsWorkingScratch;
+
+extern const u32 D_004AE5A0[];
+extern const u8 D_004AE5B0[];
+extern GameLoopStateWords GameLoopState;
+extern const float inReflRotYStep;
+extern int g_aSubWindow[4];
+extern int g_nGsEntry;
+extern NmlZbufRenderState sRender;
+extern const u8 NewVu1EnvGsKick[];
+extern const u8 NewVu1GsKick[];
+extern const u8 NewVu1ProGsKick[];
+extern const u8 NewVu1AddEnvGsKick[];
+extern const u8 NewVu1AddGsKick[];
+extern const u8 NewVu1TexEnvGsKick[];
+extern const u8 NewVu1DropGsKick[];
+extern const u8 NewVu1EnvGsKickWide[];
+extern const u8 NewVu1GsKickWide[];
+extern const u8 NewVu1ProGsKickWide[];
+extern const u8 NewVu1AddEnvGsKickWide[];
+extern const u8 NewVu1AddGsKickWide[];
+extern const u8 NewVu1TexEnvGsKickWide[];
+extern const u8 NewVu1DropGsKickWide[];
+extern const u8 D_004B19F0[];
+extern const u8 D_004B54B0[];
+extern const u8 D_004B9710[];
+extern const u8 D_004B6F80[];
+extern const u8 D_004B0A50[];
+extern const u8 D_004BD4A0[];
+extern const u32 D_004B0A40[];
+extern const u32 D_004B19E0[];
+extern const u32 D_004B54A0[];
+extern const u32 D_004B6F70[];
+extern const u32 D_004B9700[];
+extern const u32 D_004BD490[];
+extern const float alphaLimitHigh;
+extern const float alphaLimitLow;
+extern const float vectorLengthHigh;
+extern const float vectorLengthLow;
+extern const float previousVectorLengthHigh;
+extern const float previousVectorLengthLow;
+extern float circleRadiusScale;
+extern const float circleHeightOffset;
+extern const NmlCircleOffsetTable circleXOffsetTable;
+extern const NmlCircleOffsetTable circleZOffsetTable;
+
+/* One VIF unpack value passed to sceVif1PkAddUpkData128 by value. */
+extern void sceVif1PkAddUpkData128(NmlPacket packet, Quadword data);
+extern void *memcpy(void *destination, const void *source, unsigned int count);
+extern int sceVif1PkSize(XglPacket *packet);
+
+void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
+                               u64 first_test, int second_address,
+                               u64 second_value, u64 second_test);
+
+extern void sceGsSetDefLoadImage(XglLoadImage *image, short address,
+                               short width, short psm, short x, short y,
+                               short w, short h);
+
+extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
+
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
+                                 int count);
+
+extern void sceVif1PkCloseDirectCode(XglPacket *packet);
+u8 *nmlPacketSetAttributeData16N(const void *data, int count);
+extern void xglPacketTextureTrans(void *texture);
+static void nmlPacketTextureTrans(NmlModelRenderState *model);
+void nmlPacketAddGsFlushWide(void);
+
+static int s_nPixelTestType;
+
+static int s_nModelParts;
 
 static NmlCurrentPacket s_pPacket = { 0 };
 
@@ -75,24 +232,6 @@ static float s_inReflRotY = 0.0f;
 const char eye_name[8] = "eye";
 
 const char lenz_name[8] = "lenz";
-
-/* VIF command MSCAL: start the VU1 microprogram at immediate * 8. */
-
-#define VIF_CODE_MSCAL 0x14000000
-
-/* VIF command FLUSH: wait for the VU1 microprogram to finish. */
-
-#define VIF_CODE_FLUSH 0x11000000
-
-/*
- * One s_aUcodeTbl row (0x1c bytes; the 168-byte symbol holds six rows).
- * programs[type - 1] lists the VU1 program byte addresses of microcode family
- * `type`, indexed by the material's variant slot.
- */
-
-typedef struct UcodeTableRow {
-    u32 *programs[7];
-} UcodeTableRow;
 
 static u32 s_aUcodeEnvAdrZbuf[12] = { 1456U, 1456U, 1456U, 1456U, 6032U, 6032U, 6032U, 6032U, 10320U, 10320U, 10320U, 10320U };
 
@@ -173,139 +312,26 @@ static UcodeTableRow s_aUcodeTbl[6] = {
  * at [2 * count + 2] and its register address at [2 * count + 3]. Some writers
  * store the data as two 32-bit words.
  */
-
 GsTag g_aGsTag[162] = {{0}};
 
 RssdWorkFlags RssdWork = {0};
 
 char RssdStrWork[32] = {0};
 
-extern int g_aSubWindow[4];
-
-/* One VIF unpack value passed to sceVif1PkAddUpkData128 by value. */
-
-/* The allocation cursor addresses byte payloads and aligned quadword
- * payloads in the same packet buffer. Both views are used below. */
-typedef union NmlAttributeCursor {
-    u8 *bytes;
-    Quadword *quadwords;
-} NmlAttributeCursor;
-
-struct NmlAttributePacket {
-    unsigned char unmodeled_00[0x20];
-    u32 limit;
-    NmlAttributeCursor cursor;
-};
-
-extern void sceVif1PkAddUpkData128(NmlPacket packet, Quadword data);
-
-extern void *memcpy(void *destination, const void *source, unsigned int count);
-
-extern int g_nGsEntry;
-
 const char nmlEmptyName[4] = "";
 
-typedef struct NmlPixelTestPacket {
-    u32 loops;
-    u32 format;
-    u32 registers;
-    u32 register_high;
-    u64 first_value;
-    u64 first_address;
-    u64 second_value;
-    u64 second_address;
-} NmlPixelTestPacket;
-
-#define VIF_CODE_MSCNT 0x17000000
-
-extern int sceVif1PkSize(XglPacket *packet);
-
-typedef struct NmlZbufRenderState {
-    unsigned char unmodeled_00[2];
-    short frame_psm;
-    short frame_width;
-    short frame_height; /* +0x6 */
-    u16 depth_buffer_base;
-    unsigned char unmodeled_0a[0x10]; /* +0xa */
-    u16 texture_buffer_base; /* +0x1a */
-    unsigned char unmodeled_1c[4]; /* +0x1c */
-    u16 display_buffer_base; /* +0x20 */
-} NmlZbufRenderState;
-
-extern NmlZbufRenderState sRender;
-
-extern const u8 NewVu1EnvGsKick[];
-
-extern const u8 NewVu1GsKick[];
-
-extern const u8 NewVu1ProGsKick[];
-
-extern const u8 NewVu1AddEnvGsKick[];
-
-extern const u8 NewVu1AddGsKick[];
-
-extern const u8 NewVu1TexEnvGsKick[];
-
-extern const u8 NewVu1DropGsKick[];
-
-extern const u8 NewVu1EnvGsKickWide[];
-
-extern const u8 NewVu1GsKickWide[];
-
-extern const u8 NewVu1ProGsKickWide[];
-
-extern const u8 NewVu1AddEnvGsKickWide[];
-
-extern const u8 NewVu1AddGsKickWide[];
-
-extern const u8 NewVu1TexEnvGsKickWide[];
-
-extern const u8 NewVu1DropGsKickWide[];
-
-typedef union NmlReflectionPacketTag {
-    u32 words[4];
-    u64 halves[2];
-} NmlReflectionPacketTag;
-
-extern const u8 D_004B19F0[];
-
-extern const u8 D_004B54B0[];
-
-extern const u8 D_004B9710[];
-
-extern const u8 D_004B6F80[];
-
-extern const u8 D_004B0A50[];
-
-extern const u8 D_004BD4A0[];
-
-static const float s_aNormalTbl[114][4];
-
-extern const u32 D_004B0A40[];
-
-extern const u32 D_004B19E0[];
-
-extern const u32 D_004B54A0[];
-
-extern const u32 D_004B6F70[];
-
-extern const u32 D_004B9700[];
-
-extern const u32 D_004BD490[];
-
-extern const float alphaLimitHigh;
-
-extern const float alphaLimitLow;
-
-extern const float vectorLengthHigh;
-
-extern const float vectorLengthLow;
-
-extern const float previousVectorLengthHigh;
-
-extern const float previousVectorLengthLow;
-
 static int s_nLightPara;
+
+struct NmlStealthDescriptor s_aStealthDat[10] = { { .firstJoint = 9, .secondJoint = 12, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.18000000715255737f, .secondWidth = 0.18000000715255737f, .firstExtension = 0.0f, .secondExtension = -0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.94999998807907104f, 0.89999997615814209f, 0.60000002384185791f } }, { .firstJoint = 1, .secondJoint = 2, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.14000000059604645f, .secondWidth = 0.14000000059604645f, .firstExtension = 0.10000000149011612f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 2, .secondJoint = 3, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.11999999731779099f, .secondWidth = 0.18000000715255737f, .firstExtension = -0.10000000149011612f, .secondExtension = 0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 5, .secondJoint = 6, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.14000000059604645f, .secondWidth = 0.14000000059604645f, .firstExtension = 0.10000000149011612f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 6, .secondJoint = 7, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.11999999731779099f, .secondWidth = 0.18000000715255737f, .firstExtension = -0.10000000149011612f, .secondExtension = 0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 12, .secondJoint = 13, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.17000000178813934f, .secondWidth = 0.17000000178813934f, .firstExtension = -0.25f, .secondExtension = 0.05000000074505806f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 15, .secondJoint = 17, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.079999998211860657f, .secondWidth = 0.079999998211860657f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 17, .secondJoint = 19, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.090000003576278687f, .secondWidth = 0.090000003576278687f, .firstExtension = -0.0f, .secondExtension = 0.15000000596046448f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 21, .secondJoint = 23, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.079999998211860657f, .secondWidth = 0.079999998211860657f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 23, .secondJoint = 25, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.090000003576278687f, .secondWidth = 0.090000003576278687f, .firstExtension = -0.0f, .secondExtension = 0.15000000596046448f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } } };
+
+struct NmlStealthDescriptor s_inStealthUnitDat = { .firstJoint = 10000, .secondJoint = 10000, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.059999998658895493f, .secondWidth = 0.059999998658895493f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.94999998807907104f, 0.89999997615814209f, 0.60000002384185791f } };
+
+char __ps2_klibinfo__[16] = "PsIIlibkernl2420";
+
+static NmlPacketData128 s_inLc0[4];
+
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+static const float s_aNormalTbl[114][4];
 
 static inline void nmlPacketSelectLighting(NmlModelRenderState *model,
                                            const u32 *material_flags)
@@ -313,10 +339,6 @@ static inline void nmlPacketSelectLighting(NmlModelRenderState *model,
     s_pLightLayout = model;
     s_nLightPara = 0x20000 & *material_flags;
 }
-
-void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
-                               u64 first_test, int second_address,
-                               u64 second_value, u64 second_test);
 
 static inline void nmlPacketAppendGsWords(u32 address, u32 high, u32 low)
 {
@@ -338,37 +360,6 @@ static inline void nmlPacketAppendGsFields(u32 address, u32 high,
 
     nmlPacketAppendGsWords(address, high, low_word);
 }
-
-extern float circleRadiusScale;
-
-extern const float circleHeightOffset;
-
-typedef union NmlCircleVector {
-    Vector4 vector;
-    int words[4];
-    u32 unsigned_words[4];
-} NmlCircleVector;
-
-typedef union NmlCircleOffsetTable {
-    float values[4];
-    u64 pairs[2];
-} NmlCircleOffsetTable;
-
-typedef struct NmlCircleScratchpad {
-    NmlCircleVector position[4];
-    NmlCircleVector transform[4];
-    NmlCircleVector projected[4];
-    NmlCircleVector perspective[4];
-} NmlCircleScratchpad;
-
-typedef struct NmlCircleGsRecord {
-    GsTag value;
-    GsTag address;
-} NmlCircleGsRecord;
-
-extern const NmlCircleOffsetTable circleXOffsetTable;
-
-extern const NmlCircleOffsetTable circleZOffsetTable;
 
 static inline NmlCircleGsRecord *nmlCircleGsRecord(unsigned int index)
 {
@@ -465,29 +456,6 @@ static inline void nmlPacketSetPixelBlend(NmlModelRenderState *model,
                                     blend_value);
     }
 }
-
-typedef union NmlPartsScratchMatrix {
-    Matrix4 values;
-    Matrix xgl_matrix;
-    NmlScreenQuadword quadwords[4];
-    Vector4 rows[4];
-    float elements[16];
-} NmlPartsScratchMatrix;
-
-typedef struct NmlPartsLightPayload {
-    Vector4 rows[3];
-    Vector4 current_point;
-} NmlPartsLightPayload;
-
-typedef struct NmlPartsWorkingScratch {
-    NmlPartsScratchMatrix part;
-    NmlPartsScratchMatrix normal;
-    NmlPartsReferenceScratch reference_point;
-    NmlPartsLightPayload light_payload;
-    NmlPartsScratchMatrix inverse_part;
-    NmlPartsScratchMatrix projected_placement;
-    NmlPartsScratchMatrix clip;
-} NmlPartsWorkingScratch;
 
 static inline void nmlPartsCopyGeometryMatrix(NmlPartsScratchMatrix *destination,
                                               const NmlBlockVectorBlock *source)
@@ -1391,15 +1359,6 @@ void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
     nmlPacketAddGsFlushWide();
 }
 
-extern void sceGsSetDefLoadImage(XglLoadImage *image, short address,
-                               short width, short psm, short x, short y,
-                               short w, short h);
-extern void sceVif1PkOpenDirectCode(XglPacket *packet, int mode);
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
-                                 int count);
-extern void sceVif1PkCloseDirectCode(XglPacket *packet);
-u8 *nmlPacketSetAttributeData16N(const void *data, int count);
-
 void nmlPacketSendCircleTexture(const void *indices, const void *palette)
 {
     XglLoadImage image;
@@ -1501,9 +1460,6 @@ void nmlPacketClrModelCache(void)
     s_pModelLayout = 0;
     s_pLightLayout = 0;
 }
-
-extern void xglPacketTextureTrans(void *texture);
-static void nmlPacketTextureTrans(NmlModelRenderState *model);
 
 int nmlPacketAddTexture(NmlModelRenderState *model)
 {
@@ -2521,8 +2477,6 @@ static inline void nmlScreenClearAppendGs(u32 address, const u64 *value)
     g_nGsEntry++;
 }
 
-void nmlPacketAddGsFlushWide(void);
-
 void nmlPacketAddScreenClear(void)
 {
     u64 depth_format = 0x01000000;
@@ -2745,10 +2699,7 @@ void nmlPacketAddGsFba(u64 fba)
     g_nGsEntry++;
 }
 
-struct NmlStealthDescriptor s_aStealthDat[10] = { { .firstJoint = 9, .secondJoint = 12, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.18000000715255737f, .secondWidth = 0.18000000715255737f, .firstExtension = 0.0f, .secondExtension = -0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.94999998807907104f, 0.89999997615814209f, 0.60000002384185791f } }, { .firstJoint = 1, .secondJoint = 2, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.14000000059604645f, .secondWidth = 0.14000000059604645f, .firstExtension = 0.10000000149011612f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 2, .secondJoint = 3, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.11999999731779099f, .secondWidth = 0.18000000715255737f, .firstExtension = -0.10000000149011612f, .secondExtension = 0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 5, .secondJoint = 6, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.14000000059604645f, .secondWidth = 0.14000000059604645f, .firstExtension = 0.10000000149011612f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 6, .secondJoint = 7, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.11999999731779099f, .secondWidth = 0.18000000715255737f, .firstExtension = -0.10000000149011612f, .secondExtension = 0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 12, .secondJoint = 13, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.17000000178813934f, .secondWidth = 0.17000000178813934f, .firstExtension = -0.25f, .secondExtension = 0.05000000074505806f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 15, .secondJoint = 17, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.079999998211860657f, .secondWidth = 0.079999998211860657f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 17, .secondJoint = 19, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.090000003576278687f, .secondWidth = 0.090000003576278687f, .firstExtension = -0.0f, .secondExtension = 0.15000000596046448f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 21, .secondJoint = 23, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.079999998211860657f, .secondWidth = 0.079999998211860657f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 23, .secondJoint = 25, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.090000003576278687f, .secondWidth = 0.090000003576278687f, .firstExtension = -0.0f, .secondExtension = 0.15000000596046448f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } } };
-
-struct NmlStealthDescriptor s_inStealthUnitDat = { .firstJoint = 10000, .secondJoint = 10000, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.059999998658895493f, .secondWidth = 0.059999998658895493f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.94999998807907104f, 0.89999997615814209f, 0.60000002384185791f } };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const NmlCircleOffsetTable circleXOffsetTable = { .values = { -1.0f, 1.0f, -1.0f, 1.0f } };
 
 const NmlCircleOffsetTable circleZOffsetTable = { .values = { -1.0f, -1.0f, 1.0f, 1.0f } };
@@ -2778,6 +2729,3 @@ static int s_nLightPara = 0;
 static int s_nPixelTestType = 0;
 
 static const float s_aNormalTbl[114][4] = { { 0.0f, -1.0f, 0.0f, 1.0f }, { 0.0f, -0.86599999666213989f, 0.5f, 1.0f }, { 0.19099999964237213f, -0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.35400000214576721f, -0.86599999666213989f, 0.35400000214576721f, 1.0f }, { 0.46200001239776611f, -0.86599999666213989f, 0.19099999964237213f, 1.0f }, { 0.5f, -0.86599999666213989f, 0.0f, 1.0f }, { 0.46200001239776611f, -0.86599999666213989f, -0.19099999964237213f, 1.0f }, { 0.35400000214576721f, -0.86599999666213989f, -0.35400000214576721f, 1.0f }, { 0.19099999964237213f, -0.86599999666213989f, -0.46200001239776611f, 1.0f }, { 0.0f, -0.86599999666213989f, -0.5f, 1.0f }, { -0.19099999964237213f, -0.86599999666213989f, -0.46200001239776611f, 1.0f }, { -0.35400000214576721f, -0.86599999666213989f, -0.35400000214576721f, 1.0f }, { -0.46200001239776611f, -0.86599999666213989f, -0.19099999964237213f, 1.0f }, { -0.5f, -0.86599999666213989f, -0.0f, 1.0f }, { -0.46200001239776611f, -0.86599999666213989f, 0.19099999964237213f, 1.0f }, { -0.35400000214576721f, -0.86599999666213989f, 0.35400000214576721f, 1.0f }, { -0.19099999964237213f, -0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.0f, -0.7070000171661377f, 0.7070000171661377f, 1.0f }, { 0.27099999785423279f, -0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.5f, -0.7070000171661377f, 0.5f, 1.0f }, { 0.65299999713897705f, -0.7070000171661377f, 0.27099999785423279f, 1.0f }, { 0.7070000171661377f, -0.7070000171661377f, 0.0f, 1.0f }, { 0.65299999713897705f, -0.7070000171661377f, -0.27099999785423279f, 1.0f }, { 0.5f, -0.7070000171661377f, -0.5f, 1.0f }, { 0.27099999785423279f, -0.7070000171661377f, -0.65299999713897705f, 1.0f }, { 0.0f, -0.7070000171661377f, -0.7070000171661377f, 1.0f }, { -0.27099999785423279f, -0.7070000171661377f, -0.65299999713897705f, 1.0f }, { -0.5f, -0.7070000171661377f, -0.5f, 1.0f }, { -0.65299999713897705f, -0.7070000171661377f, -0.27099999785423279f, 1.0f }, { -0.7070000171661377f, -0.7070000171661377f, -0.0f, 1.0f }, { -0.65299999713897705f, -0.7070000171661377f, 0.27099999785423279f, 1.0f }, { -0.5f, -0.7070000171661377f, 0.5f, 1.0f }, { -0.27099999785423279f, -0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.0f, -0.5f, 0.86599999666213989f, 1.0f }, { 0.33100000023841858f, -0.5f, 0.80000001192092896f, 1.0f }, { 0.6119999885559082f, -0.5f, 0.6119999885559082f, 1.0f }, { 0.80000001192092896f, -0.5f, 0.33100000023841858f, 1.0f }, { 0.86599999666213989f, -0.5f, 0.0f, 1.0f }, { 0.80000001192092896f, -0.5f, -0.33100000023841858f, 1.0f }, { 0.6119999885559082f, -0.5f, -0.6119999885559082f, 1.0f }, { 0.33100000023841858f, -0.5f, -0.80000001192092896f, 1.0f }, { 0.0f, -0.5f, -0.86599999666213989f, 1.0f }, { -0.33100000023841858f, -0.5f, -0.80000001192092896f, 1.0f }, { -0.6119999885559082f, -0.5f, -0.6119999885559082f, 1.0f }, { -0.80000001192092896f, -0.5f, -0.33100000023841858f, 1.0f }, { -0.86599999666213989f, -0.5f, -0.0f, 1.0f }, { -0.80000001192092896f, -0.5f, 0.33100000023841858f, 1.0f }, { -0.6119999885559082f, -0.5f, 0.6119999885559082f, 1.0f }, { -0.33100000023841858f, -0.5f, 0.80000001192092896f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.38299998641014099f, 0.0f, 0.92400002479553223f, 1.0f }, { 0.7070000171661377f, 0.0f, 0.7070000171661377f, 1.0f }, { 0.92400002479553223f, 0.0f, 0.38299998641014099f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 0.92400002479553223f, 0.0f, -0.38299998641014099f, 1.0f }, { 0.7070000171661377f, 0.0f, -0.7070000171661377f, 1.0f }, { 0.38299998641014099f, 0.0f, -0.92400002479553223f, 1.0f }, { 0.0f, 0.0f, -1.0f, 1.0f }, { -0.38299998641014099f, 0.0f, -0.92400002479553223f, 1.0f }, { -0.7070000171661377f, 0.0f, -0.7070000171661377f, 1.0f }, { -0.92400002479553223f, 0.0f, -0.38299998641014099f, 1.0f }, { -1.0f, 0.0f, -0.0f, 1.0f }, { -0.92400002479553223f, 0.0f, 0.38299998641014099f, 1.0f }, { -0.7070000171661377f, 0.0f, 0.7070000171661377f, 1.0f }, { -0.38299998641014099f, 0.0f, 0.92400002479553223f, 1.0f }, { 0.0f, 0.5f, 0.86599999666213989f, 1.0f }, { 0.33100000023841858f, 0.5f, 0.80000001192092896f, 1.0f }, { 0.6119999885559082f, 0.5f, 0.6119999885559082f, 1.0f }, { 0.80000001192092896f, 0.5f, 0.33100000023841858f, 1.0f }, { 0.86599999666213989f, 0.5f, 0.0f, 1.0f }, { 0.80000001192092896f, 0.5f, -0.33100000023841858f, 1.0f }, { 0.6119999885559082f, 0.5f, -0.6119999885559082f, 1.0f }, { 0.33100000023841858f, 0.5f, -0.80000001192092896f, 1.0f }, { 0.0f, 0.5f, -0.86599999666213989f, 1.0f }, { -0.33100000023841858f, 0.5f, -0.80000001192092896f, 1.0f }, { -0.6119999885559082f, 0.5f, -0.6119999885559082f, 1.0f }, { -0.80000001192092896f, 0.5f, -0.33100000023841858f, 1.0f }, { -0.86599999666213989f, 0.5f, -0.0f, 1.0f }, { -0.80000001192092896f, 0.5f, 0.33100000023841858f, 1.0f }, { -0.6119999885559082f, 0.5f, 0.6119999885559082f, 1.0f }, { -0.33100000023841858f, 0.5f, 0.80000001192092896f, 1.0f }, { 0.0f, 0.7070000171661377f, 0.7070000171661377f, 1.0f }, { 0.27099999785423279f, 0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.5f, 0.7070000171661377f, 0.5f, 1.0f }, { 0.65299999713897705f, 0.7070000171661377f, 0.27099999785423279f, 1.0f }, { 0.7070000171661377f, 0.7070000171661377f, 0.0f, 1.0f }, { 0.65299999713897705f, 0.7070000171661377f, -0.27099999785423279f, 1.0f }, { 0.5f, 0.7070000171661377f, -0.5f, 1.0f }, { 0.27099999785423279f, 0.7070000171661377f, -0.65299999713897705f, 1.0f }, { 0.0f, 0.7070000171661377f, -0.7070000171661377f, 1.0f }, { -0.27099999785423279f, 0.7070000171661377f, -0.65299999713897705f, 1.0f }, { -0.5f, 0.7070000171661377f, -0.5f, 1.0f }, { -0.65299999713897705f, 0.7070000171661377f, -0.27099999785423279f, 1.0f }, { -0.7070000171661377f, 0.7070000171661377f, -0.0f, 1.0f }, { -0.65299999713897705f, 0.7070000171661377f, 0.27099999785423279f, 1.0f }, { -0.5f, 0.7070000171661377f, 0.5f, 1.0f }, { -0.27099999785423279f, 0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.0f, 0.86599999666213989f, 0.5f, 1.0f }, { 0.19099999964237213f, 0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.35400000214576721f, 0.86599999666213989f, 0.35400000214576721f, 1.0f }, { 0.46200001239776611f, 0.86599999666213989f, 0.19099999964237213f, 1.0f }, { 0.5f, 0.86599999666213989f, 0.0f, 1.0f }, { 0.46200001239776611f, 0.86599999666213989f, -0.19099999964237213f, 1.0f }, { 0.35400000214576721f, 0.86599999666213989f, -0.35400000214576721f, 1.0f }, { 0.19099999964237213f, 0.86599999666213989f, -0.46200001239776611f, 1.0f }, { 0.0f, 0.86599999666213989f, -0.5f, 1.0f }, { -0.19099999964237213f, 0.86599999666213989f, -0.46200001239776611f, 1.0f }, { -0.35400000214576721f, 0.86599999666213989f, -0.35400000214576721f, 1.0f }, { -0.46200001239776611f, 0.86599999666213989f, -0.19099999964237213f, 1.0f }, { -0.5f, 0.86599999666213989f, -0.0f, 1.0f }, { -0.46200001239776611f, 0.86599999666213989f, 0.19099999964237213f, 1.0f }, { -0.35400000214576721f, 0.86599999666213989f, 0.35400000214576721f, 1.0f }, { -0.19099999964237213f, 0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } };
-
-char __ps2_klibinfo__[16] = "PsIIlibkernl2420";
-

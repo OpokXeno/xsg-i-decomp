@@ -2,7 +2,6 @@
 #include "shared.h"
 #include "call_java_method.h"
 
-void CallMethod_II(const char *method_name, int event_type, int event_id);
 typedef struct EventLocatorFunctionData {
     unsigned char unmodeled_00[0x64];
     u32 locator_flags;
@@ -26,70 +25,6 @@ typedef struct EventLocatorFunctionActor {
     u8 unmodeled_128[0x9e8 - 0x128];
     float interaction_radius;
 } EventLocatorFunctionActor;
-
-void Call_JavaMethod(void *actor, int method_id)
-{
-    CallJavaActorPrefix *actor_record;
-    CallJavaEnemyWork *enemy_work;
-    CallJavaGameLoopStatePrefix *game_loop_state;
-
-    (void)method_id;
-    actor_record = actor;
-    game_loop_state = (CallJavaGameLoopStatePrefix *)GameLoopState;
-    enemy_work = &((CallJavaEnemyWork *)enepc)[actor_record->number];
-    if (game_loop_state->active_actor == actor_record) {
-        CallMethod_II("KickEvent", 100, EventID);
-    } else {
-        CallMethod_II("KickEvent",
-                      enemy_work->kick_event_type,
-                      EventID);
-    }
-    FlagExEvent = 1;
-}
-
-/* Call_JavaMethod (defined above in this TU, still assembler) takes actor
- * plus the method id, the same two arguments its own body proves for
- * EventCheck_Line_Touch below (it dereferences actor at +0x80 for the
- * enepc-table index and takes the method id in $a1). */
-extern void Call_JavaMethod(void *actor, int method_id);
-
-/* Check_InsideID (0x002d67e8, still assembler in this TU) takes actor plus
- * the two UnduDataGetHeader results, as Check_Locater passes them; this
- * handler forwards those same three arguments untouched. */
-extern int Check_InsideID(void *actor, LayoutHeader *first, LayoutHeader *second);
-
-/* PadData's pressed-button halfword (include/shared.h PadPrefix.half_2a);
- * bit 0x20 gates every EventCheck_*_Button handler below, the same bit
- * src/ov01/debug_entry.c tests as PadData.half_2a & 0x20. */
-extern PadPrefix PadData;
-
-void EventCheck_Line_Button(void *actor, LayoutHeader *first, LayoutHeader *second) {
-    if ((PadData.half_2a & 0x20) && (Check_InsideID(actor, first, second) != 0)) {
-        Call_JavaMethod(actor, 1);
-    }
-}
-
-/* Call_JavaMethod is defined above in this TU (still assembler); both
- * arguments are proven by its own body: it dereferences actor at +0x80 for
- * the enepc-table index and takes the method id in $a1 ($a2, reused there as
- * a local constant, is never supplied by any caller in this TU). */
-
-/* Check_InsideID (0x002d67e8, still assembler in this TU) takes actor plus
- * the two UnduDataGetHeader results, as Check_Locater passes them. The touch
- * handlers receive those same three arguments and forward them untouched
- * (whole-program argument liveness: all three are read on entry). */
-
-void EventCheck_Line_Touch(void *actor, LayoutHeader *first, LayoutHeader *second) {
-    if (Check_InsideID(actor, first, second) != 0) {
-        Call_JavaMethod(actor, 2);
-    }
-}
-
-void EventCheck_Circle_Button(void *actor, LayoutHeader *first, LayoutHeader *second) {
-    if ((PadData.half_2a & 0x20) && (Check_InsideID(actor, first, second) != 0)) {
-        Call_JavaMethod(actor, 3);
-    }
-}
 
 /*
  * This TU's own reading of the engine's actor record: only the +0x00..+0x70
@@ -118,6 +53,56 @@ typedef struct EventLocatorActor {
                                   literal 50.0/60.0 degree bounds. */
 } EventLocatorActor;
 
+typedef union InsidePosition {
+    Vector4 coordinates;
+    u64 copy_alignment;
+} InsidePosition;
+
+typedef struct InsideActor {
+    u32 flags;
+    void (*update)(struct InsideActor *);
+    void (*draw)(struct InsideActor *);
+    u32 quadword_alignment_gap;
+    InsidePosition position;
+    Vector4 previous_position;
+    Vector4 velocity;
+    Vector4 acceleration;
+    Vector4 rotation;
+    Vector4 scale;
+    unsigned char unmodeled_70[0x80 - 0x70];
+    unsigned char number;
+    unsigned char unmodeled_81[0x9e8 - 0x81];
+    float interaction_radius;
+} InsideActor;
+
+typedef struct InsidePillarSource {
+    float x, y, z, w;
+} InsidePillarSource;
+
+typedef struct InsidePillarTarget {
+    float x, y, z, w;
+} InsidePillarTarget;
+
+/* PadData's pressed-button halfword (include/shared.h PadPrefix.half_2a);
+ * bit 0x20 gates every EventCheck_*_Button handler below, the same bit
+ * src/ov01/debug_entry.c tests as PadData.half_2a & 0x20. */
+extern PadPrefix PadData;
+
+extern signed char FLAG_FRAME_60;
+
+void CallMethod_II(const char *method_name, int event_type, int event_id);
+
+/* Call_JavaMethod (defined below in this TU, still assembler) takes actor
+ * plus the method id, the same two arguments its own body proves for
+ * EventCheck_Line_Touch below (it dereferences actor at +0x80 for the
+ * enepc-table index and takes the method id in $a1). */
+extern void Call_JavaMethod(void *actor, int method_id);
+
+/* Check_InsideID (0x002d67e8, still assembler in this TU) takes actor plus
+ * the two UnduDataGetHeader results, as Check_Locater passes them; this
+ * handler forwards those same three arguments untouched. */
+extern int Check_InsideID(void *actor, LayoutHeader *first, LayoutHeader *second);
+
 /* Check_InsideFan (0x002d8240, defined in a different TU, still assembler)
  * is called here with &actor->position, the incoming first locator header
  * (passed through unmodified in $a1), -1, and four floats: actor's
@@ -125,6 +110,62 @@ typedef struct EventLocatorActor {
 extern int Check_InsideFan(Vector4 *origin, LayoutHeader *target, int flag,
                             float facing, float minDegrees, float maxDegrees,
                             float radius);
+
+extern void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
+                                      float angle, float length);
+
+extern float Get_Distance(const Vector4 *first, const Vector4 *second);
+
+extern int Check_CrossingOver(const LayoutHeader *first, const LayoutHeader *second,
+                               const Vector4 *point, const Vector4 *origin);
+
+extern void DispPillar(const void *first, const void *second, const int *color);
+
+void Call_JavaMethod(void *actor, int method_id)
+{
+    CallJavaActorPrefix *actor_record;
+    CallJavaEnemyWork *enemy_work;
+    CallJavaGameLoopStatePrefix *game_loop_state;
+
+    (void)method_id;
+    actor_record = actor;
+    game_loop_state = (CallJavaGameLoopStatePrefix *)GameLoopState;
+    enemy_work = &((CallJavaEnemyWork *)enepc)[actor_record->number];
+    if (game_loop_state->active_actor == actor_record) {
+        CallMethod_II("KickEvent", 100, EventID);
+    } else {
+        CallMethod_II("KickEvent",
+                      enemy_work->kick_event_type,
+                      EventID);
+    }
+    FlagExEvent = 1;
+}
+
+void EventCheck_Line_Button(void *actor, LayoutHeader *first, LayoutHeader *second) {
+    if ((PadData.half_2a & 0x20) && (Check_InsideID(actor, first, second) != 0)) {
+        Call_JavaMethod(actor, 1);
+    }
+}
+
+/* Call_JavaMethod is defined above in this TU (still assembler); both
+ * arguments are proven by its own body: it dereferences actor at +0x80 for
+ * the enepc-table index and takes the method id in $a1 ($a2, reused there as
+ * a local constant, is never supplied by any caller in this TU). */
+/* Check_InsideID (0x002d67e8, still assembler in this TU) takes actor plus
+ * the two UnduDataGetHeader results, as Check_Locater passes them. The touch
+ * handlers receive those same three arguments and forward them untouched
+ * (whole-program argument liveness: all three are read on entry). */
+void EventCheck_Line_Touch(void *actor, LayoutHeader *first, LayoutHeader *second) {
+    if (Check_InsideID(actor, first, second) != 0) {
+        Call_JavaMethod(actor, 2);
+    }
+}
+
+void EventCheck_Circle_Button(void *actor, LayoutHeader *first, LayoutHeader *second) {
+    if ((PadData.half_2a & 0x20) && (Check_InsideID(actor, first, second) != 0)) {
+        Call_JavaMethod(actor, 3);
+    }
+}
 
 void EventCheck_Square_Button_Center(EventLocatorActor *actor, LayoutHeader *first, LayoutHeader *second) {
     if ((PadData.half_2a & 0x20)
@@ -264,40 +305,6 @@ char Get_LocaterType_Angle(float angle)
     return type == 8 ? -1 : (char)type;
 }
 
-typedef union InsidePosition {
-    Vector4 coordinates;
-    u64 copy_alignment;
-} InsidePosition;
-typedef struct InsideActor {
-    u32 flags;
-    void (*update)(struct InsideActor *);
-    void (*draw)(struct InsideActor *);
-    u32 quadword_alignment_gap;
-    InsidePosition position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    unsigned char unmodeled_70[0x80 - 0x70];
-    unsigned char number;
-    unsigned char unmodeled_81[0x9e8 - 0x81];
-    float interaction_radius;
-} InsideActor;
-typedef struct InsidePillarSource {
-    float x, y, z, w;
-} InsidePillarSource;
-typedef struct InsidePillarTarget {
-    float x, y, z, w;
-} InsidePillarTarget;
-extern signed char FLAG_FRAME_60;
-extern void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
-                                      float angle, float length);
-extern float Get_Distance(const Vector4 *first, const Vector4 *second);
-extern int Check_CrossingOver(const LayoutHeader *first, const LayoutHeader *second,
-                               const Vector4 *point, const Vector4 *origin);
-extern void DispPillar(const void *first, const void *second, const int *color);
-
 int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
 {
     InsideActor *actor = actor_ptr;
@@ -390,13 +397,17 @@ int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Font-script labels for the locator debug modes. */
 /* JP: 芳川テスト
  * EN: Yoshikawa test */
 const char CallJavaMethodYosikawaTestText[16] = "\013\xCB\xA7\xC0\xEE\xA5\xC6\xA5\xB9\xA5\xC8";
+
 /* Text: {reset}HairTest */
 const char CallJavaMethodHairTestLabel[16] = "\013HairTest";
+
 /* Text: {reset}WindTest */
 const char CallJavaMethodWindTestLabel[16] = "\013WindTest";
+
 /* Text: {reset}ColliTest */
 const char CallJavaMethodColliTestLabel[16] = "\013ColliTest";

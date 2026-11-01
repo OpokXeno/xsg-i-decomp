@@ -115,11 +115,8 @@ typedef struct ActRecord {
 } ActRecord;
 
 void ACT_dispose2(ActRecord *self, int quick);
-
 int ACT_allocMatrix(ActRecord *self, int count);
-
 ActRecord *ACT_create(int slot, int id);
-
 void ACT_draw(void);
 
 #endif /* INCLUDE_MAIN_ACT_1_H */

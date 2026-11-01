@@ -69,16 +69,6 @@ typedef struct {
 } FxAdapterTask;
 
 /*
- * FX_ScreenMask (0x0026adb8) stores its own three fade arguments directly
- * into `color`, `duration` and `mode` (sw 0x20/0x24/0x28 at
- * 0x0026ae20..0x0026ae28).
- */
-
-static int fxAdapter(XglTaskPrefix *entry);
-int xglTaskRemove(XglTaskPrefix *task);
-extern void nmlModelSetFadeDoit(void);
-
-/*
  * This common address view is used only for the proved pointer-sized access
  * at byte offset +8 (the task scheduler, read at 0x0026adf0).  It is not a
  * complete GameLoopState layout or a claim about elements at offsets +0/+4.
@@ -87,11 +77,15 @@ typedef void *GameLoopStateAddressView[];
 
 extern GameLoopStateAddressView GameLoopState;
 
+static int fxAdapter(XglTaskPrefix *entry);
+
+int xglTaskRemove(XglTaskPrefix *task);
+extern void nmlModelSetFadeDoit(void);
+
 /* canon: config/header-canon.json chose src/core/main-0021c5c0/xglTaskEntryPrev.c over 0 other accepted spellings */
 XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry);
-
 
 extern void nmlModelSetActiveFadeIn(int argument0, int argument1, int command);
 extern void nmlModelSetActiveFadeOut(int argument0, int argument1, int command);

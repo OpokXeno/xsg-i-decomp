@@ -1,641 +1,18 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "yajima_test.h"
-
-static char h_50[7];
-
-extern int printf(const char *format, ...);
-
-extern int sceFormat(char *device, char *block_device, void *argument, int argument_size);
-
-extern int sceDevctl(const char *device, int command, const void *input,
-                     unsigned int input_size, void *output, unsigned int output_size);
-
-extern int sceOpen(const char *path, int flags, ...);
-
-extern int sceClose(int descriptor);
-
-extern int sceIoctl2(int handle, int command, const void *input, unsigned int input_size,
-                     void *output, unsigned int output_size);
-
-extern int sceMount(char *mount_point, char *device, int flags,
-                    void *payload, unsigned int payload_length);
-
-extern int sceUmount(const char *path);
-
-extern int sceMkdir(const char *path, int mode);
-
-extern int sceChstat(const char *path, void *status, unsigned int properties);
-
-extern int xglHddMcGetFree(void);
-
-extern int xglHddActivate(int state);
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern void xglSleep(void);
-
-/* tya* are defined in main/tu133 (tyaCaptureStart, tyaCaptureEnd),
- * main/tu134 (tyaMenuBgEntry), main/tu135 (tyaElevatorTask), main/tu136
- * (tyaDisplaySetting) and main/tu137 (tyaDrawGauge), none recovered yet;
- * every call in this TU passes literal 0 arguments, so only the argument
- * count is evidenced. */
-
-extern void tyaCaptureStart(int, int);
-
-extern void tyaCaptureEnd(void);
-
-extern void tyaMenuBgEntry(int, int);
-
-extern void tyaElevatorTask(int);
-
-extern void tyaDisplaySetting(int);
-
-extern void tyaDrawGauge(int);
-
-/* "hdd0:" (0x004DA2D0) and "hdd:" (0x004DA2E0): HddTestFormat's record spelled
- * the first one hdd_device_name, which HddTestShutdown's record uses for the
- * second. The merged TU keeps hdd_device for 0x004DA2D0 (canon, HddTest.c).
- */
-
-static char hdd_device[];
-
-static char hdd_device_name[];
-
-static char pfs_device_name[];
-
-static const char hdd_common_device[];
-
-static const char hdd_format_start_message[];
-
-static const char hdd_format_result_format[];
-
-static const char hdd_pfs_format_result_format[];
-
-static const char hdd_shutdown_message[];
-
-static const char hdd_full_path[];
-
-static const char hdd_create_partition_format[];
-
-static char hdd_partition_size[];
-
-static const char hdd_subcommand_format[];
-
-static const char hdd_close_result_format[];
-
-/* "pfs1:" (0x004DA2F0): HddTestMakeYourSaves' record calls it pfs_mount_point,
- * the mount/unmount records hdd_mount_point; one object, one name here. */
-
-static char hdd_mount_point[];
-
-static const char hdd_mount_result_format[];
-
-static const char hdd_unmount_result_format[];
-
-static const char hdd_your_saves_directory[];
-
-/* "make YourSaves:%d\n" (0x004C0B70). */
-
-static const char hdd_mkdir_result_format[];
-
-static const char hdd_zone_size_format[];
-
-static const char hdd_zone_free_format[];
-
-static char hdd_1024_directory_name[];
-
-static const char hdd_chstat_failure_format[];
-
-static char hdd_dummy_folder_name[];
-
-static void HddTestFormat(void);
-static void HddTestShutdown(void);
-static void HddTestHddFull(void);
-static void HddTest1024Save(void);
-static void HddTestDummyFolder(void);
-static void HddTestDummySave(void);
-static void HddTestMakeYS(void);
-
-extern char hddFormatLabel[8];
-extern const char shutdownLabel[16];
-extern const char hddFullLabel[16];
-extern const char save1024Label[16];
-extern const char dummyFolderLabel[16];
-extern const char commonFullLabel[16];
-extern const char makeYourSavesLabel[16];
-extern const char port1Label[16];
-extern const char port2Label[16];
-extern char hddText[8];
-
-static HddTestMenuEntry hdd_test_menu[];
-
-static const char hdd_status_format[];
-
-static const char hdd_status_error_format[];
-
-static const char hdd_free_format[];
-
-static const char hdd_test_title[];
-
-static char hdd_use_title[];
-
-static const char hdd_no_use_title[];
-
-static char menu_cursor[];
-
-static char *name_47[];
-
-/*
- * "%s:%d\n" (0x004DA2F8), the per-directory mkdir report of HddTest1024Save
- * and HddTestDummyFolder. Their records also call it hdd_mkdir_result_format,
- * which in this TU is the 0x004C0B70 string, so it is named apart here. While
- * .sdata stays scaffold-owned the only name the link has for the object is
- * the splat label of its data piece.
- */
-
-static char fileLineFormat[];
-
-#define hdd_mkdir_status_format fileLineFormat
-
-/*
- * PadData (0xd0-byte object at 0x490d90) through HddTest's raw view: it reads
- * the pad state as one doubleword at +40 and halfwords at +42/+44, which no
- * field view of the shared header covers (config/header-canon.json PadData,
- * byte_required src/io/main-00256190/HddTest.c).
- */
-
-extern PadDataRawView PadData;
-
-#define PAD_U64_AT(byte_offset) PadData.doublewords[(byte_offset) / sizeof(u64)]
-
-#define PAD_U16_AT(byte_offset) PadData.halfwords[(byte_offset) / sizeof(u16)]
-
-#define SCE_CST_ATTR 0x0002
-
-#define SCE_STAT_ATTRIBUTE_WORD 1
-
-static void HddTestMountCommon(void);
-
-static void HddTestMakeYourSaves(void);
-
-static void HddTestUnmountCommon(void);
-
-/* xtxdec_sleep (below) is still INCLUDE_ASM; declare it so xtxdec_error does
- * not see an implicit declaration. */
-
-static int xtxdec_sleep(void);
-
-/* xtxdec_sub is still INCLUDE_ASM; declare it here so XtxDecode does not
- * see an implicit declaration. */
-
-static int xtxdec_sub(char *filename);
-
-extern int sceRead(int descriptor, void *buffer, int bytes);
-
-extern void *memcpy(void *destination, const void *source, unsigned int size);
-
-extern int sceGsSyncPath(int mode, unsigned int timeout);
-
-extern void sceGsSetDefLoadImage(void *image, short address, short width, short psm, short x,
-                                 short y, short w, short h);
-
-extern int sceGsExecLoadImage(void *image, void *source);
-
-extern int sceGsSetDefStoreImage(void *image, short address, short width, short psm, short x,
-                                 short y, short w, short h);
-
-extern int sceGsExecStoreImage(void *image, void *destination);
-
-extern const char xtxListPathFormat[];
-
-extern const char xtxReadFormat[];
-
-extern const char xtxFilePathFormat[];
-
-extern const char xtxTbwFormat[];
-
-extern const char xtxEntryFormat[];
-
-typedef struct XtxHeader {
-    int magic[2]; /* +0x0 */
-    int image_count;
-    int table_offset;
-} XtxHeader;
-
-typedef struct XtxImageEntry {
-    unsigned int dimensions;
-    short height;
-    unsigned char unmodeled_06[2];
-    unsigned int vram_address;
-    unsigned char unmodeled_0c[4];
-    unsigned int data_offset;
-} XtxImageEntry;
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-static unsigned char TestEnv_0_0036A030[];
-
-/* Only the packet handle at +0x00 is evidenced. */
-
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
-
-/*
- * TestEnv_34 is a 6-entry, 0x10-byte-stride vertex template (matches its
- * config/symbols/main.txt size 0x60); FontTestLine only touches the x/y of
- * the last two entries (the line's two endpoints), so the rest of each entry
- * and every earlier entry (set elsewhere, still unresolved in this TU) stays
- * unmodeled.
- */
-
-typedef struct TestLineVertex {
-    int x;
-    int y;
-    unsigned char unmodeled_08[8];
-} TestLineVertex;
-
-static TestLineVertex TestEnv_34[];
-
-extern int sceWrite(int descriptor, void *buffer, unsigned int size);
-
-static const char zoneStatusFormat[];
-
-static const char chunkStepFormat[];
-
-static const char dummySaveFolderPath[];
-
-static const char mkdirStatusFormat[];
-
-static const char dummySaveFilePath[];
-
-static const char openHandleFormat[];
-
-static char counterWroteFormat[];
-
-static const char xtxDecodeText[];
-
-extern int main_param_argc;
-
-extern int main_param_argv;
-
-static const char specifyFileNameText[];
-
-static const char xtxFinishedText[];
-
-extern void xglRenderClearFrame(void);
-
-extern void xglRenderClearColor(unsigned int color);
-
-extern void xglRenderClearDepth(void);
-
-extern void xglMenuInitial(void);
-
-extern void xglMenuOpen(int mode, YajimaMenuState *menu);
-
-extern void xglMenuDraw(void);
-
-extern void xglClockRead(XglClock *clock);
-
-extern float xglFRand(void);
-
-static YajimaMenuState m_54;
-
-static void FontTest(void);
-
-static void UmlDispTest(void);
-
-static void MemcardTest(void);
-
-static void DatabaseTest(void);
-
-static void XenoMovieCheck(void);
-
-static void HddTest(void);
-static void XtxDecode(void);
-
-static void (*func_51[7])(void);
-
-static char selectText[];
-
-static const char clockDateTimeFormat[];
-extern const char databaseLabel[16];
-
-extern const char xtxDecodeLabel[16];
-
-const char movieLabel[];
-
-const char memcardLabel[];
-
-const char umlDispLabel[];
-
-const char fontLabel[];
-
 #include "main/xgl_menu.h"
 
-/* Leaf rows encode the action ID in the menu next-node slot. */
+#define hdd_mkdir_status_format fileLineFormat
+#define PAD_U64_AT(byte_offset) PadData.doublewords[(byte_offset) / sizeof(u64)]
+#define PAD_U16_AT(byte_offset) PadData.halfwords[(byte_offset) / sizeof(u16)]
+#define SCE_CST_ATTR 0x0002
+#define SCE_STAT_ATTRIBUTE_WORD 1
 
+/* Leaf rows encode the action ID in the menu next-node slot. */
 #define XGL_MENU_ACTION(id) ((XglMenuNode *)(id))
 
-const char hddLabel[];
-
-static XglMenuRow i1_52[];
-
-static XglMenuNode l1_53;
-
-static void FontTestSub(void);
-
-extern int xglCdGetFileSize(const char *name);
-
-extern const char nisuiFontPath[];
-
-extern const char scenarioTextPath[];
-
-extern const char nisuiHostPath[];
-
-extern int xglFontLoad(int font, int mode);
-
-static char test00_26[51];
-
-static char test01_27[51];
-
-static char test02_28[51];
-
-static char test03_29[51];
-
-static char test04_30[51];
-
-static char test05_31[51];
-
-static char test06_32[51];
-
-static char test07_33[56];
-
-extern void xglFontPrint(int x, int y, int color, const char *text);
-
-extern void xglFontPrintDirect(const char *text);
-
-extern int xglFontGetStringWidth(const char *text);
-
-extern int xglFontGetProportionalSize(int character);
-
-static int width_35;
-
-extern char fontTestWidthFormat[];
-
-static char test_36[6];
-
-extern char fontTestSpacingControl[];
-
-extern const char fontTestEffectControl[];
-
-extern const char characterSizeFormat[];
-
-static char test0_37[40];
-
-static char test1_38[19];
-
-static char test2_39[20];
-
-static char test3_40[36];
-
-static char test4_41[35];
-
-extern int GameSnapShotNumber(int number);
-
-extern void GameSnapShotCheck(void);
-
-extern void xglFontDebugHex(int x, int y, int value, int digits);
-
-extern void FlushCache(int mode);
-
-static int rate_2_004D9F60;
-
-static int dir_3;
-
-static int rate_8;
-
-static int dir_9;
-
-extern const char smallCharacterTestText[];
-
-extern const char test000Text[];
-
-extern const char test001Text[];
-
-extern const char hesitationText[];
-
-static unsigned char test_1[22];
-
-static char test_4[16];
-
-static char test_5[16];
-
-static char test1_6[33];
-
-static char test2_7[15];
-
-static char test_10[13];
-
-static unsigned char txt_11[15];
-
-static unsigned char xy3_12[12];
-
-static unsigned char xy5_13[28];
-
-static unsigned char xy7_14[52];
-
-static unsigned char xy9_15[84];
-
-static char test_16[25];
-
-static char test_17[43];
-
-static char test_18[40];
-
-static char test_19[31];
-
-static char init_20[13];
-
-static char test_21[33];
-
-static char test_22[21];
-
-static char test_23[33];
-
-static char test_24[31];
-
-static char test_25[26];
-
-static void FontTestP0(void);
-
-static void FontTestP1(void);
-
-static void FontTestP2(void);
-
-typedef struct UmlDispParam {
-    int file_number;
-    unsigned char unmodeled_04[4];
-    short x;
-    short y;
-    short width;
-    short height;
-    long depth;
-    short scroll_x;
-    short scroll_y;
-    unsigned char unmodeled_1c[8];
-    int flags;
-    unsigned char scroll_enable;
-    unsigned char scrolling;
-    unsigned char unmodeled_2a[2];
-    short scroll_target;
-    unsigned char unmodeled_2e[0x12];
-} UmlDispParam;
-
-typedef struct UmlDatabaseParam {
-    UmlDispParam disp;
-    unsigned char *work[4];
-    short cursor;
-    unsigned char unmodeled_52[6];
-    short total;
-    short index;
-} UmlDatabaseParam;
-
-typedef struct UmlDispVertex {
-    int x;
-    int y;
-    int z;
-    int w;
-} UmlDispVertex;
-
-static UmlDispVertex TestEnv_42[6];
-
-typedef struct SaveDataDebug {
-    unsigned char unmodeled_00[0x74];
-    unsigned char flags[128];
-    unsigned char unmodeled_f4[0x102e2 - 0xf4];
-    unsigned short umn_flags;
-    unsigned char unmodeled_102e4[0x163b0 - 0x102e4];
-} SaveDataDebug;
-
-extern unsigned char SaveData[];
-
-extern int xglFontGetSPcodeSize(int code, const char *text);
-
-extern void tyaUmlDispMain(UmlDispParam *param);
-
-extern const char umlDispFormat[];
-
-extern const char umnHeaderPath[];
-
-extern const char umnRecordFormat[];
-
-extern const char fileSelectFormat[];
-
-extern const char scrollPositionFormat[];
-
-extern char umlBitsFormat[];
-
-typedef struct UmlHeaderRecord {
-    int size;
-    int id;
-    unsigned char unmodeled_08[0x60];
-    char text[1];
-} UmlHeaderRecord;
-
-extern void xglCdLoadOverlay(int overlay);
-
-extern void tyaUmlDispInit2(unsigned char *area);
-
-extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
-
-extern void xglFlagsInitial(void);
-
-extern int xglFlagsSet(int flag, int a, int b);
-
-extern unsigned short xglSRand(void);
-
-extern void xglSoundLoadRequestSmd(const char *name, void *buffer);
-
-extern void endPrintExtFunc(int x, int y, void *data);
-
-extern int tyaUmlDispParamReset(UmlDispParam *param, int mode);
-
-extern int tyaUmlDatabaseMain(UmlDatabaseParam *param);
-
-extern char umnModeSoundName[];
-
-extern char databaseIndexFormat[];
-
-typedef struct UmlDispRect {
-    unsigned char unmodeled_00[8];
-    short x;
-    short y;
-    short width;
-    short height;
-    long depth;
-} UmlDispRect;
-
-extern const char moviePlaybackHelpText[];
-
-extern const char movieFilePathFormat[];
-
-static char * name_43[103];
-
-extern void GameResourceInit(int, int);
-
-extern int GameMpeg2Play(char *path, int mode);
-
 #define SAVE_FLAGS (((SaveDataDebug *)SaveData)->flags)
-
-extern int xglMcMain(void);
-
-/* Request records copied by the original memory-card and HDD queues. */
-typedef struct McRequestParam {
-    int file;
-    char *name;
-    void *data;
-    int size;
-} McRequestParam;
-
-typedef struct HddMcRequestParam {
-    int file;
-    void *data;
-    int size;
-} HddMcRequestParam;
-
-/* carddata.new's two payload offsets are read at +4 and +8. */
-typedef struct CardDataHeader {
-    unsigned char unmodeled_00[4];
-    int begin;
-    int end;
-} CardDataHeader;
-
-typedef struct MemcardTestWork {
-    int result;
-    int check;
-    int file;
-} MemcardTestWork;
-
-extern int xglMcRequest(int port, int command, McRequestParam *param, int *result);
-
-extern int xglMcEasySave(const char *path, const void *buffer, int size);
-
-extern void xglMcSetMapName(const unsigned char *primary_euc_name,
-                            const unsigned char *secondary_euc_name);
-
-extern int sceMcSync(int mode, int *command, int *result);
-
-extern int xglHddCheck(void);
-
-extern int xglHddMcExist(HddMcRequestParam *request);
-
-extern int xglHddMcLoad(HddMcRequestParam *request);
-
-extern int xglHddMcCreate(HddMcRequestParam *request);
-
-extern int xglHddMcSave(HddMcRequestParam *request);
 
 /* JP: エンセフェロン
  * EN: Encephalon */
@@ -812,8 +189,243 @@ extern int xglHddMcSave(HddMcRequestParam *request);
  * EN: Save */
 #define MC_TEXT_SAVE "\xA5\xBB\xA1\xBC\xA5\xD6"
 
-static unsigned char tbl_49[4];
+typedef struct XtxHeader {
+    int magic[2]; /* +0x0 */
+    int image_count;
+    int table_offset;
+} XtxHeader;
 
+typedef struct XtxImageEntry {
+    unsigned int dimensions;
+    short height;
+    unsigned char unmodeled_06[2];
+    unsigned int vram_address;
+    unsigned char unmodeled_0c[4];
+    unsigned int data_offset;
+} XtxImageEntry;
+
+/*
+ * TestEnv_34 is a 6-entry, 0x10-byte-stride vertex template (matches its
+ * config/symbols/main.txt size 0x60); FontTestLine only touches the x/y of
+ * the last two entries (the line's two endpoints), so the rest of each entry
+ * and every earlier entry (set elsewhere, still unresolved in this TU) stays
+ * unmodeled.
+ */
+typedef struct TestLineVertex {
+    int x;
+    int y;
+    unsigned char unmodeled_08[8];
+} TestLineVertex;
+
+typedef struct UmlDispParam {
+    int file_number;
+    unsigned char unmodeled_04[4];
+    short x;
+    short y;
+    short width;
+    short height;
+    long depth;
+    short scroll_x;
+    short scroll_y;
+    unsigned char unmodeled_1c[8];
+    int flags;
+    unsigned char scroll_enable;
+    unsigned char scrolling;
+    unsigned char unmodeled_2a[2];
+    short scroll_target;
+    unsigned char unmodeled_2e[0x12];
+} UmlDispParam;
+
+typedef struct UmlDatabaseParam {
+    UmlDispParam disp;
+    unsigned char *work[4];
+    short cursor;
+    unsigned char unmodeled_52[6];
+    short total;
+    short index;
+} UmlDatabaseParam;
+
+typedef struct UmlDispVertex {
+    int x;
+    int y;
+    int z;
+    int w;
+} UmlDispVertex;
+
+typedef struct SaveDataDebug {
+    unsigned char unmodeled_00[0x74];
+    unsigned char flags[128];
+    unsigned char unmodeled_f4[0x102e2 - 0xf4];
+    unsigned short umn_flags;
+    unsigned char unmodeled_102e4[0x163b0 - 0x102e4];
+} SaveDataDebug;
+
+typedef struct UmlHeaderRecord {
+    int size;
+    int id;
+    unsigned char unmodeled_08[0x60];
+    char text[1];
+} UmlHeaderRecord;
+
+typedef struct UmlDispRect {
+    unsigned char unmodeled_00[8];
+    short x;
+    short y;
+    short width;
+    short height;
+    long depth;
+} UmlDispRect;
+
+/* Request records copied by the original memory-card and HDD queues. */
+typedef struct McRequestParam {
+    int file;
+    char *name;
+    void *data;
+    int size;
+} McRequestParam;
+
+typedef struct HddMcRequestParam {
+    int file;
+    void *data;
+    int size;
+} HddMcRequestParam;
+
+/* carddata.new's two payload offsets are read at +4 and +8. */
+typedef struct CardDataHeader {
+    unsigned char unmodeled_00[4];
+    int begin;
+    int end;
+} CardDataHeader;
+
+typedef struct MemcardTestWork {
+    int result;
+    int check;
+    int file;
+} MemcardTestWork;
+
+/* "hdd0:" (0x004DA2D0) and "hdd:" (0x004DA2E0): HddTestFormat's record spelled
+ * the first one hdd_device_name, which HddTestShutdown's record uses for the
+ * second. The merged TU keeps hdd_device for 0x004DA2D0 (canon, HddTest.c).
+ */
+static char hdd_device[];
+
+static char hdd_device_name[];
+static char pfs_device_name[];
+static const char hdd_common_device[];
+static const char hdd_format_start_message[];
+static const char hdd_format_result_format[];
+static const char hdd_pfs_format_result_format[];
+static const char hdd_shutdown_message[];
+static const char hdd_full_path[];
+static const char hdd_create_partition_format[];
+static char hdd_partition_size[];
+static const char hdd_subcommand_format[];
+static const char hdd_close_result_format[];
+
+/* "pfs1:" (0x004DA2F0): HddTestMakeYourSaves' record calls it pfs_mount_point,
+ * the mount/unmount records hdd_mount_point; one object, one name here. */
+static char hdd_mount_point[];
+
+static const char hdd_mount_result_format[];
+static const char hdd_unmount_result_format[];
+static const char hdd_your_saves_directory[];
+
+/* "make YourSaves:%d\n" (0x004C0B70). */
+static const char hdd_mkdir_result_format[];
+
+static const char hdd_zone_size_format[];
+static const char hdd_zone_free_format[];
+static char hdd_1024_directory_name[];
+static const char hdd_chstat_failure_format[];
+static char hdd_dummy_folder_name[];
+extern char hddFormatLabel[8];
+extern const char shutdownLabel[16];
+extern const char hddFullLabel[16];
+extern const char save1024Label[16];
+extern const char dummyFolderLabel[16];
+extern const char commonFullLabel[16];
+extern const char makeYourSavesLabel[16];
+extern const char port1Label[16];
+extern const char port2Label[16];
+extern char hddText[8];
+static HddTestMenuEntry hdd_test_menu[];
+static const char hdd_status_format[];
+static const char hdd_status_error_format[];
+static const char hdd_free_format[];
+static const char hdd_test_title[];
+static char hdd_use_title[];
+static const char hdd_no_use_title[];
+static char menu_cursor[];
+static char *name_47[];
+
+/*
+ * "%s:%d\n" (0x004DA2F8), the per-directory mkdir report of HddTest1024Save
+ * and HddTestDummyFolder. Their records also call it hdd_mkdir_result_format,
+ * which in this TU is the 0x004C0B70 string, so it is named apart here. While
+ * .sdata stays scaffold-owned the only name the link has for the object is
+ * the splat label of its data piece.
+ */
+static char fileLineFormat[];
+
+/*
+ * PadData (0xd0-byte object at 0x490d90) through HddTest's raw view: it reads
+ * the pad state as one doubleword at +40 and halfwords at +42/+44, which no
+ * field view of the shared header covers (config/header-canon.json PadData,
+ * byte_required src/io/main-00256190/HddTest.c).
+ */
+extern PadDataRawView PadData;
+
+extern const char xtxListPathFormat[];
+extern const char xtxReadFormat[];
+extern const char xtxFilePathFormat[];
+extern const char xtxTbwFormat[];
+extern const char xtxEntryFormat[];
+static unsigned char TestEnv_0_0036A030[];
+static TestLineVertex TestEnv_34[];
+static const char zoneStatusFormat[];
+static const char chunkStepFormat[];
+static const char dummySaveFolderPath[];
+static const char mkdirStatusFormat[];
+static const char dummySaveFilePath[];
+static const char openHandleFormat[];
+static char counterWroteFormat[];
+static const char xtxDecodeText[];
+extern int main_param_argc;
+extern int main_param_argv;
+static const char specifyFileNameText[];
+static const char xtxFinishedText[];
+static char selectText[];
+static const char clockDateTimeFormat[];
+extern const char databaseLabel[16];
+extern const char xtxDecodeLabel[16];
+const char movieLabel[];
+const char memcardLabel[];
+const char umlDispLabel[];
+const char fontLabel[];
+const char hddLabel[];
+static XglMenuRow i1_52[];
+extern const char nisuiFontPath[];
+extern const char scenarioTextPath[];
+extern const char nisuiHostPath[];
+extern char fontTestWidthFormat[];
+extern char fontTestSpacingControl[];
+extern const char fontTestEffectControl[];
+extern const char characterSizeFormat[];
+extern const char smallCharacterTestText[];
+extern const char test000Text[];
+extern const char test001Text[];
+extern const char hesitationText[];
+extern unsigned char SaveData[];
+extern const char umlDispFormat[];
+extern const char umnHeaderPath[];
+extern const char umnRecordFormat[];
+extern const char fileSelectFormat[];
+extern const char scrollPositionFormat[];
+extern char umlBitsFormat[];
+extern char umnModeSoundName[];
+extern char databaseIndexFormat[];
+extern const char moviePlaybackHelpText[];
+extern const char movieFilePathFormat[];
 extern const char movie3050C1_9Name[16];
 extern const char prologueMovieName[16];
 extern const char movie3058DName[8];
@@ -917,6 +529,354 @@ extern const char resource1003B2Name[8];
 extern const char resource10B01AltName[8];
 extern const char resource1001AltName[8];
 extern const char resource10OpName[8];
+
+extern int printf(const char *format, ...);
+extern int sceFormat(char *device, char *block_device, void *argument, int argument_size);
+
+extern int sceDevctl(const char *device, int command, const void *input,
+                     unsigned int input_size, void *output, unsigned int output_size);
+
+extern int sceOpen(const char *path, int flags, ...);
+extern int sceClose(int descriptor);
+
+extern int sceIoctl2(int handle, int command, const void *input, unsigned int input_size,
+                     void *output, unsigned int output_size);
+
+extern int sceMount(char *mount_point, char *device, int flags,
+                    void *payload, unsigned int payload_length);
+
+extern int sceUmount(const char *path);
+extern int sceMkdir(const char *path, int mode);
+extern int sceChstat(const char *path, void *status, unsigned int properties);
+extern int xglHddMcGetFree(void);
+extern int xglHddActivate(int state);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern void xglSleep(void);
+
+/* tya* are defined in main/tu133 (tyaCaptureStart, tyaCaptureEnd),
+ * main/tu134 (tyaMenuBgEntry), main/tu135 (tyaElevatorTask), main/tu136
+ * (tyaDisplaySetting) and main/tu137 (tyaDrawGauge), none recovered yet;
+ * every call in this TU passes literal 0 arguments, so only the argument
+ * count is evidenced. */
+extern void tyaCaptureStart(int, int);
+
+extern void tyaCaptureEnd(void);
+extern void tyaMenuBgEntry(int, int);
+extern void tyaElevatorTask(int);
+extern void tyaDisplaySetting(int);
+extern void tyaDrawGauge(int);
+static void HddTestFormat(void);
+static void HddTestShutdown(void);
+static void HddTestHddFull(void);
+static void HddTest1024Save(void);
+static void HddTestDummyFolder(void);
+static void HddTestDummySave(void);
+static void HddTestMakeYS(void);
+static void HddTestMountCommon(void);
+static void HddTestMakeYourSaves(void);
+static void HddTestUnmountCommon(void);
+
+/* xtxdec_sleep (below) is still INCLUDE_ASM; declare it so xtxdec_error does
+ * not see an implicit declaration. */
+static int xtxdec_sleep(void);
+
+/* xtxdec_sub is still INCLUDE_ASM; declare it here so XtxDecode does not
+ * see an implicit declaration. */
+static int xtxdec_sub(char *filename);
+
+extern int sceRead(int descriptor, void *buffer, int bytes);
+extern void *memcpy(void *destination, const void *source, unsigned int size);
+extern int sceGsSyncPath(int mode, unsigned int timeout);
+
+extern void sceGsSetDefLoadImage(void *image, short address, short width, short psm, short x,
+                                 short y, short w, short h);
+
+extern int sceGsExecLoadImage(void *image, void *source);
+
+extern int sceGsSetDefStoreImage(void *image, short address, short width, short psm, short x,
+                                 short y, short w, short h);
+
+extern int sceGsExecStoreImage(void *image, void *destination);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+
+/* Only the packet handle at +0x00 is evidenced. */
+extern void nmlModelDirectSend(int mode, u8 *data, int count);
+
+extern int sceWrite(int descriptor, void *buffer, unsigned int size);
+extern void xglRenderClearFrame(void);
+extern void xglRenderClearColor(unsigned int color);
+extern void xglRenderClearDepth(void);
+extern void xglMenuInitial(void);
+extern void xglMenuOpen(int mode, YajimaMenuState *menu);
+extern void xglMenuDraw(void);
+extern void xglClockRead(XglClock *clock);
+extern float xglFRand(void);
+static void FontTest(void);
+static void UmlDispTest(void);
+static void MemcardTest(void);
+static void DatabaseTest(void);
+static void XenoMovieCheck(void);
+static void HddTest(void);
+static void XtxDecode(void);
+static void FontTestSub(void);
+extern int xglCdGetFileSize(const char *name);
+extern int xglFontLoad(int font, int mode);
+extern void xglFontPrint(int x, int y, int color, const char *text);
+extern void xglFontPrintDirect(const char *text);
+extern int xglFontGetStringWidth(const char *text);
+extern int xglFontGetProportionalSize(int character);
+extern int GameSnapShotNumber(int number);
+extern void GameSnapShotCheck(void);
+extern void xglFontDebugHex(int x, int y, int value, int digits);
+extern void FlushCache(int mode);
+static void FontTestP0(void);
+static void FontTestP1(void);
+static void FontTestP2(void);
+extern int xglFontGetSPcodeSize(int code, const char *text);
+extern void tyaUmlDispMain(UmlDispParam *param);
+extern void xglCdLoadOverlay(int overlay);
+extern void tyaUmlDispInit2(unsigned char *area);
+extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
+extern void xglFlagsInitial(void);
+extern int xglFlagsSet(int flag, int a, int b);
+extern unsigned short xglSRand(void);
+extern void xglSoundLoadRequestSmd(const char *name, void *buffer);
+extern void endPrintExtFunc(int x, int y, void *data);
+extern int tyaUmlDispParamReset(UmlDispParam *param, int mode);
+extern int tyaUmlDatabaseMain(UmlDatabaseParam *param);
+extern void GameResourceInit(int, int);
+extern int GameMpeg2Play(char *path, int mode);
+extern int xglMcMain(void);
+extern int xglMcRequest(int port, int command, McRequestParam *param, int *result);
+extern int xglMcEasySave(const char *path, const void *buffer, int size);
+
+extern void xglMcSetMapName(const unsigned char *primary_euc_name,
+                            const unsigned char *secondary_euc_name);
+
+extern int sceMcSync(int mode, int *command, int *result);
+extern int xglHddCheck(void);
+extern int xglHddMcExist(HddMcRequestParam *request);
+extern int xglHddMcLoad(HddMcRequestParam *request);
+extern int xglHddMcCreate(HddMcRequestParam *request);
+extern int xglHddMcSave(HddMcRequestParam *request);
+
+const char nisuiFontPath[24] = "data\\yajima\\nisui.euc";
+
+const char scenarioTextPath[32] = "data\\yajima\\scenario.txt";
+
+const char nisuiHostPath[16] = "host0:nisui.txt";
+
+/* JP: 縮小文字のテストっす拡大菩薩魔法嵐闘\n\n菩薩魔法嵐闘\n改行テスト
+ * EN: Small character test; enlarge; bodhisattva, magic, storm, battle\n\nbodhisattva, magic, storm, battle\nLine break test */
+const char smallCharacterTestText[80] = "\r\003\022\014\014\275\314\276\256\312\270\273\372\244\316\245\306\245\271\245\310\244\303\244\271\022  \263\310\302\347\022\014\014\312\356\273\247\313\342\313\241\315\362\306\256\022\n\n\312\356\273\247\313\342\313\241\315\362\306\256\n\262\376\271\324\245\306\245\271\245\310";
+
+/* JP: テスト（０）
+ * EN: Test (0) */
+const char test000Text[24] = "\r\002\016\004\004\000\000\000\245\306\245\271\245\310\241\312\243\260\241\313";
+
+/* JP: テスト（１）
+ * EN: Test (1) */
+const char test001Text[16] = "\r\001\245\306\245\271\245\310\241\312\243\261\241\313";
+
+/* JP: ええと──　ああ　マークⅡ㌢
+ * EN: Um... ah... mark II, centi */
+const char hesitationText[32] = "\244\250\244\250\244\310\250\241\250\241\241\241\244\242\244\242\241\241\245\336\241\274\245\257\255\266\255\302";
+
+/* Text: {reset}{effect 2}{line height 12}{char width 8} */
+const char fontTestEffectControl[16] = "\013\r\002\025\002\001\014\025\002\002\010";
+
+const char characterSizeFormat[16] = "%3d:%04x\n";
+
+const char umlDispFormat[16] = "UMLDISP %4x";
+
+const char umnHeaderPath[24] = "data\\umn\\header.lst";
+
+const char umnRecordFormat[16] = "%04d[%s][%s]\n";
+
+const char fileSelectFormat[16] = "FILE SELECT\n%4d";
+
+const char scrollPositionFormat[16] = "%4d,%4d,%3d,%6x";
+
+const char databaseLabel[16] = "DATABASE";
+
+const char movie3050C1_9Name[16] = "3050C1_9";
+
+const char prologueMovieName[16] = "prologue";
+
+/* JP: ムービープレーヤー\n\n\n%s\n\n上下で選択。\n\n○ボタンを押すと黒画面で待機します。\n\nその状態でさらに○ボタンで再生開始。\n\n再生中はゲーム中と同じ操作が可能。\n\n再生が終了するとまた黒画面で待機。\n\nそこで○ボタンを押すとこの画面に戻ります。
+ * EN: Movie player\n\n\n%s\n\nUse up/down to select.\n\nPress the circle button to wait on a black screen.\n\nPress the circle button again to start playback.\n\nThe usual in-game controls are available during playback.\n\nAfter playback ends, wait on a black screen again.\n\nPress the circle button there to return to this screen. */
+const char moviePlaybackHelpText[240] = "\013\025\002\001\010\245\340\241\274\245\323\241\274\245\327\245\354\241\274\245\344\241\274\n\n\n%s\n\n\276\345\262\274\244\307\301\252\302\362\241\243\n\n\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\271\365\262\350\314\314\244\307\302\324\265\241\244\267\244\336\244\271\241\243\n\n\244\275\244\316\276\365\302\326\244\307\244\265\244\351\244\313\241\373\245\334\245\277\245\363\244\307\272\306\300\270\263\253\273\317\241\243\n\n\272\306\300\270\303\346\244\317\245\262\241\274\245\340\303\346\244\310\306\261\244\270\301\340\272\356\244\254\262\304\307\275\241\243\n\n\272\306\300\270\244\254\275\252\316\273\244\271\244\353\244\310\244\336\244\277\271\365\262\350\314\314\244\307\302\324\265\241\241\243\n\n\244\275\244\263\244\307\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\244\263\244\316\262\350\314\314\244\313\314\341\244\352\244\336\244\271\241\243";
+
+const char movieFilePathFormat[24] = "data\\movie\\mpeg2\\%s.pss";
+
+static const char hdd_format_start_message[16] = "format HDD\n";
+
+static const char hdd_format_result_format[16] = " result:%d\n";
+
+static const char hdd_common_device[16] = "hdd0:__common";
+
+static const char hdd_pfs_format_result_format[24] = " format __common:%d\n";
+
+static const char hdd_shutdown_message[16] = "shutdown hdd\n";
+
+static const char hdd_full_path[40] = "hdd0:PP.SLPS-99999.DUMMY.DUMMY,,,1G,PFS";
+
+static const char hdd_create_partition_format[24] = "create partition:%d\n";
+
+static const char hdd_subcommand_format[16] = "sub%d:%d\n";
+
+static const char hdd_close_result_format[16] = "close:%d\n";
+
+static const char hdd_mount_result_format[16] = "mount:%d\n";
+
+static const char hdd_unmount_result_format[16] = "umount:%d\n";
+
+static const char hdd_your_saves_directory[24] = "pfs1:/Your Saves";
+
+static const char hdd_mkdir_result_format[24] = "make YourSaves:%d\n";
+
+static const char hdd_zone_size_format[16] = "zonesz:%d\n";
+
+static const char hdd_zone_free_format[16] = "zonefree:%d\n";
+
+static const char hdd_chstat_failure_format[16] = "chstat:%d\n";
+
+static const char zoneStatusFormat[16] = "zone:%d,%d\n";
+
+static const char chunkStepFormat[16] = "step:%d\n";
+
+static const char dummySaveFolderPath[16] = "pfs1:/999";
+
+static const char mkdirStatusFormat[16] = "mkdir:%d\n";
+
+static const char dummySaveFilePath[16] = "pfs1:/999/dummy";
+
+static const char openHandleFormat[16] = "open:%d\n";
+
+const char makeYourSavesLabel[16] = "MAKE YOURSAVES";
+
+const char commonFullLabel[16] = "COMMON FULL";
+
+const char dummyFolderLabel[16] = "DUMMY FOLDER";
+
+const char save1024Label[16] = "1024 SAVE";
+
+const char hddFullLabel[16] = "HDD FULL";
+
+const char shutdownLabel[16] = "SHUTDOWN";
+
+static const char hdd_status_format[24] = "HDIOC_STATUS:%d\n";
+
+/* JP: HDDデバイスが存在しません:%d\n
+ * EN: HDD device does not exist: %d\n */
+static const char hdd_status_error_format[32] =
+    "HDD\xA5\xC7\xA5\xD0\xA5\xA4\xA5\xB9\xA4\xAC\xC2\xB8\xBA\xDF\xA4\xB7\xA4\xDE\xA4\xBB\xA4\xF3:%d\n";
+
+static const char hdd_free_format[24] = "xglHddMcGetFree:%d\n";
+
+/* JP: ＨＤＤテスト
+ * EN: HDD test */
+static const char hdd_test_title[16] = "\x0B\xA3\xC8\xA3\xC4\xA3\xC4\xA5\xC6\xA5\xB9\xA5\xC8";
+
+static const char hdd_no_use_title[16] = "HDD NoUse";
+
+/* JP: ポート２
+ * EN: Port 2 */
+const char port2Label[16] = "\245\335\241\274\245\310\243\262";
+
+/* JP: ポート１
+ * EN: Port 1 */
+const char port1Label[16] = "\245\335\241\274\245\310\243\261";
+
+static YajimaMenuState m_54;
+
+static void (*func_51[7])(void);
+
+static XglMenuNode l1_53;
+
+static char test00_26[51];
+
+static char test01_27[51];
+
+static char test02_28[51];
+
+static char test03_29[51];
+
+static char test04_30[51];
+
+static char test05_31[51];
+
+static char test06_32[51];
+
+static char test07_33[56];
+
+static int width_35;
+
+static char test_36[6];
+
+static char test0_37[40];
+
+static char test1_38[19];
+
+static char test2_39[20];
+
+static char test3_40[36];
+
+static char test4_41[35];
+
+static int rate_2_004D9F60;
+
+static int dir_3;
+
+static int rate_8;
+
+static int dir_9;
+
+static unsigned char test_1[22];
+
+static char test_4[16];
+
+static char test_5[16];
+
+static char test1_6[33];
+
+static char test2_7[15];
+
+static char test_10[13];
+
+static unsigned char txt_11[15];
+
+static unsigned char xy3_12[12];
+
+static unsigned char xy5_13[28];
+
+static unsigned char xy7_14[52];
+
+static unsigned char xy9_15[84];
+
+static char test_16[25];
+
+static char test_17[43];
+
+static char test_18[40];
+
+static char test_19[31];
+
+static char init_20[13];
+
+static char test_21[33];
+
+static char test_22[21];
+
+static char test_23[33];
+
+static char test_24[31];
+
+static char test_25[26];
+
+static UmlDispVertex TestEnv_42[6];
+
+static char * name_43[103];
 
 static unsigned char TestEnv_0_0036A030[0x90] = {
     0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x8B, 0x80, 0xEE, 0x1E, 0x53, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0xB8, 0x42, 0xA9, 0x06, 0x00, 0x07, 0x20, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7A, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8A, 0x00, 0x00, 0x00, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
@@ -1083,134 +1043,6 @@ static YajimaMenuState m_54 = {
     &l1_53,
     0
 };
-
-const char nisuiFontPath[24] = "data\\yajima\\nisui.euc";
-
-const char scenarioTextPath[32] = "data\\yajima\\scenario.txt";
-
-const char nisuiHostPath[16] = "host0:nisui.txt";
-
-/* JP: 縮小文字のテストっす拡大菩薩魔法嵐闘\n\n菩薩魔法嵐闘\n改行テスト
- * EN: Small character test; enlarge; bodhisattva, magic, storm, battle\n\nbodhisattva, magic, storm, battle\nLine break test */
-const char smallCharacterTestText[80] = "\r\003\022\014\014\275\314\276\256\312\270\273\372\244\316\245\306\245\271\245\310\244\303\244\271\022  \263\310\302\347\022\014\014\312\356\273\247\313\342\313\241\315\362\306\256\022\n\n\312\356\273\247\313\342\313\241\315\362\306\256\n\262\376\271\324\245\306\245\271\245\310";
-
-/* JP: テスト（０）
- * EN: Test (0) */
-const char test000Text[24] = "\r\002\016\004\004\000\000\000\245\306\245\271\245\310\241\312\243\260\241\313";
-
-/* JP: テスト（１）
- * EN: Test (1) */
-const char test001Text[16] = "\r\001\245\306\245\271\245\310\241\312\243\261\241\313";
-
-/* JP: ええと──　ああ　マークⅡ㌢
- * EN: Um... ah... mark II, centi */
-const char hesitationText[32] = "\244\250\244\250\244\310\250\241\250\241\241\241\244\242\244\242\241\241\245\336\241\274\245\257\255\266\255\302";
-
-/* Text: {reset}{effect 2}{line height 12}{char width 8} */
-const char fontTestEffectControl[16] = "\013\r\002\025\002\001\014\025\002\002\010";
-
-const char characterSizeFormat[16] = "%3d:%04x\n";
-
-const char umlDispFormat[16] = "UMLDISP %4x";
-
-const char umnHeaderPath[24] = "data\\umn\\header.lst";
-
-const char umnRecordFormat[16] = "%04d[%s][%s]\n";
-
-const char fileSelectFormat[16] = "FILE SELECT\n%4d";
-
-const char scrollPositionFormat[16] = "%4d,%4d,%3d,%6x";
-
-const char databaseLabel[16] = "DATABASE";
-
-const char movie3050C1_9Name[16] = "3050C1_9";
-
-const char prologueMovieName[16] = "prologue";
-
-/* JP: ムービープレーヤー\n\n\n%s\n\n上下で選択。\n\n○ボタンを押すと黒画面で待機します。\n\nその状態でさらに○ボタンで再生開始。\n\n再生中はゲーム中と同じ操作が可能。\n\n再生が終了するとまた黒画面で待機。\n\nそこで○ボタンを押すとこの画面に戻ります。
- * EN: Movie player\n\n\n%s\n\nUse up/down to select.\n\nPress the circle button to wait on a black screen.\n\nPress the circle button again to start playback.\n\nThe usual in-game controls are available during playback.\n\nAfter playback ends, wait on a black screen again.\n\nPress the circle button there to return to this screen. */
-const char moviePlaybackHelpText[240] = "\013\025\002\001\010\245\340\241\274\245\323\241\274\245\327\245\354\241\274\245\344\241\274\n\n\n%s\n\n\276\345\262\274\244\307\301\252\302\362\241\243\n\n\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\271\365\262\350\314\314\244\307\302\324\265\241\244\267\244\336\244\271\241\243\n\n\244\275\244\316\276\365\302\326\244\307\244\265\244\351\244\313\241\373\245\334\245\277\245\363\244\307\272\306\300\270\263\253\273\317\241\243\n\n\272\306\300\270\303\346\244\317\245\262\241\274\245\340\303\346\244\310\306\261\244\270\301\340\272\356\244\254\262\304\307\275\241\243\n\n\272\306\300\270\244\254\275\252\316\273\244\271\244\353\244\310\244\336\244\277\271\365\262\350\314\314\244\307\302\324\265\241\241\243\n\n\244\275\244\263\244\307\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\244\263\244\316\262\350\314\314\244\313\314\341\244\352\244\336\244\271\241\243";
-
-const char movieFilePathFormat[24] = "data\\movie\\mpeg2\\%s.pss";
-
-static const char hdd_format_start_message[16] = "format HDD\n";
-
-static const char hdd_format_result_format[16] = " result:%d\n";
-
-static const char hdd_common_device[16] = "hdd0:__common";
-
-static const char hdd_pfs_format_result_format[24] = " format __common:%d\n";
-
-static const char hdd_shutdown_message[16] = "shutdown hdd\n";
-
-static const char hdd_full_path[40] = "hdd0:PP.SLPS-99999.DUMMY.DUMMY,,,1G,PFS";
-
-static const char hdd_create_partition_format[24] = "create partition:%d\n";
-
-static const char hdd_subcommand_format[16] = "sub%d:%d\n";
-
-static const char hdd_close_result_format[16] = "close:%d\n";
-
-static const char hdd_mount_result_format[16] = "mount:%d\n";
-
-static const char hdd_unmount_result_format[16] = "umount:%d\n";
-
-static const char hdd_your_saves_directory[24] = "pfs1:/Your Saves";
-
-static const char hdd_mkdir_result_format[24] = "make YourSaves:%d\n";
-
-static const char hdd_zone_size_format[16] = "zonesz:%d\n";
-
-static const char hdd_zone_free_format[16] = "zonefree:%d\n";
-
-static const char hdd_chstat_failure_format[16] = "chstat:%d\n";
-
-static const char zoneStatusFormat[16] = "zone:%d,%d\n";
-
-static const char chunkStepFormat[16] = "step:%d\n";
-
-static const char dummySaveFolderPath[16] = "pfs1:/999";
-
-static const char mkdirStatusFormat[16] = "mkdir:%d\n";
-
-static const char dummySaveFilePath[16] = "pfs1:/999/dummy";
-
-static const char openHandleFormat[16] = "open:%d\n";
-
-const char makeYourSavesLabel[16] = "MAKE YOURSAVES";
-
-const char commonFullLabel[16] = "COMMON FULL";
-
-const char dummyFolderLabel[16] = "DUMMY FOLDER";
-
-const char save1024Label[16] = "1024 SAVE";
-
-const char hddFullLabel[16] = "HDD FULL";
-
-const char shutdownLabel[16] = "SHUTDOWN";
-
-static const char hdd_status_format[24] = "HDIOC_STATUS:%d\n";
-
-/* JP: HDDデバイスが存在しません:%d\n
- * EN: HDD device does not exist: %d\n */
-static const char hdd_status_error_format[32] =
-    "HDD\xA5\xC7\xA5\xD0\xA5\xA4\xA5\xB9\xA4\xAC\xC2\xB8\xBA\xDF\xA4\xB7\xA4\xDE\xA4\xBB\xA4\xF3:%d\n";
-
-static const char hdd_free_format[24] = "xglHddMcGetFree:%d\n";
-
-/* JP: ＨＤＤテスト
- * EN: HDD test */
-static const char hdd_test_title[16] = "\x0B\xA3\xC8\xA3\xC4\xA3\xC4\xA5\xC6\xA5\xB9\xA5\xC8";
-
-static const char hdd_no_use_title[16] = "HDD NoUse";
-
-/* JP: ポート２
- * EN: Port 2 */
-const char port2Label[16] = "\245\335\241\274\245\310\243\262";
-
-/* JP: ポート１
- * EN: Port 1 */
-const char port1Label[16] = "\245\335\241\274\245\310\243\261";
 
 static int rate_2_004D9F60 = 128;
 
@@ -1461,6 +1293,11 @@ static char menu_cursor[8] = ">";
 /* JP: ＨＤＤ
  * EN: HDD */
 char hddText[8] = "\243\310\243\304\243\304";
+
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+static char h_50[7];
+
+static unsigned char tbl_49[4];
 
 static void testfunc(XglPacket **packet) {
     sceVif1PkAddDirectDataN(*packet, TestEnv_0_0036A030, 9);
@@ -2704,6 +2541,7 @@ static void MemcardTest(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char xtxListPathFormat[16] = "host0:%s.lst";
 
 const char xtxReadFormat[16] = "%d[%s]%d\n";
@@ -3048,6 +2886,7 @@ void YajimaTest(void)
     xglRenderClearDepth();
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: ＸＴＸデコード
  * EN: XTX decode */
 static const char xtxDecodeText[16] = "\x0B\xA3\xD8\xA3\xD4\xA3\xD8\xA5\xC7\xA5\xB3\xA1\xBC\xA5\xC9";

@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_HAIR_TEST_H
 
 #include "shared.h"
-
 #include "main/xgl_2.h"
 
 typedef struct JntHairDescriptor {

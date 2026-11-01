@@ -6,21 +6,11 @@
 #define SRC_MAIN_SSD_3_H
 
 #include "main/ssd_init.h"
-
-/* RssdWork and its complete owner type are declared by main/ssd_init.h. */
-
-/* RssdWorkArea.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
-/*
- * Sends one RSSD command over SIF RPC; see main:0x0023fff0 (still
- * INCLUDE_ASM, main/tu110). `request` may be null, otherwise its 32 bytes
- * are copied into the SIF RPC buffer, and `size` bytes of `data` are copied
- * after it.
- */
 #include "main/nml_packet_add.h"
 
-int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
+/* RssdWork and its complete owner type are declared by main/ssd_init.h. */
+/* RssdWorkArea.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
+#define RSSD_FLAG_SUCCESS 0x20
 
 /*
  * RssdStrWork is the RSSD background-stream cache, main:0x004aa280, ELF
@@ -39,5 +29,13 @@ typedef struct RssdStreamWork {
 } RssdStreamWork;
 
 extern RssdStreamWork RssdStrWork;
+
+/*
+ * Sends one RSSD command over SIF RPC; see main:0x0023fff0 (still
+ * INCLUDE_ASM, main/tu110). `request` may be null, otherwise its 32 bytes
+ * are copied into the SIF RPC buffer, and `size` bytes of `data` are copied
+ * after it.
+ */
+int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
 
 #endif /* SRC_MAIN_SSD_3_H */

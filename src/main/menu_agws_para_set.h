@@ -1,4 +1,5 @@
 #include "main/e_battle_win_open.h"
+
 #ifndef MENU_AGWS_PARA_SET_H
 #define MENU_AGWS_PARA_SET_H
 

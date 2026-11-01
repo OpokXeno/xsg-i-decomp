@@ -11,9 +11,6 @@ typedef void *(*JntProductionConsumer)(JntWork *work,
                                       JntStaticChannel *channels,
                                       int argument);
 
-int JNT_addConsumer(JntProducer *producer, int consumer_id,
-                    JntProductionConsumer consumer, int argument);
-
 typedef struct JntInterruptElement JntInterruptElement;
 
 struct JntInterruptWork {
@@ -48,6 +45,9 @@ struct JntStaticChannel {
     float translation_direction;  /* 0x38: sign selects the chain direction */
     unsigned char unmodeled_3c[4];
 };
+
+int JNT_addConsumer(JntProducer *producer, int consumer_id,
+                    JntProductionConsumer consumer, int argument);
 
 JntStaticChannel *JNT_resetMatrix(JntWork *work, JntStaticChannel *channel);
 

@@ -1,13 +1,13 @@
 #include "common.h"
-
 #include "effect.h"
+#include "main/jni.h"
+
+#define EFFECT_PI 3.1415927f
 
 /* Runtime Java fields occupy one EE VM value word. The descriptor
  * supplies its byte offset; its declared Java/native kind selects
  * the integer, floating or reference representation below. No fixed
  * Java-object field positions are assumed. */
-#include "main/jni.h"
-
 typedef union EffectFieldValue {
     NativeEffectPeer * effect;
     EffectUnitPeer * unit;
@@ -16,6 +16,15 @@ typedef union EffectFieldValue {
     int integer;
     void * native_pointer;
 } EffectFieldValue;
+
+struct UnitScaleVector {
+    SceneObjectClassRef *class_ref;
+    float z;
+    float y;
+    float x;
+    float w;
+    unsigned char unmodeled_14[4];
+};
 
 char effectIdName[8] = "id";
 
@@ -34,17 +43,6 @@ char effectRotationXName[8] = "rx";
 char effectRotationYName[8] = "ry";
 
 char effectRotationZName[8] = "rz";
-
-#define EFFECT_PI 3.1415927f
-
-struct UnitScaleVector {
-    SceneObjectClassRef *class_ref;
-    float z;
-    float y;
-    float x;
-    float w;
-    unsigned char unmodeled_14[4];
-};
 
 void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
 {

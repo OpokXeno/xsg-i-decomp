@@ -29,6 +29,22 @@ typedef struct JThread JThread;
  * both floats with its own arguments instead.
  */
 typedef struct UtilWindow {
+    /*
+     * The xeno/util/Window class record the VM loaded: create__I stamps the
+     * window it builds with the class's own instance class ref, so the native
+     * window can be handed back as a xeno/util/Window instance. It is the same
+     * word newObject (main 0x002f4828) seeds a freshly allocated instance with
+     * and SCENE_instance (src/main/scene_1.c) writes into the window it builds
+     * with the same TWIN_create2 call.
+     *
+     * That word is the class ref of the object header every VM instance
+     * reference begins with, but this TU only copies it and never follows it,
+     * and UtilWindow.class_ref keeps it as the plain word it is copied as:
+     * create__I writes it (main 0x002f88f0) and only then reads its call
+     * block's argument word (main 0x002f88f4), an order the compiler holds
+     * for two accesses of one type and not for a header modeled with the
+     * pointer member SceneObjectHeader declares.
+     */
     int class_ref;                         /* +0x00 */
     unsigned char unmodeled_04[0x10 - 4];
     unsigned int flags;                    /* +0x10 */
@@ -48,55 +64,12 @@ typedef struct WindowCall {
     UtilWindow *window;
 } WindowCall;
 
-void Java_xeno_util_Window_getSignal__(JThread *thread, WindowCall *arguments,
-                                       int *result)
-{
-    UtilWindow *window;
-    short signal;
-
-    /* Window's load stays in its own do/while(0) block: inlined into the
-       statements below, cc1 schedules the closeState clear right after
-       the load and defers the *result store into the branch delay slot,
-       the reverse of the original order (result stored first, clear
-       delayed last). */
-    do {
-        window = arguments->window;
-    } while (0);
-    signal = (short)window->closeState;
-    window->closeState = 0;
-    *result = signal;
-}
-
-extern void MSG_print2(UtilWindow *window, const char *text, int length);
-
 /* The call block of Window.signal(int): the target window and the value
    stored into its closeState field. */
 typedef struct WindowSignalCall {
     UtilWindow *window;
     unsigned short value;
 } WindowSignalCall;
-
-void Java_xeno_util_Window_signal__I(JThread *thread, WindowSignalCall *arguments,
-                                     void *result)
-{
-    arguments->window->closeState = arguments->value;
-}
-
-const char windowClearCommand[] = "/[clear()]";
-
-void Java_xeno_util_Window_clear__(JThread *thread, WindowCall *arguments,
-                                   void *result)
-{
-    MSG_print2(arguments->window, windowClearCommand, -1);
-}
-
-const char windowCloseCommand[] = "/[close()]";
-
-void Java_xeno_util_Window_close__(JThread *thread, WindowCall *arguments,
-                                   void *result)
-{
-    MSG_print2(arguments->window, windowCloseCommand, -1);
-}
 
 /* The call block of Window.waitkey(int)/Window.wait(int): the target window
    and the value formatted into the control string. */
@@ -105,50 +78,6 @@ typedef struct WindowIntCall {
     int value;
 } WindowIntCall;
 
-const char windowWaitKeyCommandFormat[] = "/[waitkey(%d)]";
-extern int sprintf(char *destination, const char *format, ...);
-
-void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
-                                      void *result)
-{
-    UtilWindow *window;
-    char buffer[0x40];
-
-    window = arguments->window;
-    sprintf(buffer, windowWaitKeyCommandFormat, arguments->value);
-    MSG_print2(window, buffer, -1);
-}
-
-const char windowWaitCommandFormat[] = "/[wait(%d)]";
-
-void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
-                                   void *result)
-{
-    UtilWindow *window;
-    char buffer[0x40];
-
-    window = arguments->window;
-    sprintf(buffer, windowWaitCommandFormat, arguments->value);
-    MSG_print2(window, buffer, -1);
-}
-
-/*
- * The xeno/util/Window class record the VM loaded: create__I stamps the
- * window it builds with the class's own instance class ref, so the native
- * window can be handed back as a xeno/util/Window instance. It is the same
- * word newObject (main 0x002f4828) seeds a freshly allocated instance with
- * and SCENE_instance (src/main/scene_1.c) writes into the window it builds
- * with the same TWIN_create2 call.
- *
- * That word is the class ref of the object header every VM instance
- * reference begins with, but this TU only copies it and never follows it,
- * and UtilWindow.class_ref keeps it as the plain word it is copied as:
- * create__I writes it (main 0x002f88f0) and only then reads its call
- * block's argument word (main 0x002f88f4), an order the compiler holds
- * for two accesses of one type and not for a header modeled with the
- * pointer member SceneObjectHeader declares.
- */
-
 /*
  * The call block of Window.create(int): the single int argument selects
  * which toolkit initialiser prepares the new window.
@@ -156,30 +85,6 @@ void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
 typedef struct WindowCreateCall {
     int kind;
 } WindowCreateCall;
-
-extern UtilWindow *TWIN_create2(int component_id);
-extern void TWIN_initCF(UtilWindow *window);
-extern void TWIN_initScene(UtilWindow *window);
-
-void Java_xeno_util_Window_create__I(JThread *thread, WindowCreateCall *arguments,
-                                     UtilWindow **result)
-{
-    SceneClass *window_class;
-    UtilWindow *window;
-
-    window_class = classJava_xeno_util_Window;
-    window = TWIN_create2(-1);
-    window->class_ref = (int)window_class->instance_class_ref;
-    switch (arguments->kind) {
-    case 0:
-        TWIN_initCF(window);
-        break;
-    case 1:
-        TWIN_initScene(window);
-        break;
-    }
-    *result = window;
-}
 
 /* The call block of Window.setSize(int, int): the target window and the two
    byte-sized values stored into its layout_offset/line_count fields. */
@@ -190,21 +95,6 @@ typedef struct WindowSizeCall {
     unsigned char second;         /* +0x08 */
 } WindowSizeCall;
 
-extern void TWIN_init2(UtilWindow *window);
-
-void Java_xeno_util_Window_setSize__II(JThread *thread, WindowSizeCall *arguments,
-                                       void *result)
-{
-    UtilWindow *window;
-    unsigned char second;
-
-    window = arguments->window;
-    second = arguments->second;
-    window->layout_offset = second;
-    window->line_count = arguments->first;
-    TWIN_init2(window);
-}
-
 /* The call block of Window.setLocation(int, int): the target window and the
    integer x/y position converted to float. */
 typedef struct WindowLocationCall {
@@ -213,23 +103,7 @@ typedef struct WindowLocationCall {
     int y;
 } WindowLocationCall;
 
-void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *arguments,
-                                           void *result)
-{
-    UtilWindow *window;
-
-    window = arguments->window;
-    window->flags &= ~0x40;
-    /* x's store stays in its own do/while(0) block: inlined into the
-       statements around it, cc1 hoists the y load/convert ahead of it and
-       defers x's own store next to the branch delay slot instead of right
-       after its conversion, the reverse of the original order (x stored
-       first, y converted and delayed last). */
-    do {
-        window->x = (float)arguments->x;
-    } while (0);
-    window->y = (float)arguments->y;
-}
+typedef struct StringStorage StringStorage;
 
 /*
  * A java.lang.String argument, as the print natives below read it: +0x00
@@ -238,8 +112,6 @@ void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *
  * (the same shape src/main/runtime.c's StringRef reads for its own String
  * arguments).
  */
-typedef struct StringStorage StringStorage;
-
 typedef struct StringRef {
     void *unmodeled_00;
     StringStorage *value;   /* +0x04 */
@@ -263,22 +135,6 @@ typedef struct WindowStringCall {
     StringRef *string;
 } WindowStringCall;
 
-void Java_xeno_util_Window_print__Ljava_lang_String_(JThread *thread,
-                                                      WindowStringCall *arguments,
-                                                      void *result)
-{
-    UtilWindow *window;
-    StringRef *string;
-    StringStorage *storage;
-
-    window = arguments->window;
-    string = arguments->string;
-    if (window != 0 && string != 0) {
-        storage = string->value;
-        MSG_print2(window, storage->bytes, storage->length);
-    }
-}
-
 /*
  * A java.lang.String[] argument, as print__aLjava_lang_String_I reads it:
  * the object header word every VM array reference begins with (unread
@@ -297,6 +153,149 @@ typedef struct WindowStringArrayCall {
     UtilWindow *window;
     JavaStringArray *array;
 } WindowStringArrayCall;
+
+extern void MSG_print2(UtilWindow *window, const char *text, int length);
+extern int sprintf(char *destination, const char *format, ...);
+extern UtilWindow *TWIN_create2(int component_id);
+extern void TWIN_initCF(UtilWindow *window);
+extern void TWIN_initScene(UtilWindow *window);
+extern void TWIN_init2(UtilWindow *window);
+
+const char windowClearCommand[] = "/[clear()]";
+
+const char windowCloseCommand[] = "/[close()]";
+
+const char windowWaitKeyCommandFormat[] = "/[waitkey(%d)]";
+
+const char windowWaitCommandFormat[] = "/[wait(%d)]";
+
+const char windowCloseWaitKeyCommand[] = "/[waitkey(0);close()]";
+
+void Java_xeno_util_Window_getSignal__(JThread *thread, WindowCall *arguments,
+                                       int *result)
+{
+    UtilWindow *window;
+    short signal;
+
+    /* Window's load stays in its own do/while(0) block: inlined into the
+       statements below, cc1 schedules the closeState clear right after
+       the load and defers the *result store into the branch delay slot,
+       the reverse of the original order (result stored first, clear
+       delayed last). */
+    do {
+        window = arguments->window;
+    } while (0);
+    signal = (short)window->closeState;
+    window->closeState = 0;
+    *result = signal;
+}
+
+void Java_xeno_util_Window_signal__I(JThread *thread, WindowSignalCall *arguments,
+                                     void *result)
+{
+    arguments->window->closeState = arguments->value;
+}
+
+void Java_xeno_util_Window_clear__(JThread *thread, WindowCall *arguments,
+                                   void *result)
+{
+    MSG_print2(arguments->window, windowClearCommand, -1);
+}
+
+void Java_xeno_util_Window_close__(JThread *thread, WindowCall *arguments,
+                                   void *result)
+{
+    MSG_print2(arguments->window, windowCloseCommand, -1);
+}
+
+void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
+                                      void *result)
+{
+    UtilWindow *window;
+    char buffer[0x40];
+
+    window = arguments->window;
+    sprintf(buffer, windowWaitKeyCommandFormat, arguments->value);
+    MSG_print2(window, buffer, -1);
+}
+
+void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
+                                   void *result)
+{
+    UtilWindow *window;
+    char buffer[0x40];
+
+    window = arguments->window;
+    sprintf(buffer, windowWaitCommandFormat, arguments->value);
+    MSG_print2(window, buffer, -1);
+}
+
+void Java_xeno_util_Window_create__I(JThread *thread, WindowCreateCall *arguments,
+                                     UtilWindow **result)
+{
+    SceneClass *window_class;
+    UtilWindow *window;
+
+    window_class = classJava_xeno_util_Window;
+    window = TWIN_create2(-1);
+    window->class_ref = (int)window_class->instance_class_ref;
+    switch (arguments->kind) {
+    case 0:
+        TWIN_initCF(window);
+        break;
+    case 1:
+        TWIN_initScene(window);
+        break;
+    }
+    *result = window;
+}
+
+void Java_xeno_util_Window_setSize__II(JThread *thread, WindowSizeCall *arguments,
+                                       void *result)
+{
+    UtilWindow *window;
+    unsigned char second;
+
+    window = arguments->window;
+    second = arguments->second;
+    window->layout_offset = second;
+    window->line_count = arguments->first;
+    TWIN_init2(window);
+}
+
+void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *arguments,
+                                           void *result)
+{
+    UtilWindow *window;
+
+    window = arguments->window;
+    window->flags &= ~0x40;
+    /* x's store stays in its own do/while(0) block: inlined into the
+       statements around it, cc1 hoists the y load/convert ahead of it and
+       defers x's own store next to the branch delay slot instead of right
+       after its conversion, the reverse of the original order (x stored
+       first, y converted and delayed last). */
+    do {
+        window->x = (float)arguments->x;
+    } while (0);
+    window->y = (float)arguments->y;
+}
+
+void Java_xeno_util_Window_print__Ljava_lang_String_(JThread *thread,
+                                                      WindowStringCall *arguments,
+                                                      void *result)
+{
+    UtilWindow *window;
+    StringRef *string;
+    StringStorage *storage;
+
+    window = arguments->window;
+    string = arguments->string;
+    if (window != 0 && string != 0) {
+        storage = string->value;
+        MSG_print2(window, storage->bytes, storage->length);
+    }
+}
 
 void Java_xeno_util_Window_print__aLjava_lang_String_I(JThread *thread,
                                                         WindowStringArrayCall *arguments,
@@ -331,8 +330,6 @@ void Java_xeno_util_Window_setName__Ljava_lang_String_(JThread *thread, void *ar
                                                         unsigned int *result)
 {
 }
-
-const char windowCloseWaitKeyCommand[] = "/[waitkey(0);close()]";
 
 void Java_xeno_util_Window_closeWaitKey__(JThread *thread, WindowCall *arguments,
                                           void *result)

@@ -1,9 +1,12 @@
 #include "common.h"
-
-/* The controller's first 16 bytes are the rectangle passed to the drawing
- * routines; the phase/subtype/frame bytes follow at +0x10..+0x12. */
-
 #include "open_close_main.h"
+
+/* The transition primitives in this TU set red, blue, then green. */
+#define E_WIDGET_SET_RGB(widget_value, red_value, green_value, blue_value) do { \
+    (widget_value)->color.red = (red_value); \
+    (widget_value)->color.blue = (blue_value); \
+    (widget_value)->color.green = (green_value); \
+} while (0)
 
 typedef struct OpenCloseDrawPrimitive {
     short x;
@@ -14,6 +17,8 @@ typedef struct OpenCloseDrawPrimitive {
     signed char color[4];
 } OpenCloseDrawPrimitive;
 
+/* The controller's first 16 bytes are the rectangle passed to the drawing
+ * routines; the phase/subtype/frame bytes follow at +0x10..+0x12. */
 typedef struct OpenCloseController {
     unsigned char unmodeled_00[4];
     short x;
@@ -32,23 +37,12 @@ typedef struct OpenCloseCallbacks {
     void (*entry[4])(OpenCloseController *);
 } OpenCloseCallbacks;
 
-static void OpenSubType00(OpenCloseController *);
-
-static void OpenSubType01(OpenCloseController *);
-
-static void CloseSubType00(OpenCloseController *);
-
-/* Four original function pointers: open subtype 00/01, close 00/00. */
-
-const OpenCloseCallbacks openCloseHandlers = {
-    { OpenSubType00, OpenSubType01, CloseSubType00, CloseSubType00 }
-};
-
-const char OpenCloseMenu02Path[24] = "data\\endou\\menu02.xtx";
-
-const char OpenCloseMenu01Path[24] = "data\\endou\\menu01.xtx";
-
-const char OpenCloseCfwinPath[32] = "data\\endou\\cfwin.xtx";
+typedef struct EWidgetColor {
+    signed char red;
+    signed char green;
+    signed char blue;
+    signed char alpha;
+} EWidgetColor;
 
 /*
  * Partial view of the object eWindowSet initialises. eWindowMain (still
@@ -58,14 +52,6 @@ const char OpenCloseCfwinPath[32] = "data\\endou\\cfwin.xtx";
  * constants and gates that same packet's use on visible. flag is cleared here
  * but not read by any function in this TU.
  */
-
-typedef struct EWidgetColor {
-    signed char red;
-    signed char green;
-    signed char blue;
-    signed char alpha;
-} EWidgetColor;
-
 typedef struct EWindow {
     int x;               /* +0x00 */
     int y;                /* +0x04 */
@@ -77,16 +63,6 @@ typedef struct EWindow {
     signed char flag;         /* +0x19 */
     signed char visible;       /* +0x1a */
 } EWindow;
-
-/*
- * Partial view of the object eCursolSet initialises. eCursolMain (still
- * INCLUDE_ASM in this TU) dispatches on state through a jump table, gates its
- * render call on active, advances timer once per call to drive a blink
- * pattern, and uses width in the cursor's box-position arithmetic; x, y and
- * work are copied into an embedded sprite record at +0x10 the same way
- * eSpriteSet's own x/y/work are used (src/main/e_number_main.c), and color is
- * the same four-channel quad convention as that file's other e* widgets.
- */
 
 typedef struct ECursolSprite {
     short x;
@@ -100,8 +76,6 @@ typedef struct ECursolSprite {
     signed char flags;
 } ECursolSprite;
 
-/* Main updates the render descriptor that follows each setter's partial
- * object layout. State and visibility bytes are read without sign extension. */
 typedef struct EWindowRenderPacket {
     short x;
     short y;
@@ -111,6 +85,8 @@ typedef struct EWindowRenderPacket {
     EWidgetColor color;
 } EWindowRenderPacket;
 
+/* Main updates the render descriptor that follows each setter's partial
+ * object layout. State and visibility bytes are read without sign extension. */
 typedef struct EWindowMainData {
     int x;
     int y;
@@ -125,6 +101,15 @@ typedef struct EWindowMainData {
     OpenCloseController controller;
 } EWindowMainData;
 
+/*
+ * Partial view of the object eCursolSet initialises. eCursolMain (still
+ * INCLUDE_ASM in this TU) dispatches on state through a jump table, gates its
+ * render call on active, advances timer once per call to drive a blink
+ * pattern, and uses width in the cursor's box-position arithmetic; x, y and
+ * work are copied into an embedded sprite record at +0x10 the same way
+ * eSpriteSet's own x/y/work are used (src/main/e_number_main.c), and color is
+ * the same four-channel quad convention as that file's other e* widgets.
+ */
 typedef struct ECursolMainData {
     unsigned char state;
     unsigned char active;
@@ -137,13 +122,24 @@ typedef struct ECursolMainData {
     ECursolSprite sprite;
 } ECursolMainData;
 
+static void OpenSubType00(OpenCloseController *);
+static void OpenSubType01(OpenCloseController *);
+static void CloseSubType00(OpenCloseController *);
 extern float xglCos(float);
-
 extern float xglSin(float);
-
 extern void endPrintExtFunc(int, int, void *);
-
 extern void endSpriteSet(void *, int);
+
+/* Four original function pointers: open subtype 00/01, close 00/00. */
+const OpenCloseCallbacks openCloseHandlers = {
+    { OpenSubType00, OpenSubType01, CloseSubType00, CloseSubType00 }
+};
+
+const char OpenCloseMenu02Path[24] = "data\\endou\\menu02.xtx";
+
+const char OpenCloseMenu01Path[24] = "data\\endou\\menu01.xtx";
+
+const char OpenCloseCfwinPath[32] = "data\\endou\\cfwin.xtx";
 
 static void OpenSubType00(OpenCloseController *controller)
 {
@@ -448,13 +444,6 @@ void eWindowMain(EWindowMainData *window)
         endPrintExtFunc(window->primitive.work, 1, &window->primitive);
 }
 
-/* The transition primitives in this TU set red, blue, then green. */
-#define E_WIDGET_SET_RGB(widget_value, red_value, green_value, blue_value) do { \
-    (widget_value)->color.red = (red_value); \
-    (widget_value)->color.blue = (blue_value); \
-    (widget_value)->color.green = (green_value); \
-} while (0)
-
 void eWindowSet(EWindow *window)
 {
     window->color.alpha = -128;
@@ -590,4 +579,3 @@ void eCursolSet(ECursol *cursol, int width)
     cursol->active = 0;
     cursol->width = width;
 }
-

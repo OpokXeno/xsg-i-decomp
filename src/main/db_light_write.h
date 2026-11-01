@@ -7,25 +7,6 @@
 
 #include "shared.h"
 
-void VW_getCursor(HomogeneousVector *destination);
-
-/* The studio-camera table accessor is defined in main/tu104. */
-extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
-
-/*
- * updateCursorMode2 supplies the cursor and an actor position here.  A
- * candidate is eligible only when its xyz distance is below radius; the
- * distance is returned for nearest-candidate selection, otherwise -1.0f.
- */
-float ball2point(const Vector4 *cursor_position,
-                 const Vector4 *actor_position, float radius);
-
-void VW_setCursor(const Vector4 *position);
-
-/* Callback registered on the visualizer cursor by VW_setCursorFunc, invoked
- * with the caller argument stored alongside it. */
-typedef void (*CursorCallback)(void *argument);
-
 /*
  * cursor's demonstrated HomogeneousVector layout (include/shared.h) covers
  * only the position slot at +0x10. VW_setCursorFunc stores a callback
@@ -35,9 +16,25 @@ typedef void (*CursorCallback)(void *argument);
  * HomogeneousVector member.
  */
 #define CURSOR_CALLBACK_OFFSET 0x50
+
 #define CURSOR_CALLBACK_ARGUMENT_OFFSET 0x54
 
-void VW_setCursorFunc(CursorCallback callback, void *argument);
+#define ACTOR_COUNT 64
+
+#define ACTOR_IN_USE_ID_OFFSET 0x86
+
+/*
+ * cursor[0].x's fourth `sw`-not-`swc1` raw word (VW_setCursorMode's own
+ * store target): the visualizer's current camera/cursor mode selector,
+ * read back as an int by changeCameraMode. It shares the same slot's other
+ * three words with the position float fields of CURSOR_CALLBACK_OFFSET's
+ * comment; the mode selector is this array's first word, so its offset is 0.
+ */
+#define CURSOR_MODE_OFFSET 0x0
+
+/* Callback registered on the visualizer cursor by VW_setCursorFunc, invoked
+ * with the caller argument stored alongside it. */
+typedef void (*CursorCallback)(void *argument);
 
 /*
  * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
@@ -50,9 +47,6 @@ void VW_setCursorFunc(CursorCallback callback, void *argument);
  * names agree with the owner view in include/main/act_1.h. Other spans
  * remain unmodeled; neither cursor writes the vectors' fourth lanes.
  */
-#define ACTOR_COUNT 64
-#define ACTOR_IN_USE_ID_OFFSET 0x86
-
 typedef struct {
     u32 flags;
     u8 unmodeled_04[0x10 - 0x04];
@@ -68,32 +62,6 @@ typedef struct {
     u8 unmodeled_88[0xA70 - (ACTOR_IN_USE_ID_OFFSET + 2)];
 } ActorHead;
 
-extern ActorHead actor[ACTOR_COUNT];
-
-void MAP_serach(void);
-
-void changeCameraMode(void);
-
-/*
- * cursor[0].x's fourth `sw`-not-`swc1` raw word (VW_setCursorMode's own
- * store target): the visualizer's current camera/cursor mode selector,
- * read back as an int by changeCameraMode. It shares the same slot's other
- * three words with the position float fields of CURSOR_CALLBACK_OFFSET's
- * comment; the mode selector is this array's first word, so its offset is 0.
- */
-#define CURSOR_MODE_OFFSET 0x0
-
-void drawAxis(Matrix4 matrix, float scale);
-
-void EvtTools(void);
-void updateCursor(int mode);
-void ACT_update(void);
-void JTHREAD_cntl(void);
-void MAP_updateUnit(void);
-void PLAY_ctrl(void);
-void TCAMERA_update(void);
-extern int mode_004DC5A8;
-
 struct CursorPadKeyResult {
     u16 held;
     u16 pressed;
@@ -102,5 +70,33 @@ struct CursorPadKeyResult {
     signed char flags[8];
 };
 
+extern ActorHead actor[ACTOR_COUNT];
+extern int mode_004DC5A8;
+
+void VW_getCursor(HomogeneousVector *destination);
+
+/* The studio-camera table accessor is defined in main/tu104. */
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+
+/*
+ * updateCursorMode2 supplies the cursor and an actor position here.  A
+ * candidate is eligible only when its xyz distance is below radius; the
+ * distance is returned for nearest-candidate selection, otherwise -1.0f.
+ */
+float ball2point(const Vector4 *cursor_position,
+                 const Vector4 *actor_position, float radius);
+
+void VW_setCursor(const Vector4 *position);
+void VW_setCursorFunc(CursorCallback callback, void *argument);
+void MAP_serach(void);
+void changeCameraMode(void);
+void drawAxis(Matrix4 matrix, float scale);
+void EvtTools(void);
+void updateCursor(int mode);
+void ACT_update(void);
+void JTHREAD_cntl(void);
+void MAP_updateUnit(void);
+void PLAY_ctrl(void);
+void TCAMERA_update(void);
 
 #endif /* SRC_MAIN_DB_LIGHT_WRITE_H */

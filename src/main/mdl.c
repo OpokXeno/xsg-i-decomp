@@ -1,5 +1,4 @@
 #include "common.h"
-
 #include "mdl.h"
 
 #define SWAP32(x) \

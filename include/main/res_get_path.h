@@ -4,7 +4,6 @@
 #include "shared.h"
 
 u32 GameResourceWorkAlloc(int size);
-
 void GameResourceWorkReload(void);
 
 #endif /* INCLUDE_MAIN_RES_GET_PATH_H */

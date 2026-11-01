@@ -1,6 +1,14 @@
 #include "common.h"
-
 #include "main/xgl_2.h"
+
+/* Original .lit4 words byte-pinned at their mapped VAs. */
+#define MENUBG_VERTICAL_OFFSET_SCALE (0.4f) /* 0x004D7C88: cd cc cc 3e */
+
+#define MENUBG_HORIZONTAL_SCALE_DECAY (0.7f) /* 0x004D7C8C: 33 33 33 3f */
+#define MENUBG_MIN_HORIZONTAL_SCALE (0.001f) /* 0x004D7C90: 6f 12 83 3a */
+#define MENU_BG_VERTICAL_OFFSET_FACTOR MENUBG_VERTICAL_OFFSET_SCALE
+#define MENU_BG_HORIZONTAL_DECAY MENUBG_HORIZONTAL_SCALE_DECAY
+#define MENU_BG_MIN_HORIZONTAL_LIMIT MENUBG_MIN_HORIZONTAL_SCALE
 
 typedef struct MenuBgWork {
     u64 initial_word;
@@ -90,36 +98,20 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 XglTaskPrefix *entry);
 
 extern float xglFRand(void);
-
 extern float I2F(int value);
-
 extern void xglCameraMove(StudioCamera *camera);
-
 extern int xglTaskRemove(XglTaskPrefix *task);
-
 extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
 extern void xglRotTransPersN(MenuBgProjectedPoint *destination,
                              Matrix4 *matrix, const Vector4 *points,
                              int count, int cameraId);
 
-/* Original .lit4 words byte-pinned at their mapped VAs. */
-
-#define MENUBG_VERTICAL_OFFSET_SCALE (0.4f) /* 0x004D7C88: cd cc cc 3e */
-
-#define MENUBG_HORIZONTAL_SCALE_DECAY (0.7f) /* 0x004D7C8C: 33 33 33 3f */
-
-#define MENUBG_MIN_HORIZONTAL_SCALE (0.001f) /* 0x004D7C90: 6f 12 83 3a */
-
-#define MENU_BG_VERTICAL_OFFSET_FACTOR MENUBG_VERTICAL_OFFSET_SCALE
-
-#define MENU_BG_HORIZONTAL_DECAY MENUBG_HORIZONTAL_SCALE_DECAY
-
-#define MENU_BG_MIN_HORIZONTAL_LIMIT MENUBG_MIN_HORIZONTAL_SCALE
+static int task_menubg(XglTaskPrefix *task);
+static void task_menubg_sub(XglTaskPrefix *task, float scale);
 
 /* DMA/VIF header and GIF tag are stored little-endian on EE. These
  * initializer helpers express packet words, not opaque packet-byte blobs. */
-
 #define EE_U32_BYTES(value) \
     (u8)((u32)(value)), (u8)((u32)(value) >> 8), \
     (u8)((u32)(value) >> 16), (u8)((u32)(value) >> 24)
@@ -139,25 +131,12 @@ extern void xglRotTransPersN(MenuBgProjectedPoint *destination,
 
 #define NML_ZERO_QWORD EE_U64_BYTES(0), EE_U64_BYTES(0)
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* 11-qword palette transfer: DMA/VIF header, GIFtag, four A+D writes,
  * then five original zero qwords retained by the original transfer count. */
-
 static u8 TestEnv_2_0036AAA0[176];
+
 static u8 TestEnv_3_0036AB50[112];
-
-static int task_menubg(XglTaskPrefix *task);
-
-static void task_menubg_sub(XglTaskPrefix *task, float scale);
-
-/* Original .lit4 words byte-pinned at their mapped VAs. */
-
-/* DMA/VIF header and GIF tag are stored little-endian on EE. These
- * initializer helpers express packet words, not opaque packet-byte blobs. */
-
-/* 11-qword palette transfer: DMA/VIF header, GIFtag, four A+D writes,
- * then five original zero qwords retained by the original transfer count. */
-
-/* 7-qword entry transfer: DMA/VIF header, GIFtag, and five A+D writes. */
 
 static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
 {
@@ -391,6 +370,7 @@ void tyaMenuBgEntry(XglTaskScheduler *scheduler, MenuBgWork *work)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static u8 TestEnv_2_0036AAA0[176] = {
     NML_DIRECT_HEADER(0x51000005),
     GIF_TAG_WORDS(0x8004, 0x10000000, 0x0000000e, 0),
@@ -403,7 +383,6 @@ static u8 TestEnv_2_0036AAA0[176] = {
 };
 
 /* 7-qword entry transfer: DMA/VIF header, GIFtag, and five A+D writes. */
-
 static u8 TestEnv_3_0036AB50[112] = {
     NML_DIRECT_HEADER(0x51000006),
     GIF_TAG_WORDS(0x8001, 0x50000000, 0x000eeeee, 0),

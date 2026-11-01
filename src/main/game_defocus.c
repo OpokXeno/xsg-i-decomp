@@ -1,8 +1,26 @@
 #include "common.h"
-
 #include "shared.h"
 
 #define NULL ((void *)0)
+#define DEFOCUS_SCRATCH ((DefocusSolidPacket *)0x70000000)
+#define DEFOCUS_SOLID_GIF_TAG 0x51000004
+#define DEFOCUS_SOLID_VIF_COMMAND 0x8001
+#define DEFOCUS_SOLID_GS_MODE 0x30234000
+#define DEFOCUS_SOLID_GS_REGISTERS 0x551
+#define DEFOCUS_SCREEN_X_BIAS 28664
+#define DEFOCUS_SCREEN_Y_BIAS 29175
+#define DEFOCUS_HEAD_WORDS 16
+#define DEFOCUS_SOLID_WORDS 20
+#define DEFOCUS_VU_MEMORY_WORD ((u32 *)0x8001)
+#define DEFOCUS_TYPE05_PACKET ((DefocusTexturedPacket *)0x70000000)
+#define DEFOCUS_WAVE_HEADER ((DefocusWaveHeader *)0x70000000)
+#define DEFOCUS_WAVE_TABLE ((DefocusWaveTable *)0x70000000)
+#define DEFOCUS_WAVE_SPRITE ((DefocusWaveSprite *)0x70000080)
+#define DEFOCUS_RADIAL_VERTICES ((DefocusRadialVertex *)0x70000000)
+#define DEFOCUS_STAR_HEADER ((DefocusStarHeader *)0x70000318)
+#define DEFOCUS_STAR_STRIP ((DefocusStarVertex *)0x70000338)
+#define DEFOCUS_STAR_WORD(index) (((int *)0x70000318)[index])
+#define DEFOCUS_RING_TABLE ((DefocusRingTable *)0x70000000)
 
 typedef struct {
     u8 unmodeled_00[0x14];
@@ -14,12 +32,9 @@ typedef struct {
     void (*callback)(XglPacket *packet);
 } DefocusRenderState;
 
-extern DefocusRenderState sRender;
-
 /* Partial view of one GameDefocusParam entry: 16 entries, stride 0x44.
  * The first three bytes are used by the recovered state handlers and the
  * following sixteen words hold the settings copied by GameDefocusSet. */
-
 typedef struct {
     u8 type;
     u8 state;
@@ -28,14 +43,7 @@ typedef struct {
     int parameters[16];
 } DefocusLayer;
 
-extern DefocusLayer GameDefocusParam[16];
-
-static void DefocusMain(XglPacket *packet);
-
-static void DefocusMainType09Final(DefocusLayer *layer);
-
 /* GS registers inside the display-environment block at DispEnv. */
-
 typedef struct {
     unsigned int en1 : 1;
     unsigned int en2 : 1;
@@ -91,10 +99,6 @@ typedef struct {
     u64 extwrite;
 } DefocusDispEnv;
 
-extern DefocusDispEnv DispEnv;
-
-extern int ScanLineInterpolate;
-
 typedef struct {
     u8 red;
     u8 green;
@@ -133,28 +137,8 @@ typedef struct {
     u32 second_flags;
 } DefocusSolidPacket;
 
-#define DEFOCUS_SCRATCH ((DefocusSolidPacket *)0x70000000)
-
-#define DEFOCUS_SOLID_GIF_TAG 0x51000004
-
-#define DEFOCUS_SOLID_VIF_COMMAND 0x8001
-
-#define DEFOCUS_SOLID_GS_MODE 0x30234000
-
-#define DEFOCUS_SOLID_GS_REGISTERS 0x551
-
-#define DEFOCUS_SCREEN_X_BIAS 28664
-
-#define DEFOCUS_SCREEN_Y_BIAS 29175
-
-#define DEFOCUS_HEAD_WORDS 16
-
-#define DEFOCUS_SOLID_WORDS 20
-
 /* The data reference in the original GIF/VIF packet points one word into VU memory. */
-
 /* Partial model of the fixed packet template; unknown words stay explicit. */
-
 typedef struct DefocusSolidPacketHeader {
     u8 unmodeled_00[0x0c];
     u32 packet_tag_0c;
@@ -171,16 +155,6 @@ typedef struct DefocusSolidPacketHeader {
     u32 packet_header_38;
     u32 unmodeled_3c;
 } DefocusSolidPacketHeader;
-
-#define DEFOCUS_VU_MEMORY_WORD ((u32 *)0x8001)
-
-static DefocusSolidPacketHeader Head_6_00367240;
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
-
-extern int printf(const char *format, ...);
 
 typedef struct {
     u8 unmodeled_00[0x50];
@@ -239,16 +213,6 @@ typedef struct {
     u64 destination_register;
 } DefocusTintPacket;
 
-static DefocusCopyPacket TestPrim_1;
-
-static DefocusTintPacket TestPrim_2;
-
-static u64 TestPrim_3[6];
-
-static DefocusTexturedHeader Head_0;
-
-static DefocusTexturedHeader Head_4_00367170;
-
 typedef struct {
     u32 unmodeled_00[20];
     u64 texture;
@@ -257,33 +221,11 @@ typedef struct {
     u64 unmodeled_68;
 } DefocusType05Header;
 
-static DefocusType05Header Head_5;
-
-#define DEFOCUS_TYPE05_PACKET ((DefocusTexturedPacket *)0x70000000)
-
-/* The data reference in the original GIF/VIF packet points one word into VU memory. */
-
-/* Partial model of the fixed packet template; unknown words stay explicit. */
-
 typedef struct {
     u8 unmodeled_00[0x20];
     u64 texture;
     u8 unmodeled_28[0x48];
 } DefocusCopyTemplate;
-
-static DefocusCopyTemplate Copy_10;
-
-static DefocusTexturedHeader Head_11;
-
-static u64 Head_13[10];
-
-static u64 Tail_15[8];
-
-extern float I2F(int value);
-
-extern int F2I(float value);
-
-extern float xglSin(float angle);
 
 typedef struct {
     u32 header[3];
@@ -324,18 +266,6 @@ typedef struct {
     u32 second_flags;
 } DefocusWaveSprite;
 
-#define DEFOCUS_WAVE_HEADER ((DefocusWaveHeader *)0x70000000)
-
-#define DEFOCUS_WAVE_TABLE ((DefocusWaveTable *)0x70000000)
-
-#define DEFOCUS_WAVE_SPRITE ((DefocusWaveSprite *)0x70000080)
-
-static DefocusTexturedHeader Head_12;
-
-extern float xglCos(float angle);
-
-static DefocusTexturedHeader Head_7;
-
 typedef struct {
     int u;
     int v;
@@ -345,14 +275,6 @@ typedef struct {
     u32 color;
     u32 flags;
 } DefocusRadialVertex;
-
-#define DEFOCUS_RADIAL_VERTICES ((DefocusRadialVertex *)0x70000000)
-
-extern float xglFRand(void);
-
-static DefocusSolidPacketHeader Head_8;
-
-static u8 rate_9[37];
 
 typedef struct {
     u32 header[3];
@@ -374,8 +296,6 @@ typedef struct {
     DefocusRingPoint outer[33];
 } DefocusRingTable;
 
-#define DEFOCUS_STAR_HEADER ((DefocusStarHeader *)0x70000318)
-
 typedef struct {
     int red;
     int green;
@@ -387,16 +307,103 @@ typedef struct {
     int flags;
 } DefocusStarVertex;
 
-#define DEFOCUS_STAR_STRIP ((DefocusStarVertex *)0x70000338)
-
-#define DEFOCUS_STAR_WORD(index) (((int *)0x70000318)[index])
-
-#define DEFOCUS_RING_TABLE ((DefocusRingTable *)0x70000000)
-
+extern DefocusRenderState sRender;
+extern DefocusLayer GameDefocusParam[16];
+extern DefocusDispEnv DispEnv;
+extern int ScanLineInterpolate;
 extern void (*func_14[11])(DefocusLayer *layer, XglPacket *packet);
+
+static void DefocusMain(XglPacket *packet);
+static void DefocusMainType09Final(DefocusLayer *layer);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+extern int printf(const char *format, ...);
+extern float I2F(int value);
+extern int F2I(float value);
+extern float xglSin(float angle);
+extern float xglCos(float angle);
+extern float xglFRand(void);
+extern void DefocusMainType01(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType06(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType02(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType07(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType11(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType09(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType03(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType05(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType08(DefocusLayer *layer, XglPacket *packet);
+extern void DefocusMainType10(DefocusLayer *layer, XglPacket *packet);
+
+static DefocusSolidPacketHeader Head_6_00367240;
+
+static DefocusCopyPacket TestPrim_1;
+
+static DefocusTintPacket TestPrim_2;
+
+static u64 TestPrim_3[6];
+
+static DefocusTexturedHeader Head_0;
+
+static DefocusTexturedHeader Head_4_00367170;
+
+static DefocusType05Header Head_5;
+
+static DefocusCopyTemplate Copy_10;
+
+static DefocusTexturedHeader Head_11;
+
+static u64 Head_13[10];
+
+static u64 Tail_15[8];
+
+static DefocusTexturedHeader Head_12;
+
+static DefocusTexturedHeader Head_7;
+
+static DefocusSolidPacketHeader Head_8;
+
+static u8 rate_9[37];
+
+static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet);
+
+static DefocusTexturedHeader Head_0 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
+
+static DefocusCopyPacket TestPrim_1 = { .unmodeled_00 = { 0ULL, 5836665177201704960ULL, 15027174950396002305ULL, 4192666307718894ULL, 5117050880ULL, 78ULL, 462849ULL, 71ULL, 0ULL, 20ULL, 1ULL, 74ULL }, .framebuffer = 0ULL, .frame_register = 76ULL, .texture = 0ULL, .unmodeled_78 = { 6ULL, 549755814016ULL, 128ULL, 0ULL, 0ULL, 125305670889464ULL, 4294967295ULL, 30786325585920ULL, 0ULL, 156091996475384ULL, 4294967295ULL, 0ULL, 63ULL, 0ULL, 74ULL } };
+
+static DefocusTintPacket TestPrim_2 = { .unmodeled_00 = { 0ULL, 5836665151431901184ULL, 8071365325922271233ULL, 249909742ULL, 458752ULL, 71ULL }, .source_frame = 0ULL, .frame_register = 76ULL, .color = { 0ULL, 0ULL }, .top_left = 125305670889464ULL, .first_color = 49152, .first_flags = 0U, .bottom_right = 156091996475384ULL, .second_color = 49152, .second_flags = 0U, .unmodeled_70 = { 0ULL, 63ULL }, .destination_frame = 0ULL, .destination_register = 76ULL };
+
+static u64 TestPrim_3[6] = { 0x0000000000000000ULL, 0x5100000200000000ULL, 0x1000000000008001ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000004cULL };
+
+static DefocusTexturedHeader Head_4_00367170 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 13, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 64, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
+
+static DefocusType05Header Head_5 = { .unmodeled_00 = { 0U, 0U, 0U, 1358954502U, 32769U, 1342177280U, 978670U, 0U, 0U, 0U, 20U, 0U, 462849U, 0U, 71U, 0U, 68U, 0U, 66U, 0U }, .texture = 0ULL, .unmodeled_58 = 6ULL, .texture_dimensions = 0ULL, .unmodeled_68 = 8ULL };
+
+static DefocusSolidPacketHeader Head_6_00367240 = {
+    {0}, 0x51000003, 0x8001U, 0x20000000,
+    0x000000EE, 0, 0x00071001, 0, 0x47, 0, 0x84, 0, 0x42, 0
+};
+
+static DefocusTexturedHeader Head_7 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
+
+static DefocusSolidPacketHeader Head_8 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .packet_tag_0c = 1358954499U, .vu_memory_address_10 = 32769U, .packet_header_14 = 536870912U, .packet_header_18 = 238U, .unmodeled_1c = 0U, .packet_header_20 = 462849U, .unmodeled_24 = 0U, .packet_header_28 = 71U, .unmodeled_2c = 0U, .packet_header_30 = 68U, .unmodeled_34 = 0U, .packet_header_38 = 66U, .unmodeled_3c = 0U };
+
+static u8 rate_9[37] = { 17, 9, 1, 0, 0, 0, 0, 8, 16, 24, 32, 48, 48, 48, 32, 24, 16, 8, 0, 0, 0, 0, 1, 9, 17, 25, 33, 49, 49, 49, 33, 25, 17, 9, 1, 0, 0 };
+
+static DefocusCopyTemplate Copy_10 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 80, 238, 238, 14, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_28 = { 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 192, 1, 0, 0, 82, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0 } };
+
+static DefocusTexturedHeader Head_11 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 13, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
+
+static DefocusTexturedHeader Head_12 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
+
+static u64 Head_13[10] = { 0x0000000000000000ULL, 0x5100000400000000ULL, 0x3000000000008001ULL, 0x0000000000000eeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000131000000ULL, 0x000000000000004eULL, 0x000006fc007fc005ULL, 0x0000000000000008ULL };
+
+static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet) = { DefocusMainType01, DefocusMainType02, DefocusMainType03, DefocusMainType01, DefocusMainType05, DefocusMainType06, DefocusMainType07, DefocusMainType08, DefocusMainType09, DefocusMainType10, DefocusMainType11 };
+
+static u64 Tail_15[8] = { 0x0000000000000000ULL, 0x5100000300000000ULL, 0x2000000000008001ULL, 0x00000000000000eeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000031000000ULL, 0x000000000000004eULL };
 
 /* Runtime writes the layer entries through DefocusSet; the original table is
  * sixteen 0x44-byte records whose initial bytes are all zero. */
+DefocusLayer GameDefocusParam[16] = { 0 };
 
 static u64 GetTex0(int type, int tex_cc)
 {
@@ -1361,53 +1368,3 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
     }
     GameDefocusCheck();
 }
-
-extern void DefocusMainType01(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType06(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType02(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType07(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType11(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType09(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType03(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType05(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType08(DefocusLayer *layer, XglPacket *packet);
-extern void DefocusMainType10(DefocusLayer *layer, XglPacket *packet);
-
-static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet);
-
-static DefocusTexturedHeader Head_0 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
-
-static DefocusCopyPacket TestPrim_1 = { .unmodeled_00 = { 0ULL, 5836665177201704960ULL, 15027174950396002305ULL, 4192666307718894ULL, 5117050880ULL, 78ULL, 462849ULL, 71ULL, 0ULL, 20ULL, 1ULL, 74ULL }, .framebuffer = 0ULL, .frame_register = 76ULL, .texture = 0ULL, .unmodeled_78 = { 6ULL, 549755814016ULL, 128ULL, 0ULL, 0ULL, 125305670889464ULL, 4294967295ULL, 30786325585920ULL, 0ULL, 156091996475384ULL, 4294967295ULL, 0ULL, 63ULL, 0ULL, 74ULL } };
-
-static DefocusTintPacket TestPrim_2 = { .unmodeled_00 = { 0ULL, 5836665151431901184ULL, 8071365325922271233ULL, 249909742ULL, 458752ULL, 71ULL }, .source_frame = 0ULL, .frame_register = 76ULL, .color = { 0ULL, 0ULL }, .top_left = 125305670889464ULL, .first_color = 49152, .first_flags = 0U, .bottom_right = 156091996475384ULL, .second_color = 49152, .second_flags = 0U, .unmodeled_70 = { 0ULL, 63ULL }, .destination_frame = 0ULL, .destination_register = 76ULL };
-
-static u64 TestPrim_3[6] = { 0x0000000000000000ULL, 0x5100000200000000ULL, 0x1000000000008001ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000004cULL };
-
-static DefocusTexturedHeader Head_4_00367170 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 13, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 64, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
-
-static DefocusType05Header Head_5 = { .unmodeled_00 = { 0U, 0U, 0U, 1358954502U, 32769U, 1342177280U, 978670U, 0U, 0U, 0U, 20U, 0U, 462849U, 0U, 71U, 0U, 68U, 0U, 66U, 0U }, .texture = 0ULL, .unmodeled_58 = 6ULL, .texture_dimensions = 0ULL, .unmodeled_68 = 8ULL };
-
-static DefocusSolidPacketHeader Head_6_00367240 = {
-    {0}, 0x51000003, 0x8001U, 0x20000000,
-    0x000000EE, 0, 0x00071001, 0, 0x47, 0, 0x84, 0, 0x42, 0
-};
-
-static DefocusTexturedHeader Head_7 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
-
-static DefocusSolidPacketHeader Head_8 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .packet_tag_0c = 1358954499U, .vu_memory_address_10 = 32769U, .packet_header_14 = 536870912U, .packet_header_18 = 238U, .unmodeled_1c = 0U, .packet_header_20 = 462849U, .unmodeled_24 = 0U, .packet_header_28 = 71U, .unmodeled_2c = 0U, .packet_header_30 = 68U, .unmodeled_34 = 0U, .packet_header_38 = 66U, .unmodeled_3c = 0U };
-
-static u8 rate_9[37] = { 17, 9, 1, 0, 0, 0, 0, 8, 16, 24, 32, 48, 48, 48, 32, 24, 16, 8, 0, 0, 0, 0, 1, 9, 17, 25, 33, 49, 49, 49, 33, 25, 17, 9, 1, 0, 0 };
-
-static DefocusCopyTemplate Copy_10 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 80, 238, 238, 14, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_28 = { 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 192, 1, 0, 0, 82, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 0 } };
-
-static DefocusTexturedHeader Head_11 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 13, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
-
-static DefocusTexturedHeader Head_12 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
-
-static u64 Head_13[10] = { 0x0000000000000000ULL, 0x5100000400000000ULL, 0x3000000000008001ULL, 0x0000000000000eeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000131000000ULL, 0x000000000000004eULL, 0x000006fc007fc005ULL, 0x0000000000000008ULL };
-
-static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet) = { DefocusMainType01, DefocusMainType02, DefocusMainType03, DefocusMainType01, DefocusMainType05, DefocusMainType06, DefocusMainType07, DefocusMainType08, DefocusMainType09, DefocusMainType10, DefocusMainType11 };
-
-static u64 Tail_15[8] = { 0x0000000000000000ULL, 0x5100000300000000ULL, 0x2000000000008001ULL, 0x00000000000000eeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000031000000ULL, 0x000000000000004eULL };
-
-DefocusLayer GameDefocusParam[16] = { 0 };

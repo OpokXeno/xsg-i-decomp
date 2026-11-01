@@ -1,14 +1,15 @@
 #include "common.h"
-
 #include "act_1.h"
 
-static MatrixHeap matrixHeap;
+/* PadData's pressed-button halfword layout as ACT_info reads it. */
+typedef struct ActInfoPad {
+    u8 pad_00[0x28];
+    u16 half_28;
+    u16 half_2a;
+    u16 half_2c;
+} ActInfoPad;
 
-static ActMatrixArena actMatrix;
-
-static unsigned char matrixHeapBlock[0x400];
-
-static MatrixHeap *actMatrixHeap = 0;
+extern ActInfoPad PadData;
 
 extern void *memset(void *destination, int value, unsigned int count);
 
@@ -19,108 +20,43 @@ extern void *memset(void *destination, int value, unsigned int count);
  * left by 6 (multiplying by 64) into the size argument, and main:0x00305a7c
  * moves this function's own tag argument into the third argument unchanged.
  */
-
 extern void *RSRC_alloc(MatrixHeap *heap, int size, int tag);
-
-/* Returns the new block's storage (RSRC_alloc returns the item's +0x08 data). */
-
-/*
- * ACT_matrixInit establishes the shared actor matrix-heap state consumed by
- * ACT_allocMatrix/ACT_allocBlock through actMatrixHeap before any allocation.
- *
- * Field roles are proven by bounded callers:
- * - heap_origin (+0x00): origin subtracted from the cursor in RSRC_check
- *   (main:0x0026d780: lw v0,4(a0) / lw a2,0(a0) / subu v0,v0,a2); never
- *   advanced after init, so it anchors the heap while the cursor moves.
- * - heap_cursor (+0x04): bump cursor advanced per item in RSRC_alloc
- *   (main:0x0026d84c: lw v0,4(s1) ... addu v0,v0,v1 / sw v0,4(s1)).
- * - heap_bound (+0x08): byte bound compared in RSRC_check
- *   (main:0x0026d78c: lw v1,8(a0) / sltu v0,v0,v1); init value 0xC0000.
- * - heap_store (+0x0c): item storage indexed by RSRC_alloc (0x0026d820:
- *   lw v0,12(s1) / addu s0,v0,a2) and RSRC_info/RSRC_getDirtyItem.
- * - heap_count (+0x10): item count incremented per alloc (0x0026d824:
- *   sh a0,16(s1) with a0 = count+1); loop bound in RSRC_info.
- * - heap_max (+0x12): max items 64 (0x0026d7d8: lhu v1,18(s1) /
- *   sltu v1,v0,v1 gate).
- * The scaffold reserves 0x20 bytes for matrixHeap. Later fields past offset
- * 0x14 remain unknown; the tail records that established object extent without
- * assigning names or invented semantics to those bytes.
- */
 
 extern void RSRC_inactiveSource(MatrixHeap *heap, ActRecord *actor);
 
 extern void ACT_resetParent(ActRecord *self, ActRecord *parent);
-
 void ACT_dispose2(ActRecord *self, int quick);
-
-/*
- * The plain default-options entry: ActorAndResourceDispose (main:0x0027fec0)
- * tail-calls it, and it always asks ACT_dispose2 for the full teardown
- * (main:0x00305e64..0x00305e6c).
- */
-
-/*
- * Releases one actor entry: RSRC_inactiveSource retires its matrix-heap
- * resources, a live parent link is handed to ACT_resetParent before it is
- * cleared, and the entry's own hooks and in-use id go back to zero. `quick`
- * skips the ten-word block immediately before the parent link
- * (+0x8d4..+0x8f8) when it is nonzero; ACT_dispose always passes zero (full
- * teardown).
- */
 
 extern void EXM_StepShakeWind(void);
 
 extern void ACT_info_00306090(void);
-
 extern void ACT_modelDraw(ActRecord *actor);
-
-/*
- * Steps the wind simulation, refreshes the debug actor printer, then draws
- * every in-use actor (ACT_info_00306090's own "ACT[%02x]"/in-use reading
- * confirms the same test; see the ActRecord comment in act_1.h).
- */
 
 extern void xglStudioFlushActiveCamera(void);
 
 extern void DB_reset(int, int);
-
 extern void LOOK_target_doit(void);
-
-/*
- * Refreshes the active camera, resets the debug light-write window with two
- * literal arguments (the only values this TU ever passes), then runs every
- * in-use actor's own per-frame update hook (main:0x00305f94: jalr through
- * the entry's `update` member, skipped when null) before driving the
- * look-at target.
- */
 
 extern void ACT_updateMotionPause(ActRecord *actor);
 
 extern void ACT_resetMatrix(ActRecord *self);
-
 extern void UnduParamInit(void *param);
-
 extern void EXM_InitMovedHair(ActRecord *actor);
-
 extern void EXM_InitWind(void);
+extern void DB_params(const char *params);
+extern void DB_println(const char *format, ...);
 
-/* PadData's pressed-button halfword layout as ACT_info reads it. */
+static MatrixHeap *actMatrixHeap = 0;
 
-typedef struct ActInfoPad {
-    u8 pad_00[0x28];
-    u16 half_28;
-    u16 half_2a;
-    u16 half_2c;
-} ActInfoPad;
+static MatrixHeap matrixHeap;
 
-extern ActInfoPad PadData;
+static ActMatrixArena actMatrix;
+
+static unsigned char matrixHeapBlock[0x400];
 
 static ActInfoState actInfo;
 
-extern void DB_params(const char *params);
-
-extern void DB_println(const char *format, ...);
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 /*
  * ACT_info's text. actorEffectControl is the 16-byte control string ACT_info hands to
  * DB_params before any line (its first five bytes are 13, 2, 14, 2, 2, the
@@ -128,7 +64,6 @@ extern void DB_println(const char *format, ...);
  * in order of first use (the three shortest, "%8.3f", "ANIM" and "MDL",
  * stay string literals in the code because they live in .sdata).
  */
-
 /* Text: {effect 2}{effect params} */
 const char actorEffectControl[16] = "\r\002\016\002\002";
 
@@ -157,16 +92,6 @@ const char actorCenterLabel[] = "  CENTER";
 const char actorParentFormat[] = "PARENT %d";
 
 const char actorChildFormat[] = "CHILD[%d] %d";
-
-/*
- * The debug actor printer, shown while bit 0 of actInfo.visible is set
- * (toggled by the pad's 0x100 + 0x1 chord) and driven by the d-pad bits
- * of the pad's third halfword (0x2000/0x8000 move the printed slot,
- * 0x1000/0x4000 the page). Page 0 prints flags, position and rotation (in
- * degrees), scale, the motion number, the second flags word and the speed;
- * page 1 prints the eleven resource pointers and the model's part count and
- * bounds; page 2 prints the parent and the children.
- */
 
 int ACT_allocMatrix(ActRecord *self, int count)
 {
@@ -205,11 +130,34 @@ int ACT_allocMatrix(ActRecord *self, int count)
     return count;
 }
 
+/* Returns the new block's storage (RSRC_alloc returns the item's +0x08 data). */
 void *ACT_allocBlock(int tag, int blockCount)
 {
     return RSRC_alloc(actMatrixHeap, blockCount << 6, tag);
 }
 
+/*
+ * ACT_matrixInit establishes the shared actor matrix-heap state consumed by
+ * ACT_allocMatrix/ACT_allocBlock through actMatrixHeap before any allocation.
+ *
+ * Field roles are proven by bounded callers:
+ * - heap_origin (+0x00): origin subtracted from the cursor in RSRC_check
+ *   (main:0x0026d780: lw v0,4(a0) / lw a2,0(a0) / subu v0,v0,a2); never
+ *   advanced after init, so it anchors the heap while the cursor moves.
+ * - heap_cursor (+0x04): bump cursor advanced per item in RSRC_alloc
+ *   (main:0x0026d84c: lw v0,4(s1) ... addu v0,v0,v1 / sw v0,4(s1)).
+ * - heap_bound (+0x08): byte bound compared in RSRC_check
+ *   (main:0x0026d78c: lw v1,8(a0) / sltu v0,v0,v1); init value 0xC0000.
+ * - heap_store (+0x0c): item storage indexed by RSRC_alloc (0x0026d820:
+ *   lw v0,12(s1) / addu s0,v0,a2) and RSRC_info/RSRC_getDirtyItem.
+ * - heap_count (+0x10): item count incremented per alloc (0x0026d824:
+ *   sh a0,16(s1) with a0 = count+1); loop bound in RSRC_info.
+ * - heap_max (+0x12): max items 64 (0x0026d7d8: lhu v1,18(s1) /
+ *   sltu v1,v0,v1 gate).
+ * The scaffold reserves 0x20 bytes for matrixHeap. Later fields past offset
+ * 0x14 remain unknown; the tail records that established object extent without
+ * assigning names or invented semantics to those bytes.
+ */
 void ACT_matrixInit(void)
 {
     matrixHeap.heap_bound = 0xC0000;
@@ -363,11 +311,24 @@ ActRecord *ACT_create(int slot, int id)
     return self;
 }
 
+/*
+ * The plain default-options entry: ActorAndResourceDispose (main:0x0027fec0)
+ * tail-calls it, and it always asks ACT_dispose2 for the full teardown
+ * (main:0x00305e64..0x00305e6c).
+ */
 void ACT_dispose(ActRecord *self)
 {
     ACT_dispose2(self, 0);
 }
 
+/*
+ * Releases one actor entry: RSRC_inactiveSource retires its matrix-heap
+ * resources, a live parent link is handed to ACT_resetParent before it is
+ * cleared, and the entry's own hooks and in-use id go back to zero. `quick`
+ * skips the ten-word block immediately before the parent link
+ * (+0x8d4..+0x8f8) when it is nonzero; ACT_dispose always passes zero (full
+ * teardown).
+ */
 void ACT_dispose2(ActRecord *self, int quick)
 {
     ActRecord *parent;
@@ -394,6 +355,11 @@ void ACT_dispose2(ActRecord *self, int quick)
     }
 }
 
+/*
+ * Steps the wind simulation, refreshes the debug actor printer, then draws
+ * every in-use actor (ACT_info_00306090's own "ACT[%02x]"/in-use reading
+ * confirms the same test; see the ActRecord comment in act_1.h).
+ */
 void ACT_draw(void)
 {
     ActRecord *cursor;
@@ -412,6 +378,13 @@ void ACT_draw(void)
     } while (remaining >= 0);
 }
 
+/*
+ * Refreshes the active camera, resets the debug light-write window with two
+ * literal arguments (the only values this TU ever passes), then runs every
+ * in-use actor's own per-frame update hook (main:0x00305f94: jalr through
+ * the entry's `update` member, skipped when null) before driving the
+ * look-at target.
+ */
 void ACT_update(void)
 {
     ActRecord *cursor;
@@ -451,6 +424,15 @@ void ACT_pauseUpdate(void)
     }
 }
 
+/*
+ * The debug actor printer, shown while bit 0 of actInfo.visible is set
+ * (toggled by the pad's 0x100 + 0x1 chord) and driven by the d-pad bits
+ * of the pad's third halfword (0x2000/0x8000 move the printed slot,
+ * 0x1000/0x4000 the page). Page 0 prints flags, position and rotation (in
+ * degrees), scale, the motion number, the second flags word and the speed;
+ * page 1 prints the eleven resource pointers and the model's part count and
+ * bounds; page 2 prints the parent and the children.
+ */
 static void ACT_info(void)
 {
     ActInfoPad *pad = &PadData;
@@ -549,4 +531,3 @@ static void ACT_info(void)
         break;
     }
 }
-

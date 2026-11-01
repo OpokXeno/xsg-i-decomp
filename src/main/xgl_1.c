@@ -1,19 +1,21 @@
 #include "common.h"
-
 #include "shared.h"
 
-const char errorMessageFormat[];
+#define D_ENABLEW ((volatile u32 *) 0x1000f590)
+#define D3_CHCR   ((volatile u32 *) 0x1000b000)
+#define D3_MADR   ((volatile u32 *) 0x1000b010)
+#define D3_QWC    ((volatile u32 *) 0x1000b020)
+#define D4_MADR   ((volatile u32 *) 0x1000b410)
+#define D4_QWC    ((volatile u32 *) 0x1000b420)
+#define D4_CHCR   ((volatile u32 *) 0x1000b400)
+#define IPU_CMD   ((volatile u32 *) 0x10002000)
+#define IPU_CTRL  ((volatile u32 *) 0x10002010)
 
-/*
- * xglMpeg2InfoInit2's own body is still INCLUDE_ASM below, but its tail at
- * 0x00222818..0x00222828 computes align64(arena + allocated_size +
- * audio_buffer_size) into v0 immediately before return: that value is the
- * function's result, not a void return. xglMpeg2InfoInit calls it and
- * discards the result, but the forward declaration used here must still
- * spell the pointer-return signature the body actually implements.
- */
+#define UNCACHED(address) \
+    ((void *) (((unsigned int) (address) & 0x0FFFFFFF) | 0x20000000))
 
-extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
+#define D4_TADR   ((volatile u32 *) 0x1000b430)
+#define IPU_BP    ((volatile u32 *) 0x10002020)
 
 typedef struct CdStreamParam CdStreamParam;
 
@@ -149,68 +151,6 @@ typedef struct MpegStreamData {
     int length;                         /* +0x0c */
 } MpegStreamData;
 
-#define D_ENABLEW ((volatile u32 *) 0x1000f590)
-
-#define D3_CHCR   ((volatile u32 *) 0x1000b000)
-
-#define D3_MADR   ((volatile u32 *) 0x1000b010)
-
-#define D3_QWC    ((volatile u32 *) 0x1000b020)
-
-#define D4_MADR   ((volatile u32 *) 0x1000b410)
-
-#define D4_QWC    ((volatile u32 *) 0x1000b420)
-
-#define D4_CHCR   ((volatile u32 *) 0x1000b400)
-
-#define IPU_CMD   ((volatile u32 *) 0x10002000)
-
-#define IPU_CTRL  ((volatile u32 *) 0x10002010)
-
-#define UNCACHED(address) \
-    ((void *) (((unsigned int) (address) & 0x0FFFFFFF) | 0x20000000))
-
-extern int DIntr(void);
-
-extern int EIntr(void);
-
-extern void *memcpy(void *destination, const void *source, unsigned int count);
-
-extern void FlushCache(int mode);
-
-extern int sceIpuSync(int mode, int timeout);
-
-extern int xglCdStreamClose(CdStreamParam *stream);
-
-extern void xglCdStreamParamInit(struct CdStreamParam *param);
-
-extern void xglCdStreamReadRingCore(struct CdStreamParam *stream);
-
-extern void xglCdStreamReadRing(struct CdStreamParam *stream, int byte_count);
-
-extern int xglCdStreamOpen();
-
-extern void sceMpegInit(void);
-
-extern void sceMpegCreate(void *mpeg, void *work, int work_size);
-
-extern void sceMpegDelete(void *mpegHandle);
-
-extern void sceMpegAddCallback(void *mpeg, int type, int (*callback)(), void *argument);
-
-extern void sceMpegAddStrCallback(void *mpeg, int stream, int channel,
-                                  int (*callback)(), void *argument);
-
-extern int sceMpegDemuxPss(void *mpeg, unsigned char *source, int size);
-
-extern int SsdGetResultValue(int *value);
-
-extern void SsdInitVagStreamStereo(int size, int channels);
-
-static int fillBuff(XglMovieInfo *info, int wait);
-
-static int nodataCallback(int event, void *data, XglMovieInfo *info);
-
 typedef struct {
     unsigned char unmodeled_00[4];
     const char *message;
@@ -222,34 +162,14 @@ typedef struct {
     unsigned char errorFlag;
 } MpegCallbackState;
 
-extern int printf(const char *format, ...);
-
 /*
  * xglCdStreamClose's own parameter type (CdStreamParam, main/tu092
  * src/main/xgl_cd.c) is TU-local to that file; this TU only forwards a
  * pointer to it and does not access its members, so the tag stays opaque.
  */
-
 typedef struct CdStreamParam CdStreamParam;
 
-extern void SsdDisposeVagStream(void);
-
-extern void SsdStopVagStream(int channel);
-
-extern void sceMpegReset(void *mpegHandle);
-
-/*
- * arg0+0x30 (temp_16 = s1+0x30 in the original) is passed to sceMpegReset
- * and sceMpegDelete as a raw address; sceMpegReset/sceMpegDelete have no
- * public prototype (docs/naming.md), so the embedded MPEG handle stays an
- * untyped pointer computed by byte offset from the stream object.
- */
-
-extern int sceIpuInit(void);
-
 typedef XglMovieWork MoviePlaybackWork;
-
-extern const char frameDropMessage[];
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -292,10 +212,6 @@ struct XglMovieSourceHeader {
     unsigned char unmodeled_0e[2];
 };
 
-#define D4_TADR   ((volatile u32 *) 0x1000b430)
-
-#define IPU_BP    ((volatile u32 *) 0x10002020)
-
 typedef struct XglMovieRenderState {
     unsigned char unmodeled_00[0x14];
     unsigned short bufferBase0;         /* +0x14 */
@@ -304,41 +220,72 @@ typedef struct XglMovieRenderState {
     unsigned char unmodeled_1c[0x40];
 } XglMovieRenderState;
 
+const char errorMessageFormat[];
+extern const char frameDropMessage[];
 extern XglMovieRenderState sRender;
 
-extern void SyncDCache(void *start, void *end);
-
-int xglMovieClose(XglMovieInfo *info);
-
-extern int sceMpegIsEnd(void *mpeg);
-
-extern int sceMpegGetPicture(void *mpeg, unsigned char *destination, int size);
-
-extern void SsdPlayVagStream(int channel, int start, int loop);
-
-extern int SsdGetVagStreamStatusStereo(void);
-
-extern void SsdSetVagStreamDataStereo(int channel, int address, int size);
-
-extern int sceGsSyncPath(int mode, int timeout);
-
-extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
-
-extern void nmlModelDirectSend(int mode, u8 *data, int count);
-
-extern int xglCdStreamRewind(struct CdStreamParam *stream);
-
-static int checkdma(XglMovieWork *info);
+const char mpegGetPictureFailedMessage[];
 
 /*
- * errorCallback (main:0x00222158) is registered as the MPEG movie decoder's
- * error handler. The original bytes read a pointer at arg1+0x04 and pass it
- * as the "%s\n" argument of errorMessageFormat's printf, then read, increment and
- * store back an unsigned byte at arg2+0x98 and clear a byte at arg2+0x99
- * right after it (lbu/sb at those fixed offsets).
+ * xglMpeg2InfoInit2's own body is still INCLUDE_ASM below, but its tail at
+ * 0x00222818..0x00222828 computes align64(arena + allocated_size +
+ * audio_buffer_size) into v0 immediately before return: that value is the
+ * function's result, not a void return. xglMpeg2InfoInit calls it and
+ * discards the result, but the forward declaration used here must still
+ * spell the pointer-return signature the body actually implements.
  */
+extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
 
-const char mpegGetPictureFailedMessage[];
+extern int DIntr(void);
+extern int EIntr(void);
+extern void *memcpy(void *destination, const void *source, unsigned int count);
+extern void FlushCache(int mode);
+extern int sceIpuSync(int mode, int timeout);
+extern int xglCdStreamClose(CdStreamParam *stream);
+extern void xglCdStreamParamInit(struct CdStreamParam *param);
+extern void xglCdStreamReadRingCore(struct CdStreamParam *stream);
+extern void xglCdStreamReadRing(struct CdStreamParam *stream, int byte_count);
+extern int xglCdStreamOpen();
+extern void sceMpegInit(void);
+extern void sceMpegCreate(void *mpeg, void *work, int work_size);
+extern void sceMpegDelete(void *mpegHandle);
+extern void sceMpegAddCallback(void *mpeg, int type, int (*callback)(), void *argument);
+
+extern void sceMpegAddStrCallback(void *mpeg, int stream, int channel,
+                                  int (*callback)(), void *argument);
+
+extern int sceMpegDemuxPss(void *mpeg, unsigned char *source, int size);
+extern int SsdGetResultValue(int *value);
+extern void SsdInitVagStreamStereo(int size, int channels);
+static int fillBuff(XglMovieInfo *info, int wait);
+static int nodataCallback(int event, void *data, XglMovieInfo *info);
+extern int printf(const char *format, ...);
+extern void SsdDisposeVagStream(void);
+extern void SsdStopVagStream(int channel);
+extern void sceMpegReset(void *mpegHandle);
+
+/*
+ * arg0+0x30 (temp_16 = s1+0x30 in the original) is passed to sceMpegReset
+ * and sceMpegDelete as a raw address; sceMpegReset/sceMpegDelete have no
+ * public prototype (docs/naming.md), so the embedded MPEG handle stays an
+ * untyped pointer computed by byte offset from the stream object.
+ */
+extern int sceIpuInit(void);
+
+extern void SyncDCache(void *start, void *end);
+int xglMovieClose(XglMovieInfo *info);
+extern int sceMpegIsEnd(void *mpeg);
+extern int sceMpegGetPicture(void *mpeg, unsigned char *destination, int size);
+extern void SsdPlayVagStream(int channel, int start, int loop);
+extern int SsdGetVagStreamStatusStereo(void);
+extern void SsdSetVagStreamDataStereo(int channel, int address, int size);
+extern int sceGsSyncPath(int mode, int timeout);
+extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
+extern void nmlModelDirectSend(int mode, u8 *data, int count);
+extern int xglCdStreamRewind(struct CdStreamParam *stream);
+static int checkdma(XglMovieWork *info);
+
+const char errorMessageFormat[] = "%s\n";
 
 static int myDmaDirectFromIPU(u32 address, u32 count)
 {
@@ -950,6 +897,13 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
     return 1;
 }
 
+/*
+ * errorCallback (main:0x00222158) is registered as the MPEG movie decoder's
+ * error handler. The original bytes read a pointer at arg1+0x04 and pass it
+ * as the "%s\n" argument of errorMessageFormat's printf, then read, increment and
+ * store back an unsigned byte at arg2+0x98 and clear a byte at arg2+0x99
+ * right after it (lbu/sb at those fixed offsets).
+ */
 static int errorCallback(int event, MpegErrorInfo *error, MpegCallbackState *state)
 {
     printf(errorMessageFormat, error->message);
@@ -1159,8 +1113,7 @@ int xglMovieInit(void)
     return sceIpuInit();
 }
 
-const char errorMessageFormat[] = "%s\n";
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char frameDropMessage[16] = "frame drop\n";
 
 const char mpegGetPictureFailedMessage[] = {'s', 'c', 'e', 'M', 'p', 'e', 'g', 'G', 'e', 't', 'P', 'i', 'c', 't', 'u', 'r', 'e', ' ', 'f', 'a', 'i', 'l', 'e', 'd', 10, 0};

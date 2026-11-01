@@ -1,37 +1,43 @@
 #include "common.h"
-
 #include "enemy_1.h"
-
-/* Per-actor work records are cleared before use. */
 
 #define ENEMY_CONTACT_PADDING 0.3f
 
 #define ENEMY_CONTACT_HEIGHT 1.9f
-
 #define ENEMY_FALL_ACCEL -0.02f
-
 #define INSIDE_FAN_WOOO_ANGLE_OFFSET 3.1415927f
-
 #define INSIDE_FAN_ANGLE_OFFSET 3.1415927f
-
 #define ENEMY_HIT_PADDING 0.3f
-
 #define ENEMY_HIT_HEIGHT 1.9f
-
 #define ENEMY_AIR_FALL_ACCEL -0.02f
-
 #define ENEMY_CHASE_MIN_DISTANCE 0.1f
-
 #define ESCAPE_TARGET_POSITION_EPSILON 0.01f
-
 #define ESCAPE_HEIGHT_FOLLOW_RATE 0.01f
-
 #define CHASE_LOST_DISTANCE 0.01f
-
 #define LAST_PLAYER_REACHED_DISTANCE 0.01f
+
+/* Distance thresholds and retreat speeds used by the two look-back paths.
+ * The original has no named objects for them: cc1 emits each use as an
+ * anonymous .lit4 literal (0x004D8034..0x004D8040). */
+#define ESCAPE_RESET_DISTANCE 0.012f
+
+#define ESCAPE_SPEED 0.06666667f
+#define ROUTE_CHASE_RESET_DISTANCE 0.012f
+#define ROUTE_CHASE_SPEED 0.06666667f
+
+/* Distance thresholds and retreat speeds used by the two look-back paths. */
+#define ROUTE_NEAR_LOOKBACK_DISTANCE 0.01f
+
+#define ROUTE_HALF_TURN_RADIANS 3.1415927f
+#define ROUTE_DIRECTION_FULL_TURN 6.2831855f
+#define ROUTE_FAR_LOOKBACK_DISTANCE 0.12f
+#define ROUTE_RANDOM_HALF_TURN_RADIANS 3.1415927f
+#define ROUTE_RETREAT_FULL_TURN 6.2831855f
+#define ENEMY_DRIFT_DAMPING 0.9f
 
 EnemyVector4 EnemyTarget = { .vector = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f } };
 
+/* Per-actor work records are cleared before use. */
 EnemyWorkEntry enepc[16] = {{0}};
 
 /* JP: 目撃
@@ -80,36 +86,6 @@ u16 MostNearActor = 0;
  * remains unknown; no numeric, floating-point or pointer interpretation is claimed. */
 u32 MostNear = 0;
 
-/* Distance thresholds and retreat speeds used by the two look-back paths.
- * The original has no named objects for them: cc1 emits each use as an
- * anonymous .lit4 literal (0x004D8034..0x004D8040). */
-
-#define ESCAPE_RESET_DISTANCE 0.012f
-
-#define ESCAPE_SPEED 0.06666667f
-
-#define ROUTE_CHASE_RESET_DISTANCE 0.012f
-
-#define ROUTE_CHASE_SPEED 0.06666667f
-
-/* Per-actor work records are cleared before use. */
-
-/* Distance thresholds and retreat speeds used by the two look-back paths. */
-
-#define ROUTE_NEAR_LOOKBACK_DISTANCE 0.01f
-
-#define ROUTE_HALF_TURN_RADIANS 3.1415927f
-
-#define ROUTE_DIRECTION_FULL_TURN 6.2831855f
-
-#define ROUTE_FAR_LOOKBACK_DISTANCE 0.12f
-
-#define ROUTE_RANDOM_HALF_TURN_RADIANS 3.1415927f
-
-#define ROUTE_RETREAT_FULL_TURN 6.2831855f
-
-#define ENEMY_DRIFT_DAMPING 0.9f
-
 int Get_EffectCode(int attr)
 {
     int effect[15] = {
@@ -127,6 +103,7 @@ int Get_EffectCode(int attr)
     return -1;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char finalInitMethodName[11] = "Final_init";
 
 void Enemy_Init(EnemyActor *self)
@@ -862,6 +839,7 @@ void Enemy_Unique(EnemyActor *actor)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char animTimeFormat[20] = "%3d AnimTime  = %8f";
 
 const char animStartFormat[20] = "%3d AnimStart = %8f";

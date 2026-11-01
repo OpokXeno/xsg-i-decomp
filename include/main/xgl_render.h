@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_XGL_RENDER_H
 
 #include "shared.h"
-
 #include "main/xgl_2.h"
 
 typedef void (*XglRenderFadeCallback)(XglPacket *packet);

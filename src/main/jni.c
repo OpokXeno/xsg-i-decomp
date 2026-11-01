@@ -1,8 +1,16 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "jni.h"
+
+extern DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
+extern unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
+extern DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer);
+extern void DataBuffer_seek(DataBuffer *buffer, int offset);
+static const char *checkClass(void *buffer, const char *name, int target);
+static const char *getStrIndex(const char *name, int delimiter);
+extern int DataBuffer_getPos(DataBuffer *buffer);
+extern void DataBuffer_setPos(DataBuffer *buffer, int offset);
+extern int memcmp(const void *a, const void *b, unsigned int size);
 
 const u8 xenoVmSystemClassName[16] = "xeno/vm/System";
 
@@ -48,20 +56,7 @@ const u8 xenoPlayControlClassName[24] = "xeno/PlayControl";
 
 const u8 xenoMovieClassName[24] = "xeno/Movie";
 
-extern DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
-
-extern unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
-
-extern DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer);
-
-extern void DataBuffer_seek(DataBuffer *buffer, int offset);
-
-static const char *checkClass(void *buffer, const char *name, int target);
-
-static const char *getStrIndex(const char *name, int delimiter);
-
 /* Cached native Java class handles populated by JNI_loadNativeClass. */
-
 SceneClass *classJava_xeno_Enepc;
 
 SceneClass *classJava_xeno_Scene;
@@ -105,14 +100,6 @@ SceneClass *classJava_xeno_util_Input;
 SceneClass *classJava_xeno_Camera;
 
 SceneClass *classJava_xeno_Movie;
-
-extern int DataBuffer_getPos(DataBuffer *buffer);
-
-extern void DataBuffer_setPos(DataBuffer *buffer, int offset);
-
-extern int memcmp(const void *a, const void *b, unsigned int size);
-
-/* Cached native Java class handles populated by JNI_loadNativeClass. */
 
 void JNI_initSystem(xheap_block *heap, int size)
 {
@@ -492,6 +479,7 @@ int JNI_getRegister(int register_index)
     return VMRegister[register_index & 0x1f];
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char SdvOpcodeNameInstanceofFast[16] = "instanceof_fast";
 
 const char SdvOpcodeNameCheckcastFast[16] = "checkcast_fast";

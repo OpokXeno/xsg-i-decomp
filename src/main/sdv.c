@@ -1,10 +1,11 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "sdv.h"
-
 #include "main/m_ef_obj.h"
+
+/* A key field halfway between two keys: blend is the 8-bit fraction. */
+#define SDV_BLEND(dest, field) \
+    (dest) = (key1->field == key0->field ? key0->field : (key0->field + (((key1->field - key0->field) * blend + 128) >> 8)) & 0xffff)
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -12,8 +13,6 @@ typedef union SdvQuadColor {
     Quadword quad;
     unsigned int word[4];
 } SdvQuadColor;
-
-
 
 typedef union SdvColor {
     struct {
@@ -30,7 +29,315 @@ typedef union SdvScreenQuad {
     Quadword quad;
 } SdvScreenQuad;
 
-static const unsigned long long alphaTbl_004CC8D8[4];
+typedef struct SdvSequence {
+    unsigned int event_address;
+    int script_base;
+    int elapsed;
+    int position;
+    int stride;
+    int last_sound;
+} SdvSequence;
+
+typedef struct SdvSpecial {
+    SdvSequence sequence;
+    unsigned char unmodeled_18[8];
+    SdvSpecialSlot slots[7];
+} SdvSpecial;
+
+typedef struct SdvCameraParam {
+    int kind;
+    unsigned char unmodeled_04[12];
+    Vector4 position;
+    int actor;
+    int actor_number;
+    int part;
+    int source_actor;
+    int source_number;
+    int source_part;
+    int target_actor;
+    int target_number;
+    int target_part;
+    unsigned char unmodeled_44[40];
+    float weight;
+} SdvCameraParam;
+
+typedef struct SdvBattleCameraActors {
+    int source_actor;
+    int target_actor;
+    unsigned char unmodeled_08[8];
+    short source_number;
+    short target_number;
+} SdvBattleCameraActors;
+
+/* A key viewed as raw bytes: the char member makes the copy alias every
+ * type, so the cached slot fields are reloaded after it. */
+typedef union SdvKeyBytes {
+    SdvSpecialKey key;
+    char byte[sizeof(SdvSpecialKey)];
+} SdvKeyBytes;
+
+typedef union SdvTextureCoordinate {
+    float stq[4];
+    Quadword quad;
+} SdvTextureCoordinate;
+
+extern short _hitFlag;
+extern short _hitSignal;
+extern int _nowEftNo;
+extern const char sdvOpNameNop[8];
+extern const char SdvOpcodeNameAconstNull[16];
+extern const char SdvOpcodeNameIconstM1[16];
+extern const char SdvOpcodeNameIconst0[16];
+extern const char SdvOpcodeNameIconst1[16];
+extern const char SdvOpcodeNameIconst2[16];
+extern const char SdvOpcodeNameIconst3[16];
+extern const char SdvOpcodeNameIconst4[16];
+extern const char SdvOpcodeNameIconst5[16];
+extern const char SdvOpcodeNameLconst0[16];
+extern const char SdvOpcodeNameLconst1[16];
+extern const char SdvOpcodeNameFconst0[16];
+extern const char SdvOpcodeNameFconst1[16];
+extern const char SdvOpcodeNameFconst2[16];
+extern const char SdvOpcodeNameDconst0[16];
+extern const char SdvOpcodeNameDconst1[16];
+extern const char sdvOpNameBipush[8];
+extern const char sdvOpNameSipush[8];
+extern const char sdvOpNameLdc1[8];
+extern const char sdvOpNameLdc2[8];
+extern const char sdvOpNameLdc2w[8];
+extern const char sdvOpNameIload[8];
+extern const char sdvOpNameLload[8];
+extern const char sdvOpNameFload[8];
+extern const char sdvOpNameDload[8];
+extern const char sdvOpNameAload[8];
+extern const char sdvOpNameIload0[8];
+extern const char sdvOpNameIload1[8];
+extern const char sdvOpNameIload2[8];
+extern const char sdvOpNameIload3[8];
+extern const char sdvOpNameLload0[8];
+extern const char sdvOpNameLload1[8];
+extern const char sdvOpNameLload2[8];
+extern const char sdvOpNameLload3[8];
+extern const char sdvOpNameFload0[8];
+extern const char sdvOpNameFload1[8];
+extern const char sdvOpNameFload2[8];
+extern const char sdvOpNameFload3[8];
+extern const char sdvOpNameDload0[8];
+extern const char sdvOpNameDload1[8];
+extern const char sdvOpNameDload2[8];
+extern const char sdvOpNameDload3[8];
+extern const char sdvOpNameAload0[8];
+extern const char sdvOpNameAload1[8];
+extern const char sdvOpNameAload2[8];
+extern const char sdvOpNameAload3[8];
+extern const char sdvOpNameIaload[8];
+extern const char sdvOpNameLaload[8];
+extern const char sdvOpNameFaload[8];
+extern const char sdvOpNameDaload[8];
+extern const char sdvOpNameAaload[8];
+extern const char sdvOpNameBaload[8];
+extern const char sdvOpNameCaload[8];
+extern const char sdvOpNameSaload[8];
+extern const char sdvOpNameIstore[8];
+extern const char sdvOpNameLstore[8];
+extern const char sdvOpNameFstore[8];
+extern const char sdvOpNameDstore[8];
+extern const char sdvOpNameAstore[8];
+extern const char SdvOpcodeNameIstore0[16];
+extern const char SdvOpcodeNameIstore1[16];
+extern const char SdvOpcodeNameIstore2[16];
+extern const char SdvOpcodeNameIstore3[16];
+extern const char SdvOpcodeNameLstore0[16];
+extern const char SdvOpcodeNameLstore1[16];
+extern const char SdvOpcodeNameLstore2[16];
+extern const char SdvOpcodeNameLstore3[16];
+extern const char SdvOpcodeNameFstore0[16];
+extern const char SdvOpcodeNameFstore1[16];
+extern const char SdvOpcodeNameFstore2[16];
+extern const char SdvOpcodeNameFstore3[16];
+extern const char SdvOpcodeNameDstore0[16];
+extern const char SdvOpcodeNameDstore1[16];
+extern const char SdvOpcodeNameDstore2[16];
+extern const char SdvOpcodeNameDstore3[16];
+extern const char SdvOpcodeNameAstore0[16];
+extern const char SdvOpcodeNameAstore1[16];
+extern const char SdvOpcodeNameAstore2[16];
+extern const char SdvOpcodeNameAstore3[16];
+extern const char sdvOpNameIastore[8];
+extern const char sdvOpNameLastore[8];
+extern const char sdvOpNameFastore[8];
+extern const char sdvOpNameDastore[8];
+extern const char sdvOpNameAastore[8];
+extern const char sdvOpNameBastore[8];
+extern const char sdvOpNameCastore[8];
+extern const char sdvOpNameSastore[8];
+extern const char sdvOpNamePop[8];
+extern const char sdvOpNamePop2[8];
+extern const char sdvOpNameDup[8];
+extern const char sdvOpNameDupX1[8];
+extern const char sdvOpNameDupX2[8];
+extern const char sdvOpNameDup2[8];
+extern const char sdvOpNameDup2X1[8];
+extern const char sdvOpNameDup2X2[8];
+extern const char sdvOpNameSwap[8];
+extern const char sdvOpNameIadd[8];
+extern const char sdvOpNameLadd[8];
+extern const char sdvOpNameFadd[8];
+extern const char sdvOpNameDadd[8];
+extern const char sdvOpNameIsub[8];
+extern const char sdvOpNameLsub[8];
+extern const char sdvOpNameFsub[8];
+extern const char sdvOpNameDsub[8];
+extern const char sdvOpNameImul[8];
+extern const char sdvOpNameLmul[8];
+extern const char sdvOpNameFmul[8];
+extern const char sdvOpNameDmul[8];
+extern const char sdvOpNameIdiv[8];
+extern const char sdvOpNameLdiv[8];
+extern const char sdvOpNameFdiv[8];
+extern const char sdvOpNameDdiv[8];
+extern const char sdvOpNameIrem[8];
+extern const char sdvOpNameLrem[8];
+extern const char sdvOpNameFrem[8];
+extern const char sdvOpNameDrem[8];
+extern const char sdvOpNameIneg[8];
+extern const char sdvOpNameLneg[8];
+extern const char sdvOpNameFneg[8];
+extern const char sdvOpNameDneg[8];
+extern const char sdvOpNameIshl[8];
+extern const char sdvOpNameLshl[8];
+extern const char sdvOpNameIshr[8];
+extern const char sdvOpNameLshr[8];
+extern const char sdvOpNameIushr[8];
+extern const char sdvOpNameLushr[8];
+extern const char sdvOpNameIand[8];
+extern const char sdvOpNameLand[8];
+extern const char sdvOpNameIor[8];
+extern const char sdvOpNameLor[8];
+extern const char sdvOpNameIxor[8];
+extern const char sdvOpNameLxor[8];
+extern const char sdvOpNameIinc[8];
+extern const char sdvOpNameI2l[8];
+extern const char sdvOpNameI2f[8];
+extern const char sdvOpNameI2d[8];
+extern const char sdvOpNameL2i[8];
+extern const char sdvOpNameL2f[8];
+extern const char sdvOpNameL2d[8];
+extern const char sdvOpNameF2i[8];
+extern const char sdvOpNameF2l[8];
+extern const char sdvOpNameF2d[8];
+extern const char sdvOpNameD2i[8];
+extern const char sdvOpNameD2l[8];
+extern const char sdvOpNameD2f[8];
+extern const char SdvOpcodeNameInt2byte[16];
+extern const char SdvOpcodeNameInt2char[16];
+extern const char SdvOpcodeNameInt2short[16];
+extern const char sdvOpNameLcmp[8];
+extern const char sdvOpNameFcmpl[8];
+extern const char sdvOpNameFcmpg[8];
+extern const char sdvOpNameDcmpl[8];
+extern const char sdvOpNameDcmpg[8];
+extern const char sdvOpNameIfeq[8];
+extern const char sdvOpNameIfne[8];
+extern const char sdvOpNameIflt[8];
+extern const char sdvOpNameIfge[8];
+extern const char sdvOpNameIfgt[8];
+extern const char sdvOpNameIfle[8];
+extern const char SdvOpcodeNameIfIcmpeq[16];
+extern const char SdvOpcodeNameIfIcmpne[16];
+extern const char SdvOpcodeNameIfIcmplt[16];
+extern const char SdvOpcodeNameIfIcmpge[16];
+extern const char SdvOpcodeNameIfIcmpgt[16];
+extern const char SdvOpcodeNameIfIcmple[16];
+extern const char SdvOpcodeNameIfAcmpeq[16];
+extern const char SdvOpcodeNameIfAcmpne[16];
+extern const char sdvOpNameGoto[8];
+extern const char sdvOpNameJsr[8];
+extern const char sdvOpNameRet[8];
+extern const char SdvOpcodeNameTableswitch[16];
+extern const char SdvOpcodeNameLookupswitch[16];
+extern const char sdvOpNameIreturn[8];
+extern const char sdvOpNameLreturn[8];
+extern const char sdvOpNameFreturn[8];
+extern const char sdvOpNameDreturn[8];
+extern const char sdvOpNameAreturn[8];
+extern const char sdvOpNameReturn[8];
+extern const char SdvOpcodeNameGetstatic[16];
+extern const char SdvOpcodeNamePutstatic[16];
+extern const char SdvOpcodeNameGetfield[16];
+extern const char SdvOpcodeNamePutfield[16];
+extern const char SdvOpcodeNameInvokevirtual[16];
+extern const char SdvOpcodeNameInvokespecial[16];
+extern const char SdvOpcodeNameInvokestatic[16];
+extern const char SdvOpcodeNameInvokeinterface[16];
+extern const char sdvOpNameUnknown[4];
+extern const char sdvOpNameNew[8];
+extern const char SdvOpcodeNameNewarray[16];
+extern const char SdvOpcodeNameAnewarray[16];
+extern const char SdvOpcodeNameArraylength[16];
+extern const char sdvOpNameAthrow[8];
+extern const char SdvOpcodeNameCheckcast[16];
+extern const char SdvOpcodeNameInstanceof[16];
+extern const char SdvOpcodeNameMonitorenter[16];
+extern const char SdvOpcodeNameMonitorexit[16];
+extern const char sdvOpNameWide[8];
+extern const char SdvOpcodeNameMultianewarray[16];
+extern const char sdvOpNameIfnull[8];
+extern const char SdvOpcodeNameIfnonnull[16];
+extern const char sdvOpNameGotoW[8];
+extern const char sdvOpNameJsrW[8];
+extern const char SdvOpcodeNameBreakpoint[16];
+extern const char SdvOpcodeNameCheckcastFast[16];
+extern const char SdvOpcodeNameInstanceofFast[16];
+
+extern void *memset(void *, int, unsigned int);
+
+extern Vector4 *MMathVectorInterpolation(Vector4 *destination,
+                                         const Vector4 *first,
+                                         const Vector4 *second,
+                                         float parameter);
+
+extern unsigned char *sefGetBattleData(void);
+extern void sefMemZero(void *data, unsigned int size);
+extern Vector4 *func_A2C3F8(void);
+extern int sefGetDmgNull(void);
+extern void sefGetPosition(Vector4 *position, void *actor, int part);
+extern void func_A31500(float *params, int kind);
+extern void func_A31AE0(int kind, void *params);
+extern void func_A31BB8(int kind);
+extern int func_A31C30(int kind);
+
+extern void func_A31CA0(int value0, int value1, int value2, int value3,
+                        int value4);
+
+extern SdvScheduler *sefGetNowScheduler(void);
+extern StudioCamera *xglStudioGetActiveCamera(void);
+extern void MMathMulMatrix(void *destination, void *first, void *second);
+
+extern Vector4 *MMathApplyMatrix(Vector4 *destination, const void *matrix,
+                                 const Vector4 *point);
+
+extern int MMathRotTransPersClip(SdvScreenPoint *destination, const void *screen,
+                                 const void *matrix, const void *point);
+
+extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
+extern void sefGetWeaponPosition(Vector4 *position, void *weapon, int part);
+extern void SGsInitGifPacket(SdvGifPacket *packet);
+
+extern void SGsOpenGifPacket(SdvGifPacket *packet, int prim,
+                             unsigned long long registers, unsigned int nreg);
+
+extern void SGsCloseGifPacket(SdvGifPacket *packet);
+
+extern void SGsAddReg(SdvGifPacket *packet, unsigned long long address,
+                      unsigned long long value);
+
+extern void SGsAddGifSTQ(SdvGifPacket *packet, float texture_s, float texture_t,
+                         float texture_q);
+
+extern void SGsAddGifRGBA(SdvGifPacket *packet, Quadword rgba);
+extern void SGsAddGifData(SdvGifPacket *packet, Quadword data);
+extern void SGsSendPacket(SdvGifPacket *packet);
 
 static float _sdvMapRgb[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
@@ -38,19 +345,9 @@ static float _sdvAmbient[4] = {0.25f, 0.25f, 0.25f, 1.0f};
 
 static short blksiz_2[9] = { 1, 3, 7, 15, 31, 63, 127, 255, 511 };
 
-
-
-static short _sdvSpecialBuf[8];
-
-static SdvAlter _sdvAlter[16];
-
 static int _sdvAmbFrame = 0;
 
 static int _sdvAmbState = 0;
-
-static unsigned char charID_0;
-
-static int eftCate_1;
 
 unsigned char orgData[33][0x180] = {{0}};
 
@@ -82,86 +379,61 @@ MEfObjCamParams mefCamParams = {0};
  */
 unsigned char mdstr[256] = {0};
 
-
-extern void *memset(void *, int, unsigned int);
-
-extern Vector4 *MMathVectorInterpolation(Vector4 *destination,
-                                         const Vector4 *first,
-                                         const Vector4 *second,
-                                         float parameter);
-
-extern unsigned char *sefGetBattleData(void);
-
-extern short _hitFlag;
-
-extern short _hitSignal;
-
-typedef struct SdvSequence {
-    unsigned int event_address;
-    int script_base;
-    int elapsed;
-    int position;
-    int stride;
-    int last_sound;
-} SdvSequence;
-
-typedef struct SdvSpecial {
-    SdvSequence sequence;
-    unsigned char unmodeled_18[8];
-    SdvSpecialSlot slots[7];
-} SdvSpecial;
-
-extern void sefMemZero(void *data, unsigned int size);
-
-
-
 static int serial_3 = 0;
 
-extern Vector4 *func_A2C3F8(void);
+const char *instructionCodeName[240] = {
+    sdvOpNameNop, SdvOpcodeNameAconstNull, SdvOpcodeNameIconstM1, SdvOpcodeNameIconst0, SdvOpcodeNameIconst1, SdvOpcodeNameIconst2,
+    SdvOpcodeNameIconst3, SdvOpcodeNameIconst4, SdvOpcodeNameIconst5, SdvOpcodeNameLconst0, SdvOpcodeNameLconst1, SdvOpcodeNameFconst0,
+    SdvOpcodeNameFconst1, SdvOpcodeNameFconst2, SdvOpcodeNameDconst0, SdvOpcodeNameDconst1, sdvOpNameBipush, sdvOpNameSipush,
+    sdvOpNameLdc1, sdvOpNameLdc2, sdvOpNameLdc2w, sdvOpNameIload, sdvOpNameLload, sdvOpNameFload,
+    sdvOpNameDload, sdvOpNameAload, sdvOpNameIload0, sdvOpNameIload1, sdvOpNameIload2, sdvOpNameIload3,
+    sdvOpNameLload0, sdvOpNameLload1, sdvOpNameLload2, sdvOpNameLload3, sdvOpNameFload0, sdvOpNameFload1,
+    sdvOpNameFload2, sdvOpNameFload3, sdvOpNameDload0, sdvOpNameDload1, sdvOpNameDload2, sdvOpNameDload3,
+    sdvOpNameAload0, sdvOpNameAload1, sdvOpNameAload2, sdvOpNameAload3, sdvOpNameIaload, sdvOpNameLaload,
+    sdvOpNameFaload, sdvOpNameDaload, sdvOpNameAaload, sdvOpNameBaload, sdvOpNameCaload, sdvOpNameSaload,
+    sdvOpNameIstore, sdvOpNameLstore, sdvOpNameFstore, sdvOpNameDstore, sdvOpNameAstore, SdvOpcodeNameIstore0,
+    SdvOpcodeNameIstore1, SdvOpcodeNameIstore2, SdvOpcodeNameIstore3, SdvOpcodeNameLstore0, SdvOpcodeNameLstore1, SdvOpcodeNameLstore2,
+    SdvOpcodeNameLstore3, SdvOpcodeNameFstore0, SdvOpcodeNameFstore1, SdvOpcodeNameFstore2, SdvOpcodeNameFstore3, SdvOpcodeNameDstore0,
+    SdvOpcodeNameDstore1, SdvOpcodeNameDstore2, SdvOpcodeNameDstore3, SdvOpcodeNameAstore0, SdvOpcodeNameAstore1, SdvOpcodeNameAstore2,
+    SdvOpcodeNameAstore3, sdvOpNameIastore, sdvOpNameLastore, sdvOpNameFastore, sdvOpNameDastore, sdvOpNameAastore,
+    sdvOpNameBastore, sdvOpNameCastore, sdvOpNameSastore, sdvOpNamePop, sdvOpNamePop2, sdvOpNameDup,
+    sdvOpNameDupX1, sdvOpNameDupX2, sdvOpNameDup2, sdvOpNameDup2X1, sdvOpNameDup2X2, sdvOpNameSwap,
+    sdvOpNameIadd, sdvOpNameLadd, sdvOpNameFadd, sdvOpNameDadd, sdvOpNameIsub, sdvOpNameLsub,
+    sdvOpNameFsub, sdvOpNameDsub, sdvOpNameImul, sdvOpNameLmul, sdvOpNameFmul, sdvOpNameDmul,
+    sdvOpNameIdiv, sdvOpNameLdiv, sdvOpNameFdiv, sdvOpNameDdiv, sdvOpNameIrem, sdvOpNameLrem,
+    sdvOpNameFrem, sdvOpNameDrem, sdvOpNameIneg, sdvOpNameLneg, sdvOpNameFneg, sdvOpNameDneg,
+    sdvOpNameIshl, sdvOpNameLshl, sdvOpNameIshr, sdvOpNameLshr, sdvOpNameIushr, sdvOpNameLushr,
+    sdvOpNameIand, sdvOpNameLand, sdvOpNameIor, sdvOpNameLor, sdvOpNameIxor, sdvOpNameLxor,
+    sdvOpNameIinc, sdvOpNameI2l, sdvOpNameI2f, sdvOpNameI2d, sdvOpNameL2i, sdvOpNameL2f,
+    sdvOpNameL2d, sdvOpNameF2i, sdvOpNameF2l, sdvOpNameF2d, sdvOpNameD2i, sdvOpNameD2l,
+    sdvOpNameD2f, SdvOpcodeNameInt2byte, SdvOpcodeNameInt2char, SdvOpcodeNameInt2short, sdvOpNameLcmp, sdvOpNameFcmpl,
+    sdvOpNameFcmpg, sdvOpNameDcmpl, sdvOpNameDcmpg, sdvOpNameIfeq, sdvOpNameIfne, sdvOpNameIflt,
+    sdvOpNameIfge, sdvOpNameIfgt, sdvOpNameIfle, SdvOpcodeNameIfIcmpeq, SdvOpcodeNameIfIcmpne, SdvOpcodeNameIfIcmplt,
+    SdvOpcodeNameIfIcmpge, SdvOpcodeNameIfIcmpgt, SdvOpcodeNameIfIcmple, SdvOpcodeNameIfAcmpeq, SdvOpcodeNameIfAcmpne, sdvOpNameGoto,
+    sdvOpNameJsr, sdvOpNameRet, SdvOpcodeNameTableswitch, SdvOpcodeNameLookupswitch, sdvOpNameIreturn, sdvOpNameLreturn,
+    sdvOpNameFreturn, sdvOpNameDreturn, sdvOpNameAreturn, sdvOpNameReturn, SdvOpcodeNameGetstatic, SdvOpcodeNamePutstatic,
+    SdvOpcodeNameGetfield, SdvOpcodeNamePutfield, SdvOpcodeNameInvokevirtual, SdvOpcodeNameInvokespecial, SdvOpcodeNameInvokestatic, SdvOpcodeNameInvokeinterface,
+    sdvOpNameUnknown, sdvOpNameNew, SdvOpcodeNameNewarray, SdvOpcodeNameAnewarray, SdvOpcodeNameArraylength, sdvOpNameAthrow,
+    SdvOpcodeNameCheckcast, SdvOpcodeNameInstanceof, SdvOpcodeNameMonitorenter, SdvOpcodeNameMonitorexit, sdvOpNameWide, SdvOpcodeNameMultianewarray,
+    sdvOpNameIfnull, SdvOpcodeNameIfnonnull, sdvOpNameGotoW, sdvOpNameJsrW, SdvOpcodeNameBreakpoint, sdvOpNameUnknown,
+    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
+    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
+    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
+    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
+    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
+    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, SdvOpcodeNameCheckcastFast, SdvOpcodeNameInstanceofFast
+};
 
-extern int sefGetDmgNull(void);
+static short _sdvSpecialBuf[8];
 
-extern void sefGetPosition(Vector4 *position, void *actor, int part);
+static SdvAlter _sdvAlter[16];
 
-extern int _nowEftNo;
+static unsigned char charID_0;
 
-extern void func_A31500(float *params, int kind);
+static int eftCate_1;
 
-extern void func_A31AE0(int kind, void *params);
-
-extern void func_A31BB8(int kind);
-
-extern int func_A31C30(int kind);
-
-extern void func_A31CA0(int value0, int value1, int value2, int value3,
-                        int value4);
-
-
-
-typedef struct SdvCameraParam {
-    int kind;
-    unsigned char unmodeled_04[12];
-    Vector4 position;
-    int actor;
-    int actor_number;
-    int part;
-    int source_actor;
-    int source_number;
-    int source_part;
-    int target_actor;
-    int target_number;
-    int target_part;
-    unsigned char unmodeled_44[40];
-    float weight;
-} SdvCameraParam;
-
-typedef struct SdvBattleCameraActors {
-    int source_actor;
-    int target_actor;
-    unsigned char unmodeled_08[8];
-    short source_number;
-    short target_number;
-} SdvBattleCameraActors;
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+static const unsigned long long alphaTbl_004CC8D8[4];
 
 void sdvInitAmbient(void)
 {
@@ -668,18 +940,6 @@ void sdvScheduleCamera(SdvCameraTask *task)
     }
 }
 
-extern SdvScheduler *sefGetNowScheduler(void);
-
-extern StudioCamera *xglStudioGetActiveCamera(void);
-
-extern void MMathMulMatrix(void *destination, void *first, void *second);
-
-extern Vector4 *MMathApplyMatrix(Vector4 *destination, const void *matrix,
-                                 const Vector4 *point);
-
-extern int MMathRotTransPersClip(SdvScreenPoint *destination, const void *screen,
-                                 const void *matrix, const void *point);
-
 static int sdvTransOffset(SdvScreenPoint *screen, SdvScreenPoint *offset,
                           SdvSpecialSlot *slot, SdvSpecialKey *key)
 {
@@ -785,17 +1045,6 @@ static int sdvAllocSpecialWork(int kind)
     return -1;
 }
 
-/* A key field halfway between two keys: blend is the 8-bit fraction. */
-#define SDV_BLEND(dest, field) \
-    (dest) = (key1->field == key0->field ? key0->field : (key0->field + (((key1->field - key0->field) * blend + 128) >> 8)) & 0xffff)
-
-/* A key viewed as raw bytes: the char member makes the copy alias every
- * type, so the cached slot fields are reloaded after it. */
-typedef union SdvKeyBytes {
-    SdvSpecialKey key;
-    char byte[sizeof(SdvSpecialKey)];
-} SdvKeyBytes;
-
 static inline void sdvCopyKey(SdvSpecialKey *destination, const SdvSpecialKey *source)
 {
     ((SdvKeyBytes *)destination)->key = ((const SdvKeyBytes *)source)->key;
@@ -887,7 +1136,6 @@ void sdvExecSpecial(SdvSpecial *special)
         }
     }
 }
-
 
 void sdvDrawSpecial(SdvSpecial *special)
 {
@@ -1212,7 +1460,6 @@ void sdvScheduleAlter(SdvSequence *sequence, SdvAlterRequest *request)
     sdvCreateAlter(&parameters);
 }
 
-
 void sdvInitAlter(SdvAlter *alter)
 {
     sefMemZero(alter, sizeof(*alter));
@@ -1261,10 +1508,6 @@ void sdvKillAlter(int alter_id)
         return;
     sdvDestroyAlter(&_sdvAlter[index]);
 }
-
-extern int sefGetDmgNull(void);
-extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
-extern void sefGetWeaponPosition(Vector4 *position, void *weapon, int part);
 
 void sdvExecAlter(SdvAlter *alter)
 {
@@ -1344,231 +1587,7 @@ void sdvExecAlter(SdvAlter *alter)
     }
 }
 
-
-extern void SGsInitGifPacket(SdvGifPacket *packet);
-extern void SGsOpenGifPacket(SdvGifPacket *packet, int prim,
-                             unsigned long long registers, unsigned int nreg);
-extern void SGsCloseGifPacket(SdvGifPacket *packet);
-extern void SGsAddReg(SdvGifPacket *packet, unsigned long long address,
-                      unsigned long long value);
-extern void SGsAddGifSTQ(SdvGifPacket *packet, float texture_s, float texture_t,
-                         float texture_q);
-extern void SGsAddGifRGBA(SdvGifPacket *packet, Quadword rgba);
-extern void SGsAddGifData(SdvGifPacket *packet, Quadword data);
-extern void SGsSendPacket(SdvGifPacket *packet);
-
-extern const char sdvOpNameNop[8];
-extern const char SdvOpcodeNameAconstNull[16];
-extern const char SdvOpcodeNameIconstM1[16];
-extern const char SdvOpcodeNameIconst0[16];
-extern const char SdvOpcodeNameIconst1[16];
-extern const char SdvOpcodeNameIconst2[16];
-extern const char SdvOpcodeNameIconst3[16];
-extern const char SdvOpcodeNameIconst4[16];
-extern const char SdvOpcodeNameIconst5[16];
-extern const char SdvOpcodeNameLconst0[16];
-extern const char SdvOpcodeNameLconst1[16];
-extern const char SdvOpcodeNameFconst0[16];
-extern const char SdvOpcodeNameFconst1[16];
-extern const char SdvOpcodeNameFconst2[16];
-extern const char SdvOpcodeNameDconst0[16];
-extern const char SdvOpcodeNameDconst1[16];
-extern const char sdvOpNameBipush[8];
-extern const char sdvOpNameSipush[8];
-extern const char sdvOpNameLdc1[8];
-extern const char sdvOpNameLdc2[8];
-extern const char sdvOpNameLdc2w[8];
-extern const char sdvOpNameIload[8];
-extern const char sdvOpNameLload[8];
-extern const char sdvOpNameFload[8];
-extern const char sdvOpNameDload[8];
-extern const char sdvOpNameAload[8];
-extern const char sdvOpNameIload0[8];
-extern const char sdvOpNameIload1[8];
-extern const char sdvOpNameIload2[8];
-extern const char sdvOpNameIload3[8];
-extern const char sdvOpNameLload0[8];
-extern const char sdvOpNameLload1[8];
-extern const char sdvOpNameLload2[8];
-extern const char sdvOpNameLload3[8];
-extern const char sdvOpNameFload0[8];
-extern const char sdvOpNameFload1[8];
-extern const char sdvOpNameFload2[8];
-extern const char sdvOpNameFload3[8];
-extern const char sdvOpNameDload0[8];
-extern const char sdvOpNameDload1[8];
-extern const char sdvOpNameDload2[8];
-extern const char sdvOpNameDload3[8];
-extern const char sdvOpNameAload0[8];
-extern const char sdvOpNameAload1[8];
-extern const char sdvOpNameAload2[8];
-extern const char sdvOpNameAload3[8];
-extern const char sdvOpNameIaload[8];
-extern const char sdvOpNameLaload[8];
-extern const char sdvOpNameFaload[8];
-extern const char sdvOpNameDaload[8];
-extern const char sdvOpNameAaload[8];
-extern const char sdvOpNameBaload[8];
-extern const char sdvOpNameCaload[8];
-extern const char sdvOpNameSaload[8];
-extern const char sdvOpNameIstore[8];
-extern const char sdvOpNameLstore[8];
-extern const char sdvOpNameFstore[8];
-extern const char sdvOpNameDstore[8];
-extern const char sdvOpNameAstore[8];
-extern const char SdvOpcodeNameIstore0[16];
-extern const char SdvOpcodeNameIstore1[16];
-extern const char SdvOpcodeNameIstore2[16];
-extern const char SdvOpcodeNameIstore3[16];
-extern const char SdvOpcodeNameLstore0[16];
-extern const char SdvOpcodeNameLstore1[16];
-extern const char SdvOpcodeNameLstore2[16];
-extern const char SdvOpcodeNameLstore3[16];
-extern const char SdvOpcodeNameFstore0[16];
-extern const char SdvOpcodeNameFstore1[16];
-extern const char SdvOpcodeNameFstore2[16];
-extern const char SdvOpcodeNameFstore3[16];
-extern const char SdvOpcodeNameDstore0[16];
-extern const char SdvOpcodeNameDstore1[16];
-extern const char SdvOpcodeNameDstore2[16];
-extern const char SdvOpcodeNameDstore3[16];
-extern const char SdvOpcodeNameAstore0[16];
-extern const char SdvOpcodeNameAstore1[16];
-extern const char SdvOpcodeNameAstore2[16];
-extern const char SdvOpcodeNameAstore3[16];
-extern const char sdvOpNameIastore[8];
-extern const char sdvOpNameLastore[8];
-extern const char sdvOpNameFastore[8];
-extern const char sdvOpNameDastore[8];
-extern const char sdvOpNameAastore[8];
-extern const char sdvOpNameBastore[8];
-extern const char sdvOpNameCastore[8];
-extern const char sdvOpNameSastore[8];
-extern const char sdvOpNamePop[8];
-extern const char sdvOpNamePop2[8];
-extern const char sdvOpNameDup[8];
-extern const char sdvOpNameDupX1[8];
-extern const char sdvOpNameDupX2[8];
-extern const char sdvOpNameDup2[8];
-extern const char sdvOpNameDup2X1[8];
-extern const char sdvOpNameDup2X2[8];
-extern const char sdvOpNameSwap[8];
-extern const char sdvOpNameIadd[8];
-extern const char sdvOpNameLadd[8];
-extern const char sdvOpNameFadd[8];
-extern const char sdvOpNameDadd[8];
-extern const char sdvOpNameIsub[8];
-extern const char sdvOpNameLsub[8];
-extern const char sdvOpNameFsub[8];
-extern const char sdvOpNameDsub[8];
-extern const char sdvOpNameImul[8];
-extern const char sdvOpNameLmul[8];
-extern const char sdvOpNameFmul[8];
-extern const char sdvOpNameDmul[8];
-extern const char sdvOpNameIdiv[8];
-extern const char sdvOpNameLdiv[8];
-extern const char sdvOpNameFdiv[8];
-extern const char sdvOpNameDdiv[8];
-extern const char sdvOpNameIrem[8];
-extern const char sdvOpNameLrem[8];
-extern const char sdvOpNameFrem[8];
-extern const char sdvOpNameDrem[8];
-extern const char sdvOpNameIneg[8];
-extern const char sdvOpNameLneg[8];
-extern const char sdvOpNameFneg[8];
-extern const char sdvOpNameDneg[8];
-extern const char sdvOpNameIshl[8];
-extern const char sdvOpNameLshl[8];
-extern const char sdvOpNameIshr[8];
-extern const char sdvOpNameLshr[8];
-extern const char sdvOpNameIushr[8];
-extern const char sdvOpNameLushr[8];
-extern const char sdvOpNameIand[8];
-extern const char sdvOpNameLand[8];
-extern const char sdvOpNameIor[8];
-extern const char sdvOpNameLor[8];
-extern const char sdvOpNameIxor[8];
-extern const char sdvOpNameLxor[8];
-extern const char sdvOpNameIinc[8];
-extern const char sdvOpNameI2l[8];
-extern const char sdvOpNameI2f[8];
-extern const char sdvOpNameI2d[8];
-extern const char sdvOpNameL2i[8];
-extern const char sdvOpNameL2f[8];
-extern const char sdvOpNameL2d[8];
-extern const char sdvOpNameF2i[8];
-extern const char sdvOpNameF2l[8];
-extern const char sdvOpNameF2d[8];
-extern const char sdvOpNameD2i[8];
-extern const char sdvOpNameD2l[8];
-extern const char sdvOpNameD2f[8];
-extern const char SdvOpcodeNameInt2byte[16];
-extern const char SdvOpcodeNameInt2char[16];
-extern const char SdvOpcodeNameInt2short[16];
-extern const char sdvOpNameLcmp[8];
-extern const char sdvOpNameFcmpl[8];
-extern const char sdvOpNameFcmpg[8];
-extern const char sdvOpNameDcmpl[8];
-extern const char sdvOpNameDcmpg[8];
-extern const char sdvOpNameIfeq[8];
-extern const char sdvOpNameIfne[8];
-extern const char sdvOpNameIflt[8];
-extern const char sdvOpNameIfge[8];
-extern const char sdvOpNameIfgt[8];
-extern const char sdvOpNameIfle[8];
-extern const char SdvOpcodeNameIfIcmpeq[16];
-extern const char SdvOpcodeNameIfIcmpne[16];
-extern const char SdvOpcodeNameIfIcmplt[16];
-extern const char SdvOpcodeNameIfIcmpge[16];
-extern const char SdvOpcodeNameIfIcmpgt[16];
-extern const char SdvOpcodeNameIfIcmple[16];
-extern const char SdvOpcodeNameIfAcmpeq[16];
-extern const char SdvOpcodeNameIfAcmpne[16];
-extern const char sdvOpNameGoto[8];
-extern const char sdvOpNameJsr[8];
-extern const char sdvOpNameRet[8];
-extern const char SdvOpcodeNameTableswitch[16];
-extern const char SdvOpcodeNameLookupswitch[16];
-extern const char sdvOpNameIreturn[8];
-extern const char sdvOpNameLreturn[8];
-extern const char sdvOpNameFreturn[8];
-extern const char sdvOpNameDreturn[8];
-extern const char sdvOpNameAreturn[8];
-extern const char sdvOpNameReturn[8];
-extern const char SdvOpcodeNameGetstatic[16];
-extern const char SdvOpcodeNamePutstatic[16];
-extern const char SdvOpcodeNameGetfield[16];
-extern const char SdvOpcodeNamePutfield[16];
-extern const char SdvOpcodeNameInvokevirtual[16];
-extern const char SdvOpcodeNameInvokespecial[16];
-extern const char SdvOpcodeNameInvokestatic[16];
-extern const char SdvOpcodeNameInvokeinterface[16];
-extern const char sdvOpNameUnknown[4];
-extern const char sdvOpNameNew[8];
-extern const char SdvOpcodeNameNewarray[16];
-extern const char SdvOpcodeNameAnewarray[16];
-extern const char SdvOpcodeNameArraylength[16];
-extern const char sdvOpNameAthrow[8];
-extern const char SdvOpcodeNameCheckcast[16];
-extern const char SdvOpcodeNameInstanceof[16];
-extern const char SdvOpcodeNameMonitorenter[16];
-extern const char SdvOpcodeNameMonitorexit[16];
-extern const char sdvOpNameWide[8];
-extern const char SdvOpcodeNameMultianewarray[16];
-extern const char sdvOpNameIfnull[8];
-extern const char SdvOpcodeNameIfnonnull[16];
-extern const char sdvOpNameGotoW[8];
-extern const char sdvOpNameJsrW[8];
-extern const char SdvOpcodeNameBreakpoint[16];
-extern const char SdvOpcodeNameCheckcastFast[16];
-extern const char SdvOpcodeNameInstanceofFast[16];
-
-typedef union SdvTextureCoordinate {
-    float stq[4];
-    Quadword quad;
-} SdvTextureCoordinate;
-
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static const unsigned long long alphaTbl_004CC8D8[4] = {68ULL, 72ULL, 549755813954ULL, 106ULL};
 
 static const SdvTextureCoordinate stqTbl_004CC900[4] = {
@@ -1786,252 +1805,3 @@ void sdvDrawAlters(int category)
         }
     }
 }
-
-extern const char sdvOpNameNop[8];
-extern const char SdvOpcodeNameAconstNull[16];
-extern const char SdvOpcodeNameIconstM1[16];
-extern const char SdvOpcodeNameIconst0[16];
-extern const char SdvOpcodeNameIconst1[16];
-extern const char SdvOpcodeNameIconst2[16];
-extern const char SdvOpcodeNameIconst3[16];
-extern const char SdvOpcodeNameIconst4[16];
-extern const char SdvOpcodeNameIconst5[16];
-extern const char SdvOpcodeNameLconst0[16];
-extern const char SdvOpcodeNameLconst1[16];
-extern const char SdvOpcodeNameFconst0[16];
-extern const char SdvOpcodeNameFconst1[16];
-extern const char SdvOpcodeNameFconst2[16];
-extern const char SdvOpcodeNameDconst0[16];
-extern const char SdvOpcodeNameDconst1[16];
-extern const char sdvOpNameBipush[8];
-extern const char sdvOpNameSipush[8];
-extern const char sdvOpNameLdc1[8];
-extern const char sdvOpNameLdc2[8];
-extern const char sdvOpNameLdc2w[8];
-extern const char sdvOpNameIload[8];
-extern const char sdvOpNameLload[8];
-extern const char sdvOpNameFload[8];
-extern const char sdvOpNameDload[8];
-extern const char sdvOpNameAload[8];
-extern const char sdvOpNameIload0[8];
-extern const char sdvOpNameIload1[8];
-extern const char sdvOpNameIload2[8];
-extern const char sdvOpNameIload3[8];
-extern const char sdvOpNameLload0[8];
-extern const char sdvOpNameLload1[8];
-extern const char sdvOpNameLload2[8];
-extern const char sdvOpNameLload3[8];
-extern const char sdvOpNameFload0[8];
-extern const char sdvOpNameFload1[8];
-extern const char sdvOpNameFload2[8];
-extern const char sdvOpNameFload3[8];
-extern const char sdvOpNameDload0[8];
-extern const char sdvOpNameDload1[8];
-extern const char sdvOpNameDload2[8];
-extern const char sdvOpNameDload3[8];
-extern const char sdvOpNameAload0[8];
-extern const char sdvOpNameAload1[8];
-extern const char sdvOpNameAload2[8];
-extern const char sdvOpNameAload3[8];
-extern const char sdvOpNameIaload[8];
-extern const char sdvOpNameLaload[8];
-extern const char sdvOpNameFaload[8];
-extern const char sdvOpNameDaload[8];
-extern const char sdvOpNameAaload[8];
-extern const char sdvOpNameBaload[8];
-extern const char sdvOpNameCaload[8];
-extern const char sdvOpNameSaload[8];
-extern const char sdvOpNameIstore[8];
-extern const char sdvOpNameLstore[8];
-extern const char sdvOpNameFstore[8];
-extern const char sdvOpNameDstore[8];
-extern const char sdvOpNameAstore[8];
-extern const char SdvOpcodeNameIstore0[16];
-extern const char SdvOpcodeNameIstore1[16];
-extern const char SdvOpcodeNameIstore2[16];
-extern const char SdvOpcodeNameIstore3[16];
-extern const char SdvOpcodeNameLstore0[16];
-extern const char SdvOpcodeNameLstore1[16];
-extern const char SdvOpcodeNameLstore2[16];
-extern const char SdvOpcodeNameLstore3[16];
-extern const char SdvOpcodeNameFstore0[16];
-extern const char SdvOpcodeNameFstore1[16];
-extern const char SdvOpcodeNameFstore2[16];
-extern const char SdvOpcodeNameFstore3[16];
-extern const char SdvOpcodeNameDstore0[16];
-extern const char SdvOpcodeNameDstore1[16];
-extern const char SdvOpcodeNameDstore2[16];
-extern const char SdvOpcodeNameDstore3[16];
-extern const char SdvOpcodeNameAstore0[16];
-extern const char SdvOpcodeNameAstore1[16];
-extern const char SdvOpcodeNameAstore2[16];
-extern const char SdvOpcodeNameAstore3[16];
-extern const char sdvOpNameIastore[8];
-extern const char sdvOpNameLastore[8];
-extern const char sdvOpNameFastore[8];
-extern const char sdvOpNameDastore[8];
-extern const char sdvOpNameAastore[8];
-extern const char sdvOpNameBastore[8];
-extern const char sdvOpNameCastore[8];
-extern const char sdvOpNameSastore[8];
-extern const char sdvOpNamePop[8];
-extern const char sdvOpNamePop2[8];
-extern const char sdvOpNameDup[8];
-extern const char sdvOpNameDupX1[8];
-extern const char sdvOpNameDupX2[8];
-extern const char sdvOpNameDup2[8];
-extern const char sdvOpNameDup2X1[8];
-extern const char sdvOpNameDup2X2[8];
-extern const char sdvOpNameSwap[8];
-extern const char sdvOpNameIadd[8];
-extern const char sdvOpNameLadd[8];
-extern const char sdvOpNameFadd[8];
-extern const char sdvOpNameDadd[8];
-extern const char sdvOpNameIsub[8];
-extern const char sdvOpNameLsub[8];
-extern const char sdvOpNameFsub[8];
-extern const char sdvOpNameDsub[8];
-extern const char sdvOpNameImul[8];
-extern const char sdvOpNameLmul[8];
-extern const char sdvOpNameFmul[8];
-extern const char sdvOpNameDmul[8];
-extern const char sdvOpNameIdiv[8];
-extern const char sdvOpNameLdiv[8];
-extern const char sdvOpNameFdiv[8];
-extern const char sdvOpNameDdiv[8];
-extern const char sdvOpNameIrem[8];
-extern const char sdvOpNameLrem[8];
-extern const char sdvOpNameFrem[8];
-extern const char sdvOpNameDrem[8];
-extern const char sdvOpNameIneg[8];
-extern const char sdvOpNameLneg[8];
-extern const char sdvOpNameFneg[8];
-extern const char sdvOpNameDneg[8];
-extern const char sdvOpNameIshl[8];
-extern const char sdvOpNameLshl[8];
-extern const char sdvOpNameIshr[8];
-extern const char sdvOpNameLshr[8];
-extern const char sdvOpNameIushr[8];
-extern const char sdvOpNameLushr[8];
-extern const char sdvOpNameIand[8];
-extern const char sdvOpNameLand[8];
-extern const char sdvOpNameIor[8];
-extern const char sdvOpNameLor[8];
-extern const char sdvOpNameIxor[8];
-extern const char sdvOpNameLxor[8];
-extern const char sdvOpNameIinc[8];
-extern const char sdvOpNameI2l[8];
-extern const char sdvOpNameI2f[8];
-extern const char sdvOpNameI2d[8];
-extern const char sdvOpNameL2i[8];
-extern const char sdvOpNameL2f[8];
-extern const char sdvOpNameL2d[8];
-extern const char sdvOpNameF2i[8];
-extern const char sdvOpNameF2l[8];
-extern const char sdvOpNameF2d[8];
-extern const char sdvOpNameD2i[8];
-extern const char sdvOpNameD2l[8];
-extern const char sdvOpNameD2f[8];
-extern const char SdvOpcodeNameInt2byte[16];
-extern const char SdvOpcodeNameInt2char[16];
-extern const char SdvOpcodeNameInt2short[16];
-extern const char sdvOpNameLcmp[8];
-extern const char sdvOpNameFcmpl[8];
-extern const char sdvOpNameFcmpg[8];
-extern const char sdvOpNameDcmpl[8];
-extern const char sdvOpNameDcmpg[8];
-extern const char sdvOpNameIfeq[8];
-extern const char sdvOpNameIfne[8];
-extern const char sdvOpNameIflt[8];
-extern const char sdvOpNameIfge[8];
-extern const char sdvOpNameIfgt[8];
-extern const char sdvOpNameIfle[8];
-extern const char SdvOpcodeNameIfIcmpeq[16];
-extern const char SdvOpcodeNameIfIcmpne[16];
-extern const char SdvOpcodeNameIfIcmplt[16];
-extern const char SdvOpcodeNameIfIcmpge[16];
-extern const char SdvOpcodeNameIfIcmpgt[16];
-extern const char SdvOpcodeNameIfIcmple[16];
-extern const char SdvOpcodeNameIfAcmpeq[16];
-extern const char SdvOpcodeNameIfAcmpne[16];
-extern const char sdvOpNameGoto[8];
-extern const char sdvOpNameJsr[8];
-extern const char sdvOpNameRet[8];
-extern const char SdvOpcodeNameTableswitch[16];
-extern const char SdvOpcodeNameLookupswitch[16];
-extern const char sdvOpNameIreturn[8];
-extern const char sdvOpNameLreturn[8];
-extern const char sdvOpNameFreturn[8];
-extern const char sdvOpNameDreturn[8];
-extern const char sdvOpNameAreturn[8];
-extern const char sdvOpNameReturn[8];
-extern const char SdvOpcodeNameGetstatic[16];
-extern const char SdvOpcodeNamePutstatic[16];
-extern const char SdvOpcodeNameGetfield[16];
-extern const char SdvOpcodeNamePutfield[16];
-extern const char SdvOpcodeNameInvokevirtual[16];
-extern const char SdvOpcodeNameInvokespecial[16];
-extern const char SdvOpcodeNameInvokestatic[16];
-extern const char SdvOpcodeNameInvokeinterface[16];
-extern const char sdvOpNameUnknown[4];
-extern const char sdvOpNameNew[8];
-extern const char SdvOpcodeNameNewarray[16];
-extern const char SdvOpcodeNameAnewarray[16];
-extern const char SdvOpcodeNameArraylength[16];
-extern const char sdvOpNameAthrow[8];
-extern const char SdvOpcodeNameCheckcast[16];
-extern const char SdvOpcodeNameInstanceof[16];
-extern const char SdvOpcodeNameMonitorenter[16];
-extern const char SdvOpcodeNameMonitorexit[16];
-extern const char sdvOpNameWide[8];
-extern const char SdvOpcodeNameMultianewarray[16];
-extern const char sdvOpNameIfnull[8];
-extern const char SdvOpcodeNameIfnonnull[16];
-extern const char sdvOpNameGotoW[8];
-extern const char sdvOpNameJsrW[8];
-extern const char SdvOpcodeNameBreakpoint[16];
-extern const char SdvOpcodeNameCheckcastFast[16];
-extern const char SdvOpcodeNameInstanceofFast[16];
-
-const char *instructionCodeName[240] = {
-    sdvOpNameNop, SdvOpcodeNameAconstNull, SdvOpcodeNameIconstM1, SdvOpcodeNameIconst0, SdvOpcodeNameIconst1, SdvOpcodeNameIconst2,
-    SdvOpcodeNameIconst3, SdvOpcodeNameIconst4, SdvOpcodeNameIconst5, SdvOpcodeNameLconst0, SdvOpcodeNameLconst1, SdvOpcodeNameFconst0,
-    SdvOpcodeNameFconst1, SdvOpcodeNameFconst2, SdvOpcodeNameDconst0, SdvOpcodeNameDconst1, sdvOpNameBipush, sdvOpNameSipush,
-    sdvOpNameLdc1, sdvOpNameLdc2, sdvOpNameLdc2w, sdvOpNameIload, sdvOpNameLload, sdvOpNameFload,
-    sdvOpNameDload, sdvOpNameAload, sdvOpNameIload0, sdvOpNameIload1, sdvOpNameIload2, sdvOpNameIload3,
-    sdvOpNameLload0, sdvOpNameLload1, sdvOpNameLload2, sdvOpNameLload3, sdvOpNameFload0, sdvOpNameFload1,
-    sdvOpNameFload2, sdvOpNameFload3, sdvOpNameDload0, sdvOpNameDload1, sdvOpNameDload2, sdvOpNameDload3,
-    sdvOpNameAload0, sdvOpNameAload1, sdvOpNameAload2, sdvOpNameAload3, sdvOpNameIaload, sdvOpNameLaload,
-    sdvOpNameFaload, sdvOpNameDaload, sdvOpNameAaload, sdvOpNameBaload, sdvOpNameCaload, sdvOpNameSaload,
-    sdvOpNameIstore, sdvOpNameLstore, sdvOpNameFstore, sdvOpNameDstore, sdvOpNameAstore, SdvOpcodeNameIstore0,
-    SdvOpcodeNameIstore1, SdvOpcodeNameIstore2, SdvOpcodeNameIstore3, SdvOpcodeNameLstore0, SdvOpcodeNameLstore1, SdvOpcodeNameLstore2,
-    SdvOpcodeNameLstore3, SdvOpcodeNameFstore0, SdvOpcodeNameFstore1, SdvOpcodeNameFstore2, SdvOpcodeNameFstore3, SdvOpcodeNameDstore0,
-    SdvOpcodeNameDstore1, SdvOpcodeNameDstore2, SdvOpcodeNameDstore3, SdvOpcodeNameAstore0, SdvOpcodeNameAstore1, SdvOpcodeNameAstore2,
-    SdvOpcodeNameAstore3, sdvOpNameIastore, sdvOpNameLastore, sdvOpNameFastore, sdvOpNameDastore, sdvOpNameAastore,
-    sdvOpNameBastore, sdvOpNameCastore, sdvOpNameSastore, sdvOpNamePop, sdvOpNamePop2, sdvOpNameDup,
-    sdvOpNameDupX1, sdvOpNameDupX2, sdvOpNameDup2, sdvOpNameDup2X1, sdvOpNameDup2X2, sdvOpNameSwap,
-    sdvOpNameIadd, sdvOpNameLadd, sdvOpNameFadd, sdvOpNameDadd, sdvOpNameIsub, sdvOpNameLsub,
-    sdvOpNameFsub, sdvOpNameDsub, sdvOpNameImul, sdvOpNameLmul, sdvOpNameFmul, sdvOpNameDmul,
-    sdvOpNameIdiv, sdvOpNameLdiv, sdvOpNameFdiv, sdvOpNameDdiv, sdvOpNameIrem, sdvOpNameLrem,
-    sdvOpNameFrem, sdvOpNameDrem, sdvOpNameIneg, sdvOpNameLneg, sdvOpNameFneg, sdvOpNameDneg,
-    sdvOpNameIshl, sdvOpNameLshl, sdvOpNameIshr, sdvOpNameLshr, sdvOpNameIushr, sdvOpNameLushr,
-    sdvOpNameIand, sdvOpNameLand, sdvOpNameIor, sdvOpNameLor, sdvOpNameIxor, sdvOpNameLxor,
-    sdvOpNameIinc, sdvOpNameI2l, sdvOpNameI2f, sdvOpNameI2d, sdvOpNameL2i, sdvOpNameL2f,
-    sdvOpNameL2d, sdvOpNameF2i, sdvOpNameF2l, sdvOpNameF2d, sdvOpNameD2i, sdvOpNameD2l,
-    sdvOpNameD2f, SdvOpcodeNameInt2byte, SdvOpcodeNameInt2char, SdvOpcodeNameInt2short, sdvOpNameLcmp, sdvOpNameFcmpl,
-    sdvOpNameFcmpg, sdvOpNameDcmpl, sdvOpNameDcmpg, sdvOpNameIfeq, sdvOpNameIfne, sdvOpNameIflt,
-    sdvOpNameIfge, sdvOpNameIfgt, sdvOpNameIfle, SdvOpcodeNameIfIcmpeq, SdvOpcodeNameIfIcmpne, SdvOpcodeNameIfIcmplt,
-    SdvOpcodeNameIfIcmpge, SdvOpcodeNameIfIcmpgt, SdvOpcodeNameIfIcmple, SdvOpcodeNameIfAcmpeq, SdvOpcodeNameIfAcmpne, sdvOpNameGoto,
-    sdvOpNameJsr, sdvOpNameRet, SdvOpcodeNameTableswitch, SdvOpcodeNameLookupswitch, sdvOpNameIreturn, sdvOpNameLreturn,
-    sdvOpNameFreturn, sdvOpNameDreturn, sdvOpNameAreturn, sdvOpNameReturn, SdvOpcodeNameGetstatic, SdvOpcodeNamePutstatic,
-    SdvOpcodeNameGetfield, SdvOpcodeNamePutfield, SdvOpcodeNameInvokevirtual, SdvOpcodeNameInvokespecial, SdvOpcodeNameInvokestatic, SdvOpcodeNameInvokeinterface,
-    sdvOpNameUnknown, sdvOpNameNew, SdvOpcodeNameNewarray, SdvOpcodeNameAnewarray, SdvOpcodeNameArraylength, sdvOpNameAthrow,
-    SdvOpcodeNameCheckcast, SdvOpcodeNameInstanceof, SdvOpcodeNameMonitorenter, SdvOpcodeNameMonitorexit, sdvOpNameWide, SdvOpcodeNameMultianewarray,
-    sdvOpNameIfnull, SdvOpcodeNameIfnonnull, sdvOpNameGotoW, sdvOpNameJsrW, SdvOpcodeNameBreakpoint, sdvOpNameUnknown,
-    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
-    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
-    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
-    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
-    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown,
-    sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, sdvOpNameUnknown, SdvOpcodeNameCheckcastFast, SdvOpcodeNameInstanceofFast
-};

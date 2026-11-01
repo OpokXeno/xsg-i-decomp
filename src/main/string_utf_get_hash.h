@@ -22,26 +22,17 @@ struct ConstString {
     char data[1];
 };
 
-extern void *xmalloc(int size, int type);
-
-extern unsigned int strlen(const char *string);
-
-extern int memcmp(const void *left, const void *right, unsigned int count);
-
-extern void *memcpy(void *destination, const void *source, unsigned int count);
-
-int StringUtf_getHash(const char *bytes, int length);
-
-void *StringUtf_create(int length);
-
-ConstString *findConstString(const char *bytes, int length);
-
-void reloadConstString(void *heap_boundary);
-
 extern ConstString **constStringTable;
 
+extern void *xmalloc(int size, int type);
+extern unsigned int strlen(const char *string);
+extern int memcmp(const void *left, const void *right, unsigned int count);
+extern void *memcpy(void *destination, const void *source, unsigned int count);
+int StringUtf_getHash(const char *bytes, int length);
+void *StringUtf_create(int length);
+ConstString *findConstString(const char *bytes, int length);
+void reloadConstString(void *heap_boundary);
 SceneString *loadConstString(const char *bytes, int length);
-
 SceneString *loadConstString2(const char *bytes, int length);
 
 #endif /* SRC_MAIN_STRING_UTF_GET_HASH_H */

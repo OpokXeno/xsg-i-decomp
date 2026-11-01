@@ -6,29 +6,6 @@
 #define SRC_MAIN_JNI_H
 
 #include "shared.h"
-
-extern SceneClass *classJava_xeno_Enepc;
-extern SceneClass *classJava_xeno_Scene;
-extern SceneClass *classJava_xeno_util_Window;
-extern SceneClass *classJava_xeno_Uwamono;
-extern SceneClass *classJava_xeno_Chr;
-extern SceneClass *classJava_xeno_util_Format;
-extern SceneClass *classJava_xeno_Unit;
-extern SceneClass *classJava_xeno_vm_System;
-extern SceneClass *classJava_xeno_util_Vector4f;
-extern SceneClass *classJava_xeno_util_Runtime;
-extern SceneClass *classJava_xeno_util_Layout;
-extern SceneClass *classJava_xeno_Effect;
-extern SceneClass *classJava_xeno_Light;
-extern SceneClass *classJava_xeno_util_Menu;
-extern SceneClass *classJava_xeno_util_Toolkit;
-extern SceneClass *classJava_xeno_Stage;
-extern SceneClass *classJava_xeno_PlayControl;
-extern SceneClass *classJava_xeno_util_TCHParams;
-extern SceneClass *classJava_xeno_util_Spline;
-extern SceneClass *classJava_xeno_util_Input;
-extern SceneClass *classJava_xeno_Camera;
-extern SceneClass *classJava_xeno_Movie;
 #include "main/data_buffer.h"
 #include "main/find_native_method.h"
 
@@ -40,30 +17,6 @@ extern SceneClass *classJava_xeno_Movie;
  * src/main/unit.c forwards chr.h's JThread without completing it.
  */
 typedef struct xheap_block xheap_block;
-
-extern void xheap_init(int keep_heap, xheap_block *heap, int size);
-
-extern void *xheap_push(void);
-
-extern void *xheap_pop(void);
-
-extern void xheap_current_clear(void);
-
-extern void initClassDB(void);
-
-extern void *xmalloc(int size, int type);
-
-extern void *jthreadTop;
-extern void *jthreadCurrent;
-
-extern int instanceOf(SceneClass *scene_class, SceneClass *parent_class);
-
-extern void JTHREAD_waitFor(void);
-
-extern void virtualMachine(SceneVm *vm, SceneMethod *method,
-                           SceneObject *arguments, int *output);
-
-extern void (*jthreadResetFunc)(void);
 
 /*
  * The VM/native-thread object every JNI_* entry point in this TU shares with
@@ -103,6 +56,51 @@ typedef struct JThread {
     short frame_limit;                  /* +0x40 */
 } JThread;
 
+/*
+ * A loaded PDB class-search group: entry_count many PdbClassEntry records
+ * follow immediately after this header, at +0x8 (main 0x002f0a90
+ * lhu $17,6($3) / addiu $16,$3,8).
+ */
+typedef struct PdbClassGroup {
+    unsigned char unmodeled_00[6];
+    unsigned short entry_count; /* +0x6 */
+} PdbClassGroup;
+
+/*
+ * One 16-byte entry of a PdbClassGroup: the byte range DataBuffer_init scans
+ * for a class definition (main 0x002f0a90 lw $5/$6,8/0xc($16)).
+ */
+typedef struct PdbClassEntry {
+    unsigned char unmodeled_00[8];
+    void *data;  /* +0x8 */
+    int length;  /* +0xC */
+} PdbClassEntry;
+
+extern SceneClass *classJava_xeno_Enepc;
+extern SceneClass *classJava_xeno_Scene;
+extern SceneClass *classJava_xeno_util_Window;
+extern SceneClass *classJava_xeno_Uwamono;
+extern SceneClass *classJava_xeno_Chr;
+extern SceneClass *classJava_xeno_util_Format;
+extern SceneClass *classJava_xeno_Unit;
+extern SceneClass *classJava_xeno_vm_System;
+extern SceneClass *classJava_xeno_util_Vector4f;
+extern SceneClass *classJava_xeno_util_Runtime;
+extern SceneClass *classJava_xeno_util_Layout;
+extern SceneClass *classJava_xeno_Effect;
+extern SceneClass *classJava_xeno_Light;
+extern SceneClass *classJava_xeno_util_Menu;
+extern SceneClass *classJava_xeno_util_Toolkit;
+extern SceneClass *classJava_xeno_Stage;
+extern SceneClass *classJava_xeno_PlayControl;
+extern SceneClass *classJava_xeno_util_TCHParams;
+extern SceneClass *classJava_xeno_util_Spline;
+extern SceneClass *classJava_xeno_util_Input;
+extern SceneClass *classJava_xeno_Camera;
+extern SceneClass *classJava_xeno_Movie;
+extern void *jthreadTop;
+extern void *jthreadCurrent;
+extern void (*jthreadResetFunc)(void);
 
 /*
  * The fixed bank of 8 script class ids JNI_loadClassDB allocates from for a
@@ -113,6 +111,7 @@ extern int classDB[8];
 
 /* The fully-qualified class names JNI_loadNativeClass resolves. */
 extern const u8 xenoVmSystemClassName[16]; /* "xeno/vm/System" */
+
 extern const u8 xenoUtilFormatClassName[24]; /* "xeno/util/Format" */
 extern const u8 xenoUtilMenuClassName[16]; /* "xeno/util/Menu" */
 extern const u8 xenoUtilWindowClassName[24]; /* "xeno/util/Window" */
@@ -136,24 +135,22 @@ extern const u8 xenoPlayControlClassName[24]; /* "xeno/PlayControl" */
 extern const u8 xenoMovieClassName[24]; /* "xeno/Movie" */
 
 /*
- * A loaded PDB class-search group: entry_count many PdbClassEntry records
- * follow immediately after this header, at +0x8 (main 0x002f0a90
- * lhu $17,6($3) / addiu $16,$3,8).
+ * The 32-entry virtual-machine register bank JNI_getRegister reads by
+ * (index & 0x1f).
  */
-typedef struct PdbClassGroup {
-    unsigned char unmodeled_00[6];
-    unsigned short entry_count; /* +0x6 */
-} PdbClassGroup;
+extern int VMRegister[32];
 
-/*
- * One 16-byte entry of a PdbClassGroup: the byte range DataBuffer_init scans
- * for a class definition (main 0x002f0a90 lw $5/$6,8/0xc($16)).
- */
-typedef struct PdbClassEntry {
-    unsigned char unmodeled_00[8];
-    void *data;  /* +0x8 */
-    int length;  /* +0xC */
-} PdbClassEntry;
+extern void xheap_init(int keep_heap, xheap_block *heap, int size);
+extern void *xheap_push(void);
+extern void *xheap_pop(void);
+extern void xheap_current_clear(void);
+extern void initClassDB(void);
+extern void *xmalloc(int size, int type);
+extern int instanceOf(SceneClass *scene_class, SceneClass *parent_class);
+extern void JTHREAD_waitFor(void);
+
+extern void virtualMachine(SceneVm *vm, SceneMethod *method,
+                           SceneObject *arguments, int *output);
 
 /*
  * Looks up the bounded set of PdbClassGroup entries registered for class_id.
@@ -167,11 +164,5 @@ extern void PDB_getEntry(int class_id, void **groups, int *group_count);
  * (src/main/data_buffer.c).
  */
 extern void DataBuffer_init(DataBuffer *buffer, DataBufferByte *base, int length, int big_endian);
-
-/*
- * The 32-entry virtual-machine register bank JNI_getRegister reads by
- * (index & 0x1f).
- */
-extern int VMRegister[32];
 
 #endif /* SRC_MAIN_JNI_H */

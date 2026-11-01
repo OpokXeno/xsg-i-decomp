@@ -4,18 +4,8 @@
 #define SRC_MAIN_UNIT_H
 
 typedef unsigned char u8;
-typedef unsigned int u32;
 
-/*
- * JNI_isInstanceOf/loadConstString/lookupClassField are the runtime's
- * class-field lookup primitives, already recovered with this exact
- * signature in src/main/chr.h (main/tu248, JNI_isInstanceOf itself defined
- * in src/main/jni.c). This TU cannot include another TU's TU-local header,
- * so they are declared verbatim again here.
- */
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-extern SceneString *loadConstString(const char *bytes, int length);
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+typedef unsigned int u32;
 
 /*
  * The native peer record every Java xeno.Unit object's "peer" field points
@@ -60,7 +50,6 @@ extern JavaField *lookupClassField(void *class_object, void *name, int flags);
  *   +0x2e4 render_command
  *                   the word renderCommand__I writes (sw).
  */
-
 /*
  * Fields this TU's shadow/sort-offset natives touch, ahead of and behind the
  * "model"/render_command pair above:
@@ -73,7 +62,6 @@ extern JavaField *lookupClassField(void *class_object, void *name, int flags);
  *                   the int setSortOffset__F writes (cvt.w.s then swc1
  *                   748($peer): the float argument truncated toward zero).
  */
-
 /*
  * Field this TU's setFilter native touches, between render_command and
  * sort_offset above:
@@ -156,18 +144,8 @@ typedef struct UnitSequenceEntry {
     float axis_w;                                      /* +0x25c */
 } UnitSequenceEntry;
 
-extern UnitSequenceEntry unitSequence[64];
-
-/* tyaElevatorTask is still asm elsewhere; initElevatorFunc__ installs it as
- * this unit's elevator callback and tail-calls it once to start. */
-extern int tyaElevatorTask(void *peer, int field_offset);
-
-/* MDL_setVisible is still asm elsewhere. */
-extern int MDL_setVisible(void *model, int mode, u8 visible);
-
 /* Call block shapes: `object` is always the Java xeno.Unit instance the
  * native was invoked on, at +0x00 of every block below. */
-
 typedef struct UnitObjectCall {
     u8 *object;
 } UnitObjectCall;
@@ -300,9 +278,6 @@ typedef struct UnitScaleVector {
     unsigned char unmodeled_14[0x18 - 0x14];
 } UnitScaleVector;
 
-extern SceneClass *classJava_xeno_util_Vector4f;
-extern UnitScaleVector scale_0_007C0A58;
-
 /*
  * The interpreter value slot a native's return value goes into, the third
  * argument of every native here that returns something: getSerial__/
@@ -363,5 +338,28 @@ typedef struct UnitFilterParamCall {
     u8 *object;
     UnitFloatArray *values;
 } UnitFilterParamCall;
+
+extern UnitSequenceEntry unitSequence[64];
+extern SceneClass *classJava_xeno_util_Vector4f;
+extern UnitScaleVector scale_0_007C0A58;
+
+/*
+ * JNI_isInstanceOf/loadConstString/lookupClassField are the runtime's
+ * class-field lookup primitives, already recovered with this exact
+ * signature in src/main/chr.h (main/tu248, JNI_isInstanceOf itself defined
+ * in src/main/jni.c). This TU cannot include another TU's TU-local header,
+ * so they are declared verbatim again here.
+ */
+extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
+
+extern SceneString *loadConstString(const char *bytes, int length);
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+
+/* tyaElevatorTask is still asm elsewhere; initElevatorFunc__ installs it as
+ * this unit's elevator callback and tail-calls it once to start. */
+extern int tyaElevatorTask(void *peer, int field_offset);
+
+/* MDL_setVisible is still asm elsewhere. */
+extern int MDL_setVisible(void *model, int mode, u8 visible);
 
 #endif

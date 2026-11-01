@@ -8,14 +8,6 @@
 #include "shared.h"
 
 /*
- * MMathRotateMatrixYXZ (main:0x002efbb0): defined as C in src/main/m_math.c,
- * declared TU-locally here the same way ov01/tu022 (src/ov01/m_ef.h)
- * declares other main math-library entry points until main's own TU claims
- * them.
- */
-extern Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, const Matrix4 *matrix, const Vector4 *angles);
-
-/*
  * mefCamParams: main-owned camera/rotation parameter block that
  * MEfObjExec1st writes every frame, still asm-owned (config/symbols/main.txt
  * "mefCamParams = 0x0043AF40; // size:0x50"). Only the fields this function
@@ -32,5 +24,13 @@ typedef struct MEfObjCamParams {
 } MEfObjCamParams;
 
 extern MEfObjCamParams mefCamParams;
+
+/*
+ * MMathRotateMatrixYXZ (main:0x002efbb0): defined as C in src/main/m_math.c,
+ * declared TU-locally here the same way ov01/tu022 (src/ov01/m_ef.h)
+ * declares other main math-library entry points until main's own TU claims
+ * them.
+ */
+extern Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, const Matrix4 *matrix, const Vector4 *angles);
 
 #endif /* SRC_MAIN_M_EF_OBJ_H */

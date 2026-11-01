@@ -7,12 +7,12 @@ typedef struct LayoutHeader LayoutHeader;
 
 typedef unsigned int IdLightQuadword __attribute__((mode(TI)));
 
-/* A studio light block (0xF0 bytes): ambient, then colour/direction pairs. */
 typedef struct IdLightPair {
     IdLightQuadword color;
     IdLightQuadword direction;
 } IdLightPair;
 
+/* A studio light block (0xF0 bytes): ambient, then colour/direction pairs. */
 typedef struct IdLightSet {
     IdLightQuadword ambientColor;
     IdLightPair lights[3];

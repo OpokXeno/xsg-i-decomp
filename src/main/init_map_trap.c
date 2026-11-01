@@ -1,6 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
+#include "main/toolkit.h"
 
 typedef struct {
     unsigned long long xy;
@@ -55,36 +55,7 @@ typedef struct {
     TrapPosition sphere;
 } TrapCollisionRecord;
 
-extern TrapDamageActor actor[64];
-
-extern TrapEnemyWorkEntry enepc[16];
-
-extern signed char collflg;
-
-extern signed char printflg;
-
-extern const char actElectricFormat[24];
-
-extern const char actExplosionFormat[24];
-
-extern const char actFallFormat[16];
-
-extern const char actSlotFormat[16];
-
-extern const char actSealFormat[16];
-
-extern float CheckDist3D(const TrapPosition *, const TrapPosition *);
-
-extern int printf(const char *, ...);
-
-#include "main/toolkit.h"
-
-/* The effect API reads complete 16-byte position/orientation vectors and
- * returns the allocated scheduler, or null when allocation fails. */
 struct SchedulerState;
-extern struct SchedulerState *sefCreateEffectCf(int effectNo,
-                                              const Vector4 *position,
-                                              const Vector4 *orientation);
 
 typedef struct {
     unsigned char unmodeled_00[0xa9a];
@@ -121,30 +92,6 @@ struct TrapMapUnit {
 
 typedef unsigned int TrapGameLoopStateWords[0xa80c];
 
-extern TrapGameLoopStateWords GameLoopState;
-
-extern const char unitTrapDeleteFormat[0x28];
-
-extern char trapBrokenMethodName[];
-
-extern void DrawActiveCursol(TrapMapUnit *unit);
-
-extern void UwamonoCommonFunc(TrapMapUnit *unit);
-
-extern void ClearUwamonoEffect(TrapMapUnit *unit);
-
-extern void SetUwaWind(TrapMapUnit *unit);
-
-extern void UwamonoBrokenSe(TrapMapUnit *unit);
-
-extern void Vibration_Set_Strong(int a, int b, int c);
-
-extern void xglSoundEffectNormalID(int soundId, int variant);
-
-extern void CallMethod_I(const char *method_name, int argument1);
-
-extern void EXM_ClearWindStruct();
-
 typedef struct {
     signed char windState;
     unsigned char unmodeled_01[0x0f];
@@ -162,26 +109,6 @@ typedef struct {
     unsigned char unmodeled_21[0x0f];
 } KowareKindEntry;
 
-extern KowareKindEntry KowareKind_t[127];
-extern int uwares_tbl[14];
-extern int xtxres_tbl[14];
-extern const char setTrapSizeFormat[16];
-extern const char trapSizeXyzFormat[16];
-extern const char createTrapPosFormat[0x30];
-
-extern void CreateUwamonoCommon(TrapMapUnit *unit);
-extern void SetContainerParam(TrapMapUnit *unit);
-extern void SetHideObject(TrapMapUnit *unit);
-extern void xglMatrixStackUnit(void);
-extern void xglMatrixStackTrans(const float translation[4]);
-extern void xglMatrixStackRotX(float angle);
-extern void xglMatrixStackRotY(float angle);
-extern void xglMatrixStackRotZ(float angle);
-extern void xglMatrixStackSave(float matrix[4][4]);
-void MAP_updateUnitTrap(TrapMapUnit *unit);
-
-int GivesEnemyDamage(TrapMapUnit *unit);
-
 /* The map unit's struct copies move 8-byte halves of TrapPosition; the float
  * arithmetic below reads and writes the same vectors as plain floats. */
 typedef struct {
@@ -198,6 +125,55 @@ typedef struct {
     unsigned char unmodeled_30[0x80];
     TrapVector dimensions;
 } TrapMapUnitVectors;
+
+extern TrapDamageActor actor[64];
+extern TrapEnemyWorkEntry enepc[16];
+extern signed char collflg;
+extern signed char printflg;
+extern const char actElectricFormat[24];
+extern const char actExplosionFormat[24];
+extern const char actFallFormat[16];
+extern const char actSlotFormat[16];
+extern const char actSealFormat[16];
+extern TrapGameLoopStateWords GameLoopState;
+extern const char unitTrapDeleteFormat[0x28];
+extern char trapBrokenMethodName[];
+extern KowareKindEntry KowareKind_t[127];
+extern int uwares_tbl[14];
+extern int xtxres_tbl[14];
+extern const char setTrapSizeFormat[16];
+extern const char trapSizeXyzFormat[16];
+extern const char createTrapPosFormat[0x30];
+
+extern float CheckDist3D(const TrapPosition *, const TrapPosition *);
+extern int printf(const char *, ...);
+
+/* The effect API reads complete 16-byte position/orientation vectors and
+ * returns the allocated scheduler, or null when allocation fails. */
+extern struct SchedulerState *sefCreateEffectCf(int effectNo,
+                                              const Vector4 *position,
+                                              const Vector4 *orientation);
+
+extern void DrawActiveCursol(TrapMapUnit *unit);
+extern void UwamonoCommonFunc(TrapMapUnit *unit);
+extern void ClearUwamonoEffect(TrapMapUnit *unit);
+extern void SetUwaWind(TrapMapUnit *unit);
+extern void UwamonoBrokenSe(TrapMapUnit *unit);
+extern void Vibration_Set_Strong(int a, int b, int c);
+extern void xglSoundEffectNormalID(int soundId, int variant);
+extern void CallMethod_I(const char *method_name, int argument1);
+extern void EXM_ClearWindStruct();
+extern void CreateUwamonoCommon(TrapMapUnit *unit);
+extern void SetContainerParam(TrapMapUnit *unit);
+extern void SetHideObject(TrapMapUnit *unit);
+extern void xglMatrixStackUnit(void);
+extern void xglMatrixStackTrans(const float translation[4]);
+extern void xglMatrixStackRotX(float angle);
+extern void xglMatrixStackRotY(float angle);
+extern void xglMatrixStackRotZ(float angle);
+extern void xglMatrixStackSave(float matrix[4][4]);
+void MAP_updateUnitTrap(TrapMapUnit *unit);
+int GivesEnemyDamage(TrapMapUnit *unit);
 
 void InitMapTrap(TrapMapUnit *unit)
 {
@@ -478,6 +454,7 @@ int GivesEnemyDamage(TrapMapUnit *unit)
     return 0;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 char trapBrokenMethodName[8] = "broken";
 
 const char CreateEvtItemGetDigit9Text[8] = "9";

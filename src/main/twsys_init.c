@@ -1,7 +1,19 @@
 #include "common.h"
 #include "shared.h"
+#include "main/msg_init.h"
+#include "main/ew_sprt_set_cursor_uv.h"
+#include "twsys_init.h"
 
-extern void xglSoundEffectNormalID(int soundEffectId, int pitch);
+/*
+ * The font control strings TWSYS_draw emits before a component's own drawing
+ * code: the same setup for every window-like kind, and a variant for the
+ * scene window, differing only in the two counts at offsets 1 and 4.
+ */
+/* Text: {effect 2}{effect params}{blend}{color #808080} */
+#define TWSYS_DRAW_WINDOW_FONT "\x0d\x02\x0e\x02\x03\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
+
+/* Text: {effect 3}{effect params}{blend}{color #808080} */
+#define TWSYS_DRAW_SCENE_FONT  "\x0d\x03\x0e\x02\x02\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
 
 /*
  * One slot of the fixed-size `tcomponent` table TWSYS_createComponent hands
@@ -19,10 +31,6 @@ extern void xglSoundEffectNormalID(int soundEffectId, int pitch);
  * The 0x5B0 stride between slots is TWSYS_init/TWSYS_update/TWSYS_draw's own
  * loop increment.
  */
-
-#include "main/msg_init.h"
-#include "main/ew_sprt_set_cursor_uv.h"
-
 typedef struct TComponent {
     unsigned char unmodeled_00[0xc];
     unsigned short pixelWidth; /* +0xc */
@@ -44,54 +52,9 @@ typedef struct TComponent {
     unsigned char unmodeled_a4[0x5B0 - 0xA4];
 } TComponent;
 
-void TW_setPos(TComponent *component);
-
-static TComponent tcomponent[4];
-
-static unsigned char groupStatus[3];
-
-static unsigned char groupByteState;
-
-void EW_init(unsigned char *freeSpace);
-
-void MBUF_init(void);
-
-void TMENU_updateDefault(TComponent *component);
-
-void TSLIDER_updateDefault(TComponent *component);
-
-void TWIN_update2(TComponent *component);
-
-void EW_draw(void);
-
-void TMENU_drawDefault(TComponent *component);
-
-void TSLIDER_drawDefault(TComponent *component);
-
-void TWIN_draw2(TComponent *component);
-
-void TWIN_drawScene2(TComponent *component);
-
-extern const char twsysResetControl[];
-/* Text: {reset} */
-const char twsysResetControl[8] = "\x0b";
-
-/* Defined by xgl_font.c; `text` is a font control-code string. */
-
-extern void xglFontPrintDirectOT(int ot, const char *text);
-
-/*
- * The font control strings TWSYS_draw emits before a component's own drawing
- * code: the same setup for every window-like kind, and a variant for the
- * scene window, differing only in the two counts at offsets 1 and 4.
- */
-
-/* Text: {effect 2}{effect params}{blend}{color #808080} */
-#define TWSYS_DRAW_WINDOW_FONT "\x0d\x02\x0e\x02\x03\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
-
-/* Text: {effect 3}{effect params}{blend}{color #808080} */
-#define TWSYS_DRAW_SCENE_FONT  "\x0d\x03\x0e\x02\x02\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
-
+/* TWindow belongs to main/tu143. Its width at +0x0C is read as a signed short:
+ * TWIN_popScene compares a signed halfword there, and TW_setPos sign-extends
+ * that halfword before its centering calculation. */
 /*
  * The text-window record TWSYS_createComponent hands back (still assembler
  * in this TU). Only the fields this allocation and its evidenced siblings
@@ -107,7 +70,6 @@ extern void xglFontPrintDirectOT(int ot, const char *text);
  *  - +0x187 line_count: TWIN_update2 and TWIN_popCF/TWIN_popScene (still
  *    assembler) loop up to this byte over the +0x17C line-pointer array.
  */
-
 typedef struct TWindow {
     unsigned char unmodeled_00[0xC];
     unsigned short width;          /* +0xC */
@@ -149,20 +111,9 @@ typedef struct TWindow {
     char *lineData[1];             /* +0x188; inline pointer and character buffers follow */
 } TWindow;
 
-/* Configures a field-conversation text window's line pitch, layout offset,
- * line count and on-screen size. */
-
-/* Configures a scene-message text window's line pitch, layout offset, line
- * count and on-screen size. */
-
-void EW_dispose(int handle);
-
-void MBUF_dispose(int *mbuf);
-
-TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup);
-
-void TMENU_init(TComponent *component);
-
+/* TMenu belongs to main/tu143. TMENU_init initializes the pointer at +0x154
+ * to its inline string workspace; TMENU_addItem advances it after each line.
+ * The pointer at +0x148 retains the start of the active query text. */
 /*
  * The menu-kind component TMENU_create hands back (still assembler in this
  * TU). Only the fields this allocation touches are modeled:
@@ -176,7 +127,6 @@ void TMENU_init(TComponent *component);
  *    query.
  *  - +0x154 nextQueryId: copied into activeQueryId when that one is empty.
  */
-
 typedef struct TMenu {
     unsigned char unmodeled_00[0x0C];
     short width;                   /* +0x0C */
@@ -218,20 +168,6 @@ typedef struct TMenu {
     char queryText[1];                /* +0x1A4: inline string workspace */
 } TMenu;
 
-int MSG_queuePush(int queue, int *message, int messageSize, int encoding);
-
-extern unsigned char radixTenUnits[100];
-
-extern unsigned char radixTenTenths[100];
-
-extern unsigned char digits[16];
-
-extern void *memcpy(void *destination, const void *source, unsigned int size);
-
-extern int MSG_copyln(char **destination, const char **source, int flags);
-
-#include "twsys_init.h"
-
 typedef union EwRootView { EwContainerWidget container; EwWidget widget; } EwRootView;
 
 typedef union EwLabelBody {
@@ -251,19 +187,10 @@ typedef struct TransformParams {
     Matrix4 *local;
 } TransformParams;
 
-void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
-                     TransformParams *params);
-
-void xglStudioGetCamera(StudioCamera **camera, int index);
-
-int XTK_getWindowOwner(void);
-
 typedef struct WindowOwnerPrefix {
     unsigned char unmodeled_00[0x10];
     Vector4 position;
 } WindowOwnerPrefix;
-
-static Vector4 vSample = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
 
 typedef struct EwSpriteState {
     short flags;
@@ -271,6 +198,7 @@ typedef struct EwSpriteState {
     unsigned short u;
     unsigned short v;
 } EwSpriteState;
+
 typedef struct EwSpriteWidget {
     unsigned short flags;
     unsigned short type;
@@ -282,12 +210,6 @@ typedef struct EwSpriteWidget {
     EwSpriteState sprite;
     unsigned char unmodeled_18[0x10];
 } EwSpriteWidget;
-
-void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell);
-
-extern const char twinFontParamControl[];
-
-extern const char twinStyleControl[];
 
 typedef union WindowCoord {
     float value;
@@ -302,7 +224,60 @@ typedef union EwLabelSlot {
     int bits;
 } EwLabelSlot;
 
+extern const char twsysResetControl[];
+extern unsigned char radixTenUnits[100];
+extern unsigned char radixTenTenths[100];
+extern unsigned char digits[16];
+extern const char twinFontParamControl[];
+extern const char twinStyleControl[];
 extern const unsigned char twinLabelStyleControl[];
+
+extern void xglSoundEffectNormalID(int soundEffectId, int pitch);
+void TW_setPos(TComponent *component);
+void EW_init(unsigned char *freeSpace);
+void MBUF_init(void);
+void TMENU_updateDefault(TComponent *component);
+void TSLIDER_updateDefault(TComponent *component);
+void TWIN_update2(TComponent *component);
+void EW_draw(void);
+void TMENU_drawDefault(TComponent *component);
+void TSLIDER_drawDefault(TComponent *component);
+void TWIN_draw2(TComponent *component);
+void TWIN_drawScene2(TComponent *component);
+
+/* Defined by xgl_font.c; `text` is a font control-code string. */
+extern void xglFontPrintDirectOT(int ot, const char *text);
+
+void EW_dispose(int handle);
+
+void MBUF_dispose(int *mbuf);
+TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup);
+void TMENU_init(TComponent *component);
+int MSG_queuePush(int queue, int *message, int messageSize, int encoding);
+extern void *memcpy(void *destination, const void *source, unsigned int size);
+extern int MSG_copyln(char **destination, const char **source, int flags);
+
+void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
+                     TransformParams *params);
+
+void xglStudioGetCamera(StudioCamera **camera, int index);
+int XTK_getWindowOwner(void);
+void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell);
+unsigned int strlen(const char *string);
+
+/* Text: {reset} */
+const char twsysResetControl[8] = "\x0b";
+
+static Vector4 vSample = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
+
+/* Text: {style 0} */
+const char twinStyleControl[3] = "\031\000";
+
+static TComponent tcomponent[4];
+
+static unsigned char groupStatus[3];
+
+static unsigned char groupByteState;
 
 void TWSYS_init(void)
 {
@@ -438,8 +413,6 @@ void TWSYS_draw(void)
     } while (slotIndex < 4);
     EW_draw();
 }
-
-unsigned int strlen(const char *string);
 
 int PARSE_int(const char *text, int length, int radix)
 {
@@ -679,6 +652,8 @@ void TW_setPos(TComponent *component)
     component->height = projected->y;
 }
 
+/* Configures a field-conversation text window's line pitch, layout offset,
+ * line count and on-screen size. */
 void WIN_initCF(TWindow *window)
 {
     window->line_pitch = 0x18;
@@ -688,6 +663,8 @@ void WIN_initCF(TWindow *window)
     window->height = 0x50;
 }
 
+/* Configures a scene-message text window's line pitch, layout offset, line
+ * count and on-screen size. */
 void WIN_initScene(TWindow *window)
 {
     window->line_pitch = 0x1A;
@@ -759,6 +736,8 @@ int WIN_checkActiveWindow(void)
     return 0;
 }
 
+/* TWIN_create2 and TWIN_draw2 establish the label's line count at +0x14
+ * and its caller-owned line pointer table at +0x24. */
 TWindow *TWIN_create2(int index)
 {
     TWindow *window;
@@ -1148,6 +1127,7 @@ void TWIN_update2(TComponent *component)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Font parameters installed before ordinary text and scene-window labels. */
 const char twinFontParamControl[19] = "\r\002\016\002\003\030\030\030\017\000\000\200\014\200\200\200\031\003";
 
@@ -1235,9 +1215,6 @@ void TWIN_draw2(TComponent *component)
     xglFontPrint(x, y, 0x00FFFFF0, window->textOutput);
     xglFontPrintDirectOT(0x00FFFFF0, twinStyleControl);
 }
-
-/* Text: {style 0} */
-const char twinStyleControl[3] = "\031\000";
 
 void TWIN_drawScene2(TComponent *component)
 {

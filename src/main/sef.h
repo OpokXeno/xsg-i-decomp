@@ -5,22 +5,10 @@
 #ifndef SRC_MAIN_SEF_H
 #define SRC_MAIN_SEF_H
 
+#define offsetof(type, member) ((__SIZE_TYPE__) &(((type *)0)->member))
+
 typedef struct SchedulerState SchedulerState;
 
-int sefIsDeadSchduler(unsigned int scheduler_index);
-
-SchedulerState *sefGetNowScheduler(void);
-
-/* Original TU-local current-scheduler pointer (main:0x004DC670). */
-static SchedulerState *_nowScheduler;
-
-/*
- * SchedulerState's flags word, the only field of the 0xab0-byte record this
- * TU dereferences by name: sefRewindEffectCf (main:0x002e7948) sets bit 0x1
- * of it, and sefFreeScheduler (main:0x002e51a8, still assembly) tests the
- * same word with a wider mask (0x202). Bytes before it are not yet evidenced
- * by any accepted function in this TU.
- */
 /*
  * sefDestroyScriptScheduler2 (main:0x002e5320) reads a script_id/task_id
  * pair right after flags, matched against its own two parameters to find
@@ -85,6 +73,13 @@ struct SchedulerState {
     unsigned short initFlags;        /* +0xa82 */
     int requestParam;                /* +0xa84, the request's param word */
     float effectSpeed;               /* +0xa88 */
+    /*
+     * SchedulerState's flags word, the only field of the 0xab0-byte record this
+     * TU dereferences by name: sefRewindEffectCf (main:0x002e7948) sets bit 0x1
+     * of it, and sefFreeScheduler (main:0x002e51a8) tests the same word with a
+     * wider mask (0x202). Bytes before it are not yet evidenced by any accepted
+     * function in this TU.
+     */
     int flags;
     ScriptBinding scriptBinding;
     short category;                  /* +0xa98 */
@@ -97,16 +92,6 @@ struct SchedulerState {
     short mapperIndex;               /* +0xaa4 */
     unsigned char unmodeled_aa6[0xab0 - 0xaa6];
 };
-
-/* sefGetDirMatrix (main:0x002e2818) is still INCLUDE_ASM in this TU; declared
- * here so sefGetVecMatrix (main:0x002e2908) can call it. Caller evidence
- * (a0 unchanged destination matrix, a1 the temporary direction vector). */
-static void sefGetDirMatrix(Matrix4 *dest, Vector4 *dir);
-
-/* sefRandf (main:0x002e11b0) is still INCLUDE_ASM in this TU; declared here
- * so sefGetCirclePos (main:0x002e2280) can call it. Returns a unit random
- * scalar in f0. */
-static float sefRandf(void);
 
 /* A named .lit4 literal (config/symbols/main.txt), read by sefGetCirclePos;
  * referencing it by symbol keeps the compiler's own literal pool from
@@ -143,11 +128,6 @@ extern const float lit4_004d8354;
  */
 extern const float DEG_TO_RAD;
 
-/* sefGetLineAdr (main:0x002e7ea0): the line-effect table, scaffold-owned like
- * _scheduler/_ptAlloc/_battleData above; only its pointer accessor is C. */
-/* 128 records of the evidenced 0x820-byte line-data stride. */
-static unsigned char _lineData[0x41000];
-
 /*
  * sefGetDmgNull (main:0x002e7e40): 0x0079411C is _battleData + SEF_BATTLE_PHASE
  * (0x00794110 + 0x00c), the same battle-phase field sefCalcLocalMatrix reads
@@ -166,7 +146,25 @@ static unsigned char _lineData[0x41000];
  */
 extern short sefDmgNullCount[];
 
-#define offsetof(type, member) ((__SIZE_TYPE__) &(((type *)0)->member))
+int sefIsDeadSchduler(unsigned int scheduler_index);
+SchedulerState *sefGetNowScheduler(void);
 
+/* sefGetDirMatrix (main:0x002e2818) is defined later in this TU; declared
+ * here so sefGetVecMatrix (main:0x002e2908) can call it. Caller evidence
+ * (a0 unchanged destination matrix, a1 the temporary direction vector). */
+static void sefGetDirMatrix(Matrix4 *dest, Vector4 *dir);
+
+/* sefRandf (main:0x002e11b0) is defined later in this TU; declared here
+ * so sefGetCirclePos (main:0x002e2280) can call it. Returns a unit random
+ * scalar in f0. */
+static float sefRandf(void);
+
+/* Original TU-local current-scheduler pointer (main:0x004DC670). */
+static SchedulerState *_nowScheduler;
+
+/* sefGetLineAdr (main:0x002e7ea0): the line-effect table, scaffold-owned like
+ * _scheduler/_ptAlloc/_battleData above; only its pointer accessor is C. */
+/* 128 records of the evidenced 0x820-byte line-data stride. */
+static unsigned char _lineData[0x41000];
 
 #endif /* SRC_MAIN_SEF_H */

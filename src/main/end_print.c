@@ -1,16 +1,19 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "end_print.h"
-
 #include "main/xgl_jpeg.h"
+#include "main/xgl_packet.h"
 
 #define NULL ((void *)0)
 
 #define SPRITE_UV_BYTES(u, v, width, height) \
     (u) & 255, (u) >> 8, (v) & 255, (v) >> 8, \
     (width) & 255, (width) >> 8, (height) & 255, (height) >> 8
+
+/* EE scratchpad RAM base (src/ov01/gr_gp_init.c's grPacketSend and
+ * src/ov01/m_gs.c's MGsGPTerm build the same VIF1 direct-mode packet at the
+ * same address). */
+#define SCRATCHPAD_BASE ((void *)0x70000000)
 
 typedef struct EndPrintRenderState {
     unsigned char unmodeled_00[4];
@@ -22,30 +25,239 @@ typedef struct EndPrintRenderState {
     unsigned short draw_back_reset_value; /* +0x20 */
 } EndPrintRenderState;
 
-extern EndPrintRenderState sRender;
-
-/* 511 callback entries plus the adjacent terminal/overflow entry. The
- * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
-
-static PrintFuncEntry PrintFunc[512];
-
-static PrintFuncEntry *pPrintFuncTop;
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-extern void eMessageSpriteReset(void);
-
-extern void xglFontReloadTexture(EndPrintContext *context, int mode);
-
 /*
  * uv_clut: a fixed table of UV/CLUT entries; only the CLUT id at +0x04 of
  * each 8-byte entry is read here.
  */
-
 typedef struct UvClutEntry {
     const unsigned char *uv;       /* +0x00 */
     int clut;                      /* +0x04 */
 } UvClutEntry;
+
+/* Sprite coordinates, color and packed UV/CLUT indices consumed by the draw routines. */
+/*
+ * The sprite descriptor subPrintSprite (still asm) draws; only the CLUT
+ * index byte at +0x11 is read by PrintSprite00.
+ */
+typedef struct PrintSpriteInfo {
+    short x, y;
+    int depth;
+    short width, height;
+    unsigned char color[4];
+    short uv; /* low byte: UV table entry; high byte: CLUT table entry */
+    unsigned char column, row;
+} PrintSpriteInfo;
+
+typedef struct PrintPointInfo {
+    short x;                /* +0x00 */
+    short y;                /* +0x02 */
+    int depth;              /* +0x04 */
+    unsigned char color[4]; /* +0x08..+0x0b */
+} PrintPointInfo;
+
+typedef struct PrintCircleInfo {
+    short x;                      /* +0x00 */
+    short y;                      /* +0x02 */
+    int depth;                    /* +0x04 */
+    unsigned char color[4];       /* +0x08..+0x0b */
+    int radius;                   /* +0x0c */
+    int pointCount;               /* +0x10 */
+    unsigned char pointColor[4];  /* +0x14..+0x17 */
+} PrintCircleInfo;
+
+/*
+ * The JPEG-decode setup context: only the fields endDecodeJpeg itself
+ * reads or writes are named. +0x10/+0x14 are filled from the source and
+ * destination words already stored at +0x30/+0x34, and +0x20..+0x27 is
+ * cleared before the decode call; the rest of the struct is untouched
+ * here.
+ */
+typedef struct EndDecodeJpegContext {
+    unsigned char unmodeled_00[8]; /* +0x00..+0x07 */
+    short width;                   /* +0x08 */
+    short height;                  /* +0x0a */
+    unsigned char unmodeled_0c[4]; /* +0x0c..+0x0f */
+    int decodeSource;              /* +0x10 */
+    int decodeDestination;         /* +0x14 */
+    unsigned char unmodeled_18[8]; /* +0x18..+0x1f */
+    short decodeParam[4];          /* +0x20..+0x27 */
+    unsigned char unmodeled_28[8]; /* +0x28..+0x2f */
+    int source;                    /* +0x30 */
+    int destination;               /* +0x34 */
+} EndDecodeJpegContext;
+
+typedef struct SpriteUv {
+    short u;      /* +0x00 */
+    short v;      /* +0x02 */
+    short width;  /* +0x04 */
+    short height; /* +0x06 */
+} SpriteUv;
+
+typedef struct PrintTagFontInfo {
+    short x;                  /* +0x00 */
+    unsigned short y;         /* +0x02 */
+    int depth;                /* +0x04 */
+    unsigned char color[4];   /* +0x08..+0x0b */
+    unsigned char *text;      /* +0x0c */
+} PrintTagFontInfo;
+
+typedef struct PrintNumberInfo {
+    short x;                /* +0x00 */
+    unsigned short y;       /* +0x02 */
+    int depth;              /* +0x04 */
+    unsigned char color[4]; /* +0x08..+0x0b */
+    int value;              /* +0x0c */
+    unsigned short digits;  /* +0x10 */
+    unsigned short flags;   /* +0x12 */
+} PrintNumberInfo;
+
+typedef struct WindowTexEntry {
+    unsigned int bufferWidthAndFormat; /* +0x00 */
+    unsigned int clutAddress;          /* +0x04 */
+    unsigned int vramAddress;          /* +0x08 */
+    int size;                          /* +0x0c */
+    int dataOffset;                    /* +0x10 */
+} WindowTexEntry;
+
+typedef struct WindowTexDirectory {
+    unsigned char unmodeled_00[8]; /* +0x00..+0x07 */
+    int entryCount;                /* +0x08 */
+    int entryOffset;               /* +0x0c */
+} WindowTexDirectory;
+
+typedef struct PrintLinePoint {
+    int x;                    /* +0x00 */
+    int y;                    /* +0x04 */
+    int z;                    /* +0x08 */
+    int terminator;           /* +0x0c */
+    unsigned char color[4];   /* +0x10..+0x13 */
+    unsigned char unmodeled_14[12]; /* +0x14..+0x1f */
+} PrintLinePoint;
+
+typedef struct PrintRect {
+    short x;      /* +0x00 */
+    short y;      /* +0x02 */
+    int depth;    /* +0x04 */
+    short width;  /* +0x08 */
+    short height; /* +0x0a */
+} PrintRect;
+
+typedef struct PrintThumbnailInfo {
+    short x;                       /* +0x00 */
+    short y;                       /* +0x02 */
+    int depth;                     /* +0x04 */
+    unsigned char unmodeled_08[4]; /* +0x08..+0x0b */
+    const void *image;             /* +0x0c */
+} PrintThumbnailInfo;
+
+typedef struct PrintBackQuadVertex {
+    int x;            /* +0x00 */
+    int y;            /* +0x04 */
+    int z;            /* +0x08 */
+    int unmodeled_0c; /* +0x0c */
+} PrintBackQuadVertex;
+
+typedef struct PrintBackQuad {
+    PrintBackQuadVertex vertex[4]; /* +0x00..+0x3f */
+    float uv[4];                   /* +0x40..+0x4f */
+} PrintBackQuad;
+
+typedef struct PrintBackSpriteInfo {
+    short x;                /* +0x00 */
+    short y;                /* +0x02 */
+    int depth;              /* +0x04 */
+    unsigned char color[4]; /* +0x08..+0x0b */
+    short width;            /* +0x0c */
+    short height;           /* +0x0e */
+    short u;                /* +0x10 */
+    short v;                /* +0x12 */
+} PrintBackSpriteInfo;
+
+typedef struct PrintJpegInfo {
+    short x;                        /* +0x00 */
+    short y;                        /* +0x02 */
+    int depth;                      /* +0x04 */
+    short width;                    /* +0x08 */
+    short height;                   /* +0x0a */
+    short offsetX;                  /* +0x0c */
+    short offsetY;                  /* +0x0e */
+    unsigned char unmodeled_10[0x24]; /* +0x10..+0x33 */
+    const void *image;              /* +0x34 */
+} PrintJpegInfo;
+
+enum { QUAD_X, QUAD_Y, QUAD_DEPTH };
+
+typedef struct PrintSpriteVertex {
+    int position[3];
+    unsigned char unmodeled_0c[4];
+} PrintSpriteVertex;
+
+typedef struct PrintSpriteColor {
+    unsigned char red;
+    unsigned char green;
+    unsigned char blue;
+    unsigned char alpha;
+} PrintSpriteColor;
+
+typedef struct PrintSpriteQuad {
+    unsigned char flags;
+    signed char coordinateMode;
+    unsigned short uv;
+    unsigned char unmodeled_04[12];
+    PrintSpriteVertex vertices[4];
+    PrintSpriteColor colors[4];
+} PrintSpriteQuad;
+
+typedef struct PrintFrameInfo {
+    short x, y;
+    int depth;
+    short width, height;
+    unsigned char color[4];
+} PrintFrameInfo;
+
+typedef struct PrintUnsignedFrameInfo {
+    unsigned short x, y;
+    int depth;
+    unsigned short width, height;
+    unsigned char color[4];
+} PrintUnsignedFrameInfo;
+
+typedef struct EtherLineEndpoint {
+    float x;
+    float y;
+    float depth;
+    unsigned char unmodeled_0c[4];
+    unsigned char color[4];
+    unsigned char unmodeled_14[12];
+} EtherLineEndpoint;
+
+extern EndPrintRenderState sRender;
+extern void (*func_tbl_4[])(EndPrintContext *context, int param);
+extern void (*func_tbl2_5[])(EndPrintContext *context, int param);
+
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern void eMessageSpriteReset(void);
+extern void xglFontReloadTexture(EndPrintContext *context, int mode);
+static void endPrintInfoSet(EndPrintContext *context, int clut, int flag);
+static void subPrintSprite(EndPrintContext *context, PrintSpriteInfo *sprite);
+static void subPrintLine(EndPrintContext *context, PrintPointInfo *line);
+static void subPrintRibbon(EndPrintContext *context, PrintPointInfo *ribbon);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+
+/* PrintCircleCore (this TU, still asm) draws into the scratchpad buffer this
+ * function points it at. */
+static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *circle);
+
+extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
+
+extern void endSpriteSet(PrintSpriteInfo *sprite, int flags);
+extern WindowTexDirectory *WindowTexAddrGet(int index);
+extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+extern float xglSin(float angle);
+extern float xglCos(float angle);
+extern void xglFontPrintExtFunc(int order, void (*func)(EndPrintContext *context, int param), void *param);
 
 static const unsigned char cur_uv[32] = {
     SPRITE_UV_BYTES(0, 192, 16, 16),
@@ -281,10 +493,6 @@ static const unsigned char face_agws_uv[112] = {
     SPRITE_UV_BYTES(832, 141, 63, 32)
 };
 
-static const unsigned char name_uv[8] = {
-    SPRITE_UV_BYTES(256, 210, 105, 24)
-};
-
 static const unsigned char others2_uv[24] = {
     SPRITE_UV_BYTES(0, 208, 384, 48),
     SPRITE_UV_BYTES(0, 201, 500, 7),
@@ -314,10 +522,6 @@ static const unsigned char face03_uv[16] = {
 static const unsigned char face04_uv[16] = {
     SPRITE_UV_BYTES(768, 0, 64, 93),
     SPRITE_UV_BYTES(832, 0, 64, 93)
-};
-
-static const unsigned char thumnail_uv[8] = {
-    SPRITE_UV_BYTES(0, 0, 128, 112)
 };
 
 static const unsigned char ether_uv[40] = {
@@ -430,6 +634,14 @@ static const unsigned char umn3_uv[32] = {
     SPRITE_UV_BYTES(470, 26, 22, 26)
 };
 
+static const unsigned char name_uv[8] = {
+    SPRITE_UV_BYTES(256, 210, 105, 24)
+};
+
+static const unsigned char thumnail_uv[8] = {
+    SPRITE_UV_BYTES(0, 0, 128, 112)
+};
+
 static UvClutEntry uv_clut[26] = {
     { cur_uv, 0x000FDE00 },
     { others_uv, 0x000FDE00 },
@@ -459,211 +671,20 @@ static UvClutEntry uv_clut[26] = {
     { umn3_uv, 0x000FDB00 },
 };
 
-/* Sprite coordinates, color and packed UV/CLUT indices consumed by the draw routines. */
-typedef struct PrintSpriteInfo {
-    short x, y;
-    int depth;
-    short width, height;
-    unsigned char color[4];
-    short uv; /* low byte: UV table entry; high byte: CLUT table entry */
-    unsigned char column, row;
-} PrintSpriteInfo;
-
-typedef struct PrintPointInfo {
-    short x;                /* +0x00 */
-    short y;                /* +0x02 */
-    int depth;              /* +0x04 */
-    unsigned char color[4]; /* +0x08..+0x0b */
-} PrintPointInfo;
-
-typedef struct PrintCircleInfo {
-    short x;                      /* +0x00 */
-    short y;                      /* +0x02 */
-    int depth;                    /* +0x04 */
-    unsigned char color[4];       /* +0x08..+0x0b */
-    int radius;                   /* +0x0c */
-    int pointCount;               /* +0x10 */
-    unsigned char pointColor[4];  /* +0x14..+0x17 */
-} PrintCircleInfo;
-
-static void endPrintInfoSet(EndPrintContext *context, int clut, int flag);
-
-static void subPrintSprite(EndPrintContext *context, PrintSpriteInfo *sprite);
-
-static void subPrintLine(EndPrintContext *context, PrintPointInfo *line);
-
-static void subPrintRibbon(EndPrintContext *context, PrintPointInfo *ribbon);
-
-#include "main/xgl_packet.h"
-
-/* EE scratchpad RAM base (src/ov01/gr_gp_init.c's grPacketSend and
- * src/ov01/m_gs.c's MGsGPTerm build the same VIF1 direct-mode packet at the
- * same address). */
-
-#define SCRATCHPAD_BASE ((void *)0x70000000)
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
-/* PrintCircleCore (this TU, still asm) draws into the scratchpad buffer this
- * function points it at. */
-
-static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *circle);
-
-/*
- * The JPEG-decode setup context: only the fields endDecodeJpeg itself
- * reads or writes are named. +0x10/+0x14 are filled from the source and
- * destination words already stored at +0x30/+0x34, and +0x20..+0x27 is
- * cleared before the decode call; the rest of the struct is untouched
- * here.
- */
-
-typedef struct EndDecodeJpegContext {
-    unsigned char unmodeled_00[8]; /* +0x00..+0x07 */
-    short width;                   /* +0x08 */
-    short height;                  /* +0x0a */
-    unsigned char unmodeled_0c[4]; /* +0x0c..+0x0f */
-    int decodeSource;              /* +0x10 */
-    int decodeDestination;         /* +0x14 */
-    unsigned char unmodeled_18[8]; /* +0x18..+0x1f */
-    short decodeParam[4];          /* +0x20..+0x27 */
-    unsigned char unmodeled_28[8]; /* +0x28..+0x2f */
-    int source;                    /* +0x30 */
-    int destination;               /* +0x34 */
-} EndDecodeJpegContext;
-
 /* 511 callback entries plus the adjacent terminal/overflow entry. The
  * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
+static PrintFuncEntry PrintFunc[512];
 
-extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
+static PrintFuncEntry *pPrintFuncTop;
 
-/*
- * uv_clut: a fixed table of UV/CLUT entries; only the CLUT id at +0x04 of
- * each 8-byte entry is read here.
- */
-
-/*
- * The sprite descriptor subPrintSprite (still asm) draws; only the CLUT
- * index byte at +0x11 is read by PrintSprite00.
- */
-
-typedef struct SpriteUv {
-    short u;      /* +0x00 */
-    short v;      /* +0x02 */
-    short width;  /* +0x04 */
-    short height; /* +0x06 */
-} SpriteUv;
-
-typedef struct PrintTagFontInfo {
-    short x;                  /* +0x00 */
-    unsigned short y;         /* +0x02 */
-    int depth;                /* +0x04 */
-    unsigned char color[4];   /* +0x08..+0x0b */
-    unsigned char *text;      /* +0x0c */
-} PrintTagFontInfo;
-
-extern void endSpriteSet(PrintSpriteInfo *sprite, int flags);
-
-typedef struct PrintNumberInfo {
-    short x;                /* +0x00 */
-    unsigned short y;       /* +0x02 */
-    int depth;              /* +0x04 */
-    unsigned char color[4]; /* +0x08..+0x0b */
-    int value;              /* +0x0c */
-    unsigned short digits;  /* +0x10 */
-    unsigned short flags;   /* +0x12 */
-} PrintNumberInfo;
-
-/* EE scratchpad RAM base (src/ov01/gr_gp_init.c's grPacketSend and
- * src/ov01/m_gs.c's MGsGPTerm build the same VIF1 direct-mode packet at the
- * same address). */
-
-/* PrintCircleCore (this TU, still asm) draws into the scratchpad buffer this
- * function points it at. */
-
-/* 511 callback entries plus the adjacent terminal/overflow entry. The
- * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
-
-typedef struct WindowTexEntry {
-    unsigned int bufferWidthAndFormat; /* +0x00 */
-    unsigned int clutAddress;          /* +0x04 */
-    unsigned int vramAddress;          /* +0x08 */
-    int size;                          /* +0x0c */
-    int dataOffset;                    /* +0x10 */
-} WindowTexEntry;
-
-typedef struct WindowTexDirectory {
-    unsigned char unmodeled_00[8]; /* +0x00..+0x07 */
-    int entryCount;                /* +0x08 */
-    int entryOffset;               /* +0x0c */
-} WindowTexDirectory;
-
-extern WindowTexDirectory *WindowTexAddrGet(int index);
-
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static u64 ePrintEnv_0[12];
-
-typedef struct PrintLinePoint {
-    int x;                    /* +0x00 */
-    int y;                    /* +0x04 */
-    int z;                    /* +0x08 */
-    int terminator;           /* +0x0c */
-    unsigned char color[4];   /* +0x10..+0x13 */
-    unsigned char unmodeled_14[12]; /* +0x14..+0x1f */
-} PrintLinePoint;
-
-typedef struct PrintRect {
-    short x;      /* +0x00 */
-    short y;      /* +0x02 */
-    int depth;    /* +0x04 */
-    short width;  /* +0x08 */
-    short height; /* +0x0a */
-} PrintRect;
 
 static u64 ThumImageEnv_1[12];
 
 static u64 ThumDrawEnv_2[24];
 
-typedef struct PrintThumbnailInfo {
-    short x;                       /* +0x00 */
-    short y;                       /* +0x02 */
-    int depth;                     /* +0x04 */
-    unsigned char unmodeled_08[4]; /* +0x08..+0x0b */
-    const void *image;             /* +0x0c */
-} PrintThumbnailInfo;
-
-extern float xglSin(float angle);
-
-extern float xglCos(float angle);
-
 static u64 Env_3[12];
-
-typedef struct PrintBackQuadVertex {
-    int x;            /* +0x00 */
-    int y;            /* +0x04 */
-    int z;            /* +0x08 */
-    int unmodeled_0c; /* +0x0c */
-} PrintBackQuadVertex;
-
-typedef struct PrintBackQuad {
-    PrintBackQuadVertex vertex[4]; /* +0x00..+0x3f */
-    float uv[4];                   /* +0x40..+0x4f */
-} PrintBackQuad;
-
-typedef struct PrintBackSpriteInfo {
-    short x;                /* +0x00 */
-    short y;                /* +0x02 */
-    int depth;              /* +0x04 */
-    unsigned char color[4]; /* +0x08..+0x0b */
-    short width;            /* +0x0c */
-    short height;           /* +0x0e */
-    short u;                /* +0x10 */
-    short v;                /* +0x12 */
-} PrintBackSpriteInfo;
 
 static u64 sJpegEnv00_7[16];
 
@@ -673,20 +694,7 @@ static u64 JpegEnv10_9[16];
 
 static u64 JpegEnv11_10[20];
 
-typedef struct PrintJpegInfo {
-    short x;                        /* +0x00 */
-    short y;                        /* +0x02 */
-    int depth;                      /* +0x04 */
-    short width;                    /* +0x08 */
-    short height;                   /* +0x0a */
-    short offsetX;                  /* +0x0c */
-    short offsetY;                  /* +0x0e */
-    unsigned char unmodeled_10[0x24]; /* +0x10..+0x33 */
-    const void *image;              /* +0x34 */
-} PrintJpegInfo;
-
 /* The original direct-mode writers use EE scratchpad RAM. */
-
 #ifndef SCRATCHPAD_BASE
 
 #endif
@@ -873,29 +881,6 @@ static void PrintSprite00(EndPrintContext *context, PrintSpriteInfo *sprite)
     endPrintInfoSet(context, uv_clut[((const unsigned char *)&sprite->uv)[1]].clut, 1);
     subPrintSprite(context, sprite);
 }
-
-enum { QUAD_X, QUAD_Y, QUAD_DEPTH };
-
-typedef struct PrintSpriteVertex {
-    int position[3];
-    unsigned char unmodeled_0c[4];
-} PrintSpriteVertex;
-
-typedef struct PrintSpriteColor {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-} PrintSpriteColor;
-
-typedef struct PrintSpriteQuad {
-    unsigned char flags;
-    signed char coordinateMode;
-    unsigned short uv;
-    unsigned char unmodeled_04[12];
-    PrintSpriteVertex vertices[4];
-    PrintSpriteColor colors[4];
-} PrintSpriteQuad;
 
 static void PrintSprite01(EndPrintContext *context, PrintSpriteQuad *sprite)
 {
@@ -1416,13 +1401,6 @@ static void PrintNumber(EndPrintContext *context, PrintNumberInfo *number)
     }
 }
 
-typedef struct PrintFrameInfo {
-    short x, y;
-    int depth;
-    short width, height;
-    unsigned char color[4];
-} PrintFrameInfo;
-
 static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
 {
     short left[8];
@@ -1563,13 +1541,6 @@ static void PrintWindow(EndPrintContext *context, PrintFrameInfo *frame)
     }
     xglPrimAddGifTagDirect(context->packet, command, count + i * 4 + 1);
 }
-
-typedef struct PrintUnsignedFrameInfo {
-    unsigned short x, y;
-    int depth;
-    unsigned short width, height;
-    unsigned char color[4];
-} PrintUnsignedFrameInfo;
 
 static void PrintFrame(EndPrintContext *context, int param)
 {
@@ -1983,15 +1954,6 @@ static void PrintBackSprite2(EndPrintContext *context, PrintBackSpriteInfo *spri
     sceVif1PkAddDirectDataN(context->packet, context->scratch, 6);
 }
 
-typedef struct EtherLineEndpoint {
-    float x;
-    float y;
-    float depth;
-    unsigned char unmodeled_0c[4];
-    unsigned char color[4];
-    unsigned char unmodeled_14[12];
-} EtherLineEndpoint;
-
 static void PrintEtherLine(EndPrintContext *context, int param)
 {
     const EtherLineEndpoint *endpoints;
@@ -2080,10 +2042,6 @@ static void PrintEtherLine(EndPrintContext *context, int param)
         }
     }
 }
-
-extern void (*func_tbl_4[])(EndPrintContext *context, int param);
-extern void (*func_tbl2_5[])(EndPrintContext *context, int param);
-extern void xglFontPrintExtFunc(int order, void (*func)(EndPrintContext *context, int param), void *param);
 
 void endPrintExtFunc(int order, int command, void *param)
 {
@@ -2236,6 +2194,7 @@ void endPrintJpeg(PrintJpegInfo *jpeg)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static u64 ThumImageEnv_1[12] = { 0ULL, 5836665138832211968ULL, 1152921504606879748ULL, 14ULL, 624522604576768ULL, 80ULL, 0ULL, 81ULL, 481036337280ULL, 82ULL, 0ULL, 83ULL };
 
 static u64 sJpegEnv00_7[16] = { 0ULL, 5836665138546999296ULL, 1152921504606846980ULL, 14ULL, 2313372464840704ULL, 80ULL, 0ULL, 81ULL, 962072674816ULL, 82ULL, 0ULL, 83ULL, 0ULL, 5836788266669441024ULL, 576460752303484928ULL, 0ULL };

@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_PAUSE_MENU_PAGE_ENEMY_H
 
 #include "shared.h"
-
 #include "main/enemy_1.h"
 #include "main/xgl_2.h"
 #include "main/xgl_studio.h"

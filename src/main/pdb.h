@@ -1,7 +1,6 @@
 #ifndef SRC_MAIN_PDB_H
 #define SRC_MAIN_PDB_H
 
-/* Variable-length PDB groups contain entry_count records after the header. */
 typedef struct PDBEntryRecord {
     char *name;
     unsigned short name_length;
@@ -10,6 +9,7 @@ typedef struct PDBEntryRecord {
     int data_length;
 } PDBEntryRecord;
 
+/* Variable-length PDB groups contain entry_count records after the header. */
 typedef struct PDBGroup {
     char *name;
     unsigned short name_length;

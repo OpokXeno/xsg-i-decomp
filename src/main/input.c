@@ -11,14 +11,6 @@
  */
 typedef struct JThread JThread;
 
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
-extern SceneString *loadConstString(const char *bytes, int length);
-
-/* The "id" field name every lookupClassField(classJava_xeno_util_Input, ...)
- * call below looks up. */
-extern const char inputIdFieldName[];
-
 /*
  * Call block of Java_xeno_util_Input_create__I: the controller number the
  * new xeno.util.Input instance is bound to, written straight into the "id"
@@ -27,30 +19,6 @@ extern const char inputIdFieldName[];
 typedef struct InputCreateCall {
     int id; /* +0x00 */
 } InputCreateCall;
-
-/*
- * Input.create(int) builds the xeno/util/Input instance the getters below
- * are called on: it allocates the instance, stores the requested controller
- * number in the class's "id" field and returns the new reference through
- * the call's result slot.
- *
- * That result slot keeps the plain word it is written as: the id-field
- * store (main 0x002f6ab4) stays ahead of the result store (main 0x002f6ab8)
- * only while both are accesses of one type, the same ordering
- * src/main/window.c relies on for UtilWindow.class_ref.
- */
-void Java_xeno_util_Input_create__I(JThread *thread, InputCreateCall *arguments,
-                                    int *result)
-{
-    SceneObject object;
-    JavaField *id_field;
-
-    object = newObject(classJava_xeno_util_Input);
-    id_field = lookupClassField(classJava_xeno_util_Input,
-                                loadConstString(inputIdFieldName, -1), 0);
-    *(int *)(object + id_field->offset) = arguments->id;
-    *result = (int)object;
-}
 
 /*
  * Call block of Java_xeno_util_Input_getButton__/getEdge__/getRepeat__:
@@ -86,7 +54,40 @@ typedef struct InputPadEntry {
     unsigned char unmodeled_2e[0x68 - 0x2e];
 } InputPadEntry;
 
+/* The "id" field name every lookupClassField(classJava_xeno_util_Input, ...)
+ * call below looks up. */
+extern const char inputIdFieldName[];
+
 extern InputPadEntry PadData[];
+
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+extern SceneString *loadConstString(const char *bytes, int length);
+
+const char inputIdFieldName[] = "id";
+
+/*
+ * Input.create(int) builds the xeno/util/Input instance the getters below
+ * are called on: it allocates the instance, stores the requested controller
+ * number in the class's "id" field and returns the new reference through
+ * the call's result slot.
+ *
+ * That result slot keeps the plain word it is written as: the id-field
+ * store (main 0x002f6ab4) stays ahead of the result store (main 0x002f6ab8)
+ * only while both are accesses of one type, the same ordering
+ * src/main/window.c relies on for UtilWindow.class_ref.
+ */
+void Java_xeno_util_Input_create__I(JThread *thread, InputCreateCall *arguments,
+                                    int *result)
+{
+    SceneObject object;
+    JavaField *id_field;
+
+    object = newObject(classJava_xeno_util_Input);
+    id_field = lookupClassField(classJava_xeno_util_Input,
+                                loadConstString(inputIdFieldName, -1), 0);
+    *(int *)(object + id_field->offset) = arguments->id;
+    *result = (int)object;
+}
 
 void Java_xeno_util_Input_getButton__(JThread *thread, InputObjectCall *arguments,
                                       unsigned int *result)
@@ -129,5 +130,3 @@ void Java_xeno_util_Input_getRepeat__(JThread *thread, InputObjectCall *argument
     id = *(int *)(object + id_field->offset);
     *result = PadData[id].repeat;
 }
-
-const char inputIdFieldName[] = "id";

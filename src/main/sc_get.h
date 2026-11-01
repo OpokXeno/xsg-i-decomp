@@ -5,6 +5,8 @@
 #ifndef SRC_MAIN_SC_GET_H
 #define SRC_MAIN_SC_GET_H
 
+#include "shared.h"
+
 typedef struct ScriptTask ScriptTask;
 
 typedef struct ScriptPosition {
@@ -117,12 +119,6 @@ struct ScriptTask {
     unsigned char unmodeled_74[0x0C]; /* +0x74..+0x7F */
 };
 
-extern int scWaitParseScript(ScriptTask *task);
-
-extern int scMoveParseScript(ScriptTask *task);
-
-#include "shared.h"
-
 typedef unsigned short ScSchedulerWord;
 
 typedef unsigned int ScSchedulerWord32;
@@ -149,8 +145,9 @@ struct ScriptRecord {
 
 extern ScriptRecord _scriptWork[16];
 
+extern int scWaitParseScript(ScriptTask *task);
+extern int scMoveParseScript(ScriptTask *task);
 static int scONGOSUB(ScriptTask *task);
-
 static int scParseScript(ScriptTask *task);
 
 #endif /* SRC_MAIN_SC_GET_H */

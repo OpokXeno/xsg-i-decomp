@@ -43,8 +43,6 @@ typedef struct SequenceState {
     void *handler[4];
 } SequenceState;
 
-/* Each actor owns one 0x260-byte sequence record. The recovered head and
- * byte storage share that allocation; the unmodeled tracks retain their extent. */
 struct Actor;
 
 typedef struct MoveTrack {
@@ -55,6 +53,8 @@ typedef struct MoveTrack {
     Vector4 target;
 } MoveTrack;
 
+/* The motion track of a sequence entry (+0x138): what SEQ_motion plays and
+ * how it hands the values to the actor. */
 typedef struct MotionTrack {
     float time;
     u8 unmodeled_04[0x08 - 0x04];
@@ -68,6 +68,8 @@ typedef struct MotionTrack {
     float speed;
 } MotionTrack;
 
+/* Each actor owns one 0x260-byte sequence record. The recovered head and
+ * byte storage share that allocation; the unmodeled tracks retain their extent. */
 typedef struct ActSequenceEntry {
     SequenceState state;
     u32 frame_counter;

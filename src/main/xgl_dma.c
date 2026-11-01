@@ -1,14 +1,22 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "xgl_pad.h"
+
+/* EE DMAC global registers and the SPR-from channel registers. */
+#define DMAC_CTRL      ((volatile u32 *)0x1000E000)
+
+#define DMAC_STAT      ((volatile u32 *)0x1000E010)
+#define DMAC_RBSR      ((volatile u32 *)0x1000E040)
+#define DMAC_RBOR      ((volatile u32 *)0x1000E050)
+#define D8_CHCR        ((volatile u32 *)0x1000D000)
+#define D8_MADR        ((volatile u32 *)0x1000D010)
+#define D8_QWC         ((volatile u32 *)0x1000D020)
+#define D8_SADR        ((volatile u32 *)0x1000D080)
 
 /*
  * The DMA channel table and the MFIFO state are provided by the scaffold data
  * for this TU.  Only the register slots touched by these routines are named.
  */
-
 typedef struct XglDmaChannel {
     /* EE DMAC MMIO registers: CHCR +0x00, MADR +0x10, QWC +0x20, TADR +0x30.
      * The hardware updates CHCR while the polling loops wait for completion. */
@@ -26,6 +34,27 @@ typedef struct XglDmaBuffer {
     u32 *current;
 } XglDmaBuffer;
 
+/* The first word is the channel pointer; the second word's role is unknown. */
+struct MfifoDrainStorage {
+    XglDmaChannel *channel;
+    u32 unmodeled_04;
+};
+
+/* Layout of the DMAC_CTRL register. */
+typedef struct XglDmacControl {
+    u32 dma_enable : 1;
+    u32 cycle_steal_release : 1;
+    u32 drain_mode : 2;
+    u32 stall_source : 2;
+    u32 stall_drain : 2;
+    u32 release_cycle : 3;
+    u32 reserved : 21;
+} XglDmacControl;
+
+extern void FlushCache(int mode);
+extern int sceGsSyncPath(int mode, int timeout);
+void xglDmaDirectSrcChain(u32 channel, u32 address);
+
 static XglDmaChannel *tbl[10] = {
     (XglDmaChannel *)0x10008000,
     (XglDmaChannel *)0x10009000,
@@ -41,51 +70,10 @@ static XglDmaChannel *tbl[10] = {
 
 XglPadRecord PadData[2] = {{0}};
 
-/* The first word is the channel pointer; the second word's role is unknown. */
-
-struct MfifoDrainStorage {
-    XglDmaChannel *channel;
-    u32 unmodeled_04;
-};
-
 static struct MfifoDrainStorage mfifo_drain;
 
+/* Declared here, not at the top: moving it up changes the original code. */
 #define mfifo_drain mfifo_drain.channel
-
-extern void FlushCache(int mode);
-
-extern int sceGsSyncPath(int mode, int timeout);
-
-/* EE DMAC global registers and the SPR-from channel registers. */
-
-#define DMAC_CTRL      ((volatile u32 *)0x1000E000)
-
-/* Layout of the DMAC_CTRL register. */
-typedef struct XglDmacControl {
-    u32 dma_enable : 1;
-    u32 cycle_steal_release : 1;
-    u32 drain_mode : 2;
-    u32 stall_source : 2;
-    u32 stall_drain : 2;
-    u32 release_cycle : 3;
-    u32 reserved : 21;
-} XglDmacControl;
-
-#define DMAC_STAT      ((volatile u32 *)0x1000E010)
-
-#define DMAC_RBSR      ((volatile u32 *)0x1000E040)
-
-#define DMAC_RBOR      ((volatile u32 *)0x1000E050)
-
-#define D8_CHCR        ((volatile u32 *)0x1000D000)
-
-#define D8_MADR        ((volatile u32 *)0x1000D010)
-
-#define D8_QWC         ((volatile u32 *)0x1000D020)
-
-#define D8_SADR        ((volatile u32 *)0x1000D080)
-
-void xglDmaDirectSrcChain(u32 channel, u32 address);
 
 void xglDmaDirectNormal(u32 channel, u32 address, u32 count)
 {

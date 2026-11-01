@@ -1,19 +1,13 @@
 #include "common.h"
-
 #include "shared.h"
 
-/* GameLoopState (main VA 0x00338680) is a 0x2a030-byte global (see
- * src/main/game.c); MoveHokan reads only the flag byte at +193 (main VA
- * 0x00338741, config/objects/main.objects.json alias MoveHokanStateFlag).
- * Declared here as the byte array the original size evidences, not as a
- * standalone one-byte extern: at -G8 an object at or under the G threshold is
- * addressed through $gp, and the original's own two-instruction
- * lui/lbu absolute address for this byte proves this access is NOT
- * gp-relative. This TU-local view is
- * independent of the other partial views other TUs give the same symbol
- * (GameLoopFlagsPrefix, GameLoopStateAddressView, ...; */
+/* The camera record copied by value as doubleword pairs. */
+#include "main/maptbl.h"
 
-extern const float cameraYawHalfTurn;
+#define MoveHokanStateFlag (GameLoopState.camera_flags)
+
+#define FLOOR_DETERMINANT(px, pz, qx, qz, rx, rz) \
+    ((px) * (qz) + (qx) * (rz) + (rx) * (pz) - (px) * (rz) - (qx) * (pz) - (rx) * (qz))
 
 struct CameraCenterSource {
     unsigned char unmodeled_00[0x10];
@@ -52,18 +46,9 @@ typedef struct GameLoopCameraView {
     unsigned char unmodeled_250[0x2a030 - 0x250];
 } GameLoopCameraView;
 
-extern GameLoopCameraView GameLoopState;
-
-#define MoveHokanStateFlag (GameLoopState.camera_flags)
-
-/* xglVectorScaleAddXYZ is defined by main/tu100 (src/main/xgl_2.c);
- * this prototype follows that TU's declaration. */
-
-void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
-                          const Vector4 *source, const Vector4 *other);
-
-static float CfCameraOfsNow[4];
-
+/* One record of the camera table CfCameraDefine (main:0x00362e80, 33 records
+ * of 0xa0 bytes, defined by src/main/maptbl.c). Only the members the camera
+ * update reads or resets are named. */
 typedef struct CameraDefinition {
     unsigned char pedestal_mode;          /* +0x00 */
     unsigned char pedestal_interpolation; /* +0x01 */
@@ -100,6 +85,8 @@ typedef struct CameraDefinition {
 } CameraDefinition;
 
 struct CameraDefinition;
+
+/* The view block of the studio camera record, from StudioCamera + 0x90. */
 typedef struct CameraView {
     unsigned char unmodeled_00[4];
     float perspective;                    /* +0x04 */
@@ -118,6 +105,7 @@ typedef struct CameraPoint {
     Vector4 coordinates;
     unsigned long long alignment[0];
 } CameraPoint;
+
 struct CameraScratchpad {
     struct CameraDefinition *definition;         /* +0x00 */
     StudioCamera *studio;                        /* +0x04 */
@@ -148,12 +136,6 @@ struct CameraScratchpad {
     CameraPoint saved_position;                     /* +0x190 */
 };
 
-/* One record of the camera table CfCameraDefine (main:0x00362e80, 33 records
- * of 0xa0 bytes, defined by src/main/maptbl.c). Only the members the camera
- * update reads or resets are named. */
-
-/* The view block of the studio camera record, from StudioCamera + 0x90. */
-
 /* Interpolation state of the camera pair (position, look-at): the per-frame
  * step, the frames still to run and the yaw being blended, bss at
  * main:0x004dcad0. */
@@ -165,8 +147,6 @@ typedef struct HokanState {
     float previous_yaw;       /* +0x10 */
     float current_yaw;        /* +0x14 */
 } HokanState;
-
-static HokanState HokanNow;
 
 typedef struct LayoutHeader LayoutHeader;
 
@@ -205,21 +185,6 @@ typedef struct CameraUnduParam {
     unsigned char unmodeled_28[0x18];
 } CameraUnduParam;
 
-static CameraUnduParam CamLookAt;
-static Vector4 CamLookAtPos;
-static CameraUnduParam CamPos;
-static Vector4 CamPosPos;
-
-extern LayoutHeader *UnduDataGetHeader(int, int);
-
-/* The camera record copied by value as doubleword pairs. */
-#include "main/maptbl.h"
-
-extern StudioCamera *xglStudioGetActiveCamera(void);
-extern float xglAtan2(float, float);
-extern int F2I(float);
-extern float xglRotTransPers(int *, void *, const float *, int);
-
 typedef struct CameraDefocusLayer {
     unsigned char type;
     unsigned char state;
@@ -228,40 +193,11 @@ typedef struct CameraDefocusLayer {
     int parameters[16];
 } CameraDefocusLayer;
 
-extern CameraDefocusLayer GameDefocusParam[16];
-extern void GameDefocusCheck(void);
-void GameCameraChangeID(int id, int unused1, int unused2);
-
-extern const float nearestCenterInitialDistance;
-
-extern const float oneThirdCornerSum;
-
-extern const float oneThirdCentroid;
-
 typedef struct CameraFloorVertex {
     float x;
     float y;
     float z;
 } CameraFloorVertex;
-
-extern double sqrt(double);
-
-extern float UnduCheck(const Vector4 *, void *, CameraUnduParam *);
-
-extern void UnduParamInit(CameraUnduParam *);
-
-static __inline__ float FloorSlope(float rise, float run)
-{
-    if (run >= 0.0f && run < 0.001f) {
-        return rise * 100.0f;
-    }
-    if (run <= 0.0f && -0.001f < run) {
-        return rise * -100.0f;
-    }
-    return rise / run;
-}
-
-extern const float cameraLookAtMargin;
 
 typedef struct CameraEnemyWork {
     unsigned char unmodeled_00[0x3830];
@@ -269,7 +205,69 @@ typedef struct CameraEnemyWork {
     unsigned char unmodeled_3832[0x38b0 - 0x3832];
 } CameraEnemyWork;
 
+typedef int s32;
+
+typedef s32 M2C_UNK;
+
+extern const float cameraYawHalfTurn;
+
+/* GameLoopState (main VA 0x00338680) is a 0x2a030-byte global (see
+ * src/main/game.c); MoveHokan reads only the flag byte at +193 (main VA
+ * 0x00338741, config/objects/main.objects.json alias MoveHokanStateFlag).
+ * Declared here as the byte array the original size evidences, not as a
+ * standalone one-byte extern: at -G8 an object at or under the G threshold is
+ * addressed through $gp, and the original's own two-instruction
+ * lui/lbu absolute address for this byte proves this access is NOT
+ * gp-relative. This TU-local view is
+ * independent of the other partial views other TUs give the same symbol
+ * (GameLoopFlagsPrefix, GameLoopStateAddressView, ...; */
+extern GameLoopCameraView GameLoopState;
+extern CameraDefocusLayer GameDefocusParam[16];
+extern const float nearestCenterInitialDistance;
+extern const float oneThirdCornerSum;
+extern const float oneThirdCentroid;
+extern const float cameraLookAtMargin;
 extern CameraEnemyWork enepc[16];
+
+/* xglVectorScaleAddXYZ is defined by main/tu100 (src/main/xgl_2.c);
+ * this prototype follows that TU's declaration. */
+void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
+                          const Vector4 *source, const Vector4 *other);
+
+extern LayoutHeader *UnduDataGetHeader(int, int);
+extern StudioCamera *xglStudioGetActiveCamera(void);
+extern float xglAtan2(float, float);
+extern int F2I(float);
+extern float xglRotTransPers(int *, void *, const float *, int);
+extern void GameDefocusCheck(void);
+void GameCameraChangeID(int id, int unused1, int unused2);
+extern double sqrt(double);
+extern float UnduCheck(const Vector4 *, void *, CameraUnduParam *);
+extern void UnduParamInit(CameraUnduParam *);
+extern void xglMatrixStackUnit(void);
+extern void xglMatrixStackTrans(const float translation[4]);
+extern void xglMatrixStackRotY(float angle);
+extern void xglMatrixStackSave(float matrix[4][4]);
+extern void nmlModelSetGlobalFogDist(float start, float end, float parameter0, float parameter1);
+extern void nmlModelSetGlobalFogCol(const Vector4 *color);
+void GameCamera(void);
+static void CameraType1(void);
+static void CalcLookAt(struct CameraScratchpad *scratchpad);
+static void CalcCameraPos(struct CameraScratchpad *scratchpad);
+static void CameraType1Core(void);
+static void CameraType0(void);
+
+static float CfCameraOfsNow[4];
+
+static HokanState HokanNow;
+
+static CameraUnduParam CamLookAt;
+
+static Vector4 CamLookAtPos;
+
+static CameraUnduParam CamPos;
+
+static Vector4 CamPosPos;
 
 static unsigned char pre_mode;
 
@@ -281,36 +279,16 @@ static CameraUnduParam CamPlayer;
 
 static Vector4 CamPlyPosOld;
 
-extern void xglMatrixStackUnit(void);
-
-extern void xglMatrixStackTrans(const float translation[4]);
-
-extern void xglMatrixStackRotY(float angle);
-
-extern void xglMatrixStackSave(float matrix[4][4]);
-
-extern void nmlModelSetGlobalFogDist(float start, float end, float parameter0, float parameter1);
-
-extern void nmlModelSetGlobalFogCol(const Vector4 *color);
-
-#define FLOOR_DETERMINANT(px, pz, qx, qz, rx, rz) \
-    ((px) * (qz) + (qx) * (rz) + (rx) * (pz) - (px) * (rz) - (qx) * (pz) - (rx) * (qz))
-
-void GameCamera(void);
-
-static void CameraType1(void);
-
-static void CalcLookAt(struct CameraScratchpad *scratchpad);
-
-static void CalcCameraPos(struct CameraScratchpad *scratchpad);
-
-static void CameraType1Core(void);
-
-typedef int s32;
-
-typedef s32 M2C_UNK;
-
-static void CameraType0(void);
+static __inline__ float FloorSlope(float rise, float run)
+{
+    if (run >= 0.0f && run < 0.001f) {
+        return rise * 100.0f;
+    }
+    if (run <= 0.0f && -0.001f < run) {
+        return rise * -100.0f;
+    }
+    return rise / run;
+}
 
 void GameCameraReset(void)
 {
@@ -1431,6 +1409,7 @@ void GameCamera(void)
     GameLoopState.camera_flags &= 0x3f;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const float nearestCenterInitialDistance = 1000000.0f;
 
 const float oneThirdCornerSum = 0.3333333432674408f;

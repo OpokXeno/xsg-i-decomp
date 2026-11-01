@@ -45,6 +45,7 @@ typedef struct MenuListEntry {
 
 MenuTextEntry *MenuTextGet(int index);
 int MenuBoxChk(int index);
+
 /*
  * priceMode 0 applies the discount rates stored in SaveData (clamped to at
  * least half price); any other value uses the full rate, and 1 additionally

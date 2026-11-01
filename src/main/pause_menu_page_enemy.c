@@ -1,87 +1,114 @@
 #include "common.h"
-
 #include "pause_menu_page_enemy.h"
 
 short DebugActor = 0;
+
 static short Page_0 = 0;
+
 /* JP: 発見
  * EN: Discovered */
 const char discoveredText[5] = "\310\257\270\253";
+
 /* JP: 追跡中
  * EN: Chasing */
 const char chasingText[7] = "\304\311\300\327\303\346";
+
 /* JP: 硬直
  * EN: Stiffen */
 const char stiffenText[5] = "\271\305\304\276";
+
 /* JP: 帰巣
  * EN: Return home */
 const char returnHomeText[5] = "\265\242\301\343";
+
 /* JP: 触手中
  * EN: Tentacle active */
 const char tentacleActiveText[7] = "\277\250\274\352\303\346";
+
 /* JP: ぬる
  * EN: Null */
 const char pauseMenuPageEnemyNullText[5] = "\244\314\244\353";
+
 /* JP: 触手
  * EN: Tentacle */
 const char tentacleText[5] = "\277\250\274\352";
+
 /* JP: 警備員
  * EN: Guard */
 const char guardText[7] = "\267\331\310\367\260\367";
+
 /* JP: 門番
  * EN: Gatekeeper */
 const char gatekeeperText[5] = "\314\347\310\326";
+
 /* JP: ルート
  * EN: Route */
 const char routeText[7] = "\245\353\241\274\245\310";
+
 /* JP: 往復
  * EN: Round trip */
 const char roundTripText[5] = "\261\375\311\374";
+
 /* JP: 壁
  * EN: Wall */
 const char wallText[3] = "\312\311";
+
 /* JP: 浮遊
  * EN: Float */
 const char floatText[5] = "\311\342\315\267";
+
 /* JP: 逃亡
  * EN: Flee */
 const char fleeText[5] = "\306\250\313\264";
+
 /* JP: ぬる
  * EN: Null */
 const char locatorNullText[7] = "\244\314\244\353\241\241";
+
 /* JP: ／Ｂ
  * EN: / B */
 const char locatorSlashBText[7] = "\241\277\243\302\241\241";
+
 /* JP: ／Ｔ
  * EN: / T */
 const char locatorSlashTText[7] = "\241\277\243\324\241\241";
+
 /* JP: ●Ｂ
  * EN: (B) */
 const char locatorParenBText[7] = "\241\374\243\302\241\241";
+
 /* JP: ■Ｂ中
  * EN: [B] active */
 const char locatorBracketBActiveText[7] = "\242\243\243\302\303\346";
+
 /* JP: ■Ｂ
  * EN: [B] */
 const char locatorBracketBText[7] = "\242\243\243\302\241\241";
+
 /* JP: ■Ｔ
  * EN: [T] */
 const char locatorBracketTText[7] = "\242\243\243\324\241\241";
+
 /* JP: ヌル
  * EN: Null */
 const char locatorNoneText[7] = "\245\314\245\353\241\241";
+
 /* JP: 北↑
  * EN: North Up */
 const char directionNorthUpText[5] = "\313\314\242\254";
+
 /* JP: 東→
  * EN: East Right */
 const char directionEastRightText[5] = "\305\354\242\252";
+
 /* JP: 南↓
  * EN: South Down */
 const char directionSouthDownText[5] = "\306\356\242\255";
+
 /* JP: 西←
  * EN: West Left */
 const char directionWestLeftText[5] = "\300\276\242\253";
+
 /* JP: 通常
  * EN: Normal */
 const char freezeNormalText[5] = "\304\314\276\357";
@@ -710,6 +737,7 @@ void Debug_Mark(const Vector4 *position, int entry)
     nmlModelEntry(entry);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char selectCursorText[2] = ">";
 
 /* JP: ↓
@@ -717,6 +745,7 @@ const char selectCursorText[2] = ">";
 const char downText[3] = "\242\255";
 
 short EventID = 0;
+
 signed char FlagExEvent = 0;
 
 /* Partial byte representation: original signedness and semantic type remain unknown. */

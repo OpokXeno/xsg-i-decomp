@@ -1,40 +1,32 @@
 #include "common.h"
 #include "main/xgl_2.h"
-
 #include "shared.h"
-
 #include "jnt.h"
 
-/* File scope: as a late block-scope extern in JNT_computeMatrix, the
-   contract cc1 reads uninitialized memory for it and compiles that
-   function nondeterministically. */
+/*
+ * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
+ * Two of its slots are named here, because this file's two recovered
+ * functions are their writers; the area itself is not recovered, so the
+ * slots are named relative to a base the caller materializes rather than
+ * modeled as members (see the block comment on JNT_setMatrix).
+ *
+ * The base has to stay a value the function holds: folding it into each
+ * store's address instead (`*(T *)0x700007a0`) makes 2.96 emit the two
+ * absolute stores as separate li/sw pairs, four instructions in place of the
+ * original's single shared `lui $2,0x7000` and two displaced stores.
+ */
+#define JNT_SCRATCH_BASE ((void *)0x70000000)
+
+#define JNT_MATRIX_BUFFER_OFFSET 0x7A0
+#define JNT_MATRIX_SELECT_OFFSET 0x4BC
+#define JNT_MATRIX_BUFFER(scratch) (((JntWork *)(scratch))->matrix_buffer)
+#define JNT_MATRIX_SELECT(scratch) (((JntWork *)(scratch))->matrix_select)
+#define jntChainAt(work, index) (&(work)->chain_slots[(index)])
+
 struct JntGameLoopState {
     unsigned char unmodeled_00[0x0c];
     unsigned short mode;
 };
-extern struct JntGameLoopState GameLoopState;
-
-static inline void jntCopyMatrix(JntMatrix *destination, const JntMatrix *source)
-{
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)\n\t"
-        "lq $2, 16(%1)\n\t"
-        "sq $2, 16(%0)\n\t"
-        "lq $2, 32(%1)\n\t"
-        "sq $2, 32(%0)\n\t"
-        "lq $2, 48(%1)\n\t"
-        "sq $2, 48(%0)"
-        : : "r"(destination), "r"(source) : "$2", "memory");
-}
-
-static inline void jntCopyMatrixRow(float destination[4], const float source[4])
-{
-    __asm__ __volatile__(
-        "lq $2, 0(%1)\n\t"
-        "sq $2, 0(%0)"
-        : : "r"(destination), "r"(source) : "$2", "memory");
-}
 
 typedef struct JntHairIdSource {
     unsigned char unmodeled_00[4];
@@ -106,30 +98,20 @@ typedef struct JntFilterList {
     JntFilterFn filters[8];
 } JntFilterList;
 
-/*
- * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
- * Two of its slots are named here, because this file's two recovered
- * functions are their writers; the area itself is not recovered, so the
- * slots are named relative to a base the caller materializes rather than
- * modeled as members (see the block comment on JNT_setMatrix).
- *
- * The base has to stay a value the function holds: folding it into each
- * store's address instead (`*(T *)0x700007a0`) makes 2.96 emit the two
- * absolute stores as separate li/sw pairs, four instructions in place of the
- * original's single shared `lui $2,0x7000` and two displaced stores.
- */
-
-#define JNT_SCRATCH_BASE ((void *)0x70000000)
-
-#define JNT_MATRIX_BUFFER_OFFSET 0x7A0
-
-#define JNT_MATRIX_SELECT_OFFSET 0x4BC
-
 typedef union JntRotationPayload {
     float values[3];
     int bits[3];
 } JntRotationPayload;
 
+/* Static-value copying uses floating point, while the matrix API transports
+ * these same angle representations as raw words into VU0. */
+/*
+ * A joint static-value channel: JNT_getStaticVal2 reads its type (dispatch,
+ * only types 1-5 apply a transform), its target joint slot and the
+ * translate/rotate triples it feeds to CUR_MATRIX_Txyz4s/Rzyx4s, then
+ * returns the following channel (`channel + 1`), which fixes its size at
+ * 0x40 bytes, the same stride as JntElement.
+ */
 struct JntStaticChannel {
     unsigned short type;           /* 0x00 */
     unsigned short interpolation_flags; /* 0x02 */
@@ -169,6 +151,7 @@ struct JntProducer {
     int state;              /* 0x70, cleared by JNT_startProduction */
     unsigned char *deferred_limits[1]; /* 0x74: partial deferred-limit list */
 };
+
 struct JntWork {
     JntProducer *producer;         /* +0x000 */
     unsigned short *cursor;        /* +0x004: FCV2 packed-curve state */
@@ -232,19 +215,16 @@ struct JntWork {
     unsigned char unmodeled_824[0x0c];
     JntInterruptElement default_element; /* +0x830: default element storage */
 };
+
 typedef void *(*JntProductionConsumer)(JntWork *work,
                                       struct JntStaticChannel *channels,
                                       int argument);
-
-#define JNT_MATRIX_BUFFER(scratch) (((JntWork *)(scratch))->matrix_buffer)
-
-#define JNT_MATRIX_SELECT(scratch) (((JntWork *)(scratch))->matrix_select)
 
 /*
  * Three more scratchpad slots share a fixed layout with the pair above, so
  * they are named with a partial struct instead of one offset macro per
  * field: JNT_setInterpMatrix stores its matrix-buffer argument at 0x7A4 and
- * its float argument at 0x800 (interp_matrix / interpolation below).
+ * its float argument at 0x800 (interp_matrix / interpolation in JntWork above).
  *
  * JNT_setCurve stores its two pointer arguments at 0x7A8/0x7AC. Neither is
  * an end pointer: this same TU's JNT_getStaticVal (VA 0x0030EDC8) and
@@ -256,14 +236,12 @@ typedef void *(*JntProductionConsumer)(JntWork *work,
  *   - JNT_getVal: `sll $2,$6,5 / addu $3,$2,$3` with
  *     $3 = lw 0x7AC($17) -- 0x7AC is the table it reads, value_records.
  */
-
 /*
  * A joint element is a fixed-size record: JNT_getElement indexes an array of
  * them and JNT_nextElement advances by exactly one. The layout beyond that
  * 0x40-byte stride is not recovered, so it stays a single unmodeled span
  * (docs/naming.md) rather than invented members.
  */
-
 typedef struct JntElement {
     unsigned char unmodeled_00[0x40];
 } JntElement;
@@ -273,7 +251,6 @@ typedef struct JntElement {
  * recovered here, then a self-relative offset field whose own address plus
  * its value is the joint's root element.
  */
-
 typedef struct JntElementHeader {
     unsigned char unmodeled_00[0x10];
     int root_element_offset;
@@ -288,7 +265,6 @@ typedef struct JntElementHeader {
  * read/write it around the same joint update the matrix/curve slots above
  * serve.
  */
-
 typedef struct JntFlagsWork {
     unsigned char unmodeled_000[0x38];
     int flags;
@@ -302,7 +278,6 @@ typedef struct JntFlagsWork {
  * after it at 0x814 (`swc1 $f12,2068($1)`); both are supplied by
  * ACT_updateMotionSub (JNT_animSetFlags also by ACT_modelDrawSub).
  */
-
 typedef struct JntAnimWork {
     unsigned char unmodeled_000[0x810];
     int anim_flags;
@@ -328,39 +303,6 @@ typedef struct JntRootScratch {
     JntRootSlot scale;
 } JntRootScratch;
 
-/*
- * The matrix_print current-matrix API transfers native 64-byte matrices,
- * loads a 16-byte translation payload, and transports rotation words into
- * VU0 without a numerical integer conversion.
- */
-
-void CUR_MATRIX_Set(Matrix4 matrix);
-
-void CUR_MATRIX_Get(Matrix4 matrix);
-
-void CUR_MATRIX_Txyz4s(const Vector4 *translate);
-
-void CUR_MATRIX_Rzyx4s(const int *rotate);
-
-/* Static-value copying uses floating point, while the matrix API transports
- * these same angle representations as raw words into VU0. */
-
-/*
- * A joint static-value channel: JNT_getStaticVal2 reads its type (dispatch,
- * only types 1-5 apply a transform), its target joint slot and the
- * translate/rotate triples it feeds to CUR_MATRIX_Txyz4s/Rzyx4s, then
- * returns the following channel (`channel + 1`), which fixes its size at
- * 0x40 bytes, the same stride as JntElement.
- */
-
-/*
- * Hair-smoothing toggle at VA 0x004DC248: JNT_computeMatrix reads it with
- * `lb $2,flagSmoothHair` (VA 0x00314B14) to decide whether to apply the
- * interpolated hair matrix; this pair only sets/clears it.
- */
-
-static signed char flagSmoothHair = 0;
-
 typedef struct JntMoveElement {
     unsigned short type;
     unsigned char unmodeled_02[0x3E];
@@ -373,12 +315,6 @@ typedef struct JntMoveElementHeader {
     int element_offset;
 } JntMoveElementHeader;
 
-char *strncpy(char *destination, const char *source, unsigned int count);
-
-float FCV2_getPackValue(unsigned short **cursor, float frame);
-
-static unsigned char dummyAttr[0x10] = {0};
-
 struct FcvPackAttribute {
     unsigned char unmodeled_00[4];
     unsigned short channel_flags;
@@ -387,17 +323,6 @@ struct FcvPackAttribute {
     unsigned short pivot_index;       /* 0x0A */
     unsigned short rotation_index;    /* 0x0C */
 };
-
-struct FcvPackAttribute *FCV2_getPackAttribute(unsigned short **cursor);
-
-unsigned char dummyCntFree[0x10] = {0};
-
-char dummyName[0x10] = {0};
-
-JntStaticChannel *JNT_setMDLMatrix(JntWork *work,
-                                 JntStaticChannel *channel);
-
-void FCV2_resetPack(void *pack_state, void *pack);
 
 struct JntProductionOwner {
     unsigned char unmodeled_000[0x10];
@@ -430,16 +355,41 @@ typedef struct JntPreviousTransform {
     Vector4 rotation;
 } JntPreviousTransform;
 
+typedef struct JntModelMatrixResource {
+    unsigned char unmodeled_00[0x50];
+    int matrices_offset;          /* 0x50 */
+    unsigned char unmodeled_54[4];
+    int combined_matrices_offset; /* 0x58 */
+    int model_matrices_offset;    /* 0x5C */
+} JntModelMatrixResource;
+
+/* File scope: as a late block-scope extern in JNT_computeMatrix, the
+   contract cc1 reads uninitialized memory for it and compiles that
+   function nondeterministically. */
+extern struct JntGameLoopState GameLoopState;
+
+/*
+ * The matrix_print current-matrix API transfers native 64-byte matrices,
+ * loads a 16-byte translation payload, and transports rotation words into
+ * VU0 without a numerical integer conversion.
+ */
+void CUR_MATRIX_Set(Matrix4 matrix);
+void CUR_MATRIX_Get(Matrix4 matrix);
+void CUR_MATRIX_Txyz4s(const Vector4 *translate);
+void CUR_MATRIX_Rzyx4s(const int *rotate);
+char *strncpy(char *destination, const char *source, unsigned int count);
+float FCV2_getPackValue(unsigned short **cursor, float frame);
+struct FcvPackAttribute *FCV2_getPackAttribute(unsigned short **cursor);
+
+JntStaticChannel *JNT_setMDLMatrix(JntWork *work,
+                                 JntStaticChannel *channel);
+
+void FCV2_resetPack(void *pack_state, void *pack);
 void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
-
 void xglMatrix2Quaternion(float quaternion[4], const void *matrix);
-
 void xglQuaternion2Matrix(Matrix4 destination, const Vector4 *quaternion);
-
 void xglQuaternionInterpolateLinear(Vector4 *destination, const Vector4 *left, const Vector4 *right, float left_weight, float right_weight);
-
 JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float frame);
-
 void alignXAxis(float *axis, Matrix4 frame);
 void MATRIX_transpose3(Matrix4 matrix);
 void CUR_MATRIX_4s3(Matrix4 matrix);
@@ -448,19 +398,12 @@ float xglAtan2(float y, float x);
 void CUR_MATRIX_Rz4s(const int *rotate);
 void CUR_MATRIX_GetT(Vector4 *translation);
 void CUR_MATRIX_SetR(Matrix4 matrix);
-
 JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, float frame);
-
 JntStaticChannel *EXM_CalcExMotion(JntWork *work, JntStaticChannel *channel);
-
 void MATRIX_convert4(Matrix4 destination, Matrix4 source);
-
 void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
-
 void xglMatrixUnit4s(Matrix4 destination);
-
 JntStaticChannel *JNT_interpolate(JntWork *work, JntStaticChannel *channel);
-
 JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel);
 
 void get_fcvpack(float *destination, const float *fallback_values,
@@ -478,13 +421,42 @@ JntStaticChannel *JNT_getVal_staticChain(JntWork *work,
                                          JntStaticChannel *channel,
                                          float frame);
 
-typedef struct JntModelMatrixResource {
-    unsigned char unmodeled_00[0x50];
-    int matrices_offset;          /* 0x50 */
-    unsigned char unmodeled_54[4];
-    int combined_matrices_offset; /* 0x58 */
-    int model_matrices_offset;    /* 0x5C */
-} JntModelMatrixResource;
+/*
+ * Hair-smoothing toggle at VA 0x004DC248: JNT_computeMatrix reads it with
+ * `lb $2,flagSmoothHair` (VA 0x00314B14) to decide whether to apply the
+ * interpolated hair matrix; this pair only sets/clears it.
+ */
+static signed char flagSmoothHair = 0;
+
+static unsigned char dummyAttr[0x10] = {0};
+
+unsigned char dummyCntFree[0x10] = {0};
+
+char dummyName[0x10] = {0};
+
+float jointMovementFollowRate = 0.80000001192092896f;
+
+static inline void jntCopyMatrix(JntMatrix *destination, const JntMatrix *source)
+{
+    __asm__ __volatile__(
+        "lq $2, 0(%1)\n\t"
+        "sq $2, 0(%0)\n\t"
+        "lq $2, 16(%1)\n\t"
+        "sq $2, 16(%0)\n\t"
+        "lq $2, 32(%1)\n\t"
+        "sq $2, 32(%0)\n\t"
+        "lq $2, 48(%1)\n\t"
+        "sq $2, 48(%0)"
+        : : "r"(destination), "r"(source) : "$2", "memory");
+}
+
+static inline void jntCopyMatrixRow(float destination[4], const float source[4])
+{
+    __asm__ __volatile__(
+        "lq $2, 0(%1)\n\t"
+        "sq $2, 0(%0)"
+        : : "r"(destination), "r"(source) : "$2", "memory");
+}
 
 static inline JntMatrix *jntMatrixAt(void *base, int index)
 {
@@ -1603,17 +1575,6 @@ advance_channel:
     work->current_index++;
     return next;
 }
-
-void alignXAxis(float *axis, Matrix4 frame);
-void MATRIX_transpose3(Matrix4 matrix);
-void CUR_MATRIX_4s3(Matrix4 matrix);
-void CUR_MATRIX_Rx4s(const int *rotate);
-float xglAtan2(float y, float x);
-void CUR_MATRIX_Rz4s(const int *rotate);
-void CUR_MATRIX_GetT(Vector4 *translation);
-void CUR_MATRIX_SetR(Matrix4 matrix);
-
-#define jntChainAt(work, index) (&(work)->chain_slots[(index)])
 
 JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float frame) {
     Vector4 *translation = (Vector4 *)channel->translate;
@@ -3958,5 +3919,3 @@ void JNT_offSmoothHair(void)
 {
     flagSmoothHair = 0;
 }
-
-float jointMovementFollowRate = 0.80000001192092896f;

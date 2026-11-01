@@ -1,23 +1,21 @@
 #include "common.h"
 #include "shared.h"
 #include "xgl_prim_add.h"
-
 #include "main/xgl_packet.h"
 
 #define NULL ((void *)0)
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
 #define XGL_PRIM_ADD_MODE_INDEX8 0
 #define XGL_PRIM_ADD_MODE_INDEX16 1
 #define XGL_PRIM_ADD_MODE_DIRECT 2
 #define XGL_PRIM_ADD_FLAG_POSITION_OFFSET 0x10
 #define XGL_PRIM_ADD_FLAG_FLUSH_DIRECT 0x20
 #define XGL_PRIM_ADD_POSITION_Z_MASK 0x00ffffffu
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 
 void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count) {
     if (packet == NULL) {

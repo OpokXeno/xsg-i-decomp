@@ -1,21 +1,32 @@
 #include "common.h"
-
 #include "shared.h"
+
+/* SHAKE_ANGLE_MAX/SHAKE_ANGLE_MIN are the two clamp values, +/- 2*pi. */
+#define SHAKE_ANGLE_MAX 6.2831855f
+
+#define SHAKE_ANGLE_MIN -6.2831855f
 
 typedef struct EXM_WindState EXM_WindState;
 
-static EXM_WindState _wind;
+typedef union EXM_WindVector {
+    Vector4 vector;
+    unsigned long long words[2];
+} EXM_WindVector;
 
-static EXM_WindState *wind = &_wind;
-
-static float wave = 0.0f;
-
-static float waverad = 0.0f;
-
-/* The +0x10 vector fields are named from the allocated reset and setter stores.
- * The u64 at +0x08 preserves the 8-byte alignment of the complete wind state. */
-
-void EXM_ResetWind(void);
+/* The 64 unitSequence entries have a 0x260-byte stride in the named callers. */
+typedef struct UnitSequenceEntry {
+    unsigned char unmodeled_00[0x04];
+    int state;
+    unsigned char unmodeled_08[0x240 - 0x08];
+    float pivot_x;
+    float pivot_y;
+    float pivot_z;
+    unsigned char unmodeled_24c[0x250 - 0x24c];
+    float axis_x;
+    float axis_y;
+    float axis_z;
+    float axis_w;
+} UnitSequenceEntry;
 
 /*
  * EXM_GetWindPower/EXM_ResetWind/EXM_SetDirectionalWind/EXM_SetPointWind/
@@ -31,29 +42,10 @@ void EXM_ResetWind(void);
  * pairs, which needs that alignment -- a struct whose largest member is only
  * 4-byte aligned instead compiles the same `*wind = *para;` assignment to
  * ldl/ldr/sdl/sdr.
+ *
+ * The +0x10 vector fields are named from the allocated reset and setter stores.
+ * The u64 at +0x08 preserves the 8-byte alignment of the complete wind state.
  */
-
-typedef union EXM_WindVector {
-    Vector4 vector;
-    unsigned long long words[2];
-} EXM_WindVector;
-
-/* The 64 unitSequence entries have a 0x260-byte stride in the named callers. */
-
-typedef struct UnitSequenceEntry {
-    unsigned char unmodeled_00[0x04];
-    int state;
-    unsigned char unmodeled_08[0x240 - 0x08];
-    float pivot_x;
-    float pivot_y;
-    float pivot_z;
-    unsigned char unmodeled_24c[0x250 - 0x24c];
-    float axis_x;
-    float axis_y;
-    float axis_z;
-    float axis_w;
-} UnitSequenceEntry;
-
 struct EXM_WindState {
     char mode;              /* +0x00, read signed (lb) by EXM_GetWindPower */
     u8 unmodeled_01[7];
@@ -65,8 +57,6 @@ struct EXM_WindState {
     u8 unmodeled_2c[4];
 };
 
-static EXM_WindState _wind = { 0 };
-
 /*
  * MapUnit is a 64-entry array with a 0x300-byte stride.  These are additive
  * record views from existing callers: map_2 names the update/render callback,
@@ -75,7 +65,6 @@ static EXM_WindState _wind = { 0 };
  * TU names its position vector.  A union keeps those independently evidenced
  * views without asserting that same-offset fields have one shared meaning.
  */
-
 typedef struct MapUnitDrawView {
     unsigned int flags; /* +0x00 */
     void (*update)(void *unit); /* +0x04 */
@@ -122,16 +111,6 @@ typedef struct MapUnitRecord {
     };
 } MapUnitRecord;
 
-MapUnitRecord MapUnit[64] = { 0 };
-
-UnitSequenceEntry unitSequence[64] = { 0 };
-
-/* SHAKE_ANGLE_MAX/SHAKE_ANGLE_MIN are the two clamp values, +/- 2*pi. */
-
-#define SHAKE_ANGLE_MAX 6.2831855f
-
-#define SHAKE_ANGLE_MIN -6.2831855f
-
 typedef union EXM_WindVectorStorage {
     Vector4 vector;
     u64 pair[2];
@@ -153,15 +132,27 @@ typedef struct EXM_WindUnit {
     EXM_WindFrame *frame; /* +0x820 */
 } EXM_WindUnit;
 
+void EXM_ResetWind(void);
+
 float xglSin(float angle);
-
 void xglVectorNormal(Vector4 *dest, const Vector4 *src);
-
 void MATRIX_identity4s(Matrix4 destination);
-
 void MATRIX_rotY4s(Matrix4 matrix, float angle);
-
 void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
+
+static EXM_WindState _wind;
+
+static EXM_WindState *wind = &_wind;
+
+static float wave = 0.0f;
+
+static float waverad = 0.0f;
+
+static EXM_WindState _wind = { 0 };
+
+MapUnitRecord MapUnit[64] = { 0 };
+
+UnitSequenceEntry unitSequence[64] = { 0 };
 
 void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *position)
 {

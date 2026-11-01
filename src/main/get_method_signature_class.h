@@ -4,6 +4,7 @@
 #include "shared.h"
 
 typedef union VMConstantPoolEntry VMConstantPoolEntry;
+
 union VMConstantPoolEntry {
     void *object;
     unsigned char *tags;
@@ -19,6 +20,7 @@ union VMConstantPoolEntry {
 };
 
 typedef struct VMConstantOwner VMConstantOwner;
+
 struct VMConstantOwner {
     unsigned char unmodeled_00[0x0c];
     int class_loader;
@@ -27,28 +29,22 @@ struct VMConstantOwner {
 };
 
 typedef struct VMClassNameRef VMClassNameRef;
+
 struct VMClassNameRef {
     unsigned char unmodeled_00[0x08];
     const char *name;
 };
 
 typedef struct VMResolvedFieldRef VMResolvedFieldRef;
+
 struct VMResolvedFieldRef {
     SceneClass *class_obj;
     SceneField *field;
     unsigned char unmodeled_08[8];
 };
 
-int getField(int index, VMConstantOwner *owner, int is_static,
-             VMResolvedFieldRef *ref);
-SceneMethod *getMethodSignatureClass(int index, VMConstantOwner *owner);
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
-SceneClass *getClass(int index, VMConstantOwner *owner);
-extern SceneClass *loadArray(void *class_descriptor, int skip_load);
-extern int loadClass(int class_key, int skip_load);
-
 typedef struct VMMethodEntry VMMethodEntry;
+
 struct VMMethodEntry {
     SceneString *name;
     SceneClass *type;
@@ -56,6 +52,7 @@ struct VMMethodEntry {
 };
 
 typedef struct VMFieldEntry VMFieldEntry;
+
 /* Lookup compares the name at +0 in each 20-byte class field entry. */
 struct VMFieldEntry {
     SceneString *name;
@@ -71,6 +68,7 @@ struct VMFieldEntry {
  * superclass link is modeled locally here instead of extending it.
  */
 typedef struct VMClassLink VMClassLink;
+
 struct VMClassLink {
     unsigned char unmodeled_00[0x10];
     VMClassLink *superclass;
@@ -83,6 +81,15 @@ struct VMClassLink {
     unsigned short field_count;
     unsigned short static_field_count;
 };
+
+int getField(int index, VMConstantOwner *owner, int is_static,
+             VMResolvedFieldRef *ref);
+
+SceneMethod *getMethodSignatureClass(int index, VMConstantOwner *owner);
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+SceneClass *getClass(int index, VMConstantOwner *owner);
+extern SceneClass *loadArray(void *class_descriptor, int skip_load);
+extern int loadClass(int class_key, int skip_load);
 
 extern SceneMethod *findMethodLocal(VMClassLink *class_obj, SceneString *name,
                                      SceneClass *type);

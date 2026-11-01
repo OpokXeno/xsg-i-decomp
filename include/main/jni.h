@@ -2,46 +2,8 @@
 #define INCLUDE_MAIN_JNI_H
 
 #include "shared.h"
-
 #include "main/data_buffer.h"
 #include "main/find_native_method.h"
-
-extern SceneClass *classJava_xeno_Scene;
-
-/* Proposal: script "Stage" class handle, parallel to the already-shared
- * classJava_xeno_Scene (src/core/main-0025a6d8/private.h). Evidenced by
- * gp-relative access at .sbss+0x4dc7f0 (context.json data_refs). */
-extern SceneClass *classJava_xeno_Stage;
-
-extern SceneClass *classJava_xeno_Chr;
-
-extern SceneClass *classJava_xeno_Unit;
-
-extern SceneClass *classJava_xeno_Enepc;
-
-extern SceneClass *classJava_xeno_util_Window;
-
-extern SceneClass *classJava_xeno_Uwamono;
-
-extern SceneClass *classJava_xeno_util_Vector4f;
-
-extern SceneClass *classJava_xeno_util_Layout;
-
-extern SceneClass *classJava_xeno_Effect;
-
-extern SceneClass *classJava_xeno_Light;
-
-extern SceneClass *classJava_xeno_util_Menu;
-
-extern SceneClass *classJava_xeno_util_TCHParams;
-
-extern SceneClass *classJava_xeno_util_Spline;
-
-extern SceneClass *classJava_xeno_util_Input;
-
-extern SceneClass *classJava_xeno_Camera;
-
-extern SceneClass *classJava_xeno_Movie;
 
 /*
  * The VM/native-thread object every JNI_* entry point in this TU shares with
@@ -80,6 +42,29 @@ typedef struct JThread {
     u16 frame_depth;                    /* +0x3e */
     short frame_limit;                  /* +0x40 */
 } JThread;
+
+extern SceneClass *classJava_xeno_Scene;
+
+/* Proposal: script "Stage" class handle, parallel to the already-shared
+ * classJava_xeno_Scene (src/core/main-0025a6d8/private.h). Evidenced by
+ * gp-relative access at .sbss+0x4dc7f0 (context.json data_refs). */
+extern SceneClass *classJava_xeno_Stage;
+
+extern SceneClass *classJava_xeno_Chr;
+extern SceneClass *classJava_xeno_Unit;
+extern SceneClass *classJava_xeno_Enepc;
+extern SceneClass *classJava_xeno_util_Window;
+extern SceneClass *classJava_xeno_Uwamono;
+extern SceneClass *classJava_xeno_util_Vector4f;
+extern SceneClass *classJava_xeno_util_Layout;
+extern SceneClass *classJava_xeno_Effect;
+extern SceneClass *classJava_xeno_Light;
+extern SceneClass *classJava_xeno_util_Menu;
+extern SceneClass *classJava_xeno_util_TCHParams;
+extern SceneClass *classJava_xeno_util_Spline;
+extern SceneClass *classJava_xeno_util_Input;
+extern SceneClass *classJava_xeno_Camera;
+extern SceneClass *classJava_xeno_Movie;
 
 void JNI_popFrame(void);
 

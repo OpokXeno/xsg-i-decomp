@@ -3,8 +3,6 @@
 
 #include "shared.h"
 
-extern XglPacket *xglPacketGetCurrent(void);
-
 /*
  * The VIF1 direct-mode packet builder object. xglPacketInit constructs two
  * of them back to back inside asPacketSource, 0x28 bytes apart (main
@@ -67,5 +65,7 @@ typedef struct XglTextureTransSet {
     int count;
     u32 entryOffset;
 } XglTextureTransSet;
+
+extern XglPacket *xglPacketGetCurrent(void);
 
 #endif /* INCLUDE_MAIN_XGL_PACKET_H */

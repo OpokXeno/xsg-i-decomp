@@ -1,10 +1,31 @@
 #include "common.h"
-
 #include "enemy_2.h"
+
+#define ENEMY_FREEZE_SPEED 0.03333333507f
+#define FRAME_TIME_30FPS 0.03333333507f
+#define sac_turn_pi 3.141592741f
+#define sac_turn_two_pi_subtract 6.283185482f
+#define sac_turn_two_pi_add 6.283185482f
+
+/* A command changes the state selector before notifying the corresponding
+ * enemy state machine. Capture the actor once for both operations. */
+#define ENEMY_SELECT_TYPE(actor_value, type_value) do { \
+    Actor *command_actor = (actor_value); \
+    unsigned char *type_work = (unsigned char *)(enepc + command_actor->number); \
+    ENEMY_TYPE(type_work) = (type_value); \
+    Enemy_Pause(command_actor); \
+} while (0)
+
+#define ENEMY_SELECT_CODE(actor_value, code_value) do { \
+    Actor *command_actor = (actor_value); \
+    command_actor->command_code = (code_value); \
+    Enemy_Init(command_actor); \
+} while (0)
 
 /* Enemy command queue: count at +0x120, types at +0x140 and five
  * sixteen-word parameter rows at +0x180. */
 enum { ENEMY_COMMAND_QUEUE_SIZE = 16 };
+
 typedef struct EnemyCommandActor {
     u32 flags;
     void (*update)(struct Actor *actor);
@@ -39,15 +60,16 @@ typedef struct EnemyCommandActor {
     unsigned char unmodeled_9f0[0xa70 - 0x9f0];
 } EnemyCommandActor;
 
-#define ENEMY_FREEZE_SPEED 0.03333333507f
-
-#define FRAME_TIME_30FPS 0.03333333507f
-
-#define sac_turn_pi 3.141592741f
-
-#define sac_turn_two_pi_subtract 6.283185482f
-
-#define sac_turn_two_pi_add 6.283185482f
+/* The command queue Start_Enemy_Command drains, viewed from the actor's
+ * extension block at ACTOR_EXT_OFFSET (the original keeps actor + 0xc0 in a
+ * register and loads lw 96/128/192.. from it). */
+typedef struct EnemyCommandQueue {
+    unsigned char unmodeled_00[0x60];
+    int count;                                       /* actor +0x120 */
+    unsigned char unmodeled_64[0x80 - 0x64];
+    unsigned int type[ENEMY_COMMAND_QUEUE_SIZE];     /* actor +0x140 */
+    int parameter[5][ENEMY_COMMAND_QUEUE_SIZE];      /* actor +0x180 */
+} EnemyCommandQueue;
 
 int Get_ActorNumber(int target)
 {
@@ -184,21 +206,6 @@ void Enemy_Command_Stop_FreeFall(Actor *actor, signed char command)
         break;
     }
 }
-
-/* A command changes the state selector before notifying the corresponding
- * enemy state machine. Capture the actor once for both operations. */
-#define ENEMY_SELECT_TYPE(actor_value, type_value) do { \
-    Actor *command_actor = (actor_value); \
-    unsigned char *type_work = (unsigned char *)(enepc + command_actor->number); \
-    ENEMY_TYPE(type_work) = (type_value); \
-    Enemy_Pause(command_actor); \
-} while (0)
-
-#define ENEMY_SELECT_CODE(actor_value, code_value) do { \
-    Actor *command_actor = (actor_value); \
-    command_actor->command_code = (code_value); \
-    Enemy_Init(command_actor); \
-} while (0)
 
 void Enemy_Command_Type(Actor *actor, int type)
 {
@@ -393,17 +400,6 @@ void Map_Command_Ladder(int state_index, int ladder_type, int scale_percent,
     state->ladder_mode[state_index - 1] = ladder_mode;
 }
 
-/* The command queue Start_Enemy_Command drains, viewed from the actor's
- * extension block at ACTOR_EXT_OFFSET (the original keeps actor + 0xc0 in a
- * register and loads lw 96/128/192.. from it). */
-typedef struct EnemyCommandQueue {
-    unsigned char unmodeled_00[0x60];
-    int count;                                       /* actor +0x120 */
-    unsigned char unmodeled_64[0x80 - 0x64];
-    unsigned int type[ENEMY_COMMAND_QUEUE_SIZE];     /* actor +0x140 */
-    int parameter[5][ENEMY_COMMAND_QUEUE_SIZE];      /* actor +0x180 */
-} EnemyCommandQueue;
-
 void Start_Enemy_Command(Actor *actor)
 {
     EnemyCommandQueue *queue;
@@ -507,4 +503,3 @@ void Start_Enemy_Command(Actor *actor)
     }
     queue->count = 0;
 }
-

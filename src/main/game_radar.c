@@ -1,8 +1,12 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_cd.h"
+
+#define image_004DC554 radarImage
+#define rate radarRate
+#define TWO_PI (6.2831854820251465f)
+#define ACTOR_ANGLE_MAX (6.2831854820251465f)
+#define ACTOR_ANGLE_MIN (-6.2831854820251465f)
 
 typedef struct RadarActor {
     u32 flags;
@@ -26,37 +30,7 @@ typedef struct RadarActor {
     u8 unmodeled_900[0x170];
 } RadarActor;
 
-#define image_004DC554 radarImage
-
-#define rate radarRate
-
-static u8 *radarImage;
-
-static u8 radarRate;
-
-static const char radarTexturePath[32] = "data\\yajima\\cf_rader00.xtx";
-
-extern u8 *image_004DC554;
-
-extern u8 rate;
-
-static u8 ping;
-
-extern float xglSin(float);
-
-extern float xglCos(float);
-
-#define TWO_PI (6.2831854820251465f)
-
-#define ACTOR_ANGLE_MAX (6.2831854820251465f)
-
-#define ACTOR_ANGLE_MIN (-6.2831854820251465f)
-
-extern void nmlModelDirectSend(int, u8 *, int);
-
 typedef unsigned int GameLoopStateWords[];
-
-extern GameLoopStateWords GameLoopState;
 
 typedef struct EnemyWork {
     u8 unmodeled_00[0x48];
@@ -65,14 +39,6 @@ typedef struct EnemyWork {
     u32 flags;
     u8 unmodeled_37e4[0xCC];
 } EnemyWork;
-
-extern EnemyWork enepc[16];
-
-extern RadarActor actor[64];
-
-int CheckActorExist(RadarActor *actor);
-
-static void DrawActorPoint(float angle, int *position, u32 *color);
 
 typedef struct RadarPoint {
     int x;
@@ -127,17 +93,32 @@ typedef struct RadarPingEnd {
     u32 unmodeled_1c;
 } RadarPingEnd;
 
+extern u8 *image_004DC554;
+extern u8 rate;
+extern GameLoopStateWords GameLoopState;
+extern EnemyWork enepc[16];
+extern RadarActor actor[64];
+
+extern float xglSin(float);
+extern float xglCos(float);
+extern void nmlModelDirectSend(int, u8 *, int);
+int CheckActorExist(RadarActor *actor);
+static void DrawActorPoint(float angle, int *position, u32 *color);
 int WIN_checkActiveWindow(void);
-
 void nmlModelDirectSendXtx(int, u8 *);
-
 float I2F(int);
-
 int F2I(float);
-
 static void DrawRadarPing(int *);
-
 static void DrawRadarInfo(int *);
+
+static const char radarTexturePath[32] = "data\\yajima\\cf_rader00.xtx";
+
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+static u8 *radarImage;
+
+static u8 radarRate;
+
+static u8 ping;
 
 static inline void RadarSpritePacketInit(RadarSpritePacket **packet)
 {
@@ -414,4 +395,3 @@ void GameRadarInit(void)
     WorkEnd = image_004DC554 + xglCdReadFile(radarTexturePath, image_004DC554, 0, 0);
     rate = 0;
 }
-

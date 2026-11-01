@@ -14,8 +14,9 @@ typedef union Matrix {
     XglQuadword quadwords[4];
 } Matrix;
 
-extern float xglAtan2(float x, float y);
+extern unsigned long long iRandSeed;
 
+extern float xglAtan2(float x, float y);
 void xglMatrix2Quaternion(float quaternion[4], const Matrix *matrix);
 
 void xglVectorClamp(Vector4 *destination, const Vector4 *source,
@@ -31,9 +32,6 @@ void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
                     const float translation[4]);
 
 void xglRandSeedInit(void);
-
-extern unsigned long long iRandSeed;
-
 unsigned int xglLRand(void);
 
 void xglVectorDiv(Vector4 *destination, const Vector4 *numerator,
@@ -67,9 +65,7 @@ void xglVectorDivSubXYZ(Vector4 *destination, const Vector4 *numerator,
                         const Vector4 *divisor, const Vector4 *subtrahend);
 
 extern void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right);
-
 void xglVectorScale(Vector4 *destination, const Vector4 *source, float scale);
-
 void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
 
 void xglVectorScaleAdd(float scale, Vector4 *destination,
@@ -91,7 +87,6 @@ void xglVectorInterXYZ(float fraction, Vector4 *destination,
                        const Vector4 *start, const Vector4 *end);
 
 void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
-
 float xglVectorInner4(const Vector4 *left, const Vector4 *right);
 
 void xglVectorOuter(Vector4 *destination, const Vector4 *left,
@@ -110,6 +105,7 @@ void xglVectorOuter(Vector4 *destination, const Vector4 *left,
  * function.
  */
 extern void Vu0CallMatrixStackUnit(void);
+
 extern void Vu0CallMatrixStackMul(void);
 extern void Vu0CallMatrixStackReverse(void);
 extern void Vu0CallMatrixStackInverse(void);
@@ -125,7 +121,6 @@ extern void Vu0CallMatrixStackPush(void);
 extern void Vu0CallMatrixStackPop(void);
 extern void Vu0CallMatrixStackMulVector(void);
 extern void Vu0CallMatrixStackRTPS(void);
-
 void xglMatrixStackMul(const Matrix4 matrix);
 void xglMatrixStackReverse(void);
 void xglMatrixStackInverse(void);
@@ -133,13 +128,16 @@ void xglMatrixStackScale(const float scale[4]);
 void xglMatrixStackTrans(const float translation[4]);
 void xglMatrixStackRotV(const float axis[4], float angle);
 void xglMatrixStackRotZ(float angle);
+
 void xglMatrixStackFrustum(float left, float right, float bottom, float top,
                            float nearPlane, float farPlane);
+
 void xglMatrixStackLoad(float matrix[4][4]);
 void xglMatrixStackPushUnit(void);
 void xglMatrixStackPush(void);
 void xglMatrixStackPop(int count);
 void xglMatrixStackMulVector(Vector4 *out, const Vector4 *vector);
+
 void xglMatrixStackRTPS(Vector4 *out, const Vector4 *point,
                         const Vector4 *scale, const Vector4 *offset);
 

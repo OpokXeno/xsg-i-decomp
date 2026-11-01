@@ -1,20 +1,15 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "xgl_timer0.h"
-
 #include "main/control_entry.h"
 
 /*
  * EE Timer 0.  T0_COUNT is the free-running counter and T0_MODE its control
  * word; bit 7 (0x80) of T0_MODE is CUE, which starts the count.
  */
-
 #define T0_COUNT ((volatile u32 *)0x10000000)
 
 #define T0_MODE  ((volatile u32 *)0x10000010)
-
 #define T0_MODE_CUE 128
 
 /*
@@ -24,37 +19,22 @@
  * WorkEnd; the 32 words that follow it receive the unread tail of the stream
  * when the output cursor catches up with the read pointer.
  */
-
 #define ARX_MAGIC 0x585241
 
 #define ARX_MAGIC_WORD 0
-
 #define ARX_SIZE_WORD 1
-
 #define ARX_PAYLOAD_SIZE_WORD 2
-
 #define ARX_FLAGS_WORD 3
-
 #define ARX_TABLE_WORD 4
-
 #define ARX_TABLE_COUNT 30
-
 #define ARX_TABLE_SLOTS 32
-
 #define ARX_DATA_WORD 34
-
-typedef struct ArxBitReader {
-    u32 value;
-    u32 bit_count;
-    u32 *data;
-} ArxBitReader;
 
 /*
  * One output word: a clear flag bit takes the next stream word as is; a set
  * flag bit is followed by a unary length prefix that selects a table entry
  * together with `length` further bits.
  */
-
 #define ARX_DECODE_WORD(value) \
     do { \
         if (getbit1(&reader) == 0) { \
@@ -70,6 +50,12 @@ typedef struct ArxBitReader {
             value = table[index + getbits(&reader, length)]; \
         } \
     } while (0)
+
+typedef struct ArxBitReader {
+    u32 value;
+    u32 bit_count;
+    u32 *data;
+} ArxBitReader;
 
 void xglTimer0Reset(int mode)
 {

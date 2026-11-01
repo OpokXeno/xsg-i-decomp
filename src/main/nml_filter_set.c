@@ -1,12 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "nml_filter_set.h"
-
-static void nmlModelSetFilterGunosys(const LayoutStore *model, int flags, int count);
-
-static void nmlModelSetFilterStealth(const LayoutStore *model, int flags);
 
 struct NmlFilterRenderView {
     u8 unmodeled_00[2];
@@ -20,43 +14,23 @@ struct NmlFilterRenderView {
     u16 displayBufferBase;
 };
 
-extern struct NmlFilterRenderView sRender;
-
 struct NmlFilterGsRegisterEntry {
     u64 value;
     u64 registerId;
 };
 
-/* One scratchpad write contains two of the owner's actual GS slots. */
-
-extern void nmlPacketGsInit(void);
-
-/* Defining-owner interface; normal header transport remains an integration need. */
-extern void packet_gs_entry64(u32 registerId, const u64 *value);
-
-extern void nmlPacketAddGsFlush(void);
-
-extern void nmlPacketAddGsFrame(int frame, int offset);
-
-extern void nmlPacketAddGsFBA(int value);
-
-extern void nmlPacketAddGsZbuf(int zBuffer);
-
-extern void nmlPacketAddGsFlushWide(void);
-
+/* Six original cube faces, each containing four corner indices. */
 struct NmlFilterCubeFaces {
     int vertices[6][4];
 };
 
-/* Six original cube faces, each containing four corner indices. */
-
-/* The projection helper's VFT0I/SQC2 output is integer GS coordinates. */
-
+/* One scratchpad write contains two of the owner's actual GS slots. */
 struct NmlFilterGsPair {
     GsTag payload;
     GsTag registerSlot;
 };
 
+/* The projection helper's VFT0I/SQC2 output is integer GS coordinates. */
 typedef int NmlFilterGridVector[4] __attribute__((aligned(16)));
 
 enum {
@@ -71,18 +45,47 @@ struct NmlFilterGridPoint {
     NmlFilterGridVector displaced;
 };
 
-extern struct NmlStealthDescriptor s_aStealthDat[10];
+typedef union NmlFilterPositionView {
+    Vector4 vector;
+    unsigned long long words[2];
+} NmlFilterPositionView;
 
+extern struct NmlFilterRenderView sRender;
+extern struct NmlStealthDescriptor s_aStealthDat[10];
 extern struct NmlStealthDescriptor s_inStealthUnitDat;
 
-extern void *nmlPacketSetAttributeAlloc16N(int records);
+static void nmlModelSetFilterGunosys(const LayoutStore *model, int flags, int count);
+static void nmlModelSetFilterStealth(const LayoutStore *model, int flags);
 
+extern void nmlPacketGsInit(void);
+
+/* Defining-owner interface; normal header transport remains an integration need. */
+extern void packet_gs_entry64(u32 registerId, const u64 *value);
+
+extern void nmlPacketAddGsFlush(void);
+extern void nmlPacketAddGsFrame(int frame, int offset);
+extern void nmlPacketAddGsFBA(int value);
+extern void nmlPacketAddGsZbuf(int zBuffer);
+extern void nmlPacketAddGsFlushWide(void);
+extern void *nmlPacketSetAttributeAlloc16N(int records);
 extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
 
 extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
     float scale);
 
 extern float xglAtan2(float x, float y);
+
+/* Private owner proposals; original data stays unchanged scaffolding. */
+static void _WeightToGlobalPlaceVec(Vector4 *destination,
+    const Matrix4 *jointMatrix, const Matrix4 *jointAuxMatrix);
+
+extern void nmlPacketAddGsFrame1(int frame, int offset);
+extern StudioCamera *xglStudioGetActiveCamera(void);
+
+/* Base tint of the stealth outline (red, green, blue, unused). */
+struct NmlStealthTint {
+    float channels[4];
+} __attribute__((aligned(16)));
 
 static void _CurSetMatrix(float matrix[4][4])
 {
@@ -288,13 +291,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
 #undef NML_FILTER_EMIT
 #undef NML_FILTER_VERTEX
 
-/* Base tint of the stealth outline (red, green, blue, unused). */
-struct NmlStealthTint {
-    float channels[4];
-} __attribute__((aligned(16)));
-
 /* Original read-only data remains scaffolding, with no recovery credit. */
-
 /* One strip vertex: its UV entry, then its XYZ entry whose register slot holds
  * the clip flags of the vertex and of the two before it in the strip. */
 #define NML_STEALTH_VERTEX(vertex, entryIndex, clipFlags) { \
@@ -439,7 +436,6 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
 }
 
 #undef NML_STEALTH_CLIP
-
 #undef NML_STEALTH_VERTEX
 
 static void _WeightToGlobalPlaceInit(float matrix[4][4])
@@ -519,10 +515,6 @@ static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
     );
     return lengthSq;
 }
-
-/* Private owner proposals; original data stays unchanged scaffolding. */
-static void _WeightToGlobalPlaceVec(Vector4 *destination,
-    const Matrix4 *jointMatrix, const Matrix4 *jointAuxMatrix);
 
 /* Offset one outline vertex across the bone by a signed width. */
 #define NML_STEALTH_EDGE(vertex, center, centerY, depth, sign, width) { \
@@ -1097,8 +1089,6 @@ void nmlFilterBackClear(void)
     nmlPacketAddGsFlush();
 }
 
-extern void nmlPacketAddGsFrame1(int frame, int offset);
-
 void nmlFilterSetFlatRender(LayoutStore *model)
 {
     struct NmlFilterRenderView *render;
@@ -1381,13 +1371,6 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     nmlPacketAddGsFlush();
 }
 
-extern StudioCamera *xglStudioGetActiveCamera(void);
-
-typedef union NmlFilterPositionView {
-    Vector4 vector;
-    unsigned long long words[2];
-} NmlFilterPositionView;
-
 int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
 {
     int facingCamera[6];
@@ -1558,4 +1541,3 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
 #undef NML_CUBE_CORNER
     return needsClipping;
 }
-

@@ -1,21 +1,15 @@
 #include "common.h"
-
 #include "shared.h"
 #include "main/jni.h"
 #include "main/jthread.h"
-
 #include "unit.h"
-
-/* Partial native field views; unknown spans remain byte storage. */
-typedef struct JThreadNode JThreadNode;
 
 #define UNIT_THREAD_KIND 5
 #define UNIT_WAIT_UNIT 6
-extern SceneString *TYPE_Void;
-extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
-                              void *signature_or_type);
-extern void JNI_initThread(SceneVm *vm);
-extern JThreadNode *JTHREAD_get(SceneObject object);
+#define UNIT_FLAG_SUSPENDED 0x10
+
+/* Partial native field views; unknown spans remain byte storage. */
+typedef struct JThreadNode JThreadNode;
 
 typedef struct UnitVector3 {
     float x;
@@ -275,16 +269,15 @@ typedef struct UnitMotionRootCall {
     UnitPivotVector *vector;
 } UnitMotionRootCall;
 
-/* The original global actor table contains 64 records of 0xa70 bytes
- * (symbol-table size 0x29c00). These are this TU's storage view: the known
- * member extents come from the independent actor call sites documented in
- * src/main/act_2.h; unnamed spans remain byte storage. */
-
 typedef struct UnitActorAnimSlot {
     unsigned char unmodeled_00[0x14];
     unsigned short currentDataId;
 } UnitActorAnimSlot;
 
+/* The original global actor table contains 64 records of 0xa70 bytes
+ * (symbol-table size 0x29c00). These are this TU's storage view: the known
+ * member extents come from the independent actor call sites documented in
+ * src/main/act_2.h; unnamed spans remain byte storage. */
 typedef struct UnitActorStorage {
     u32 flags;
     void (*update)(struct UnitActorStorage *actor);
@@ -311,11 +304,21 @@ typedef struct UnitActorStorage {
     unsigned char unmodeled_8fc[0xa70 - 0x8fc];
 } UnitActorStorage;
 
-UnitActorStorage actor[64] = { 0 };
-
+extern SceneString *TYPE_Void;
 extern const char unitPeerName[];
-
 extern const char unitPositionYName[];
+extern const char unitRotationXName[];
+extern const char unitRotationYName[];
+extern const char unitRotationZName[];
+extern const char unitPositionXName[];
+extern const char unitPositionZName[];
+extern unsigned int GameLoopState[];
+
+extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+                              void *signature_or_type);
+
+extern void JNI_initThread(SceneVm *vm);
+extern JThreadNode *JTHREAD_get(SceneObject object);
 
 /*
  * The Java VM's per-thread execution context, already recovered as
@@ -330,7 +333,6 @@ extern const char unitPositionYName[];
  * `failure_result` unchanged -- the same shape as Java_xeno_Chr_sclX__FFZ /
  * CHR_sclX in src/main/chr.c, which names the same three parameters.
  */
-
 static void UNIT_rotY(int mode, JThread *thread, void *arguments,
                u32 *failure_result);
 
@@ -353,7 +355,6 @@ static void UNIT_sclZ(int mode, JThread *thread, void *arguments,
  * insert the mode literal ahead of `thread`/`arguments`/`failure_result` and
  * forward those three unchanged.
  */
-
 static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
                  u32 *failure_result);
 
@@ -363,58 +364,33 @@ static void UNIT_rotX(int mode, JThread *thread, void *arguments,
 void UNIT_motion(int mode, JThread *thread, void *arguments,
                  u32 *failure_result);
 
-#define UNIT_FLAG_SUSPENDED 0x10
-
 /* MAP_callUnitGroup is still asm elsewhere (src/main/map_create_unit_peer.c):
  * it applies `callback` to every unit record of group `group`. */
-
 extern void MAP_callUnitGroup(int group, void (*callback)(int *flags));
+
+extern void MAP_updateUnitDefault(UnitPeer *peer);
+extern void MAP_updateUnitMPack(UnitPeer *peer);
+extern void MAP_updateUnitSequence(UnitPeer *peer);
+extern void MAP_updateUnitPartsSequence(UnitPeer *peer);
+extern void MAP_updateUnitPartsSequence2(UnitPeer *peer);
+extern void SEQ_rotYCNSUnitChr(void *unit);
+extern void SEQ_transCNSUnitChr(void *unit);
+extern void SEQ_scaleUnit(void *unit);
+extern void SEQ_rotateUnit(void *unit);
+extern void SEQ_moveUnitXZ(void *unit);
+extern void SEQ_moveChr(void *unit);
+extern void SEQ_motionUnit(void *unit);
+extern void SEQ_moveUnitSPL(void *unit);
+extern void SEQ_rotateUnitSPL(void *unit);
+extern void SEQ_scaleUnitSPL(void *unit);
 
 const char algorithmFieldName[10] = "algorithm";
 
-extern const char unitRotationXName[];
-
-extern const char unitRotationYName[];
-
-extern const char unitRotationZName[];
-
-extern const char unitPositionXName[];
-
-extern const char unitPositionZName[];
+UnitActorStorage actor[64] = { 0 };
 
 static float defaultOffset_0043C1D0[4];
 
-extern unsigned int GameLoopState[];
-
-extern void MAP_updateUnitDefault(UnitPeer *peer);
-
-extern void MAP_updateUnitMPack(UnitPeer *peer);
-
-extern void MAP_updateUnitSequence(UnitPeer *peer);
-
-extern void MAP_updateUnitPartsSequence(UnitPeer *peer);
-
-extern void MAP_updateUnitPartsSequence2(UnitPeer *peer);
-
-extern void SEQ_rotYCNSUnitChr(void *unit);
-
-extern void SEQ_transCNSUnitChr(void *unit);
-
-extern void SEQ_scaleUnit(void *unit);
-
-extern void SEQ_rotateUnit(void *unit);
-
-extern void SEQ_moveUnitXZ(void *unit);
-
-extern void SEQ_moveChr(void *unit);
-
-extern void SEQ_motionUnit(void *unit);
-
-extern void SEQ_moveUnitSPL(void *unit);
-
-extern void SEQ_rotateUnitSPL(void *unit);
-
-extern void SEQ_scaleUnitSPL(void *unit);
+static float defaultOffset_0043C1D0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 static void UNIT_setUpdate(u8 *object, UnitNativePeer *unit)
 {
@@ -2192,12 +2168,12 @@ void Java_xeno_Unit_setMonitorPrio__I(JThread *thread, UnitIntCall *arguments)
     peer->monitor_priority = 0;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 /* Preserve the frozen compiled form's declarations before consumers and
  * original eight-byte definitions after the function bodies. */
 const char unitPeerName[8] = "peer";
-const char unitPositionYName[8] = "py";
 
-static float defaultOffset_0043C1D0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+const char unitPositionYName[8] = "py";
 
 const char unitRotationXName[8] = "rx";
 

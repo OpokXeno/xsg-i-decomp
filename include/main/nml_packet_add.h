@@ -2,14 +2,8 @@
 #define INCLUDE_MAIN_NML_PACKET_ADD_H
 
 #include "shared.h"
-
 #include "main/ssd_init.h"
 #include "main/xgl_2.h"
-
-/* RssdWork storage is defined by main/tu107; its layout is owned by main/tu110. */
-extern RssdWorkFlags RssdWork;
-
-extern const char nmlEmptyName[4];
 
 /* One stealth part: two joints, outline widths, end extensions and the
  * longitudinal stretch applied to each of the four cross-section rings. */
@@ -29,6 +23,11 @@ typedef union GsTag {
     u64 value;
     u32 words[2];
 } GsTag;
+
+/* RssdWork storage is defined by main/tu107; its layout is owned by main/tu110. */
+extern RssdWorkFlags RssdWork;
+
+extern const char nmlEmptyName[4];
 
 void nmlPacketAddGsScissor(u64 scissor);
 

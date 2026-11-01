@@ -1,11 +1,9 @@
 #include "common.h"
-
-static int mode_004DC5A8;
-
 #include "shared.h"
 #include "main/get.h"
-
 #include "db_light_write.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_2.h"
 
 /*
  * The retail ELF has a GLOBAL OBJECT named cursor at 0x0099C7F0 with size
@@ -14,7 +12,6 @@ static int mode_004DC5A8;
  * words at +0x50/+0x54. Six slots of the existing vector type express the
  * recorded object extent without assigning meanings to the other words.
  */
-
 typedef struct CursorState {
     int mode;
     union { int flag_04; int submode; };
@@ -40,12 +37,7 @@ typedef struct CursorState {
     unsigned char unmodeled_58[8];
 } CursorState;
 
-HomogeneousVector cursor[6];
-
-#include "main/xgl_studio.h"
-
 /* Owner declarations used by these debug views; storage remains original scaffolding. */
-
 typedef struct {
     unsigned char unmodeled_00[0x50];
     unsigned int matrix_data_offset;
@@ -81,52 +73,6 @@ typedef struct {
     DbLightWritePadSecondPrefix second;
 } DbLightWritePadData;
 
-extern MapGameLoopStateView GameLoopState;
-
-extern DbLightWritePadData PadData;
-
-static int visible_0;
-
-static int partsIndex;
-
-extern const char matrixRowFormat[];
-
-extern const char partsIndexFormat[];
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern void nmlModelSetPartsVisible(MapPartListView *parts,
-                                    int part_index, int visible);
-
-static Vector4 lightDir[6];
-
-static RgVector lightCol[6];
-
-extern void xglLightIntensityParallel(void *light, int index,
-                                      const Vector4 *intensity);
-
-extern void xglLightIntensityAmbient(void *light,
-                                     const Vector4 *intensity);
-
-extern void xglLightDirection(void *light, unsigned int index,
-                              const Vector4 *direction);
-
-extern float atan2f(float y, float x);
-
-extern float xglSin(float angle);
-
-extern float xglCos(float angle);
-
-extern int sceWrite(int descriptor, const void *buffer, int size);
-
-extern double fptodp(float value);
-
-extern const char lightSetColorFormat[];
-
-extern const char lightSetDirection2Format[];
-
-extern const char stageSetColorFormat[];
-
 /* Clear-environment colour words (the GS clear block's color_r/g/b at 0x20). */
 typedef struct {
     unsigned char unmodeled_00[0x20];
@@ -135,24 +81,11 @@ typedef struct {
     unsigned int color_b;
 } ClearEnvColorView;
 
-extern ClearEnvColorView ClearEnv;
-
 typedef struct { float f[28]; } LightFloats;
 
 typedef struct {
     Matrix4 m;
 } Matrix4Block;
-
-extern StudioCamera *xglStudioGetActiveCamera(void);
-
-extern void xglVectorMulMat(Vector4 *destination, const void *matrix,
-                            const Vector4 *vector);
-
-extern void xglVectorNormal(Vector4 *destination, const Vector4 *vector);
-
-extern const float cursorDirectionLength;
-
-extern void ACT_updateSequence(ActorHead *actor);
 
 typedef struct {
     unsigned char unmodeled_00[0x0C];
@@ -168,42 +101,6 @@ typedef struct {
     int view_mode;
     void *view_constraint;
 } CameraChannelRecord;
-
-extern CameraChannelRecord tcamera;
-
-static float cursorSpeed[9];
-
-extern const float cursorPlaneRotateDecrement;
-
-extern const float cursorPlaneRotateIncrement;
-
-extern const char mapHeightFormat[];
-
-extern const char mapHoleHeightText[];
-
-static unsigned short keyData[8];
-
-extern float UnduGet(float x, float z);
-
-void updateCursorModePlane(void);
-
-extern const float cursorMode0RotateDecrement;
-
-extern const float cursorMode0RotateIncrement;
-
-static int toolFlags;
-
-int cursorMode;
-
-static const char * cursorModeName[5];
-
-extern const char cursorPositionFormat[];
-
-extern const char cameraPositionFormat[];
-
-extern const char cursorModeSpeedFormat[];
-
-extern void PAD_getKey(unsigned short *keys, int port, int mask);
 
 typedef struct WindRecord {
     signed char mode;
@@ -227,58 +124,6 @@ typedef struct WindMarker {
     int color[4];
 } WindMarker;
 
-extern void EXM_ResetWind(void);
-
-static int dispy_2;
-
-static int csr_1;
-
-extern const char windSettingsText[];
-
-extern const char windTypeText[];
-
-extern const char windOffText[];
-
-extern const char windPointText[];
-
-extern const char windShakeText[];
-
-extern const char windVectorText[];
-
-extern const char cursorMarkerText[];
-
-extern const char windOffSelectedText[];
-
-extern const char windDirectionalSelectedText[];
-
-extern const char windDirectionalText[];
-
-extern const char windPointSelectedText[];
-
-extern const char windPowerFormat[];
-
-extern const char windSpeedFormat[];
-
-extern const char windXFormat[];
-
-extern const char windYFormat[];
-
-extern const char windZFormat[];
-
-extern const char windWFormat[];
-
-extern const char windShakeCommandFormat[];
-
-extern const char directionalWindCommandFormat[];
-
-extern const char pointWindCommandFormat[];
-
-extern const char stopWindCommandFormat[];
-
-void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index);
-
-void drawCircle2(Matrix4 *matrix, float radius, int color_index);
-
 typedef struct CursorCameraRecordView {
     unsigned char unmodeled_00[0x0C];
     int mode[4];
@@ -296,10 +141,6 @@ typedef struct UpdateLightKeys {
     signed char stick_y;
 } UpdateLightKeys;
 
-void updateCursorMode0(void);
-
-void updateCursorMode2(void);
-
 enum CursorMode {
     CURSOR_MODE_NONE = -1,
     CURSOR_MODE_0,
@@ -308,6 +149,227 @@ enum CursorMode {
     CURSOR_MODE_3,
     CURSOR_MODE_4
 };
+
+typedef struct {
+    Matrix4 matrix;
+    Matrix4 world;
+    Vector4 screen_scale;
+    Vector4 screen_offset;
+    Matrix4 *local;
+} DebugDrawTransform;
+
+typedef struct {
+    unsigned int count, primitive, registers, reserved;
+    unsigned int payload[8][4];
+} DebugRectPacket;
+
+typedef struct {
+    DebugRectPacket packet;
+    unsigned char unmodeled_90[0x400 - 0x90];
+    DebugDrawTransform transform;
+    unsigned char unmodeled_4a4[0x4e0 - 0x4a4];
+    Vector4 positions[5];
+} DebugRectScratch;
+
+typedef struct {
+    DebugRectPacket packet;
+    unsigned char unmodeled_90[0x400 - 0x90];
+    DebugDrawTransform transform;
+    unsigned char unmodeled_4a4[0x4b0 - 0x4a4];
+    Vector4 input[2];
+    unsigned char unmodeled_4d0[0x10];
+    Vector4 output[2];
+} DebugLineScratch;
+
+typedef struct DebugCursorColour {
+    unsigned char red;
+    unsigned char green;
+    unsigned char blue;
+    unsigned char alpha;
+} DebugCursorColour;
+
+/* The lighting editor copies direction into the bar position with doubleword
+   ld/sd pairs: the vector storage is eight-byte aligned. The union gives it
+   that alignment without a GNU attribute. */
+typedef union LightEditorVector {
+    Vector4 vector;
+    u64 doublewords[2];
+} LightEditorVector;
+
+typedef struct FloatLightEntry {
+    RgVector color;
+    RgVector direction;
+} FloatLightEntry;
+
+typedef struct FloatLight {
+    RgVector ambient_color;
+    FloatLightEntry lights[3];
+} FloatLight;
+
+extern MapGameLoopStateView GameLoopState;
+extern DbLightWritePadData PadData;
+extern const char matrixRowFormat[];
+extern const char partsIndexFormat[];
+extern const char lightSetColorFormat[];
+extern const char lightSetDirection2Format[];
+extern const char stageSetColorFormat[];
+extern ClearEnvColorView ClearEnv;
+extern const float cursorDirectionLength;
+extern CameraChannelRecord tcamera;
+extern const float cursorPlaneRotateDecrement;
+extern const float cursorPlaneRotateIncrement;
+extern const char mapHeightFormat[];
+extern const char mapHoleHeightText[];
+extern const float cursorMode0RotateDecrement;
+extern const float cursorMode0RotateIncrement;
+extern const char cursorPositionFormat[];
+extern const char cameraPositionFormat[];
+extern const char cursorModeSpeedFormat[];
+extern const char windSettingsText[];
+extern const char windTypeText[];
+extern const char windOffText[];
+extern const char windPointText[];
+extern const char windShakeText[];
+extern const char windVectorText[];
+extern const char cursorMarkerText[];
+extern const char windOffSelectedText[];
+extern const char windDirectionalSelectedText[];
+extern const char windDirectionalText[];
+extern const char windPointSelectedText[];
+extern const char windPowerFormat[];
+extern const char windSpeedFormat[];
+extern const char windXFormat[];
+extern const char windYFormat[];
+extern const char windZFormat[];
+extern const char windWFormat[];
+extern const char windShakeCommandFormat[];
+extern const char directionalWindCommandFormat[];
+extern const char pointWindCommandFormat[];
+extern const char stopWindCommandFormat[];
+extern DebugCursorColour cCursor[6];
+extern float lightSpeedTbl[4];
+extern const char rgbColorFormat[];
+extern const char directionVectorFormat[];
+extern const char lightSpeedFormat[];
+extern const char ambientText[];
+extern const char backgroundText[];
+extern const char mapText[];
+extern const char DBCursorModeXzLabel[8];
+extern const char DBCursorModeFreeLabel[8];
+extern const char DBCursorModeYzLabel[8];
+extern const char DBCursorModeXyLabel[8];
+extern const char DBCursorModeFcvLabel[8];
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+extern void nmlModelSetPartsVisible(MapPartListView *parts,
+                                    int part_index, int visible);
+
+extern void xglLightIntensityParallel(void *light, int index,
+                                      const Vector4 *intensity);
+
+extern void xglLightIntensityAmbient(void *light,
+                                     const Vector4 *intensity);
+
+extern void xglLightDirection(void *light, unsigned int index,
+                              const Vector4 *direction);
+
+extern float atan2f(float y, float x);
+extern float xglSin(float angle);
+extern float xglCos(float angle);
+extern int sceWrite(int descriptor, const void *buffer, int size);
+extern double fptodp(float value);
+extern StudioCamera *xglStudioGetActiveCamera(void);
+
+extern void xglVectorMulMat(Vector4 *destination, const void *matrix,
+                            const Vector4 *vector);
+
+extern void xglVectorNormal(Vector4 *destination, const Vector4 *vector);
+extern void ACT_updateSequence(ActorHead *actor);
+extern float UnduGet(float x, float z);
+void updateCursorModePlane(void);
+extern void PAD_getKey(unsigned short *keys, int port, int mask);
+extern void EXM_ResetWind(void);
+void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index);
+void drawCircle2(Matrix4 *matrix, float radius, int color_index);
+void updateCursorMode0(void);
+void updateCursorMode2(void);
+
+extern void transformVector(Vector4 *destination, const Vector4 *vectors,
+                            int count, DebugDrawTransform *params);
+
+extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *tag, int count);
+extern void xglMatrixStackLoad(Matrix4 matrix);
+extern void MATRIX_transpose3(Matrix4 matrix);
+extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
+extern float dptofp(double value);
+extern void xglStudioFlushActiveCamera(void);
+
+static int visible_0;
+
+static Vector4 lightDir[6];
+
+static RgVector lightCol[6];
+
+static float cursorSpeed[9];
+
+static const char * cursorModeName[5];
+
+static int dispy_2;
+
+static int csr_1;
+
+static unsigned char col[56];
+
+static Vector4 vRect[4] ;
+
+static Vector4 vBox[5] ;
+
+static Vector4 vGridXZ[5] ;
+
+static Vector4 vCursor[6] ;
+
+static int lightColIndex;
+
+static int lightSpeed;
+
+static int lightStateOffset;
+
+static float cursorSpeed[9] = { 0.010000000707805157f, 0.01666666753590107f, 0.066666670143604279f, 0.13333334028720856f, 0.26666668057441711f, 0.3333333432674408f, 0.53333336114883423f, 1.0666667222976685f, 4.2666668891906738f };
+
+static Vector4 vGridXZ[5] = { { .x = -0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = 0.5f, .w = 1.0f }, { .x = -0.5f, .y = 0.0f, .z = 0.5f, .w = 1.0f }, { .x = -0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f } };
+
+static Vector4 vCursor[6] = { { .x = -0.5f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.5f, .w = 1.0f } };
+
+DebugCursorColour cCursor[6] = { { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 192, .green = 0, .blue = 0, .alpha = 128 }, { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 0, .green = 192, .blue = 0, .alpha = 128 }, { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 0, .green = 0, .blue = 192, .alpha = 128 } };
+
+static Vector4 vRect[4] = { { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = -1.0f, .z = 0.0f, .w = 1.0f }, { .x = 1.0f, .y = -1.0f, .z = 0.0f, .w = 1.0f } };
+
+static Vector4 vBox[5] = { { .x = -0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = -0.5f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = -0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f } };
+
+static Vector4 lightDir[6] = { { .x = 0.0f, .y = 1.0f, .z = 0.77999997138977051f, .w = 1.0f }, { .x = 0.77999997138977051f, .y = 1.0f, .z = 0.0f, .w = 1.0f }, { .x = -0.61500000953674316f, .y = -1.0f, .z = -0.61500000953674316f, .w = 1.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f } };
+
+float lightSpeedTbl[4] = { 0.004999999888241291f, 0.0099999997764825821f, 0.019999999552965164f, 0.029999999329447746f };
+
+static const char * cursorModeName[5] = { DBCursorModeFreeLabel, DBCursorModeYzLabel, DBCursorModeXzLabel, DBCursorModeXyLabel, DBCursorModeFcvLabel };
+
+static unsigned char col[56] = { 192, 192, 192, 128, 192, 0, 0, 128, 192, 192, 192, 128, 0, 192, 0, 128, 192, 192, 192, 128, 0, 0, 192, 128, 192, 192, 192, 128, 192, 192, 0, 128, 192, 192, 192, 128, 0, 192, 192, 128, 192, 192, 192, 128, 192, 0, 192, 128, 16, 16, 16, 128, 192, 192, 192, 128 };
+
+static RgVector lightCol[6] = { { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.2f, 0.2f, 0.2f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } };
+
+static int mode_004DC5A8;
+
+HomogeneousVector cursor[6];
+
+static int partsIndex;
+
+static unsigned short keyData[8];
+
+static int toolFlags;
+
+int cursorMode;
+
+static int lightIndex;
 
 void DB_lightWrite(int descriptor)
 {
@@ -352,33 +414,6 @@ void DB_lightWrite(int descriptor)
                  sprintf(buffer, stage_format, stage_red, stage_green, stage_blue));
     }
 }
-
-typedef struct {
-    Matrix4 matrix;
-    Matrix4 world;
-    Vector4 screen_scale;
-    Vector4 screen_offset;
-    Matrix4 *local;
-} DebugDrawTransform;
-
-typedef struct {
-    unsigned int count, primitive, registers, reserved;
-    unsigned int payload[8][4];
-} DebugRectPacket;
-
-typedef struct {
-    DebugRectPacket packet;
-    unsigned char unmodeled_90[0x400 - 0x90];
-    DebugDrawTransform transform;
-    unsigned char unmodeled_4a4[0x4e0 - 0x4a4];
-    Vector4 positions[5];
-} DebugRectScratch;
-
-static unsigned char col[56];
-static Vector4 vRect[4] ;
-extern void transformVector(Vector4 *destination, const Vector4 *vectors,
-                            int count, DebugDrawTransform *params);
-extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *tag, int count);
 
 void drawRect2(Matrix4 *matrix, int color_index)
 {
@@ -435,8 +470,6 @@ void drawRect2(Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, (const void *)0x70000000, 9);
 }
 
-static Vector4 vBox[5] ;
-
 void drawBox2(Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
@@ -487,16 +520,6 @@ void drawBox2(Matrix4 *matrix, int color_index)
     }
     xglPrimAddGifTagDirect(0, (const void *)0x70000000, vertex_count * 2 + 1);
 }
-
-typedef struct {
-    DebugRectPacket packet;
-    unsigned char unmodeled_90[0x400 - 0x90];
-    DebugDrawTransform transform;
-    unsigned char unmodeled_4a4[0x4b0 - 0x4a4];
-    Vector4 input[2];
-    unsigned char unmodeled_4d0[0x10];
-    Vector4 output[2];
-} DebugLineScratch;
 
 void drawCircle2(Matrix4 *matrix, float radius, int color_index)
 {
@@ -667,19 +690,6 @@ void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
     xglPrimAddGifTagDirect(0, scratch, 5);
 }
 
-#include "main/xgl_2.h"
-
-extern void xglMatrixStackLoad(Matrix4 matrix);
-static Vector4 vGridXZ[5] ;
-typedef struct DebugCursorColour {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-} DebugCursorColour;
-
-extern DebugCursorColour cCursor[6];
-
 void drawGrid(Matrix4 matrix, float scale)
 {
     Vector4 scale_vector;
@@ -758,8 +768,6 @@ static StudioCamera *getCurrentCamera(void)
     }
 }
 
-static Vector4 vCursor[6] ;
-
 void drawAxis(Matrix4 matrix, float scale)
 {
     Vector4 scale_vector;
@@ -816,10 +824,6 @@ void drawAxis(Matrix4 matrix, float scale)
     }
     xglPrimAddGifTagDirect(0, (const void *)0x70000000, 13);
 }
-
-extern void MATRIX_transpose3(Matrix4 matrix);
-extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
-extern float dptofp(double value);
 
 void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
 {
@@ -2031,35 +2035,6 @@ void initLight(void)
     xglLightIntensityAmbient(light, &lightCol[3]);
 }
 
-extern float lightSpeedTbl[4];
-static int lightIndex;
-static int lightColIndex;
-static int lightSpeed;
-static int lightStateOffset;
-extern void xglStudioFlushActiveCamera(void);
-extern const char rgbColorFormat[];
-extern const char directionVectorFormat[];
-extern const char lightSpeedFormat[];
-extern const char ambientText[];
-extern const char backgroundText[];
-extern const char mapText[];
-
-/* The lighting editor copies direction into the bar position with doubleword
-   ld/sd pairs: the vector storage is eight-byte aligned. The union gives it
-   that alignment without a GNU attribute. */
-typedef union LightEditorVector {
-    Vector4 vector;
-    u64 doublewords[2];
-} LightEditorVector;
-typedef struct FloatLightEntry {
-    RgVector color;
-    RgVector direction;
-} FloatLightEntry;
-typedef struct FloatLight {
-    RgVector ambient_color;
-    FloatLightEntry lights[3];
-} FloatLight;
-
 void updateLight(int mode)
 {
     const struct CursorPadKeyResult *keys =
@@ -2597,22 +2572,7 @@ void VW_getCursor(HomogeneousVector *destination)
     destination->w = 1.0f;
 }
 
-static float cursorSpeed[9] = { 0.010000000707805157f, 0.01666666753590107f, 0.066666670143604279f, 0.13333334028720856f, 0.26666668057441711f, 0.3333333432674408f, 0.53333336114883423f, 1.0666667222976685f, 4.2666668891906738f };
-
-static Vector4 vGridXZ[5] = { { .x = -0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = 0.5f, .w = 1.0f }, { .x = -0.5f, .y = 0.0f, .z = 0.5f, .w = 1.0f }, { .x = -0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f } };
-
-static Vector4 vCursor[6] = { { .x = -0.5f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.5f, .w = 1.0f } };
-
-DebugCursorColour cCursor[6] = { { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 192, .green = 0, .blue = 0, .alpha = 128 }, { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 0, .green = 192, .blue = 0, .alpha = 128 }, { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 0, .green = 0, .blue = 192, .alpha = 128 } };
-
-static Vector4 vRect[4] = { { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = -1.0f, .z = 0.0f, .w = 1.0f }, { .x = 1.0f, .y = -1.0f, .z = 0.0f, .w = 1.0f } };
-
-static Vector4 vBox[5] = { { .x = -0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = -0.5f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = -0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f } };
-
-static Vector4 lightDir[6] = { { .x = 0.0f, .y = 1.0f, .z = 0.77999997138977051f, .w = 1.0f }, { .x = 0.77999997138977051f, .y = 1.0f, .z = 0.0f, .w = 1.0f }, { .x = -0.61500000953674316f, .y = -1.0f, .z = -0.61500000953674316f, .w = 1.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f } };
-
-float lightSpeedTbl[4] = { 0.004999999888241291f, 0.0099999997764825821f, 0.019999999552965164f, 0.029999999329447746f };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char lightSetColorFormat[48] = "light.setColor(%2d, %7.3ff, %7.3ff, %7.3ff);\n";
 
 const char lightSetDirection2Format[56] = "light.setDirection2(%2d, %7.3ff, %7.3ff, %7.3ff);\n";
@@ -2727,16 +2687,3 @@ const char windVectorText[8] = "\013VECTOR";
 
 /* Text: {reset}> */
 const char cursorMarkerText[8] = "\013>";
-
-extern const char DBCursorModeXzLabel[8];
-extern const char DBCursorModeFreeLabel[8];
-extern const char DBCursorModeYzLabel[8];
-extern const char DBCursorModeXyLabel[8];
-extern const char DBCursorModeFcvLabel[8];
-
-static const char * cursorModeName[5] = { DBCursorModeFreeLabel, DBCursorModeYzLabel, DBCursorModeXzLabel, DBCursorModeXyLabel, DBCursorModeFcvLabel };
-
-static unsigned char col[56] = { 192, 192, 192, 128, 192, 0, 0, 128, 192, 192, 192, 128, 0, 192, 0, 128, 192, 192, 192, 128, 0, 0, 192, 128, 192, 192, 192, 128, 192, 192, 0, 128, 192, 192, 192, 128, 0, 192, 192, 128, 192, 192, 192, 128, 192, 0, 192, 128, 16, 16, 16, 128, 192, 192, 192, 128 };
-
-static RgVector lightCol[6] = { { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.2f, 0.2f, 0.2f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } };
-

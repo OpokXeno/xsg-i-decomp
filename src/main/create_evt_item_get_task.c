@@ -1,35 +1,16 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_task.h"
-
 #include "main/xgl_2.h"
-
 #include "create_evt_item_get_task.h"
 
-/* Event-item IDs index a 0x80-byte formatted name slot. */
-
-extern unsigned char EvtItemTbl[255 * 0x80];
-
-const char obtainedMoneyFormat[16] = "Obtained %d G.";
-
-const char evt_item_format_special[24] =
-    /* Text: Obtained {color #329BBE}%s{color #808080}. */
-    "Obtained \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
-
-extern int dataBoxInc(int category, int id);
-
-extern char *GetItemName(int category, int id);
-
-extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
-                                       int (*callback)(XglTaskPrefix *),
-                                       XglTaskPrefix *entry);
+#define UNIT_ITEM_SPIN_STEP (0.05f)
+#define UNIT_ITEM_SYMBOL_SPIN_STEP (0.05f)
+#define UNIT_ITEM_PICKUP_DISTANCE (0.8f)
 
 /* One MapUnit record view shared by the initialization and item-update
  * functions below.  Its stride and all named members are supported by their
  * combined accesses; gaps remain unmodelled. */
-
 typedef struct ItemUnitInfo {
     unsigned char unmodeled_00[2];
     unsigned short itemNo;
@@ -50,6 +31,7 @@ typedef struct ItemModelHeader {
     int matrixOffset;
 } ItemModelHeader;
 
+/* Position records are copied by two aligned doubleword loads and stores. */
 typedef union ItemMapVectorBlock {
     Vector4 vector;
     unsigned long long words[2];
@@ -94,25 +76,6 @@ typedef struct MapDisplayRecord {
     void *model;
 } MapDisplayRecord;
 
-extern void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit);
-
-extern void MAP_updateUnitItemSymbol(ItemMapUnit *unit);
-
-extern void SetItemSymbolRsrc(ItemMapUnit *unit);
-
-extern void MAP_updateUnitItemBox(ItemMapUnit *unit);
-
-extern int xglFlagsGet1(int bitOffset);
-
-extern int printf(const char *format, ...);
-
-extern void sefDeleteEffectCf(int effectId);
-
-const char evt_item_format_normal[16] = "Obtained %s.";
-
-/* Text: Obtained %s {color #329BBE}%s{color #808080}. */
-const char obtainedColoredItemFormat[24] = "Obtained %s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
-
 typedef struct ItemOwnerUnit {
     unsigned int flags;
     unsigned char unmodeled_04[0xc];
@@ -126,27 +89,6 @@ typedef struct ItemOwnerUnit {
     unsigned char unmodeled_1a5[0x15b];
 } ItemOwnerUnit;
 
-extern ItemOwnerUnit MapUnit[64];
-
-extern void nmlModelSetPartsVisible(void *model, short partsNo, int visible);
-
-extern void DrawActiveCursol(ItemMapUnit *unit);
-
-#define UNIT_ITEM_SPIN_STEP (0.05f)
-
-extern signed char printflg;
-
-/* Text: Obtained %s%s {color #329BBE}%s{color #808080} */
-const char obtainedColoredCountItemFormat[32] = "Obtained %s%s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80";
-
-extern void nmlModelEntry(int entry);
-
-extern void nmlModelSetClip(int clip);
-
-extern void nmlModelSetPlace(Matrix4 matrix);
-
-extern void nmlModelSetTexture(const char *texture);
-
 /*
  * Only the fields MAP_drawUnitItemBox reads/writes are evidenced: the
  * embedded placement matrix at +0x40 (addiu $4,$16,64 into nmlModelSetPlace),
@@ -157,7 +99,6 @@ extern void nmlModelSetTexture(const char *texture);
  * into nmlModelSetTexture) and the saved-matrix pointer at +0x230 (lw 0x230
  * into xglMatrixStackSave). The spans between them are left unmodelled.
  */
-
 typedef struct UnitItemBox {
     unsigned char unmodeled_00[0x40];  /* +0x00 */
     Matrix4 place;                      /* +0x40 */
@@ -172,20 +113,6 @@ typedef struct UnitItemBox {
     Matrix4 *saved_matrix;              /* +0x230 */
 } UnitItemBox;
 
-extern void MAP_drawUnitItemBox(UnitItemBox *box);
-
-/* Definitions follow their callers so references remain address-based. */
-
-/* Event-item IDs index a 0x80-byte formatted name slot. */
-
-static void taskItemGet(XglTaskPrefix *entry);
-
-/* One MapUnit record view shared by the initialization and item-update
- * functions below.  Its stride and all named members are supported by their
- * combined accesses; gaps remain unmodelled. */
-
-/* Position records are copied by two aligned doubleword loads and stores. */
-
 typedef struct ItemBoxRecord {
     unsigned char category;
     unsigned char item;
@@ -198,66 +125,73 @@ typedef struct ItemNameRecord {
     char *name;
 } ItemNameRecord;
 
-extern ItemNameRecord *func_A2C5F8(int item);
-
-extern ItemNameRecord *func_A2C6E8(int item);
-
-extern ItemNameRecord *func_A2C738(int item);
-
-extern ItemNameRecord *func_A2C698(int item);
-
-extern void UwamonoCommonFunc(void *unit);
-
-extern float CheckDist3D(const void *first, const void *second);
-
-extern void xglSoundEffectNormalID(int effectId, int channel);
-
-extern void ClearUwamonoEffect(void *unit);
-
+/* Event-item IDs index a 0x80-byte formatted name slot. */
+extern unsigned char EvtItemTbl[255 * 0x80];
+extern ItemOwnerUnit MapUnit[64];
+extern signed char printflg;
 extern void *uwares_tbl[14];
-
 extern const char *xtxres_tbl[14];
-
-extern int xglFlagsSet1(int flag, int value);
-
-extern int dataMoneyBoxInc(int money);
-
-extern int CallMethod_I(const char *method, int value);
-
-extern char *strcat(char *destination, const char *source);
-
 extern const char CreateEvtItemGetDigit9Text[];
-
 extern const char CreateEvtItemGetDigit8Text[];
-
 extern const char CreateEvtItemGetDigit7Text[];
-
 extern const char CreateEvtItemGetDigit6Text[];
-
 extern const char CreateEvtItemGetDigit5Text[];
-
 extern const char CreateEvtItemGetDigit4Text[];
-
 extern const char CreateEvtItemGetDigit3Text[];
-
 extern const char CreateEvtItemGetDigit2Text[];
-
 extern const char CreateEvtItemGetDigit1Text[];
-
 extern const char CreateEvtItemGetDigit0Text[];
-
-static const char *strno[10];
-
 extern ItemBoxRecord ItemBoxTbl[601];
 
-static const char *strno[10] = {
-    CreateEvtItemGetDigit0Text, CreateEvtItemGetDigit1Text, CreateEvtItemGetDigit2Text, CreateEvtItemGetDigit3Text, CreateEvtItemGetDigit4Text,
-    CreateEvtItemGetDigit5Text, CreateEvtItemGetDigit6Text, CreateEvtItemGetDigit7Text, CreateEvtItemGetDigit8Text, CreateEvtItemGetDigit9Text
-};
+extern int dataBoxInc(int category, int id);
+extern char *GetItemName(int category, int id);
 
-ItemBoxRecord ItemBoxTbl[601] = {{0}};
+extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
+                                       int (*callback)(XglTaskPrefix *),
+                                       XglTaskPrefix *entry);
 
-unsigned char EvtItemTbl[255 * 0x80] = { 0 };
+extern void MAP_updateUnitSpecialSymbol(ItemMapUnit *unit);
+extern void MAP_updateUnitItemSymbol(ItemMapUnit *unit);
+extern void SetItemSymbolRsrc(ItemMapUnit *unit);
+extern void MAP_updateUnitItemBox(ItemMapUnit *unit);
+extern int xglFlagsGet1(int bitOffset);
+extern int printf(const char *format, ...);
+extern void sefDeleteEffectCf(int effectId);
+extern void nmlModelSetPartsVisible(void *model, short partsNo, int visible);
+extern void DrawActiveCursol(ItemMapUnit *unit);
+extern void nmlModelEntry(int entry);
+extern void nmlModelSetClip(int clip);
+extern void nmlModelSetPlace(Matrix4 matrix);
+extern void nmlModelSetTexture(const char *texture);
+extern void MAP_drawUnitItemBox(UnitItemBox *box);
+
+static void taskItemGet(XglTaskPrefix *entry);
+extern ItemNameRecord *func_A2C5F8(int item);
+extern ItemNameRecord *func_A2C6E8(int item);
+extern ItemNameRecord *func_A2C738(int item);
+extern ItemNameRecord *func_A2C698(int item);
+extern void UwamonoCommonFunc(void *unit);
+extern float CheckDist3D(const void *first, const void *second);
+extern void xglSoundEffectNormalID(int effectId, int channel);
+extern void ClearUwamonoEffect(void *unit);
+extern int xglFlagsSet1(int flag, int value);
+extern int dataMoneyBoxInc(int money);
+extern int CallMethod_I(const char *method, int value);
+extern char *strcat(char *destination, const char *source);
+
+const char obtainedMoneyFormat[16] = "Obtained %d G.";
+
+const char evt_item_format_special[24] =
+    /* Text: Obtained {color #329BBE}%s{color #808080}. */
+    "Obtained \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
+
+const char evt_item_format_normal[16] = "Obtained %s.";
+
+/* Text: Obtained %s {color #329BBE}%s{color #808080}. */
+const char obtainedColoredItemFormat[24] = "Obtained %s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
+
+/* Text: Obtained %s%s {color #329BBE}%s{color #808080} */
+const char obtainedColoredCountItemFormat[32] = "Obtained %s%s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80";
 
 const char obtainedCountItemFormat[24] = "Obtained %s%s %s";
 
@@ -271,12 +205,18 @@ static const char unitDeleteFormat[48] = "unit koware delete id=0x%x serial=%d\n
 
 const char illegalGroupFormat[16] = "Illegal grp %d\n";
 
-#define UNIT_ITEM_SYMBOL_SPIN_STEP (0.05f)
+static const char *strno[10];
 
-#define UNIT_ITEM_PICKUP_DISTANCE (0.8f)
+static const char *strno[10] = {
+    CreateEvtItemGetDigit0Text, CreateEvtItemGetDigit1Text, CreateEvtItemGetDigit2Text, CreateEvtItemGetDigit3Text, CreateEvtItemGetDigit4Text,
+    CreateEvtItemGetDigit5Text, CreateEvtItemGetDigit6Text, CreateEvtItemGetDigit7Text, CreateEvtItemGetDigit8Text, CreateEvtItemGetDigit9Text
+};
+
+ItemBoxRecord ItemBoxTbl[601] = {{0}};
+
+unsigned char EvtItemTbl[255 * 0x80] = { 0 };
 
 /* Definitions follow their callers so references remain address-based. */
-
 static void taskItemGet(XglTaskPrefix *entry)
 {
     EventItemTask *task = (EventItemTask *)entry;
@@ -900,6 +840,7 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: 上物用デバッグメニュー
  * EN: Field object debug menu */
 const char PauseMenuFieldObjectLabel[24] = "\276\345\312\252\315\321\245\307\245\320\245\303\245\260\245\341\245\313\245\345\241\274";

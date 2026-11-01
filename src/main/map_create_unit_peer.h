@@ -7,6 +7,9 @@
 
 #include "shared.h"
 
+/* flags bit: snap position.y to the ground undulation under x/z each update */
+#define MAP_UNIT_FOLLOW_GROUND 0x100
+
 /*
  * This TU's view of one entry of the game-wide MapUnit[] array (0x300 bytes
  * apart; MAP_initUnitSequance stores MAP_updateUnitDefault as each entry's
@@ -34,23 +37,6 @@ typedef struct MapUnitRecord {
     void *resourceModel; /* +0xd4: parts-matrix update runs only while NULL */
 } MapUnitRecord;
 
-/* flags bit: snap position.y to the ground undulation under x/z each update */
-#define MAP_UNIT_FOLLOW_GROUND 0x100
-
-/* Undulate.c (main); no header is published for it yet (also declared this
- * way in src/main/near_dir.c and src/ov01/unit_cmd.h). */
-extern float UnduGet(float x, float z);
-
-/*
- * A second, wider view of the same MapUnit[] entry MapUnitRecord models the
- * head of: MAP_setUnitMotion and MAP_updateUnitMPack, below, evidence its
- * embedded animation-player state at +0x100, which ANM_resetDefault (still
- * asm) otherwise owns. `position`/`rotation`/`scale`/`matrix` repeat
- * MapUnitRecord's own transform fields at the same offsets for
- * MAP_updateUnitMPack's matrix-stack sequence (MapUnitRecord itself cannot
- * grow to add the animation fields: MAP_updateUnitDefault, outside this
- * allocation, already uses it at its published size).
- */
 typedef struct MapUnitAnmState {
     unsigned int flags; /* +0x00: SEQ_motionUnit loads the motion track's flags */
     float motionTime; /* +0x04: MAP_updateUnitMPack mirrors PLAY_getCurrent's
@@ -62,6 +48,16 @@ typedef struct MapUnitAnmState {
                           argument before calling ANM_resetDefault. */
 } MapUnitAnmState;
 
+/*
+ * A second, wider view of the same MapUnit[] entry MapUnitRecord models the
+ * head of: MAP_setUnitMotion and MAP_updateUnitMPack, below, evidence its
+ * embedded animation-player state at +0x100, which ANM_resetDefault (still
+ * asm) otherwise owns. `position`/`rotation`/`scale`/`matrix` repeat
+ * MapUnitRecord's own transform fields at the same offsets for
+ * MAP_updateUnitMPack's matrix-stack sequence (MapUnitRecord itself cannot
+ * grow to add the animation fields: MAP_updateUnitDefault, outside this
+ * allocation, already uses it at its published size).
+ */
 typedef struct MapUnitMotionRecord {
     unsigned char unmodeled_00[0x10];
     Vector4 position; /* +0x10 */
@@ -78,18 +74,6 @@ typedef struct MapUnitMotionRecord {
     MapUnitAnmState anim; /* +0x100 */
 } MapUnitMotionRecord;
 
-/*
- * Defined in src/main/xgl_2.c (main/tu100) with this spelling, but not in
- * include/main/xgl_2.h: src/ov02/umn_procurator.h declares it as
- * `void xglMatrixStackTrans(float *)`, and header_harvest shares no name
- * with divergent spellings (reports/header-harvest-conflicts.md).
- */
-extern void xglMatrixStackTrans(const float translation[4]);
-
-/*
- * MAP_callUnitGroup compares the group halfword in each 0x260-byte sequence
- * entry and calls its callback with the corresponding unit's flags word.
- */
 /* A spline sampled once per frame: SEQ_moveUnitSPL, SEQ_rotateUnitSPL and
  * SEQ_scaleUnitSPL each keep one in their sequence channel. */
 typedef struct MapUnitSplineTrack {
@@ -104,10 +88,6 @@ typedef struct MapUnitBoneOwner {
     Matrix4 *matrices; /* +0x824 */
 } MapUnitBoneOwner;
 
-/* Movement channel at +0x38 of a sequence entry: a straight walk to a target
- * (SEQ_moveUnitChr follows a unit, SEQ_moveUnitXZ a fixed point;
- * `destination.w` carries the step), a bone-attached offset
- * (SEQ_transCNSUnitChr) or a spline (`spline`, SEQ_moveUnitSPL). */
 typedef struct MapUnitWalkTrack {
     struct MapUnitRecord *followed; /* +0x00 */
     int frames;                     /* +0x04 */
@@ -122,15 +102,16 @@ typedef struct MapUnitBoneTrack {
     Vector4 offset; /* +0x10 */
 } MapUnitBoneTrack;
 
+/* Movement channel at +0x38 of a sequence entry: a straight walk to a target
+ * (SEQ_moveUnitChr follows a unit, SEQ_moveUnitXZ a fixed point;
+ * `destination.w` carries the step), a bone-attached offset
+ * (SEQ_transCNSUnitChr) or a spline (`spline`, SEQ_moveUnitSPL). */
 typedef union MapUnitMoveTrack {
     MapUnitSplineTrack spline;
     MapUnitWalkTrack walk;
     MapUnitBoneTrack bone;
 } MapUnitMoveTrack;
 
-/* Rotation channel at +0xb8: SEQ_rotateUnitSPL samples a spline,
- * SEQ_rotateUnit turns each axis from `start` to `goal`, and
- * SEQ_rotYCNSUnitChr aims at a bone. */
 typedef struct MapUnitTurnTrack {
     struct MapUnitRecord *target; /* +0x00 */
     unsigned char unmodeled_04[0x10 - 0x04];
@@ -151,6 +132,9 @@ typedef struct MapUnitBoneAimTrack {
     float goal[3]; /* +0x30 */
 } MapUnitBoneAimTrack;
 
+/* Rotation channel at +0xb8: SEQ_rotateUnitSPL samples a spline,
+ * SEQ_rotateUnit turns each axis from `start` to `goal`, and
+ * SEQ_rotYCNSUnitChr aims at a bone. */
 typedef union MapUnitRotationTrack {
     MapUnitSplineTrack spline;
     MapUnitTurnTrack turn;
@@ -185,6 +169,10 @@ typedef struct MapUnitScaleTrack {
     float step[3];   /* +0x40 */
 } MapUnitScaleTrack;
 
+/*
+ * MAP_callUnitGroup compares the group halfword in each 0x260-byte sequence
+ * entry and calls its callback with the corresponding unit's flags word.
+ */
 typedef struct MapUnitGroupSequenceEntry {
     unsigned int flags; /* +0x00 */
     int state;          /* +0x04 */
@@ -256,13 +244,26 @@ typedef struct MapPartsLoopState {
 } MapPartsLoopState;
 
 extern MapPartsLoopState GameLoopState;
+extern MapUnitGroupSequenceEntry unitSequence[64];
+extern MapUnitGroupEntry MapUnit[64];
+
+/* Undulate.c (main); no header is published for it yet (also declared this
+ * way in src/main/near_dir.c and src/ov01/unit_cmd.h). */
+extern float UnduGet(float x, float z);
+
+/*
+ * Defined in src/main/xgl_2.c (main/tu100) with this spelling, but not in
+ * include/main/xgl_2.h: src/ov02/umn_procurator.h declares it as
+ * `void xglMatrixStackTrans(float *)`, and header_harvest shares no name
+ * with divergent spellings (reports/header-harvest-conflicts.md).
+ */
+extern void xglMatrixStackTrans(const float translation[4]);
+
 extern void MAP_setUnitMotion(MapUnitMotionRecord *unit, int motionId);
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 extern float nearDir(float from, float to);
 extern float xglAtan2(float x, float y);
 extern float xglSin(float angle);
 extern float xglCos(float angle);
-extern MapUnitGroupSequenceEntry unitSequence[64];
-extern MapUnitGroupEntry MapUnit[64];
 
 #endif /* SRC_MAIN_MAP_CREATE_UNIT_PEER_H */

@@ -7,101 +7,6 @@
 
 #include "shared.h"
 
-/* The executable exports this 64-entry enemy-work allocation. */
-typedef struct EnemyWork {
-    unsigned char bytes[0x38b0];
-} EnemyWork;
-
-/* Canonical single definition of the shared enemy spline state store for
- * the coherent three-function TU (Script_Action, Set_Spline_By_Route,
- * Set_Spline_By_Random), Spark attempt-cacc3f0a0396.
- *
- * Changed TU-organization hypothesis versus the predecessor padded-struct
- * TU (two separate EnemySplineState definitions with bytes_before/after
- * padding): exactly ONE definition of the store exists in source, held by
- * this header, and every contiguous-extent projection stages these same
- * bytes. The original 232192-byte store (16 entries of 0x38b0 bytes) lives
- * at main .data 0x00379110 under the original GLOBAL symbol `enepc`. The
- * original instructions multiply the actor id byte by the 0x38b0 stride,
- * and the witnessed symbol extent is exactly 16 * 0x38b0, which supports
- * opaque byte-block addressing without proving any historical member
- * layout or route capacity. Access is by witnessed offsets only; unknown
- * layout stays outside the explicit type. No bytes_before/after
- * placeholders, no padded complete structs, no invented bounds, no
- * aliases. The original store is zero-initialized, a witnessed byte fact.
- *
- * Noncontiguous code extents (Script 0x002d0e48+300 versus Route/Random
- * 0x002d1768+224, with Move_BeltConveyer, Check_Discovery, Check_Encount
- * and Enemy_After_Battle between them) force one strict packet per
- * contiguous span under the comparer's original-function-coverage rule,
- * so each linked proof stages this header once; there is exactly one
- * definition in source.
- */
-typedef unsigned char EnemyStateBlock[0x38b0];
-
-/* Recovered head of the engine's actor record (task layout-actor-family, the
- * `actor_bytes` named-layout job; the full evidence is in the same type's
- * comment in src/main/near_dir.h, which defines it identically for main/tu257).
- *
- * `actor` is the 64-entry array at main 0x0043c1e0 with a 0xa70 stride
- * (readelf gives `0043c1e0 0x29c00 OBJECT GLOBAL actor`, and 0x29c00 is
- * exactly 64 * 0xa70, so the symbol size corroborates both the stride and
- * the entry count; every site is `lui 0x44` + `addiu -0x3e20`, and reading
- * the `lui` half alone is how 0x0044c1e0 got written here and in three other
- * places, corrected 2026-09-13) that
- * ACT_create hands out (0x00305cd0) and ACT_update walks once a frame
- * (0x00305f58). This TU's `actor` is that record and not a separate object:
- * Enemy_Init reads +0x54 of the pointer it later passes to Set_Spline_By_Random
- * and writes +0x9e4 of it two instructions later (0x002cb3f0/0x002cb408), and
- * the byte at +0x80 both functions index enepc with is the slot number
- * ACT_create writes there (0x00305de0). src/main/enemy_2.c calls the same
- * object EnemyActor.
- *
- * The type stops at +0x70 because that is where the evidence stops: nothing
- * between +0x70 and +0x80 is recovered, so the slot number at +0x80 and the
- * target angle at +0x9e4 stay outside it and keep the byte view below.
- */
-struct Actor;
-typedef struct ActorHead {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-} ActorHead;
-
-/* The 0x70-byte ActorHead remains the embedded prefix. Set_Motion and
- * Sound_FootStep additionally read or write the named Actor members below at
- * offsets confirmed by their field accesses and neighboring actor code. */
-typedef struct Actor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    unsigned char unmodeled_70[0xb0 - 0x70];
-    short last_step_distance;               /* +0xb0, Sound_FootStep */
-    unsigned char unmodeled_b2[0x6f0 - 0xb2];
-    unsigned int movement_flags;             /* +0x6f0, Sound_FootStep */
-    float movement_distance;                 /* +0x6f4, Sound_FootStep */
-    unsigned char unmodeled_6f8[0x704 - 0x6f8];
-    unsigned short motion_id;                /* +0x704, Sound_FootStep */
-    unsigned char unmodeled_706[0x714 - 0x706];
-    float motion_parameter;                  /* +0x714, Set_Motion */
-    unsigned char unmodeled_718[0x744 - 0x718];
-    float copied_motion_parameter;           /* +0x744, Set_Motion */
-} Actor;
-
 /* The actor's target facing angle, in radians like Actor.rotation.
  *
  * Enemy_Init seeds it from the actor's own yaw, Actor.rotation.y at +0x54
@@ -161,6 +66,7 @@ typedef struct Actor {
  * each offset gains the name it was missing.
  */
 #define ENEMY_SPLINE_PARAMETER_OFFSET    0x40
+
 #define ENEMY_SPLINE_FAST_POINTS_OFFSET  0x42
 #define ENEMY_SPLINE_POINTS_OFFSET       0x80
 #define ENEMY_SPLINE_POINT_COUNT_OFFSET  0x1080
@@ -170,14 +76,19 @@ typedef struct Actor {
 
 #define ENEMY_SPLINE_PARAMETER(entry) \
     (*(short *)((unsigned char *)(entry) + ENEMY_SPLINE_PARAMETER_OFFSET))
+
 #define ENEMY_SPLINE_FAST_POINTS(entry) \
     (*(short *)((unsigned char *)(entry) + ENEMY_SPLINE_FAST_POINTS_OFFSET))
+
 #define ENEMY_SPLINE_POINTS(entry) \
     ((float (*)[4])((unsigned char *)(entry) + ENEMY_SPLINE_POINTS_OFFSET))
+
 #define ENEMY_SPLINE_POINT_COUNT(entry) \
     (*(short *)((unsigned char *)(entry) + ENEMY_SPLINE_POINT_COUNT_OFFSET))
+
 #define ENEMY_ROUTE_POINTS(entry) \
     ((float (*)[4])((unsigned char *)(entry) + ENEMY_ROUTE_POINTS_OFFSET))
+
 #define ENEMY_ROUTE_POINT_COUNT(entry) \
     (*(short *)((unsigned char *)(entry) + ENEMY_ROUTE_POINT_COUNT_OFFSET))
 
@@ -266,10 +177,6 @@ typedef struct Actor {
 #define ENEMY_JAVA_REACTION(entry) \
     ((int *)((unsigned char *)(entry) + ENEMY_JAVA_REACTION_OFFSET))
 
-typedef struct EnemyJavaReactionWord {
-    int value;
-} EnemyJavaReactionWord;
-
 #define ENEMY_JAVA_REACTION_AT(entry, offset) \
     ((EnemyJavaReactionWord *)((unsigned char *)(entry) + (offset)))
 
@@ -277,7 +184,108 @@ typedef struct EnemyJavaReactionWord {
 
 /* Set_Motion copies this value from the per-enemy entry at +0x3858. */
 #define ENEMY_MOTION_PARAMETER_OFFSET 0x3858
+
 #define ENEMY_MOTION_PARAMETER(entry) \
     ((float *)((unsigned char *)(entry) + ENEMY_MOTION_PARAMETER_OFFSET))
+
+/* The executable exports this 64-entry enemy-work allocation. */
+typedef struct EnemyWork {
+    unsigned char bytes[0x38b0];
+} EnemyWork;
+
+/* Canonical single definition of the shared enemy spline state store for
+ * the coherent three-function TU (Script_Action, Set_Spline_By_Route,
+ * Set_Spline_By_Random), Spark attempt-cacc3f0a0396.
+ *
+ * Changed TU-organization hypothesis versus the predecessor padded-struct
+ * TU (two separate EnemySplineState definitions with bytes_before/after
+ * padding): exactly ONE definition of the store exists in source, held by
+ * this header, and every contiguous-extent projection stages these same
+ * bytes. The original 232192-byte store (16 entries of 0x38b0 bytes) lives
+ * at main .data 0x00379110 under the original GLOBAL symbol `enepc`. The
+ * original instructions multiply the actor id byte by the 0x38b0 stride,
+ * and the witnessed symbol extent is exactly 16 * 0x38b0, which supports
+ * opaque byte-block addressing without proving any historical member
+ * layout or route capacity. Access is by witnessed offsets only; unknown
+ * layout stays outside the explicit type. No bytes_before/after
+ * placeholders, no padded complete structs, no invented bounds, no
+ * aliases. The original store is zero-initialized, a witnessed byte fact.
+ *
+ * Noncontiguous code extents (Script 0x002d0e48+300 versus Route/Random
+ * 0x002d1768+224, with Move_BeltConveyer, Check_Discovery, Check_Encount
+ * and Enemy_After_Battle between them) force one strict packet per
+ * contiguous span under the comparer's original-function-coverage rule,
+ * so each linked proof stages this header once; there is exactly one
+ * definition in source.
+ */
+typedef unsigned char EnemyStateBlock[0x38b0];
+
+struct Actor;
+
+/* Recovered head of the engine's actor record (task layout-actor-family, the
+ * `actor_bytes` named-layout job; the full evidence is in the same type's
+ * comment in src/main/near_dir.h, which defines it identically for main/tu257).
+ *
+ * `actor` is the 64-entry array at main 0x0043c1e0 with a 0xa70 stride
+ * (readelf gives `0043c1e0 0x29c00 OBJECT GLOBAL actor`, and 0x29c00 is
+ * exactly 64 * 0xa70, so the symbol size corroborates both the stride and
+ * the entry count; every site is `lui 0x44` + `addiu -0x3e20`, and reading
+ * the `lui` half alone is how 0x0044c1e0 got written here and in three other
+ * places, corrected 2026-09-13) that
+ * ACT_create hands out (0x00305cd0) and ACT_update walks once a frame
+ * (0x00305f58). This TU's `actor` is that record and not a separate object:
+ * Enemy_Init reads +0x54 of the pointer it later passes to Set_Spline_By_Random
+ * and writes +0x9e4 of it two instructions later (0x002cb3f0/0x002cb408), and
+ * the byte at +0x80 both functions index enepc with is the slot number
+ * ACT_create writes there (0x00305de0). src/main/enemy_2.c calls the same
+ * object EnemyActor.
+ *
+ * The type stops at +0x70 because that is where the evidence stops: nothing
+ * between +0x70 and +0x80 is recovered, so the slot number at +0x80 and the
+ * target angle at +0x9e4 stay outside it and keep the byte view below.
+ */
+typedef struct ActorHead {
+    u32 flags;
+    void (*update)(struct Actor *actor);
+    void (*draw)(struct Actor *actor);
+    u32 quadword_alignment_gap;
+    Vector4 position;
+    Vector4 previous_position;
+    Vector4 velocity;
+    Vector4 acceleration;
+    Vector4 rotation;
+    Vector4 scale;
+} ActorHead;
+
+/* The 0x70-byte ActorHead remains the embedded prefix. Set_Motion and
+ * Sound_FootStep additionally read or write the named Actor members below at
+ * offsets confirmed by their field accesses and neighboring actor code. */
+typedef struct Actor {
+    u32 flags;
+    void (*update)(struct Actor *actor);
+    void (*draw)(struct Actor *actor);
+    u32 quadword_alignment_gap;
+    Vector4 position;
+    Vector4 previous_position;
+    Vector4 velocity;
+    Vector4 acceleration;
+    Vector4 rotation;
+    Vector4 scale;
+    unsigned char unmodeled_70[0xb0 - 0x70];
+    short last_step_distance;               /* +0xb0, Sound_FootStep */
+    unsigned char unmodeled_b2[0x6f0 - 0xb2];
+    unsigned int movement_flags;             /* +0x6f0, Sound_FootStep */
+    float movement_distance;                 /* +0x6f4, Sound_FootStep */
+    unsigned char unmodeled_6f8[0x704 - 0x6f8];
+    unsigned short motion_id;                /* +0x704, Sound_FootStep */
+    unsigned char unmodeled_706[0x714 - 0x706];
+    float motion_parameter;                  /* +0x714, Set_Motion */
+    unsigned char unmodeled_718[0x744 - 0x718];
+    float copied_motion_parameter;           /* +0x744, Set_Motion */
+} Actor;
+
+typedef struct EnemyJavaReactionWord {
+    int value;
+} EnemyJavaReactionWord;
 
 #endif /* SRC_MAIN_SET_MOTION_H */

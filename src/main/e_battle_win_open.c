@@ -1,7 +1,5 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "e_battle_win_open.h"
 
 /* Parameter words at +0, +4, +8, +0xc and +0x10, read by eBattleWinOpen4. */
@@ -13,8 +11,6 @@ typedef struct BattleWinOpenParam4 {
     const char *text;
 } BattleWinOpenParam4;
 
-int BW3BattleOrDataBase = 0;
-
 typedef struct BattleWinOpen2Params {
     int x;
     int y;
@@ -24,47 +20,9 @@ typedef struct BattleWinOpen2Params {
     const char *title;
 } BattleWinOpen2Params;
 
-int eMessageNextGyouMaxGet(const char *text);
-
-BattleWindow *BW = 0;
-
-BattleWindow2 *BW2 = 0;
-
-BattleWindow3 *BW3 = 0;
-
-BattleWindow4 *BW4 = 0;
-
-extern int MenuCursorKeepCheck(WindowSPKeepBuffer keep);
-
-const char MenuFileHardDiskDriveText[16] = "Hard Disk Drive";
-
-const char MenuFileSlot2Text[8] = "slot 2";
-
-const char MenuFileSlot1Text[8] = "slot 1";
-
-extern const char analysisTagText[];
-
-extern const char hpText[];
-
-static const char * msg00_1_0036D600[3];
-
-static const char * msg01_2_0036D610[5];
-
-static unsigned short msg03_3[3];
-
 typedef struct BattleWinConditionLabelTable {
     const unsigned short *rows[10];
 } BattleWinConditionLabelTable;
-
-extern const BattleWinConditionLabelTable conditionLabelTable;
-
-const char **func_A2C5F8(int id);
-
-const char **func_A2C698(int id);
-
-const char **func_A2C6E8(int id);
-
-const char **func_A2C738(int id);
 
 typedef struct BattleWinAnalysisParams {
     int x;
@@ -86,8 +44,6 @@ typedef struct BattleWinAnalysisParams {
     const char *rare_item_text;
 } BattleWinAnalysisParams;
 
-extern BattleWinItem *BW_item;
-
 typedef struct BattleWinOpenParams {
     int x;
     int y;
@@ -98,11 +54,121 @@ typedef struct BattleWinOpenParams {
     const char *title;
 } BattleWinOpenParams;
 
+extern const char analysisTagText[];
+extern const char hpText[];
+extern const BattleWinConditionLabelTable conditionLabelTable;
+extern BattleWinItem *BW_item;
+extern const char informationTagText[];
+extern const char weaknessPrefixText[16];
+extern const char rareItemPrefixText[16];
+extern const char itemPrefixText[8];
+extern const char moneyText[8];
+extern const char ePtsText[8];
+extern const char expText[8];
+extern const char tPtsText[8];
+extern const char sPtsText[8];
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+extern const char conditionBText[8];
+
+extern const char conditionSpText[8];
+extern const char conditionLText[8];
+extern const char conditionFText[8];
+extern const char conditionIText[8];
+extern const char conditionPrText[8];
+extern const char conditionSlText[8];
+extern const char conditionHtText[8];
+extern const char conditionArText[8];
+extern const char conditionCuText[8];
+
+int eMessageNextGyouMaxGet(const char *text);
+extern int MenuCursorKeepCheck(WindowSPKeepBuffer keep);
+const char **func_A2C5F8(int id);
+const char **func_A2C698(int id);
+const char **func_A2C6E8(int id);
+const char **func_A2C738(int id);
+extern void endPrintInit(void);
+
+int BW3BattleOrDataBase = 0;
+
+BattleWindow *BW = 0;
+
+BattleWindow2 *BW2 = 0;
+
+BattleWindow3 *BW3 = 0;
+
+BattleWindow4 *BW4 = 0;
+
+const char MenuFileSlot2Text[8] = "slot 2";
+
+const char MenuFileSlot1Text[8] = "slot 1";
+
+static const char * msg00_1_0036D600[3];
+
+static const char * msg01_2_0036D610[5];
+
 static const char text_0;
 
-extern const char informationTagText[];
+static const char * msg00_1_0036D600[3] = { weaknessPrefixText, rareItemPrefixText, itemPrefixText };
 
-extern void endPrintInit(void);
+static const char * msg01_2_0036D610[5] = { tPtsText, ePtsText, sPtsText, expText, moneyText };
+
+static const char text_0 = 0;
+
+const char itemPrefixText[8] = "Item: ";
+
+/* Text: \x01Money */
+const char moneyText[8] = "\001Money";
+
+/* Text: \x01Exp */
+const char expText[8] = "\001Exp";
+
+/* Text: \x01S.Pts */
+const char sPtsText[8] = "\001S.Pts";
+
+/* Text: \x01E.Pts */
+const char ePtsText[8] = "\001E.Pts";
+
+/* Text: \x01T.Pts */
+const char tPtsText[8] = "\001T.Pts";
+
+/* Text: \x01Hp */
+const char hpText[4] = "\001Hp";
+
+BattleWinItem * BW_item = 0;
+
+const char MenuFileFormatText[8] = "Format";
+
+const char MenuFileLoadText[8] = "Load";
+
+const char MenuFileSaveText[8] = "Save";
+
+const char MenuFileCancelText[8] = "Cancel.";
+
+const char conditionBText[8] = "B";
+
+const char conditionSpText[8] = "Sp";
+
+const char conditionLText[8] = "L";
+
+const char conditionFText[8] = "F";
+
+const char conditionIText[8] = "I";
+
+const char conditionPrText[8] = "Pr";
+
+const char conditionSlText[8] = "Sl";
+
+const char conditionHtText[8] = "Ht";
+
+const char conditionArText[8] = "Ar";
+
+const char conditionCuText[8] = "Cu";
+
+static unsigned short msg03_3[3];
+
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
+const char MenuFileHardDiskDriveText[16] = "Hard Disk Drive";
 
 void eBattleWinOpen(BattleWinOpenParams *params)
 {
@@ -1532,19 +1598,7 @@ void WindowSPSetSelect(WindowSPCursor *list, unsigned char *keep)
     list->current_row = keep[4];
 }
 
-extern const char weaknessPrefixText[16];
-extern const char rareItemPrefixText[16];
-extern const char itemPrefixText[8];
-extern const char moneyText[8];
-extern const char ePtsText[8];
-extern const char expText[8];
-extern const char tPtsText[8];
-extern const char sPtsText[8];
-
-static const char * msg00_1_0036D600[3] = { weaknessPrefixText, rareItemPrefixText, itemPrefixText };
-
-static const char * msg01_2_0036D610[5] = { tPtsText, ePtsText, sPtsText, expText, moneyText };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char informationTagText[16] = "Information";
 
 const char rareItemPrefixText[16] = "Rare Item: ";
@@ -1559,69 +1613,4 @@ const char MenuFileMemoryCardSlot2Path[24] = "/MEMORY CARD slot 2";
 
 const char MenuFileMemoryCardSlot1Path[32] = "/MEMORY CARD slot 1";
 
-static const char text_0 = 0;
-
-const char itemPrefixText[8] = "Item: ";
-
-/* Text: \x01Money */
-const char moneyText[8] = "\001Money";
-
-/* Text: \x01Exp */
-const char expText[8] = "\001Exp";
-
-/* Text: \x01S.Pts */
-const char sPtsText[8] = "\001S.Pts";
-
-/* Text: \x01E.Pts */
-const char ePtsText[8] = "\001E.Pts";
-
-/* Text: \x01T.Pts */
-const char tPtsText[8] = "\001T.Pts";
-
-/* Text: \x01Hp */
-const char hpText[4] = "\001Hp";
-
-BattleWinItem * BW_item = 0;
-
-const char MenuFileFormatText[8] = "Format";
-
-const char MenuFileLoadText[8] = "Load";
-
-const char MenuFileSaveText[8] = "Save";
-
-const char MenuFileCancelText[8] = "Cancel.";
-
-/* Original storage of this TU without a C reader; typed from its original bytes. */
-extern const char conditionBText[8];
-extern const char conditionSpText[8];
-extern const char conditionLText[8];
-extern const char conditionFText[8];
-extern const char conditionIText[8];
-extern const char conditionPrText[8];
-extern const char conditionSlText[8];
-extern const char conditionHtText[8];
-extern const char conditionArText[8];
-extern const char conditionCuText[8];
-
-const char conditionBText[8] = "B";
-
-const char conditionSpText[8] = "Sp";
-
-const char conditionLText[8] = "L";
-
-const char conditionFText[8] = "F";
-
-const char conditionIText[8] = "I";
-
-const char conditionPrText[8] = "Pr";
-
-const char conditionSlText[8] = "Sl";
-
-const char conditionHtText[8] = "Ht";
-
-const char conditionArText[8] = "Ar";
-
-const char conditionCuText[8] = "Cu";
-
 const BattleWinConditionLabelTable conditionLabelTable = { { (const unsigned short *)conditionBText, (const unsigned short *)conditionSpText, (const unsigned short *)conditionLText, (const unsigned short *)conditionFText, (const unsigned short *)conditionIText, (const unsigned short *)conditionPrText, (const unsigned short *)conditionSlText, (const unsigned short *)conditionHtText, (const unsigned short *)conditionArText, (const unsigned short *)conditionCuText } };
-

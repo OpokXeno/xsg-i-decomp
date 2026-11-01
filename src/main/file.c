@@ -1,22 +1,14 @@
 #include "common.h"
 #include "main/e_battle_win_open.h"
-
-void WindowSPSet(WindowSPCursor *cursor);
-void WindowSPMain(WindowSPCursor *cursor);
-void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
-
 #include "main/open_close_main.h"
 #include "main/end_print.h"
 #include "main/e_number_main.h"
 #include "main/menu_1.h"
-
 #include "shared.h"
-
 #include "file.h"
-
 #include "main/xgl_jpeg.h"
-
 #include "main/menu_top_command_check.h"
+#include "file.private.h"
 
 typedef struct FileThumbnailRequest {
     u32 source;
@@ -30,14 +22,12 @@ typedef struct FileThumbnailRequest {
 } FileThumbnailRequest;
 
 /* FileWork+0x09 is the signed current-slot byte used by the JPEG routines. */
-
 typedef struct FileWorkCurrentSlotView {
     unsigned char unmodeled_00[0x09];
     signed char current_slot;
 } FileWorkCurrentSlotView;
 
 /* Five decoder buffers are 0xe100 bytes apart; their signed object number is +1. */
-
 typedef struct FileJpegSlotView {
     unsigned char unmodeled_00;
     signed char number;
@@ -73,28 +63,6 @@ typedef struct FileObjectEntryView {
     u64 play_time;
     XglClock elapsed;
 } FileObjectEntryView;
-
-void FileJpegDecode(int number);
-
-extern char MenuFileSlot1Text[];
-
-extern char MenuFileSlot2Text[];
-
-extern char MenuFileHardDiskDriveText[];
-
-static char *name_0_0036D628[3] = {
-    MenuFileSlot1Text,
-    MenuFileSlot2Text,
-    MenuFileHardDiskDriveText,
-};
-
-FileWorkBlock *FileWork = 0;
-
-byte *FileJpegDec = 0;
-
-byte *FileObjectData = 0;
-
-#include "file.private.h"
 
 struct FilePassWindow {
     short x;
@@ -244,10 +212,6 @@ typedef struct FilePasWork {
     struct FilePassClip rect;
 } FilePasWork;
 
-static char * msg00_1_0036D638[6];
-
-extern int MenuPasLengthGet(const char *text);
-
 struct FileInfoWindowData {
     short x;
     short y;
@@ -314,38 +278,6 @@ struct FileProgressTexts {
     char *text[4];
 };
 
-extern const struct FileDeviceTexts fileDeviceTexts;
-
-extern const struct FileOperationTexts fileOperationTexts;
-
-extern const struct FileSelectionTexts fileSelectionTexts;
-
-extern char *fileListTexts[];
-
-extern char * const fileConfirmationTexts[12];
-
-extern const struct FileSlotTexts fileSlotTexts;
-
-extern char * const fileSlotStateTexts[6];
-
-extern const struct FileCardTexts fileCardTexts;
-
-extern const struct FileRequestTexts fileRequestTexts;
-
-extern const struct FileFormatTexts fileFormatTexts;
-
-extern char *fileFinishTexts[];
-
-extern char * const fileProgressTexts[4];
-
-extern char periodText[];
-extern char periodEndText[];
-extern const char insertCardPromptText[];
-
-extern void eMessageCpy(char *destination, char *source);
-
-extern void eMessageCat(char *source);
-
 struct FileLoadGauge {
     short x;
     short y;
@@ -363,73 +295,282 @@ struct FileLoadGauge {
     struct FileGaugeColor unfilled_color;
 };
 
-static struct FileLoadGauge gauge;
-
-void tyaDrawGauge(struct FileLoadGauge *progress);
-
 typedef struct FileObjectImages {
     FileObjectEntryView slots[99];
     FileObjectEntryView templates[3];
     FileObjectEntryView current;
 } FileObjectImages;
 
+struct FileSelectItem {
+    char *text;
+    unsigned char unmodeled_04[4];
+    signed char color_state;
+    unsigned char unmodeled_09[3];
+};
+
+struct FileSelectList {
+    unsigned char unmodeled_00[2];
+    unsigned short layout_mode;
+    int selected;
+    char *title;
+    void *confirmation_data;
+    void *items;
+    unsigned char unmodeled_14[0x5f8 - 0x14];
+};
+
+struct FileSelectContext {
+    unsigned char unmodeled_00[2];
+    unsigned char initial_flags;
+    unsigned char initial_state;
+    int work;
+    unsigned char animation_flags[4];
+    short targets[4];
+    struct FilePassWindow windows[4];
+    struct FileSelectList lists[4];
+    struct FileSelectItem entries[6];
+};
+
+struct FileSelectSource {
+    char *message;
+    char *title;
+};
+
+/* Thumbnail display reads the packed time word and signed scenario bytes. */
+typedef struct FileThumbnailSaveEntry {
+    struct FileJpegDecodeSlotView *jpeg;
+    unsigned char unmodeled_004[0x1007 - 0x004];
+    signed char chapter;
+    signed char leader;
+    unsigned char unmodeled_1009[3];
+    int map_number;
+    int party_ids[16];
+    unsigned int play_time;
+    unsigned char unmodeled_1054[4];
+    unsigned int packed_time;
+    unsigned char unmodeled_105c[4];
+} FileThumbnailSaveEntry;
+
+/* Defining-owner interface proposals from xgl_hdd. */
+struct HddCheckState {
+    int status;
+    unsigned char *transfer;
+    int dataSize;
+};
+
+struct HddExistRequest {
+    int card;
+    unsigned char *found;
+};
+
+struct HddLoadRequest {
+    int card;
+    void *data;
+    int size;
+};
+
+struct HddSaveRequest {
+    int card;
+    const void *data;
+    int size;
+};
+
+/*
+ * PadData as MenuFile reads it: a TU-local view of the 0xd0-byte pad object
+ * (src/main/input.c lists the other views). held/pressed keep the PadPrefix
+ * names at +0x28/+0x2a; the panel cursor tests 0x1000/0x4000 in the +0x30
+ * halfword, and mappedRepeat is the +0x34 halfword of PadPrefix.
+ */
+typedef struct FileMenuPadData {
+    unsigned char unmodeled_00[0x28];
+    u16 half_28;
+    u16 half_2a;
+    u16 half_2c;
+    u16 half_2e;
+    u16 half_30;
+    u16 mappedPressed;
+    u16 mappedRepeat;
+} FileMenuPadData;
+
+/* The card number as MenuFile reads it before the create request: through a
+   one-member union, so the load is not ordered after the gauge stores. */
+typedef union FileCardNumber {
+    int number;
+} FileCardNumber;
+
+extern char MenuFileSlot1Text[];
+extern char MenuFileSlot2Text[];
+extern char MenuFileHardDiskDriveText[];
+extern const struct FileDeviceTexts fileDeviceTexts;
+extern const struct FileOperationTexts fileOperationTexts;
+extern const struct FileSelectionTexts fileSelectionTexts;
+extern char *fileListTexts[];
+extern char * const fileConfirmationTexts[12];
+extern const struct FileSlotTexts fileSlotTexts;
+extern char * const fileSlotStateTexts[6];
+extern const struct FileCardTexts fileCardTexts;
+extern const struct FileRequestTexts fileRequestTexts;
+extern const struct FileFormatTexts fileFormatTexts;
+extern char *fileFinishTexts[];
+extern char * const fileProgressTexts[4];
+extern char periodText[];
+extern char periodEndText[];
+extern const char insertCardPromptText[];
 extern XglTaskScheduler *FileTask;
-
 extern unsigned char *FileCardDataBuf;
-
 extern unsigned char *FileExistCheckWork;
-
 extern const unsigned char cardDataNewPath[];
-
 extern const unsigned char newDataThumbnailPath[];
-
 extern const unsigned char unusedDataThumbnailPath[];
-
 extern const unsigned char brokenDataThumbnailPath[];
+extern const char memoryCardSlot1Text[];
+extern const char memoryCardSlot2Text[];
+extern char cancelText[];
+extern char fileSelectText[];
+static struct FileSelectSource msg01_2_0036D650[] ;
+extern const char shionLevelText[];
+extern const char newFileText[];
+extern const char corruptDataText[];
+extern const char cannotSaveText[];
+extern const char cannotLoadText[];
+extern char slotNumberText[];
+static char * msg00_5_0036D668[] ;
+extern FileMenuPadData PadData;
+extern const char shortNumberFormat[];
+extern const char memoryCardMarkerText[];
+extern const char wideNumberFormat[];
+extern char MenuFileMemoryCardSlot2Path[24];
+extern char MenuFileLoadText[8];
+extern char MenuFileFormatText[8];
+extern char MenuFileSaveText[8];
+extern char MenuFileHardDiskDrivePath[24];
+extern char MenuFileMemoryCardSlot1Path[32];
+extern const char savingText[16];
+extern const char formattingText[16];
+extern const char loadingText[16];
+extern char timeText[8];
+extern char fileMoneyText[8];
+extern const char cardRemoveWarningText[72];
+extern const char savingToCardText[48];
+extern const char newDataSaveText[64];
+extern const char loadingFromCardText[48];
+extern const char overwriteSaveDataText[32];
+extern const char savingNewDataText[24];
+extern const char powerOffWarningText[32];
+extern const char saveCompleteText[24];
+extern const char formattingCardText[48];
+extern char saveStateBlankText[8];
+extern const char saveFailedText[16];
+extern const char loadFailedNotFoundText[48];
+extern const char loadFailedCorruptedText[48];
+extern const char saveDataCorruptedText[64];
+extern const char loadFailedText[16];
+extern const char maxSaveFilesHddText[64];
+extern const char maxSaveFilesExceededText[104];
+extern const char maxFoldersExceededText[104];
+extern const char notEnoughSpaceText[56];
+extern char MenuFileCancelText[8];
 
+void WindowSPSet(WindowSPCursor *cursor);
+void WindowSPMain(WindowSPCursor *cursor);
+void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
+void FileJpegDecode(int number);
+extern int MenuPasLengthGet(const char *text);
+extern void eMessageCpy(char *destination, char *source);
+extern void eMessageCat(char *source);
+void tyaDrawGauge(struct FileLoadGauge *progress);
 void endPrintDirectFrameCopy(XglPacket *packet, int source, int destination);
-
 void endPrintInit(void);
-
 void MenuCfTaikiPush(void);
-
 void MenuCfTaikiPop(void);
-
 XglTaskScheduler *MenuBgTaskInit(void *work, int mode);
-
 void *xglTaskInitial(void *work, int entries, int mode);
-
 void MenuBgTaskMain(void);
-
 void MenuBgTaskBreak(void);
-
 void MenuLoadInit(void);
-
 void MenuFontLoad(int mode, int wait);
-
 void WindowTexLoad(int mode, int resource);
-
 void *MenuSaveMapTextLoad(void *work, int mode);
-
 void MenuLoadFile(const unsigned char *name, void *destination);
-
 void MenuWorkEndCheck(void *end);
-
 int MenuLoadSync(void);
-
 int GameSnapShotSaveThumbnail(int quality, void *destination);
-
 void GameSnapShotCheck(void);
-
 void GameCfPlayerLoadResource(int mode);
-
 void MapChangeFadeSet(void);
-
 void exit(int status);
-
 void *MenuWorkEndGet(void);
-
 void MenuFile(void);
+void FileThumbnailDisp(struct FileThumbnailContext *panel);
+extern int xglMcMain(void);
+extern int xglHddCheck(void);
+extern int xglHddMcGetFree(void);
+extern int xglHddMcExist(struct HddExistRequest *request);
+extern int xglHddMcCreate(struct HddCheckState *request);
+extern int xglHddMcLoad(struct HddLoadRequest *request);
+extern int xglHddMcSave(const struct HddSaveRequest *request);
+extern int MenuSelectMove(int selection, int count, int wrap);
+extern void xglFontDebugHex(int x, int y, int value, int digits);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+static char *name_0_0036D628[3] = {
+    MenuFileSlot1Text,
+    MenuFileSlot2Text,
+    MenuFileHardDiskDriveText,
+};
+
+FileWorkBlock *FileWork = 0;
+
+byte *FileJpegDec = 0;
+
+byte *FileObjectData = 0;
+
+static char * msg00_1_0036D638[6];
+
+static char * msg00_1_0036D638[6] = { MenuFileSaveText, MenuFileLoadText, MenuFileMemoryCardSlot1Path, MenuFileMemoryCardSlot2Path, MenuFileHardDiskDrivePath, MenuFileFormatText };
+
+static char * msg00_4_0036D658[3] = { savingText, loadingText, formattingText };
+
+static char * msg00_5_0036D668[] = { timeText, fileMoneyText };
+
+char saveStateBlankText[8] = "";
+
+char periodText[8] = ".";
+
+const char yesNoText[8] = "Yes\nNo";
+
+char cancelText[8] = "Cancel";
+
+char fileSelectText[8] = "Select";
+
+/* Text: \x01Money */
+char fileMoneyText[8] = "\001Money";
+
+/* Text: \x01Time */
+char timeText[8] = "\001Time";
+
+char slotNumberText[8] = "No.";
+
+const char shortNumberFormat[8] = "%3d";
+
+const char memoryCardMarkerText[8] = "-MC-";
+
+const char wideNumberFormat[4] = "%6d";
+
+XglTaskScheduler * FileTask = 0;
+
+unsigned char * FileCardDataBuf = 0;
+
+FileSaveRecord * FileSaveData = 0;
+
+unsigned char * FileExistCheckWork = 0;
+
+FileObjectSystem * FileObjectDataSystem = 0;
+
+const char itemsText[8] = "Items";
+
+const char MenuItemCancelText[8] = "Cancel.";
+
+static struct FileLoadGauge gauge;
 
 static void VersionUpDate(SaveDataHeader *save_data)
 {
@@ -1308,46 +1449,6 @@ static void MenuFileInfo(TskObject *task, void *data)
     }
 }
 
-struct FileSelectItem {
-    char *text;
-    unsigned char unmodeled_04[4];
-    signed char color_state;
-    unsigned char unmodeled_09[3];
-};
-
-struct FileSelectList {
-    unsigned char unmodeled_00[2];
-    unsigned short layout_mode;
-    int selected;
-    char *title;
-    void *confirmation_data;
-    void *items;
-    unsigned char unmodeled_14[0x5f8 - 0x14];
-};
-
-struct FileSelectContext {
-    unsigned char unmodeled_00[2];
-    unsigned char initial_flags;
-    unsigned char initial_state;
-    int work;
-    unsigned char animation_flags[4];
-    short targets[4];
-    struct FilePassWindow windows[4];
-    struct FileSelectList lists[4];
-    struct FileSelectItem entries[6];
-};
-
-struct FileSelectSource {
-    char *message;
-    char *title;
-};
-
-extern const char memoryCardSlot1Text[];
-extern const char memoryCardSlot2Text[];
-extern char cancelText[];
-extern char fileSelectText[];
-static struct FileSelectSource msg01_2_0036D650[] ;
-
 static void tskFileSelect(TskObject *task, void *data)
 {
     struct FileSelectContext *const view = data;
@@ -1524,29 +1625,6 @@ static void tskFileEx(TskObject *task, FileExplanation *text)
         break;
     }
 }
-
-/* Thumbnail display reads the packed time word and signed scenario bytes. */
-typedef struct FileThumbnailSaveEntry {
-    struct FileJpegDecodeSlotView *jpeg;
-    unsigned char unmodeled_004[0x1007 - 0x004];
-    signed char chapter;
-    signed char leader;
-    unsigned char unmodeled_1009[3];
-    int map_number;
-    int party_ids[16];
-    unsigned int play_time;
-    unsigned char unmodeled_1054[4];
-    unsigned int packed_time;
-    unsigned char unmodeled_105c[4];
-} FileThumbnailSaveEntry;
-
-extern const char shionLevelText[];
-extern const char newFileText[];
-extern const char corruptDataText[];
-extern const char cannotSaveText[];
-extern const char cannotLoadText[];
-extern char slotNumberText[];
-static char * msg00_5_0036D668[] ;
 
 void FileThumbnailDisp(struct FileThumbnailContext *panel)
 {
@@ -1770,8 +1848,6 @@ if (party_count > 0) {
         } while (0);
     }
 }
-
-void FileThumbnailDisp(struct FileThumbnailContext *panel);
 
 static void tskFileData(TskObject *task, void *data)
 {
@@ -2012,67 +2088,6 @@ static void tskFileData(TskObject *task, void *data)
         break;
     }
 }
-
-/* Defining-owner interface proposals from xgl_hdd. */
-struct HddCheckState {
-    int status;
-    unsigned char *transfer;
-    int dataSize;
-};
-
-struct HddExistRequest {
-    int card;
-    unsigned char *found;
-};
-
-struct HddLoadRequest {
-    int card;
-    void *data;
-    int size;
-};
-
-struct HddSaveRequest {
-    int card;
-    const void *data;
-    int size;
-};
-
-extern int xglMcMain(void);
-extern int xglHddCheck(void);
-extern int xglHddMcGetFree(void);
-extern int xglHddMcExist(struct HddExistRequest *request);
-extern int xglHddMcCreate(struct HddCheckState *request);
-extern int xglHddMcLoad(struct HddLoadRequest *request);
-extern int xglHddMcSave(const struct HddSaveRequest *request);
-extern int MenuSelectMove(int selection, int count, int wrap);
-extern void xglFontDebugHex(int x, int y, int value, int digits);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-/*
- * PadData as MenuFile reads it: a TU-local view of the 0xd0-byte pad object
- * (src/main/input.c lists the other views). held/pressed keep the PadPrefix
- * names at +0x28/+0x2a; the panel cursor tests 0x1000/0x4000 in the +0x30
- * halfword, and mappedRepeat is the +0x34 halfword of PadPrefix.
- */
-typedef struct FileMenuPadData {
-    unsigned char unmodeled_00[0x28];
-    u16 half_28;
-    u16 half_2a;
-    u16 half_2c;
-    u16 half_2e;
-    u16 half_30;
-    u16 mappedPressed;
-    u16 mappedRepeat;
-} FileMenuPadData;
-
-extern FileMenuPadData PadData;
-/* The card number as MenuFile reads it before the create request: through a
-   one-member union, so the load is not ordered after the gauge stores. */
-typedef union FileCardNumber {
-    int number;
-} FileCardNumber;
-extern const char shortNumberFormat[];
-extern const char memoryCardMarkerText[];
-extern const char wideNumberFormat[];
 
 void MenuFile(void) {
     unsigned char delay;
@@ -3364,43 +3379,7 @@ int MenuFileMain(int menu_mode)
     return FileWork->result == 0;
 }
 
-extern char MenuFileMemoryCardSlot2Path[24];
-extern char MenuFileLoadText[8];
-extern char MenuFileFormatText[8];
-extern char MenuFileSaveText[8];
-extern char MenuFileHardDiskDrivePath[24];
-extern char MenuFileMemoryCardSlot1Path[32];
-extern const char savingText[16];
-extern const char formattingText[16];
-extern const char loadingText[16];
-extern char timeText[8];
-extern char fileMoneyText[8];
-extern const char cardRemoveWarningText[72];
-extern const char savingToCardText[48];
-extern const char newDataSaveText[64];
-extern const char loadingFromCardText[48];
-extern const char overwriteSaveDataText[32];
-extern const char savingNewDataText[24];
-extern const char powerOffWarningText[32];
-extern const char saveCompleteText[24];
-extern const char formattingCardText[48];
-extern char saveStateBlankText[8];
-extern const char saveFailedText[16];
-extern const char loadFailedNotFoundText[48];
-extern const char loadFailedCorruptedText[48];
-extern const char saveDataCorruptedText[64];
-extern const char loadFailedText[16];
-extern const char maxSaveFilesHddText[64];
-extern const char maxSaveFilesExceededText[104];
-extern const char maxFoldersExceededText[104];
-extern const char notEnoughSpaceText[56];
-
-static char * msg00_1_0036D638[6] = { MenuFileSaveText, MenuFileLoadText, MenuFileMemoryCardSlot1Path, MenuFileMemoryCardSlot2Path, MenuFileHardDiskDrivePath, MenuFileFormatText };
-
-static char * msg00_4_0036D658[3] = { savingText, loadingText, formattingText };
-
-static char * msg00_5_0036D668[] = { timeText, fileMoneyText };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char cardRemoveWarningText[72] = ".\nDo not remove Memory Card (PS2), reset, or switch off the console.";
 
 const char powerOffWarningText[32] = ".\nDo not turn power off.";
@@ -3549,46 +3528,6 @@ const char characterWeaponsText[24] = "Character Weapons";
 /* Text: Special Items | Categorical Order | Numerical Order | Alphabetical Order | Sort by */
 const char MenuItemInfoLabelsText[96] = "Special Items\000\000\000Categorical Order\000\000\000\000\000\000\000Numerical Order\000Alphabetical Order\000\000\000\000\000\000Sort by ";
 
-char saveStateBlankText[8] = "";
-
-char periodText[8] = ".";
-
-const char yesNoText[8] = "Yes\nNo";
-
-char cancelText[8] = "Cancel";
-
-char fileSelectText[8] = "Select";
-
-/* Text: \x01Money */
-char fileMoneyText[8] = "\001Money";
-
-/* Text: \x01Time */
-char timeText[8] = "\001Time";
-
-char slotNumberText[8] = "No.";
-
-const char shortNumberFormat[8] = "%3d";
-
-const char memoryCardMarkerText[8] = "-MC-";
-
-const char wideNumberFormat[4] = "%6d";
-
-XglTaskScheduler * FileTask = 0;
-
-unsigned char * FileCardDataBuf = 0;
-
-FileSaveRecord * FileSaveData = 0;
-
-unsigned char * FileExistCheckWork = 0;
-
-FileObjectSystem * FileObjectDataSystem = 0;
-
-const char itemsText[8] = "Items";
-
-const char MenuItemCancelText[8] = "Cancel.";
-
-extern char MenuFileCancelText[8];
-
 static struct FileSelectSource msg01_2_0036D650[] = { { .message = isThisOkayText, .title = yesNoText } };
 
 const struct FileDeviceTexts fileDeviceTexts = { { MenuFileCancelText, MenuFileSaveText, MenuFileLoadText } };
@@ -3622,4 +3561,3 @@ char *fileFinishTexts[2] = { saveDataNotExistText, saveDataNotExistCardText };
 char periodEndText[8] = ". \037";
 
 int FileWorkEndTop = 0;
-

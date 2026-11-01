@@ -7,6 +7,193 @@
 
 #include "shared.h"
 
+#define ENEMY_ACTOR_NUMBER(actor) (((EnemyActorView *)(actor))->number)
+
+/* The actor's target facing angle, in radians like Actor.rotation.
+ *
+ * Enemy_Init seeds it from the actor's own yaw, Actor.rotation.y at +0x54
+ * (lwc1 f0,0x54(s3) at 0x002cb3f0; swc1 f0,0x9e4(s3) at 0x002cb408);
+ * Enemy_Command_Sac_Turn below writes the converted command angle there
+ * whenever the turn is instantaneous (swc1 f12,0x9e4(a0) at 0x002d34a4);
+ * ACT_updateEnemy and Enemy_Route steer with it (0x002cdcc0, 0x002cc60c) and
+ * Set_Spline_By_Random (src/main/set_motion.c) hands it to BSpline_Init as the
+ * heading the random spline leaves along.
+ *
+ * It is 0x964 bytes past the end of the recovered type, with nothing in
+ * between recovered, so it cannot be a member of Actor without inventing that
+ * span (docs/naming.md); naming the offset is docs/style.md rule 2's
+ * documented fallback. src/main/set_motion.h spells the same offset under the
+ * same name for main/tu193. */
+#define ACTOR_TARGET_ANGLE_OFFSET 0x9e4
+
+#define ACTOR_TARGET_ANGLE(actor) \
+    (*(float *)((unsigned char *)(actor) + ACTOR_TARGET_ANGLE_OFFSET))
+
+/* The actor's speed, ACT_info's "SPEED %8.3f" column (lwc1/swc1 at
+ * 0x00306378, cited above at +0x6f8). src/main/near_dir.h names the same
+ * offset `speed` in its own field-evidence comment; this macro reuses that
+ * name rather than inventing another one for the object both files describe.
+ * Enemy_Command_Freeze below is the only function of this TU that reads or
+ * writes it, saving and restoring it across a freeze/thaw and slowing it to
+ * ENEMY_FREEZE_SPEED for a scripted deceleration. It is 0x28 bytes past the recovered
+ * type, with nothing in between recovered, so it stays a named offset
+ * (docs/style.md rule 2) rather than a member of Actor. */
+#define ACTOR_SPEED_OFFSET 0x6f8
+
+#define ACTOR_SPEED(actor) \
+    (*(float *)((unsigned char *)(actor) + ACTOR_SPEED_OFFSET))
+
+/* The second flags word ACT_info prints with the same "FLAGS %08x" as +0x00
+ * (0x00306374, cited above at +0x6f0). Enemy_Command_Stop_FreeFall below is
+ * the only function of this TU that touches it, setting or clearing its top
+ * two bits to claim or release free-fall ownership. */
+#define ACTOR_RUNTIME_FLAGS_OFFSET 0x6f0
+
+#define ACTOR_RUNTIME_FLAGS(actor) \
+    (*(u32 *)((unsigned char *)(actor) + ACTOR_RUNTIME_FLAGS_OFFSET))
+
+/* The identity stored at +0x37b8 of each enemy-work entry; the same field is
+ * read by Get_ActorNumber at 0x002d2d60/0x002d2d88 and compared with target. */
+#define ENEMY_ID_OFFSET 0x37b8
+
+/* Enemy_Command_Scale's per-entry blend: current/start/target values and
+ * frame/duration halfwords are written at +0x37d0..+0x37e3. */
+#define ENEMY_SCALE_OFFSET 0x37d0
+
+#define ENEMY_SCALE(work) \
+    ((EnemyScale *)((unsigned char *)(work) + ENEMY_SCALE_OFFSET))
+
+#define ACTOR_MOTION_NUMBER_OFFSET 0x704
+
+#define ACTOR_MOTION_NUMBER(actor) \
+    (((EnemyActorMotionView *)(actor))->motion_number)
+
+#define ACTOR_EXT_OFFSET 0xc0
+#define ENEMY_ACTION_VALUE_OFFSET 0x2090
+#define ENEMY_ACTION_ARGUMENT_DELTA 0x800
+#define ENEMY_ACTION_SLOT_COUNT 4
+#define ENEMY_ACTION_STRIDE 8
+
+/* The turn state inside one `enepc` entry.
+ *
+ * The entry's layout as a whole is not recovered - src/main/set_motion.h keeps
+ * the same store an opaque 0x38b0-byte block and names only the offsets its own
+ * two functions witness (+0x40, +0x42, +0x80, +0x1080, +0x1090, +0x3094) - so
+ * the spans this TU does not witness get no members either, and the entry does
+ * not become a struct. It is the same store: Enemy_Command_Sac_Turn indexes
+ * `enepc` with Actor.number, which is what Set_Spline_By_Route and
+ * Set_Spline_By_Random index it with too.
+ *
+ * +0x3824..+0x382f IS recovered, as one twelve-byte record, because the game
+ * reads it as one. Script_Action (0x002d0ee8..0x002d0f28) skips the record when
+ * the halfword at +0x382c is -1 and otherwise computes
+ * `start + (target - start) * frame / duration` from +0x3824, +0x3828, +0x382c
+ * and +0x382e in that order, incrementing +0x382c by one on the way
+ * (addiu a0,a0,1 at 0x002d0f0c); this function writes exactly those four,
+ * seeding +0x3824 from the actor's current rotation lane and +0x3828 from the
+ * converted command angle; and ACT_createEnemy builds a fresh entry with -1 in
+ * +0x382c and 0 in +0x382e (sh t0,0x382c(s1) at 0x002d42f8 with t0 = -1 from
+ * 0x002d4258, sh zero,0x382e(s1)), which is the same "no turn in progress"
+ * marker this function's instantaneous branch writes. So the four are the
+ * start angle, the target angle, the elapsed frame count and the frame count
+ * the turn is to take, and `EnemyTurn` names them.
+ *
+ * It stays a view taken at a named offset rather than a member of the entry
+ * (docs/style.md rule 2, the middle grade): nothing between the entry's base
+ * and +0x3824 is recovered, so a struct whose base is the entry could only be
+ * written by inventing 0x3824 bytes, which docs/naming.md refuses. The view
+ * was compiled and measured (form 04): ee-gcc 2.96 folds ENEMY_TURN_OFFSET into
+ * the displacement of each store, so the function keeps its original 216 bytes
+ * and all six EE images stay identical. That is the opposite of what the same
+ * store cost main/tu193, where a typed reference per offset cost one addiu per
+ * reference - the difference is that all four fields here are addressed from
+ * one base in one basic block.
+ *
+ * +0x37e0 is the turn request flags word and lies 0x44 bytes before the
+ * record, with nothing in between recovered, so it keeps its own named offset
+ * rather than joining EnemyTurn. This function ORs ENEMY_TURN_REQUEST into it
+ * to ask for a timed turn; nineteen other functions of main read or write the
+ * same word, among them Script_Action, ACT_updateEnemy, Enemy_Route and
+ * ACT_createEnemy, which clears it when it builds the entry (sw zero,0x37e0(s1)
+ * at 0x002d42b8).
+ */
+#define ENEMY_TURN_FLAGS_OFFSET 0x37e0
+
+#define ENEMY_TURN_OFFSET       0x3824
+
+#define ENEMY_TURN(work) \
+    ((EnemyTurn *)((unsigned char *)(work) + ENEMY_TURN_OFFSET))
+
+#define ENEMY_TURN_FLAGS(work) \
+    (*(unsigned int *)((unsigned char *)(work) + ENEMY_TURN_FLAGS_OFFSET))
+
+#define ENEMY_SAC_MOVE_OFFSET 0x3800
+
+#define ENEMY_SAC_MOVE(work) \
+    ((EnemySacMove *)((unsigned char *)(work) + ENEMY_SAC_MOVE_OFFSET))
+
+/* The bit this function sets in ENEMY_TURN_FLAGS to ask for a timed turn. */
+#define ENEMY_TURN_REQUEST 0x10000
+
+/* Enemy_Command_Freeze's own state inside the entry: a one-byte freeze
+ * command (lb/sb at 0x002d2eac/0x002d2ef4/0x002d2f00) and, 14 bytes later,
+ * the actor's speed saved across the freeze (lwc1/swc1 at
+ * 0x002d2f0c/0x002d2f30/0x002d2f54, ACTOR_SPEED above). Both are read and
+ * written by Enemy_Command_Freeze alone, so they are named offsets rather
+ * than members: nothing between the entry's base and +0x37a2, or between
+ * +0x37a2 and +0x37b0, is recovered.
+ *
+ * ENEMY_FREEZE_NO_SAVED_SPEED is the sentinel Enemy_Command_Freeze stores at
+ * +0x37b0 for "not currently frozen" (lui $1,0xc47a / mtc1 at 0x002d2f1c and
+ * 0x002d2f40) and compares against before thawing (c.eq.s at 0x002d2f28). */
+#define ENEMY_FREEZE_STATE_OFFSET       0x37a2
+
+#define ENEMY_FREEZE_SAVED_SPEED_OFFSET 0x37b0
+
+#define ENEMY_FREEZE_STATE(work) \
+    (*(signed char *)((unsigned char *)(work) + ENEMY_FREEZE_STATE_OFFSET))
+
+#define ENEMY_FREEZE_SAVED_SPEED(work) \
+    (*(float *)((unsigned char *)(work) + ENEMY_FREEZE_SAVED_SPEED_OFFSET))
+
+#define ENEMY_FREEZE_NO_SAVED_SPEED -1000.0f
+
+/* Enemy_Command_Turn's own one-byte state, one byte after
+ * ENEMY_FREEZE_STATE (lb/sb at 0x002d2fc4/0x002d2fd0/0x002d2fd8): set,
+ * cleared or toggled by commands 0-2 and read by nothing else in this TU. */
+#define ENEMY_TURN_LOCK_OFFSET 0x37a3
+
+#define ENEMY_TURN_LOCK(work) \
+    (*(signed char *)((unsigned char *)(work) + ENEMY_TURN_LOCK_OFFSET))
+
+/* Enemy_Command_Light's own state: a halfword, not a byte (lh/sh at
+ * 0x002d3038/0x002d3048/0x002d3050/0x002d3060), set, cleared or toggled by
+ * commands 0-2 the same way ENEMY_TURN_LOCK is. */
+#define ENEMY_LIGHT_OFFSET 0x38aa
+
+#define ENEMY_LIGHT(work) \
+    (*(short *)((unsigned char *)(work) + ENEMY_LIGHT_OFFSET))
+
+/* Enemy_Command_Type's own one-byte state inside the entry (sb a1 to
+ * enepc + 0x4a at 0x002d30d4, read back by Enemy_Pause with lbu v0,0x4a(s1)
+ * at 0x002ccfc4): the enemy behaviour type Enemy_Pause switches on to select
+ * one of its pause behaviours. It stays a named offset like the other `enepc`
+ * offsets above: EnemyWork is the opaque block src/main/set_motion.h defines
+ * identically, so it gets no members here. */
+#define ENEMY_TYPE_OFFSET 0x4a
+
+#define ENEMY_TYPE(work) \
+    (*(unsigned char *)((unsigned char *)(work) + ENEMY_TYPE_OFFSET))
+
+/* Enemy_Command_Target's own state: the enepc entry's target actor number,
+ * a halfword two bytes after ENEMY_TURN_LOCK (sh at 0x002d3164/0x002d3178).
+ * Enemy_Command_Target below is the only function of this TU that writes
+ * it. */
+#define ENEMY_TARGET_OFFSET 0x37a4
+
+#define ENEMY_TARGET(work) \
+    (*(short *)((unsigned char *)(work) + ENEMY_TARGET_OFFSET))
+
 /*
  * The engine's actor record.
  *
@@ -190,71 +377,11 @@ typedef struct EnemyActorView {
     unsigned char number;
 } EnemyActorView;
 
-#define ENEMY_ACTOR_NUMBER(actor) (((EnemyActorView *)(actor))->number)
-
-/* The actor's target facing angle, in radians like Actor.rotation.
- *
- * Enemy_Init seeds it from the actor's own yaw, Actor.rotation.y at +0x54
- * (lwc1 f0,0x54(s3) at 0x002cb3f0; swc1 f0,0x9e4(s3) at 0x002cb408);
- * Enemy_Command_Sac_Turn below writes the converted command angle there
- * whenever the turn is instantaneous (swc1 f12,0x9e4(a0) at 0x002d34a4);
- * ACT_updateEnemy and Enemy_Route steer with it (0x002cdcc0, 0x002cc60c) and
- * Set_Spline_By_Random (src/main/set_motion.c) hands it to BSpline_Init as the
- * heading the random spline leaves along.
- *
- * It is 0x964 bytes past the end of the recovered type, with nothing in
- * between recovered, so it cannot be a member of Actor without inventing that
- * span (docs/naming.md); naming the offset is docs/style.md rule 2's
- * documented fallback. src/main/set_motion.h spells the same offset under the
- * same name for main/tu193. */
-#define ACTOR_TARGET_ANGLE_OFFSET 0x9e4
-
-#define ACTOR_TARGET_ANGLE(actor) \
-    (*(float *)((unsigned char *)(actor) + ACTOR_TARGET_ANGLE_OFFSET))
-
-/* The actor's speed, ACT_info's "SPEED %8.3f" column (lwc1/swc1 at
- * 0x00306378, cited above at +0x6f8). src/main/near_dir.h names the same
- * offset `speed` in its own field-evidence comment; this macro reuses that
- * name rather than inventing another one for the object both files describe.
- * Enemy_Command_Freeze below is the only function of this TU that reads or
- * writes it, saving and restoring it across a freeze/thaw and slowing it to
- * ENEMY_FREEZE_SPEED for a scripted deceleration. It is 0x28 bytes past the recovered
- * type, with nothing in between recovered, so it stays a named offset
- * (docs/style.md rule 2) rather than a member of Actor. */
-#define ACTOR_SPEED_OFFSET 0x6f8
-
-#define ACTOR_SPEED(actor) \
-    (*(float *)((unsigned char *)(actor) + ACTOR_SPEED_OFFSET))
-
-/* The second flags word ACT_info prints with the same "FLAGS %08x" as +0x00
- * (0x00306374, cited above at +0x6f0). Enemy_Command_Stop_FreeFall below is
- * the only function of this TU that touches it, setting or clearing its top
- * two bits to claim or release free-fall ownership. */
-#define ACTOR_RUNTIME_FLAGS_OFFSET 0x6f0
-
-#define ACTOR_RUNTIME_FLAGS(actor) \
-    (*(u32 *)((unsigned char *)(actor) + ACTOR_RUNTIME_FLAGS_OFFSET))
-
-/* The engine's own entry point for an actor's enemy behaviour, cited above
- * (0x002cb278) as the witness that ties `enepc` and Actor.number together,
- * and called by Enemy_Command_Code below (jal Enemy_Init at 0x002d30f8). */
-extern void Enemy_Init(Actor *actor);
-
 /* The executable exports this 64-entry enemy-work allocation. */
 typedef struct EnemyWork {
     unsigned char bytes[0x38b0];
 } EnemyWork;
 
-/* canon: config/header-canon.json chose src/math/main/002d33f8-sac-turn/private.h over 0 other accepted spellings */
-extern EnemyWork enepc[16];
-
-/* The identity stored at +0x37b8 of each enemy-work entry; the same field is
- * read by Get_ActorNumber at 0x002d2d60/0x002d2d88 and compared with target. */
-#define ENEMY_ID_OFFSET 0x37b8
-
-/* Enemy_Command_Scale's per-entry blend: current/start/target values and
- * frame/duration halfwords are written at +0x37d0..+0x37e3. */
-#define ENEMY_SCALE_OFFSET 0x37d0
 typedef struct EnemyScale {
     float current;
     float start;
@@ -262,75 +389,18 @@ typedef struct EnemyScale {
     short frame;
     short duration;
 } EnemyScale;
-#define ENEMY_SCALE(work) \
-    ((EnemyScale *)((unsigned char *)(work) + ENEMY_SCALE_OFFSET))
 
-#define ACTOR_MOTION_NUMBER_OFFSET 0x704
 typedef struct EnemyActorMotionView {
     unsigned char unmodeled_00_703[ACTOR_MOTION_NUMBER_OFFSET];
     unsigned short motion_number;
 } EnemyActorMotionView;
-#define ACTOR_MOTION_NUMBER(actor) \
-    (((EnemyActorMotionView *)(actor))->motion_number)
-extern void ACT_setMotion(Actor *actor, unsigned int dataId);
 
-#define ACTOR_EXT_OFFSET 0xc0
 typedef struct ActorAction {
     unsigned char unmodeled_00[0x1a];
     short frame;
     unsigned char unmodeled_1c[2];
     short duration;
 } ActorAction;
-#define ENEMY_ACTION_VALUE_OFFSET 0x2090
-#define ENEMY_ACTION_ARGUMENT_DELTA 0x800
-#define ENEMY_ACTION_SLOT_COUNT 4
-#define ENEMY_ACTION_STRIDE 8
-
-/* The turn state inside one `enepc` entry.
- *
- * The entry's layout as a whole is not recovered - src/main/set_motion.h keeps
- * the same store an opaque 0x38b0-byte block and names only the offsets its own
- * two functions witness (+0x40, +0x42, +0x80, +0x1080, +0x1090, +0x3094) - so
- * the spans this TU does not witness get no members either, and the entry does
- * not become a struct. It is the same store: Enemy_Command_Sac_Turn indexes
- * `enepc` with Actor.number, which is what Set_Spline_By_Route and
- * Set_Spline_By_Random index it with too.
- *
- * +0x3824..+0x382f IS recovered, as one twelve-byte record, because the game
- * reads it as one. Script_Action (0x002d0ee8..0x002d0f28) skips the record when
- * the halfword at +0x382c is -1 and otherwise computes
- * `start + (target - start) * frame / duration` from +0x3824, +0x3828, +0x382c
- * and +0x382e in that order, incrementing +0x382c by one on the way
- * (addiu a0,a0,1 at 0x002d0f0c); this function writes exactly those four,
- * seeding +0x3824 from the actor's current rotation lane and +0x3828 from the
- * converted command angle; and ACT_createEnemy builds a fresh entry with -1 in
- * +0x382c and 0 in +0x382e (sh t0,0x382c(s1) at 0x002d42f8 with t0 = -1 from
- * 0x002d4258, sh zero,0x382e(s1)), which is the same "no turn in progress"
- * marker this function's instantaneous branch writes. So the four are the
- * start angle, the target angle, the elapsed frame count and the frame count
- * the turn is to take, and `EnemyTurn` names them.
- *
- * It stays a view taken at a named offset rather than a member of the entry
- * (docs/style.md rule 2, the middle grade): nothing between the entry's base
- * and +0x3824 is recovered, so a struct whose base is the entry could only be
- * written by inventing 0x3824 bytes, which docs/naming.md refuses. The view
- * was compiled and measured (form 04): ee-gcc 2.96 folds ENEMY_TURN_OFFSET into
- * the displacement of each store, so the function keeps its original 216 bytes
- * and all six EE images stay identical. That is the opposite of what the same
- * store cost main/tu193, where a typed reference per offset cost one addiu per
- * reference - the difference is that all four fields here are addressed from
- * one base in one basic block.
- *
- * +0x37e0 is the turn request flags word and lies 0x44 bytes before the
- * record, with nothing in between recovered, so it keeps its own named offset
- * rather than joining EnemyTurn. This function ORs ENEMY_TURN_REQUEST into it
- * to ask for a timed turn; nineteen other functions of main read or write the
- * same word, among them Script_Action, ACT_updateEnemy, Enemy_Route and
- * ACT_createEnemy, which clears it when it builds the entry (sw zero,0x37e0(s1)
- * at 0x002d42b8).
- */
-#define ENEMY_TURN_FLAGS_OFFSET 0x37e0
-#define ENEMY_TURN_OFFSET       0x3824
 
 typedef struct EnemyTurn {
     float start_angle;
@@ -338,12 +408,6 @@ typedef struct EnemyTurn {
     short frame;
     short duration;
 } EnemyTurn;
-
-#define ENEMY_TURN(work) \
-    ((EnemyTurn *)((unsigned char *)(work) + ENEMY_TURN_OFFSET))
-
-#define ENEMY_TURN_FLAGS(work) \
-    (*(unsigned int *)((unsigned char *)(work) + ENEMY_TURN_FLAGS_OFFSET))
 
 /* Enemy_Command_Sac_Move's state begins at +0x3800 of the opaque EnemyWork
  * entry: the original stores two four-float vectors at +0x3800/+0x3810 and
@@ -354,91 +418,6 @@ typedef struct EnemySacMove {
     short frame;
     short duration;
 } EnemySacMove;
-
-#define ENEMY_SAC_MOVE_OFFSET 0x3800
-#define ENEMY_SAC_MOVE(work) \
-    ((EnemySacMove *)((unsigned char *)(work) + ENEMY_SAC_MOVE_OFFSET))
-
-/* The bit this function sets in ENEMY_TURN_FLAGS to ask for a timed turn. */
-#define ENEMY_TURN_REQUEST 0x10000
-
-/* Enemy_Command_Freeze's own state inside the entry: a one-byte freeze
- * command (lb/sb at 0x002d2eac/0x002d2ef4/0x002d2f00) and, 14 bytes later,
- * the actor's speed saved across the freeze (lwc1/swc1 at
- * 0x002d2f0c/0x002d2f30/0x002d2f54, ACTOR_SPEED above). Both are read and
- * written by Enemy_Command_Freeze alone, so they are named offsets rather
- * than members: nothing between the entry's base and +0x37a2, or between
- * +0x37a2 and +0x37b0, is recovered.
- *
- * ENEMY_FREEZE_NO_SAVED_SPEED is the sentinel Enemy_Command_Freeze stores at
- * +0x37b0 for "not currently frozen" (lui $1,0xc47a / mtc1 at 0x002d2f1c and
- * 0x002d2f40) and compares against before thawing (c.eq.s at 0x002d2f28). */
-#define ENEMY_FREEZE_STATE_OFFSET       0x37a2
-#define ENEMY_FREEZE_SAVED_SPEED_OFFSET 0x37b0
-
-#define ENEMY_FREEZE_STATE(work) \
-    (*(signed char *)((unsigned char *)(work) + ENEMY_FREEZE_STATE_OFFSET))
-
-#define ENEMY_FREEZE_SAVED_SPEED(work) \
-    (*(float *)((unsigned char *)(work) + ENEMY_FREEZE_SAVED_SPEED_OFFSET))
-
-#define ENEMY_FREEZE_NO_SAVED_SPEED -1000.0f
-
-/* Enemy_Command_Turn's own one-byte state, one byte after
- * ENEMY_FREEZE_STATE (lb/sb at 0x002d2fc4/0x002d2fd0/0x002d2fd8): set,
- * cleared or toggled by commands 0-2 and read by nothing else in this TU. */
-#define ENEMY_TURN_LOCK_OFFSET 0x37a3
-
-#define ENEMY_TURN_LOCK(work) \
-    (*(signed char *)((unsigned char *)(work) + ENEMY_TURN_LOCK_OFFSET))
-
-/* Enemy_Command_Light's own state: a halfword, not a byte (lh/sh at
- * 0x002d3038/0x002d3048/0x002d3050/0x002d3060), set, cleared or toggled by
- * commands 0-2 the same way ENEMY_TURN_LOCK is. */
-#define ENEMY_LIGHT_OFFSET 0x38aa
-
-#define ENEMY_LIGHT(work) \
-    (*(short *)((unsigned char *)(work) + ENEMY_LIGHT_OFFSET))
-
-void Enemy_Command_Sac_Turn(Actor *actor, int duration,
-                            float angle_degrees, float angle_mode,
-                            short axis);
-
-/* These are distinct literal-pool witnesses despite equal numeric values. */
-extern const float sac_turn_pi;
-extern volatile const float sac_turn_two_pi_subtract;
-extern volatile const float sac_turn_two_pi_add;
-
-/* The scripted deceleration speed Enemy_Command_Freeze applies for its
- * "slow" command (lwc1 $gp,-31280 at 0x002d2f60, value 0.03333...). Not in
- * config/symbols/main.txt, so it keeps the splat default name. */
-extern float ENEMY_FREEZE_SPEED;
-
-/* Runs an enemy's pause behaviour, chosen by ENEMY_TYPE of its `enepc` entry
- * (lbu v0,0x4a(s1) at 0x002ccfc4). No caller uses a value from it or from
- * Enemy_Init: Start_Enemy_Command discards what Enemy_Command_Type and
- * Enemy_Command_Code leave in v0 (0x002d366c, 0x002d3684). */
-extern void Enemy_Pause(Actor *actor);
-
-/* Enemy_Command_Type's own one-byte state inside the entry (sb a1 to
- * enepc + 0x4a at 0x002d30d4, read back by Enemy_Pause with lbu v0,0x4a(s1)
- * at 0x002ccfc4): the enemy behaviour type Enemy_Pause switches on to select
- * one of its pause behaviours. It stays a named offset like the other `enepc`
- * offsets above: EnemyWork is the opaque block src/main/set_motion.h defines
- * identically, so it gets no members here. */
-#define ENEMY_TYPE_OFFSET 0x4a
-
-#define ENEMY_TYPE(work) \
-    (*(unsigned char *)((unsigned char *)(work) + ENEMY_TYPE_OFFSET))
-
-/* Enemy_Command_Target's own state: the enepc entry's target actor number,
- * a halfword two bytes after ENEMY_TURN_LOCK (sh at 0x002d3164/0x002d3178).
- * Enemy_Command_Target below is the only function of this TU that writes
- * it. */
-#define ENEMY_TARGET_OFFSET 0x37a4
-
-#define ENEMY_TARGET(work) \
-    (*(short *)((unsigned char *)(work) + ENEMY_TARGET_OFFSET))
 
 /*
  * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared
@@ -451,7 +430,6 @@ extern void Enemy_Pause(Actor *actor);
  * it is the player's own Actor pointer.
  */
 typedef unsigned int GameLoopStateWords[];
-extern GameLoopStateWords GameLoopState;
 
 /* The ladder command addresses sixteen entries at the end of GameLoopState:
  * type bytes at +0x29fa0, mode bytes at +0x29fb0 and scales at +0x29fc0.
@@ -463,16 +441,52 @@ typedef struct GameLoopMapState {
     float ladder_scale[16];
 } GameLoopMapState;
 
+/* canon: config/header-canon.json chose src/math/main/002d33f8-sac-turn/private.h over 0 other accepted spellings */
+extern EnemyWork enepc[16];
+
+/* These are distinct literal-pool witnesses despite equal numeric values. */
+extern const float sac_turn_pi;
+
+extern volatile const float sac_turn_two_pi_subtract;
+extern volatile const float sac_turn_two_pi_add;
+
+/* The scripted deceleration speed Enemy_Command_Freeze applies for its
+ * "slow" command (lwc1 $gp,-31280 at 0x002d2f60, value 0.03333...). Not in
+ * config/symbols/main.txt, so it keeps the splat default name. */
+extern float ENEMY_FREEZE_SPEED;
+
+extern GameLoopStateWords GameLoopState;
+extern Actor actor[64];
+
+/* The engine's own entry point for an actor's enemy behaviour, cited above
+ * (0x002cb278) as the witness that ties `enepc` and Actor.number together,
+ * and called by Enemy_Command_Code below (jal Enemy_Init at 0x002d30f8). */
+extern void Enemy_Init(Actor *actor);
+
+extern void ACT_setMotion(Actor *actor, unsigned int dataId);
+
+void Enemy_Command_Sac_Turn(Actor *actor, int duration,
+                            float angle_degrees, float angle_mode,
+                            short axis);
+
+/* Runs an enemy's pause behaviour, chosen by ENEMY_TYPE of its `enepc` entry
+ * (lbu v0,0x4a(s1) at 0x002ccfc4). No caller uses a value from it or from
+ * Enemy_Init: Start_Enemy_Command discards what Enemy_Command_Type and
+ * Enemy_Command_Code leave in v0 (0x002d366c, 0x002d3684). */
+extern void Enemy_Pause(Actor *actor);
+
 /* Sibling of this TU, still original bytes (INCLUDE_ASM above): converts a
  * command's target selector into the enepc/Actor index Enemy_Command_Target
  * below stores, the same numbering ACT_create hands out into Actor.number
  * (+0x80). */
 extern int Get_ActorNumber(int target);
+
 extern void Check_Encount(Actor *actor, int enable, signed char command);
-extern Actor actor[64];
 extern int ACT_setMotion2(Actor *actor, int motion, int flags);
+
 extern int Actor_LookAt_Set(Actor *actor, signed char duration,
                             const Vector4 *target_position);
+
 extern int Actor_LookAt_Release(Actor *actor, signed char duration);
 
 #endif /* SRC_MAIN_ENEMY_2_H */

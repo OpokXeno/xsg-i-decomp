@@ -1,25 +1,11 @@
 #include "common.h"
-
 #include "shared.h"
 
 typedef struct XglCamera XglCamera;
 
 typedef struct XglCameraScreen XglCameraScreen;
 
-static void xglCameraScreenInit(StudioCamera *studio);
-
-static void xglCameraTravelInit(StudioCamera *studio);
-
-/* Move passes an unused second register argument; the callee reads only a0. */
-
-static void xglCameraViewScreen(StudioCamera *studio, const Vector4 *offset);
-
-static void xglCameraViewTravel(StudioCamera *studio, Vector4 *offset);
-
-static void xglCameraViewVolume(StudioCamera *studio, Vector4 *offset);
-
 /* The screen subobject begins at +0x10; its viewport occupies +0x60..+0x6f. */
-
 typedef struct CameraScreen {
     u8 unmodeled_00[0x50];
     Vector4 window;
@@ -31,7 +17,6 @@ typedef struct CameraWindowData {
 } CameraWindowData;
 
 /* sRender is 0x5c bytes; its signed screen dimensions are at +4 and +6. */
-
 typedef struct RenderWindowLimits {
     u8 unmodeled_00[4];
     union {
@@ -43,25 +28,6 @@ typedef struct RenderWindowLimits {
     };
     u8 unmodeled_08[0x54];
 } RenderWindowLimits;
-
-extern RenderWindowLimits sRender;
-
-static Vector4 sClipRange_0;
-static Vector4 sPortEffect_1;
-static Vector4 sShootAngleR_2;
-static Vector4 sShootAngleV_3;
-static Vector4 sShootAngleA_4;
-static Vector4 sShootPlaceR_5;
-static Vector4 sShootPlaceV_6;
-static Vector4 sShootPlaceA_7;
-static Vector4 sChaseRefPos_8;
-static Vector4 sChaseIntPos_9;
-
-#include "xgl_camera.h"
-
-static Vector4 sShootAngleA_10 = {0.0f, 0.0f, 0.0f, 1.0f};
-
-static Vector4 sShootPlaceA_11 = {0.0f, 0.0f, 0.0f, 1.0f};
 
 /* Two 0x68-byte pad records; TravelScale reads port 1's held mask. */
 struct CameraPadRecord {
@@ -76,19 +42,32 @@ struct CameraPadRecord {
     signed char analog_signed[4];
 };
 
+/* DISPLAY register of the GS display environment at +0x18. */
+typedef struct CameraDisplayEnv {
+    u8 unmodeled_00[0x18];
+    long display;
+    u8 unmodeled_20[0x30];
+} CameraDisplayEnv;
+
+extern RenderWindowLimits sRender;
 extern struct CameraPadRecord PadData[2];
+extern CameraDisplayEnv DispEnv;
+
+static void xglCameraScreenInit(StudioCamera *studio);
+static void xglCameraTravelInit(StudioCamera *studio);
+
+/* Move passes an unused second register argument; the callee reads only a0. */
+static void xglCameraViewScreen(StudioCamera *studio, const Vector4 *offset);
+static void xglCameraViewTravel(StudioCamera *studio, Vector4 *offset);
+static void xglCameraViewVolume(StudioCamera *studio, Vector4 *offset);
 
 extern void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source,
                               float scale);
 
 extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
 extern float atan2f(float y, float x);
-
 extern float tanf(float angle);
-
 extern void xglMatrixStackInverse(void);
-
 extern void xglMatrixStackMul(Matrix4 matrix);
 
 extern void xglMatrixStackFrustum(float left, float right, float bottom,
@@ -103,23 +82,62 @@ extern void xglPlaneParameter(Vector4 *destination, const Vector4 *p0,
 extern void xglVectorScale(Vector4 *destination, const Vector4 *source,
                            float scale);
 
-/* DISPLAY register of the GS display environment at +0x18. */
-typedef struct CameraDisplayEnv {
-    u8 unmodeled_00[0x18];
-    long display;
-    u8 unmodeled_20[0x30];
-} CameraDisplayEnv;
-
-extern CameraDisplayEnv DispEnv;
-
-static signed char aaiVertexIndex[6][3];
-
 extern float xglSin(float angle);
-
 extern float xglCos(float angle);
 
 extern void xglVectorScaleAddXYZ(Vector4 *destination, const Vector4 *source,
                                  const Vector4 *other, float scale);
+
+static Vector4 sClipRange_0;
+
+static Vector4 sPortEffect_1;
+
+static Vector4 sShootAngleR_2;
+
+static Vector4 sShootAngleV_3;
+
+static Vector4 sShootAngleA_4;
+
+static Vector4 sShootPlaceR_5;
+
+static Vector4 sShootPlaceV_6;
+
+static Vector4 sShootPlaceA_7;
+
+static Vector4 sChaseRefPos_8;
+
+static Vector4 sChaseIntPos_9;
+
+static Vector4 sShootAngleA_10 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+static Vector4 sShootPlaceA_11 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+static signed char aaiVertexIndex[6][3];
+
+static Vector4 sClipRange_0 = { .x = 0.0099999997764825821f, .y = 99000.0f, .z = 0.0f, .w = 0.0f };
+
+static Vector4 sPortEffect_1 = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 100.0f };
+
+static Vector4 sShootAngleR_2 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
+
+static Vector4 sShootAngleV_3 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
+
+static Vector4 sShootAngleA_4 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
+
+static Vector4 sShootPlaceR_5 = { .x = 0.0f, .y = 1.0f, .z = 4.0f, .w = 1.0f };
+
+static Vector4 sShootPlaceV_6 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
+
+static Vector4 sShootPlaceA_7 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
+
+static Vector4 sChaseRefPos_8 = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f };
+
+static Vector4 sChaseIntPos_9 = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f };
+
+static signed char aaiVertexIndex[6][3] = { { 0, 2, 4 }, { 1, 0, 5 }, { 0, 1, 2 }, { 3, 1, 7 }, { 2, 3, 6 }, { 4, 6, 5 } };
+
+/* Declared here, not at the top: moving it up changes the original code. */
+#include "xgl_camera.h"
 
 static void xglCameraControlInit(StudioCamera *camera)
 {
@@ -681,25 +699,3 @@ void xglCameraClipRangeDefault(StudioCamera *camera)
     camera->nearClip = 0.01f;
     camera->farClip = 99000.0f;
 }
-
-static Vector4 sClipRange_0 = { .x = 0.0099999997764825821f, .y = 99000.0f, .z = 0.0f, .w = 0.0f };
-
-static Vector4 sPortEffect_1 = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 100.0f };
-
-static Vector4 sShootAngleR_2 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-
-static Vector4 sShootAngleV_3 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-
-static Vector4 sShootAngleA_4 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-
-static Vector4 sShootPlaceR_5 = { .x = 0.0f, .y = 1.0f, .z = 4.0f, .w = 1.0f };
-
-static Vector4 sShootPlaceV_6 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-
-static Vector4 sShootPlaceA_7 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-
-static Vector4 sChaseRefPos_8 = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f };
-
-static Vector4 sChaseIntPos_9 = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f };
-
-static signed char aaiVertexIndex[6][3] = { { 0, 2, 4 }, { 1, 0, 5 }, { 0, 1, 2 }, { 3, 1, 7 }, { 2, 3, 6 }, { 4, 6, 5 } };

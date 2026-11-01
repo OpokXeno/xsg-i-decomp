@@ -6,7 +6,9 @@
 #define SRC_MAIN_FCV2_H
 
 typedef signed short s16;
+
 typedef int s32;
+
 typedef float f32;
 
 /* FCV2 pack state consumed by the packed-curve readers and initializer. */

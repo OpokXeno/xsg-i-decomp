@@ -1,8 +1,10 @@
 /* UMN code embedded in MAIN, original OV02 translation unit 12. */
 #include "common.h"
+
 #include "shared.h"
 
 typedef unsigned char u8;
+
 typedef signed short s16;
 
 typedef struct TyaUmlDispParam {
@@ -74,8 +76,35 @@ typedef struct TyaUmlDispLine {
     s16 marks[18];
 } TyaUmlDispLine;
 
+/*
+ * One record of the text archive find_text walks: `size` counts the bytes
+ * after the size word itself (the next record starts at size + 4), and a zero
+ * size ends the archive. Only the fields find_text reads are evidenced.
+ */
+typedef struct TyaUmlTextRecord {
+    int size;                  /* 0x00 */
+    int id;                    /* 0x04 */
+    u8 unmodeled_08[0x0C];
+    u16 flag;                  /* 0x14: event flag that unlocks the text */
+    u8 unmodeled_16[0x52];
+    u8 text[1];                /* 0x68 */
+} TyaUmlTextRecord;
+
+/*
+ * The database view tyaUmlDatabaseMain drives: it starts with the display
+ * parameters it hands to tyaUmlDispMain/tyaUmlDispType3/tyaUmlDispLoad, so
+ * the record embeds a TyaUmlDispParam. Only the index cursor disp_index
+ * reads is modeled; the rest stays unmodeled.
+ */
+typedef struct TyaUmlDatabase {
+    TyaUmlDispParam display;   /* 0x00 */
+    u8 unmodeled_30[0x26];
+    s16 indexCursor;           /* 0x56: highlighted entry of the index bar */
+} TyaUmlDatabase;
+
 /* Original embedded-OV02 storage; no new data definitions. */
 extern u8 *D_00A13660;                  /* OV02 `buffer` */
+
 extern s16 *D_00A138E8;                 /* OV02 `tbl` */
 extern s16 base_tbl[0x140];
 extern TyaUmlImage image_00A10BC0[8];
@@ -83,20 +112,39 @@ extern u64 TestEnv_1_00A108B0[12];      /* texture_trans's VIF scratch packet */
 extern const char D_00A13380[24];       /* font control stream */
 extern const char D_00A13398[24];       /* "data\\umn\\db_fileno.txt" */
 extern TyaUmlRenderSize sRender;
+
+/* Font control streams: the index-bar header, the highlighted and the normal
+ * entry colour, the two-byte entry labels (through idx.7) and the suffix
+ * template msg.8, whose bytes 2 and 3 take the high and low suffix byte. */
+extern const char D_00A13400[16];
+
+extern const char D_00A13410[8];
+extern const char D_00A13418[8];
+extern const char *idx_7;
+extern char msg_8[5];
+
 extern int xglCdGetFileSize(const char *name);
 extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
 extern void *memset(void *dest, int value, unsigned int size);
 extern int tyaUmlDispLoad(TyaUmlDispParam *parameter);
 static void tyaUmlDispType3(TyaUmlDispParam *parameter);
 extern void tyaUmlDispType3Sub0(void *context, void *argument);
+
 extern void xglFontPrintExtFunc(unsigned int flags,
                                 void (*draw)(void *context, void *argument),
                                 void *argument);
+
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
                                     int count);
+
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+
+/* Defined in src/main/xgl_flags.c. */
+extern int xglFlagsGet(int bit_offset, int bit_count);
+
+extern void xglFontPrintDirectOT(int ot, const char *text);
 
 static void mark(TyaUmlParser *parser, TyaUmlDispLine *line)
 {
@@ -186,23 +234,6 @@ int tyaUmlDispMain(TyaUmlDispParam *parameter)
     tyaUmlDispType3(parameter);
     return 0;
 }
-
-/*
- * One record of the text archive find_text walks: `size` counts the bytes
- * after the size word itself (the next record starts at size + 4), and a zero
- * size ends the archive. Only the fields find_text reads are evidenced.
- */
-typedef struct TyaUmlTextRecord {
-    int size;                  /* 0x00 */
-    int id;                    /* 0x04 */
-    u8 unmodeled_08[0x0C];
-    u16 flag;                  /* 0x14: event flag that unlocks the text */
-    u8 unmodeled_16[0x52];
-    u8 text[1];                /* 0x68 */
-} TyaUmlTextRecord;
-
-/* Defined in src/main/xgl_flags.c. */
-extern int xglFlagsGet(int bit_offset, int bit_count);
 
 /* Returns the text of record `id`, or 0 if it is missing or still locked. */
 static u8 *find_text(TyaUmlTextRecord *record, int id)
@@ -322,28 +353,6 @@ done:
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/ov02/12_tya_uml", dbheader_load);
-
-/*
- * The database view tyaUmlDatabaseMain drives: it starts with the display
- * parameters it hands to tyaUmlDispMain/tyaUmlDispType3/tyaUmlDispLoad, so
- * the record embeds a TyaUmlDispParam. Only the index cursor disp_index
- * reads is modeled; the rest stays unmodeled.
- */
-typedef struct TyaUmlDatabase {
-    TyaUmlDispParam display;   /* 0x00 */
-    u8 unmodeled_30[0x26];
-    s16 indexCursor;           /* 0x56: highlighted entry of the index bar */
-} TyaUmlDatabase;
-
-/* Font control streams: the index-bar header, the highlighted and the normal
- * entry colour, the two-byte entry labels (through idx.7) and the suffix
- * template msg.8, whose bytes 2 and 3 take the high and low suffix byte. */
-extern const char D_00A13400[16];
-extern const char D_00A13410[8];
-extern const char D_00A13418[8];
-extern const char *idx_7;
-extern char msg_8[5];
-extern void xglFontPrintDirectOT(int ot, const char *text);
 
 /* Prints the 26-entry index bar, highlighting database->indexCursor. */
 static void disp_index(TyaUmlDatabase *database, int suffix)

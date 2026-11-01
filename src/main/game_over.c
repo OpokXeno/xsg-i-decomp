@@ -1,12 +1,84 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_thread.h"
-
 #include "game_over.h"
-
 #include "main/xgl_packet.h"
+
+/* GameLoopState.scene_id value that routes GameOver to the ending screen. */
+#define GAME_END_SCENE_ID 9998
+
+/* EE RAM staging buffer for the compressed image and the decoded image
+ * that DrawImage presents. */
+#define IMAGE_LOAD_BUFFER 0x010e0000
+
+#define IMAGE_FRAME_BUFFER 0x01000000
+
+/* PadData.half_2a press bits used by the ending prompts: 0x20 accepts
+ * both questions, 0x40 declines the save question. */
+#define PAD_DECIDE 0x20
+
+#define PAD_CANCEL 0x40
+
+/* GameEnd's prompt outcome. */
+#define END_CHOICE_SAVE 1
+
+#define END_CHOICE_QUIT 2
+
+/* GS ALPHA_1 register: blend = ((A - B) * C >> 7) + D with the FIX
+ * coefficient in bits 32..39 (SCE_GS_SET_ALPHA layout). */
+#define GS_ALPHA(a, b, c, d, fix) \
+    ((u64)(a) | ((u64)(b) << 2) | ((u64)(c) << 4) | ((u64)(d) << 6) | \
+     ((u64)(fix) << 32))
+
+/* One frame of the fade-out: present the image, program the ALPHA_1
+ * register of a TestEnv packet with the new fade level, send the packet
+ * and wait for the next frame. The original's schedule keeps this block
+ * apart from the per-frame outcome check that follows it (no instruction
+ * of the alpha update is hoisted above that check); a do/while(0)
+ * statement macro reproduces that barrier. Receipt: attempt-68a6449851d1
+ * forms 03 (plain statements, hoists slti/addiu above the outcome bne at
+ * 0x00254078) vs 04 (wrapped in do{...}while(0), keeps the original
+ * schedule) - the wrapper is what keeps the order, not a coincidence of
+ * that one build. */
+#define DRAW_FADE_FRAME(env, alpha)                                     \
+    do {                                                                \
+        DrawImage((void *)IMAGE_FRAME_BUFFER);                          \
+        (env)[4] = GS_ALPHA(2, 0, 2, 1, (alpha));                       \
+        FlushCache(0);                                                  \
+        sceVif1PkRef(xglPacketGetCurrent(), (env), 6, 0, 0, 0);         \
+        xglSleep();                                                     \
+    } while (0)
+
+#define INTERMISSION_LOAD_OFFSET 0x100000
+
+/*
+ * sRender's destination-buffer selector: folded (with a fixed high bit)
+ * into the register DrawImage primes at TestEnv0[4] before the two-part
+ * image transfer below. Only this halfword is evidenced here (see
+ * src/main/map_1.c's MapRenderState for the same object's callback member
+ * and src/main/window_tex_load.c's UmnRenderSize for the screen-size
+ * halfwords).
+ */
+/* DrawBack reads the framebuffer-page halfword at sRender +0x14. */
+typedef struct {
+    u8 unmodeled_00[0x10];
+    u16 width;
+    u16 height;
+    u16 framebuffer_page;
+    u8 unmodeled_16[0x0a];
+    u16 buffer_select;
+} DrawImageRenderState;
+
+extern GameLoopStatePrefix GameLoopState;
+extern DrawImageRenderState sRender;
+
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern u32 GameResourceGetFreeAddr(void);
+extern void GameResourceReset(int mode);
 
 const char GameEndImagePath[24] = "data\\yajima\\end.jpg";
 
@@ -21,6 +93,20 @@ const char GameEndQuestion[0x68] = "\013\031\003\r\000Are you sure you want to e
 const char GameOverImagePath[24] = "data\\yajima\\gameov.jpg";
 
 const char GameOverStreamPath[32] = "data\\yajima\\gameover.vds";
+
+static const char gameOverSavePromptText[0x58] = {
+    0x0b, 0x0e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x0d,
+    0x03, 0x19, 0x03, 0x57, 0x6f, 0x75, 0x6c, 0x64,
+    0x20, 0x79, 0x6f, 0x75, 0x20, 0x6c, 0x69, 0x6b,
+    0x65, 0x20, 0x74, 0x6f, 0x20, 0x73, 0x61, 0x76,
+    0x65, 0x3f, 0x0a, 0x0a, 0x0c, 0x80, 0x20, 0x20,
+    0xa1, 0xfb, 0x20, 0x0c, 0x80, 0x80, 0x80, 0x19,
+    0x03, 0x42, 0x75, 0x74, 0x74, 0x6f, 0x6e, 0x3a,
+    0x20, 0x59, 0x65, 0x73, 0x0a, 0x0a, 0x0c, 0x20,
+    0x20, 0x80, 0xa1, 0xdf, 0x20, 0x0c, 0x80, 0x80,
+    0x80, 0x42, 0x75, 0x74, 0x74, 0x6f, 0x6e, 0x3a,
+    0x20, 0x4e, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 
 static u64 TestEnv_0_00369CC0[12] = {
     0x0000000000000000ULL, 0x5100000500000000ULL,
@@ -73,118 +159,7 @@ static GameOverDmaPacket12 TestEnv5 = { .words = {
     0x00008df800008ff8ULL, 0x0000000000000000ULL
 } };
 
-extern GameLoopStatePrefix GameLoopState;
-
-/* GameLoopState.scene_id value that routes GameOver to the ending screen. */
-
-#define GAME_END_SCENE_ID 9998
-
-/* EE RAM staging buffer for the compressed image and the decoded image
- * that DrawImage presents. */
-
-#define IMAGE_LOAD_BUFFER 0x010e0000
-
-#define IMAGE_FRAME_BUFFER 0x01000000
-
-/* PadData.half_2a press bits used by the ending prompts: 0x20 accepts
- * both questions, 0x40 declines the save question. */
-
-#define PAD_DECIDE 0x20
-
-#define PAD_CANCEL 0x40
-
-/* GameEnd's prompt outcome. */
-
-#define END_CHOICE_SAVE 1
-
-#define END_CHOICE_QUIT 2
-
-/* GS ALPHA_1 register: blend = ((A - B) * C >> 7) + D with the FIX
- * coefficient in bits 32..39 (SCE_GS_SET_ALPHA layout). */
-
-#define GS_ALPHA(a, b, c, d, fix) \
-    ((u64)(a) | ((u64)(b) << 2) | ((u64)(c) << 4) | ((u64)(d) << 6) | \
-     ((u64)(fix) << 32))
-
-/* One frame of the fade-out: present the image, program the ALPHA_1
- * register of a TestEnv packet with the new fade level, send the packet
- * and wait for the next frame. The original's schedule keeps this block
- * apart from the per-frame outcome check that follows it (no instruction
- * of the alpha update is hoisted above that check); a do/while(0)
- * statement macro reproduces that barrier. Receipt: attempt-68a6449851d1
- * forms 03 (plain statements, hoists slti/addiu above the outcome bne at
- * 0x00254078) vs 04 (wrapped in do{...}while(0), keeps the original
- * schedule) - the wrapper is what keeps the order, not a coincidence of
- * that one build. */
-
-#define DRAW_FADE_FRAME(env, alpha)                                     \
-    do {                                                                \
-        DrawImage((void *)IMAGE_FRAME_BUFFER);                          \
-        (env)[4] = GS_ALPHA(2, 0, 2, 1, (alpha));                       \
-        FlushCache(0);                                                  \
-        sceVif1PkRef(xglPacketGetCurrent(), (env), 6, 0, 0, 0);         \
-        xglSleep();                                                     \
-    } while (0)
-
-/*
- * sRender's destination-buffer selector: folded (with a fixed high bit)
- * into the register DrawImage primes at TestEnv0[4] before the two-part
- * image transfer below. Only this halfword is evidenced here (see
- * src/main/map_1.c's MapRenderState for the same object's callback member
- * and src/main/window_tex_load.c's UmnRenderSize for the screen-size
- * halfwords).
- */
-
-/* DrawBack reads the framebuffer-page halfword at sRender +0x14. */
-
-typedef struct {
-    u8 unmodeled_00[0x10];
-    u16 width;
-    u16 height;
-    u16 framebuffer_page;
-    u8 unmodeled_16[0x0a];
-    u16 buffer_select;
-} DrawImageRenderState;
-
-extern DrawImageRenderState sRender;
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
-
-/* The ending screen: fade the ending image in, ask whether to save, and
- * either run the save menu or (after a second confirmation) fade out. */
-
-/* The game-over screen: show the game-over image with its stream, then
- * fade picture and stream volume out together. */
-
-static const char gameOverSavePromptText[0x58] = {
-    0x0b, 0x0e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x0d,
-    0x03, 0x19, 0x03, 0x57, 0x6f, 0x75, 0x6c, 0x64,
-    0x20, 0x79, 0x6f, 0x75, 0x20, 0x6c, 0x69, 0x6b,
-    0x65, 0x20, 0x74, 0x6f, 0x20, 0x73, 0x61, 0x76,
-    0x65, 0x3f, 0x0a, 0x0a, 0x0c, 0x80, 0x20, 0x20,
-    0xa1, 0xfb, 0x20, 0x0c, 0x80, 0x80, 0x80, 0x19,
-    0x03, 0x42, 0x75, 0x74, 0x74, 0x6f, 0x6e, 0x3a,
-    0x20, 0x59, 0x65, 0x73, 0x0a, 0x0a, 0x0c, 0x20,
-    0x20, 0x80, 0xa1, 0xdf, 0x20, 0x0c, 0x80, 0x80,
-    0x80, 0x42, 0x75, 0x74, 0x74, 0x6f, 0x6e, 0x3a,
-    0x20, 0x4e, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
 static char name_6[0x15] = "data\\yajima\\im00.jpg";
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
-#define INTERMISSION_LOAD_OFFSET 0x100000
-
-extern u32 GameResourceGetFreeAddr(void);
-
-extern void GameResourceReset(int mode);
 
 static void DrawImage(void *framebuffer)
 {
@@ -259,6 +234,8 @@ static void redraw_frame(void *framebuffer) {
     xglSleep();
 }
 
+/* The ending screen: fade the ending image in, ask whether to save, and
+ * either run the save menu or (after a second confirmation) fade out. */
 static void GameEnd(void)
 {
     JpegDecodeRequest jpeg;
@@ -356,6 +333,8 @@ static void GameEnd(void)
     xglSleep();
 }
 
+/* The game-over screen: show the game-over image with its stream, then
+ * fade picture and stream volume out together. */
 void GameOver(void)
 {
     JpegDecodeRequest jpeg;

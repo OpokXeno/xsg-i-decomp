@@ -1,12 +1,5 @@
 #include "common.h"
-
 #include "game_snap_shot.h"
-
-/* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
-
-static char snapname[40];
-static char *snapnameno = snapname + 31;
-
 #include "main/xgl_cd.h"
 
 enum {
@@ -67,6 +60,31 @@ typedef struct {
     short game_state_value;
 } GameSnapShotGameState;
 
+typedef struct {
+    unsigned char unmodeled_00[0x22];
+    unsigned short draw_buffer_base;
+} GameSnapShotRenderState;
+
+extern GameSnapShotDrawEnv DrawEnv;
+extern GameSnapShotGameState GameLoopState;
+extern GameSnapShotRenderState sRender;
+
+extern int sceOpen(const char *path, int flags, ...);
+extern int sceClose(int descriptor);
+extern int sceWrite(int descriptor, const void *buffer, unsigned int size);
+extern void xglClockUInt2DayTime(XglClock *clock, unsigned int seconds);
+extern int xglJpegEncode(GameSnapShotJpegParams *params);
+extern void *memset(void *destination, int value, unsigned int size);
+extern int printf(const char *format, ...);
+extern void SyncDCache(void *start, void *end);
+extern int sceGsSyncPath(int mode, int timeout);
+extern void xglDmaDirectNormal(int channel, const void *packet, int quadwords);
+
+static char snapname[40];
+
+/* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
+static char *snapnameno = snapname + 31;
+
 static char snapname[40] = "host0:/home/xeno/work/snap/game0000.jpg";
 
 static GameSnapShotQuality quality_table[5] = {
@@ -85,48 +103,14 @@ char GameMovieAlpha = 0;
 
 short GameMovieFrame = 0;
 
+static SnapshotDmaPacket TestPrim_0_00366EA0;
+
+static SnapshotDmaPacket TestPrim_0_00366EA0 = { .words = { 0x0000000000000000ULL, 0x5100000b00000000ULL, 0xa08b400000008001ULL, 0x000000e53531eeeeULL, 0x0000000000071001ULL, 0x0000000000000047ULL, 0x0000000000000060ULL, 0x0000000000000014ULL, 0x0000000000000000ULL, 0x000000000000004cULL, 0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000008000000080ULL, 0x0000000000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071f700006ff8ULL, 0x00000000ffffffffULL, 0x00001c0000002000ULL, 0x0000000000000000ULL, 0x000078f7000077f8ULL, 0x00000000ffffffffULL, 0x0000000000000000ULL, 0x000000000000003fULL } };
+
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char snapShotLogFormat[] = "*** SnapShot:%s,%08x ***\n";
 
 const char snapShotQualityFormat[24] = "%d,%d,%d\n";
-
-extern GameSnapShotDrawEnv DrawEnv;
-
-extern GameSnapShotGameState GameLoopState;
-
-extern int sceOpen(const char *path, int flags, ...);
-
-extern int sceClose(int descriptor);
-
-extern int sceWrite(int descriptor, const void *buffer, unsigned int size);
-
-extern void xglClockUInt2DayTime(XglClock *clock, unsigned int seconds);
-
-extern int xglJpegEncode(GameSnapShotJpegParams *params);
-
-extern void *memset(void *destination, int value, unsigned int size);
-
-extern int printf(const char *format, ...);
-
-/* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
-
-/* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
-
-typedef struct {
-    unsigned char unmodeled_00[0x22];
-    unsigned short draw_buffer_base;
-} GameSnapShotRenderState;
-
-static SnapshotDmaPacket TestPrim_0_00366EA0;
-
-extern GameSnapShotRenderState sRender;
-
-extern void SyncDCache(void *start, void *end);
-
-extern int sceGsSyncPath(int mode, int timeout);
-
-extern void xglDmaDirectNormal(int channel, const void *packet, int quadwords);
-
-/* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
 
 int GameSnapShotNumber(int number) {
     if (number >= 0) {
@@ -331,5 +315,3 @@ int GameSnapShotSaveFile(int number, const void *data, int size) {
     snapnameno[3]++;
     return number;
 }
-
-static SnapshotDmaPacket TestPrim_0_00366EA0 = { .words = { 0x0000000000000000ULL, 0x5100000b00000000ULL, 0xa08b400000008001ULL, 0x000000e53531eeeeULL, 0x0000000000071001ULL, 0x0000000000000047ULL, 0x0000000000000060ULL, 0x0000000000000014ULL, 0x0000000000000000ULL, 0x000000000000004cULL, 0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000008000000080ULL, 0x0000000000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071f700006ff8ULL, 0x00000000ffffffffULL, 0x00001c0000002000ULL, 0x0000000000000000ULL, 0x000078f7000077f8ULL, 0x00000000ffffffffULL, 0x0000000000000000ULL, 0x000000000000003fULL } };

@@ -6,6 +6,16 @@
 #include "party.h"
 
 /*
+ * The complete 0x188-byte party state that PartyDataGet() points into
+ * (SaveData + 0x10078), handled here only as a whole block. Its members are
+ * not recovered in this unit: the image records just the evidenced size and
+ * the 8-byte alignment implied by the original's doubleword ld/sd block copy.
+ */
+typedef struct PartyStateImage {
+    unsigned long long words[0x188 / 8];
+} PartyStateImage;
+
+/*
  * Party state: the original party source file, main 0x002b56c0..0x002b6494
  * (the file begins at the gcc2_compiled. marker 0x002b56c0; this candidate
  * stops after PartyAllPartyGet2, before PartyAgwsGet).
@@ -18,7 +28,6 @@
  * value in a plain beq delay slot when those callees are defined earlier in
  * the same file; compiled alone the same source produces beql.
  */
-
 /* The party state is the 0x188-byte region embedded at SaveData + 0x10078. */
 unsigned char *PartyDataGet(void)
 {
@@ -495,16 +504,6 @@ int PartyReserveGet(int *reserve_ids)
     return count;
 }
 
-/*
- * The complete 0x188-byte party state that PartyDataGet() points into
- * (SaveData + 0x10078), handled here only as a whole block. Its members are
- * not recovered in this unit: the image records just the evidenced size and
- * the 8-byte alignment implied by the original's doubleword ld/sd block copy.
- */
-typedef struct PartyStateImage {
-    unsigned long long words[0x188 / 8];
-} PartyStateImage;
-
 /* Runs PartyAllPartyGet(out, 0) against a caller-supplied party state and
  * restores the live state afterwards; returns the number of ids stored. */
 int PartyAllPartyGet2(int *out, PartyStateImage *state)
@@ -544,7 +543,6 @@ int PartyAgwsGet(int *party_ids)
 }
 
 /* Count every set bit in the first two bytes of the party-state prefix. */
-
 int PartyCharNumGet(void)
 {
     unsigned char *party_prefix = PartyDataGet();
@@ -563,7 +561,6 @@ int PartyCharNumGet(void)
 }
 
 /* Count the low-nibble bits of the first four party-state prefix bytes. */
-
 int PartyAgwsNumGet(void)
 {
     unsigned char *party_prefix = PartyDataGet();

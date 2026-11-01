@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_STAGE_2_H
 
 #include "shared.h"
-
 #include "main/jni.h"
 
 typedef struct StageBackground {

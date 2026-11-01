@@ -1,10 +1,19 @@
 #include "common.h"
-
 #include "set_motion.h"
-
 #include "main/enemy_1.h"
 #include "main/get.h"
 #include "main/pause_menu_page_enemy.h"
+
+#define ENEMY_ACTION_BLOCK_OFFSET 0x40
+#define ENEMY_STATUS_FLAGS_OFFSET 0x50
+#define ENEMY_ACTION_STATE_OFFSET 0x48
+#define ENEMY_ELECTRIC_STATUS_OFFSET 0x6a
+
+/* This flag is a signed byte in the original enemy-work record. */
+#define ENEMY_EAR_DISABLED_OFFSET 0x37a2
+
+#define ENEMY_SPLINE_VECTORS(entry) \
+    ((Vector4 *)((unsigned char *)(entry) + ENEMY_SPLINE_POINTS_OFFSET))
 
 typedef struct EnemyActionBlock {
     short spline_parameter;
@@ -21,10 +30,6 @@ typedef struct EncountParams {
     unsigned int encounter_event : 8;
 } EncountParams;
 
-#define ENEMY_ACTION_BLOCK_OFFSET 0x40
-
-#define ENEMY_STATUS_FLAGS_OFFSET 0x50
-
 typedef struct EnemyEncountState {
     unsigned char unmodeled_00[0x68];
     signed char encounter_side;
@@ -33,20 +38,6 @@ typedef struct EnemyEncountState {
     unsigned char unmodeled_6b[0x37e0 - 0x6b];
     unsigned int action_flags;
 } EnemyEncountState;
-
-extern short DebugActor;
-
-extern short SelNum;
-
-extern short Times;
-
-extern void *AdrsEnemyExclamation;
-
-extern void *AdrsEnemyQuestion;
-
-extern void *AdrsEnemySphere;
-
-extern void *AdrsEnemySquare;
 
 typedef struct SetMotionPad {
     unsigned char pad_00[0x28];
@@ -96,46 +87,6 @@ typedef struct EnemyDetectActor {
     float interaction_radius;
     unsigned char unmodeled_9ec[0xa70 - 0x9ec];
 } EnemyDetectActor;
-void Homing_Search(EnemyDetectActor *enemy);
-
-extern EnemyDetectActor actor[64];
-
-extern void EnemySound_Stop(Actor *actor, signed char which);
-
-extern void xglSoundEffectStopDirect(int sound_id);
-
-extern float Get_Distance3D(const Vector4 *origin, const Vector4 *target);
-
-extern PadPrefix PadData;
-
-extern void Check_Discovery(Actor *enemy);
-
-extern EnemyStateBlock enepc[16];
-
-extern void BSpline_Init(float *points, const float *origin, float angle);
-
-extern void Get_MiddlePoint(const float *start, const float *following,
-                            short point_index, short point_count,
-                            float *result);
-
-extern int RES_GetEnemySeBank(int sound_id);
-
-extern int RES_GetEnemySeType(int sound_id);
-
-extern void xglSoundEffectPosID();
-
-/*
- * Sound_FootStep and Enemy_ActionReady always pass 1 for `play`; when it is
- * not 1 the positional call below is skipped and the function has no other
- * effect. `ignore_se_type` is 0 at Enemy_ActionReady's one sound_index == 1
- * call and 1 everywhere else (main:0x002d3930, 0x002d396c, 0x002d3a84,
- * 0x002d06d8, 0x002d0710, 0x002d0744); when it is 0 and sound_index is 2 or
- * 4, a bank whose RES_GetEnemySeType is 1 is skipped entirely.
- */
-
-extern void xglSoundEffectStopID(int sound_id, int flags);
-
-extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
 
 /*
  * A TU-local view of main/xgl_sound.c's struct SoundWork (main:0x004a8140),
@@ -144,7 +95,6 @@ extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
  * SoundEffectBankEntry.handle), the same field xglSoundEffectStopDirect
  * reads (main:0x00226720).
  */
-
 typedef struct SetMotionSoundWork
 {
     unsigned char unmodeled_00[0x20];
@@ -154,8 +104,6 @@ typedef struct SetMotionSoundWork
         unsigned short file_handle;
     } effect_banks[32];
 } SetMotionSoundWork;
-
-extern SetMotionSoundWork SoundWork;
 
 typedef struct ActorTalkControls {
     unsigned char unmodeled_00[0x64];
@@ -175,20 +123,10 @@ typedef struct ActorTalk {
     float target_angle;
 } ActorTalk;
 
-extern void Set_Motion(Actor *actor, int motion, unsigned int mode);
-
-extern void Enemy_Command_LookAt(Actor *actor, int target);
-
-extern void Enemy_Command_Freeze(Actor *actor, int frozen);
-
 typedef struct EnemyTalkState {
     unsigned char unmodeled_00[0x37a8];
     int saved_motion;
 } EnemyTalkState;
-
-#define ENEMY_ACTION_STATE_OFFSET 0x48
-
-#define ENEMY_ELECTRIC_STATUS_OFFSET 0x6a
 
 typedef struct EnemyEarState {
     unsigned char unmodeled_00[0x37a2];
@@ -196,10 +134,6 @@ typedef struct EnemyEarState {
     unsigned char unmodeled_37a3[0x38ac - 0x37a3];
     short discovery_count;
 } EnemyEarState;
-
-/* This flag is a signed byte in the original enemy-work record. */
-
-#define ENEMY_EAR_DISABLED_OFFSET 0x37a2
 
 typedef struct EnemyScriptState {
     unsigned char unmodeled_00[0x37e0];
@@ -223,7 +157,6 @@ typedef struct BeltUndulation {
     unsigned long long surface_flags;
     unsigned char unmodeled_028[0x18];
 } BeltUndulation;
-extern BeltUndulation UnduTemp;
 
 typedef struct UnduTestStorage {
     int queryFlags;
@@ -235,20 +168,6 @@ typedef struct UnduTestStorage {
     long long attribute;
     unsigned char unmodeled_028[0x18];
 } UnduTestStorage;
-
-extern UnduTestStorage UnduTest;
-
-static unsigned char idx_0[16];
-
-static float vec_1[9][2];
-
-static float rate_2_003B2008[4];
-
-extern void UnduParamInit(BeltUndulation *param);
-
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
-
-extern void UnduCheck(const Vector4 *position, void *exclude, BeltUndulation *param);
 
 typedef struct EnemyDiscoveryState {
     unsigned char unmodeled_00[0x48];
@@ -302,29 +221,11 @@ typedef struct DiscoveryGameLoopState {
     EncountRecord encount; /* +0x29f90 */
 } DiscoveryGameLoopState;
 
-extern DiscoveryGameLoopState GameLoopState;
-
-extern signed char FLAG_FRAME_60;
-
-extern void Enemy_ActionReady(Actor *actor, int action);
-
 typedef struct PlayerHistoryActor {
     ActorHead head;
     unsigned char unmodeled_70[0x9e8 - sizeof(ActorHead)];
     float interaction_radius;
 } PlayerHistoryActor;
-
-extern float PlayHis[64][4];
-
-extern float BackPos[4];
-
-extern float LocaterAngle[16];
-
-extern short PhCunt[1];
-
-extern int Check_Straight_ID(float heading, float *previous,
-                             void *enemy_state, int limit,
-                             float *result, int stride);
 
 typedef struct EnemyHomingState {
     unsigned char unmodeled_00[0x30a0];
@@ -334,9 +235,6 @@ typedef struct EnemyHomingState {
     short linked_target[64];
     unsigned short position_count;
 } EnemyHomingState;
-
-extern void Homing_Add(int actor_index, float x, float y, float z,
-                       short target_index);
 
 typedef struct EnemyShadowState {
     unsigned char unmodeled_00[0x38aa];
@@ -349,21 +247,11 @@ typedef struct ActorShadow {
     Vector4 shadow_offset;
 } ActorShadow;
 
-extern float Get_Distance(const Vector4 *source, const Vector4 *destination);
-
-extern const float SHADOW_NO_NEAREST_DISTANCE;
-
-#define SHADOW_NO_NEAREST_DISTANCE 5000.0f
-
 typedef struct ActorFan {
     ActorHead head;
     unsigned char unmodeled_70[0x9e8 - sizeof(ActorHead)];
     float interaction_radius;
 } ActorFan;
-
-extern int Check_InsideFan(const Vector4 *origin, const Vector4 *target,
-                           int flag, float facing, float min_degrees,
-                           float max_degrees, float radius);
 
 typedef struct EnemyLookatState {
     unsigned char unmodeled_00[0x0c];
@@ -374,16 +262,98 @@ typedef struct EnemyLookatState {
     Vector4 point;
 } EnemyLookatState;
 
+typedef union HomingPositionRecord {
+    Vector4 coordinates;
+    float elements[4];
+} HomingPositionRecord;
+
+typedef struct EnemyHomingDebugState {
+    unsigned char unmodeled_00[0x30a0];
+    HomingPositionRecord positions[64];
+    short neighbours[64][4];
+    short neighbour_count[64];
+    short linked_target[64];
+    short position_count;
+} EnemyHomingDebugState;
+
+typedef struct EnemyHomingSearchState {
+    unsigned char unmodeled_00[0x30a0];
+    float positions[64][4];
+    short neighbours[64][4];
+    short neighbour_count[64];
+    short linked_target[64];
+    short position_count;
+} EnemyHomingSearchState;
+
+extern short DebugActor;
+extern short SelNum;
+extern short Times;
+extern void *AdrsEnemyExclamation;
+extern void *AdrsEnemyQuestion;
+extern void *AdrsEnemySphere;
+extern void *AdrsEnemySquare;
+extern EnemyDetectActor actor[64];
+extern PadPrefix PadData;
+extern EnemyStateBlock enepc[16];
+extern SetMotionSoundWork SoundWork;
+extern BeltUndulation UnduTemp;
+extern UnduTestStorage UnduTest;
+extern DiscoveryGameLoopState GameLoopState;
+extern signed char FLAG_FRAME_60;
+extern float PlayHis[64][4];
+extern float BackPos[4];
+extern float LocaterAngle[16];
+extern short PhCunt[1];
+extern const float SHADOW_NO_NEAREST_DISTANCE;
+extern short EfTab_Code[15];
+extern short EfTab_Intr[15];
+extern float EfTab_Scal[15];
+extern short EfTab_Loop[15];
+extern float TabEnemy_Ang[8];
+extern long EneTerritoryID[20];
+
+void Homing_Search(EnemyDetectActor *enemy);
+extern void EnemySound_Stop(Actor *actor, signed char which);
+extern void xglSoundEffectStopDirect(int sound_id);
+extern float Get_Distance3D(const Vector4 *origin, const Vector4 *target);
+extern void Check_Discovery(Actor *enemy);
+extern void BSpline_Init(float *points, const float *origin, float angle);
+
+extern void Get_MiddlePoint(const float *start, const float *following,
+                            short point_index, short point_count,
+                            float *result);
+
+extern int RES_GetEnemySeBank(int sound_id);
+extern int RES_GetEnemySeType(int sound_id);
+extern void xglSoundEffectPosID();
+
+extern void xglSoundEffectStopID(int sound_id, int flags);
+
+extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
+extern void Set_Motion(Actor *actor, int motion, unsigned int mode);
+extern void Enemy_Command_LookAt(Actor *actor, int target);
+extern void Enemy_Command_Freeze(Actor *actor, int frozen);
+extern void UnduParamInit(BeltUndulation *param);
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+extern void UnduCheck(const Vector4 *position, void *exclude, BeltUndulation *param);
+extern void Enemy_ActionReady(Actor *actor, int action);
+
+extern int Check_Straight_ID(float heading, float *previous,
+                             void *enemy_state, int limit,
+                             float *result, int stride);
+
+extern void Homing_Add(int actor_index, float x, float y, float z,
+                       short target_index);
+
+extern float Get_Distance(const Vector4 *source, const Vector4 *destination);
+
+extern int Check_InsideFan(const Vector4 *origin, const Vector4 *target,
+                           int flag, float facing, float min_degrees,
+                           float max_degrees, float radius);
+
 extern void ACT_setMotion2(Actor *actor, int motion, int flags);
-
 extern int RES_GetEnemySeFoot(int sound_id);
-
 extern int F2I(float value);
-
-extern void EnemySound(Actor *actor, short sound_index, signed char play,
-                       signed char ignore_se_type);
-
-static unsigned char FootStep[0x180];
 
 /*
  * Sound_FootStep and Enemy_ActionReady always pass 1 for `play`; when it is
@@ -393,18 +363,87 @@ static unsigned char FootStep[0x180];
  * 0x002d06d8, 0x002d0710, 0x002d0744); when it is 0 and sound_index is 2 or
  * 4, a bank whose RES_GetEnemySeType is 1 is skipped entirely.
  */
+extern void EnemySound(Actor *actor, short sound_index, signed char play,
+                       signed char ignore_se_type);
 
-/*
- * A TU-local view of main/xgl_sound.c's struct SoundWork (main:0x004a8140),
- * not yet reachable through a shared header. effect_banks starts at +0x20
- * and each entry's low halfword is its handle (main/xgl_sound.c's
- * SoundEffectBankEntry.handle), the same field xglSoundEffectStopDirect
- * reads (main:0x00226720).
- */
+extern float Get_Angle(const Vector4 *first, const Vector4 *second);
+extern float sinf(float angle);
+extern float cosf(float angle);
+extern void TM_Script_Spline_Add(int number, float x, float y, float z);
 
-/* This flag is a signed byte in the original enemy-work record. */
+static unsigned char idx_0[16];
+
+static float vec_1[9][2];
+
+static float rate_2_003B2008[4];
+
+static unsigned char FootStep[0x180];
+
+static unsigned char FootStep[0x180] = {
+    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x0f, 0x02, 0x04, 0x10,
+    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x04, 0x10,
+    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x03, 0x0d, 0x02, 0x10, 0x05, 0x10, 0x02, 0x10, 0x04, 0x10,
+    0x01, 0x0f, 0x05, 0x10, 0x02, 0x10, 0x03, 0x0d, 0x02, 0x10, 0x04, 0x10, 0x02, 0x10, 0x01, 0x0c,
+    0x02, 0x10, 0x01, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c,
+    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x01, 0x0f, 0x01, 0x08, 0x02, 0x10, 0x01, 0x09,
+    0x04, 0x12, 0x04, 0x11, 0x02, 0x10, 0x05, 0x10, 0x02, 0x10, 0x05, 0x10, 0x02, 0x0e, 0x04, 0x10,
+    0x02, 0x10, 0x04, 0x10, 0x01, 0x10, 0x01, 0x0a, 0x01, 0x10, 0x06, 0x12, 0x02, 0x0d, 0x01, 0x09,
+    0x01, 0x10, 0x04, 0x10, 0x02, 0x10, 0x03, 0x0d, 0x02, 0x10, 0x01, 0x0c, 0x01, 0x0f, 0x05, 0x10,
+    0x02, 0x10, 0x01, 0x0c, 0x02, 0x0f, 0x01, 0x0c, 0x02, 0x0e, 0x04, 0x10, 0x01, 0x0f, 0x01, 0x08,
+    0x01, 0x0f, 0x01, 0x08, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x05, 0x10, 0x02, 0x10, 0x05, 0x10,
+    0x02, 0x10, 0x05, 0x10, 0x0f, 0x02, 0x04, 0x10, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x04, 0x10,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x10, 0x05, 0x10,
+    0x02, 0x10, 0x04, 0x10, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d,
+    0x01, 0x0e, 0x03, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d,
+    0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d,
+    0x01, 0x0e, 0x03, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x01, 0x16, 0x01, 0x0d, 0x11, 0x01, 0x05, 0x11,
+    0x03, 0x11, 0x04, 0x10, 0x03, 0x10, 0x04, 0x0f, 0x16, 0x09, 0x0d, 0x01, 0x1d, 0x0e, 0x09, 0x05,
+    0x13, 0x04, 0x06, 0x12, 0x13, 0x04, 0x06, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x10, 0x01, 0x08, 0x01, 0x18, 0x08, 0x0c, 0x01, 0x10, 0x01, 0x08, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x01, 0x0d, 0x01, 0x01, 0x11, 0x02, 0x0b,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x01, 0x03, 0x0c, 0x11, 0x01, 0x05, 0x11,
+    0x01, 0x10, 0x02, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x0b, 0x01, 0x04, 0x11, 0x04, 0x10,
+    0x01, 0x17, 0x05, 0x14, 0x01, 0x17, 0x05, 0x14, 0x01, 0x17, 0x05, 0x14, 0x01, 0x17, 0x05, 0x14
+};
+
+static unsigned char idx_0[16] = {0, 1, 3, 2, 5, 0, 4, 0, 7, 8, 0, 0, 6, 0, 0, 0};
+
+static float vec_1[9][2] = {
+    {0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f},
+    {1.0f, -1.0f}, {0.0f, -1.0f}, {-1.0f, -1.0f}, {-1.0f, 0.0f},
+    {-1.0f, 1.0f},
+};
+
+static float rate_2_003B2008[4] = {1.0f, 2.0f, 0.5f, 3.0f};
+
+float PlayHis[64][4] = {{0.0f}};
+
+float BackPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+float TabEnemy_Ang[8] = { 0.0f, 0.78539818525314331f, 1.5707963705062866f, 2.3561944961547852f, 3.1415927410125732f, 3.9269909858703613f, 4.7123889923095703f, 5.4977874755859375f };
+
+float LocaterAngle[16] = {
+    -3.2f, -3.0f, -2.4f, -2.2f, -1.6f, -1.4f, -0.8f, -0.6f,
+    -0.1f, 0.1f, 0.6f, 0.8f, 1.4f, 1.6f, 2.2f, 2.3f,
+};
+
+long EneTerritoryID[20] = { 0LL, 134217728LL, 150994944LL, 167772160LL, 184549376LL, 201326592LL, 218103808LL, 234881024LL, 251658240LL, 0LL, 0LL, 402653184LL, 419430400LL, 436207616LL, 452984832LL, 469762048LL, 486539264LL, 503316480LL, 520093696LL, 0LL };
+
+short EfTab_Code[15] = { 1492, 1493, 1494, 1555, 1416, 1554, 1627, 1724, 1746, 1658, 1726, 0, 0, 0, 0 };
+
+short EfTab_Intr[15] = { 5, 5, 13, 13, 5, 15, 5, 5, 5, 10, 5, 0, 0, 0, 0 };
+
+float EfTab_Scal[15] = { 4.0f, 4.0f, 8.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+short EfTab_Loop[15] = { 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* The original scratch blocks are 0x40 bytes; only this prefix is modeled. */
+BeltUndulation UnduTemp = {0};
+
+UnduTestStorage UnduTest = {0};
+
+/* Declared here, not at the top: moving it up changes the original code. */
+#define SHADOW_NO_NEAREST_DISTANCE 5000.0f
 
 void Set_Motion(Actor *actor, int motion, unsigned int mode)
 {
@@ -1033,40 +1072,6 @@ void Set_PlayerHistory(Actor *actor)
     }
 }
 
-typedef union HomingPositionRecord {
-    Vector4 coordinates;
-    float elements[4];
-} HomingPositionRecord;
-
-typedef struct EnemyHomingDebugState {
-    unsigned char unmodeled_00[0x30a0];
-    HomingPositionRecord positions[64];
-    short neighbours[64][4];
-    short neighbour_count[64];
-    short linked_target[64];
-    short position_count;
-} EnemyHomingDebugState;
-
-typedef struct EnemyHomingSearchState {
-    unsigned char unmodeled_00[0x30a0];
-    float positions[64][4];
-    short neighbours[64][4];
-    short neighbour_count[64];
-    short linked_target[64];
-    short position_count;
-} EnemyHomingSearchState;
-
-extern float Get_Angle(const Vector4 *first, const Vector4 *second);
-
-#define ENEMY_SPLINE_VECTORS(entry) \
-    ((Vector4 *)((unsigned char *)(entry) + ENEMY_SPLINE_POINTS_OFFSET))
-
-extern float sinf(float angle);
-
-extern float cosf(float angle);
-
-extern void TM_Script_Spline_Add(int number, float x, float y, float z);
-
 void Homing_Search(EnemyDetectActor *enemy)
 {
     EnemyHomingSearchState *state = (EnemyHomingSearchState *)enepc[enemy->slot_number];
@@ -1495,79 +1500,3 @@ void Actor_LookAt_Init(Actor *actor)
     *ACTOR_LOOKAT_TARGET(actor) = -1;
     *ENEMY_LOOKAT_POINT(enepc[ACTOR_NUMBER(actor)]) = 0;
 }
-
-extern short EfTab_Code[15];
-
-extern short EfTab_Intr[15];
-
-extern float EfTab_Scal[15];
-
-extern short EfTab_Loop[15];
-
-extern float TabEnemy_Ang[8];
-
-extern long EneTerritoryID[20];
-
-static unsigned char FootStep[0x180] = {
-    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x0f, 0x02, 0x04, 0x10,
-    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x04, 0x10,
-    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x03, 0x0d, 0x02, 0x10, 0x05, 0x10, 0x02, 0x10, 0x04, 0x10,
-    0x01, 0x0f, 0x05, 0x10, 0x02, 0x10, 0x03, 0x0d, 0x02, 0x10, 0x04, 0x10, 0x02, 0x10, 0x01, 0x0c,
-    0x02, 0x10, 0x01, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c,
-    0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x01, 0x0f, 0x01, 0x08, 0x02, 0x10, 0x01, 0x09,
-    0x04, 0x12, 0x04, 0x11, 0x02, 0x10, 0x05, 0x10, 0x02, 0x10, 0x05, 0x10, 0x02, 0x0e, 0x04, 0x10,
-    0x02, 0x10, 0x04, 0x10, 0x01, 0x10, 0x01, 0x0a, 0x01, 0x10, 0x06, 0x12, 0x02, 0x0d, 0x01, 0x09,
-    0x01, 0x10, 0x04, 0x10, 0x02, 0x10, 0x03, 0x0d, 0x02, 0x10, 0x01, 0x0c, 0x01, 0x0f, 0x05, 0x10,
-    0x02, 0x10, 0x01, 0x0c, 0x02, 0x0f, 0x01, 0x0c, 0x02, 0x0e, 0x04, 0x10, 0x01, 0x0f, 0x01, 0x08,
-    0x01, 0x0f, 0x01, 0x08, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x05, 0x10, 0x02, 0x10, 0x05, 0x10,
-    0x02, 0x10, 0x05, 0x10, 0x0f, 0x02, 0x04, 0x10, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x04, 0x10,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x10, 0x05, 0x10,
-    0x02, 0x10, 0x04, 0x10, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d,
-    0x01, 0x0e, 0x03, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d,
-    0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d, 0x01, 0x0e, 0x03, 0x0d,
-    0x01, 0x0e, 0x03, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x01, 0x16, 0x01, 0x0d, 0x11, 0x01, 0x05, 0x11,
-    0x03, 0x11, 0x04, 0x10, 0x03, 0x10, 0x04, 0x0f, 0x16, 0x09, 0x0d, 0x01, 0x1d, 0x0e, 0x09, 0x05,
-    0x13, 0x04, 0x06, 0x12, 0x13, 0x04, 0x06, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x10, 0x01, 0x08, 0x01, 0x18, 0x08, 0x0c, 0x01, 0x10, 0x01, 0x08, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x01, 0x0d, 0x01, 0x01, 0x11, 0x02, 0x0b,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x01, 0x03, 0x0c, 0x11, 0x01, 0x05, 0x11,
-    0x01, 0x10, 0x02, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x0b, 0x01, 0x04, 0x11, 0x04, 0x10,
-    0x01, 0x17, 0x05, 0x14, 0x01, 0x17, 0x05, 0x14, 0x01, 0x17, 0x05, 0x14, 0x01, 0x17, 0x05, 0x14
-};
-
-static unsigned char idx_0[16] = {0, 1, 3, 2, 5, 0, 4, 0, 7, 8, 0, 0, 6, 0, 0, 0};
-
-static float vec_1[9][2] = {
-    {0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f},
-    {1.0f, -1.0f}, {0.0f, -1.0f}, {-1.0f, -1.0f}, {-1.0f, 0.0f},
-    {-1.0f, 1.0f},
-};
-
-static float rate_2_003B2008[4] = {1.0f, 2.0f, 0.5f, 3.0f};
-
-float PlayHis[64][4] = {{0.0f}};
-
-float BackPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-float TabEnemy_Ang[8] = { 0.0f, 0.78539818525314331f, 1.5707963705062866f, 2.3561944961547852f, 3.1415927410125732f, 3.9269909858703613f, 4.7123889923095703f, 5.4977874755859375f };
-
-float LocaterAngle[16] = {
-    -3.2f, -3.0f, -2.4f, -2.2f, -1.6f, -1.4f, -0.8f, -0.6f,
-    -0.1f, 0.1f, 0.6f, 0.8f, 1.4f, 1.6f, 2.2f, 2.3f,
-};
-
-long EneTerritoryID[20] = { 0LL, 134217728LL, 150994944LL, 167772160LL, 184549376LL, 201326592LL, 218103808LL, 234881024LL, 251658240LL, 0LL, 0LL, 402653184LL, 419430400LL, 436207616LL, 452984832LL, 469762048LL, 486539264LL, 503316480LL, 520093696LL, 0LL };
-
-short EfTab_Code[15] = { 1492, 1493, 1494, 1555, 1416, 1554, 1627, 1724, 1746, 1658, 1726, 0, 0, 0, 0 };
-
-short EfTab_Intr[15] = { 5, 5, 13, 13, 5, 15, 5, 5, 5, 10, 5, 0, 0, 0, 0 };
-
-float EfTab_Scal[15] = { 4.0f, 4.0f, 8.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-short EfTab_Loop[15] = { 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-
-/* The original scratch blocks are 0x40 bytes; only this prefix is modeled. */
-
-BeltUndulation UnduTemp = {0};
-
-UnduTestStorage UnduTest = {0};

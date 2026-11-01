@@ -5,8 +5,6 @@
 #ifndef SRC_MAIN_XGL_HDD_H
 #define SRC_MAIN_XGL_HDD_H
 
-extern int xglCdGetFileData();
-
 #include "shared.h"
 
 struct HddRenderState {
@@ -14,10 +12,6 @@ struct HddRenderState {
     unsigned char errorScreenActive;
 };
 
-extern struct HddRenderState sRender;
-extern PadPrefix PadData;
-
-/* The fixed six-qword VIF-to-GIF packet used by the HDD error screen. */
 typedef struct HddGifTag {
     u32 low_word;
     u32 high_word;
@@ -43,6 +37,7 @@ typedef struct HddGsXyz2 {
     u32 : 32;
 } HddGsXyz2;
 
+/* The fixed six-qword VIF-to-GIF packet used by the HDD error screen. */
 typedef struct HddErrorPacket {
     u32 vif_nop_00;
     u32 vif_nop_04;
@@ -53,70 +48,6 @@ typedef struct HddErrorPacket {
     HddGsRgbaq color;
     HddGsXyz2 corners[2];
 } HddErrorPacket;
-
-extern HddErrorPacket TestEnv_0_004A8A80[];
-extern const unsigned char hddLoadErrorText[];
-extern void xglDmaDirectNormal(int channel, const void *packet, int qwords);
-extern void xglSoundEffectNormalDirect(int sound_id);
-
-int sceRead(int descriptor, void *buffer, int bytes);
-
-int xglHddCheck2(void);
-
-static int xglHddCheckCore(void);
-
-extern int xglHddMcUmount(void);
-
-extern int sceUmount(const char *path);
-
-extern char hdd_mc_path[];
-
-int xglHddMcLoad(void *save);
-
-extern int xglHddMcLoadMount(void);
-
-extern int xglHddMcLoadCore(void *save);
-
-int xglHddUninstall(void);
-
-extern int sceRemove(const char *path);
-
-
-extern u8 system_cnf[];
-
-
-extern u8 mount_device[];
-
-/*
- * The xglHdd layer keeps its own copy of the "hdd0:" device name at
- * main:0x004DC368; the HddTest debug tool has an identical string of its own
- * at 0x004DA2D0, which accepted source calls hdd_device.  Neither address
- * carries an original symbol, so this one is named for the layer that owns
- * it.
- */
-extern char xgl_hdd_device[];
-
-
-extern const char cd_filename[];
-
-extern int xglHddCheck(void);
-
-extern void xglHddErrorScreen(void);
-
-extern void xglCdArcCheck(void);
-
-extern int sceMount(char *mount_point, char *device, int flags,
-                    void *payload, unsigned int payload_length);
-
-extern int sceDevctl(const char *device, int command, const void *input,
-                     unsigned int input_size, void *output, unsigned int output_size);
-
-/*
- * SCE fileio: the third argument is the creation mode, supplied only when
- * the flags request creation (xglHddMount passes 0x16D with flag 1).
- */
-extern int sceOpen(const char *path, int flags, ...);
-
 
 struct HddLoadRequest {
     int card;
@@ -175,6 +106,70 @@ struct HddDirectoryEntry {
     unsigned char unmodeled_140[16];
 };
 
+/*
+ * HddInstallCBparam (main:0x004DC3B0) points at the install context
+ * xglHddInstallReadCB reports progress through: callback is invoked with
+ * command 6 and a computed offset built from base and the current read
+ * value, param is passed through unchanged, status keeps callback's last
+ * result, and total is the read count the first (event == 1) call records.
+ */
+typedef struct HddInstallCBParam {
+    int (*callback)(int command, int offset, int param);
+    int base;
+    int param;
+    int status;
+    int total;
+} HddInstallCBParam;
+
+extern struct HddRenderState sRender;
+extern PadPrefix PadData;
+extern HddErrorPacket TestEnv_0_004A8A80[];
+extern const unsigned char hddLoadErrorText[];
+extern char hdd_mc_path[];
+extern u8 system_cnf[];
+extern u8 mount_device[];
+
+/*
+ * The xglHdd layer keeps its own copy of the "hdd0:" device name at
+ * main:0x004DC368; the HddTest debug tool has an identical string of its own
+ * at 0x004DA2D0, which accepted source calls hdd_device.  Neither address
+ * carries an original symbol, so this one is named for the layer that owns
+ * it.
+ */
+extern char xgl_hdd_device[];
+
+extern const char cd_filename[];
+extern HddInstallCBParam *HddInstallCBparam;
+
+extern int xglCdGetFileData();
+extern void xglDmaDirectNormal(int channel, const void *packet, int qwords);
+extern void xglSoundEffectNormalDirect(int sound_id);
+int sceRead(int descriptor, void *buffer, int bytes);
+int xglHddCheck2(void);
+static int xglHddCheckCore(void);
+extern int xglHddMcUmount(void);
+extern int sceUmount(const char *path);
+int xglHddMcLoad(void *save);
+extern int xglHddMcLoadMount(void);
+extern int xglHddMcLoadCore(void *save);
+int xglHddUninstall(void);
+extern int sceRemove(const char *path);
+extern int xglHddCheck(void);
+extern void xglHddErrorScreen(void);
+extern void xglCdArcCheck(void);
+
+extern int sceMount(char *mount_point, char *device, int flags,
+                    void *payload, unsigned int payload_length);
+
+extern int sceDevctl(const char *device, int command, const void *input,
+                     unsigned int input_size, void *output, unsigned int output_size);
+
+/*
+ * SCE fileio: the third argument is the creation mode, supplied only when
+ * the flags request creation (xglHddMount passes 0x16D with flag 1).
+ */
+extern int sceOpen(const char *path, int flags, ...);
+
 extern int sceDopen(const char *path);
 extern int sceDread(int descriptor, struct HddDirectoryEntry *entry);
 extern int sceDclose(int descriptor);
@@ -191,26 +186,7 @@ static int xglHddMcCheckCore(struct HddCheckState *state);
 extern int xglHddMcCheck(struct HddCheckState *state);
 static int create_file(int card, int slot, const void *data, int size);
 extern unsigned char *xglMcSetFullPath(int card, int slot);
-
 extern int xglHddMcGetFree(void);
-
-/*
- * HddInstallCBparam (main:0x004DC3B0) points at the install context
- * xglHddInstallReadCB reports progress through: callback is invoked with
- * command 6 and a computed offset built from base and the current read
- * value, param is passed through unchanged, status keeps callback's last
- * result, and total is the read count the first (event == 1) call records.
- */
-typedef struct HddInstallCBParam {
-    int (*callback)(int command, int offset, int param);
-    int base;
-    int param;
-    int status;
-    int total;
-} HddInstallCBParam;
-
-extern HddInstallCBParam *HddInstallCBparam;
-
 extern int xglCdReadCancel(void);
 
 #endif /* SRC_MAIN_XGL_HDD_H */

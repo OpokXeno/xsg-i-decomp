@@ -21,6 +21,7 @@ typedef struct GameInitCameraRecord {
 
 extern GameInitCameraRecord tcamera[];
 extern struct UnitActorStorage actor;
+
 extern void TCAMERA_init(void);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 

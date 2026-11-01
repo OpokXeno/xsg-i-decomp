@@ -131,21 +131,27 @@ typedef struct BattleDataStorage {
 } BattleDataStorage;
 
 typedef char BattleDataHeaderSizeCheck[sizeof(BattleDataHeader) == 0x50 ? 1 : -1];
+
 typedef char BattleDataS32SizeCheck[
     sizeof(BattleDataS32) == 4 && __alignof__(BattleDataS32) == 2 ? 1 : -1];
+
 typedef char BattleWeaponPriceRecordSizeCheck[sizeof(BattleWeaponPriceRecord) == 0x20 ? 1 : -1];
+
 typedef char BattleItemPriceRecordSizeCheck[sizeof(BattleItemPriceRecord) == 0x14 ? 1 : -1];
+
 typedef char BattleBulletPriceRecordSizeCheck[sizeof(BattleBulletPriceRecord) == 0x0e ? 1 : -1];
+
 typedef char BattleAccessoryPriceRecordSizeCheck[sizeof(BattleAccessoryPriceRecord) == 0x10 ? 1 : -1];
+
 typedef char BattleFramePriceRecordSizeCheck[sizeof(BattleFramePriceRecord) == 0x10 ? 1 : -1];
+
 typedef char BattleEnginePriceRecordSizeCheck[sizeof(BattleEnginePriceRecord) == 0x0c ? 1 : -1];
+
 typedef char BattleParameterRecordSizeCheck[sizeof(BattleParameterRecord) == 0x20 ? 1 : -1];
+
 typedef char BattleLevelDataSizeCheck[sizeof(BattleExperienceAndParameters) == 0x38c ? 1 : -1];
+
 typedef char BattleDataStorageSizeCheck[sizeof(BattleDataStorage) == 0x10000 ? 1 : -1];
-
-extern BattleDataStorage batDatBuf;
-
-extern const Vector4 McMathUnitVector;
 
 typedef struct SdvKeyCursor {
     int position;
@@ -160,13 +166,6 @@ typedef struct SdvCameraChoice {
     unsigned char unmodeled_14[8];
     int camera_commands[4][3];
 } SdvCameraChoice;
-
-/* These typed caller declarations agree with the defining sc_get and sef
- * functions; their generated owner headers do not yet export these names. */
-extern int scGetImmAdrImmIdx2(int base, unsigned short *table, int index);
-extern short scGetImmNumIdx(short *table, int index);
-extern int sefIsEntryBoss(void);
-extern int rand(void);
 
 typedef short int16_t;
 
@@ -189,20 +188,6 @@ typedef struct {
     float ang[3];
     unsigned int : 32;
 } SdvCamOffset;
-
-extern int _sdvAmbFrame;
-extern int _sdvAmbState;
-
-static void sdvSetAmbStateSub(int state, int effect_no, int force);
-extern void *xglStudioGetLight2(void);
-extern void xglLightIntensityAmbient(void *light, void *ambient);
-extern void func_A2C3D8(void *map_rgb);
-extern void xglSoundEffectNormalID(int sound_id, int variant);
-
-extern int srsAnalyzeEftNo(int effectId, unsigned char *charId,
-                            int *effectCategory);
-extern unsigned char charID_0;
-extern int eftCate_1;
 
 /*
  * One 12-byte channel of a camera schedule task: sdvScheduleCamera reads
@@ -277,27 +262,16 @@ typedef struct SdvSpecialSlot {
     int index;                      /* +0x5c */
 } SdvSpecialSlot;
 
-extern short _sefBattleMode;
-int sdvProgressPrm(int kind, void *data, int size);
-extern void func_A31920(int kind, float *params);
-
-void sdvScheduleCamera(SdvCameraTask *task);
-
-extern void GameDefocusSet(int index, int, const int *);
-extern short _sdvSpecialBuf[8];
-
-void sdvClearSpecialWork(void);
+typedef struct SdvActorPosition {
+    unsigned char unmodeled_00[16];
+    Vector4 position;               /* +0x10 */
+} SdvActorPosition;
 
 /*
  * The 36-byte request that starts an alter: the actors the selectors 256 and
  * 512 name, the weapon the selectors from 1024 name, and the effect number
  * whose texture images the alter draws.
  */
-typedef struct SdvActorPosition {
-    unsigned char unmodeled_00[16];
-    Vector4 position;               /* +0x10 */
-} SdvActorPosition;
-
 typedef struct SdvAlterRequest {
     struct SdvActorPosition *source_actor; /* +0x00 */
     struct SdvActorPosition *target_actor; /* +0x04 */
@@ -307,10 +281,6 @@ typedef struct SdvAlterRequest {
     unsigned char unmodeled_16[14];
 } SdvAlterRequest;
 
-/*
- * One 0x1280-byte alter record. Only the +0x1278 status halfword that
- * sdvInitAlters, sdvDestroyAlters and sdvExecAlters read is named.
- */
 /* RGBA channels share the original aligned 128-bit packet color. */
 typedef unsigned int SdvPackedColor __attribute__((mode(TI)));
 
@@ -340,6 +310,10 @@ typedef struct SdvAlterParameters {
     short category;                 /* +0x6e */
 } SdvAlterParameters;
 
+/*
+ * One 0x1280-byte alter record. Only the +0x1278 status halfword that
+ * sdvInitAlters, sdvDestroyAlters and sdvExecAlters read is named.
+ */
 typedef struct SdvAlter {
     SdvAlterParameters parameters;
     Vector4 trail[2][128];          /* +0x70 */
@@ -353,10 +327,6 @@ typedef struct SdvAlter {
     unsigned char unmodeled_127e[2];
 } SdvAlter;
 
-int sdvCreateAlter(SdvAlterParameters *parameters);
-void sdvInitAlter(SdvAlter *alter);
-void sdvDestroyAlter(SdvAlter *alter);
-void sdvExecAlter(SdvAlter *alter);
 /* The GIF packet accumulator of the SGs* family: a growing array of 16-byte
  * records at `base`, `count` records long; `tag_index` is the record the open
  * GIF tag sits in and `loop_count` is what closing it ORs into its NLOOP. */
@@ -367,10 +337,43 @@ typedef struct SdvGifPacket {
     void *base;                     /* +0x0c */
 } SdvGifPacket;
 
-void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet);
+extern BattleDataStorage batDatBuf;
+extern const Vector4 McMathUnitVector;
+extern int _sdvAmbFrame;
+extern int _sdvAmbState;
+extern unsigned char charID_0;
+extern int eftCate_1;
+extern short _sefBattleMode;
+extern short _sdvSpecialBuf[8];
 extern SdvGifPacket _packet;
-extern void SGsInitEnv(void);
 
+/* These typed caller declarations agree with the defining sc_get and sef
+ * functions; their generated owner headers do not yet export these names. */
+extern int scGetImmAdrImmIdx2(int base, unsigned short *table, int index);
+
+extern short scGetImmNumIdx(short *table, int index);
+extern int sefIsEntryBoss(void);
+extern int rand(void);
+static void sdvSetAmbStateSub(int state, int effect_no, int force);
+extern void *xglStudioGetLight2(void);
+extern void xglLightIntensityAmbient(void *light, void *ambient);
+extern void func_A2C3D8(void *map_rgb);
+extern void xglSoundEffectNormalID(int sound_id, int variant);
+
+extern int srsAnalyzeEftNo(int effectId, unsigned char *charId,
+                            int *effectCategory);
+
+int sdvProgressPrm(int kind, void *data, int size);
+extern void func_A31920(int kind, float *params);
+void sdvScheduleCamera(SdvCameraTask *task);
+extern void GameDefocusSet(int index, int, const int *);
+void sdvClearSpecialWork(void);
+int sdvCreateAlter(SdvAlterParameters *parameters);
+void sdvInitAlter(SdvAlter *alter);
+void sdvDestroyAlter(SdvAlter *alter);
+void sdvExecAlter(SdvAlter *alter);
+void sdvDrawAlter(SdvAlter *alter, SdvGifPacket *packet);
+extern void SGsInitEnv(void);
 void sdvInitAlters(void);
 void sdvDestroyAlters(void);
 void sdvExecAlters(void);

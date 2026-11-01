@@ -4,7 +4,6 @@
 #define SRC_MAIN_EXM_1_H
 
 #include "main/xgl_2.h"
-
 #include "shared.h"
 
 /*
@@ -50,13 +49,13 @@ typedef struct Actor {
     Matrix *previous_joint_matrices; /* +0xa60 */
 } Actor;
 
-
 typedef struct ExMotionJointState {
     unsigned char unmodeled_00[16];
     Vector4 translation;
     unsigned char unmodeled_20[16];
     Vector4 rotation;
 } ExMotionJointState;
+
 typedef struct ExMotionJointWork {
     unsigned char unmodeled_000[0x28];
     struct JntHairIdSource *hair_id_source;
@@ -81,20 +80,10 @@ typedef struct ExMotionJointWork {
     struct Actor *owner;
 } ExMotionJointWork;
 
-
 typedef struct ExHairTypeSelection {
     int kind;
     unsigned int flags;
 } ExHairTypeSelection;
-
-
-extern ExHairTypeSelection htypebuf[];
-
-extern void *collibuf[1];
-
-extern int ibuf;
-
-extern int startjnt;
 
 typedef struct ExCollisionPrimitive {
     unsigned short joint;
@@ -103,6 +92,112 @@ typedef struct ExCollisionPrimitive {
     Vector4 start;
     Vector4 end;
 } ExCollisionPrimitive;
+
+typedef struct ExCollisionRequest {
+    struct ExCollisionPrimitive *primitives;
+    unsigned int flags;
+    float *correction;
+} ExCollisionRequest;
+
+typedef struct JntMatrix {
+    Matrix4 transform;
+} JntMatrix;
+
+typedef struct ExMotionChannel {
+    unsigned short type;
+    unsigned char unmodeled_002[12];
+    unsigned short matrix_index;
+    Vector4 translation;
+    Vector4 rotation;
+    unsigned char unmodeled_030[16];
+} ExMotionChannel;
+
+typedef struct ExHairParameters {
+    float gravity;
+    float length_response;
+    unsigned char unmodeled_008[8];
+    float response[3];
+    unsigned char unmodeled_01c[4];
+    float chain_response;
+    unsigned char unmodeled_024[12];
+} ExHairParameters;
+
+typedef struct ExGroundQuery {
+    unsigned char unmodeled_00[8];
+    short attribute_mask;
+    unsigned char unmodeled_0a[0x40 - 10];
+} ExGroundQuery;
+
+extern ExHairTypeSelection htypebuf[];
+extern void *collibuf[1];
+extern int ibuf;
+extern int startjnt;
+extern const float exmHairAnDSize;
+extern const float exmHairAnDFootRadius;
+extern const float exmHairAbFootRadius;
+extern const float exmHairAsBackSize;
+extern const float exmHairAsFootRadius;
+extern const float exmHairBrDSkirtColliSize;
+extern const float exmHairBrDSkirtColliFootRad;
+extern const float exmHairBo2SkirtColliSize;
+extern const float exmHairBo2SkirtColliFootRad;
+extern const float exmHairClSize;
+extern const float exmHairClFootRadius;
+extern const float exmHairESize;
+extern const float exmHairEFootRadius;
+extern const float exmHairFrSkirtColliSize;
+extern const float exmHairFrSkirtColliSizeB;
+extern const float exmHairFrSkirtColliFootRad;
+extern const float exmHairGiSkirtColliSize;
+extern const float exmHairGiSkirtColliFootRad;
+extern const float exmHairHeSkirtColliSize;
+extern const float exmHairHeSkirtColliSizeB;
+extern const float exmHairHeSkirtColliFootRad;
+extern const float exmHairISkirtColliSize;
+extern const float exmHairISkirtColliSizeB;
+extern const float exmHairISkirtColliFootRad;
+extern const float exmHairJr1SkirtColliSize;
+extern const float exmHairJr1SkirtColliFootRad;
+extern const float exmHairKeNSkirtColliSizeB;
+extern const float exmHairKeNSkirtColliSizeS;
+extern const float exmHairKeNSkirtColliFootRad;
+extern const float exmHairMoHmSkirtColliSize;
+extern const float exmHairMoHmSkirtColliFootRad;
+extern const float exmHairObSkirtColliSize;
+extern const float exmHairObSkirtColliFootRad;
+extern const float exmHairShioCSkirtColliSize;
+extern const float exmHairShioCSkirtColliFootRad;
+extern const float exmHairSeSkirtColliSize;
+extern const float exmHairSeSkirtColliFootRad;
+extern const float exmHairVSkirtColliSizeB;
+extern const float exmHairVSkirtColliSizeS;
+extern const float exmHairVSkirtColliFootRad;
+extern const float exmHairWSkirtColliSizeB;
+extern const float exmHairWSkirtColliFootRad;
+extern const float exmHairYSkirtColliFootRad;
+extern float vel_0[4];
+extern ExHairParameters hairpara[];
+extern float JR_coatAdjust[];
+
+void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
+float xglSin(float angle);
+float xglCos(float angle);
+void xglVectorNormal(Vector4 *destination, const Vector4 *source);
+void xglMatrixMul(Matrix *destination, Matrix *first, Matrix *second);
+void xglVectorInner(float *result, const Vector4 *first, const Vector4 *second);
+void MATRIX_rotX4s(Matrix *matrix, float angle);
+void MATRIX_rotY4s(Matrix *matrix, float angle);
+void MATRIX_rotZ4s(Matrix *matrix, float angle);
+void EXM_ResetWave(void);
+void UnduParamInit(void *query);
+float asinf(float value);
+float UnduCheck(const void *position, void *velocity, ExGroundQuery *query);
+
+static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3],
+                               const Matrix4 jointMatrix, ExCollisionRequest *request);
+
+void EXM_GetWindPower(float output[3], ExMotionJointWork *work, const float input[3],
+                      const float parent_position[4]);
 
 static ExCollisionPrimitive abelcol[3];
 
@@ -145,181 +240,5 @@ static ExCollisionPrimitive shioncol[5];
 static ExCollisionPrimitive shitancol[4];
 
 static ExCollisionPrimitive tonnycol[4];
-
-extern const float exmHairAnDSize;
-
-extern const float exmHairAnDFootRadius;
-
-extern const float exmHairAbFootRadius;
-
-extern const float exmHairAsBackSize;
-
-extern const float exmHairAsFootRadius;
-
-extern const float exmHairBrDSkirtColliSize;
-
-extern const float exmHairBrDSkirtColliFootRad;
-
-extern const float exmHairBo2SkirtColliSize;
-
-extern const float exmHairBo2SkirtColliFootRad;
-
-extern const float exmHairClSize;
-
-extern const float exmHairClFootRadius;
-
-extern const float exmHairESize;
-
-extern const float exmHairEFootRadius;
-
-extern const float exmHairFrSkirtColliSize;
-
-extern const float exmHairFrSkirtColliSizeB;
-
-extern const float exmHairFrSkirtColliFootRad;
-
-extern const float exmHairGiSkirtColliSize;
-
-extern const float exmHairGiSkirtColliFootRad;
-
-extern const float exmHairHeSkirtColliSize;
-
-extern const float exmHairHeSkirtColliSizeB;
-
-extern const float exmHairHeSkirtColliFootRad;
-
-extern const float exmHairISkirtColliSize;
-
-extern const float exmHairISkirtColliSizeB;
-
-extern const float exmHairISkirtColliFootRad;
-
-extern const float exmHairJr1SkirtColliSize;
-
-extern const float exmHairJr1SkirtColliFootRad;
-
-extern const float exmHairKeNSkirtColliSizeB;
-
-extern const float exmHairKeNSkirtColliSizeS;
-
-extern const float exmHairKeNSkirtColliFootRad;
-
-extern const float exmHairMoHmSkirtColliSize;
-
-extern const float exmHairMoHmSkirtColliFootRad;
-
-extern const float exmHairObSkirtColliSize;
-
-extern const float exmHairObSkirtColliFootRad;
-
-extern const float exmHairShioCSkirtColliSize;
-
-extern const float exmHairShioCSkirtColliFootRad;
-
-extern const float exmHairSeSkirtColliSize;
-
-extern const float exmHairSeSkirtColliFootRad;
-
-extern const float exmHairVSkirtColliSizeB;
-
-extern const float exmHairVSkirtColliSizeS;
-
-extern const float exmHairVSkirtColliFootRad;
-
-extern const float exmHairWSkirtColliSizeB;
-
-extern const float exmHairWSkirtColliFootRad;
-
-extern const float exmHairYSkirtColliFootRad;
-
-void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
-
-
-typedef struct ExCollisionRequest {
-    struct ExCollisionPrimitive *primitives;
-    unsigned int flags;
-    float *correction;
-} ExCollisionRequest;
-
-
-
-
-typedef struct JntMatrix {
-    Matrix4 transform;
-} JntMatrix;
-
-
-extern float vel_0[4];
-
-float xglSin(float angle);
-
-float xglCos(float angle);
-
-void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
-
-
-
-
-
-
-
-
-void xglMatrixMul(Matrix *destination, Matrix *first, Matrix *second);
-
-void xglVectorInner(float *result, const Vector4 *first, const Vector4 *second);
-
-void MATRIX_rotX4s(Matrix *matrix, float angle);
-
-void MATRIX_rotY4s(Matrix *matrix, float angle);
-
-void MATRIX_rotZ4s(Matrix *matrix, float angle);
-
-void EXM_ResetWave(void);
-
-void UnduParamInit(void *query);
-
-float asinf(float value);
-
-typedef struct ExMotionChannel {
-    unsigned short type;
-    unsigned char unmodeled_002[12];
-    unsigned short matrix_index;
-    Vector4 translation;
-    Vector4 rotation;
-    unsigned char unmodeled_030[16];
-} ExMotionChannel;
-
-
-typedef struct ExHairParameters {
-    float gravity;
-    float length_response;
-    unsigned char unmodeled_008[8];
-    float response[3];
-    unsigned char unmodeled_01c[4];
-    float chain_response;
-    unsigned char unmodeled_024[12];
-} ExHairParameters;
-
-
-typedef struct ExGroundQuery {
-    unsigned char unmodeled_00[8];
-    short attribute_mask;
-    unsigned char unmodeled_0a[0x40 - 10];
-} ExGroundQuery;
-
-
-float UnduCheck(const void *position, void *velocity, ExGroundQuery *query);
-
-extern ExHairParameters hairpara[];
-
-extern float JR_coatAdjust[];
-
-static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3],
-                               const Matrix4 jointMatrix, ExCollisionRequest *request);
-
-void EXM_GetWindPower(float output[3], ExMotionJointWork *work, const float input[3],
-                      const float parent_position[4]);
-
 
 #endif

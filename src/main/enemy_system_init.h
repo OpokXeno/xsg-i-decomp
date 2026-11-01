@@ -7,19 +7,6 @@
  * (sw zero at 0x002d3e44, absolute-addressed through a lui/sw pair rather
  * than gp-relative). */
 typedef unsigned int GameLoopStateWords[];
-extern GameLoopStateWords GameLoopState;
-
-/* Buffer addresses Enemy_SystemInit fills with xglCdReadFile, one per
- * enemy resource file (data\matumoto\enemy.dat, spline.dat, bikkuri.lex,
- * hatena.lex, maru.lex and sikaku.lex in that order). res_get_path.c reads
- * AdrsEnemyPreset back as the buffer Enemy_LoadPreset fills; this TU only
- * ever writes the six, so their pointee type stays unmodelled. */
-extern void *AdrsEnemyPreset;
-extern void *AdrsEnemySpline;
-extern void *AdrsEnemyExclamation;
-extern void *AdrsEnemyQuestion;
-extern void *AdrsEnemySphere;
-extern void *AdrsEnemySquare;
 
 /* The enemy record ACT_createEnemy builds: one 0xa70-byte slot of `actor`
  * and its 0x38b0-byte `enepc` entry, modelled only as far as this TU writes
@@ -170,9 +157,24 @@ typedef struct EnemyInitActor {
     unsigned char unmodeled_a34[0x3c];
 } EnemyInitActor;
 
-extern EnemyInitActor actor[64];
 /* GameLoopState[1] is the player's actor: ACT_createEnemy reads its number
  * through it (lw at 0x002d4280, lbu 0x80 at 0x002d4284). */
+extern GameLoopStateWords GameLoopState;
+
+/* Buffer addresses Enemy_SystemInit fills with xglCdReadFile, one per
+ * enemy resource file (data\matumoto\enemy.dat, spline.dat, bikkuri.lex,
+ * hatena.lex, maru.lex and sikaku.lex in that order). res_get_path.c reads
+ * AdrsEnemyPreset back as the buffer Enemy_LoadPreset fills; this TU only
+ * ever writes the six, so their pointee type stays unmodelled. */
+extern void *AdrsEnemyPreset;
+
+extern void *AdrsEnemySpline;
+extern void *AdrsEnemyExclamation;
+extern void *AdrsEnemyQuestion;
+extern void *AdrsEnemySphere;
+extern void *AdrsEnemySquare;
+extern EnemyInitActor actor[64];
+
 extern EnemyInitWork enepc[16];
 
 EnemyInitActor *ACT_createEnemy(int number, int id);

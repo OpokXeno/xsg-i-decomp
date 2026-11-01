@@ -51,18 +51,18 @@ typedef struct DoorParams {
     unsigned int initialization_state; /* +0x44: cleared by InitMapDoor */
 } DoorParams;
 
-/*
- * A map door's runtime state. InitMapDoor and MAP_updateUnitDoor (main:
- * 0x002c4760, 0x002c4a18, this TU, still assembly) construct and drive it;
- * only the members the AutoDoor/EventDoor/MjDoor/HalfAutoDoor state
- * functions touch are named here.
- */
 typedef union DoorPosition {
     Vector4 values;
     float lanes[4]; /* scalar view of values; the stores into the linked unit index this */
     u64 words[2];
 } DoorPosition;
 
+/*
+ * A map door's runtime state. InitMapDoor and MAP_updateUnitDoor (main:
+ * 0x002c4760, 0x002c4a18, this TU, still assembly) construct and drive it;
+ * only the members the AutoDoor/EventDoor/MjDoor/HalfAutoDoor state
+ * functions touch are named here.
+ */
 typedef struct DoorUnit {
     unsigned int flags; /* +0x00: InitMapDoor sets the initialized bit */
     void (*update_func)(struct DoorUnit *); /* +0x04 */

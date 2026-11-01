@@ -7,6 +7,17 @@
 
 #include "shared.h"
 
+#include "main/init_vm.h"
+
+/*
+ * One record of the CF-camera table CfCameraDefine (main:0x00362e80, 33 records
+ * of 0xa0 bytes, defined by src/main/maptbl.c). The Java CF setters of this
+ * unit address it by camera index, or by every record when the index is
+ * negative. Only the members those setters touch are named; the rest of each
+ * record is unmodeled storage.
+ */
+#include "main/maptbl.h"
+
 /* Bounded spline record at camera + 0x4d0.
  * Only offsets 4/6/8/10/12/16 carry use-site evidence:
  *  +4 weight_mode, +10 sample_count, +12 component_count, +16 samples
@@ -14,8 +25,6 @@
  *  +6 first_key and +8 last_key are stored by CAMERA_rotateSPL itself.
  * Offset +0 is never touched by either body, so it is kept as opaque
  * reserved bytes, not a named semantic field. */
-#include "main/init_vm.h"
-
 typedef struct CameraSpline {
     unsigned char reserved0[4];
     unsigned short weight_mode;
@@ -25,10 +34,6 @@ typedef struct CameraSpline {
     unsigned int component_count;
     const float *samples;
 } CameraSpline;
-
-extern void SPL_init(CameraSpline *spline, unsigned int weight_mode,
-                     const float *samples, unsigned int sample_count,
-                     unsigned int component_count);
 
 typedef struct JavaEnvironment JavaEnvironment;
 
@@ -160,8 +165,6 @@ typedef struct CameraSplineRequest {
     unsigned short last_key;       /* +0x10 */
 } CameraSplineRequest;
 
-extern StudioCamera *xglStudioGetCamera2(int camera_id);
-
 /*
  * Call block of the camera "this"-only natives: Java_xeno_Camera_getRotateX__/
  * getRotateY__/getRotateZ__/getFov__ (0x002fb390/0x002fb3e0/0x002fb430/
@@ -215,6 +218,38 @@ typedef struct CameraSetClipRangeArgs {
 } CameraSetClipRangeArgs;
 
 /*
+ * Call block of Java_xeno_Camera_changeID__III (0x002fc7c8): `this` and the
+ * three Java int arguments forwarded unchanged to GameCameraChangeID's own
+ * first, second and third arguments (still asm, src/main/game_camera.c). That
+ * function only reads its first argument, storing it as the new camera id
+ * (lhu/sh GameLoopState+0xc4 at main:0x00246bd0/0x00246c2c); it never loads
+ * its second or third.
+ */
+typedef struct CameraChangeIDArgs {
+    unsigned char unmodeled_00[4]; /* +0x00: the jobject, not read here */
+    int id;  /* +0x04: GameCameraChangeID's own first argument */
+    int id2; /* +0x08: forwarded, not read by GameCameraChangeID */
+    int id3; /* +0x0c: forwarded, not read by GameCameraChangeID */
+} CameraChangeIDArgs;
+
+typedef struct CameraVector3 {
+    float x;
+    float y;
+    float z;
+} CameraVector3;
+
+/* Interpreter native-call storage, defined by main/tu226 init_vm.c.
+ * Native callbacks receive arrays of these four-byte value slots for both
+ * arguments and results; the method descriptor selects each member. */
+typedef struct VMThreadP VMThread;
+
+extern void SPL_init(CameraSpline *spline, unsigned int weight_mode,
+                     const float *samples, unsigned int sample_count,
+                     unsigned int component_count);
+
+extern StudioCamera *xglStudioGetCamera2(int camera_id);
+
+/*
  * CAMERA_transSPL (main:0x002fb900) and CAMERA_viewSPL (main:0x002fbb30) are
  * local to this file in the original, still asm here, and share
  * CAMERA_rotateSPL's shape: `selection` picks the case, `request` is the
@@ -231,47 +266,10 @@ typedef struct CameraSetClipRangeArgs {
  */
 static void CAMERA_transSPL(int selection, JavaEnvironment *environment,
                             CameraSplineRequest *request, void *result);
+
 static void CAMERA_viewSPL(int selection, JavaEnvironment *environment,
                            CameraSplineRequest *request, void *result);
 
-/*
- * Call block of Java_xeno_Camera_changeID__III (0x002fc7c8): `this` and the
- * three Java int arguments forwarded unchanged to GameCameraChangeID's own
- * first, second and third arguments (still asm, src/main/game_camera.c). That
- * function only reads its first argument, storing it as the new camera id
- * (lhu/sh GameLoopState+0xc4 at main:0x00246bd0/0x00246c2c); it never loads
- * its second or third.
- */
-typedef struct CameraChangeIDArgs {
-    unsigned char unmodeled_00[4]; /* +0x00: the jobject, not read here */
-    int id;  /* +0x04: GameCameraChangeID's own first argument */
-    int id2; /* +0x08: forwarded, not read by GameCameraChangeID */
-    int id3; /* +0x0c: forwarded, not read by GameCameraChangeID */
-} CameraChangeIDArgs;
-
 extern void GameCameraChangeID(int, int, int);
-
-typedef struct CameraVector3 {
-    float x;
-    float y;
-    float z;
-} CameraVector3;
-
-/*
- * One record of the CF-camera table CfCameraDefine (main:0x00362e80, 33 records
- * of 0xa0 bytes, defined by src/main/maptbl.c). The Java CF setters of this
- * unit address it by camera index, or by every record when the index is
- * negative. Only the members those setters touch are named; the rest of each
- * record is unmodeled storage.
- */
-#include "main/maptbl.h"
-
-
-
-/* Interpreter native-call storage, defined by main/tu226 init_vm.c.
- * Native callbacks receive arrays of these four-byte value slots for both
- * arguments and results; the method descriptor selects each member. */
-
-typedef struct VMThreadP VMThread;
 
 #endif /* SRC_MAIN_CAMERA_H */

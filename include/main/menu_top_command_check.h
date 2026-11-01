@@ -208,11 +208,8 @@ typedef struct MenuStatusPanel {
 } MenuStatusPanel;
 
 int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel);
-
 int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel);
-
 void MenuPasWindow(void);
-
 void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work);
 
 #endif /* INCLUDE_MAIN_MENU_TOP_COMMAND_CHECK_H */

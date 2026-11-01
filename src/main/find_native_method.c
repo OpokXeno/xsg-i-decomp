@@ -1,31 +1,17 @@
 #include "common.h"
-
 #include "main/init_vm.h"
-
 #include "find_native_method.h"
 
 typedef struct ClassCacheEntry ClassCacheEntry;
+
 struct JavaMethod;
-
-extern ClassCacheEntry **classEntryPool;
-
-int strcmp(const char *, const char *);
 
 /* One row of the default_native[] table: a native method's exported name
  * and the address of its native implementation. */
-
 typedef struct NativeMethodEntry {
     const char *name;
     void *function;
 } NativeMethodEntry;
-
-extern NativeMethodEntry default_native[];
-
-/*
- * Looks up name in the default_native[] table, which a NULL name terminates,
- * and returns the matching native implementation, or NULL if the table is
- * empty or no entry's name matches.
- */
 
 /*
  * A string constant of a class file's constant pool, as this function reads
@@ -33,7 +19,6 @@ extern NativeMethodEntry default_native[];
  * 8 to this function and retags it 0x18 once the slot holds the instance
  * built here.
  */
-
 typedef struct StringConstant {
     u8 unmodeled_00[6];
     u16 length;     /* +0x6: the constant's UTF-8 byte count */
@@ -46,7 +31,6 @@ typedef struct StringConstant {
  * buffer from +0x4 and +0x8 and passes them to loadConstString. The source
  * constant has the same interned UTF-8 layout as ConstString.
  */
-
 typedef struct StringValue {
     u8 unmodeled_00[4];
     int length;     /* +0x4: the constant's length, widened to a word */
@@ -57,21 +41,10 @@ typedef struct StringValue {
  * The java.lang.String instance itself: the object header newObject seeds,
  * then the value record at +0x4 SCENE_start reads.
  */
-
 typedef struct StringInstance {
     ObjectHeader header;
     StringValue *value;  /* +0x4 */
 } StringInstance;
-
-JavaClass *findClass(ClassCacheEntry *entry);
-
-ClassCacheEntry *lookupClassEntry(ClassNameKey *name, void *classLoader);
-
-int processClass(JavaClass *clazz, int targetState);
-
-void *classFromSig(const char **cursor, void *classLoader);
-
-static int sizeofDescripter(u8 **cursor);
 
 typedef struct JavaMethod JavaMethod;
 
@@ -80,90 +53,6 @@ typedef struct JavaFieldEntry FieldEntry;
 typedef struct DispatchTable DispatchTable;
 
 typedef union ConstantPoolEntry ConstantPoolEntry;
-
-/*
- * The full layout of the VM class record (include/shared.h's SceneClass is
- * the shared view of the same 0x40 bytes).
- */
-#ifndef INCLUDE_MAIN_FIND_NATIVE_METHOD_H
-struct JavaClass {
-    ObjectHeader header;
-    ClassNameKey *name;
-    u16 accessFlags;
-    u16 flags;
-    void *classLoader;
-    JavaClass *superClass;
-    ConstantPoolEntry *constants;
-    DispatchTable *classPointer;
-    FieldEntry *fields;
-    JavaMethod *methods;
-    JavaClass **interfaces;
-    u16 constantCount;
-    u16 dispatchSize;
-    u16 methodCount;
-    u16 interfaceCount;
-    u16 fieldCount;
-    u16 staticFieldCount;
-    u16 declaredInterfaceCount;
-    s16 state;
-    int instanceSize;
-    ElementType *elementClass;
-};
-#endif
-
-static JavaClass _dummyClass;
-
-char *strcpy(char *, const char *);
-
-extern ElementType *classBoolean;
-
-extern ElementType *classByte;
-
-extern ElementType *classChar;
-
-extern ElementType *classShort;
-
-extern ElementType *classInt;
-
-extern ElementType *classLong;
-
-extern ElementType *classFloat;
-
-extern ElementType *classDouble;
-
-extern ElementType *classVoid;
-
-extern ClassNameKey *NAME_Constructor;
-
-extern ClassNameKey *loadConstString(const char *bytes, int length);
-
-extern ClassNameKey *loadConstString2(const char *bytes, int length);
-
-static struct JavaMethod *findSuperMethod(struct JavaMethod *method, JavaClass *classEntry);
-
-static void buildDispatchMethodTable(JavaClass *clazz);
-
-static void allocStaticField(JavaClass *classEntry);
-
-static void resolveInstanceField(JavaClass *classEntry);
-
-static void resolveStaticField(JavaClass *clazz);
-
-static int resolveConstants(JavaClass *classEntry);
-
-extern JavaClass *getClass(JavaClass *classRef, JavaClass *owner);
-
-extern ClassNameKey *NAME_Init;
-
-extern ClassNameKey *TYPE_Void;
-
-extern SceneVm *initVMThread;
-
-extern SceneMethod *findMethodLocal(JavaClass *clazz, ClassNameKey *name, ClassNameKey *type);
-
-extern void JNI_initThread(SceneVm *thread);
-
-extern void JNI_callMethod(SceneVm *thread, SceneMethod *method, SceneObject *object, int *args);
 
 union ConstantSlot {
     u8 *tags;
@@ -237,8 +126,81 @@ struct DispatchTable {
     JavaMethod *methods[1];
 };
 
-static int sizeofDescripterType(u8 **cursor);
+extern ClassCacheEntry **classEntryPool;
+extern NativeMethodEntry default_native[];
+extern ElementType *classBoolean;
+extern ElementType *classByte;
+extern ElementType *classChar;
+extern ElementType *classShort;
+extern ElementType *classInt;
+extern ElementType *classLong;
+extern ElementType *classFloat;
+extern ElementType *classDouble;
+extern ElementType *classVoid;
+extern ClassNameKey *NAME_Constructor;
+extern ClassNameKey *NAME_Init;
+extern ClassNameKey *TYPE_Void;
+extern SceneVm *initVMThread;
 
+int strcmp(const char *, const char *);
+JavaClass *findClass(ClassCacheEntry *entry);
+ClassCacheEntry *lookupClassEntry(ClassNameKey *name, void *classLoader);
+int processClass(JavaClass *clazz, int targetState);
+void *classFromSig(const char **cursor, void *classLoader);
+static int sizeofDescripter(u8 **cursor);
+char *strcpy(char *, const char *);
+extern ClassNameKey *loadConstString(const char *bytes, int length);
+extern ClassNameKey *loadConstString2(const char *bytes, int length);
+static struct JavaMethod *findSuperMethod(struct JavaMethod *method, JavaClass *classEntry);
+static void buildDispatchMethodTable(JavaClass *clazz);
+static void allocStaticField(JavaClass *classEntry);
+static void resolveInstanceField(JavaClass *classEntry);
+static void resolveStaticField(JavaClass *clazz);
+static int resolveConstants(JavaClass *classEntry);
+extern JavaClass *getClass(JavaClass *classRef, JavaClass *owner);
+extern SceneMethod *findMethodLocal(JavaClass *clazz, ClassNameKey *name, ClassNameKey *type);
+extern void JNI_initThread(SceneVm *thread);
+extern void JNI_callMethod(SceneVm *thread, SceneMethod *method, SceneObject *object, int *args);
+static int sizeofDescripterType(u8 **cursor);
+int instanceOf(SceneClass *fromClass, SceneClass *toClass);
+
+static JavaClass _dummyClass;
+
+/*
+ * The full layout of the VM class record (include/shared.h's SceneClass is
+ * the shared view of the same 0x40 bytes).
+ */
+#ifndef INCLUDE_MAIN_FIND_NATIVE_METHOD_H
+struct JavaClass {
+    ObjectHeader header;
+    ClassNameKey *name;
+    u16 accessFlags;
+    u16 flags;
+    void *classLoader;
+    JavaClass *superClass;
+    ConstantPoolEntry *constants;
+    DispatchTable *classPointer;
+    FieldEntry *fields;
+    JavaMethod *methods;
+    JavaClass **interfaces;
+    u16 constantCount;
+    u16 dispatchSize;
+    u16 methodCount;
+    u16 interfaceCount;
+    u16 fieldCount;
+    u16 staticFieldCount;
+    u16 declaredInterfaceCount;
+    s16 state;
+    int instanceSize;
+    ElementType *elementClass;
+};
+#endif
+
+/*
+ * Looks up name in the default_native[] table, which a NULL name terminates,
+ * and returns the matching native implementation, or NULL if the table is
+ * empty or no entry's name matches.
+ */
 void *findNativeMethod(const char *name)
 {
     NativeMethodEntry *entry = default_native;
@@ -881,8 +843,6 @@ static int sizeofDescripter(u8 **cursor)
     }
 }
 
-int instanceOf(SceneClass *fromClass, SceneClass *toClass);
-
 /*
  * Array assignability: strips matching array dimensions, then compares the
  * element types. The recursive instanceOf call handles object element types.
@@ -1000,6 +960,7 @@ static int sizeofDescripterType(u8 **cursor)
     return size;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char primitiveArrayDescriptorFormat[8] = "[%c";
 
 const char nestedArrayDescriptorFormat[8] = "[%s";

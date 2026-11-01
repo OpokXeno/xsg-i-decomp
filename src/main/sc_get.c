@@ -1,39 +1,33 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "sc_get.h"
-
-/* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
-
-ScriptRecord _scriptWork[];
 
 #define SCRIPT_WORK_BYTES ((unsigned char *)(void *)_scriptWork)
 
-/* EUC-JP: "clear effect outside the valid range %d %d". */
+/* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
+ScriptRecord _scriptWork[];
 
+/* EUC-JP: "clear effect outside the valid range %d %d". */
 static const char outOfRangeEffectDeleteFormat[];
 
 static const char registerOverflowFormat[];
-
 static const char effectStackUnderflowFormat[];
-
-static short _cmdPut;
-
-int _scMslCate;
-
-int _nowScript;
-
-int _nowEvent;
-
 extern int _nowDataIdx;
+const char registerDumpFormat[];
+
+static const char noLoadEffectDataFormat[];
+
+static const char taskOutOfRangeFormat[];
+static const char taskWorkEmptyFormat[];
+static const char effectStackOverflowFormat[];
+static const char badExpressionFormat[];
+static const char simajiriMoviePath[];
 
 /*
  * scFindScriptData is a genuine tail call (`j sefSearchMapperIndex`, not
  * `jal`) into the mapper-index search main/tu211 (src/main/sef.c) defines;
  * that function is still INCLUDE_ASM there.
  */
-
 extern int sefSearchMapperIndex(int eftNo);
 
 /*
@@ -41,7 +35,6 @@ extern int sefSearchMapperIndex(int eftNo);
  * takes the same script_index/task_index pair scDeleteTask below does; its
  * own accepted definition (src/main/sef.c) documents the match.
  */
-
 extern void sefDestroyScriptScheduler2(int script_index, int task_index);
 
 static void scDeleteTask(int script_index, int task_index);
@@ -52,12 +45,10 @@ static void scDeleteTask(int script_index, int task_index);
  * same +0x400 pointer scGetTableAdrIdx and its siblings below read) is
  * loaded, also deletes the one task scDeleteTask selects.
  */
-
 extern void scDestroyScript(int script_index);
 
-/* scExecScript (above) is still INCLUDE_ASM; declare it so its caller does
+/* scExecScript is defined below in this file; declare it so its caller does
  * not see an implicit declaration. */
-
 static void scExecScript(void);
 
 static int scDispatchScript(ScriptTask *task);
@@ -67,18 +58,11 @@ static int scDispatchScript(ScriptTask *task);
  * main/tu211 (src/main/sef.c), still INCLUDE_ASM there. scExecEffect calls
  * scExecScript, then genuinely tail-calls (`j`, not `jal`) into it.
  */
-
 extern void sefExecScheduler(void);
 
-/*
- * Invalidate one task slot and decrement its owning script's active count.
- * The original storage declarations are unavailable; the slot's recovered
- * members are in sc_get.h, and the script header at +0x440 of each script
- * record keeps its measured offsets, because only its active-task counter has
- * an evidenced role here.
- */
-
 extern int tracePrint();
+
+extern int scGetCmdScript(ScriptTask *task);
 
 /*
  * scGetReg resolves a script-register selector the same way scGetRegAdr
@@ -87,18 +71,9 @@ extern int tracePrint();
  * the error through tracePrint and reads as 0), but keeps its own copy of the
  * address computation and bound check instead of calling scGetRegAdr.
  */
-
-/* Same indirect-selector and bound-check logic as scGetReg above, writing
- * `value` into the resolved register instead of reading it. */
-
-extern int scGetCmdScript(ScriptTask *task);
-
 extern int scGetReg(int reg);
-
 extern int scGetAdrScript(ScriptTask *task);
-
 static int scCreateTask(int script_index, int task_index, int address, ScriptTaskParameters *data);
-
 static void scDeleteTaskAll(int event, int task_index);
 
 /*
@@ -110,23 +85,18 @@ static void scDeleteTaskAll(int event, int task_index);
  * and scABORTScript, whose first call it is, leaves $a0 untouched
  * (0x002eabc4..0x002eabc8). scGetNumScript's own body does not read it.
  */
-
 extern int scGetNumScript(ScriptTask *task);
 
 extern unsigned int strlen(const char *s);
 
-const char registerDumpFormat[];
-
 /* Preserve the earlier external reference above while owning its bytes here. */
-
 /* Keep the active script scalars after scRDUMPScript's small-data format. */
-
+/* Same indirect-selector and bound-check logic as scGetReg above, writing
+ * `value` into the resolved register instead of reading it. */
 extern void scSetReg(int reg, int value);
 
 extern void sdvSetAmbState(int state, int effect_no);
-
 extern void sdvSetAmbState2(int state, int effect_no);
-
 extern int scGetAdrImmScript(ScriptTask *task);
 
 /*
@@ -137,142 +107,110 @@ extern int scGetAdrImmScript(ScriptTask *task);
  * script's data table pointer; -1 is the same "auto-assign" sentinel
  * scOBJEVEScript's scCreateTask call above uses for its task-index argument.
  */
-
 extern int sefCreateScheduler(int address, void *taskField0x30, void *taskField0x20, int table, int taskIndex);
 
 extern void sefCreateBattleActorTbl(short effect_no);
 
 /* scFreezeCamera (still assembly in this TU) takes the task's effect_no. */
-
 static void scFreezeCamera(int effect_no);
 
 extern char *srsAnalyzeEftNo(int effectId, int *charId, int *effectCategory);
-
 static int scERRORScript(ScriptTask *task);
-
 static int scGOScript(ScriptTask *task);
-
 static int scGOSUBScript(ScriptTask *task);
-
 static int scBRAScript(ScriptTask *task);
-
 static int scEXITScript(ScriptTask *task);
-
 static int scRETURNScript(ScriptTask *task);
-
 static int scONGOScript(ScriptTask *task);
-
 static int scONGOSUBScript(ScriptTask *task);
-
 static int scPRINTScript(ScriptTask *task);
-
 static int scRPUTScript(ScriptTask *task);
-
 static int scRDUMPScript(ScriptTask *task);
-
 static int scCMDPUTONScript(ScriptTask *task);
-
 static int scCMDPUTOFFScript(ScriptTask *task);
-
 static int scFADEONScript(ScriptTask *task);
-
 static int scRSETScript(ScriptTask *task);
-
 static int scRINCScript(ScriptTask *task);
-
 static int scRDECScript(ScriptTask *task);
-
 static int scRADDScript(ScriptTask *task);
-
 static int scRSUBScript(ScriptTask *task);
-
 static int scRMULScript(ScriptTask *task);
-
 static int scRDIVScript(ScriptTask *task);
-
 static int scRMODScript(ScriptTask *task);
-
 static int scR_ANDScript(ScriptTask *task);
-
 static int scR_ORScript(ScriptTask *task);
-
 static int scR_XORScript(ScriptTask *task);
-
 static int scR_NOTScript(ScriptTask *task);
-
 static int scR_NEGScript(ScriptTask *task);
-
 static int scRRNDScript(ScriptTask *task);
-
 static int scREVEScript(ScriptTask *task);
-
 static int scOBJEVEScript(ScriptTask *task);
-
 static int scABORTScript(ScriptTask *task);
-
 static int scPAUSEScript(ScriptTask *task);
-
 static int scWAITCNTScript(ScriptTask *task);
-
 static int scWAITEVEScript(ScriptTask *task);
-
 static int scWAITEFTScript(ScriptTask *task);
-
 static int scWAITMOVIEScript(ScriptTask *task);
-
 static int scWAITMISSILEScript(ScriptTask *task);
-
 static int scEFFECTScript(ScriptTask *task);
-
 static int scEFFECT2Script(ScriptTask *task);
-
 static int scEFFECT3Script(ScriptTask *task);
-
 static int scMOVIEScript(ScriptTask *task);
-
 static int scMISSILEScript(ScriptTask *task);
-
 static int scMISSILE3Script(ScriptTask *task);
+extern void **svGetScript(int effectNo);
+extern void sefDestroyScriptScheduler(int script_index);
+extern int srsGetEffect2Idx(int effectNo);
+extern int sefCreateScheduler2(int address, void *taskData, void *positionData, int table, int flags, int taskIndex);
+extern int func_A32FA8(const char *filename);
+extern int rand(void);
+extern void func_A31500(int *position, int mode);
+extern void func_A31920(int mode, int *position);
+
+static short _cmdPut;
+
+int _scMslCate;
 
 static int (*_scFuncHandler[73])(ScriptTask *task);
 
-/* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
-
-static const char noLoadEffectDataFormat[];
-
-static const char taskOutOfRangeFormat[];
-
-static const char taskWorkEmptyFormat[];
-
-static const char effectStackOverflowFormat[];
-
-static const char badExpressionFormat[];
-
-static const char simajiriMoviePath[];
-
 static ScriptZeroPosition _zeroPos_0041E290;
-
-extern void **svGetScript(int effectNo);
-
-extern void sefDestroyScriptScheduler(int script_index);
-
-extern int srsGetEffect2Idx(int effectNo);
-
-extern int sefCreateScheduler2(int address, void *taskData, void *positionData, int table, int flags, int taskIndex);
-
-extern int func_A32FA8(const char *filename);
-
-extern int rand(void);
-
-extern void func_A31500(int *position, int mode);
-
-extern void func_A31920(int mode, int *position);
 
 static short _cmdPut = 0;
 
 int _scMslCate = 0;
 
 const char registerDumpFormat[8] = " %04x";
+
+ScriptRecord _scriptWork[16] = {{0}};
+
+static ScriptZeroPosition _zeroPos_0041E290 = {{0, 0x3f80000000000000ULL}};
+
+static int (*_scFuncHandler[73])(ScriptTask *task) = {
+    scERRORScript, scGOScript, scGOSUBScript, scBRAScript,
+    scEXITScript, scRETURNScript, scONGOScript, scONGOSUBScript,
+    scERRORScript, scERRORScript, scPRINTScript, scRPUTScript,
+    scRDUMPScript, scCMDPUTONScript, scCMDPUTOFFScript, scFADEONScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scRSETScript, scRINCScript, scRDECScript, scRADDScript,
+    scRSUBScript, scRMULScript, scRDIVScript, scRMODScript,
+    scR_ANDScript, scR_ORScript, scR_XORScript, scR_NOTScript,
+    scR_NEGScript, scRRNDScript, scREVEScript, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scOBJEVEScript, scABORTScript, scPAUSEScript, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scERRORScript, scERRORScript, scWAITCNTScript, scWAITEVEScript,
+    scWAITEFTScript, scWAITMOVIEScript, scWAITMISSILEScript, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scEFFECTScript, scEFFECT2Script, scEFFECT3Script, scERRORScript,
+    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
+    scERRORScript, scERRORScript, scMOVIEScript, scMISSILEScript,
+    scMISSILE3Script
+};
+
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+int _nowScript;
+
+int _nowEvent;
 
 void scInitScript(void)
 {
@@ -454,6 +392,13 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
     return task_index;
 }
 
+/*
+ * Invalidate one task slot and decrement its owning script's active count.
+ * The original storage declarations are unavailable; the slot's recovered
+ * members are in sc_get.h, and the script header at +0x440 of each script
+ * record keeps its measured offsets, because only its active-task counter has
+ * an evidenced role here.
+ */
 static void scDeleteTask(int script_index, int task_index)
 {
     ScriptTask *task;
@@ -1435,32 +1380,7 @@ int scGetCmdAdrScript(ScriptTask *task)
     return address;
 }
 
-ScriptRecord _scriptWork[16] = {{0}};
-
-static ScriptZeroPosition _zeroPos_0041E290 = {{0, 0x3f80000000000000ULL}};
-
-static int (*_scFuncHandler[73])(ScriptTask *task) = {
-    scERRORScript, scGOScript, scGOSUBScript, scBRAScript,
-    scEXITScript, scRETURNScript, scONGOScript, scONGOSUBScript,
-    scERRORScript, scERRORScript, scPRINTScript, scRPUTScript,
-    scRDUMPScript, scCMDPUTONScript, scCMDPUTOFFScript, scFADEONScript,
-    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
-    scRSETScript, scRINCScript, scRDECScript, scRADDScript,
-    scRSUBScript, scRMULScript, scRDIVScript, scRMODScript,
-    scR_ANDScript, scR_ORScript, scR_XORScript, scR_NOTScript,
-    scR_NEGScript, scRRNDScript, scREVEScript, scERRORScript,
-    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
-    scOBJEVEScript, scABORTScript, scPAUSEScript, scERRORScript,
-    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
-    scERRORScript, scERRORScript, scWAITCNTScript, scWAITEVEScript,
-    scWAITEFTScript, scWAITMOVIEScript, scWAITMISSILEScript, scERRORScript,
-    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
-    scEFFECTScript, scEFFECT2Script, scEFFECT3Script, scERRORScript,
-    scERRORScript, scERRORScript, scERRORScript, scERRORScript,
-    scERRORScript, scERRORScript, scMOVIEScript, scMISSILEScript,
-    scMISSILE3Script
-};
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static const char noLoadEffectDataFormat[40] = "--- error no load effect data %d";
 
 /* JP: 範囲外のエフェクトを消去しようとしてます %d %d

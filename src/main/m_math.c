@@ -1,13 +1,11 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_2.h"
-
 #include "m_math.h"
 
-extern float srsAtan2(float deltaX, float deltaZ);
 extern const Vector4 McMathUnitVector;
+
+extern float srsAtan2(float deltaX, float deltaZ);
 
 float MMathMakeRandom(void)
 {

@@ -25,7 +25,6 @@ typedef struct MapUnitSlot {
 } MapUnitSlot;
 
 MapUnitSlot *MAP_createUnit(int slot, int serial);
-
 void MAP_drawUnit(void);
 
 #endif /* INCLUDE_MAIN_MAP_2_H */

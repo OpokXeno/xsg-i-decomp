@@ -75,51 +75,6 @@ typedef struct NativeUnitPeer {
     void *java_object; /* +208: written at 0x2f9488 (sw s1,208(s0)) */
 } NativeUnitPeer;
 
-/* this domain's accepted files spell it differently; the canonical form is repeated here */
-extern SceneString *loadConstString(const char *bytes, int length);
-
-/* canon: config/header-canon.json chose src/math/main/002ff538-chr-scl/private.h over 1 other accepted spelling */
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
-/*
- * getPeer_Uwamono (main VA 0x002f93f8, 588 bytes, GLOBAL binding).
- * Native peer helper: reads the unit id Java field, creates the Uwamono
- * peer, attaches a JNI thread ward, copies position/rotation Java fields
- * into the peer, normalizes rotations from degrees to radians, and stores
- * the peer back into the Java peer field.
- */
-void *getPeer_Uwamono(void *java_unit);
-
-/*
- * pi: the float at .lit4 0x004d83b0 (bytes db 0f 49 40 = 3.1415927...),
- * loaded via gp-relative lwc1 at 0x2f95e8 (lwc1 $f4,-30656(gp)).
- * Used as rotation / 180.0f * pi (degree-to-radian scaling).
- */
-extern const float pi;
-
-extern const char unit_field_id[];
-
-extern const char unit_field_algorithm[];
-
-extern const char unit_field_px[];
-
-extern const char unit_field_py[];
-
-extern const char unit_field_pz[];
-
-extern const char unit_field_rx[];
-
-extern const char unit_field_ry[];
-
-extern const char unit_field_rz[];
-
-extern const char unit_field_peer[];
-
-extern NativeUnitPeer *Unit_CreateUwamono(int identifier, int unit_id);
-
-extern JavaThread *JNI_createThread(int kind, int stack_words,
-                                    int frame_words);
-
 /*
  * The script VM's per-thread context, already recovered as `JThread` in
  * src/main/jni.h/src/main/chr.h. No function in this TU reads any of its
@@ -127,9 +82,6 @@ extern JavaThread *JNI_createThread(int kind, int stack_words,
  * verbatim because a TU-local header cannot be included from another TU.
  */
 typedef struct JThread JThread;
-
-/* Canonical spelling (config/header-canon.json) for this primitive. */
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 
 /*
  * The engine's actor record a xeno.Chr's "peer" field points to, already
@@ -215,8 +167,6 @@ typedef struct ToolkitStagePeer {
     void *java_object; /* +0x2c */
 } ToolkitStagePeer;
 
-extern ToolkitStagePeer *STAGE_create(u16 stage_id);
-
 /* The three-coordinate records passed from getPeer_Effect to the CF helper. */
 typedef struct ToolkitEffectVector {
     float x;
@@ -229,11 +179,6 @@ typedef struct ToolkitEffectPeer {
     unsigned char unmodeled_00[0x6b8];
     SceneObject java_object; /* +0x6b8: assigned at main 0x002f9ae8 */
 } ToolkitEffectPeer;
-
-extern int sefLoadEffectCf(int cf_id, int effect_no);
-extern ToolkitEffectPeer *sefCreateEffectCf(int effect_id,
-                                            ToolkitEffectVector *position,
-                                            ToolkitEffectVector *orientation);
 
 /* Fields written by getPeer_Enepc; other Actor contents remain unmodeled. */
 typedef struct ToolkitEnemyPeer {
@@ -254,11 +199,6 @@ typedef struct ToolkitEnemyPeer {
     unsigned char unmodeled_4c4[0x4c];
     unsigned char light_peer; /* +0x510; only its address is passed to Java */
 } ToolkitEnemyPeer;
-
-extern const char lightPeerClassName[];
-extern const float toolkitEnemyConstant;
-extern ToolkitEnemyPeer *ACT_createEnemy(int identifier, int enemy_id);
-extern int ACT_initMotion(void *peer);
 
 typedef struct ToolkitActorVector4 {
     float x;
@@ -284,9 +224,62 @@ typedef struct ToolkitChrPeer {
     int resource_handles[11]; /* +0x8d0 */
 } ToolkitChrPeer;
 
+/*
+ * pi: the float at .lit4 0x004d83b0 (bytes db 0f 49 40 = 3.1415927...),
+ * loaded via gp-relative lwc1 at 0x2f95e8 (lwc1 $f4,-30656(gp)).
+ * Used as rotation / 180.0f * pi (degree-to-radian scaling).
+ */
+extern const float pi;
+
+extern const char unit_field_id[];
+extern const char unit_field_algorithm[];
+extern const char unit_field_px[];
+extern const char unit_field_py[];
+extern const char unit_field_pz[];
+extern const char unit_field_rx[];
+extern const char unit_field_ry[];
+extern const char unit_field_rz[];
+extern const char unit_field_peer[];
+extern const char lightPeerClassName[];
+extern const float toolkitEnemyConstant;
+
+/* this domain's accepted files spell it differently; the canonical form is repeated here */
+extern SceneString *loadConstString(const char *bytes, int length);
+
+/* canon: config/header-canon.json chose src/math/main/002ff538-chr-scl/private.h over 1 other accepted spelling */
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+
+/*
+ * getPeer_Uwamono (main VA 0x002f93f8, 588 bytes, GLOBAL binding).
+ * Native peer helper: reads the unit id Java field, creates the Uwamono
+ * peer, attaches a JNI thread ward, copies position/rotation Java fields
+ * into the peer, normalizes rotations from degrees to radians, and stores
+ * the peer back into the Java peer field.
+ */
+void *getPeer_Uwamono(void *java_unit);
+
+extern NativeUnitPeer *Unit_CreateUwamono(int identifier, int unit_id);
+
+extern JavaThread *JNI_createThread(int kind, int stack_words,
+                                    int frame_words);
+
+/* Canonical spelling (config/header-canon.json) for this primitive. */
+extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
+
+extern ToolkitStagePeer *STAGE_create(u16 stage_id);
+extern int sefLoadEffectCf(int cf_id, int effect_no);
+
+extern ToolkitEffectPeer *sefCreateEffectCf(int effect_id,
+                                            ToolkitEffectVector *position,
+                                            ToolkitEffectVector *orientation);
+
+extern ToolkitEnemyPeer *ACT_createEnemy(int identifier, int enemy_id);
+extern int ACT_initMotion(void *peer);
+
 /* Still INCLUDE_ASM in src/main/act_2.c (main/tu255); local hypothesis
  * prototypes until that TU's own header exposes one. */
 extern void ACT_loadResource(Actor *peer, int id);
+
 extern int ACT_loadMotion(Actor *peer, int id, int category);
 
 /* Still INCLUDE_ASM in src/main/map_2.c (main/tu269); local hypothesis

@@ -1,78 +1,13 @@
 #include "common.h"
 #include "shared.h"
 #include "sdv.h"
-
-extern void RES_GetMdlFileName(char *destination, int modelId);
-
 #include "main/xgl_cd.h"
-
 #include "menu_1.h"
-int MenuIdChange(short id, int highPart);
+#include "main/party.h"
 
 typedef struct MenuNumberDigits {
     const char *text[10];
 } MenuNumberDigits;
-
-extern const MenuNumberDigits numberDigitTexts;
-
-extern const char numberEmptyText[];
-
-extern const unsigned short largeFaceTable[12];
-
-extern const unsigned short largeAgwsFaceTable[12];
-
-extern const unsigned short smallFaceTable[16];
-
-extern const unsigned short smallAgwsFaceTable[12];
-
-static void (*f_11[])();
-
-static const char *f_base_14[];
-
-static const char *f_exten_15[];
-
-static const char *f_ukn_name_16[];
-
-static const char *f_char_mot_17[];
-
-static char *f_mons_mot_18[];
-
-/* MenuNumberTextGet's same-TU assembly writes and returns this buffer. */
-
-static char msg_2_00532A78[0x18];
-
-/* MenuFileNameGet builds names into this same-TU filename buffer. */
-
-static char fname_13[0x80];
-
-static int sort[2][0x100];
-
-static MenuListEntry mw_list[2][256];
-
-/* OptMntToPosEquip2 maps the mount code through this asm sibling first. */
-
-int OptMntToPosEquip(int mountCode);
-
-extern unsigned char SaveData[];
-
-int MenuScenarioNoGet(void);
-
-/*
- * dataEvtBoxChk is defined in src/main/data.c and xglFlagsGet in
- * src/main/xgl_flags.c; neither is published in include/main/ yet (only
- * xglFlagsInitial is), so both are forward-declared here like
- * MenuScenarioNoGet above and OptMntToPosEquip at the top of this file.
- */
-
-int dataEvtBoxChk(int eventId);
-
-int xglFlagsGet(int bitOffset, int bitCount);
-
-/* MenuLoadFile is defined in src/main/window_tex_load.c. */
-
-extern void MenuLoadFile(const char *name, void *buffer);
-
-/* MenuLoadFile is defined in src/main/window_tex_load.c. */
 
 typedef struct WeaponStatus WeaponStatus;
 
@@ -81,7 +16,6 @@ typedef struct WeaponStatus WeaponStatus;
  * status record (it rejects ids <= 0); MenuBulletCheck only reads the flag
  * halfword at +0x6, whose bit 0x100 marks a weapon that needs bullets.
  */
-
 struct WeaponStatus {
     unsigned char unmodeled_00[6];
     unsigned short flags; /* +0x6: bit 0x100 - weapon needs bullets */
@@ -90,21 +24,16 @@ struct WeaponStatus {
     short weaponClassMask; /* +0xc */
 };
 
-extern WeaponStatus *dataWpnGet(int weaponId);
-
 typedef struct BulletData BulletData;
 
 /*
  * dataAttGet (same TU, still asm) indexes the bullet/attachment table by
  * ammoId; only the owning weapon id short at +0xC is read here.
  */
-
 struct BulletData {
     unsigned char unmodeled_00[0xC];
     short weaponId; /* +0xC: the weapon this ammunition belongs to */
 };
-
-extern BulletData *dataAttGet(int ammoId);
 
 typedef struct PartEquipData PartEquipData;
 
@@ -115,7 +44,6 @@ typedef struct PartEquipData PartEquipData;
  * bitmask of the characters that can equip the part, tested against
  * chrEquipGet's per-character bit.
  */
-
 struct PartEquipData {
     unsigned char price[4];
     unsigned char unmodeled_04[2];
@@ -126,10 +54,6 @@ struct PartEquipData {
     unsigned short associatedId; /* +0xe */
 };
 
-extern PartEquipData *dataFrmGet(int frameId);
-
-extern PartEquipData *dataEngGet(int engineId);
-
 /*
  * dataUnitOrgGet's own 0x180-byte per-character record (ov01 VA 0x00a191c0,
  * cross-overlay call under the scaffold label func_A191C0, matching
@@ -139,7 +63,6 @@ extern PartEquipData *dataEngGet(int engineId);
  * at +0x64 as CharParaData's accessory[3]; only that weapon array is read
  * here.
  */
-
 typedef struct {
     unsigned char unmodeled_00[0x54];
     short agwsId; /* +0x54 */
@@ -153,15 +76,12 @@ typedef struct {
     short skillId[3]; /* +0xa6 */
 } UnitOrgWeapons;
 
-extern UnitOrgWeapons *func_A191C0(int chrNo);
-
 /*
  * dataWpnGet's own record (ov01 VA 0x00a1a3d8). MenuBulletCheck above models
  * its +0x6 flags halfword as WeaponStatus, already accepted and unable to
  * grow, so this call site keeps its own scaffold label func_A1A3D8 (matching
  * src/main/menu_shop.c) for the different +0x12 halfword summed here.
  */
-
 typedef struct {
     unsigned char unmodeled_000[2];
     unsigned char price[4];
@@ -174,10 +94,6 @@ typedef struct {
     unsigned char equipWeight; /* +0x11 */
     short wagl; /* +0x12 */
 } WeaponWaglData;
-
-extern WeaponWaglData *func_A1A3D8(int weaponId);
-
-#include "main/party.h"
 
 struct MenuScenarioRange {
     int scenario;
@@ -194,74 +110,6 @@ struct MenuScenarioTable {
     unsigned char unmodeled_3c[4];
 };
 
-extern char noneName[5];
-extern const unsigned char blankText[1];
-
-extern short func_A197E8(int characterId, int specialId);
-
-extern MenuTextEntry *func_A2C5A8(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C5F8(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C648(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C698(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C6E8(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C738(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C7D8(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C918(unsigned int itemId);
-
-extern MenuTextEntry *func_A2C968(unsigned int itemId);
-
-extern char *dataEvtItmNameGet(unsigned int itemId);
-
-char *MenuCharNameGet(unsigned int charId);
-
-int dataItmBoxChk(int id);
-
-int dataWpnBoxChk(int id);
-
-int dataBltBoxChk(int id);
-
-int dataAccBoxChk(int id);
-
-int dataItmBoxInc(int id);
-
-int dataEvtBoxInc(int id);
-
-int dataWpnBoxInc(int id);
-
-int dataBltBoxInc(int id);
-
-int dataAccBoxInc(int id);
-
-void dataItmBoxDec(int id);
-
-void dataEvtBoxDec(int id);
-
-void dataWpnBoxDec(int id);
-
-void dataBltBoxDec(int id);
-
-void dataAccBoxDec(int id);
-
-void PartyTakeAgwsOn(int id);
-
-/* dataUnitOrgGet's per-character record fields used by this TU are at
- * +0x5A, +0x5E, +0x64, and +0xA6. */
-
-extern PartEquipData *func_A1A548(int accessoryId);
-
-/* MenuNumberTextGet's same-TU assembly writes and returns this buffer. */
-
-/* MenuFileNameGet builds names into this same-TU filename buffer. */
-
-extern const int wpnMountIdTable[8];
-
 struct MenuPriceRecord {
     unsigned char price[4];
 };
@@ -273,20 +121,25 @@ struct MenuBulletPriceRecord {
     short weaponId;
 };
 
-extern struct MenuPriceRecord *func_A1A4E8(int itemId);
+extern const MenuNumberDigits numberDigitTexts;
+extern const char numberEmptyText[];
+extern const unsigned short largeFaceTable[12];
+extern const unsigned short largeAgwsFaceTable[12];
+extern const unsigned short smallFaceTable[16];
+extern const unsigned short smallAgwsFaceTable[12];
+static void (*f_11[])();
+static const char *f_base_14[];
+static const char *f_exten_15[];
+static const char *f_ukn_name_16[];
+static const char *f_char_mot_17[];
+static char *f_mons_mot_18[];
+extern unsigned char SaveData[];
+extern char noneName[5];
+extern const unsigned char blankText[1];
 
-extern struct MenuBulletPriceRecord *func_A1A428(int bulletId);
-
-extern struct MenuPriceRecord *func_A1A598(int frameId);
-
-extern struct MenuPriceRecord *func_A1A5E8(int engineId);
+extern const int wpnMountIdTable[8];
 
 extern const int boxPriceTable[3];
-
-extern void *memset(void *destination, int value, unsigned int bytes);
-
-extern int PartyAllPartyGet(int *party, int selection);
-
 extern const char MenuDigit0Text[8];
 extern const char MenuDigit1Text[8];
 extern const char MenuDigit2Text[8];
@@ -297,12 +150,6 @@ extern const char MenuDigit6Text[8];
 extern const char MenuDigit7Text[8];
 extern const char MenuDigit8Text[8];
 extern const char MenuDigit9Text[8];
-static void MenuSortSubType00(unsigned int *first, unsigned int *second);
-static void MenuSortSubType01(unsigned int *first, unsigned int *second);
-static void MenuSortSubType02(int *first, int *second);
-static void MenuSortSubType03(int *first, int *second);
-static void MenuSortSubType04(int *first, int *second);
-static void MenuSortSubType05(int *first, int *second);
 extern const char registeredReserveText[19];
 extern const char registeredCombatantText[21];
 extern const char combatantText[10];
@@ -372,6 +219,92 @@ extern const char menuAgwsName[9];
 extern const char mtnMeqpName[9];
 extern const char gunoMotionName[9];
 
+extern void RES_GetMdlFileName(char *destination, int modelId);
+int MenuIdChange(short id, int highPart);
+
+/* OptMntToPosEquip2 maps the mount code through this asm sibling first. */
+int OptMntToPosEquip(int mountCode);
+
+int MenuScenarioNoGet(void);
+
+/*
+ * dataEvtBoxChk is defined in src/main/data.c and xglFlagsGet in
+ * src/main/xgl_flags.c; neither is published in include/main/ yet (only
+ * xglFlagsInitial is), so both are forward-declared here like
+ * MenuScenarioNoGet above and OptMntToPosEquip at the top of this file.
+ */
+int dataEvtBoxChk(int eventId);
+
+int xglFlagsGet(int bitOffset, int bitCount);
+
+/* MenuLoadFile is defined in src/main/window_tex_load.c. */
+extern void MenuLoadFile(const char *name, void *buffer);
+
+extern WeaponStatus *dataWpnGet(int weaponId);
+extern BulletData *dataAttGet(int ammoId);
+extern PartEquipData *dataFrmGet(int frameId);
+extern PartEquipData *dataEngGet(int engineId);
+extern UnitOrgWeapons *func_A191C0(int chrNo);
+extern WeaponWaglData *func_A1A3D8(int weaponId);
+extern short func_A197E8(int characterId, int specialId);
+extern MenuTextEntry *func_A2C5A8(unsigned int itemId);
+extern MenuTextEntry *func_A2C5F8(unsigned int itemId);
+extern MenuTextEntry *func_A2C648(unsigned int itemId);
+extern MenuTextEntry *func_A2C698(unsigned int itemId);
+extern MenuTextEntry *func_A2C6E8(unsigned int itemId);
+extern MenuTextEntry *func_A2C738(unsigned int itemId);
+extern MenuTextEntry *func_A2C7D8(unsigned int itemId);
+extern MenuTextEntry *func_A2C918(unsigned int itemId);
+extern MenuTextEntry *func_A2C968(unsigned int itemId);
+extern char *dataEvtItmNameGet(unsigned int itemId);
+char *MenuCharNameGet(unsigned int charId);
+int dataItmBoxChk(int id);
+int dataWpnBoxChk(int id);
+int dataBltBoxChk(int id);
+int dataAccBoxChk(int id);
+int dataItmBoxInc(int id);
+int dataEvtBoxInc(int id);
+int dataWpnBoxInc(int id);
+int dataBltBoxInc(int id);
+int dataAccBoxInc(int id);
+void dataItmBoxDec(int id);
+void dataEvtBoxDec(int id);
+void dataWpnBoxDec(int id);
+void dataBltBoxDec(int id);
+void dataAccBoxDec(int id);
+void PartyTakeAgwsOn(int id);
+
+/* dataUnitOrgGet's per-character record fields used by this TU are at
+ * +0x5A, +0x5E, +0x64, and +0xA6. */
+extern PartEquipData *func_A1A548(int accessoryId);
+
+extern struct MenuPriceRecord *func_A1A4E8(int itemId);
+extern struct MenuBulletPriceRecord *func_A1A428(int bulletId);
+extern struct MenuPriceRecord *func_A1A598(int frameId);
+extern struct MenuPriceRecord *func_A1A5E8(int engineId);
+extern void *memset(void *destination, int value, unsigned int bytes);
+extern int PartyAllPartyGet(int *party, int selection);
+static void MenuSortSubType00(unsigned int *first, unsigned int *second);
+static void MenuSortSubType01(unsigned int *first, unsigned int *second);
+static void MenuSortSubType02(int *first, int *second);
+static void MenuSortSubType03(int *first, int *second);
+static void MenuSortSubType04(int *first, int *second);
+static void MenuSortSubType05(int *first, int *second);
+extern struct MenuCharParameters *func_00A11108(int charId, int *attack, int *defense);
+
+const struct MenuScenarioTable scenarioRangeTable[1] = {
+    {{{{500, 500, 500}, {400, 400, 399}, {399, 399, 300},
+       {197, 197, 100}, {56, 56, 1}}}, 0}
+};
+
+const MenuNumberDigits numberDigitTexts = {{ MenuDigit0Text, MenuDigit1Text, MenuDigit2Text, MenuDigit3Text, MenuDigit4Text, MenuDigit5Text, MenuDigit6Text, MenuDigit7Text, MenuDigit8Text, MenuDigit9Text }};
+
+const char registeredReserveText[19] = "Registered Reserve";
+
+const char registeredCombatantText[21] = "Registered Combatant";
+
+const char combatantText[10] = "Combatant";
+
 static char f_name_0_0036D6C8[21] = "data\\endou\\mapex.bin";
 
 static char f_name_1[23] = "data\\endou\\savemap.bin";
@@ -432,10 +365,15 @@ unsigned char ParaDataChangeTbl[] = {
     6, 7, 0, 1, 2, 3, 4, 5
 };
 
-const struct MenuScenarioTable scenarioRangeTable[1] = {
-    {{{{500, 500, 500}, {400, 400, 399}, {399, 399, 300},
-       {197, 197, 100}, {56, 56, 1}}}, 0}
-};
+/* MenuNumberTextGet's same-TU assembly writes and returns this buffer. */
+static char msg_2_00532A78[0x18];
+
+/* MenuFileNameGet builds names into this same-TU filename buffer. */
+static char fname_13[0x80];
+
+static int sort[2][0x100];
+
+static MenuListEntry mw_list[2][256];
 
 unsigned char *MenuSaveDataGet(void)
 {
@@ -576,8 +514,6 @@ int MenuSaveMapTextLoad(int work, int mode)
     return next;
 }
 
-extern struct MenuCharParameters *func_00A11108(int charId, int *attack, int *defense);
-
 int MenuCharHpCheck(int charId)
 {
     int attack[4];
@@ -716,6 +652,7 @@ char *MenuNumberTextGet(long long number, int digitsBeforeUnits, int leadingZero
     return msg_2_00532A78;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char numberEmptyText[1] = "";
 
 char toText[8] = "To";
@@ -857,14 +794,7 @@ unsigned short MenuFaceEpidGet(int charId, int smallPortrait)
     return 0;
 }
 
-const MenuNumberDigits numberDigitTexts = {{ MenuDigit0Text, MenuDigit1Text, MenuDigit2Text, MenuDigit3Text, MenuDigit4Text, MenuDigit5Text, MenuDigit6Text, MenuDigit7Text, MenuDigit8Text, MenuDigit9Text }};
-
-const char registeredReserveText[19] = "Registered Reserve";
-
-const char registeredCombatantText[21] = "Registered Combatant";
-
-const char combatantText[10] = "Combatant";
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const unsigned short largeFaceTable[12] = { 3328, 3073, 3072, 3840, 3585, 3329, 3584, 3328, 3328, 3841, 4096, 3840 };
 
 const unsigned short largeAgwsFaceTable[12] = { 2306, 2305, 2310, 2311, 2306, 2304, 2307, 2307, 2307, 2308, 2309, 2307 };
@@ -1183,6 +1113,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
     return price;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const int boxPriceTable[3] = { 400, 100, 100 };
 
 int MenuSkillEquipCheck(short charId, short skillId)
@@ -1391,6 +1322,7 @@ int PosEquipToMntPos(void)
     return 0;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const int wpnMountIdTable[8] = {32, 24, 34, 26, 35, 27, 33, 25};
 
 static unsigned short chrEquipGet(int charId)
@@ -2158,6 +2090,7 @@ MenuListEntry *MenuListGet(int listIndex)
     return mw_list[listIndex];
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char roboEtcPath[15] = "data\\robo\\etc\\";
 
 const char yamamotoMotPath[19] = "data\\yamamoto\\mot\\";

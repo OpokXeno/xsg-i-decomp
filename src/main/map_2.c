@@ -1,61 +1,35 @@
 #include "common.h"
-
 #include "map_2.h"
-
-extern MapUnitResource *RES_loadFile(int command, int callback, int resource_id, int flags);
-
-extern void LOG(const char *format, ...);
-
-extern int MDL_create(void *model_instance, void *resource_model);
+#include "main/xgl_2.h"
 
 #define NULL ((void *)0)
 
-#include "main/xgl_2.h"
-
-extern void unit6003_update(MapUnitSlot *unit);
-
 struct MdlHandle;
 
+extern MapUnitResource *RES_loadFile(int command, int callback, int resource_id, int flags);
+extern void LOG(const char *format, ...);
+extern int MDL_create(void *model_instance, void *resource_model);
+extern void unit6003_update(MapUnitSlot *unit);
 extern void MDL_partsSetVisible(struct MdlHandle *model);
-
 extern void nmlModelSetTexture(const char *texture);
-
 extern void nmlModelSetPlace(const Vector4 *place);
-
 extern void nmlModelSetRenderLevel(int level);
-
 extern void nmlModelSetSortOffset(float offset);
-
 extern void nmlModelSetClip(int enabled);
-
 extern void nmlModelSetMapShadowParts(unsigned short part);
-
 extern void nmlModelSetTexMap(int mode, int size, float weight);
-
 extern void nmlModelSetToumei(int enabled);
-
 extern void nmlModelSetZwrite(int enabled);
-
 extern void nmlModelSetStencil(int enabled);
-
 extern void nmlModelSetFilter(int filter, float start, float end);
-
 extern void nmlModelSetTransparency(float transparency);
-
 extern void nmlModelSetReflTransparency(float transparency);
-
 extern void nmlModelSetShadowMapEntry(void);
-
 extern void nmlModelEntry(int entry);
-
 extern void nmlModelGetGblPosition(Vector4 *position);
-
 extern void xglMatrixStackLoad(float matrix[4][4]);
-
 extern void xglMatrixStackMul(const Matrix4 matrix);
-
 extern void xglMatrixStackPush(void);
-
 extern void xglMatrixStackPop(int count);
 
 int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
@@ -370,4 +344,3 @@ void MAP_getHeight(MapPosition *position)
         position->y = height;
     }
 }
-

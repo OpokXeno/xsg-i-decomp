@@ -2,9 +2,9 @@
 #define SRC_MAIN_MENU_TOP_COMMAND_CHECK_H
 
 #include "main/e_battle_win_open.h"
-
 #include "shared.h"
 #include "main/party.h"
+
 typedef struct WindowDX WindowDX;
 
 /* Partial menu records retain the offsets used by the original consumers. */
@@ -208,7 +208,6 @@ typedef struct MenuModelTransform {
     MenuModelVector target;
     Matrix4 place;
 } MenuModelTransform;
-
 
 /* Scalar view used by the formation task; complete-vector copy consumers keep
  * the doubleword storage view above. Both views describe the same 0x80 bytes. */
@@ -548,6 +547,11 @@ extern int debug_flag;
 extern int MenuModelOut[];
 extern char topMenuDebugLabel[];
 extern PadPrefix PadData;
+extern char topMenuTitleText[];
+extern unsigned char MenuTopCommand[10];
+extern const char *text[12];
+extern MenuTopCommandEntry command_0[11];
+
 extern void MenuModelMemorySet(int size);
 extern void MenuModelMenuMotionLoad(void);
 extern void MenuModelCreate(int *slot, int partyId);
@@ -566,14 +570,11 @@ extern void eSpriteSet(MenuTopESprite *sprite, short image);
 extern void eSpriteMain(MenuTopESprite *sprite);
 extern void eTagFontSet(MenuTopETagFont *tag, const char *text);
 extern void eTagFontMain(MenuTopETagFont *tag);
-extern char topMenuTitleText[];
 int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel);
 int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel);
 void MenuPasWindow(void);
 extern unsigned char *PartyDataGet(void);
 extern void MoveSlide(short *current, short *target, float rate);
-
-
 MenuStatusPara *func_00A11108(int chrNo, int *attack, int *defense);
 MenuStatusExp *func_A19210(int chrNo);
 char *MenuCharNameGet(int chrNo);
@@ -582,20 +583,15 @@ void eMessageSet(void *message, const char *text);
 void eMessageDraw(void *message);
 void endSpriteSet(void *sprite, int mode);
 void endPrintExtFunc(int work, int type, void *data);
-extern unsigned char MenuTopCommand[10];
 void TopStatusWinMain(void);
 void TopInfoMain(void);
 void TopMenuWinMain(void);
 void TopFaceExWinMain(void);
-extern const char *text[12];
-
-extern MenuTopCommandEntry command_0[11];
 int MenuTopCommandCheck(int commandId);
 int MenuCursorKeepCheck(void);
 void eRibbonSet(void *ribbon, int mode);
 void eRibbonMain(void *ribbon);
 void eNumberSet(void *number, int value);
 void eNumberMain(void *number);
-
 
 #endif

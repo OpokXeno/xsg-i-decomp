@@ -1,12 +1,6 @@
 #ifndef INCLUDE_MAIN_E_BATTLE_WIN_OPEN_H
 #define INCLUDE_MAIN_E_BATTLE_WIN_OPEN_H
 
-extern void eBattleWinClose2(void);
-
-extern int eBattleWinPageCheck4(void);
-
-extern void eBattleWinClose4(void);
-
 /*
  * WindowDX is the sub-window control block WindowDXSet/WindowDXMain/
  * WindowDXFlagChange share, and the type every "*Main" screen task that
@@ -160,8 +154,6 @@ struct WindowDX {
     WindowDXSprite sprite;              /* +0x180 */
 };
 
-void WindowDXSet(WindowDX *window);
-
 typedef struct WindowSPCursor {
     unsigned char state;
     unsigned char draw_flags;
@@ -197,22 +189,18 @@ typedef struct WindowSPCursor {
 
 typedef unsigned char WindowSPKeepBuffer[5];
 
+extern void eBattleWinClose2(void);
+extern int eBattleWinPageCheck4(void);
+extern void eBattleWinClose4(void);
+void WindowDXSet(WindowDX *window);
 void WindowDXMain(WindowDX *window);
-
 int WindowSPSelect(WindowSPCursor *cursor, int button_flags);
-
 void WindowSPItemChange(WindowSPCursor *list);
-
 void WindowSPSetSelect(WindowSPCursor *list, unsigned char *keep);
-
 void eBattleWinClose(void *window);
-
 void eBattleWinClose3(void);
-
 void eBattleWinInit(void);
-
 void WindowSPKeepSelect(WindowSPCursor *cursor, WindowSPKeepBuffer keep);
-
 void WindowSPKeepSelectCheck(WindowSPKeepBuffer keep);
 
 #endif /* INCLUDE_MAIN_E_BATTLE_WIN_OPEN_H */

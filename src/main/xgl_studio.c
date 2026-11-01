@@ -16,14 +16,12 @@
  * type and offset, so src/main/game.c's `camera->state == 4` reads the
  * same byte either way.
  */
-
 typedef struct Studio {
     StudioLight light;
     StudioCamera cameras[8];
 } Studio;
 
-static Studio asStudioSource[4];
-static Studio *pCurrentStudio;
+extern int StudioEntrySkip;
 
 extern void xglStudioChange(int studio_index);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
@@ -41,7 +39,10 @@ extern void xglCameraMove(StudioCamera *camera);
 extern void xglCameraTravelProc(StudioCamera *camera);
 extern void xglLightInit(StudioLight *light);
 extern void xglCameraInit(StudioCamera *camera);
-extern int StudioEntrySkip;
+
+static Studio asStudioSource[4];
+
+static Studio *pCurrentStudio;
 
 void xglStudioChange(int studio_index)
 {

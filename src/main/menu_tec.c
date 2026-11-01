@@ -1,23 +1,11 @@
 #include "common.h"
 #include "main/e_battle_win_open.h"
-
-void WindowSPSet(WindowSPCursor *cursor);
-void WindowSPMain(WindowSPCursor *cursor);
-void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
-
 #include "main/menu_top_command_check.h"
+#include "main/party.h"
+#include "shared.h"
 
-extern signed char nextMenuTable[];
-
-extern char tecLabel[];
-
-extern char msFormat[];
-
-extern char sliFormat[];
-
-extern char lstFormat[];
-
-extern char sctFormat[];
+#define PAD_L1 0x0004
+#define PAD_R1 0x0008
 
 typedef struct MenuTecInfoDetail {
     short x;
@@ -56,12 +44,6 @@ typedef struct MenuTecInfoWork {
     char message[0x80];
 } MenuTecInfoWork;
 
-extern MenuTecInfoWork *MenuTecInfo;
-
-extern unsigned char *MainMenuWorkEnd;
-
-extern const char tecDataPath[];
-
 typedef struct MenuTecData {
     unsigned char unmodeled_00[8];
     unsigned char levelPointIncrement[8];
@@ -69,22 +51,6 @@ typedef struct MenuTecData {
     unsigned short speedPointCost[8];
     unsigned short waitPointCost[8];
 } MenuTecData;
-
-extern MenuTecData *MenuTecDataBuf;
-
-void *MenuTecDataGet(int chrNo);
-
-struct MenuTecSaveRecord *MenuTecSaveDataGet(int chrNo);
-
-int MenuTecNextSpeedPointGet(int chrNo, int point);
-
-/* dataPlChaGet (ov01/data_unit_org_get.c VA 0x00a19210, still INCLUDE_ASM
- * there and not yet linkable by that name): returns the running character's
- * control record, whose word at +0xC this function decrements. Kept under
- * the scaffold's undefined_funcs_auto.txt placeholder name until that TU
- * recovers it. */
-
-int *func_A19210(int chrNo);
 
 typedef struct MenuWorkState {
     unsigned char unmodeled_00[3];
@@ -112,40 +78,10 @@ typedef struct MenuWorkState {
     unsigned char unmodeled_54[0x80 - 0x54];
 } MenuWorkState;
 
-extern MenuWorkState MenuWork;
-
-int MenuTecTLevLimitCheck(int chrNo, int point);
-
-int MenuTecNextTLevPointGet(int chrNo, int point);
-
-/* dataUnitOrgGet (ov01/data_unit_org_get.c VA 0x00a191c0, still INCLUDE_ASM
- * there and not yet linkable by that name): returns the running character's
- * parameter record (the full record is src/main/menu_para_pt_rate_get.c's
- * CharParaData); MenuTecEquipCheck only reads the six equipped technique ids
- * at +0x82. Kept under the scaffold's undefined_funcs_auto.txt placeholder
- * name until that TU recovers it. */
-
 typedef struct MenuTecEquipRecord {
     unsigned char unmodeled_00[0x82];
     short techniqueId[6]; /* +0x82 */
 } MenuTecEquipRecord;
-
-MenuTecEquipRecord *func_A191C0(int chrNo);
-
-/* dataTecGet (ov01/data_unit_org_get.c VA 0x00a1a378, still INCLUDE_ASM there
- * and not yet linkable by that name): returns a pointer to the technique's
- * metadata record, or a NULL pointer plus a diagnostic print for a
- * non-positive index. Kept under the scaffold's undefined_funcs_auto.txt
- * placeholder name until that TU recovers it. */
-
-unsigned char *func_A1A378(int tecBit);
-
-/* Returns whether either of the technique's two low target-metadata bits is
- * set (elf_names annotation). */
-
-int BitToTecNo(int bit);
-
-#include "main/party.h"
 
 typedef struct MenuTecSaveRecord {
     unsigned char level[8];
@@ -180,16 +116,6 @@ typedef struct MenuTecCharacter {
     MenuTecCharTechnique technique[8];
 } MenuTecCharacter;
 
-int MenuTecNextWaitPointGet(int chrNo, int point);
-
-/* dataPlChaGet (ov01/data_unit_org_get.c VA 0x00a19210, still INCLUDE_ASM
- * there and not yet linkable by that name): returns the running character's
- * control record, whose word at +0xC this function decrements. Kept under
- * the scaffold's undefined_funcs_auto.txt placeholder name until that TU
- * recovers it. */
-
-#include "shared.h"
-
 typedef struct MenuTecPasWork MenuTecPasWork;
 
 typedef struct MenuTecMenuWork MenuTecMenuWork;
@@ -200,47 +126,11 @@ typedef struct MenuTecListWork MenuTecListWork;
 
 typedef struct MenuTecSetWinWork MenuTecSetWinWork;
 
-extern MenuTecPasWork *MenuTecPas;
-
-extern MenuTecMenuWork *MenuTecMenu;
-
-extern MenuTecL1R1Work *MenuTecL1R1;
-
-extern MenuTecListWork *MenuTecList;
-
-extern MenuTecSetWinWork *MenuTecSetWin;
-
 typedef struct MenuTecListRow {
     const char *name;
     int amount;
     unsigned char flag;
 } MenuTecListRow;
-
-struct MenuTecListRow *MenuListGet(int list);
-
-struct MenuTecListRow *MenuListMake(int list, int mode);
-
-int MenuSortCheck(int list);
-
-void MoveSlide(short *current, short *target, float rate);
-
-void eSpriteSet(void *sprite, short spriteId);
-
-void eSpriteMain(void *sprite);
-
-void eNumberSet(void *number, int mode);
-
-void eNumberMain(void *number);
-
-void eTagFontSet(void *tag, const char *tagWord);
-
-void eTagFontMain(void *tag);
-
-extern PadPrefix PadData;
-
-#define PAD_L1 0x0004
-
-#define PAD_R1 0x0008
 
 typedef struct MenuTecLabel {
     unsigned char unmodeled_00[4];
@@ -309,18 +199,6 @@ struct MenuTecPasWork {
     unsigned char callbackWork[0x10];   /* +0x340 */
 };
 
-static const char * msg_0_0036DC68[3];
-
-int MenuPasLengthGet(const char *text);
-
-void MenuPasWindow(void);
-
-void eMessageSet(void *message, const char *text);
-
-void eMessageMain(void *message);
-
-void endPrintExtFunc(int kind, int id, void *data);
-
 typedef struct MenuTecWindowDX {
     short x;                            /* +0x00 */
     short y;                            /* +0x02 */
@@ -378,10 +256,6 @@ struct MenuTecMenuWork {
     MenuTecSelectList list[2];          /* +0x330 */
 };
 
-static const char * msg00_1_0036DC78[] ;
-
-static const char * msg01_2_0036DC80[] ;
-
 typedef struct MenuTecL1R1Sprite {
     unsigned char unmodeled_00[0x04];
     short x;    /* +0x04 */
@@ -426,30 +300,6 @@ struct MenuTecListWork {
     MenuTecSPWindow window;             /* +0x08 */
 };
 
-static const char * msg00_7[3];
-
-static const char * msg01_8_0036DCB8[3];
-
-static const char * msg02_9[] ;
-
-static const char * msg03_10[10];
-
-void eCursolSet(void *cursor, signed char width);
-
-void eCursolMain(void *cursor);
-
-void eCursolModeChange(void *cursor, int mode);
-
-int MenuTecSpeedLimitCheck(int chrNo, int point);
-
-int MenuTecWaitLimitCheck(int chrNo, int point);
-
-int MenuTecCharTLevUpCheck(void);
-
-int MenuTecCharSpeedUpCheck(void);
-
-int MenuTecCharWaitUpCheck(void);
-
 typedef struct MenuTecL1R1SpriteIds {
     short id[2];
 } MenuTecL1R1SpriteIds;
@@ -458,13 +308,311 @@ typedef struct MenuTecL1R1SlideStep {
     signed char side[2];
 } MenuTecL1R1SlideStep;
 
-int func_A197E8(int chrNo, int tecNo);
+typedef struct MenuTextEntry {
+    const char *name;
+    const unsigned char *auxiliary;
+    const unsigned char *sortName;
+} MenuTextEntry;
 
-void *MenuSortAddrGet(int list);
+typedef struct MenuTecExRibbon {
+    short position[2];             /* X, Y */
+    unsigned int drawOrder;
+    short size[2];                 /* width, height */
+    unsigned char unmodeled_0c[0x70 - 0x0c];
+} MenuTecExRibbon;
 
+typedef struct MenuTecExRow {
+    MenuTecExRibbon ribbon;
+    MenuTecLabel label;
+    MenuTecNumber number;
+} MenuTecExRow;
+
+typedef struct MenuTecExWork {
+    unsigned char state;
+    unsigned char unmodeled_01[3];
+    unsigned int drawOrder;
+    MenuTecExRow row[1];
+    /* MenuTec's constructor advances 0x248 bytes past this allocation. */
+    unsigned char unmodeled_128[0x248 - 0x128];
+} MenuTecExWork;
+
+struct MenuStatusPanelWindow;
+
+struct MenuStatusPanel;
+
+typedef struct MenuTecStatusHeader {
+    unsigned char state;
+    unsigned char mode;
+    unsigned char unmodeled_02[2];
+    unsigned char verticalFirst;
+    unsigned char compact;
+    unsigned char transition;
+    signed char previousCursor;
+    int color;
+} MenuTecStatusHeader;
+
+typedef struct MenuTecStatusRecord {
+    signed char characterNo;
+    unsigned char unmodeled_01;
+    unsigned char unmodeled_02[2];
+    short offsetX;
+    short offsetY;
+    unsigned char unmodeled_08[0x834 - 8];
+} MenuTecStatusRecord;
+
+typedef struct MenuTecStatusWindow {
+    short x;
+    short y;
+    int color;
+    short width;
+    short height;
+    const char *title;
+    unsigned char state;
+    unsigned char ribbonInitialized;
+    unsigned char unmodeled_12[2];
+    void (*display)(struct MenuStatusPanelWindow *, struct MenuStatusPanel *);
+    MenuTecStatusRecord *displayData;
+    unsigned char unmodeled_1c[0x188 - 0x1c];
+} MenuTecStatusWindow;
+
+typedef struct MenuTecStatusCursor {
+    signed char state;
+    unsigned char unmodeled_01[3];
+    short x;
+    short y;
+    int drawOrder;
+    unsigned char unmodeled_0c[4];
+} MenuTecStatusCursor;
+
+typedef struct MenuTecStatusWindowEntry {
+    MenuTecStatusHeader header;
+    MenuTecStatusWindow window;
+} MenuTecStatusWindowEntry;
+
+typedef struct MenuTecStatusRecordEntry {
+    MenuTecStatusHeader header;
+    MenuTecStatusRecord record;
+} MenuTecStatusRecordEntry;
+
+typedef struct MenuTecStatusCursorEntry {
+    MenuTecStatusHeader header;
+    MenuTecStatusCursor cursor;
+    unsigned char unmodeled_1c[0x24 - 0x1c];
+} MenuTecStatusCursorEntry;
+
+typedef struct MenuTecStatusWork {
+    MenuTecStatusWindowEntry window[8];
+    MenuTecStatusRecordEntry detail[8];
+    MenuTecStatusCursorEntry cursor[2];
+    MenuTecStatusHeader endHeader;
+} MenuTecStatusWork;
+
+typedef struct MenuTecList2Row {
+    MenuTecWindowDX window;
+    MenuTecPasMessage techniqueName[4];
+    MenuTecPasMessage equipmentName[4];
+    MenuTecL1R1Sprite icon[8];
+    unsigned char unmodeled_4f4[0x6b4 - 0x4f4];
+    MenuTecL1R1Sprite marker[4];
+} MenuTecList2Row;
+
+typedef struct MenuTecList2Work {
+    unsigned char state;
+    unsigned char mode;
+    unsigned char unmodeled_02[2];
+    int color;
+    MenuTecList2Row row[2];
+    MenuTecWindowDX detailWindow;
+    MenuTecPasMessage detailLabel[2];
+    MenuTecNumber detailNumber[2];
+    MenuTecCursor cursor;
+} MenuTecList2Work;
+
+typedef struct MenuTecList2SpriteIds {
+    short id[10];
+} MenuTecList2SpriteIds;
+
+typedef struct MenuTecList2MessageIds {
+    int id[6];
+} MenuTecList2MessageIds;
+
+extern signed char nextMenuTable[];
+extern char tecLabel[];
+extern char msFormat[];
+extern char sliFormat[];
+extern char lstFormat[];
+extern char sctFormat[];
+extern MenuTecInfoWork *MenuTecInfo;
+extern unsigned char *MainMenuWorkEnd;
+extern const char tecDataPath[];
+extern MenuTecData *MenuTecDataBuf;
+extern MenuWorkState MenuWork;
+extern MenuTecPasWork *MenuTecPas;
+extern MenuTecMenuWork *MenuTecMenu;
+extern MenuTecL1R1Work *MenuTecL1R1;
+extern MenuTecListWork *MenuTecList;
+extern MenuTecSetWinWork *MenuTecSetWin;
+extern PadPrefix PadData;
+static const char * msg00_1_0036DC78[] ;
+static const char * msg01_2_0036DC80[] ;
+static const char * msg02_9[] ;
 static unsigned char MenuTecTrgTbl00[] ;
-
 static unsigned char MenuTecTrgTbl01[] ;
+extern char infoPeriodText[];
+extern char infoSentenceEndText[];
+extern MenuTecExWork *MenuTecEx;
+static const char * msg00_3_0036DC88[] ;
+extern MenuTecStatusWork *MenuTecStatus;
+extern unsigned char MenuKeepSelect[];
+extern const char techListTitleText[];
+extern const char listTitleText[];
+extern const MenuTecList2MessageIds list2MessageIdTable;
+extern const MenuTecList2SpriteIds list2SpriteIdTable;
+extern MenuTecList2Work *MenuTecList2;
+extern const char setListHiTitleText[];
+extern const char setListLwTitleText[];
+static const char * msg01_5[] ;
+extern const char MenuTecAttacksText[13];
+extern const char MenuTecUseTpText[11];
+extern const char MenuTecSetText[5];
+extern const char techSetMenuText[24];
+extern const char confirmYesNoText[8];
+extern const char techConfirmQuestionText[24];
+extern const char techPointsText[8];
+extern const char timesUsedText[16];
+extern const char spiritsAbsorbedText[24];
+extern const char numberDefeatedText[16];
+extern const char nearText[8];
+extern const char farText[8];
+extern const char waitText[8];
+extern const char techText[8];
+extern const char speedText[8];
+extern const char upOkText[8];
+extern const char completeText[16];
+extern const char dashLineText[8];
+extern const char waitLevelA8Text[8];
+extern const char waitLevelA4Text[8];
+extern const char waitLevelA6Text[8];
+extern const char waitLevelA9Text[8];
+extern const char waitLevelA7Text[8];
+extern const char waitLevelA0Text[8];
+extern const char waitLevelA3Text[8];
+extern const char waitLevelA5Text[8];
+extern const char waitLevelA1Text[8];
+extern const char waitLevelA2Text[8];
+
+/* Original objects referenced by this TU's initialized DATA. */
+extern const char speedLimitedValue[];
+
+extern const char speedUnlimitedValue[];
+
+void WindowSPSet(WindowSPCursor *cursor);
+void WindowSPMain(WindowSPCursor *cursor);
+void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
+void *MenuTecDataGet(int chrNo);
+struct MenuTecSaveRecord *MenuTecSaveDataGet(int chrNo);
+int MenuTecNextSpeedPointGet(int chrNo, int point);
+
+/* dataPlChaGet (ov01/data_unit_org_get.c VA 0x00a19210, still INCLUDE_ASM
+ * there and not yet linkable by that name): returns the running character's
+ * control record, whose word at +0xC this function decrements. Kept under
+ * the scaffold's undefined_funcs_auto.txt placeholder name until that TU
+ * recovers it. */
+int *func_A19210(int chrNo);
+
+int MenuTecTLevLimitCheck(int chrNo, int point);
+int MenuTecNextTLevPointGet(int chrNo, int point);
+/* dataUnitOrgGet (ov01/data_unit_org_get.c VA 0x00a191c0, still INCLUDE_ASM
+ * there and not yet linkable by that name): returns the running character's
+ * parameter record (the full record is src/main/menu_para_pt_rate_get.c's
+ * CharParaData); MenuTecEquipCheck only reads the six equipped technique ids
+ * at +0x82. Kept under the scaffold's undefined_funcs_auto.txt placeholder
+ * name until that TU recovers it. */
+MenuTecEquipRecord *func_A191C0(int chrNo);
+
+/* dataTecGet (ov01/data_unit_org_get.c VA 0x00a1a378, still INCLUDE_ASM there
+ * and not yet linkable by that name): returns a pointer to the technique's
+ * metadata record, or a NULL pointer plus a diagnostic print for a
+ * non-positive index. Kept under the scaffold's undefined_funcs_auto.txt
+ * placeholder name until that TU recovers it. */
+unsigned char *func_A1A378(int tecBit);
+
+/* Returns whether either of the technique's two low target-metadata bits is
+ * set (elf_names annotation). */
+int BitToTecNo(int bit);
+
+int MenuTecNextWaitPointGet(int chrNo, int point);
+struct MenuTecListRow *MenuListGet(int list);
+struct MenuTecListRow *MenuListMake(int list, int mode);
+int MenuSortCheck(int list);
+void MoveSlide(short *current, short *target, float rate);
+void eSpriteSet(void *sprite, short spriteId);
+void eSpriteMain(void *sprite);
+void eNumberSet(void *number, int mode);
+void eNumberMain(void *number);
+void eTagFontSet(void *tag, const char *tagWord);
+void eTagFontMain(void *tag);
+int MenuPasLengthGet(const char *text);
+void MenuPasWindow(void);
+void eMessageSet(void *message, const char *text);
+void eMessageMain(void *message);
+void endPrintExtFunc(int kind, int id, void *data);
+void eCursolSet(void *cursor, signed char width);
+void eCursolMain(void *cursor);
+void eCursolModeChange(void *cursor, int mode);
+int MenuTecSpeedLimitCheck(int chrNo, int point);
+int MenuTecWaitLimitCheck(int chrNo, int point);
+int MenuTecCharTLevUpCheck(void);
+int MenuTecCharSpeedUpCheck(void);
+int MenuTecCharWaitUpCheck(void);
+int func_A197E8(int chrNo, int tecNo);
+void *MenuSortAddrGet(int list);
+MenuTextEntry *MenuTextGet(int textId);
+int MenuSortGet(int listIndex, int entryIndex);
+void eMessageCpy(char *destination, const char *source);
+void eMessageCat(const char *source);
+char *MenuCharNameGet(int characterNo);
+char *MenuNumberTextGet(long long value, int width, int mode);
+void eRibbonSet(MenuTecExRibbon *ribbon, int mode);
+void eRibbonMain(MenuTecExRibbon *ribbon);
+int PartyAttackerCheck(int characterNo);
+const char *MenuTagTextGet(int tag);
+
+static const char * msg_0_0036DC68[3];
+
+static const char * msg00_7[3];
+
+static const char * msg01_8_0036DCB8[3];
+
+static const char * msg03_10[10];
+
+static const char * msg00_4_0036DC90[3];
+
+static const char * msg_0_0036DC68[3] = { MenuTecAttacksText, MenuTecSetText, MenuTecUseTpText };
+
+static const char * msg00_1_0036DC78[] = { techSetMenuText };
+
+static const char * msg01_2_0036DC80[] = { confirmYesNoText, techConfirmQuestionText };
+
+static const char * msg00_3_0036DC88[] = { techPointsText };
+
+static const char * msg00_4_0036DC90[3] = { timesUsedText, numberDefeatedText, spiritsAbsorbedText };
+
+static const char * msg01_5[] = { nearText, farText };
+
+static const char * msg00_7[3] = { techText, speedText, waitText };
+
+static const char * msg01_8_0036DCB8[3] = { upOkText, completeText, dashLineText };
+
+static const char * msg03_10[10] = { waitLevelA0Text, waitLevelA1Text, waitLevelA2Text, waitLevelA3Text, waitLevelA4Text, waitLevelA5Text, waitLevelA6Text, waitLevelA7Text, waitLevelA8Text, waitLevelA9Text };
+
+static const char * msg02_9[] = { speedLimitedValue, speedUnlimitedValue };
+
+static unsigned char MenuTecTrgTbl00[] = { 0, 1, 0, 0, 1, 0 };
+
+static unsigned char MenuTecTrgTbl01[] = { 1, 1, 1, 1, 1, 1 };
+
+static short MenuTecParty[8];
 
 MenuTecSaveRecord *MenuTecSaveDataGet(int chrNo)
 {
@@ -738,23 +886,6 @@ void MenuTecPasMain(void)
         endPrintExtFunc(pas->color, 0x66, 0);
     }
 }
-
-extern char infoPeriodText[];
-extern char infoSentenceEndText[];
-
-typedef struct MenuTextEntry {
-    const char *name;
-    const unsigned char *auxiliary;
-    const unsigned char *sortName;
-} MenuTextEntry;
-
-MenuTextEntry *MenuTextGet(int textId);
-int MenuSortGet(int listIndex, int entryIndex);
-
-void eMessageCpy(char *destination, const char *source);
-void eMessageCat(const char *source);
-char *MenuCharNameGet(int characterNo);
-char *MenuNumberTextGet(long long value, int width, int mode);
 
 void MenuTecInfoMain(void)
 {
@@ -1093,34 +1224,6 @@ void MenuTecMenuMain(void)
     }
 }
 
-typedef struct MenuTecExRibbon {
-    short position[2];             /* X, Y */
-    unsigned int drawOrder;
-    short size[2];                 /* width, height */
-    unsigned char unmodeled_0c[0x70 - 0x0c];
-} MenuTecExRibbon;
-
-typedef struct MenuTecExRow {
-    MenuTecExRibbon ribbon;
-    MenuTecLabel label;
-    MenuTecNumber number;
-} MenuTecExRow;
-
-typedef struct MenuTecExWork {
-    unsigned char state;
-    unsigned char unmodeled_01[3];
-    unsigned int drawOrder;
-    MenuTecExRow row[1];
-    /* MenuTec's constructor advances 0x248 bytes past this allocation. */
-    unsigned char unmodeled_128[0x248 - 0x128];
-} MenuTecExWork;
-
-extern MenuTecExWork *MenuTecEx;
-static const char * msg00_3_0036DC88[] ;
-
-void eRibbonSet(MenuTecExRibbon *ribbon, int mode);
-void eRibbonMain(MenuTecExRibbon *ribbon);
-
 void MenuTecExMain(void)
 {
     MenuTecExWork *work = MenuTecEx;
@@ -1256,81 +1359,6 @@ void MenuTecL1R1Main(void)
         }
     }
 }
-
-struct MenuStatusPanelWindow;
-struct MenuStatusPanel;
-
-typedef struct MenuTecStatusHeader {
-    unsigned char state;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    unsigned char verticalFirst;
-    unsigned char compact;
-    unsigned char transition;
-    signed char previousCursor;
-    int color;
-} MenuTecStatusHeader;
-
-typedef struct MenuTecStatusRecord {
-    signed char characterNo;
-    unsigned char unmodeled_01;
-    unsigned char unmodeled_02[2];
-    short offsetX;
-    short offsetY;
-    unsigned char unmodeled_08[0x834 - 8];
-} MenuTecStatusRecord;
-
-typedef struct MenuTecStatusWindow {
-    short x;
-    short y;
-    int color;
-    short width;
-    short height;
-    const char *title;
-    unsigned char state;
-    unsigned char ribbonInitialized;
-    unsigned char unmodeled_12[2];
-    void (*display)(struct MenuStatusPanelWindow *, struct MenuStatusPanel *);
-    MenuTecStatusRecord *displayData;
-    unsigned char unmodeled_1c[0x188 - 0x1c];
-} MenuTecStatusWindow;
-
-typedef struct MenuTecStatusCursor {
-    signed char state;
-    unsigned char unmodeled_01[3];
-    short x;
-    short y;
-    int drawOrder;
-    unsigned char unmodeled_0c[4];
-} MenuTecStatusCursor;
-
-typedef struct MenuTecStatusWindowEntry {
-    MenuTecStatusHeader header;
-    MenuTecStatusWindow window;
-} MenuTecStatusWindowEntry;
-
-typedef struct MenuTecStatusRecordEntry {
-    MenuTecStatusHeader header;
-    MenuTecStatusRecord record;
-} MenuTecStatusRecordEntry;
-
-typedef struct MenuTecStatusCursorEntry {
-    MenuTecStatusHeader header;
-    MenuTecStatusCursor cursor;
-    unsigned char unmodeled_1c[0x24 - 0x1c];
-} MenuTecStatusCursorEntry;
-
-typedef struct MenuTecStatusWork {
-    MenuTecStatusWindowEntry window[8];
-    MenuTecStatusRecordEntry detail[8];
-    MenuTecStatusCursorEntry cursor[2];
-    MenuTecStatusHeader endHeader;
-} MenuTecStatusWork;
-
-extern MenuTecStatusWork *MenuTecStatus;
-static short MenuTecParty[8];
-int PartyAttackerCheck(int characterNo);
-const char *MenuTagTextGet(int tag);
 
 void MenuTecStatusMain(void)
 {
@@ -1480,10 +1508,6 @@ void MenuTecStatusMain(void)
     }
 }
 
-extern unsigned char MenuKeepSelect[];
-extern const char techListTitleText[];
-extern const char listTitleText[];
-
 void MenuTecListMain(void)
 {
     short target[1];
@@ -1584,44 +1608,6 @@ void MenuTecListMain(void)
         break;
     }
 }
-
-typedef struct MenuTecList2Row {
-    MenuTecWindowDX window;
-    MenuTecPasMessage techniqueName[4];
-    MenuTecPasMessage equipmentName[4];
-    MenuTecL1R1Sprite icon[8];
-    unsigned char unmodeled_4f4[0x6b4 - 0x4f4];
-    MenuTecL1R1Sprite marker[4];
-} MenuTecList2Row;
-
-typedef struct MenuTecList2Work {
-    unsigned char state;
-    unsigned char mode;
-    unsigned char unmodeled_02[2];
-    int color;
-    MenuTecList2Row row[2];
-    MenuTecWindowDX detailWindow;
-    MenuTecPasMessage detailLabel[2];
-    MenuTecNumber detailNumber[2];
-    MenuTecCursor cursor;
-} MenuTecList2Work;
-
-typedef struct MenuTecList2SpriteIds {
-    short id[10];
-} MenuTecList2SpriteIds;
-
-typedef struct MenuTecList2MessageIds {
-    int id[6];
-} MenuTecList2MessageIds;
-
-extern const MenuTecList2MessageIds list2MessageIdTable;
-extern const MenuTecList2SpriteIds list2SpriteIdTable;
-
-extern MenuTecList2Work *MenuTecList2;
-extern const char setListHiTitleText[];
-extern const char setListLwTitleText[];
-static const char * msg00_4_0036DC90[3];
-static const char * msg01_5[] ;
 
 void MenuTecListMain2(void)
 {
@@ -2519,56 +2505,10 @@ void MenuTec(void)
     xglFontDebugPrintf(0, 104, sctFormat, MenuWork.rowCursor);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Defined after MenuTec: the original .sdata holds it at 0x004DB518, after
  * every string literal of the TU's functions (MenuTec's ends at 0x004DB517). */
 MenuTecData *MenuTecDataBuf = 0;
-
-extern const char MenuTecAttacksText[13];
-extern const char MenuTecUseTpText[11];
-extern const char MenuTecSetText[5];
-extern const char techSetMenuText[24];
-extern const char confirmYesNoText[8];
-extern const char techConfirmQuestionText[24];
-extern const char techPointsText[8];
-extern const char timesUsedText[16];
-extern const char spiritsAbsorbedText[24];
-extern const char numberDefeatedText[16];
-extern const char nearText[8];
-extern const char farText[8];
-extern const char waitText[8];
-extern const char techText[8];
-extern const char speedText[8];
-extern const char upOkText[8];
-extern const char completeText[16];
-extern const char dashLineText[8];
-extern const char waitLevelA8Text[8];
-extern const char waitLevelA4Text[8];
-extern const char waitLevelA6Text[8];
-extern const char waitLevelA9Text[8];
-extern const char waitLevelA7Text[8];
-extern const char waitLevelA0Text[8];
-extern const char waitLevelA3Text[8];
-extern const char waitLevelA5Text[8];
-extern const char waitLevelA1Text[8];
-extern const char waitLevelA2Text[8];
-
-static const char * msg_0_0036DC68[3] = { MenuTecAttacksText, MenuTecSetText, MenuTecUseTpText };
-
-static const char * msg00_1_0036DC78[] = { techSetMenuText };
-
-static const char * msg01_2_0036DC80[] = { confirmYesNoText, techConfirmQuestionText };
-
-static const char * msg00_3_0036DC88[] = { techPointsText };
-
-static const char * msg00_4_0036DC90[3] = { timesUsedText, numberDefeatedText, spiritsAbsorbedText };
-
-static const char * msg01_5[] = { nearText, farText };
-
-static const char * msg00_7[3] = { techText, speedText, waitText };
-
-static const char * msg01_8_0036DCB8[3] = { upOkText, completeText, dashLineText };
-
-static const char * msg03_10[10] = { waitLevelA0Text, waitLevelA1Text, waitLevelA2Text, waitLevelA3Text, waitLevelA4Text, waitLevelA5Text, waitLevelA6Text, waitLevelA7Text, waitLevelA8Text, waitLevelA9Text };
 
 const char techSetMenuText[24] = "Set\nUse T.Pts\nCancel";
 
@@ -2690,16 +2630,6 @@ const char MenuSystemOffText[8] = "Off";
 const char MenuSystemOnText[8] = "On";
 
 const char MenuSystemYesNoText[8] = "Yes\nNo";
-
-/* Original objects referenced by this TU's initialized DATA. */
-extern const char speedLimitedValue[];
-extern const char speedUnlimitedValue[];
-
-static const char * msg02_9[] = { speedLimitedValue, speedUnlimitedValue };
-
-static unsigned char MenuTecTrgTbl00[] = { 0, 1, 0, 0, 1, 0 };
-
-static unsigned char MenuTecTrgTbl01[] = { 1, 1, 1, 1, 1, 1 };
 
 /* Text: . \x1F */
 char infoSentenceEndText[8] = ". \037";

@@ -5,6 +5,9 @@
 #ifndef SRC_MAIN_SSD_INIT_H
 #define SRC_MAIN_SSD_INIT_H
 
+/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
+#define RSSD_FLAG_SUCCESS 0x20
+
 /*
  * The 32-byte SIF RPC receive record copied into RssdWork.response.
  *
@@ -33,16 +36,6 @@ typedef struct RssdRpcResponse {
     unsigned char unmodeled_010[0x20 - 0x10];          /* +0x0c..0x1f: 32-bit words, not read here */
 } RssdRpcResponse;
 
-/* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
-/*
- * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
- * ELF symbol size 0x200 bytes. The accepted RssdWorkFlags in
- * xeno/core/types.h (from RssdBackgroundNextWave, main:0x0023ff28) only
- * carries the leading `flags` word; this function evidences more of the same
- * object, so the type is extended here under the same tag and leading field
- * Only the evidenced members are modeled here. Bytes this TU does not access
- * stay explicit unmodeled spans.
- */
 struct SsdMemoryBlock;
 
 /*
@@ -70,6 +63,16 @@ typedef struct SsdThreadCreateInfo {
     unsigned int option;                  /* +0x20 */
 } SsdThreadCreateInfo;
 
+/* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
+/*
+ * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
+ * ELF symbol size 0x200 bytes. The accepted RssdWorkFlags in
+ * xeno/core/types.h (from RssdBackgroundNextWave, main:0x0023ff28) only
+ * carries the leading `flags` word; this function evidences more of the same
+ * object, so the type is extended here under the same tag and leading field
+ * Only the evidenced members are modeled here. Bytes this TU does not access
+ * stay explicit unmodeled spans.
+ */
 typedef struct RssdWorkFlags {
     int flags;                            /* +0x000: bit 3 cleared on RPC completion; bit 5 is the success status */
     int rpc_buffer_size;                  /* +0x004: RPC buffer capacity */
@@ -180,13 +183,6 @@ typedef struct RssdWorkFlags {
     void *stream_end_callback_arg;        /* +0x1fc: SsdSetStreamEndCallback arg1 */
 } RssdWorkFlags;
 
-/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
-void RssdBackgroundNextWave(const int *request);
-
-extern RssdWorkFlags RssdWork;
-
 /*
  * One argument word of an RSSD request. Most commands pass plain integers;
  * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence
@@ -219,6 +215,10 @@ typedef struct RssdRequest {
     int header[4];
     RssdRequestWord arg[4];
 } RssdRequest;
+
+extern RssdWorkFlags RssdWork;
+
+void RssdBackgroundNextWave(const int *request);
 
 /*
  * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):

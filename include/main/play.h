@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_PLAY_H
 
 #include "shared.h"
-
 #include "main/jni.h"
 
 typedef struct FCV2Value {

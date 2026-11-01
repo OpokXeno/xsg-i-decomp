@@ -5,9 +5,13 @@
 
 /* The pool contains 96 records of 0x420 bytes each. */
 #define MEFOBJ_COUNT 0x60
+
 #define MEFOBJ_ACTIVE 1
+#define MEFOBJ_SYS_READY 1
+#define MEFOBJ_SYS_ENABLED 2
 
 typedef struct MEfObj MEfObj;
+
 typedef void (*MEfObjUpdate)(MEfObj *self, void *work);
 
 struct MEfObj {
@@ -18,18 +22,17 @@ struct MEfObj {
     u8 work[0x400];
 };
 
-static MEfObj mefObjBuff[MEFOBJ_COUNT];
-static u32 mefObjSysFlags = 0;
 extern void MOutputDebugStringWarn(const char *format, ...);
+
+static u32 mefObjSysFlags = 0;
+
+static MEfObj mefObjBuff[MEFOBJ_COUNT];
 
 void MEfObjInit(void)
 {
     memset(mefObjBuff, 0, 0x18c00);
     mefObjSysFlags = 1;
 }
-
-#define MEFOBJ_SYS_READY 1
-#define MEFOBJ_SYS_ENABLED 2
 
 void MEfObjEnabled(short enabled)
 {

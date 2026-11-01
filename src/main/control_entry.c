@@ -1,6 +1,11 @@
 #include "common.h"
 #include "shared.h"
 
+/*
+ * REGIST/REGIST2 (main:0x0021826c/0x0021827c): the sound-effect bank name
+ * and SWD bank name ControlEntry loads before the boot logo. Still owned by
+ * asm data.
+ */
 extern char soundEffectBankName[];
 extern char sio2manModuleName[];
 extern char mcmanModuleName[];
@@ -25,15 +30,10 @@ extern void xglThreadRotate(void);
  */
 static void InitializeSystem(void);
 
-/*
- * REGIST/REGIST2 (main:0x0021826c/0x0021827c): the sound-effect bank name
- * and SWD bank name ControlEntry loads before the boot logo. Still owned by
- * asm data.
- */
-
 /* ControlEntry subsystem prototypes follow the argument and return
  * types evidenced by these cross-TU call sites. */
 extern void xglCdLoadOverlay(int overlayId);
+
 extern void xglSoundLoadEffect(const char *bankName, void *buffer, int mode);
 extern void xglSoundLoadSwd(const char *swdName, void *buffer);
 extern int SsdAddWaveData(void *data, int size, int wave);
@@ -41,6 +41,63 @@ extern int SsdSpuDmaCompleted(int wait);
 extern void xglRenderDispOn(void);
 extern void LogoFirst(void);
 extern int Title(void);
+
+/*
+ * SCE SDK entry points InitializeSystem calls to bring the IOP and its
+ * CD/file-system modules up. Their own translation units are SCE SDK
+ * (out of recovery scope) and stay assembly, so the prototypes are declared
+ * here from this call site's argument and return usage.
+ */
+extern void sceSifInitRpc(int mode);
+
+extern int sceCdInit(int mode);
+extern int sceSifRebootIop(const char *img_file);
+extern int sceSifSyncIop(void);
+extern int sceSifInitIopHeap(void);
+extern int sceSifLoadFileReset(void);
+extern int sceCdMmode(int media);
+extern int sceFsReset(void);
+extern void *sceCdPOffCallback(void (*func)(void), void *old_func);
+
+/* InitializeSystem subsystem prototypes follow the argument and return
+ * types evidenced by these cross-TU call sites. */
+extern int xglCdSifLoadModule(const char *path, int flags);
+
+extern void xglCdPowerOffCB(void);
+extern void xglSoundInitial(void);
+extern void xglCdInitial(void);
+extern void xglPadInitial(void);
+extern void xglMcInitial(void);
+extern void *xglTaskInitial(void *pool, int capacity, int flags);
+extern void xglDmaInitial(void);
+extern void xglGeometryInit(void);
+extern void xglPacketInit(void);
+extern void xglRenderInit(void);
+extern void xglFontInitial(void);
+extern int xglMovieInit(void);
+extern void xglMenuInitial(void);
+
+char soundEffectBankName[8] = "REGIST";
+
+char sio2manModuleName[8] = "sio2man";
+
+char mcmanModuleName[8] = "mcman";
+
+char mcservModuleName[8] = "mcserv";
+
+char padmanModuleName[8] = "padman";
+
+char libsdModuleName[8] = "libsd";
+
+char ssdModuleName[8] = "ssd";
+
+char rssdModuleName[8] = "rssd";
+
+u8 *WorkEnd = 0;
+
+int main_param_argc = 0;
+
+int main_param_argv = 0;
 
 /*
  * Loads the boot sound banks, waits for the SPU DMA transfer to finish,
@@ -79,39 +136,6 @@ void ControlEntry(void)
         entry();
     }
 }
-
-/*
- * SCE SDK entry points InitializeSystem calls to bring the IOP and its
- * CD/file-system modules up. Their own translation units are SCE SDK
- * (out of recovery scope) and stay assembly, so the prototypes are declared
- * here from this call site's argument and return usage.
- */
-extern void sceSifInitRpc(int mode);
-extern int sceCdInit(int mode);
-extern int sceSifRebootIop(const char *img_file);
-extern int sceSifSyncIop(void);
-extern int sceSifInitIopHeap(void);
-extern int sceSifLoadFileReset(void);
-extern int sceCdMmode(int media);
-extern int sceFsReset(void);
-extern void *sceCdPOffCallback(void (*func)(void), void *old_func);
-
-/* InitializeSystem subsystem prototypes follow the argument and return
- * types evidenced by these cross-TU call sites. */
-extern int xglCdSifLoadModule(const char *path, int flags);
-extern void xglCdPowerOffCB(void);
-extern void xglSoundInitial(void);
-extern void xglCdInitial(void);
-extern void xglPadInitial(void);
-extern void xglMcInitial(void);
-extern void *xglTaskInitial(void *pool, int capacity, int flags);
-extern void xglDmaInitial(void);
-extern void xglGeometryInit(void);
-extern void xglPacketInit(void);
-extern void xglRenderInit(void);
-extern void xglFontInitial(void);
-extern int xglMovieInit(void);
-extern void xglMenuInitial(void);
 
 static void InitializeSystem(void)
 {
@@ -166,16 +190,7 @@ int main(int argc, int argv)
     return 0;
 }
 
-char soundEffectBankName[8] = "REGIST";
-char sio2manModuleName[8] = "sio2man";
-char mcmanModuleName[8] = "mcman";
-char mcservModuleName[8] = "mcserv";
-char padmanModuleName[8] = "padman";
-char libsdModuleName[8] = "libsd";
-char ssdModuleName[8] = "ssd";
-char rssdModuleName[8] = "rssd";
-u8 *WorkEnd = 0;
-int main_param_argc = 0;
-int main_param_argv = 0;
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char soundRegist2Path[16] = "sed\\REGIST2";
+
 const char iopRebootImagePath[32] = "cdrom0:\\IOP\\IOPRP24D.IMG;1";

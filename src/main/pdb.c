@@ -1,5 +1,4 @@
 #include "common.h"
-
 #include "pdb.h"
 
 enum {
@@ -8,11 +7,8 @@ enum {
 };
 
 static char *getStrIndex(const char *string, int length, int character);
-
 unsigned int strlen(const char *string);
-
 char *strncpy(char *destination, const char *source, unsigned int count);
-
 int strncmp(const char *left, const char *right, unsigned int count);
 
 void PDB_getEntry(int class_id, void **groups, int *group_count)

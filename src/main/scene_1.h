@@ -9,6 +9,8 @@
 #include "main/jni.h"
 #include "main/find_native_method.h"
 
+#define SCENE_THREAD_HAS_METHOD 0x10u
+
 typedef struct SceneWindow SceneWindow;
 
 typedef struct SceneType SceneType;
@@ -88,8 +90,6 @@ struct SceneThread {
     unsigned int flags;                  /* +0x24 */
 };
 
-#define SCENE_THREAD_HAS_METHOD 0x10u
-
 /*
  * SCENE_instance only ever writes the window's word 0 (0x0025a310); nothing
  * in this TU reads or writes any other window offset, so the window is
@@ -99,32 +99,25 @@ struct SceneWindow {
     SceneObjectHeader header;
 };
 
-void SCENE_instance(SceneVm *vm, SceneObject scene_object);
-
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
 extern SceneString *NAME_Constructor;
-
 extern const char scene_constructor_format[];
-
 extern const char scene_message_field_name[];
-
 extern const char scene_init_name[];
-
 extern const char scene_window_class_name[];
+extern SceneType *TYPE_Void;
+extern const char scene_cleanup_name[];
+extern const char scene_void_signature[];
 
+void SCENE_instance(SceneVm *vm, SceneObject scene_object);
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern SceneString *loadConstString2(const char *bytes, int length);
 
 extern SceneClass *getClassFromSignature(const char *signature,
                                          void *class_loader);
 
 extern int instanceOf(SceneClass *scene_class, SceneClass *parent_class);
-
 extern SceneClass *loadClass(SceneString *name, int initialize);
-
-
 extern SceneWindow *TWIN_create2(int component_id);
-
 extern void TWIN_initScene(SceneWindow *window);
 
 /*
@@ -145,12 +138,6 @@ void SCENE_cleanup(SceneVm *vm, SceneObject scene_object);
 
 void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
                  void *method_name);
-
-extern SceneType *TYPE_Void;
-
-extern const char scene_cleanup_name[];
-
-extern const char scene_void_signature[];
 
 /* The observed third argument is either a loaded signature string or a cached type. */
 extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
@@ -176,7 +163,6 @@ extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
 extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 
 extern SceneThread *JTHREAD_get(SceneObject object);
-
 extern void JTHREAD_defaultScene(SceneThread *thread);
 
 #endif /* SRC_MAIN_SCENE_1_H */

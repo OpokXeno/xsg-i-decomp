@@ -46,7 +46,6 @@ static void setWeightLen2(SplinePoint *points, int count);
 static void setWeightTime(SplinePoint *points, int count, float duration);
 static void setWeightIndex(SplinePoint *points, int count);
 static void SPL_cardinalInit(SplineState *spline);
-
 extern void SPL_getValueXYZ(float *destination, void *spline, float frame);
 
 #endif /* SRC_MAIN_SPL_H */

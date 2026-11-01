@@ -1,22 +1,26 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/party.h"
-
 #include "menu_skill.h"
-
-/* Base of the loaded skill table used by this translation unit. */
-
-extern unsigned char *SkillDataBuf;
 
 /*
  * Offset of the per-level "points required for next skill level" table inside
  * the loaded skill data block (SkillDataBuf). Evidenced by the original
  * SkillNextLvGet (`lhu $2, 382($4)`, 382 = 0x17e);
  */
-
 #define SKILL_NEXT_LV_TABLE_OFFSET 0x17e
+
+/* Base of the loaded skill table used by this translation unit. */
+extern unsigned char *SkillDataBuf;
+
+extern const char MenuSkillSetSuffixText[8];
+extern const char MenuSkillTitleText[8];
+
+const char skillExtractCommandText[9] = "/Extract";
+
+static const char * msg_0_0036DD58[3] = { MenuSkillTitleText, skillExtractCommandText, MenuSkillSetSuffixText };
+
+static short MenuSkillParty[8];
 
 int SkillSetLvGet(int skill_id)
 {
@@ -103,8 +107,6 @@ int SkillCharPointPlus(int character_id, int point_delta)
     }
     return 0;
 }
-
-const char skillExtractCommandText[9] = "/Extract";
 
 void MenuSkillPasMain(void)
 {
@@ -457,6 +459,7 @@ void MenuSkillStatusMain(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char skillExtractSetCancelText[19] = "Extract\nSet\nCancel";
 
 const char skillExtractQuestionText[16] = " Extract skill\?";
@@ -521,6 +524,7 @@ void MenuSkillMenuMain(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Text: {color #808080}\x1E\x00: Set Search */
 const char skillSetSearchText[19] = "\014\200\200\200\036\000: Set Search";
 
@@ -679,6 +683,7 @@ void MenuSkillL1R1Main(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: 1・ /  2・ /  3・
  * EN: 1. / 2. / 3. */
 const char skillNumberedListText[15] = " 1\241\246\n 2\241\246\n 3\241\246";
@@ -735,6 +740,7 @@ void MenuSkillSetListMain(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const SkillCategoryIconIds skillCategoryIconTable = { .id = { 265, 266, 772, 773, 774 } };
 
 void MenuSkillCategoryMain(void)
@@ -879,6 +885,7 @@ void MenuSkillCategoryMain(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Text: List{x 656}S.Lv{x 519}S.Pts */
 const char skillListHeaderText[18] = "List\003\220S.Lv\003\007S.Pts";
 
@@ -1086,6 +1093,7 @@ void MenuSkillListMain(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char skillEmptyText[1] = "";
 
 const char skillYesNoText[7] = "Yes\nNo";
@@ -1479,14 +1487,10 @@ void MenuSkill(void)
     xglFontDebugPrintf(0, 64, "\x0bskill");
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Defined after MenuSkill: the original .sdata holds it at 0x004DB658, after
  * MenuSkill's "\x0bskill" literal at 0x004DB650. */
 unsigned char *SkillDataBuf = 0;
-
-extern const char MenuSkillSetSuffixText[8];
-extern const char MenuSkillTitleText[8];
-
-static const char * msg_0_0036DD58[3] = { MenuSkillTitleText, skillExtractCommandText, MenuSkillSetSuffixText };
 
 static const char * msg00_1_0036DD68[] = { skillExtractSetCancelText };
 
@@ -1513,5 +1517,3 @@ MenuSkillSetListWork * MenuSkillSetList = 0;
 MenuSkillCategoryWork * MenuSkillCategory = 0;
 
 MenuSkillListWork * MenuSkillList = 0;
-
-static short MenuSkillParty[8];

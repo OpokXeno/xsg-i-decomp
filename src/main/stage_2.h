@@ -8,19 +8,14 @@
 #include "shared.h"
 #include "main/jni.h"
 
+/*
+ * The "runnable" bit src/main/chr.h's JThread.flags documents at this same
+ * offset: tested by JTHREAD_cntl (0x003058e0) and cleared by
+ * JTHREAD_default unless 0x8 is set (0x00305610).
+ */
+#define STAGE_THREAD_RUNNING 0x10u
+
 struct JThreadHandle;
-
-/*
- * The runtime class handle for the Java xeno.Stage class (main 0x004dc7f0,
- * .sbss, gp-relative-loaded by every native below that calls
- * JNI_isInstanceOf/lookupClassField). No TU in this scope defines it.
- */
-
-/*
- * The "peer" field name lookupClassField(classJava_xeno_Stage, ...) looks
- * up (main 0x004dc208, the string this data reference names).
- */
-extern const char stagePeerFieldName[];
 
 /*
  * The VM thread argument every Java_xeno_* native receives, already
@@ -41,13 +36,6 @@ typedef struct StageThread {
     u16 resume_frames;       /* +0x3c */
     u16 frame_depth;         /* +0x3e */
 } StageThread;
-
-/*
- * The "runnable" bit src/main/chr.h's JThread.flags documents at this same
- * offset: tested by JTHREAD_cntl (0x003058e0) and cleared by
- * JTHREAD_default unless 0x8 is set (0x00305610).
- */
-#define STAGE_THREAD_RUNNING 0x10u
 
 /*
  * Call blocks: the natives below take no Java object receiver, only their
@@ -73,7 +61,9 @@ typedef struct StageFrameRenderCall {
 } StageFrameRenderCall;
 
 typedef struct StageJavaString StageJavaString;
+
 typedef struct StageStringStorage StageStringStorage;
+
 typedef struct StagePlayCall {
     SceneObject receiver;
     StageJavaString *string;
@@ -187,17 +177,29 @@ typedef struct StageGameLoopState {
     int bg_clip;              /* +0xb4 */
 } StageGameLoopState;
 
+/*
+ * The runtime class handle for the Java xeno.Stage class (main 0x004dc7f0,
+ * .sbss, gp-relative-loaded by every native below that calls
+ * JNI_isInstanceOf/lookupClassField). No TU in this scope defines it.
+ */
+/*
+ * The "peer" field name lookupClassField(classJava_xeno_Stage, ...) looks
+ * up (main 0x004dc208, the string this data reference names).
+ */
+extern const char stagePeerFieldName[];
+
 extern StageGameLoopState GameLoopState;
+extern SceneType *TYPE_Void;
 
 extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern StageThread *JTHREAD_get(SceneObject object);
+
 extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
                                void *signature_or_type);
-extern SceneType *TYPE_Void;
-extern void JTHREAD_defaultStage(struct JThreadHandle *thread);
 
+extern void JTHREAD_defaultStage(struct JThreadHandle *thread);
 extern void nmlModelSetMapLastEntry(int model_id, int entry);
 extern void nmlModelSetBackBuffer(int model_id, int count, int priority, int mode);
 extern void nmlModelSetFadeInCancel(int frames);

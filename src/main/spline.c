@@ -1,8 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
 #include "main/jni.h"
-
 #include "spline.h"
 
 struct SplineFloatArray {

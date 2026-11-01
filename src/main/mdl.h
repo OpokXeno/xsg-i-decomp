@@ -45,8 +45,8 @@ struct MdlPart {
 };
 
 /*
- * MDL_partsSetVisible: sibling of this TU, still INCLUDE_ASM scaffolding
- * and untouched by this allocation; declared only to call it.
+ * MDL_partsSetVisible: defined in this TU (src/main/mdl.c) and called by
+ * MDL_draw.
  */
 extern void MDL_partsSetVisible(MdlHandle *model);
 

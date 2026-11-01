@@ -1,8 +1,66 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "srs.h"
+
+/*
+ * One _srsChrEfTbl3 row (6 bytes; the 0xD8-byte symbol holds 36 rows).
+ * srsGetBossWaitEftNo scans effectNo and returns the matching bossWaitEftNo.
+ */
+typedef struct SrsChrEfTbl3Entry {
+    short effectNo;
+    short bossWaitEftNo;
+    unsigned char unmodeled_04[2];
+} SrsChrEfTbl3Entry;
+
+/*
+ * One _weaponTbl row (8 bytes; the 0x168-byte symbol holds 45 rows).
+ * srsEftNo2WeaponID reads weaponID at the row start; srsEftNoWeaponEffectID
+ * reads weaponEffectID right after it.
+ */
+typedef struct WeaponTblEntry {
+    short weaponID;
+    short weaponEffectID;
+    short weaponEffectID2;
+    short weaponEffectID3;
+} WeaponTblEntry;
+
+/*
+ * One _srsChrEfTbl row (18 bytes; the 0xD8-byte symbol holds 12 rows): a
+ * character number followed by four inclusive effect-number ranges.  The
+ * first and fourth ranges resolve to the character's combo data, the second
+ * and third only to the character number.
+ */
+typedef struct SrsChrEfTblEntry {
+    short charNo;
+    short comboMin;
+    short comboMax;
+    short firstMin;
+    short firstMax;
+    short secondMin;
+    short secondMax;
+    short alternateMin;
+    short alternateMax;
+} SrsChrEfTblEntry;
+
+/*
+ * One _srsChrEfTbl2 row (6 bytes; the 0x3C6-byte symbol holds 161 rows): a
+ * character number and the inclusive effect-number range it owns.
+ */
+typedef struct SrsChrEfTbl2Entry {
+    short charNo;
+    short effectMin;
+    short effectMax;
+} SrsChrEfTbl2Entry;
+
+typedef struct SrsBattlePrm {
+    short charNo[3];
+    short enemyNo[3];
+    unsigned char unmodeled_0C[6];
+    short weaponEffect[3][3];
+    short charReload[3];
+    short enemyReload[3];
+    unsigned char unmodeled_30[4];
+} SrsBattlePrm;
 
 extern char sefBoss033Name[];
 extern char sefBoss032Name[];
@@ -126,134 +184,38 @@ extern char virgilEffectName[];
 extern char maryEffectName[];
 extern char shelleyEffectName[];
 extern char emptyEffectName[];
-
 extern char _loadEsdData[0xC800];
-
-/* 0xC800-byte effect-name table. */
-
-/* 0xC800-byte table (config/symbols/main.txt) */
+extern char *_loadComboData[195];
+extern SrsMemRes _srsMemRes;
+extern char *_loadCfCommonData;
 
 extern int srsGetEffect2Idx(int effectNo);
 
-/*
- * One _srsChrEfTbl3 row (6 bytes; the 0xD8-byte symbol holds 36 rows).
- * srsGetBossWaitEftNo scans effectNo and returns the matching bossWaitEftNo.
- */
-
-typedef struct SrsChrEfTbl3Entry {
-    short effectNo;
-    short bossWaitEftNo;
-    unsigned char unmodeled_04[2];
-} SrsChrEfTbl3Entry;
-
-static SrsChrEfTbl3Entry _srsChrEfTbl3[36];
-static unsigned char srsViewPath[256];
-
 extern unsigned char *strcpy(unsigned char *destination, const unsigned char *source);
-extern char *_loadComboData[195];
-
 extern int srsGetWeaponEffectIdx(int effectNo);
-
-/*
- * One _weaponTbl row (8 bytes; the 0x168-byte symbol holds 45 rows).
- * srsEftNo2WeaponID reads weaponID at the row start; srsEftNoWeaponEffectID
- * reads weaponEffectID right after it.
- */
-
-typedef struct WeaponTblEntry {
-    short weaponID;
-    short weaponEffectID;
-    short weaponEffectID2;
-    short weaponEffectID3;
-} WeaponTblEntry;
-
-static WeaponTblEntry _weaponTbl[45];
-
 extern void sresDataMapping(void);
-
 extern void *smAlloc(unsigned int size);
 
 /*
  * svAddImageMapper takes the address of a chunk list; svAnalyzeChunk walks it
  * from its first entry, which is the only one these two loaders fill.
  */
-
 extern void svAddImageMapper(int type, int width, void *chunk, int height);
 
 extern void smFree(void *block);
-
 extern void svDeleteImageMapper(int type);
-
 extern void sresFreeReloaderMemory(int reload_bgm);
-
 extern int strcmp(const char *s1, const char *s2);
-
-extern SrsMemRes _srsMemRes;
-static signed char _srsEffect2IndexTbl[117];
-
-/*
- * One _srsChrEfTbl row (18 bytes; the 0xD8-byte symbol holds 12 rows): a
- * character number followed by four inclusive effect-number ranges.  The
- * first and fourth ranges resolve to the character's combo data, the second
- * and third only to the character number.
- */
-
-typedef struct SrsChrEfTblEntry {
-    short charNo;
-    short comboMin;
-    short comboMax;
-    short firstMin;
-    short firstMax;
-    short secondMin;
-    short secondMax;
-    short alternateMin;
-    short alternateMax;
-} SrsChrEfTblEntry;
-
-/*
- * One _srsChrEfTbl2 row (6 bytes; the 0x3C6-byte symbol holds 161 rows): a
- * character number and the inclusive effect-number range it owns.
- */
-
-typedef struct SrsChrEfTbl2Entry {
-    short charNo;
-    short effectMin;
-    short effectMax;
-} SrsChrEfTbl2Entry;
-
-static SrsChrEfTblEntry _srsChrEfTbl[12];
-
-static SrsChrEfTbl2Entry _srsChrEfTbl2[161];
-
-extern char *_loadCfCommonData;
-
 extern char *strcat(char *destination, const char *source);
-
 extern int xglCdGetFileSize(const char *name);
-
 extern int sceOpen(const char *path, int flags, ...);
-
 extern int sceLseek(int descriptor, int offset, int whence);
-
 extern int sceRead(int descriptor, void *buffer, int bytes);
-
 extern int sceClose(int descriptor);
-
 extern int func_00A103C8(const char *path, void *buffer);
-
 extern void srsCdReadCallback(int code);
-
-typedef struct SrsBattlePrm {
-    short charNo[3];
-    short enemyNo[3];
-    unsigned char unmodeled_0C[6];
-    short weaponEffect[3][3];
-    short charReload[3];
-    short enemyReload[3];
-    unsigned char unmodeled_30[4];
-} SrsBattlePrm;
-
 extern void tracePrint(const char *format, ...);
+extern void *memcpy(void *destination, const void *source, unsigned int count);
 
 /* JP: #### ＣＦエフェクトメモリが足りません!!
  * EN: #### Not enough CF effect memory!! */
@@ -263,7 +225,17 @@ static const char srsErrorCategoryFormat[32] = "-- err category(%d) eft(%d)";
 
 static const char srsEffectNotLoadedText[40] = "-- err : eftNo is not cf load";
 
-extern void *memcpy(void *destination, const void *source, unsigned int count);
+static SrsChrEfTbl3Entry _srsChrEfTbl3[36];
+
+static unsigned char srsViewPath[256];
+
+static WeaponTblEntry _weaponTbl[45];
+
+static signed char _srsEffect2IndexTbl[117];
+
+static SrsChrEfTblEntry _srsChrEfTbl[12];
+
+static SrsChrEfTbl2Entry _srsChrEfTbl2[161];
 
 const void *_loadCommonData[1] = { defaultEffectName };
 
@@ -296,6 +268,341 @@ char shionEffectName[8] = "shion";
 char kosmosEffectName[8] = "kosmos";
 
 char chaosEffectName[8] = "chaos";
+
+/*
+ * The original srs prefix is retained; its historical expansion is not
+ * established by the available evidence. The mode word is local to this TU.
+ */
+static unsigned char srsViewPath[256] = {0};
+
+/*
+ * 0x30C-byte table of 195 pointer-sized slots (config/symbols/main.txt).
+ */
+char *_loadComboData[195] = {
+    defaultEffectName, chaosEffectName, kosmosEffectName, shionEffectName, shitanEffectName,
+    ziggyEffectName, momoEffectName, jrEffectName, ceciliaEffectName, sefCatherinName,
+    virgilEffectName, maryEffectName, shelleyEffectName, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, sefGuno001Name, sefGuno001Name,
+    sefGuno002Name, sefGuno003Name, sefGuno004Name, sefGuno005Name, sefGuno006Name,
+    sefGuno007Name, sefGuno008Name, sefGuno009Name, sefGuno010Name, sefGuno011Name,
+    sefGuno012Name, sefGuno013Name, sefGuno014Name, sefGuno015Name, sefGuno016Name,
+    sefGuno017Name, sefGuno018Name, sefGuno019Name, sefGuno020Name, sefGuno021Name,
+    sefGuno022Name, sefGuno023Name, sefGuno024Name, sefGuno025Name, sefGuno001Name,
+    sefGuno002Name, sefGuno003Name, sefGuno114Name, sefFema001Name, sefFema002Name,
+    sefFema003Name, sefFema004Name, sefFema005Name, sefFema006Name, sefFere001Name,
+    sefFere002Name, sefFere003Name, sefFero001Name, sefFeso001Name, sefFeso002Name,
+    sefFeso003Name, sefFeso004Name, sefUtma001Name, sefUtma002Name, sefUtma003Name,
+    sefUtma004Name, sefUtma005Name, sefUtma006Name, sefUtma007Name, sefUtma008Name,
+    sefUtma009Name, sefUtma010Name, sefUtma011Name, sefUtma012Name, sefUtma013Name,
+    sefUtma014Name, sefUtre001Name, sefUtre002Name, sefUtre003Name, sefUtre004Name,
+    sefUtre005Name, sefUtre006Name, sefUtro001Name, sefUtro002Name, sefUtro003Name,
+    sefUtro004Name, sefUtro005Name, sefUtro006Name, sefUtro007Name, sefUtso001Name,
+    sefUtso002Name, sefUtso003Name, sefUtso004Name, sefUtso005Name, sefUtso006Name,
+    sefUtso007Name, sefUtma002Name, sefUtma002Name, sefUtma006Name, sefGuno006Name,
+    sefFema001Name, sefFeso001Name, sefFeso002Name, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, sefFeso001Name, sefFeso001Name, sefFeso001Name, sefFeso001Name,
+    sefFeso001Name, sefBoss001Name, sefBoss002Name, sefBoss003Name, sefBoss004Name,
+    sefBoss005Name, sefBoss006Name, sefBoss007Name, sefBoss008Name, sefBoss009Name,
+    sefBoss010Name, sefBoss011Name, sefBoss012Name, sefBoss013Name, sefBoss014Name,
+    sefBoss015Name, sefBoss016Name, sefBoss017Name, sefBoss018Name, sefBoss019Name,
+    sefBoss020Name, sefBoss021Name, sefBoss022Name, sefBoss023Name, sefBoss024Name,
+    sefBoss025Name, sefBoss026Name, sefBoss027Name, sefBoss028Name, sefBoss029Name,
+    sefBoss030Name, sefBoss031Name, sefBoss032Name, sefBoss033Name, sefBoss003Name,
+    sefBoss004Name, sefBoss020Name, emptyEffectName, emptyEffectName, emptyEffectName,
+    emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName,
+};
+
+static signed char _srsEffect2IndexTbl[117] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3,
+    4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7,
+    8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
+    2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4,
+    5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7,
+    8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0,
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3,
+    4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6,
+    7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+};
+
+static SrsChrEfTblEntry _srsChrEfTbl[12] = {
+    {1, 28, 33, 34, 41, 2030, 2041, 2509, 2512},
+    {2, 15, 20, 21, 23, 2017, 2029, 2505, 2508},
+    {3, 1, 6, 7, 14, 2001, 2016, 2501, 2504},
+    {4, 82, 87, 88, 95, 2072, 2084, 2525, 2528},
+    {5, 56, 61, 62, 68, 2054, 2061, 2517, 2520},
+    {6, 42, 47, 48, 55, 2042, 2053, 2513, 2516},
+    {7, 69, 74, 75, 81, 2062, 2071, 2521, 2524},
+    {8, 0, 0, 0, 0, 0, 0, 0, 0},
+    {9, 0, 0, 0, 0, 0, 0, 0, 0},
+    {10, 96, 98, 0, 0, 0, 0, 2529, 2532},
+    {11, 0, 0, 0, 0, 0, 0, 0, 0},
+    {12, 0, 0, 0, 0, 0, 0, 0, 0},
+};
+
+static SrsChrEfTbl2Entry _srsChrEfTbl2[161] = {
+    {34, 267, 267},
+    {35, 268, 269},
+    {36, 270, 271},
+    {37, 272, 274},
+    {38, 275, 277},
+    {39, 278, 280},
+    {40, 281, 281},
+    {41, 282, 283},
+    {42, 284, 285},
+    {43, 286, 288},
+    {44, 289, 290},
+    {45, 291, 293},
+    {46, 294, 295},
+    {47, 296, 297},
+    {48, 298, 300},
+    {49, 301, 303},
+    {50, 304, 305},
+    {51, 306, 307},
+    {52, 308, 310},
+    {53, 311, 312},
+    {54, 313, 314},
+    {55, 315, 316},
+    {56, 317, 317},
+    {57, 318, 318},
+    {58, 319, 319},
+    {59, 267, 267},
+    {60, 268, 269},
+    {61, 270, 271},
+    {62, 325, 326},
+    {63, 241, 242},
+    {64, 243, 245},
+    {65, 246, 246},
+    {66, 248, 249},
+    {67, 250, 251},
+    {68, 252, 254},
+    {69, 255, 255},
+    {70, 256, 258},
+    {71, 259, 261},
+    {72, 262, 262},
+    {73, 263, 263},
+    {74, 264, 264},
+    {75, 265, 265},
+    {76, 266, 266},
+    {77, 327, 327},
+    {78, 328, 328},
+    {79, 329, 330},
+    {80, 331, 332},
+    {81, 333, 334},
+    {82, 335, 337},
+    {83, 338, 339},
+    {84, 340, 342},
+    {85, 343, 345},
+    {86, 346, 347},
+    {87, 348, 349},
+    {88, 350, 351},
+    {89, 352, 353},
+    {90, 354, 356},
+    {91, 357, 357},
+    {92, 358, 360},
+    {93, 361, 363},
+    {94, 364, 366},
+    {95, 367, 369},
+    {96, 370, 372},
+    {97, 373, 373},
+    {98, 374, 374},
+    {99, 375, 375},
+    {100, 376, 376},
+    {101, 377, 379},
+    {102, 380, 382},
+    {103, 383, 384},
+    {104, 385, 385},
+    {105, 386, 386},
+    {106, 387, 388},
+    {107, 389, 389},
+    {108, 390, 391},
+    {109, 392, 393},
+    {110, 394, 395},
+    {151, 2326, 2330},
+    {152, 2331, 2335},
+    {153, 2311, 2315},
+    {154, 2306, 2310},
+    {155, 2341, 2345},
+    {156, 2336, 2340},
+    {157, 2301, 2305},
+    {158, 2346, 2350},
+    {159, 2351, 2355},
+    {160, 2356, 2360},
+    {161, 2361, 2365},
+    {162, 2366, 2370},
+    {163, 2371, 2375},
+    {164, 2376, 2380},
+    {165, 2381, 2385},
+    {166, 2386, 2390},
+    {167, 2391, 2395},
+    {168, 2396, 2400},
+    {169, 2401, 2405},
+    {170, 2406, 2410},
+    {171, 2411, 2415},
+    {172, 2416, 2420},
+    {173, 2426, 2430},
+    {174, 2431, 2435},
+    {175, 2436, 2440},
+    {176, 2441, 2445},
+    {177, 2446, 2450},
+    {178, 2451, 2455},
+    {179, 2456, 2460},
+    {180, 2461, 2465},
+    {181, 2466, 2470},
+    {182, 2476, 2480},
+    {183, 2421, 2425},
+    {184, 2311, 2315},
+    {185, 2306, 2310},
+    {186, 2406, 2410},
+    {151, 2681, 2683},
+    {152, 2684, 2686},
+    {153, 2687, 2689},
+    {154, 2690, 2692},
+    {155, 2693, 2695},
+    {156, 2696, 2698},
+    {157, 2699, 2701},
+    {158, 2702, 2704},
+    {159, 2705, 2707},
+    {160, 2708, 2710},
+    {161, 2711, 2713},
+    {162, 2714, 2716},
+    {163, 2717, 2719},
+    {164, 2720, 2722},
+    {165, 2723, 2725},
+    {166, 2726, 2728},
+    {167, 2729, 2731},
+    {168, 2732, 2734},
+    {169, 2735, 2737},
+    {170, 2738, 2740},
+    {171, 2741, 2743},
+    {172, 2744, 2746},
+    {173, 2747, 2749},
+    {174, 2750, 2752},
+    {175, 2753, 2755},
+    {176, 2756, 2758},
+    {177, 2759, 2761},
+    {178, 2762, 2764},
+    {179, 2765, 2767},
+    {180, 2768, 2770},
+    {181, 2771, 2773},
+    {182, 2774, 2776},
+    {183, 2777, 2779},
+    {184, 2687, 2689},
+    {185, 2690, 2692},
+    {186, 2738, 2740},
+    {111, 328, 328},
+    {112, 328, 328},
+    {113, 335, 337},
+    {114, 278, 280},
+    {63, 241, 242},
+    {73, 263, 263},
+    {74, 264, 264},
+    {146, 263, 263},
+    {147, 263, 263},
+    {148, 263, 263},
+    {149, 263, 263},
+    {150, 263, 263},
+};
+
+static SrsChrEfTbl3Entry _srsChrEfTbl3[36] = {
+    {151, 2681, {0x7B, 0x0A}},
+    {152, 2684, {0x7E, 0x0A}},
+    {153, 2687, {0x81, 0x0A}},
+    {154, 2690, {0x84, 0x0A}},
+    {155, 2693, {0x87, 0x0A}},
+    {156, 2696, {0x8A, 0x0A}},
+    {157, 2699, {0x8D, 0x0A}},
+    {158, 2702, {0x90, 0x0A}},
+    {159, 2705, {0x93, 0x0A}},
+    {160, 2708, {0x96, 0x0A}},
+    {161, 2711, {0x99, 0x0A}},
+    {162, 2714, {0x9C, 0x0A}},
+    {163, 2717, {0x9F, 0x0A}},
+    {164, 2720, {0xA2, 0x0A}},
+    {165, 2723, {0xA5, 0x0A}},
+    {166, 2726, {0xA8, 0x0A}},
+    {167, 2729, {0xAB, 0x0A}},
+    {168, 2732, {0xAE, 0x0A}},
+    {169, 2735, {0xB1, 0x0A}},
+    {170, 2738, {0xB4, 0x0A}},
+    {171, 2741, {0xB7, 0x0A}},
+    {172, 2744, {0xBA, 0x0A}},
+    {173, 2747, {0xBD, 0x0A}},
+    {174, 2750, {0xC0, 0x0A}},
+    {175, 2753, {0xC3, 0x0A}},
+    {176, 2756, {0xC6, 0x0A}},
+    {177, 2759, {0xC9, 0x0A}},
+    {178, 2762, {0xCC, 0x0A}},
+    {179, 2765, {0xCF, 0x0A}},
+    {180, 2768, {0xD2, 0x0A}},
+    {181, 2771, {0xD5, 0x0A}},
+    {182, 2774, {0xD8, 0x0A}},
+    {183, 2777, {0xDB, 0x0A}},
+    {184, 2687, {0x81, 0x0A}},
+    {185, 2690, {0x84, 0x0A}},
+    {186, 2738, {0xB4, 0x0A}},
+};
+
+static WeaponTblEntry _weaponTbl[45] = {
+    {70, 2801, 2802, 2801},
+    {71, 2803, 2803, 2804},
+    {72, 2805, 2806, 2807},
+    {73, 2808, 2862, 2863},
+    {74, 2809, 2809, 2810},
+    {75, 2811, 2812, 2813},
+    {76, 2814, 2864, 2865},
+    {77, 2815, 2815, 2816},
+    {78, 2817, 2817, 2867},
+    {79, 2818, 2818, 2818},
+    {80, 2819, 2819, 2820},
+    {81, 2821, 2821, 2866},
+    {82, 2822, 2822, 2823},
+    {83, 2824, 2824, 2861},
+    {84, 2825, 2825, 2825},
+    {85, 2826, 2826, 2827},
+    {86, 2828, 2828, 2829},
+    {87, 2830, 2830, 2831},
+    {88, 2832, 2832, 2832},
+    {89, 2833, 2833, 2834},
+    {90, 2835, 2835, 2836},
+    {91, 2837, 2837, 2838},
+    {112, 2837, 2837, 2838},
+    {92, 2839, 2839, 2840},
+    {113, 2839, 2839, 2840},
+    {93, 2841, 2841, 2841},
+    {94, 2842, 2842, 2842},
+    {114, 2842, 2842, 2842},
+    {95, 2843, 2843, 2843},
+    {96, 2844, 2844, 2844},
+    {97, 2845, 2845, 2845},
+    {98, 2846, 2846, 2846},
+    {99, 2847, 2847, 2847},
+    {100, 2848, 2848, 2848},
+    {101, 2849, 2849, 2849},
+    {102, 2850, 2850, 2850},
+    {103, 2851, 2851, 2851},
+    {104, 2852, 2852, 2852},
+    {105, 2853, 2853, 2853},
+    {108, 2854, 2854, 2854},
+    {110, 2855, 2855, 2855},
+    {106, 2856, 2856, 2856},
+    {107, 2857, 2857, 2857},
+    {111, 2858, 2858, 2858},
+    {109, 2859, 2859, 2860},
+};
+
+SrsMemRes _srsMemRes = {0};
+
+/* 0xC800-byte effect-name table. */
+/* 0xC800-byte table (config/symbols/main.txt) */
+char _loadEsdData[0xC800] = {0};
 
 int srsGetEffect2Idx(int effectNo)
 {
@@ -1177,342 +1484,3 @@ int srsEffectNameToID(char *effectName)
     }
     return 0;
 }
-
-/*
- * The original srs prefix is retained; its historical expansion is not
- * established by the available evidence. The mode word is local to this TU.
- */
-
-static unsigned char srsViewPath[256] = {0};
-
-/*
- * 0x30C-byte table of 195 pointer-sized slots (config/symbols/main.txt).
- */
-
-char *_loadComboData[195] = {
-    defaultEffectName, chaosEffectName, kosmosEffectName, shionEffectName, shitanEffectName,
-    ziggyEffectName, momoEffectName, jrEffectName, ceciliaEffectName, sefCatherinName,
-    virgilEffectName, maryEffectName, shelleyEffectName, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, sefGuno001Name, sefGuno001Name,
-    sefGuno002Name, sefGuno003Name, sefGuno004Name, sefGuno005Name, sefGuno006Name,
-    sefGuno007Name, sefGuno008Name, sefGuno009Name, sefGuno010Name, sefGuno011Name,
-    sefGuno012Name, sefGuno013Name, sefGuno014Name, sefGuno015Name, sefGuno016Name,
-    sefGuno017Name, sefGuno018Name, sefGuno019Name, sefGuno020Name, sefGuno021Name,
-    sefGuno022Name, sefGuno023Name, sefGuno024Name, sefGuno025Name, sefGuno001Name,
-    sefGuno002Name, sefGuno003Name, sefGuno114Name, sefFema001Name, sefFema002Name,
-    sefFema003Name, sefFema004Name, sefFema005Name, sefFema006Name, sefFere001Name,
-    sefFere002Name, sefFere003Name, sefFero001Name, sefFeso001Name, sefFeso002Name,
-    sefFeso003Name, sefFeso004Name, sefUtma001Name, sefUtma002Name, sefUtma003Name,
-    sefUtma004Name, sefUtma005Name, sefUtma006Name, sefUtma007Name, sefUtma008Name,
-    sefUtma009Name, sefUtma010Name, sefUtma011Name, sefUtma012Name, sefUtma013Name,
-    sefUtma014Name, sefUtre001Name, sefUtre002Name, sefUtre003Name, sefUtre004Name,
-    sefUtre005Name, sefUtre006Name, sefUtro001Name, sefUtro002Name, sefUtro003Name,
-    sefUtro004Name, sefUtro005Name, sefUtro006Name, sefUtro007Name, sefUtso001Name,
-    sefUtso002Name, sefUtso003Name, sefUtso004Name, sefUtso005Name, sefUtso006Name,
-    sefUtso007Name, sefUtma002Name, sefUtma002Name, sefUtma006Name, sefGuno006Name,
-    sefFema001Name, sefFeso001Name, sefFeso002Name, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, sefFeso001Name, sefFeso001Name, sefFeso001Name, sefFeso001Name,
-    sefFeso001Name, sefBoss001Name, sefBoss002Name, sefBoss003Name, sefBoss004Name,
-    sefBoss005Name, sefBoss006Name, sefBoss007Name, sefBoss008Name, sefBoss009Name,
-    sefBoss010Name, sefBoss011Name, sefBoss012Name, sefBoss013Name, sefBoss014Name,
-    sefBoss015Name, sefBoss016Name, sefBoss017Name, sefBoss018Name, sefBoss019Name,
-    sefBoss020Name, sefBoss021Name, sefBoss022Name, sefBoss023Name, sefBoss024Name,
-    sefBoss025Name, sefBoss026Name, sefBoss027Name, sefBoss028Name, sefBoss029Name,
-    sefBoss030Name, sefBoss031Name, sefBoss032Name, sefBoss033Name, sefBoss003Name,
-    sefBoss004Name, sefBoss020Name, emptyEffectName, emptyEffectName, emptyEffectName,
-    emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName,
-};
-
-/* 0xC800-byte effect-name table. */
-
-/* 0xC800-byte table (config/symbols/main.txt) */
-
-static signed char _srsEffect2IndexTbl[117] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3,
-    4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7,
-    8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1,
-    2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4,
-    5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7,
-    8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0,
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3,
-    4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6,
-    7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-};
-
-static SrsChrEfTblEntry _srsChrEfTbl[12] = {
-    {1, 28, 33, 34, 41, 2030, 2041, 2509, 2512},
-    {2, 15, 20, 21, 23, 2017, 2029, 2505, 2508},
-    {3, 1, 6, 7, 14, 2001, 2016, 2501, 2504},
-    {4, 82, 87, 88, 95, 2072, 2084, 2525, 2528},
-    {5, 56, 61, 62, 68, 2054, 2061, 2517, 2520},
-    {6, 42, 47, 48, 55, 2042, 2053, 2513, 2516},
-    {7, 69, 74, 75, 81, 2062, 2071, 2521, 2524},
-    {8, 0, 0, 0, 0, 0, 0, 0, 0},
-    {9, 0, 0, 0, 0, 0, 0, 0, 0},
-    {10, 96, 98, 0, 0, 0, 0, 2529, 2532},
-    {11, 0, 0, 0, 0, 0, 0, 0, 0},
-    {12, 0, 0, 0, 0, 0, 0, 0, 0},
-};
-
-static SrsChrEfTbl2Entry _srsChrEfTbl2[161] = {
-    {34, 267, 267},
-    {35, 268, 269},
-    {36, 270, 271},
-    {37, 272, 274},
-    {38, 275, 277},
-    {39, 278, 280},
-    {40, 281, 281},
-    {41, 282, 283},
-    {42, 284, 285},
-    {43, 286, 288},
-    {44, 289, 290},
-    {45, 291, 293},
-    {46, 294, 295},
-    {47, 296, 297},
-    {48, 298, 300},
-    {49, 301, 303},
-    {50, 304, 305},
-    {51, 306, 307},
-    {52, 308, 310},
-    {53, 311, 312},
-    {54, 313, 314},
-    {55, 315, 316},
-    {56, 317, 317},
-    {57, 318, 318},
-    {58, 319, 319},
-    {59, 267, 267},
-    {60, 268, 269},
-    {61, 270, 271},
-    {62, 325, 326},
-    {63, 241, 242},
-    {64, 243, 245},
-    {65, 246, 246},
-    {66, 248, 249},
-    {67, 250, 251},
-    {68, 252, 254},
-    {69, 255, 255},
-    {70, 256, 258},
-    {71, 259, 261},
-    {72, 262, 262},
-    {73, 263, 263},
-    {74, 264, 264},
-    {75, 265, 265},
-    {76, 266, 266},
-    {77, 327, 327},
-    {78, 328, 328},
-    {79, 329, 330},
-    {80, 331, 332},
-    {81, 333, 334},
-    {82, 335, 337},
-    {83, 338, 339},
-    {84, 340, 342},
-    {85, 343, 345},
-    {86, 346, 347},
-    {87, 348, 349},
-    {88, 350, 351},
-    {89, 352, 353},
-    {90, 354, 356},
-    {91, 357, 357},
-    {92, 358, 360},
-    {93, 361, 363},
-    {94, 364, 366},
-    {95, 367, 369},
-    {96, 370, 372},
-    {97, 373, 373},
-    {98, 374, 374},
-    {99, 375, 375},
-    {100, 376, 376},
-    {101, 377, 379},
-    {102, 380, 382},
-    {103, 383, 384},
-    {104, 385, 385},
-    {105, 386, 386},
-    {106, 387, 388},
-    {107, 389, 389},
-    {108, 390, 391},
-    {109, 392, 393},
-    {110, 394, 395},
-    {151, 2326, 2330},
-    {152, 2331, 2335},
-    {153, 2311, 2315},
-    {154, 2306, 2310},
-    {155, 2341, 2345},
-    {156, 2336, 2340},
-    {157, 2301, 2305},
-    {158, 2346, 2350},
-    {159, 2351, 2355},
-    {160, 2356, 2360},
-    {161, 2361, 2365},
-    {162, 2366, 2370},
-    {163, 2371, 2375},
-    {164, 2376, 2380},
-    {165, 2381, 2385},
-    {166, 2386, 2390},
-    {167, 2391, 2395},
-    {168, 2396, 2400},
-    {169, 2401, 2405},
-    {170, 2406, 2410},
-    {171, 2411, 2415},
-    {172, 2416, 2420},
-    {173, 2426, 2430},
-    {174, 2431, 2435},
-    {175, 2436, 2440},
-    {176, 2441, 2445},
-    {177, 2446, 2450},
-    {178, 2451, 2455},
-    {179, 2456, 2460},
-    {180, 2461, 2465},
-    {181, 2466, 2470},
-    {182, 2476, 2480},
-    {183, 2421, 2425},
-    {184, 2311, 2315},
-    {185, 2306, 2310},
-    {186, 2406, 2410},
-    {151, 2681, 2683},
-    {152, 2684, 2686},
-    {153, 2687, 2689},
-    {154, 2690, 2692},
-    {155, 2693, 2695},
-    {156, 2696, 2698},
-    {157, 2699, 2701},
-    {158, 2702, 2704},
-    {159, 2705, 2707},
-    {160, 2708, 2710},
-    {161, 2711, 2713},
-    {162, 2714, 2716},
-    {163, 2717, 2719},
-    {164, 2720, 2722},
-    {165, 2723, 2725},
-    {166, 2726, 2728},
-    {167, 2729, 2731},
-    {168, 2732, 2734},
-    {169, 2735, 2737},
-    {170, 2738, 2740},
-    {171, 2741, 2743},
-    {172, 2744, 2746},
-    {173, 2747, 2749},
-    {174, 2750, 2752},
-    {175, 2753, 2755},
-    {176, 2756, 2758},
-    {177, 2759, 2761},
-    {178, 2762, 2764},
-    {179, 2765, 2767},
-    {180, 2768, 2770},
-    {181, 2771, 2773},
-    {182, 2774, 2776},
-    {183, 2777, 2779},
-    {184, 2687, 2689},
-    {185, 2690, 2692},
-    {186, 2738, 2740},
-    {111, 328, 328},
-    {112, 328, 328},
-    {113, 335, 337},
-    {114, 278, 280},
-    {63, 241, 242},
-    {73, 263, 263},
-    {74, 264, 264},
-    {146, 263, 263},
-    {147, 263, 263},
-    {148, 263, 263},
-    {149, 263, 263},
-    {150, 263, 263},
-};
-
-static SrsChrEfTbl3Entry _srsChrEfTbl3[36] = {
-    {151, 2681, {0x7B, 0x0A}},
-    {152, 2684, {0x7E, 0x0A}},
-    {153, 2687, {0x81, 0x0A}},
-    {154, 2690, {0x84, 0x0A}},
-    {155, 2693, {0x87, 0x0A}},
-    {156, 2696, {0x8A, 0x0A}},
-    {157, 2699, {0x8D, 0x0A}},
-    {158, 2702, {0x90, 0x0A}},
-    {159, 2705, {0x93, 0x0A}},
-    {160, 2708, {0x96, 0x0A}},
-    {161, 2711, {0x99, 0x0A}},
-    {162, 2714, {0x9C, 0x0A}},
-    {163, 2717, {0x9F, 0x0A}},
-    {164, 2720, {0xA2, 0x0A}},
-    {165, 2723, {0xA5, 0x0A}},
-    {166, 2726, {0xA8, 0x0A}},
-    {167, 2729, {0xAB, 0x0A}},
-    {168, 2732, {0xAE, 0x0A}},
-    {169, 2735, {0xB1, 0x0A}},
-    {170, 2738, {0xB4, 0x0A}},
-    {171, 2741, {0xB7, 0x0A}},
-    {172, 2744, {0xBA, 0x0A}},
-    {173, 2747, {0xBD, 0x0A}},
-    {174, 2750, {0xC0, 0x0A}},
-    {175, 2753, {0xC3, 0x0A}},
-    {176, 2756, {0xC6, 0x0A}},
-    {177, 2759, {0xC9, 0x0A}},
-    {178, 2762, {0xCC, 0x0A}},
-    {179, 2765, {0xCF, 0x0A}},
-    {180, 2768, {0xD2, 0x0A}},
-    {181, 2771, {0xD5, 0x0A}},
-    {182, 2774, {0xD8, 0x0A}},
-    {183, 2777, {0xDB, 0x0A}},
-    {184, 2687, {0x81, 0x0A}},
-    {185, 2690, {0x84, 0x0A}},
-    {186, 2738, {0xB4, 0x0A}},
-};
-
-static WeaponTblEntry _weaponTbl[45] = {
-    {70, 2801, 2802, 2801},
-    {71, 2803, 2803, 2804},
-    {72, 2805, 2806, 2807},
-    {73, 2808, 2862, 2863},
-    {74, 2809, 2809, 2810},
-    {75, 2811, 2812, 2813},
-    {76, 2814, 2864, 2865},
-    {77, 2815, 2815, 2816},
-    {78, 2817, 2817, 2867},
-    {79, 2818, 2818, 2818},
-    {80, 2819, 2819, 2820},
-    {81, 2821, 2821, 2866},
-    {82, 2822, 2822, 2823},
-    {83, 2824, 2824, 2861},
-    {84, 2825, 2825, 2825},
-    {85, 2826, 2826, 2827},
-    {86, 2828, 2828, 2829},
-    {87, 2830, 2830, 2831},
-    {88, 2832, 2832, 2832},
-    {89, 2833, 2833, 2834},
-    {90, 2835, 2835, 2836},
-    {91, 2837, 2837, 2838},
-    {112, 2837, 2837, 2838},
-    {92, 2839, 2839, 2840},
-    {113, 2839, 2839, 2840},
-    {93, 2841, 2841, 2841},
-    {94, 2842, 2842, 2842},
-    {114, 2842, 2842, 2842},
-    {95, 2843, 2843, 2843},
-    {96, 2844, 2844, 2844},
-    {97, 2845, 2845, 2845},
-    {98, 2846, 2846, 2846},
-    {99, 2847, 2847, 2847},
-    {100, 2848, 2848, 2848},
-    {101, 2849, 2849, 2849},
-    {102, 2850, 2850, 2850},
-    {103, 2851, 2851, 2851},
-    {104, 2852, 2852, 2852},
-    {105, 2853, 2853, 2853},
-    {108, 2854, 2854, 2854},
-    {110, 2855, 2855, 2855},
-    {106, 2856, 2856, 2856},
-    {107, 2857, 2857, 2857},
-    {111, 2858, 2858, 2858},
-    {109, 2859, 2859, 2860},
-};
-
-SrsMemRes _srsMemRes = {0};
-
-char _loadEsdData[0xC800] = {0};

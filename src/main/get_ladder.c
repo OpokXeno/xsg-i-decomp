@@ -1,4 +1,11 @@
 #include "common.h"
+#include "get_ladder.h"
+#include "shared.h"
+#include "main/xgl_2.h"
+
+#define FLY_TO_LADDER_SPEED (0.033333335071802139f)
+#define FLY_TO_LADDER_RISE_STEP (0.69999998807907104f)
+#define GET_OFF_LADDER_SPEED (0.033333335071802139f)
 
 struct LadderAttributeTable {
     int attributes[16];
@@ -8,37 +15,7 @@ struct ArrivalAttributeTable {
     int attributes[4];
 };
 
-const struct LadderAttributeTable ladderAttributeTable = {{
-    0x00100000, 0x00110000, 0x00120000, 0x00130000,
-    0x00140000, 0x00150000, 0x00160000, 0x00170000,
-    0x00180000, 0x00190000, 0x001A0000, 0x001B0000,
-    0x001C0000, 0x001D0000, 0x001E0000, 0x001F0000
-}};
-
-const struct ArrivalAttributeTable arrivalAttributeTable = {{
-    0x00200000, 0x00210000, 0x00220000, 0x00230000
-}};
-
-extern short PhCunt;
-
-extern int Get_Attr_NU(const float *position, int mapIndex, int attrMask);
-
-#include "get_ladder.h"
-
-#include "shared.h"
-
-#include "main/xgl_2.h"
-
-float AdjTable_X[4] = {0.0f, 0.41f, 0.0f, -0.41f};
-
-float AdjTable_Z[4] = {-0.41f, 0.0f, 0.41f, 0.0f};
-
-float LadderStep[127] = {0.0f};
-
-extern short NowLadderStep;
-
 /* The original copies these 16-byte points with aligned doubleword loads and stores. */
-
 typedef struct LadderPoint {
     Vector4 coordinates;
     u64 alignment[0];
@@ -114,9 +91,15 @@ typedef struct LadderPad {
     signed char axis[4];
 } LadderPad;
 
+extern short PhCunt;
+extern short NowLadderStep;
 extern LadderWork enepc[16];
-
 extern LadderGameState GameLoopState;
+extern LadderPad PadData[2];
+extern const char hashigoBottomName[16];
+extern short SelNum;
+
+extern int Get_Attr_NU(const float *position, int mapIndex, int attrMask);
 
 extern void Get_LadderID_Limit(const float *position, float *result,
                                float x_limit, float z_limit);
@@ -133,45 +116,39 @@ extern void Get_MiddlePoint_Parabora(const Vector4 *start,
                                      float height, Vector4 *result);
 
 extern float Get_Height(const Vector4 *point, int mode, int flags);
-
 extern float Get_Multi_Max_Under(float first, float second, float third);
-
 extern void ACT_setMotion2(LadderActor *actor, int motion, int blend);
 
 extern float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
                                                    float speed);
 
 extern float *MotTransXYZ(float *xyz);
-
 extern void ACT_updateMotion(LadderActor *actor);
-
-#define FLY_TO_LADDER_SPEED (0.033333335071802139f)
-
-#define FLY_TO_LADDER_RISE_STEP (0.69999998807907104f)
-
-#define GET_OFF_LADDER_SPEED (0.033333335071802139f)
-
-extern LadderPad PadData[2];
-
 extern void ACT_setMotion(LadderActor *actor, unsigned int motion);
-
 extern void CallMethod_I(const char *method_name, int argument1);
-
 extern void xglSoundEffectNormalID(int id, int channel);
-
 extern void xglSoundEffectStopID(int id, int channel);
-
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 extern void *memset(void *destination, int value, unsigned int count);
-
-extern const char hashigoBottomName[16];
-
-/* The original copies these 16-byte points with aligned doubleword loads and stores. */
 
 extern void On_Ladder(LadderActor *actor);
 
-/* The original copies these 16-byte points with aligned doubleword loads and stores. */
+const struct LadderAttributeTable ladderAttributeTable = {{
+    0x00100000, 0x00110000, 0x00120000, 0x00130000,
+    0x00140000, 0x00150000, 0x00160000, 0x00170000,
+    0x00180000, 0x00190000, 0x001A0000, 0x001B0000,
+    0x001C0000, 0x001D0000, 0x001E0000, 0x001F0000
+}};
+
+const struct ArrivalAttributeTable arrivalAttributeTable = {{
+    0x00200000, 0x00210000, 0x00220000, 0x00230000
+}};
+
+float AdjTable_X[4] = {0.0f, 0.41f, 0.0f, -0.41f};
+
+float AdjTable_Z[4] = {-0.41f, 0.0f, 0.41f, 0.0f};
+
+float LadderStep[127] = {0.0f};
 
 short Get_Ladder(int attribute)
 {
@@ -813,6 +790,7 @@ void On_Ladder(register LadderActor * const actor)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char hashigoBottomName[16] = "HashigoBottom";
 
 int Ladder_Main(LadderActor *actor)
@@ -848,8 +826,7 @@ int Ladder_Main(LadderActor *actor)
     return 1;
 }
 
-extern short SelNum;
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 short NowLadderStep = 0;
 
 short SelNum = -1;

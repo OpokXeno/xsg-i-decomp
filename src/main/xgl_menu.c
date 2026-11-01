@@ -1,6 +1,9 @@
 #include "common.h"
-
 #include "shared.h"
+
+#define EE_SCRATCHPAD_BASE ((XglMenuDrawContext *)0x70000000)
+#define MENU_LIST_INDENT 8
+#define MENU_TABLE_COUNT 16
 
 typedef struct XglMenuNode XglMenuNode;
 
@@ -62,15 +65,6 @@ typedef struct XglMenuParams {
     int *result_out;
 } XglMenuParams;
 
-#define EE_SCRATCHPAD_BASE ((XglMenuDrawContext *)0x70000000)
-
-#define MENU_LIST_INDENT 8
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char darkRedTextFormat[];
-extern const char dimTextFormat[];
-extern const char plainTextFormat[];
-
 /*
  * Partial view of one entry of the menutbl array (main 0x0021ce18/0x0021ce7c,
  * a 0x80-byte stride): xglMenuDrawType0 only touches the active flag at
@@ -99,10 +93,6 @@ typedef struct {
     short sprite_row_marks[18];
 } XglMenuEntry;
 
-#define MENU_TABLE_COUNT 16
-
-extern XglMenuEntry menutbl[MENU_TABLE_COUNT];
-
 /* Port records retain the original 0x68-byte stride. */
 typedef struct MenuPadRecord {
     unsigned char unmodeled_00[0x32];
@@ -110,7 +100,18 @@ typedef struct MenuPadRecord {
     unsigned short direction_repeated;
     unsigned char unmodeled_36[0x32];
 } MenuPadRecord;
+
+extern const char darkRedTextFormat[];
+extern const char dimTextFormat[];
+extern const char plainTextFormat[];
+extern XglMenuEntry menutbl[MENU_TABLE_COUNT];
 extern MenuPadRecord PadData[2];
+
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern float I2F(int value);
+
+static void xglMenuDrawType1(XglMenuEntry *entry,
+                             XglMenuDrawContext *context);
 
 XglMenuEntry menutbl[MENU_TABLE_COUNT] = { 0 };
 
@@ -129,10 +130,8 @@ const char xglMenuPfs1Path[8] = "pfs1:";
 
 const char xglMenuHddPath[8] = "hdd:";
 
-extern float I2F(int value);
-
-static void xglMenuDrawType1(XglMenuEntry *entry,
-                             XglMenuDrawContext *context);
+/* Original four-byte object; its element type is unresolved. */
+unsigned char ActiveMenuNo[4] = { 0 };
 
 int xglMenuOpen(int slot, XglMenuParams *params)
 {
@@ -388,6 +387,3 @@ void xglMenuInitial(void)
         menutbl[i].active = 0;
     }
 }
-
-/* Original four-byte object; its element type is unresolved. */
-unsigned char ActiveMenuNo[4] = { 0 };

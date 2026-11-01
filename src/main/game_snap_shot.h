@@ -8,7 +8,6 @@ typedef union SnapshotDmaPacket {
     XglQuadword quadwords[12];
 } SnapshotDmaPacket;
 
-
 int GameSnapShotSaveFile(int number, const void *data, int size);
 
 #endif /* SRC_MAIN_GAME_SNAP_SHOT_H */

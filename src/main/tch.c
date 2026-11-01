@@ -1,12 +1,10 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "tch.h"
 
-static void getInfoAddr(TimeChart *chart);
-
 struct PlayTCHCurveSet;
+
+static void getInfoAddr(TimeChart *chart);
 
 static void getInfoAddr(TimeChart *chart)
 {

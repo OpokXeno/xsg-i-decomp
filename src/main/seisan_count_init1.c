@@ -1,19 +1,27 @@
 #include "common.h"
-
 #include "shared.h"
 #include "sdv.h"
-
 #include "main/xgl_task.h"
 #include "main/xgl_font.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_packet.h"
-
 #include "seisan_count_init1.h"
+
+typedef struct SeisanLabelBytes {
+    unsigned char bytes[5];
+} SeisanLabelBytes;
+
+typedef union SeisanNumberCoordinates {
+    struct { short x, y; } axes;
+    unsigned int packed;
+} SeisanNumberCoordinates;
+
 /* Original tu171 digit literals: each is an eight-byte character item.
  * tu172's original readers copy the first aligned halfword into a label.
  * The casts in msg_number express that existing reader view; these declarations
  * do not recover or allocate storage belonging to tu171. */
 extern const char SeisanDigit0Text[8];
+
 extern const char SeisanDigit1Text[8];
 extern const char SeisanDigit2Text[8];
 extern const char SeisanDigit3Text[8];
@@ -37,15 +45,54 @@ extern const char seisanStartPointsText[7];
 extern const char seisanEndPointsText[7];
 extern const char seisanTotalPointsText[7];
 
-typedef struct SeisanLabelBytes {
-    unsigned char bytes[5];
-} SeisanLabelBytes;
+/* The original eight-byte prompt-pointer table remains in data scaffolding. */
+extern const char *msg00_1_0036DAC8[];
+
+static void tskSeisanStatus(TskObject *task, void *data);
+
+const char combatantTitleText[10] = "Combatant";
+
+const SeisanRibbonData seisanRibbonTable = {
+    { 0x00000000, 0x0000FFFF, 0x80000000, 0x01C00000,
+      0x0000FFFF, 0x80000000, 0x00000200, 0x0000FFFF,
+      0x80000000, 0x01C00200, 0x0000FFFF, 0x80000000,
+      0x00000000, 0x00000000, 0x00000000 }
+};
+
+static const unsigned short *msg_number[10] = {
+    (const unsigned short *)SeisanDigit0Text,
+    (const unsigned short *)SeisanDigit1Text,
+    (const unsigned short *)SeisanDigit2Text,
+    (const unsigned short *)SeisanDigit3Text,
+    (const unsigned short *)SeisanDigit4Text,
+    (const unsigned short *)SeisanDigit5Text,
+    (const unsigned short *)SeisanDigit6Text,
+    (const unsigned short *)SeisanDigit7Text,
+    (const unsigned short *)SeisanDigit8Text,
+    (const unsigned short *)SeisanDigit9Text
+};
+
+static const char *msg00_0_0036DAB8[3] = {
+    SeisanPartyText, SeisanClearTimeText, SeisanMoneyText
+};
+
+static const char *msg00_1_0036DAC8[] = {
+    SeisanNextHintText, SeisanEndHintText
+};
+
+static const char *msg00_2_0036DAD0[] = {
+    SeisanItemAcquiredText, SeisanNoItemsText
+};
+
+static const char *msg00_3_0036DAD8[4] = {
+    seisanTotalPointsText, seisanEndPointsText, seisanStartPointsText, SeisanLevelUpText
+};
+
+static const char *msg01_4_0036DAE8[] = {
+    SeisanNewAttackText, SeisanNewEtherText
+};
 
 static SeisanCountData SeisanCN;
-
-/* The original eight-byte prompt-pointer table remains in data scaffolding. */
-
-extern const char *msg00_1_0036DAC8[];
 
 static inline int SeisanLearnedCount(int partySlot)
 {
@@ -58,11 +105,6 @@ static inline int SeisanLearnedId(const SeisanHissatuEntry *results,
 {
     return results[partySlot].learnedIds[learnedIndex];
 }
-
-typedef union SeisanNumberCoordinates {
-    struct { short x, y; } axes;
-    unsigned int packed;
-} SeisanNumberCoordinates;
 
 static inline int SeisanRewardCharacter(int partySlot)
 {
@@ -90,8 +132,6 @@ static inline void SeisanItemBoxClear(SeisanItemEntry *item)
         item++;
     }
 }
-
-static void tskSeisanStatus(TskObject *task, void *data);
 
 void SeisanCountInit1(void)
 {
@@ -1318,55 +1358,24 @@ void SeisanInit(void)
     MenuWorkEndCheck(work);
 }
 
-static const unsigned short *msg_number[10] = {
-    (const unsigned short *)SeisanDigit0Text,
-    (const unsigned short *)SeisanDigit1Text,
-    (const unsigned short *)SeisanDigit2Text,
-    (const unsigned short *)SeisanDigit3Text,
-    (const unsigned short *)SeisanDigit4Text,
-    (const unsigned short *)SeisanDigit5Text,
-    (const unsigned short *)SeisanDigit6Text,
-    (const unsigned short *)SeisanDigit7Text,
-    (const unsigned short *)SeisanDigit8Text,
-    (const unsigned short *)SeisanDigit9Text
-};
-static const char *msg00_0_0036DAB8[3] = {
-    SeisanPartyText, SeisanClearTimeText, SeisanMoneyText
-};
-static const char *msg00_1_0036DAC8[] = {
-    SeisanNextHintText, SeisanEndHintText
-};
-static const char *msg00_2_0036DAD0[] = {
-    SeisanItemAcquiredText, SeisanNoItemsText
-};
-static const char *msg00_3_0036DAD8[4] = {
-    seisanTotalPointsText, seisanEndPointsText, seisanStartPointsText, SeisanLevelUpText
-};
-static const char *msg01_4_0036DAE8[] = {
-    SeisanNewAttackText, SeisanNewEtherText
-};
-
-const char combatantTitleText[10] = "Combatant";
-
-const SeisanRibbonData seisanRibbonTable = {
-    { 0x00000000, 0x0000FFFF, 0x80000000, 0x01C00000,
-      0x0000FFFF, 0x80000000, 0x00000200, 0x0000FFFF,
-      0x80000000, 0x01C00200, 0x0000FFFF, 0x80000000,
-      0x00000000, 0x00000000, 0x00000000 }
-};
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 /* JP: ・
  * EN: . */
 const char seisanOrdinalPrefixText[5] = "\241\241\241\246";
+
 /* JP: ×
  * EN: X */
 const char seisanQuantityMarkText[5] = "\241\337\241\241";
+
 /* Text: \x01S.Pts */
 const char seisanStartPointsText[7] = "\001S.Pts";
+
 /* Text: \x01E.Pts */
 const char seisanEndPointsText[7] = "\001E.Pts";
+
 /* Text: \x01T.Pts */
 const char seisanTotalPointsText[7] = "\001T.Pts";
+
 const SeisanItemCategoryTable seisanItemCategoryTable[1] = { { .entries = { 1, 3, 4, 5 } } };
 
 unsigned char *SeisanWork = 0;
@@ -1379,18 +1388,30 @@ SeisanResultData *SeisanResult = 0;
 
 /* Remaining original small data, in address order. */
 SeisanMoneyData *SeisanMg = 0;
+
 SeisanItemEntry *SeisanItemBox = 0;
+
 SeisanFadeData *SeisanFade = 0;
+
 const char MenuShopCardsText[6] = "Cards";
+
 const char MenuShopItemsText[6] = "Items";
+
 const char MenuShopSellText[5] = "Sell";
+
 const char MenuShopBuyText[4] = "Buy";
+
 const char MenuShopStoreText[5] = "Shop";
+
 const char MenuShopQuitText[6] = "Quit.";
+
 const char MenuShopSelectText[8] = "Select ";
+
 const char MenuShopIsText[5] = " is ";
+
 const char MenuShopGoldUnitText[3] = "G.";
+
 /* Text:  sold.\x1F */
 const char MenuShopSoldText[8] = " sold.\037";
-const char MenuShopPeriodText[3] = ".\n";
 
+const char MenuShopPeriodText[3] = ".\n";

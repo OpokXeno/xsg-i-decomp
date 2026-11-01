@@ -1,9 +1,14 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "hair_test.h"
 #include "main/jnt.h"
+
+/* "FPK" in the low three bytes of FpkFcvHeader.magic (little-endian). */
+#define FPK_MAGIC 0x4B5046
+
+#define FPK_MAGIC_MASK 0xFFFFFF
+#define HAIR_RESOURCE(i) (list[(i)].resourceId)
+#define HAIR_TEST_PAD_SCALE (9.9999997473787516e-05f)
 
 /*
  * JntHairDescriptor is the record JNT_hairID's argument points to at +0x28:
@@ -12,7 +17,6 @@
  * the channel counts at +6 and +10 through +14 with lhu; the leading
  * six bytes remain an unmodeled span (docs/naming.md).
  */
-
 typedef struct JntHairDescriptor {
     unsigned char unmodeled_00[6];
     unsigned short channelCount;
@@ -69,18 +73,11 @@ typedef struct JntHairJoint {
  * The word in between is not evidenced here and stays an unmodeled span
  * (docs/naming.md).
  */
-
 typedef struct FpkFcvHeader {
     unsigned int magic;
     unsigned char unmodeled_04[4];
     int fcvCount;
 } FpkFcvHeader;
-
-/* "FPK" in the low three bytes of FpkFcvHeader.magic (little-endian). */
-
-#define FPK_MAGIC 0x4B5046
-
-#define FPK_MAGIC_MASK 0xFFFFFF
 
 typedef union HairTestVectorBlock {
     Vector4 vector;
@@ -121,27 +118,83 @@ typedef struct HairTestCameraView {
     PpVector4 position;
 } HairTestCameraView;
 
-static StudioCamera *pCamera_004DC634;
+typedef struct HairTestAct {
+    unsigned char unmodeled_000[0x724];
+    FpkFcvHeader *fcvHeader;
+} HairTestAct;
 
-static struct Actor *pAct_004DC638;
+typedef struct Actor {
+    unsigned char unmodeled_000[16];
+    Vector4 position;
+    unsigned char unmodeled_020[0x50 - 0x20];
+    Vector4 rotation;
+    unsigned char unmodeled_060[0x6f0 - 0x60];
+    unsigned int motionFlags;
+    unsigned char unmodeled_6f4[0x30];
+    FpkFcvHeader *fcvHeader;
+    unsigned char unmodeled_728[0xa40 - 0x728];
+    unsigned char movedHairMode;
+    unsigned char unmodeled_a41[3];
+    float movedHairDelay;
+    unsigned char unmodeled_a48[8];
+    Vector4 movedHairSway;
+} Actor;
 
-static int listpos;
+typedef struct HairTestPad {
+    u64 unmodeled_00[5];
+    unsigned short held;
+    unsigned short pressed;
+    unsigned short repeat;
+    unsigned char unmodeled_2e[0x38];
+    signed char rightX;
+    signed char rightY;
+} HairTestPad;
 
-static int listnum;
+extern HairTestPad PadData[2];
 
-static int mot;
-
-static int listnow;
-
-static float lookY;
-
-static float crx_004DC650;
-
-static float cry_004DC654;
-
-static int pause;
-
-static PpParticle cpos_00585200;
+extern void GameResourceInit(int resourceType, int resourceGroup);
+extern void ppInit(PpParticle *particle);
+extern void ppSetPos(PpParticle *particle, float x, float y, float z);
+extern void xglStudioInit(void);
+extern void xglStudioChange(int studioIndex);
+extern void xglStudioMainCameraInit(void);
+extern void xglStudioGetCamera(StudioCamera **camera, int cameraIndex);
+extern void ACT_init(void);
+extern void ACT_resourceInit(void);
+extern void ACT_initMotion(struct Actor *actor);
+extern void ACT_loadMotion(struct Actor *actor, int resourceId, int category);
+extern void ACT_loadResource(struct Actor *actor, int resourceId);
+extern void ACT_allocMatrix(struct Actor *actor, int matrixCount);
+extern void ACT_setModelWrapper(struct Actor *actor, int flags);
+extern struct Actor *ACT_create(int actorIndex, int resourceId);
+extern JointChannel *__JNT_computeMatrix(JntHairJoint *joint, JointChannel *matrix, int consumerArgument);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+static int getNumFCV(FpkFcvHeader *header);
+extern void xglRenderClearFrame(void);
+extern void xglSleep(void);
+extern void ppNextStart(PpParticle *particle);
+extern void ppNextEnd(PpParticle *particle);
+extern void ACT_setMotion(struct Actor *actor, int motion);
+extern void ACT_updateMotion(struct Actor *actor);
+extern void ACT_modelDraw(struct Actor *actor);
+extern double cos(double angle);
+extern double sin(double angle);
+extern float atan2f(float y, float x);
+extern JointChannel *JNT_getVal(JntHairJoint *, JointChannel *, float);
+extern JointChannel *JNT_getVal_staticChain(JntHairJoint *, JointChannel *, float);
+extern JointChannel *JNT_getStaticVal(JntHairJoint *, JointChannel *);
+extern JointChannel *JNT_getStaticVal2(JntHairJoint *, JointChannel *);
+extern JointChannel *JNT_getVal2(JntHairJoint *, JointChannel *, float);
+extern JointChannel *JNT_constructMatrix(JntHairJoint *, JointChannel *);
+extern JointChannel *JNT_interpolate(JntHairJoint *, JointChannel *);
+extern JointChannel *EXM_CalcExMotion(JntHairJoint *, JointChannel *);
+extern void EXM_PresetHair(JntHairJoint *);
+extern void JNT_setInterrupt(JntHairJoint *, void *);
+extern void MATRIX_convert4(Matrix *, Matrix *);
+extern void xglMatrixUnit4s(Matrix *);
+extern void xglMatrixMul(Matrix *, Matrix *, Matrix *);
+extern float xglCos(float angle);
+extern int nmlModelCalcClip(Vector4 *);
 
 const HairTestVectorBlock hairTestScaleVector = {
     .vector = { 1.0f, 1.0f, 1.0f, 1.0f }
@@ -198,115 +251,27 @@ static HairResourceEntry list[] = {
     { 1605, "cle_oba" }, { 0, "" }
 };
 
-extern void GameResourceInit(int resourceType, int resourceGroup);
+static StudioCamera *pCamera_004DC634;
 
-extern void ppInit(PpParticle *particle);
+static struct Actor *pAct_004DC638;
 
-extern void ppSetPos(PpParticle *particle, float x, float y, float z);
+static int listpos;
 
-extern void xglStudioInit(void);
+static int listnum;
 
-extern void xglStudioChange(int studioIndex);
+static int mot;
 
-extern void xglStudioMainCameraInit(void);
+static int listnow;
 
-extern void xglStudioGetCamera(StudioCamera **camera, int cameraIndex);
+static float lookY;
 
-extern void ACT_init(void);
+static float crx_004DC650;
 
-extern void ACT_resourceInit(void);
+static float cry_004DC654;
 
-extern void ACT_initMotion(struct Actor *actor);
+static int pause;
 
-extern void ACT_loadMotion(struct Actor *actor, int resourceId, int category);
-
-extern void ACT_loadResource(struct Actor *actor, int resourceId);
-
-extern void ACT_allocMatrix(struct Actor *actor, int matrixCount);
-
-extern void ACT_setModelWrapper(struct Actor *actor, int flags);
-
-extern struct Actor *ACT_create(int actorIndex, int resourceId);
-
-extern JointChannel *__JNT_computeMatrix(JntHairJoint *joint, JointChannel *matrix, int consumerArgument);
-
-#define HAIR_RESOURCE(i) (list[(i)].resourceId)
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-static int getNumFCV(FpkFcvHeader *header);
-
-typedef struct HairTestAct {
-    unsigned char unmodeled_000[0x724];
-    FpkFcvHeader *fcvHeader;
-} HairTestAct;
-
-typedef struct Actor {
-    unsigned char unmodeled_000[16];
-    Vector4 position;
-    unsigned char unmodeled_020[0x50 - 0x20];
-    Vector4 rotation;
-    unsigned char unmodeled_060[0x6f0 - 0x60];
-    unsigned int motionFlags;
-    unsigned char unmodeled_6f4[0x30];
-    FpkFcvHeader *fcvHeader;
-    unsigned char unmodeled_728[0xa40 - 0x728];
-    unsigned char movedHairMode;
-    unsigned char unmodeled_a41[3];
-    float movedHairDelay;
-    unsigned char unmodeled_a48[8];
-    Vector4 movedHairSway;
-} Actor;
-
-extern void xglRenderClearFrame(void);
-
-extern void xglSleep(void);
-
-extern void ppNextStart(PpParticle *particle);
-
-extern void ppNextEnd(PpParticle *particle);
-
-extern void ACT_setMotion(struct Actor *actor, int motion);
-
-extern void ACT_updateMotion(struct Actor *actor);
-
-extern void ACT_modelDraw(struct Actor *actor);
-
-extern double cos(double angle);
-
-extern double sin(double angle);
-
-extern float atan2f(float y, float x);
-
-extern JointChannel *JNT_getVal(JntHairJoint *, JointChannel *, float);
-extern JointChannel *JNT_getVal_staticChain(JntHairJoint *, JointChannel *, float);
-extern JointChannel *JNT_getStaticVal(JntHairJoint *, JointChannel *);
-extern JointChannel *JNT_getStaticVal2(JntHairJoint *, JointChannel *);
-extern JointChannel *JNT_getVal2(JntHairJoint *, JointChannel *, float);
-extern JointChannel *JNT_constructMatrix(JntHairJoint *, JointChannel *);
-extern JointChannel *JNT_interpolate(JntHairJoint *, JointChannel *);
-extern JointChannel *EXM_CalcExMotion(JntHairJoint *, JointChannel *);
-extern void EXM_PresetHair(JntHairJoint *);
-extern void JNT_setInterrupt(JntHairJoint *, void *);
-extern void MATRIX_convert4(Matrix *, Matrix *);
-extern void xglMatrixUnit4s(Matrix *);
-extern void xglMatrixMul(Matrix *, Matrix *, Matrix *);
-extern float xglCos(float angle);
-extern int nmlModelCalcClip(Vector4 *);
-
-typedef struct HairTestPad {
-    u64 unmodeled_00[5];
-    unsigned short held;
-    unsigned short pressed;
-    unsigned short repeat;
-    unsigned char unmodeled_2e[0x38];
-    signed char rightX;
-    signed char rightY;
-} HairTestPad;
-
-extern HairTestPad PadData[2];
-
-#define HAIR_TEST_PAD_SCALE (9.9999997473787516e-05f)
+static PpParticle cpos_00585200;
 
 static void InitTest(void)
 {
@@ -940,4 +905,3 @@ static int getNumFCV(FpkFcvHeader *header)
     }
     return result;
 }
-

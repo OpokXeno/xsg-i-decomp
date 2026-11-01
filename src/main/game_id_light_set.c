@@ -1,32 +1,23 @@
 #include "common.h"
-
 #include "game_id_light_set.h"
 
 /* The background parameter block ends in the light preset table's first slot. */
-
 typedef struct GameBgDrawType2 {
     unsigned char unmodeled_00[0x7F0];
     IdLightSet lights[16];
 } GameBgDrawType2;
 
 extern GameBgDrawType2 GameBgDrawType2Param;
-
 extern IdLightSet GameIdLight[];
 
 extern void UnduParamInit(void *param);
-
 extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
-
 extern void *xglStudioGetLight2(void);
-
 extern void UnduCheck(void *position, void *exclude, void *param);
-
 extern float I2F(int value);
 
 extern void xglVectorInter(IdLightQuadword *destination, IdLightQuadword *start,
                            const IdLightQuadword *end, float fraction);
-
-/* The background parameter block ends in the light preset table's first slot. */
 
 void GameIdLightSet(IdLightActor *actor, IdLightQuery *query) {
     int id;

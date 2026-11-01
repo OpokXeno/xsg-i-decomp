@@ -4,14 +4,169 @@
 #define SRC_MAIN_CHR_H
 
 #include "main/jni.h"
+#include "main/near_dir.h"
+
+#define SEQUENCE_MOVE_OFFSET 0x38
+#define SEQUENCE_ROTATE_OFFSET 0xb8
+#define SEQUENCE_MOTION_OFFSET 0x138
+
+/* The actor's own slot in the 64-entry `actor` array at main 0x0043c1e0,
+ * which ACT_create writes there (sb a2,0x80(s0) at 0x00305de0) and ACT_info
+ * prints as "ACT[%02x]". It selects this actor's actSequence entry. It lies
+ * past the recovered head of Actor, so it keeps the byte view, exactly as
+ * src/main/near_dir.c and src/main/set_motion.c keep it. */
+#define ACTOR_SLOT_NUMBER_OFFSET 0x80
+
+/*
+ * The VM thread. This is the first argument of every `Java_xeno_*` native
+ * method and the record `JNI_createThread` (0x002f0650) allocates, the
+ * `jthreadTop`/`jthreadCurrent` list walks and `JTHREAD_waitFor` (0x00305730)
+ * blocks. The earlier TU-local name for it here was `ChrContext`.
+ *
+ * The head below is complete from +0x00 to +0x40 except for three words and
+ * one halfword that no instruction in any of the six EE images touches; those
+ * are unnamed bit-fields, in the spelling JavaField above already uses, and
+ * the search that concluded it is recorded in the job report. Everything past
+ * +0x44 is the frame array `frames` points into and is not modelled.
+ *
+ *   +0x00             no instruction in the six images reads or writes it.
+ *   +0x04 previous    JNI_createThread links the new thread behind
+ *   +0x08 next        jthreadCurrent (sw v1,0x4(a1) / sw a1,0x8(v1) at
+ *                     0x002f06e4/0x002f06e8, and sw zero,0x4(a1) for the
+ *                     first one); JTHREAD_get (0x00305958), JTHREAD_cntl
+ *                     (0x003058c8) and JTHREAD_info walk `next` from
+ *                     jthreadTop.
+ *   +0x0c kind        JNI_createThread's first argument (sb s2,0xC(a1) at
+ *                     0x002f0698). SCRIPT_init and SCRIPT_reset pass 0 for
+ *                     the script VM (0x00261478, 0x002612e4), getPeer_Chr
+ *                     passes 1 for a character's own thread (0x002f96e0),
+ *                     getPeer_Stage and sceneObserver pass 2 (0x002f9b94,
+ *                     0x00262900) and Java_xeno_vm_Thread_create passes 4
+ *                     (0x002f6554). JTHREAD_cntl runs the reset hook only for
+ *                     threads whose kind is nonzero (0x003058fc).
+ *   +0x0d wait_kind   JTHREAD_waitFor switches on `wait_kind & 0xf` over a
+ *                     seven-entry table (jtbl_004D15B0, 0x00305734..0x00305758):
+ *                     1 counts frames in wait_target/wait_parameter, 2 waits
+ *                     for another thread's flag 0x8, 3 for a menu or window
+ *                     object's +0x14 to reach 2, 4 and 6 for the actor at
+ *                     wait_target to clear Actor.flags bit 1, 5 for its motion
+ *                     byte +0x81 to equal wait_parameter and 7 for a bit of
+ *                     GameLoopState. CHR_sclX below writes 4.
+ *   +0x0e             no instruction in the six images reads or writes it.
+ *   +0x10 object      the Java object the thread runs for: JTHREAD_get
+ *                     compares it with its argument (lw v1,0x10(a1) at
+ *                     0x00305964) and JTHREAD_defaultChr looks its `peer`
+ *                     field up on it (0x00305534).
+ *   +0x14 reset       the per-thread hook JTHREAD_cntl calls with the thread
+ *                     (lw v0,0x14(s0); jalr v0 at 0x00305910/0x0030591c).
+ *   +0x18 method      the Java method JTHREAD_default and JTHREAD_defaultChr
+ *                     hand to JNI_callMethod (0x003055f4/0x00305590).
+ *   +0x1c, +0x20      no instruction in the six images reads or writes them.
+ *   +0x24 flags       the thread's state word. JTHREAD_waitFor clears 0x4 and
+ *                     sets 0x2 when a wait is satisfied (0x00305838), and for
+ *                     the two actor waits clears 0x1 as well (0x0030582c);
+ *                     JTHREAD_cntl runs only threads carrying 0x10
+ *                     (0x003058e0); JTHREAD_default clears 0x10 unless 0x8 is
+ *                     set (0x00305610); the interpreter takes the resume path
+ *                     on 0x2 (virtualMachine 0x002f1fa0). JNI_createThread and
+ *                     JNI_initThread zero it.
+ *   +0x28 stack       the operand stack: JNI_createThread points it past the
+ *                     frame array (0x002f06b4) and the interpreter indexes it
+ *                     by stack_offset words (virtualMachine 0x002f1ff0).
+ *   +0x2c frames      the frame array, 24 bytes per frame, indexed by
+ *                     frame_depth (virtualMachine 0x002f1fc4..0x002f1fe8).
+ *   +0x30 wait_target what the thread waits on, per wait_kind: another thread
+ *                     (System_waitFor 0x002f64ac), a menu or window object, or
+ *                     the actor whose sequence must finish -- which is what
+ *                     CHR_sclX writes (sw s2,0x30(s0) at 0x002ff6f4).
+ *   +0x34 wait_parameter
+ *                     the wait's second operand: the frame count of a sleep
+ *                     (JTHREAD_waitFor 0x00305764) or the motion number of a
+ *                     motion wait (0x00305808); Java_xeno_vm_System_sleep and
+ *                     System_waitFor write it.
+ *   +0x38 stack_offset
+ *   +0x3a stack_limit the interpreter adds the method's local and stack counts
+ *                     to stack_offset on entry and calls JNI_threadException
+ *                     when the sum reaches stack_limit (virtualMachine
+ *                     0x002f1fb4..0x002f201c); JNI_createThread sizes the
+ *                     allocation from its third argument and stores it in
+ *                     stack_limit (0x002f06b0).
+ *   +0x3c resume_frames
+ *                     how many frames a woken thread still has to re-enter:
+ *                     the interpreter's resume path takes frame
+ *                     `frame_depth - resume_frames` and counts it down
+ *                     (virtualMachine 0x002f20a4..0x002f20bc). A blocking
+ *                     native method sets it to the current frame_depth, which
+ *                     is what CHR_sclX below and System_waitFor (0x002f64b4)
+ *                     do. JNI_initThread and JNI_createThread zero it.
+ *   +0x3e frame_depth the index of the running frame in `frames`
+ *                     (virtualMachine 0x002f1fb8/0x002f1fcc).
+ *   +0x40 frame_limit JNI_createThread's second argument, the frame capacity
+ *                     it sized the allocation from (sh a1,0x40(a1) at
+ *                     0x002f06a4).
+ */
+/* The thread is blocked until the actor at wait_target clears Actor.flags
+ * bit 1 -- case 4 of JTHREAD_waitFor's table (.L003057E0, 0x00305730). */
+#define JTHREAD_WAIT_ACTOR 4
+
+/*
+ * One entry of `actSequence`, head only, defined here exactly as
+ * src/main/near_dir.h (main/tu257) defines it for the same object.
+ *
+ * `flags` records which channels of the entry have already been started and
+ * `state_flags` which ones are still requested: ACT_updateSequence
+ * (0x0030ab90) clears a handler slot whose bit has gone out of `state_flags`
+ * (0x0030ac34..0x0030ac54) and clears Actor.flags bit 1 when the entry's own
+ * mask at +0x08 no longer intersects it (0x0030ac58). SEQ_scale sets the
+ * `flags` bit of an axis when it starts it (0x003096bc) and clears the
+ * `state_flags` bit when the axis reaches its target (0x003097e8); CHR_sclX/Y/Z
+ * below request an axis by setting its `state_flags` bit (0x20 for x, 0x40 for
+ * y, 0x80 for z).
+ */
+/* SequenceState and ActSequenceEntry come from their defining TU's header. */
+/* The entry array's stride: the sequence index is multiplied by 0x260 in
+ * every one of its users (CHR_sclX 0x002ff604..0x002ff614). */
+#define SEQUENCE_STRIDE 0x260
+
+/*
+ * The four handler slots of a sequence entry, +0x24..+0x30. ACT_updateSequence
+ * walks exactly these four words once a frame, skips one that is not a word-
+ * aligned text address and otherwise calls it with the actor
+ * (0x0030abe8..0x0030ac18). Slot 0 (+0x24) carries the movement handler, slot
+ * 1 (+0x28) the rotation handler CHR_rotX/Y/Z install (0x002fd704), slot 2
+ * (+0x2c) the motion handler and slot 3 (+0x30) the scale handler CHR_sclX/Y/Z
+ * install.
+ *
+ * The slots are a named offset and not members because +0x0c..+0x20 of the
+ * entry lie between them and the recovered head above: ACT_createChr,
+ * ACT_initSequence, ACT_initSequenceAt and Java_xeno_Chr_setPeer write all
+ * five of those words and this TU evidences none of their roles, so a struct
+ * reaching +0x24 could only be built by inventing them. The expression below
+ * is the one the accepted body already had.
+ */
+#define SEQUENCE_SCALE_HANDLER(entry) \
+    (*(void (**)(void))((u8 *)(entry) + 0x30))
+
+/* Rotation is the second slot in the same handler quartet. */
+#define SEQUENCE_ROTATION_HANDLER(entry) \
+    (*(void (**)(void))((u8 *)(entry) + 0x28))
+
+/* Where that channel sits inside the entry; see SEQUENCE_SCALE_HANDLER for
+ * why the entry's own head stops before it. */
+#define SEQUENCE_SCALE_OFFSET 0x1b8
 
 typedef unsigned char u8;
+
 typedef unsigned short u16;
+
 typedef unsigned int u32;
-#include "main/near_dir.h"
+
 typedef unsigned char SceneByte;
+
 typedef struct SceneClass SceneClass;
+
 typedef struct SceneString SceneString;
+
 typedef SceneByte *SceneObject;
 
 /*
@@ -21,12 +176,12 @@ typedef SceneByte *SceneObject;
  * and JTHREAD_defaultChr (0x00305548). The canonical definition is supplied
  * by include/shared.h through the defining sequence TU's header.
  */
-
 /* Call block: object +0x0, first +0x4, second +0x8, wait byte +0xC. */
 typedef union ChrScaleArgument {
     int integer;
     float floating;
 } ChrScaleArgument;
+
 typedef struct ChrScaleCall {
     u8 *object;
     ChrScaleArgument first;
@@ -44,6 +199,7 @@ typedef struct ChrScaleCall {
  * are recovered.
  */
 typedef struct ChrMoveCall ChrMoveCall;
+
 typedef struct ChrRotCall ChrRotCall;
 
 /*
@@ -63,6 +219,7 @@ typedef struct SequenceRotate {
     unsigned char unmodeled_3c[0x40 - 0x3c];
     float step[3];
 } SequenceRotate;
+
 typedef SequenceRotate SequenceRotation;
 
 typedef struct SequenceMotion {
@@ -76,19 +233,12 @@ typedef struct SequenceMotion {
     int blend;
     float rate;
 } SequenceMotion;
-#define SEQUENCE_MOVE_OFFSET 0x38
-#define SEQUENCE_ROTATE_OFFSET 0xb8
-#define SEQUENCE_MOTION_OFFSET 0x138
-extern void SEQ_moveSPL(void);
-extern void SEQ_rotate(void);
-extern void SEQ_rotateSPL(void);
-extern void SEQ_motion(void);
-extern void SEQ_scaleSPL(void);
 
 typedef struct ChrSpline {
     unsigned char unmodeled_0[8];
     u16 last_frame;
 } ChrSpline;
+
 typedef struct ChrSplineCall {
     u8 *object;
     struct ChrSpline *spline;
@@ -112,7 +262,6 @@ typedef struct ChrShadowMapIdCall {
 } ChrShadowMapIdCall;
 
 /* Vector4 is the shared four-float record used by the actor owner as well. */
-
 /*
  * UnduDataGetHeader's return type, defined by src/math/main/review09-002f6c50
  * and declared with it by src/main/layout.h and src/main/call_java_method.h
@@ -122,6 +271,11 @@ typedef struct ChrShadowMapIdCall {
  * a second definition of a type another TU owns.
  */
 typedef struct LayoutHeader LayoutHeader;
+
+typedef struct ChrPointLightVector {
+    float component[3];
+    unsigned char unmodeled_0c[4];
+} ChrPointLightVector;
 
 /*
  * The engine's actor record, recovered head, defined here exactly as
@@ -220,11 +374,6 @@ typedef struct LayoutHeader LayoutHeader;
  *                        it just wrote here too (swc1 $f1,0x4dc(s2) at
  *                        0x002feb98); no other evidenced reader in this TU.
  */
-typedef struct ChrPointLightVector {
-    float component[3];
-    unsigned char unmodeled_0c[4];
-} ChrPointLightVector;
-
 typedef struct Actor {
     u32 flags;
     void (*update)(struct Actor *actor);
@@ -313,148 +462,12 @@ typedef union ChrResultValue {
     struct Actor *actor;
 } ChrResultValue;
 
-/* The actor's own slot in the 64-entry `actor` array at main 0x0043c1e0,
- * which ACT_create writes there (sb a2,0x80(s0) at 0x00305de0) and ACT_info
- * prints as "ACT[%02x]". It selects this actor's actSequence entry. It lies
- * past the recovered head of Actor, so it keeps the byte view, exactly as
- * src/main/near_dir.c and src/main/set_motion.c keep it. */
-#define ACTOR_SLOT_NUMBER_OFFSET 0x80
-
-/*
- * The VM thread. This is the first argument of every `Java_xeno_*` native
- * method and the record `JNI_createThread` (0x002f0650) allocates, the
- * `jthreadTop`/`jthreadCurrent` list walks and `JTHREAD_waitFor` (0x00305730)
- * blocks. The earlier TU-local name for it here was `ChrContext`.
- *
- * The head below is complete from +0x00 to +0x40 except for three words and
- * one halfword that no instruction in any of the six EE images touches; those
- * are unnamed bit-fields, in the spelling JavaField above already uses, and
- * the search that concluded it is recorded in the job report. Everything past
- * +0x44 is the frame array `frames` points into and is not modelled.
- *
- *   +0x00             no instruction in the six images reads or writes it.
- *   +0x04 previous    JNI_createThread links the new thread behind
- *   +0x08 next        jthreadCurrent (sw v1,0x4(a1) / sw a1,0x8(v1) at
- *                     0x002f06e4/0x002f06e8, and sw zero,0x4(a1) for the
- *                     first one); JTHREAD_get (0x00305958), JTHREAD_cntl
- *                     (0x003058c8) and JTHREAD_info walk `next` from
- *                     jthreadTop.
- *   +0x0c kind        JNI_createThread's first argument (sb s2,0xC(a1) at
- *                     0x002f0698). SCRIPT_init and SCRIPT_reset pass 0 for
- *                     the script VM (0x00261478, 0x002612e4), getPeer_Chr
- *                     passes 1 for a character's own thread (0x002f96e0),
- *                     getPeer_Stage and sceneObserver pass 2 (0x002f9b94,
- *                     0x00262900) and Java_xeno_vm_Thread_create passes 4
- *                     (0x002f6554). JTHREAD_cntl runs the reset hook only for
- *                     threads whose kind is nonzero (0x003058fc).
- *   +0x0d wait_kind   JTHREAD_waitFor switches on `wait_kind & 0xf` over a
- *                     seven-entry table (jtbl_004D15B0, 0x00305734..0x00305758):
- *                     1 counts frames in wait_target/wait_parameter, 2 waits
- *                     for another thread's flag 0x8, 3 for a menu or window
- *                     object's +0x14 to reach 2, 4 and 6 for the actor at
- *                     wait_target to clear Actor.flags bit 1, 5 for its motion
- *                     byte +0x81 to equal wait_parameter and 7 for a bit of
- *                     GameLoopState. CHR_sclX below writes 4.
- *   +0x0e             no instruction in the six images reads or writes it.
- *   +0x10 object      the Java object the thread runs for: JTHREAD_get
- *                     compares it with its argument (lw v1,0x10(a1) at
- *                     0x00305964) and JTHREAD_defaultChr looks its `peer`
- *                     field up on it (0x00305534).
- *   +0x14 reset       the per-thread hook JTHREAD_cntl calls with the thread
- *                     (lw v0,0x14(s0); jalr v0 at 0x00305910/0x0030591c).
- *   +0x18 method      the Java method JTHREAD_default and JTHREAD_defaultChr
- *                     hand to JNI_callMethod (0x003055f4/0x00305590).
- *   +0x1c, +0x20      no instruction in the six images reads or writes them.
- *   +0x24 flags       the thread's state word. JTHREAD_waitFor clears 0x4 and
- *                     sets 0x2 when a wait is satisfied (0x00305838), and for
- *                     the two actor waits clears 0x1 as well (0x0030582c);
- *                     JTHREAD_cntl runs only threads carrying 0x10
- *                     (0x003058e0); JTHREAD_default clears 0x10 unless 0x8 is
- *                     set (0x00305610); the interpreter takes the resume path
- *                     on 0x2 (virtualMachine 0x002f1fa0). JNI_createThread and
- *                     JNI_initThread zero it.
- *   +0x28 stack       the operand stack: JNI_createThread points it past the
- *                     frame array (0x002f06b4) and the interpreter indexes it
- *                     by stack_offset words (virtualMachine 0x002f1ff0).
- *   +0x2c frames      the frame array, 24 bytes per frame, indexed by
- *                     frame_depth (virtualMachine 0x002f1fc4..0x002f1fe8).
- *   +0x30 wait_target what the thread waits on, per wait_kind: another thread
- *                     (System_waitFor 0x002f64ac), a menu or window object, or
- *                     the actor whose sequence must finish -- which is what
- *                     CHR_sclX writes (sw s2,0x30(s0) at 0x002ff6f4).
- *   +0x34 wait_parameter
- *                     the wait's second operand: the frame count of a sleep
- *                     (JTHREAD_waitFor 0x00305764) or the motion number of a
- *                     motion wait (0x00305808); Java_xeno_vm_System_sleep and
- *                     System_waitFor write it.
- *   +0x38 stack_offset
- *   +0x3a stack_limit the interpreter adds the method's local and stack counts
- *                     to stack_offset on entry and calls JNI_threadException
- *                     when the sum reaches stack_limit (virtualMachine
- *                     0x002f1fb4..0x002f201c); JNI_createThread sizes the
- *                     allocation from its third argument and stores it in
- *                     stack_limit (0x002f06b0).
- *   +0x3c resume_frames
- *                     how many frames a woken thread still has to re-enter:
- *                     the interpreter's resume path takes frame
- *                     `frame_depth - resume_frames` and counts it down
- *                     (virtualMachine 0x002f20a4..0x002f20bc). A blocking
- *                     native method sets it to the current frame_depth, which
- *                     is what CHR_sclX below and System_waitFor (0x002f64b4)
- *                     do. JNI_initThread and JNI_createThread zero it.
- *   +0x3e frame_depth the index of the running frame in `frames`
- *                     (virtualMachine 0x002f1fb8/0x002f1fcc).
- *   +0x40 frame_limit JNI_createThread's second argument, the frame capacity
- *                     it sized the allocation from (sh a1,0x40(a1) at
- *                     0x002f06a4).
- */
-
-/* The thread is blocked until the actor at wait_target clears Actor.flags
- * bit 1 -- case 4 of JTHREAD_waitFor's table (.L003057E0, 0x00305730). */
-#define JTHREAD_WAIT_ACTOR 4
-
-/*
- * One entry of `actSequence`, head only, defined here exactly as
- * src/main/near_dir.h (main/tu257) defines it for the same object.
- *
- * `flags` records which channels of the entry have already been started and
- * `state_flags` which ones are still requested: ACT_updateSequence
- * (0x0030ab90) clears a handler slot whose bit has gone out of `state_flags`
- * (0x0030ac34..0x0030ac54) and clears Actor.flags bit 1 when the entry's own
- * mask at +0x08 no longer intersects it (0x0030ac58). SEQ_scale sets the
- * `flags` bit of an axis when it starts it (0x003096bc) and clears the
- * `state_flags` bit when the axis reaches its target (0x003097e8); CHR_sclX/Y/Z
- * below request an axis by setting its `state_flags` bit (0x20 for x, 0x40 for
- * y, 0x80 for z).
- */
-/* SequenceState and ActSequenceEntry come from their defining TU's header. */
-
-/* The entry array's stride: the sequence index is multiplied by 0x260 in
- * every one of its users (CHR_sclX 0x002ff604..0x002ff614). */
-#define SEQUENCE_STRIDE 0x260
-
-/*
- * The four handler slots of a sequence entry, +0x24..+0x30. ACT_updateSequence
- * walks exactly these four words once a frame, skips one that is not a word-
- * aligned text address and otherwise calls it with the actor
- * (0x0030abe8..0x0030ac18). Slot 0 (+0x24) carries the movement handler, slot
- * 1 (+0x28) the rotation handler CHR_rotX/Y/Z install (0x002fd704), slot 2
- * (+0x2c) the motion handler and slot 3 (+0x30) the scale handler CHR_sclX/Y/Z
- * install.
- *
- * The slots are a named offset and not members because +0x0c..+0x20 of the
- * entry lie between them and the recovered head above: ACT_createChr,
- * ACT_initSequence, ACT_initSequenceAt and Java_xeno_Chr_setPeer write all
- * five of those words and this TU evidences none of their roles, so a struct
- * reaching +0x24 could only be built by inventing them. The expression below
- * is the one the accepted body already had.
- */
-#define SEQUENCE_SCALE_HANDLER(entry) \
-    (*(void (**)(void))((u8 *)(entry) + 0x30))
-
-/* Rotation is the second slot in the same handler quartet. */
-#define SEQUENCE_ROTATION_HANDLER(entry) \
-    (*(void (**)(void))((u8 *)(entry) + 0x28))
+typedef struct {
+    void *spline;
+    short frame;
+    short last_frame;
+    u16 flags;
+} SplineTrack;
 
 /*
  * The scale channel of a sequence entry, at +0x1b8 of the entry.
@@ -505,13 +518,6 @@ typedef union ChrResultValue {
  * float block is untouched in the six images, so each block is the three
  * floats it evidences and no more.
  */
-typedef struct {
-    void *spline;
-    short frame;
-    short last_frame;
-    u16 flags;
-} SplineTrack;
-
 typedef struct SequenceScale {
     SplineTrack track;   /* +0x00 */
     unsigned int : 32;   /* +0x0c */
@@ -523,10 +529,6 @@ typedef struct SequenceScale {
     unsigned int : 32;   /* +0x3c */
     float step[3];       /* +0x40 */
 } SequenceScale;
-
-/* Where that channel sits inside the entry; see SEQUENCE_SCALE_HANDLER for
- * why the entry's own head stops before it. */
-#define SEQUENCE_SCALE_OFFSET 0x1b8
 
 /*
  * Call block of Java_xeno_Chr_setVisible__IZ (0x002fee70..0x002feecc): the
@@ -727,7 +729,41 @@ typedef struct ChrFilterParamCall {
  * 0x002fcd28, 0x340000-31100 = 0x338684).
  */
 typedef unsigned int GameLoopStateWords[];
+
 extern GameLoopStateWords GameLoopState;
+
+/* Restated verbatim from include/main/jni.h, the owner header of the class
+ * slots (see JavaField above for why chr.h does not include shared.h and
+ * the headers built on it).
+ * Java_xeno_Chr_look_unit__Ljava_lang_Object_ looks its target's own peer
+ * field up on xeno.Unit's class, not xeno.Chr's (lw a0,-13252(gp) at
+ * 0x00300b5c). */
+extern SceneClass *classJava_xeno_Chr;
+
+extern SceneClass *classJava_xeno_Unit;
+extern const char chr_peer_string[];
+extern const char chr_algorithm_string[];
+extern const char chrTranslateXKey[];
+extern const char chrTranslateYKey[];
+extern const char chrTranslateZKey[];
+
+/*
+ * "rx"/"ry"/"rz", the rotation-field counterparts of the "px"/"py"/"pz"
+ * strings above: Java_xeno_Chr_stop__ reads the peer's rotation into the
+ * Java fields these name (lui/addiu at 0x002fe54c/0x002fe57c/0x002fe5ac),
+ * and Java_xeno_Chr_getRotate__ (still asm here) uses the same three.
+ */
+extern const char chrRotateXKey[];
+
+extern const char chrRotateYKey[];
+extern const char chrRotateZKey[];
+extern ActSequenceEntry actSequence[64];
+
+extern void SEQ_moveSPL(void);
+extern void SEQ_rotate(void);
+extern void SEQ_rotateSPL(void);
+extern void SEQ_motion(void);
+extern void SEQ_scaleSPL(void);
 
 /*
  * ACT_setVisible/ACT_setHand/ACT_setArms/ACT_resetArms are defined in
@@ -738,6 +774,7 @@ extern GameLoopStateWords GameLoopState;
  * ACT_setHand the same way for its own TU.
  */
 extern void ACT_setVisible(Actor *actor, int part, unsigned char visible);
+
 extern void ACT_setHand(Actor *actor, int hand);
 extern void ACT_setArms(Actor *actor, Actor *other, int acc_id, int flags);
 extern void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
@@ -749,32 +786,9 @@ extern void ACT_resetArms(Actor *actor, Actor *other, int acc_id);
  * both other accepted call sites use. */
 extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 
-/* Restated verbatim from include/main/jni.h, the owner header of the class
- * slots (see JavaField above for why chr.h does not include shared.h and
- * the headers built on it).
- * Java_xeno_Chr_look_unit__Ljava_lang_Object_ looks its target's own peer
- * field up on xeno.Unit's class, not xeno.Chr's (lw a0,-13252(gp) at
- * 0x00300b5c). */
-extern SceneClass *classJava_xeno_Chr;
-extern SceneClass *classJava_xeno_Unit;
 extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-extern const char chr_peer_string[];
-extern const char chr_algorithm_string[];
-extern const char chrTranslateXKey[];
-extern const char chrTranslateYKey[];
-extern const char chrTranslateZKey[];
-/*
- * "rx"/"ry"/"rz", the rotation-field counterparts of the "px"/"py"/"pz"
- * strings above: Java_xeno_Chr_stop__ reads the peer's rotation into the
- * Java fields these name (lui/addiu at 0x002fe54c/0x002fe57c/0x002fe5ac),
- * and Java_xeno_Chr_getRotate__ (still asm here) uses the same three.
- */
-extern const char chrRotateXKey[];
-extern const char chrRotateYKey[];
-extern const char chrRotateZKey[];
-extern ActSequenceEntry actSequence[64];
 extern void SEQ_scale(void);
 
 #endif

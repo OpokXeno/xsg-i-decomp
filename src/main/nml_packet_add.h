@@ -6,15 +6,8 @@
 #define SRC_MAIN_NML_PACKET_ADD_H
 
 #include "main/xgl_2.h"
-
 #include "shared.h"
-
 #include "main/ssd_init.h"
-
-/* RssdWork storage is defined by main/tu107; its layout is owned by main/tu110. */
-extern RssdWorkFlags RssdWork;
-
-extern const char nmlEmptyName[4];
 
 /* One stealth part: two joints, outline widths, end extensions and the
  * longitudinal stretch applied to each of the four cross-section rings. */
@@ -35,15 +28,11 @@ typedef union GsTag {
     u32 words[2];
 } GsTag;
 
-
 typedef struct NmlMaterialRenderState NmlMaterialRenderState;
-
 
 typedef struct NmlModelRenderState NmlModelRenderState;
 
-
 typedef unsigned int NmlScreenQuadword __attribute__((mode(TI)));
-
 
 typedef struct NmlModelResource {
     unsigned char unmodeled_000[0x40];
@@ -54,12 +43,10 @@ typedef struct NmlModelResource {
     u32 texture_reference;
 } NmlModelResource;
 
-
 typedef struct NmlTextureResourceSet {
     int count;
     unsigned char unmodeled_04[0x2c];
 } NmlTextureResourceSet;
-
 
 typedef struct NmlTextureResourceEntry {
     short width;
@@ -75,18 +62,10 @@ typedef struct NmlTextureResourceEntry {
     unsigned char unmodeled_18[0x28];
 } NmlTextureResourceEntry;
 
-
 /*
  * The two objects the nml packet builders render from, recovered as bounded
  * partial views: only the members a recovered function reads are modeled, and
  * every unmodeled_* array stands for a span nothing here touches.
- */
-
-/*
- * The "proreal" parameter block: the 0x1e0 bytes nmlModelSetProreal builds in
- * s_inProReal (main 0x0095b940) and nmlModelEntry copies into the packet with
- * nmlPacketSetAttributeData16N(s_inProReal, 0x1e), storing the packet address
- * it returns in NmlModelRenderState::proreal (main 0x00233028-0x00233030).
  */
 /* Partial view for the geometry and vertex indices consumed by AddParts. */
 typedef struct NmlPartsBlockView {
@@ -110,6 +89,12 @@ typedef union NmlPartsReferenceScratch {
     float components[4];
 } NmlPartsReferenceScratch;
 
+/*
+ * The "proreal" parameter block: the 0x1e0 bytes nmlModelSetProreal builds in
+ * s_inProReal (main 0x0095b940) and nmlModelEntry copies into the packet with
+ * nmlPacketSetAttributeData16N(s_inProReal, 0x1e), storing the packet address
+ * it returns in NmlModelRenderState::proreal (main 0x00233028-0x00233030).
+ */
 typedef struct NmlProRealParam {
     unsigned char unmodeled_000[0x40];
     Matrix projection_transform;
@@ -135,7 +120,6 @@ typedef struct NmlProRealParam {
     void *texture;
 } NmlProRealParam;
 
-
 /*
  * One material of the model being rendered.  Its bytes come from the model
  * resource - no engine function writes either word - so the bits below are
@@ -146,6 +130,7 @@ typedef union NmlBlockMaterialParameter {
     float lanes[20];
     NmlScreenQuadword quadwords[5];
 } NmlBlockMaterialParameter;
+
 struct NmlMaterialRenderState {
     /*
      * +0x00: the material name.  add_exec_prog searches it with strstr for
@@ -201,12 +186,10 @@ struct NmlMaterialRenderState {
     signed char alpha_mode;
 };
 
-
 typedef struct NmlPixelTestEntry {
     short reference;
     short geometry_block_index;
 } NmlPixelTestEntry;
-
 
 /*
  * The model layout the engine renders from: the single s_inLayout (main
@@ -311,33 +294,29 @@ struct NmlModelRenderState {
     unsigned char unmodeled_310[0x10];
 };
 
-
 typedef void *NmlPacket;
 
+typedef struct NmlBlockVectorBlock {
+    Vector4 vectors[4];
+} NmlBlockVectorBlock;
 
+/* RssdWork storage is defined by main/tu107; its layout is owned by main/tu110. */
+extern RssdWorkFlags RssdWork;
+
+extern const char nmlEmptyName[4];
 extern const char lenz_name[];
+extern const char eye_name[];
 
 void nmlPacketAddExecProg(NmlMaterialRenderState *material,
                           NmlModelRenderState *model,
                           int allow_extended_programs,
                           int add_transform_data);
 
-extern const char eye_name[];
-
 extern char *strstr(const char *haystack, const char *needle);
-
 extern void sceVif1PkAddCode(NmlPacket packet, u32 code);
-
 void nmlPacketAddTransData(NmlMaterialRenderState *material);
-
 void nmlPacketAddWaitMicrocode(void);
-
-
 void nmlPacketSetCurrent(void);
-
-
-
-
 extern void sceVif1PkCnt(NmlPacket packet, int count);
 
 extern void sceVif1PkOpenUpkCode(NmlPacket packet, int code, int size,
@@ -351,17 +330,9 @@ extern void sceVif1PkCloseUpkCode(NmlPacket packet);
 void nmlPacketAddReflRot(const NmlMaterialRenderState *material,
                          const NmlModelRenderState *model);
 
-
 void nmlPacketAddTransMicrocode(const NmlMaterialRenderState *material,
                                 const NmlModelRenderState *model);
 
 void nmlPacketAddFog(NmlModelRenderState *model, int viewport_index);
-
-
-
-typedef struct NmlBlockVectorBlock {
-    Vector4 vectors[4];
-} NmlBlockVectorBlock;
-
 
 #endif /* SRC_MAIN_NML_PACKET_ADD_H */

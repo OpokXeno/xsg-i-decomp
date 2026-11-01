@@ -38,9 +38,7 @@ typedef struct CameraImage {
 } CameraImage;
 
 extern MapNameGroup maptbl[20];
-
 extern CfCameraDefinition CfCameraDefine[33];
-
 extern CameraImage save_cam;
 
 #endif /* INCLUDE_MAIN_MAPTBL_H */

@@ -1,11 +1,9 @@
 #include "common.h"
 
-/*
- * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
- * own header, src/main/ssd_init.h. The generated include/main/ssd_init.h cannot
- * carry RssdWork's type yet, so that
- * header is included directly.
- */
+/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
+#define RSSD_FLAG_SUCCESS 0x20
+
+#define SSD_WAVE_TAG 0x6d647773
 
 typedef struct RssdRpcResponse {
     short error_code;              /* +0x00: negative -> per-command error */
@@ -15,6 +13,12 @@ typedef struct RssdRpcResponse {
     int _unmodeled_0c[5];          /* +0x0c..0x1f: 32-bit words, not read here */
 } RssdRpcResponse;
 
+/*
+ * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
+ * own header, src/main/ssd_init.h. The generated include/main/ssd_init.h cannot
+ * carry RssdWork's type yet, so that
+ * header is included directly.
+ */
 /* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
 /*
  * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
@@ -131,11 +135,6 @@ typedef struct RssdWorkFlags {
     void *stream_end_callback_arg;        /* +0x1fc: SsdSetStreamEndCallback arg1 */
 } RssdWorkFlags;
 
-/* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
-#define RSSD_FLAG_SUCCESS 0x20
-
-extern RssdWorkFlags RssdWork;
-
 /*
  * One argument word of an RSSD request. Most commands pass plain integers;
  * SsdTransferSampling/SsdTransferSamplingNext (main/tu112) and the sequence
@@ -168,31 +167,6 @@ typedef struct RssdRequest {
     int header[4];
     RssdRequestWord arg[4];
 } RssdRequest;
-
-/*
- * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
- * `request` may be null, otherwise it is copied as above, and `size` bytes
- * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
- * Returns -1 when the rounded payload exceeds the buffer, otherwise the
- * sceSifCallRpc result.
- */
-int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
-
-/*
- * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
- * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
- * result, else flag bit 5) through the registered one-shot completion
- * callback, then signals the waiting thread's semaphore.
- *
- * It runs from the SIF RPC interrupt context, so it ends with the
- * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
- * orders every earlier load/store, including the iSignalSema effects, before
- * `ei` re-enables interrupts on the way out.
- */
-
-extern void *sceSifGetNextRequest(void *queue);
-
-extern void sceSifExecRequest(void *request);
 
 typedef struct RssdEffectData {
     unsigned int tag;
@@ -238,30 +212,7 @@ enum {
     RSSD_CMD_CHECK_SPU_MEMORY           = 0x100
 };
 
-/*
- * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
- * it clears (main:0x002409b0). Same prototype as src/main/xgl_sound.c and
- * src/ov01/snd.h.
- */
-
-extern int SsdSpuDmaCompleted(int wait);
-
-/*
- * Waits for the previous SPU DMA transfer to complete (SsdSpuDmaCompleted,
- * wait = 1), then sends size bytes of data as the next chunk of streaming
- * wave data for wave. Always returns 0.
- */
-
-/* Forwards value (an SPU memory size or address) unchanged; no further evidenced use in this function. */
-
 enum { RSSD_CMD_STOP_ALL_EFFECT = 0x78 };
-
-extern int printf(const char *format, ...);
-
-/*
- * Sends count 32-byte packets read from packets over SIF RPC; count << 5 is
- * the RssdCallFunc payload size, sizeof(RssdRequest). No-op when count is 0.
- */
 
 typedef struct SsdWaveHeader {
     unsigned int tag;
@@ -271,12 +222,49 @@ typedef struct SsdWaveHeader {
     unsigned short id;
 } SsdWaveHeader;
 
-#define SSD_WAVE_TAG 0x6d647773
-
 enum {
     RSSD_CMD_ADD_WAVE_DATA = 0x20
 };
 
+extern RssdWorkFlags RssdWork;
+
+/*
+ * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
+ * `request` may be null, otherwise it is copied as above, and `size` bytes
+ * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
+ * Returns -1 when the rounded payload exceeds the buffer, otherwise the
+ * sceSifCallRpc result.
+ */
+int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
+
+/*
+ * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
+ * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
+ * result, else flag bit 5) through the registered one-shot completion
+ * callback, then signals the waiting thread's semaphore.
+ *
+ * It runs from the SIF RPC interrupt context, so it ends with the
+ * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
+ * orders every earlier load/store, including the iSignalSema effects, before
+ * `ei` re-enables interrupts on the way out.
+ */
+extern void *sceSifGetNextRequest(void *queue);
+
+extern void sceSifExecRequest(void *request);
+
+/*
+ * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
+ * it clears (main:0x002409b0). Same prototype as src/main/xgl_sound.c and
+ * src/ov01/snd.h.
+ */
+extern int SsdSpuDmaCompleted(int wait);
+
+extern int printf(const char *format, ...);
+
+/*
+ * Sends count 32-byte packets read from packets over SIF RPC; count << 5 is
+ * the RssdCallFunc payload size, sizeof(RssdRequest). No-op when count is 0.
+ */
 void SsdSendFuncPacket(void *packets, int count)
 {
     RssdRequest request;
@@ -350,6 +338,11 @@ int SsdAddWaveData(SsdWaveHeader *data, int size, int wave)
     return id;
 }
 
+/*
+ * Waits for the previous SPU DMA transfer to complete (SsdSpuDmaCompleted,
+ * wait = 1), then sends size bytes of data as the next chunk of streaming
+ * wave data for wave. Always returns 0.
+ */
 int SsdNextWaveData(void *data, int size, int wave)
 {
     RssdRequest request;
@@ -420,6 +413,7 @@ int SsdSpuDmaCompleted(int wait)
     return busy;
 }
 
+/* Forwards value (an SPU memory size or address) unchanged; no further evidenced use in this function. */
 void SsdCheckSpuMemory(int value)
 {
     RssdRequest request;

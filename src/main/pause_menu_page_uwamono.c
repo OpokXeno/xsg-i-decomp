@@ -1,18 +1,14 @@
 #include "common.h"
-
 #include "shared.h"
 
 #define PILLAR_SEGMENT_ANGLE (0.3926991f)
-
 #define PILLAR_CORNER_ANGLE (0.3926991f)
-
-extern float xglSin(float angle);
-
-extern float xglCos(float angle);
-
 #define COLL_POSITION_W (0.3f)
-
 #define COLL_CORNER_W (0.1f)
+#define MAP_UNIT_COLLISION 0x7000
+#define MAP_UNIT_SOUND 0x7012
+#define UWAMONO_SELF_BREAK 0x1
+#define UWAMONO_ENEMY_BREAK 0x2
 
 typedef struct ItemBoxEntry {
     signed char category;
@@ -79,95 +75,55 @@ enum {
     UWAMONO_SHOP
 };
 
-#define MAP_UNIT_COLLISION 0x7000
-
-#define MAP_UNIT_SOUND 0x7012
-
-#define UWAMONO_SELF_BREAK 0x1
-
-#define UWAMONO_ENEMY_BREAK 0x2
-
 extern signed char dispflg;
-
 extern signed char lineflg;
-
 extern signed char printflg;
-
 extern signed char collflg;
 
 /* PadData's +0x28/+0x2a/+0x2c fields match the local input view in input.c. */
-
 extern UwamonoPadEntry PadData[2];
-
 extern unsigned char EvtItemTbl[255 * 0x80];
-
 extern ItemBoxEntry ItemBoxTbl[601];
-
 extern UwamonoGameStatePrefix GameLoopState;
-
 extern UwamonoDebugUnit MapUnit[64];
-
 extern const char PauseMenuFieldObjectLabel[];
-
 char pauseMenuPageUwamonoCursorMarkerText[];
-
 const char eventItemNameFormat[];
-
 char treasureChestText[];
+const char shotTrajectoryOnText[];
+const char shotTrajectoryOffText[];
+const char fieldObjectInfoOnText[];
+const char fieldObjectInfoOffText[];
+const char fieldObjectOutputOnText[];
+const char fieldObjectOutputOffText[];
+const char collisionDisplayOnText[];
+const char collisionDisplayOffText[];
+const char shootingFlagOnText[];
+const char shootingFlagOffText[];
+const char eventItemListText[];
+const char treasureChestListText[];
+const char pressCrossToReturnText[];
+const char eventItemRowFormat[];
 
+extern float xglSin(float angle);
+extern float xglCos(float angle);
 extern void UnlockMapUnit(void);
-
 extern char *GetItemName(int category, int index);
-
 extern int HexToStr(int value, char *buffer);
-
 extern int xglFlagsGet1(int flag);
-
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
 extern void *memset(void *s, int c, unsigned int n);
-
 extern void xglRotTransPers(int *screen, float (*matrix)[4], Vector4 *point, int mode);
-
 extern void DispPillar(Vector4 *base, Vector4 *step, const int *colors);
-
 void DebDispEvtItem(void);
-
 void DebDispItemBox(void);
 
 static int debmode;
 
-static int page_2;
-
-const char shotTrajectoryOnText[];
-
-const char shotTrajectoryOffText[];
-
-const char fieldObjectInfoOnText[];
-
-const char fieldObjectInfoOffText[];
-
-const char fieldObjectOutputOnText[];
-
-const char fieldObjectOutputOffText[];
-
-const char collisionDisplayOnText[];
-
-const char collisionDisplayOffText[];
-
-const char shootingFlagOnText[];
-
-const char shootingFlagOffText[];
-
-const char eventItemListText[];
-
-const char treasureChestListText[];
-
-const char pressCrossToReturnText[];
-
-const char eventItemRowFormat[];
-
 static int debmode = 0;
+
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+static int page_2;
 
 /* JP: 射撃軌跡表示　　オン
  * EN: Shot trajectory display: On */
@@ -275,6 +231,7 @@ void PauseMenuPageUwamono(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: ＞
  * EN: > */
 char pauseMenuPageUwamonoCursorMarkerText[4] = "\xA1\xE4";
@@ -318,6 +275,7 @@ void DebDispEvtItem(void)
     debmode = (PadData[0].pressed & 0x40) ? 0 : debmode;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char eventItemNameFormat[4] = "%s";
 
 static int page_2 = 0;
@@ -675,6 +633,7 @@ void DispPillar(Vector4 *base, Vector4 *step, const int *colors)
     } while (segment < 17);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: 宝箱
  * EN: Treasure chest */
 char treasureChestText[8] = "\015\000\312\365\310\242";

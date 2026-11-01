@@ -7,7 +7,6 @@
 
 #include "shared.h"
 
-/* These four-float positions are copied as two aligned doublewords. */
 typedef struct PrintSpriteInfo {
     short x;
     short y;
@@ -20,6 +19,7 @@ typedef struct PrintSpriteInfo {
     unsigned char row;
 } EtherTreeSprite;
 
+/* These four-float positions are copied as two aligned doublewords. */
 typedef union EtherTreePosition {
     Vector4 vector;
     unsigned long long words[2];
@@ -54,23 +54,6 @@ struct EtherTreeObjectData {
     unsigned char unmodeled_64[12];
 };
 
-/*
- * sub2ParentChildSet and subParentChildSet (main/tu179, main:0x002b9ff8 and
- * main:0x002ba0a8) build the tree by id: for up to 3 children looked up
- * through MenuEtherDataGet/EtherTreeFirstDataGet, a non-zero id claims the
- * next EtherTreeObjectWorkGet() record (id set, childCount incremented,
- * stored into children[i]) and recurses; a zero id clears children[i].
- * sub2ParentChildSet also sets each child's parent back to itself; the root
- * built by subParentChildSet leaves its own children's parent unset.
- */
-
-/*
- * EtherTreeLine is the fill cursor into a table of 0x190-byte line records
- * (EtherTreeLineSet, this unit, main:0x002ba6f8): its first word points to
- * the EtherTreeObjectData it highlights. The six segment records are read
- * by subTreeLineDraw; each segment carries
- * two four-float endpoints and their four color bytes.
- */
 typedef struct EtherTreeLineDrawSegment {
     Vector4 from;
     unsigned char fromColor[4];
@@ -80,6 +63,13 @@ typedef struct EtherTreeLineDrawSegment {
     unsigned char unmodeled_34[0x0c];
 } EtherTreeLineDrawSegment;
 
+/*
+ * EtherTreeLine is the fill cursor into a table of 0x190-byte line records
+ * (EtherTreeLineSet, this unit, main:0x002ba6f8): its first word points to
+ * the EtherTreeObjectData it highlights. The six segment records are read
+ * by subTreeLineDraw; each segment carries
+ * two four-float endpoints and their four color bytes.
+ */
 typedef struct EtherTreeLineData {
     struct EtherTreeObjectData *object;
     unsigned char unmodeled_04[0x0c];

@@ -1,11 +1,30 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "anm.h"
 
-/* The shared FPK/FCV prefix used by the pack accessors. */
+#define FPK_MAGIC 0x004B5046
+#define FPK_MAGIC_MASK 0x00FFFFFF
+#define FPK_RELOCATED_MASK 0xFF000000
+#define FPK_RELOCATED 0x01000000
+#define FCV_MAGIC 0x00564346
+#define ANM_WAITING 2
+#define ANM_LOOP 8
+#define ANM_FINISHED 0x1000
+#define ANM_RESTART 0x1010
+#define ANM_RESET_BOUNDS 0x40000
+#define ANM_DEFAULT_FRAME_DURATION 0.033333335f
+#define ANM_TIME_FRAME_DURATION 0.033333335f
+#define ANM_TIME_SPEED 0.033333335f
+#define ANM_PACK_FRAME_DURATION 0.033333335f
+#define ANM_PACK_CLOCK_SPEED 0.033333335f
+#define ANM_TIME_INTERP_FRAME_DURATION 0.033333335f
+#define ANM_TIME_INTERP_CLOCK_SPEED 0.033333335f
+#define ANM_RESET_FRAME_DURATION 0.033333335f
+#define ANM_RESET_CLOCK_SPEED 0.033333335f
+#define ANM_ADVANCE_ENTRY 0x20000
+#define ANM_PAUSED 0x80000
 
+/* The shared FPK/FCV prefix used by the pack accessors. */
 typedef struct FpkFcvPack {
     u32 magic;
     u16 format;
@@ -15,16 +34,6 @@ typedef struct FpkFcvPack {
     u16 data_offset;
     u32 entries[1];
 } FpkFcvPack;
-
-#define FPK_MAGIC 0x004B5046
-
-#define FPK_MAGIC_MASK 0x00FFFFFF
-
-#define FPK_RELOCATED_MASK 0xFF000000
-
-#define FPK_RELOCATED 0x01000000
-
-#define FCV_MAGIC 0x00564346
 
 typedef struct AnmClock {
     u32 flags;
@@ -45,16 +54,6 @@ typedef struct AnmClock {
     float reset_high;
 } AnmClock;
 
-#define ANM_WAITING 2
-
-#define ANM_LOOP 8
-
-#define ANM_FINISHED 0x1000
-
-#define ANM_RESTART 0x1010
-
-#define ANM_RESET_BOUNDS 0x40000
-
 typedef struct AnmDefaultState {
     u32 flags;
     float frame;
@@ -63,8 +62,6 @@ typedef struct AnmDefaultState {
     float forward_limit;
     u16 entry_index;
 } AnmDefaultState;
-
-#define ANM_DEFAULT_FRAME_DURATION 0.033333335f
 
 typedef struct FcvPlaybackRange {
     u8 selector;
@@ -84,28 +81,6 @@ typedef struct FcvAttributeState {
     u8 unmodeled_20[16];
 } FcvAttributeState;
 
-void FCV2_readAttribute(FcvAttributeState *attributes, void *data);
-
-#define ANM_TIME_FRAME_DURATION 0.033333335f
-
-#define ANM_TIME_SPEED 0.033333335f
-
-#define ANM_PACK_FRAME_DURATION 0.033333335f
-
-#define ANM_PACK_CLOCK_SPEED 0.033333335f
-
-#define ANM_TIME_INTERP_FRAME_DURATION 0.033333335f
-
-#define ANM_TIME_INTERP_CLOCK_SPEED 0.033333335f
-
-#define ANM_RESET_FRAME_DURATION 0.033333335f
-
-#define ANM_RESET_CLOCK_SPEED 0.033333335f
-
-#define ANM_ADVANCE_ENTRY 0x20000
-
-#define ANM_PAUSED 0x80000
-
 typedef struct FpkAnimationEntry {
     u32 magic;
     u16 format;
@@ -121,7 +96,7 @@ typedef struct FpkAnimationAttributeSlot {
     u16 unmodeled_02;
 } FpkAnimationAttributeSlot;
 
-/* The shared FPK/FCV prefix used by the pack accessors. */
+void FCV2_readAttribute(FcvAttributeState *attributes, void *data);
 
 FpkAnimationEntry *ANM_getEntry(AnmClock *clock, FpkFcvPack *pack)
 {

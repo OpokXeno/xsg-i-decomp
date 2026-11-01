@@ -2,9 +2,6 @@
 #define SRC_MAIN_XGL_RENDER_H
 
 #include "main/xgl_2.h"
-
-
-
 #include "shared.h"
 
 /*
@@ -41,7 +38,6 @@ typedef union GsClearPacket {
     XglQuadword quadwords[6];
 } GsClearPacket;
 
-
 /*
  * GS display-environment block (0x004A9000, size 0x50). xglRenderDispOff/On
  * only touch the 8-byte flag word at +0x00 (bit 0x2 gates display output).
@@ -50,9 +46,6 @@ typedef struct GsDispEnv {
     u64 flags;
     unsigned char unmodeled_08[0x48];
 } GsDispEnv;
-
-extern GsClearPacket ClearEnv;
-extern GsDispEnv DispEnv;
 
 typedef void (*XglRenderFadeCallback)(XglPacket *packet);
 
@@ -85,6 +78,8 @@ typedef struct XglRenderState {
     unsigned char unmodeled_59[3];
 } XglRenderState;
 
+extern GsClearPacket ClearEnv;
+extern GsDispEnv DispEnv;
 extern XglRenderState sRender;
 
 #endif

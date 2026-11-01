@@ -1,28 +1,11 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_cd.h"
-
 #include "enemy_system_init.h"
-
-const char enemyDataPath[24] = "data\\matumoto\\enemy.dat";
-
-const char enemySplinePath[32] = "data\\matumoto\\spline.dat";
-
-const char enemyBikkuriLexPath[32] = "data\\matumoto\\bikkuri.lex";
-
-const char enemyHatenaLexPath[32] = "data\\matumoto\\hatena.lex";
-
-const char enemyMaruLexPath[24] = "data\\matumoto\\maru.lex";
-
-const char enemySikakuLexPath[32] = "data\\matumoto\\sikaku.lex";
 
 typedef struct EnemyPresetPathPrefix {
     char bytes[15];
 } EnemyPresetPathPrefix;
-
-const EnemyPresetPathPrefix enemyPresetPathPrefix = { "data\\matumoto\\" };
 
 typedef struct EnemyPresetPathParts {
     EnemyPresetPathPrefix prefix;
@@ -33,66 +16,6 @@ typedef union EnemyPresetPathStorage {
     EnemyPresetPathParts parts;
     char bytes[256];
 } EnemyPresetPathStorage;
-
-extern const char enemyDatSuffix[];
-
-extern char *strcat(char *destination, const char *source);
-
-/* GetBSplineLoop in main/tu201 indexes DataSpline from its .sdata slot. */
-
-extern void *DataSpline[1];
-
-extern void *AdrsEnemy;
-
-extern void ACT_updateEnemy(EnemyInitActor *actor);
-
-extern void UnduParamInit(void *undulation);
-
-/* GetBSplineLoop in main/tu201 indexes DataSpline from its .sdata slot. */
-
-void Enemy_SystemInit(void) {
-    AdrsEnemyPreset = WorkEnd;
-    GameLoopState[0x1c / sizeof(unsigned int)] = 0;
-    WorkEnd += xglCdReadFile(enemyDataPath, WorkEnd, 0, 0);
-
-    AdrsEnemySpline = WorkEnd;
-    WorkEnd += xglCdReadFile(enemySplinePath, WorkEnd, 0, 0);
-
-    AdrsEnemyExclamation = WorkEnd;
-    WorkEnd += xglCdReadFile(enemyBikkuriLexPath, WorkEnd, 0, 0);
-
-    AdrsEnemyQuestion = WorkEnd;
-    WorkEnd += xglCdReadFile(enemyHatenaLexPath, WorkEnd, 0, 0);
-
-    AdrsEnemySphere = WorkEnd;
-    WorkEnd += xglCdReadFile(enemyMaruLexPath, WorkEnd, 0, 0);
-
-    AdrsEnemySquare = WorkEnd;
-    WorkEnd += xglCdReadFile(enemySikakuLexPath, WorkEnd, 0, 0);
-}
-
-int Enemy_LoadPreset(void *buffer, const char *preset_name)
-{
-    EnemyPresetPathStorage path;
-
-    path.parts.prefix = enemyPresetPathPrefix;
-    memset(path.parts.suffix, 0, sizeof(path.parts.suffix));
-    strcat(path.bytes, preset_name);
-    strcat(path.bytes, enemyDatSuffix);
-    AdrsEnemyPreset = buffer;
-    return xglCdReadFile(path.bytes, buffer, 0, 0);
-}
-
-void TM_Script_Spline_Add(int number, float x, float y, float z)
-{
-    short point = enepc[number].spline_point_count;
-
-    enepc[number].spline_point_count++;
-    enepc[number].spline_points[point][0] = x;
-    enepc[number].spline_points[point][1] = y;
-    enepc[number].spline_points[point][2] = z;
-    enepc[number].spline_points[point][3] = 1.0f;
-}
 
 /* The enemy-parameter prefix shared by patrol, chase and action setup.
  * PauseMenuPageEnemy labels +0x08 as movement speed and +0x00 as movement
@@ -151,6 +74,119 @@ typedef struct EnemyNavigationWork {
     short movement_step;
     short movement_duration;
 } EnemyNavigationWork;
+
+extern const char enemyDatSuffix[];
+
+/* GetBSplineLoop in main/tu201 indexes DataSpline from its .sdata slot. */
+extern void *DataSpline[1];
+
+extern void *AdrsEnemy;
+
+extern char *strcat(char *destination, const char *source);
+extern void ACT_updateEnemy(EnemyInitActor *actor);
+extern void UnduParamInit(void *undulation);
+
+const char enemyDataPath[24] = "data\\matumoto\\enemy.dat";
+
+const char enemySplinePath[32] = "data\\matumoto\\spline.dat";
+
+const char enemyBikkuriLexPath[32] = "data\\matumoto\\bikkuri.lex";
+
+const char enemyHatenaLexPath[32] = "data\\matumoto\\hatena.lex";
+
+const char enemyMaruLexPath[24] = "data\\matumoto\\maru.lex";
+
+const char enemySikakuLexPath[32] = "data\\matumoto\\sikaku.lex";
+
+const EnemyPresetPathPrefix enemyPresetPathPrefix = { "data\\matumoto\\" };
+
+/* JP: 初期化していない
+ * EN: Not initialized */
+const char PauseMenuPageEnemyNotInitializedText[17] = "\275\351\264\374\262\275\244\267\244\306\244\244\244\312\244\244";
+
+/* JP: 警戒中：ポーズ
+ * EN: On alert: pose */
+const char PauseMenuPageEnemyAlertPoseText[15] = "\267\331\262\374\303\346\241\247\245\335\241\274\245\272";
+
+/* JP: 警戒中：威嚇
+ * EN: On alert: intimidation */
+const char PauseMenuPageEnemyAlertIntimidationText[13] = "\267\331\262\374\303\346\241\247\260\322\263\305";
+
+/* JP: 警戒中：回転
+ * EN: On alert: turning */
+const char PauseMenuPageEnemyAlertTurningText[13] = "\267\331\262\374\303\346\241\247\262\363\305\276";
+
+/* JP: 警戒中：ルート移動
+ * EN: On alert: moving along route */
+const char PauseMenuPageEnemyAlertPatrolText[19] = "\267\331\262\374\303\346\241\247\245\353\241\274\245\310\260\334\306\260";
+
+/* JP: ユニーク動作
+ * EN: Unique action */
+const char PauseMenuPageEnemyUniqueActionText[13] = "\245\346\245\313\241\274\245\257\306\260\272\356";
+
+/* JP: 爆発ダメージ中
+ * EN: Taking explosion damage */
+const char PauseMenuPageEnemyExplosionDamageText[15] = "\307\372\310\257\245\300\245\341\241\274\245\270\303\346";
+
+/* JP: 電撃ダメージ中
+ * EN: Taking electric shock damage */
+const char PauseMenuPageEnemyElectricDamageText[15] = "\305\305\267\342\245\300\245\341\241\274\245\270\303\346";
+
+/* JP: 封印ダメージ中
+ * EN: Taking seal damage */
+const char PauseMenuPageEnemySealDamageText[15] = "\311\365\260\365\245\300\245\341\241\274\245\270\303\346";
+
+/* JP: ルート上を逃亡
+ * EN: Fleeing along route */
+const char PauseMenuPageEnemyFleeRouteText[15] = "\245\353\241\274\245\310\276\345\244\362\306\250\313\264";
+
+/* JP: ルート上を追跡
+ * EN: Pursuing along route */
+const char PauseMenuPageEnemyPursueRouteText[15] = "\245\353\241\274\245\310\276\345\244\362\304\311\300\327";
+
+void Enemy_SystemInit(void) {
+    AdrsEnemyPreset = WorkEnd;
+    GameLoopState[0x1c / sizeof(unsigned int)] = 0;
+    WorkEnd += xglCdReadFile(enemyDataPath, WorkEnd, 0, 0);
+
+    AdrsEnemySpline = WorkEnd;
+    WorkEnd += xglCdReadFile(enemySplinePath, WorkEnd, 0, 0);
+
+    AdrsEnemyExclamation = WorkEnd;
+    WorkEnd += xglCdReadFile(enemyBikkuriLexPath, WorkEnd, 0, 0);
+
+    AdrsEnemyQuestion = WorkEnd;
+    WorkEnd += xglCdReadFile(enemyHatenaLexPath, WorkEnd, 0, 0);
+
+    AdrsEnemySphere = WorkEnd;
+    WorkEnd += xglCdReadFile(enemyMaruLexPath, WorkEnd, 0, 0);
+
+    AdrsEnemySquare = WorkEnd;
+    WorkEnd += xglCdReadFile(enemySikakuLexPath, WorkEnd, 0, 0);
+}
+
+int Enemy_LoadPreset(void *buffer, const char *preset_name)
+{
+    EnemyPresetPathStorage path;
+
+    path.parts.prefix = enemyPresetPathPrefix;
+    memset(path.parts.suffix, 0, sizeof(path.parts.suffix));
+    strcat(path.bytes, preset_name);
+    strcat(path.bytes, enemyDatSuffix);
+    AdrsEnemyPreset = buffer;
+    return xglCdReadFile(path.bytes, buffer, 0, 0);
+}
+
+void TM_Script_Spline_Add(int number, float x, float y, float z)
+{
+    short point = enepc[number].spline_point_count;
+
+    enepc[number].spline_point_count++;
+    enepc[number].spline_points[point][0] = x;
+    enepc[number].spline_points[point][1] = y;
+    enepc[number].spline_points[point][2] = z;
+    enepc[number].spline_points[point][3] = 1.0f;
+}
 
 EnemyInitActor *ACT_createEnemy(int number, int id)
 {
@@ -293,48 +329,5 @@ EnemyInitActor *ACT_createEnemy(int number, int id)
     return enemy;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char enemyDatSuffix[8] = ".dat";
-
-/* JP: 初期化していない
- * EN: Not initialized */
-const char PauseMenuPageEnemyNotInitializedText[17] = "\275\351\264\374\262\275\244\267\244\306\244\244\244\312\244\244";
-
-/* JP: 警戒中：ポーズ
- * EN: On alert: pose */
-const char PauseMenuPageEnemyAlertPoseText[15] = "\267\331\262\374\303\346\241\247\245\335\241\274\245\272";
-
-/* JP: 警戒中：威嚇
- * EN: On alert: intimidation */
-const char PauseMenuPageEnemyAlertIntimidationText[13] = "\267\331\262\374\303\346\241\247\260\322\263\305";
-
-/* JP: 警戒中：回転
- * EN: On alert: turning */
-const char PauseMenuPageEnemyAlertTurningText[13] = "\267\331\262\374\303\346\241\247\262\363\305\276";
-
-/* JP: 警戒中：ルート移動
- * EN: On alert: moving along route */
-const char PauseMenuPageEnemyAlertPatrolText[19] = "\267\331\262\374\303\346\241\247\245\353\241\274\245\310\260\334\306\260";
-
-/* JP: ユニーク動作
- * EN: Unique action */
-const char PauseMenuPageEnemyUniqueActionText[13] = "\245\346\245\313\241\274\245\257\306\260\272\356";
-
-/* JP: 爆発ダメージ中
- * EN: Taking explosion damage */
-const char PauseMenuPageEnemyExplosionDamageText[15] = "\307\372\310\257\245\300\245\341\241\274\245\270\303\346";
-
-/* JP: 電撃ダメージ中
- * EN: Taking electric shock damage */
-const char PauseMenuPageEnemyElectricDamageText[15] = "\305\305\267\342\245\300\245\341\241\274\245\270\303\346";
-
-/* JP: 封印ダメージ中
- * EN: Taking seal damage */
-const char PauseMenuPageEnemySealDamageText[15] = "\311\365\260\365\245\300\245\341\241\274\245\270\303\346";
-
-/* JP: ルート上を逃亡
- * EN: Fleeing along route */
-const char PauseMenuPageEnemyFleeRouteText[15] = "\245\353\241\274\245\310\276\345\244\362\306\250\313\264";
-
-/* JP: ルート上を追跡
- * EN: Pursuing along route */
-const char PauseMenuPageEnemyPursueRouteText[15] = "\245\353\241\274\245\310\276\345\244\362\304\311\300\327";

@@ -1,35 +1,22 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_2.h"
 
-/*
- * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
- * it clears (main:0x002409b0).  Same prototype as src/ov01/snd.h.
- */
+#define SOUND_ARGUMENT_START(ap, last) \
+    ((ap) = (SoundArgumentList) __builtin_next_arg(last) - \
+            (8 - __builtin_args_info(2)) * 8)
 
-extern int SsdSpuDmaCompleted(int wait);
+#define SOUND_PAN_HALF_TURN 3.1415927f
 
-extern void xglSoundSequenceNormal3(int channel, int volume, int time);
+typedef struct SoundChannelEntry {
+    unsigned short _unmodeled_00;
+    unsigned short sequence;
+} SoundChannelEntry;
 
-extern void xglSoundSequenceFadeOut2(int channel, int time);
-
-extern void xglSoundSequenceStop2(int channel);
-
-void xglMakeSePacket(short command, ...);
-
-void SsdPlayEffectParam(int effect_id, int source_id, int volume, int pan);
-
-int xglSoundSendSmd2(void *smd, int bank);
-
-static char SoundDataPath[12] = "data\\sound\\";
-
-static unsigned char ext_0[5] = { '.', 'S', 'W', 'D', '\0' };
-
-extern int xglSoundSendSwd(void *swd, int bank);
-
-int xglSoundSendSed(void *sed, int bank);
+typedef struct SoundEffectBankEntry {
+    unsigned short handle;
+    unsigned short file_handle;
+} SoundEffectBankEntry;
 
 /*
  * SoundWork (main:0x004a8140), ELF symbol size 0x8a4:
@@ -49,45 +36,12 @@ int xglSoundSendSed(void *sed, int bank);
  *   main:0x00227000 passes its address to SsdSendFuncPacket and clears it
  *   with memset); 0xa4 + 0x800 == 0x8a4, the full symbol size.
  */
-
-typedef struct SoundChannelEntry {
-    unsigned short _unmodeled_00;
-    unsigned short sequence;
-} SoundChannelEntry;
-
-typedef struct SoundEffectBankEntry {
-    unsigned short handle;
-    unsigned short file_handle;
-} SoundEffectBankEntry;
-
 struct SoundWork {
     SoundChannelEntry channels[8];
     SoundEffectBankEntry effect_banks[32];
     int packet_count;
     unsigned char packet_buffer[0x800];
 };
-
-/* The original linker places this all-zero, 0x8a4-byte object in .data. */
-
-struct SoundWork SoundWork = { 0 };
-
-void SsdStartSequence(int sequence, int start, int loop);
-
-int SsdGetResultValue(int *value);
-
-void SsdPauseSequence(int sequence, int time);
-
-void SsdStopSequence(int sequence);
-
-void SsdPlayEffectNormal(int effect_id, int source_id);
-
-void SsdStopEffect(int effect_id, int source_id);
-
-void SsdStopEffectFileID(int file_id);
-
-int SsdCheckPlayEffect(int effect_id);
-
-int SsdCheckPlayEffectAll(void);
 
 typedef struct SoundStreamState {
     unsigned char unmodeled_00[0x1c];
@@ -99,46 +53,9 @@ typedef struct SoundStreamState {
     unsigned char segment_index; /* +0x33: cleared when a stream is (re)opened */
 } SoundStreamState;
 
-int xglCdStreamOpen(SoundStreamState *stream, int size);
-
-void xglCdStreamReadRing(SoundStreamState *stream, int bytes);
-
-void SsdInitPcmStream(int channel, int volume);
-
-void SsdPlayPcmStream(int channel, int loop);
-
-void SsdInitVagStreamStereo(int channel, int volume);
-
-void SsdPlayVagStream(int channel, int start, int loop);
-
-void xglSoundStreamOpenVagStereoParam(int stream, int source, int pitch, int volume);
-
-void SsdInitVagStreamMono(int channel, int volume, int pan);
-
-void SsdSetVagStreamPanpot(int channel, int panpot, int duration);
-
-void xglSoundStreamOpenVagMultiParam(int stream, int source, int pitch, int volume, int pan);
-
 typedef struct CdStreamParam CdStreamParam;
 
-extern int xglCdStreamClose(CdStreamParam *stream);
-
-void SsdDisposePcmStream(void);
-
-void SsdStopPcmStream(int channel);
-
-int SsdGetPcmStreamStatus(void);
-
-int SsdGetVagStreamStatusStereo(void);
-
-void SsdDisposeVagStream(void);
-
-void SsdStopVagStream(int channel);
-
-void SsdSetVagStreamDataStereo(int channel, int address, int size);
-
 /* CD stream ring fields used by this TU; see the owner, main/tu092. */
-
 typedef struct SoundRingStatus {
     unsigned char unmodeled_00[8];
     unsigned char state;
@@ -162,14 +79,6 @@ typedef struct SoundArgumentSlot {
 
 typedef char *SoundArgumentList;
 
-#define SOUND_ARGUMENT_START(ap, last) \
-    ((ap) = (SoundArgumentList) __builtin_next_arg(last) - \
-            (8 - __builtin_args_info(2)) * 8)
-
-void SsdSendFuncPacket(void *packets, int count);
-
-extern void *memset(void *destination, int value, unsigned int count);
-
 typedef struct SoundPlaybackState {
     SoundRingStatus ring;
     unsigned char type;
@@ -178,41 +87,10 @@ typedef struct SoundPlaybackState {
     unsigned char *playback_buffer;
 } SoundPlaybackState;
 
-void xglCdStreamParamInit(void *state);
-
-static unsigned char StreamBuffer[0x4000];
-
-void SsdInit(int size);
-
-void SsdDisposeSequence(int sequence);
-
-int SsdAddSequenceData(void *smd);
-
-void SsdDisposeEffectData(int file_id);
-
-int SsdAddEffectData(void *sed);
-
-void SsdDisposeWaveBank(int bank);
-
-int SsdAddWaveData(void *wave, int offset, int size);
-
-void xglSoundSequenceNormal2(int channel, int volume);
-
-static char SoundEffectPath[5] = "sed\\";
-
-static char SoundSequencePath[5] = "smd\\";
-
-static unsigned char ext_1[5] = { '.', 'S', 'E', 'D', '\0' };
-
-static unsigned char ext_2_004DC350[5] = { '.', 'S', 'M', 'D', '\0' };
-
-/* The original linker places this all-zero, 0x8a4-byte object in .data. */
-
 /*
  * The sound listener is the player actor held in GameLoopState's second
  * word; its world position is the three floats at +0x10.
  */
-
 typedef struct SoundListener {
     unsigned char unmodeled_00[0x10];
     float x;
@@ -223,31 +101,91 @@ typedef struct SoundListener {
 typedef unsigned int GameLoopStateWords[];
 
 extern GameLoopStateWords GameLoopState;
+extern const char animationCharFormat[];
 
+/*
+ * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
+ * it clears (main:0x002409b0).  Same prototype as src/ov01/snd.h.
+ */
+extern int SsdSpuDmaCompleted(int wait);
+
+extern void xglSoundSequenceNormal3(int channel, int volume, int time);
+extern void xglSoundSequenceFadeOut2(int channel, int time);
+extern void xglSoundSequenceStop2(int channel);
+void xglMakeSePacket(short command, ...);
+void SsdPlayEffectParam(int effect_id, int source_id, int volume, int pan);
+int xglSoundSendSmd2(void *smd, int bank);
+extern int xglSoundSendSwd(void *swd, int bank);
+int xglSoundSendSed(void *sed, int bank);
+void SsdStartSequence(int sequence, int start, int loop);
+int SsdGetResultValue(int *value);
+void SsdPauseSequence(int sequence, int time);
+void SsdStopSequence(int sequence);
+void SsdPlayEffectNormal(int effect_id, int source_id);
+void SsdStopEffect(int effect_id, int source_id);
+void SsdStopEffectFileID(int file_id);
+int SsdCheckPlayEffect(int effect_id);
+int SsdCheckPlayEffectAll(void);
+int xglCdStreamOpen(SoundStreamState *stream, int size);
+void xglCdStreamReadRing(SoundStreamState *stream, int bytes);
+void SsdInitPcmStream(int channel, int volume);
+void SsdPlayPcmStream(int channel, int loop);
+void SsdInitVagStreamStereo(int channel, int volume);
+void SsdPlayVagStream(int channel, int start, int loop);
+void xglSoundStreamOpenVagStereoParam(int stream, int source, int pitch, int volume);
+void SsdInitVagStreamMono(int channel, int volume, int pan);
+void SsdSetVagStreamPanpot(int channel, int panpot, int duration);
+void xglSoundStreamOpenVagMultiParam(int stream, int source, int pitch, int volume, int pan);
+extern int xglCdStreamClose(CdStreamParam *stream);
+void SsdDisposePcmStream(void);
+void SsdStopPcmStream(int channel);
+int SsdGetPcmStreamStatus(void);
+int SsdGetVagStreamStatusStereo(void);
+void SsdDisposeVagStream(void);
+void SsdStopVagStream(int channel);
+void SsdSetVagStreamDataStereo(int channel, int address, int size);
+void SsdSendFuncPacket(void *packets, int count);
+extern void *memset(void *destination, int value, unsigned int count);
+void xglCdStreamParamInit(void *state);
+void SsdInit(int size);
+void SsdDisposeSequence(int sequence);
+int SsdAddSequenceData(void *smd);
+void SsdDisposeEffectData(int file_id);
+int SsdAddEffectData(void *sed);
+void SsdDisposeWaveBank(int bank);
+int SsdAddWaveData(void *wave, int offset, int size);
+void xglSoundSequenceNormal2(int channel, int volume);
 extern float atan2f(float y, float x);
-
 extern int F2I(float value);
-
 void xglSoundEffectStopID(int soundEffectId, int source);
+void SsdSetPcmStreamData(void *data, int size);
+int SsdGetVagStreamStatusAll(void);
+int SsdGetResultParam(int *parameters);
+void SsdSetVagStreamDataMono(int channel, int address, int size);
+void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
-#define SOUND_PAN_HALF_TURN 3.1415927f
+static char SoundDataPath[12] = "data\\sound\\";
 
-static unsigned char count_3;
+static unsigned char ext_0[5] = { '.', 'S', 'W', 'D', '\0' };
+
+/* The original linker places this all-zero, 0x8a4-byte object in .data. */
+struct SoundWork SoundWork = { 0 };
+
+static char SoundEffectPath[5] = "sed\\";
+
+static char SoundSequencePath[5] = "smd\\";
+
+static unsigned char ext_1[5] = { '.', 'S', 'E', 'D', '\0' };
+
+static unsigned char ext_2_004DC350[5] = { '.', 'S', 'M', 'D', '\0' };
 
 static char anim_4_004DC358[4] = { '-', 0x7F, '|', '/' };
 
-void SsdSetPcmStreamData(void *data, int size);
-
-int SsdGetVagStreamStatusAll(void);
-
-int SsdGetResultParam(int *parameters);
-
-void SsdSetVagStreamDataMono(int channel, int address, int size);
-
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern const char animationCharFormat[];
 const char animationCharFormat[8] = "%c";
+
+static unsigned char StreamBuffer[0x4000];
+
+static unsigned char count_3;
 
 void xglSoundWaitDma(void)
 {
@@ -1107,4 +1045,3 @@ void xglSoundInitial(void)
     } while (index < 16);
     xglSoundReset();
 }
-

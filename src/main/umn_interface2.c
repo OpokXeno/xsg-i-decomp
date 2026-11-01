@@ -3,22 +3,12 @@
  * OV02 original TU 6: 0x00a02d68..0x00a03450 (5 functions)
  */
 #include "common.h"
-
 #include "shared.h"
 #include "main/xgl_2.h"
 #include "main/xgl_task.h"
-
 #include "ov02/tsk_umn_object_task_main.h"
-extern UmnWorkData UmnWork;
-extern float xglFRand(void);
-extern void xglLightIntensityParallel(void *light, int index, const Vector4 *intensity);
-extern void xglLightIntensityAmbient(void *light, const Vector4 *intensity);
-extern void xglLightDirection(void *light, unsigned int index, const Vector4 *direction);
-extern void xglLightCalcMatrix(void *light);
-extern void nmlModelSetLight(void *model, void *light);
-extern void nmlModelSetTexture(const char *texture);
-extern void nmlModelSetPlace(const Vector4 *place);
-extern void nmlModelEntry(int entry);
+#include "main/xgl_packet.h"
+#include "main/xgl_render.h"
 
 /* The original vector has component and doubleword-copy views. */
 typedef union UmnBgCubeVec {
@@ -31,9 +21,6 @@ typedef struct UmnBgCubeLights {
     UmnBgCubeVec v[7];
 } UmnBgCubeLights;
 
-extern UmnBgCubeVec D_00A11E60;
-extern const UmnBgCubeLights D_00A11E70;
-
 typedef struct UmnBgCubeData {
     UmnBgCubeVec position;
     UmnBgCubeVec rotation;
@@ -42,11 +29,11 @@ typedef struct UmnBgCubeData {
     Matrix4 matrix;
 } UmnBgCubeData;
 
+typedef unsigned int UmnLightQuadword __attribute__((mode(TI)));
+
 /* One contiguous 0xF0-byte light workspace: the light object proper (0x00-0x6F)
  * followed by the two matrices xglLightCalcMatrix fills in (0x70 and 0xB0),
  * which are what nmlModelSetLight receives. */
-typedef unsigned int UmnLightQuadword __attribute__((mode(TI)));
-
 typedef struct UmnBgCubeLightWork {
     UmnLightQuadword light[7];
     Matrix4 model_set;
@@ -63,6 +50,106 @@ typedef struct UmnBgCubeMainTask {
     int model;
     UmnBgCubeData *data;
 } UmnBgCubeMainTask;
+
+typedef struct UmnIf2Coordinates {
+    int values[6];
+} UmnIf2Coordinates;
+
+typedef struct UmnIf2Rgba {
+    unsigned char red;
+    unsigned char green;
+    unsigned char blue;
+    unsigned char alpha;
+} UmnIf2Rgba;
+
+/* UmnInterface2Init allocates these twelve bytes. UmnInterface2Main fades
+ * the two alpha bytes, then queues this record as the callback argument. */
+typedef struct UmnIf2Parameters {
+    unsigned int depth;
+    UmnIf2Rgba first_vertex;
+    UmnIf2Rgba remaining_vertices;
+} UmnIf2Parameters;
+
+typedef struct UmnIf2AdCommand {
+    u64 value;
+    u64 register_address;
+} UmnIf2AdCommand;
+
+typedef struct UmnIf2SetupPacket {
+    u64 tag;
+    u64 registers;
+    UmnIf2AdCommand texture_flush;
+    UmnIf2AdCommand alpha;
+    UmnIf2AdCommand texture;
+    UmnIf2AdCommand test;
+} UmnIf2SetupPacket;
+
+/* GIF PACKED mode expands each register into four 32-bit lanes. The tag's
+ * 0x531 list repeats RGBAQ, UV and XYZ2 for each of the six vertices. */
+typedef struct UmnIf2PackedRegister {
+    u32 lane[4];
+} UmnIf2PackedRegister;
+
+typedef struct UmnIf2GeometryPacket {
+    u32 tag_low;
+    u32 tag_high;
+    u32 registers_low;
+    u32 registers_high;
+    UmnIf2PackedRegister payload[18];
+} UmnIf2GeometryPacket;
+
+/* Both direct-data submissions use the same scratchpad address. The setup
+ * packet is copied out before the geometry packet overwrites that storage. */
+typedef union UmnIf2PacketWorkspace {
+    UmnIf2SetupPacket setup;
+    UmnIf2GeometryPacket geometry;
+} UmnIf2PacketWorkspace;
+
+typedef struct UmnIf2Context {
+    XglPacket *packet;
+    unsigned char unmodeled_04[0x2C];
+    UmnIf2PacketWorkspace workspace;
+} UmnIf2Context;
+
+/*
+ * State reached through the global UmnInterface2 pointer; only the two
+ * frame counters UmnInterface2Main touches are evidenced.
+ */
+typedef struct UmnInterface2State {
+    unsigned int base_color;
+    unsigned char color_a[3];
+    unsigned char intensity_a; /* decremented by 8 each frame until zero */
+    unsigned char color_b[3];
+    unsigned char intensity_b; /* decremented by 2 each frame until zero */
+} UmnInterface2State;
+
+extern UmnWorkData UmnWork;
+extern UmnBgCubeVec D_00A11E60;
+extern const UmnBgCubeLights D_00A11E70;
+extern unsigned char *task_xmx;
+extern void *UmnBgCubeXtx;
+extern void *UmnBgCubeLex;
+extern const UmnIf2Coordinates D_00A11EE0;
+extern const UmnIf2Coordinates D_00A11EF8;
+extern UmnInterface2State *UmnInterface2;
+
+extern float xglFRand(void);
+extern void xglLightIntensityParallel(void *light, int index, const Vector4 *intensity);
+extern void xglLightIntensityAmbient(void *light, const Vector4 *intensity);
+extern void xglLightDirection(void *light, unsigned int index, const Vector4 *direction);
+extern void xglLightCalcMatrix(void *light);
+extern void nmlModelSetLight(void *model, void *light);
+extern void nmlModelSetTexture(const char *texture);
+extern void nmlModelSetPlace(const Vector4 *place);
+extern void nmlModelEntry(int entry);
+extern void xglCameraInit(StudioCamera *camera);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
+
+/* The font queue calls draw(context, arg) with the arg registered below;
+ * the context record (read at +0x00 and +0x30) is not yet recovered. */
+static void DrawUmnInterface2(void *context, void *arg);
+
+extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(void *context, void *arg), void *arg);
 
 void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
 {
@@ -136,11 +223,6 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     nmlModelEntry(task->model);
 }
 
-extern unsigned char *task_xmx;
-extern void *UmnBgCubeXtx;
-extern void *UmnBgCubeLex;
-extern void xglCameraInit(StudioCamera *camera);
-
 /*
  * Creates the background-cube task on task_xmx, gives it the 0x80-byte
  * UmnBgCubeData that starts at the next 16-byte boundary of `memory`, and
@@ -176,74 +258,6 @@ void *UmnBgCubeInit(void *memory)
     task->model = (int)UmnBgCubeLex;
     return (void *)address;
 }
-
-#include "main/xgl_packet.h"
-#include "main/xgl_render.h"
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
-
-typedef struct UmnIf2Coordinates {
-    int values[6];
-} UmnIf2Coordinates;
-
-extern const UmnIf2Coordinates D_00A11EE0;
-extern const UmnIf2Coordinates D_00A11EF8;
-
-typedef struct UmnIf2Rgba {
-    unsigned char red;
-    unsigned char green;
-    unsigned char blue;
-    unsigned char alpha;
-} UmnIf2Rgba;
-
-/* UmnInterface2Init allocates these twelve bytes. UmnInterface2Main fades
- * the two alpha bytes, then queues this record as the callback argument. */
-typedef struct UmnIf2Parameters {
-    unsigned int depth;
-    UmnIf2Rgba first_vertex;
-    UmnIf2Rgba remaining_vertices;
-} UmnIf2Parameters;
-
-typedef struct UmnIf2AdCommand {
-    u64 value;
-    u64 register_address;
-} UmnIf2AdCommand;
-
-typedef struct UmnIf2SetupPacket {
-    u64 tag;
-    u64 registers;
-    UmnIf2AdCommand texture_flush;
-    UmnIf2AdCommand alpha;
-    UmnIf2AdCommand texture;
-    UmnIf2AdCommand test;
-} UmnIf2SetupPacket;
-
-/* GIF PACKED mode expands each register into four 32-bit lanes. The tag's
- * 0x531 list repeats RGBAQ, UV and XYZ2 for each of the six vertices. */
-typedef struct UmnIf2PackedRegister {
-    u32 lane[4];
-} UmnIf2PackedRegister;
-
-typedef struct UmnIf2GeometryPacket {
-    u32 tag_low;
-    u32 tag_high;
-    u32 registers_low;
-    u32 registers_high;
-    UmnIf2PackedRegister payload[18];
-} UmnIf2GeometryPacket;
-
-/* Both direct-data submissions use the same scratchpad address. The setup
- * packet is copied out before the geometry packet overwrites that storage. */
-typedef union UmnIf2PacketWorkspace {
-    UmnIf2SetupPacket setup;
-    UmnIf2GeometryPacket geometry;
-} UmnIf2PacketWorkspace;
-
-typedef struct UmnIf2Context {
-    XglPacket *packet;
-    unsigned char unmodeled_04[0x2C];
-    UmnIf2PacketWorkspace workspace;
-} UmnIf2Context;
 
 static void DrawUmnInterface2(void *context_arg, void *arg)
 {
@@ -305,24 +319,6 @@ static void DrawUmnInterface2(void *context_arg, void *arg)
     }
     sceVif1PkAddDirectDataN(context->packet, geometry, 0x13);
 }
-
-/*
- * State reached through the global UmnInterface2 pointer; only the two
- * frame counters UmnInterface2Main touches are evidenced.
- */
-typedef struct UmnInterface2State {
-    unsigned int base_color;
-    unsigned char color_a[3];
-    unsigned char intensity_a; /* decremented by 8 each frame until zero */
-    unsigned char color_b[3];
-    unsigned char intensity_b; /* decremented by 2 each frame until zero */
-} UmnInterface2State;
-
-/* The font queue calls draw(context, arg) with the arg registered below;
- * the context record (read at +0x00 and +0x30) is not yet recovered. */
-static void DrawUmnInterface2(void *context, void *arg);
-extern void xglFontPrintExtFunc(unsigned int flags, void (*draw)(void *context, void *arg), void *arg);
-extern UmnInterface2State *UmnInterface2;
 
 void UmnInterface2Main(void) {
     if (UmnInterface2->intensity_a != 0) {

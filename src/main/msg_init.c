@@ -1,14 +1,21 @@
 #include "common.h"
 #include "main/xgl_font.h"
-
 #include "msg_init.h"
-static void _copyCTRLCode(unsigned char **destination, unsigned char **source);
 
-extern const char tokenDelimiters[];
-
-static int cnvCW;
-
-static unsigned int cnvCH;
+#define MIF2_FONT_ESCAPE_BYTE 0x19u
+#define MIF2_FONT_BEGIN_BYTE 0x01u
+#define MIF2_FONT_END_BYTE 0x00u
+#define MIF2_COLOR_BYTE 0x0cu
+#define MIF2_LABEL_BYTE 0x85u
+#define MIF2_CLEAR_BYTE 0x81u
+#define MIF2_CLOSE_BYTE 0x84u
+#define MIF2_WAITKEY_BYTE 0x80u
+#define MIF2_WAIT_BYTE 0x83u
+#define MSG_QUEUE_RESET_CONTROL_CODE_FLAG 0x100u
+#define MSG_QUEUE_RESET_MODE_MASK 0xffu
+#define MSG_QUEUE_RESET_CLEAR_ALL 0u
+#define MSG_QUEUE_RESET_CLEAR_COUNT_AND_WIDTH 10u
+#define MSG_CONTROL_CODE_FLAG_ENABLED 1u
 
 typedef struct Mif2Argument {
     int type;
@@ -18,49 +25,72 @@ typedef struct Mif2Argument {
     } value;
 } Mif2Argument;
 
-static int ctrlCodeFlags = 0;
-
-/*
- * Placeholder entry of the `mfunc` control-code table (listed twice there).
- * MSG_convert calls every entry as handler(out, argc, args) and continues
- * writing at the returned pointer; the other MIF2_* handlers emit their
- * control bytes at `out` and return the end. This one emits nothing: it only
- * walks the argument count and hands `out` back unchanged.
- */
-
-int strcmp(const char *, const char *);
-
 /*
  * One row of the mfunc[] control-code table, which a NULL name terminates.
  * MSG_convert (still asm) calls the matched row's handler as
  * handler(out, argc, args), including the placeholder MIF2_dummy row. That
  * handler ignores args and returns out unchanged.
  */
-
 typedef struct MsgFuncEntry {
     char *(*handler)(char *out, int argc, const struct Mif2Argument *args);
     const char *name;
 } MsgFuncEntry;
 
+struct MsgPrintContext {
+    unsigned char unmodeled_00[0x16];
+    unsigned short render_mode;
+    unsigned char unmodeled_18[0x94];
+    MsgQueue queue;
+};
+
+typedef struct RubyFontContext {
+    unsigned char unmodeled_00[8];
+    short x;
+    short y;
+    unsigned char unmodeled_0c[12];
+    unsigned char flags;
+} RubyFontContext;
+
+typedef struct MsgQueueInfo {
+    short count;
+    short lines;
+    short width;
+} MsgQueueInfo;
+
+extern const char tokenDelimiters[];
+extern char msgWidthProbeControl[];
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+extern char digits[16];
+
+extern char radixTenTenths[100];
+extern char radixTenUnits[100];
+
+static void _copyCTRLCode(unsigned char **destination, unsigned char **source);
+int strcmp(const char *, const char *);
 char *MIF2_clear(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_waitkey(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_wait(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_color(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_close(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_ruby(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_font(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_label(char *out, int argc, const Mif2Argument *args);
-
 char *MIF2_dummy(char *out, int argc, const Mif2Argument *args);
 char *MIF2_gaiji(char *out, int argc, const Mif2Argument *args);
 char *MIF2_code(char *out, int argc, const Mif2Argument *args);
+
+extern int PARSE_int(const char *str, int len, int base);
+
+unsigned int MSG_convert(unsigned char *destination, int capacity, const char *text, int length);
+int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int length);
+extern int xglFontCheckProportional(unsigned int high, unsigned int low);
+extern unsigned int xglFontGetProportionalSize(int code);
+extern int xglFontGetStringWidth(const char *text);
+extern int xglFontGetStringWidth2(const char *text, int mode);
+static void _skipCTRLCode(unsigned char **source);
+
+static int ctrlCodeFlags = 0;
 
 const char clearTagName[8] = "clear";
 
@@ -102,10 +132,19 @@ static MsgFuncEntry mfunc[] = {
     {0, 0},
 };
 
-/*
- * Looks up name in the mfunc[] control-code table and returns the matching
- * row, or NULL if the table is empty or no row's name matches.
- */
+const char tokenDelimiters[8] = ",();";
+
+char digits[16] = "0123456789abcdef";
+
+char radixTenTenths[100] = "0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999";
+
+char radixTenUnits[100] = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+
+char msgWidthProbeControl[8] = { 25, 3, 0, 0, 0, 0, 0, 0 };
+
+static int cnvCW;
+
+static unsigned int cnvCH;
 
 /*
  * Each message buffer has a 16-byte header followed by its 0x800-byte
@@ -113,92 +152,13 @@ static MsgFuncEntry mfunc[] = {
  * cursor at the workspace. MBUF_create also uses the header's table pointer
  * for the per-entry pointers stored inside that workspace.
  */
-
 MsgBuffer msg_buffer[8];
-
-/*
- * MBUF_init/MBUF_create (not yet recovered) establish the rest of the mbuf
- * layout; only the leading word is evidenced here.
- */
-
-extern int PARSE_int(const char *str, int len, int base);
-
-/*
- * Message queue state: the text lives in buffer, read from head up to tail.
- * width is the pixel width of the current line, count the number of glyphs
- * handed out so far.
- */
-
-struct MsgPrintContext {
-    unsigned char unmodeled_00[0x16];
-    unsigned short render_mode;
-    unsigned char unmodeled_18[0x94];
-    MsgQueue queue;
-};
-
-unsigned int MSG_convert(unsigned char *destination, int capacity, const char *text, int length);
-
-int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int length);
-
-typedef struct RubyFontContext {
-    unsigned char unmodeled_00[8];
-    short x;
-    short y;
-    unsigned char unmodeled_0c[12];
-    unsigned char flags;
-} RubyFontContext;
 
 static int rubyX1;
 
 static int rubyX2;
 
 static int rubyY;
-
-#define MIF2_FONT_ESCAPE_BYTE 0x19u
-
-#define MIF2_FONT_BEGIN_BYTE 0x01u
-
-#define MIF2_FONT_END_BYTE 0x00u
-
-#define MIF2_COLOR_BYTE 0x0cu
-
-#define MIF2_LABEL_BYTE 0x85u
-
-#define MIF2_CLEAR_BYTE 0x81u
-
-#define MIF2_CLOSE_BYTE 0x84u
-
-#define MIF2_WAITKEY_BYTE 0x80u
-
-#define MIF2_WAIT_BYTE 0x83u
-
-#define MSG_QUEUE_RESET_CONTROL_CODE_FLAG 0x100u
-
-#define MSG_QUEUE_RESET_MODE_MASK 0xffu
-
-#define MSG_QUEUE_RESET_CLEAR_ALL 0u
-
-#define MSG_QUEUE_RESET_CLEAR_COUNT_AND_WIDTH 10u
-
-#define MSG_CONTROL_CODE_FLAG_ENABLED 1u
-
-typedef struct MsgQueueInfo {
-    short count;
-    short lines;
-    short width;
-} MsgQueueInfo;
-
-extern int xglFontCheckProportional(unsigned int high, unsigned int low);
-
-extern unsigned int xglFontGetProportionalSize(int code);
-
-extern int xglFontGetStringWidth(const char *text);
-
-extern int xglFontGetStringWidth2(const char *text, int mode);
-
-extern char msgWidthProbeControl[];
-
-static void _skipCTRLCode(unsigned char **source);
 
 void MSG_init(void)
 {
@@ -894,6 +854,13 @@ char *matchBracket(const unsigned char *cursor)
     return *cursor == close ? (char *)cursor : 0;
 }
 
+/*
+ * Placeholder entry of the `mfunc` control-code table (listed twice there).
+ * MSG_convert calls every entry as handler(out, argc, args) and continues
+ * writing at the returned pointer; the other MIF2_* handlers emit their
+ * control bytes at `out` and return the end. This one emits nothing: it only
+ * walks the argument count and hands `out` back unchanged.
+ */
 char *MIF2_dummy(char *out, int argc, const Mif2Argument *args)
 {
     int i;
@@ -1157,6 +1124,10 @@ char *MIF2_code(char *out, int argc, const Mif2Argument *args)
     return end;
 }
 
+/*
+ * Looks up name in the mfunc[] control-code table and returns the matching
+ * row, or NULL if the table is empty or no row's name matches.
+ */
 static MsgFuncEntry *findMsgFunc(const char *name)
 {
     MsgFuncEntry *entry = mfunc;
@@ -1453,18 +1424,3 @@ static void _skipCTRLCode(unsigned char **source)
     }
     *source = cursor;
 }
-
-const char tokenDelimiters[8] = ",();";
-
-/* Original storage of this TU without a C reader; typed from its original bytes. */
-extern char digits[16];
-extern char radixTenTenths[100];
-extern char radixTenUnits[100];
-
-char digits[16] = "0123456789abcdef";
-
-char radixTenTenths[100] = "0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999";
-
-char radixTenUnits[100] = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
-
-char msgWidthProbeControl[8] = { 25, 3, 0, 0, 0, 0, 0, 0 };

@@ -6,6 +6,7 @@
 #define SRC_MAIN_UNDULATE_H
 
 typedef struct LayoutHeader LayoutHeader;
+
 struct UnduDataHeader;
 
 /* Collision mode in the wall-attribute header. */
@@ -106,7 +107,6 @@ typedef struct UnduGameLoopState {
     unsigned char unmodeled_00[0x5c];
     float attributeHeights[32];
 } UnduGameLoopState;
-extern UnduGameLoopState GameLoopState;
 
 /* Per-map undulation (terrain height) work data. */
 typedef struct UnduWork {
@@ -163,5 +163,7 @@ typedef struct UnduQuery {
     unsigned long long includedAttributes;
     float sample[3];
 } UnduQuery;
+
+extern UnduGameLoopState GameLoopState;
 
 #endif /* SRC_MAIN_UNDULATE_H */

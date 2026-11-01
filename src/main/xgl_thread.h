@@ -40,32 +40,19 @@ typedef struct {
 } active_thread_t;
 
 extern void *_gp;
+extern ee_sema_t sSemaParam;
+extern int iRotateSignal;
+extern active_thread_t asActiveThreadList[];
+extern unsigned int iCurrentThread;
 
 extern int WaitSema(int sema_id);
-
 extern int CreateSema(ee_sema_t *sema);
-
 extern int StartThread(int thread_id, void *args);
-
 extern int GetThreadId(void);
-
 extern void SleepThread(void);
-
-extern ee_sema_t sSemaParam;
-
-extern int iRotateSignal;
-
 extern int CancelWakeupThread(int thread_id);
-
 extern int SignalSema(int sema_id);
-
 void xglThreadInitial(void);
-
-extern active_thread_t asActiveThreadList[];
-
-
 void xglThreadRotate(void);
-
-extern unsigned int iCurrentThread;
 
 #endif /* SRC_MAIN_XGL_THREAD_H */

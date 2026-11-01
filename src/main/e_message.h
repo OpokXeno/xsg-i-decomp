@@ -6,8 +6,6 @@
 struct EMessageTextParam;
 
 /* Cursor prefix initialized by eCursolSet in open_close_main.c. */
-
-
 void eMessageTextChange(struct EMessageTextParam *message, char *text);
 
 #endif

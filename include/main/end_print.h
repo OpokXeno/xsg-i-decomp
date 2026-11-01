@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_END_PRINT_H
 
 #include "shared.h"
-
 #include "main/xgl_packet.h"
 
 /* Sprite coordinates, color and packed UV/CLUT indices consumed by the draw routines. */
@@ -16,9 +15,7 @@ typedef struct PrintSpriteInfo {
 } PrintSpriteInfo;
 
 void endPrintInit(void);
-
 void endPrintExtFunc(int order, int command, void *param);
-
 void endPrintDirectFrameCopy(XglPacket *packet, int tagLow, int tagHigh);
 
 #endif /* INCLUDE_MAIN_END_PRINT_H */

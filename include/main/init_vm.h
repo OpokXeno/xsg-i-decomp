@@ -2,14 +2,7 @@
 #define INCLUDE_MAIN_INIT_VM_H
 
 #include "shared.h"
-
 #include "main/find_native_method.h"
-
-extern JavaClass *classClass;
-
-extern JavaClass *classObject;
-
-extern SceneClass *classString;
 
 typedef union VMSlot {
     int i;
@@ -29,5 +22,9 @@ struct VMClass {
     signed char type_code;
     unsigned char element_size;
 };
+
+extern JavaClass *classClass;
+extern JavaClass *classObject;
+extern SceneClass *classString;
 
 #endif /* INCLUDE_MAIN_INIT_VM_H */

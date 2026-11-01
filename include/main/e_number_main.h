@@ -159,11 +159,8 @@ void eNumberMain(ENumberMainData *number);
 void eNumberSet(void *data, int unused);
 
 void eRibbonMain(ERibbonMainData *ribbon);
-
 void eRibbonSet(ERibbonSetData *ribbon, int style);
-
 void eTagFontMain(ETagFontMainData *tag);
-
 void eTagFontSet(ETagFont *tag, const char *text);
 
 #endif /* INCLUDE_MAIN_E_NUMBER_MAIN_H */

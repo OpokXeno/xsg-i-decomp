@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_TYA_DISPLAY_SETTING_H
 
 #include "shared.h"
-
 #include "main/xgl_dma.h"
 #include "main/xgl_jpeg.h"
 #include "main/xgl_mc.h"

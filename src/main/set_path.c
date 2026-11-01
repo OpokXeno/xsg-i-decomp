@@ -1,15 +1,14 @@
 #include "common.h"
-
-extern void sefLoadEffect(int effect, int variant);
-static void dummyMapLoad(void);
-
 #include "shared.h"
-
 #include "main/xgl_2.h"
-
 #include "main/xgl_studio.h"
 #include "main/sef.h"
 
+#define SCAM_TAKE_DEFAULT_RATE 0.1f
+#define SCAM_TAKE_DEFAULT_RANGE 2.6f
+
+/* The effect request block sefCreateEffect reads: the debug viewers fill the
+ * actor links with zero and select the effect and its variant. */
 typedef struct SetPathEffectParams {
     void *actor;
     void *target;
@@ -21,24 +20,6 @@ typedef struct SetPathEffectParams {
     short variant;
     unsigned char unmodeled_18[0x24 - 0x18];
 } SetPathEffectParams;
-
-extern void sefCreateEffect(SetPathEffectParams *params);
-
-extern s16 _sdrawFloor;
-
-extern const char nowLoadingText[];
-
-extern const char pressConfirmToStartText[];
-
-static char * cfScript;
-
-static char basepath[23];
-
-static int cur_6;
-
-extern const char enemyZSelectFormat[];
-
-extern const char comboEnemyEffectSelectText[];
 
 typedef struct SetPathDummyActor {
     unsigned char unmodeled_00[0x50];
@@ -60,28 +41,6 @@ typedef struct SetPathEffectPeer {
     signed char debugFlag;
 } SetPathEffectPeer;
 
-static unsigned char path_0[0x80];
-
-static unsigned char name_1[0x40];
-
-static SetPathEffectPeer * handle_9;
-
-static Vector4 point_10;
-
-static Vector4 angle_11;
-
-static SetPathEffectParams prm_8;
-
-static SetPathDummyActor dmyActor_12 __attribute__((aligned(16)));
-
-static SetPathEffectParams prm_13;
-
-extern unsigned int strlen(const char *string);
-
-static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name);
-
-void srsSetViewPath(unsigned char *path);
-
 typedef struct CfSelectState {
     int horizontalOrigin; /* +0x0 */
     int verticalOrigin; /* +0x4 */
@@ -97,43 +56,6 @@ typedef struct CfSelectState {
     unsigned char selectedPath[1];
     unsigned char unmodeled_11d[0x268 - 0x11d];
 } CfSelectState;
-
-static CfSelectState cfs;
-
-extern void xglRenderClearFrame(void);
-
-extern void xglSleep(void);
-
-extern int xglCdFileSelect(CfSelectState *state);
-
-/* Initialized storage, in the original .sdata/.data order. */
-static char *filelist;
-static char *gridlexTop;
-static char *gridxtxTop;
-static char *hamalexTop;
-static char *hamaxtxTop;
-static s16 loaded;
-static s16 mapdisp;
-static s16 casdisp;
-static s16 tgtdisp;
-s16 _debugPause;
-char pauseText[];
-char enemySelectFormat[];
-static int cur_7;
-char senLexName[];
-char senXtxName[];
-static Vector4 pos_14;
-static Vector4 caspos_15;
-static Vector4 tgtpos_16;
-static Vector4 scale_17;
-
-extern void sefExecEffect(void);
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern void func_A31438(void);
-
-extern int xglSoundStreamMain(void);
 
 /* Two 0x68-byte controller records. xglPadRead's CPU stores evidence
  * the overlapping held/pressed/repeat/released words at +0x28..+0x2e. */
@@ -154,88 +76,6 @@ typedef struct PadDataMenuLayout {
     u8 unmodeled_30[0x68 - 0x30];
 } PadDataMenuLayout;
 
-extern PadDataMenuLayout PadData[2];
-
-extern int sprintf(char *destination, const char *format, ...);
-
-const char cfEffectSelectText[];
-
-extern char *srsGetEsdData2(int index);
-
-extern void func_A31688(void);
-
-extern void func_A31920(int kind, float *params);
-
-extern void func_A318B8(void);
-
-#define SCAM_TAKE_DEFAULT_RATE 0.1f
-
-#define SCAM_TAKE_DEFAULT_RANGE 2.6f
-
-extern void *memset(void *destination, int value, unsigned int count);
-
-extern void PartyDataInit2(void);
-
-extern int dataItmBoxChk(int id);
-
-extern int dataItmBoxInc(int id);
-
-extern void func_A2F6A8(void);
-
-extern void func_A22668(void);
-
-extern void func_A1D1C0(int level);
-
-extern void func_A2C3A0(int level);
-
-extern int srsFileLoad(void *buffer, const char *name, int mode);
-
-const char hamaLexName[];
-
-const char hamaXtxName[];
-
-extern int func_A1A760(void);
-
-extern void func_A2C488(int level);
-
-extern void nmlModelEntry(int entry);
-
-extern void nmlModelSetLight(void *colorMod, void *normal);
-
-extern void nmlModelSetPlace(Matrix4 matrix);
-
-extern void nmlModelSetTexture(const char *texture);
-
-extern int sefCheckLoad(void);
-
-extern void xglLightCalcMatrix(StudioLight *light);
-
-extern void xglLightSetDefault(StudioLight *light);
-
-extern StudioLight *xglStudioGetLight2(void);
-
-extern unsigned char _defMatLcMod[];
-
-extern unsigned char _defMatLn[];
-
-/* Initialized objects recovered for this TU. */
-
-/* PadData's storage export belongs in the defining TU's generated header. */
-
-static int cur_2;
-
-static int menumax_4;
-
-static char * menu_3[5];
-
-extern const char debugVersionFormat[16];
-
-extern const char buildDateText[16];
-
-extern const char buildTimeText[16];
-
-extern const char setPathDebugCursorText[];
-
 typedef struct SetPathClearEnv {
     unsigned char unmodeled_00[0x20];
     unsigned int color_r;
@@ -245,32 +85,192 @@ typedef struct SetPathClearEnv {
     unsigned char unmodeled_30[0x30];
 } SetPathClearEnv;
 
+/* The studio camera as SinitCamera writes it. */
+typedef struct SetPathCamera {
+    unsigned char unmodeled_00[0xd0];
+    Vector4 position;
+    unsigned char unmodeled_e0[0x20];
+    Vector4 target;
+    Vector4 unmodeled_110;
+    Vector4 up;
+    unsigned char unmodeled_130[0x4d0 - 0x130];
+} SetPathCamera;
+
+extern s16 _sdrawFloor;
+extern const char nowLoadingText[];
+extern const char pressConfirmToStartText[];
+extern const char enemyZSelectFormat[];
+extern const char comboEnemyEffectSelectText[];
+char pauseText[];
+char enemySelectFormat[];
+char senLexName[];
+char senXtxName[];
+extern PadDataMenuLayout PadData[2];
+const char cfEffectSelectText[];
+const char hamaLexName[];
+const char hamaXtxName[];
+extern unsigned char _defMatLcMod[];
+extern unsigned char _defMatLn[];
+extern const char debugVersionFormat[16];
+extern const char buildDateText[16];
+extern const char buildTimeText[16];
+extern const char setPathDebugCursorText[];
 extern SetPathClearEnv ClearEnv;
+extern const char debugDbSelectFormat[];
+extern const char effectSelectionText[];
 
+extern const char setPathLoadingText[];
+
+extern char ColliTestTitleLabel[16];
+extern char ColliTestBattleLabel[16];
+extern char ColliTestCfDebugLabel[16];
+extern char ColliTestBattleDebugLabel[24];
+extern char ColliTestDebugLabel[16];
+
+extern void sefLoadEffect(int effect, int variant);
+static void dummyMapLoad(void);
+extern void sefCreateEffect(SetPathEffectParams *params);
+extern unsigned int strlen(const char *string);
+static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name);
+void srsSetViewPath(unsigned char *path);
+extern void xglRenderClearFrame(void);
+extern void xglSleep(void);
+extern int xglCdFileSelect(CfSelectState *state);
+extern void sefExecEffect(void);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern void func_A31438(void);
+extern int xglSoundStreamMain(void);
+extern int sprintf(char *destination, const char *format, ...);
+extern char *srsGetEsdData2(int index);
+extern void func_A31688(void);
+extern void func_A31920(int kind, float *params);
+extern void func_A318B8(void);
+extern void *memset(void *destination, int value, unsigned int count);
+extern void PartyDataInit2(void);
+extern int dataItmBoxChk(int id);
+extern int dataItmBoxInc(int id);
+extern void func_A2F6A8(void);
+extern void func_A22668(void);
+extern void func_A1D1C0(int level);
+extern void func_A2C3A0(int level);
+extern int srsFileLoad(void *buffer, const char *name, int mode);
+extern int func_A1A760(void);
+extern void func_A2C488(int level);
+extern void nmlModelEntry(int entry);
+extern void nmlModelSetLight(void *colorMod, void *normal);
+extern void nmlModelSetPlace(Matrix4 matrix);
+extern void nmlModelSetTexture(const char *texture);
+extern int sefCheckLoad(void);
+extern void xglLightCalcMatrix(StudioLight *light);
+extern void xglLightSetDefault(StudioLight *light);
+extern StudioLight *xglStudioGetLight2(void);
 extern void srsSetLoadMode(int mode);
-
 extern void sefDestroyEffect(void);
-
 extern void initFileSelect(void);
-
 extern void func_A22628(void);
-
 extern void func_A31840(void);
-
 static void seffectDebugBattle(void);
-
 static void seffectDebugCf(void);
-
 static void seffectDebugDb(void);
 extern void sresFreeReloaderMemory(int mode);
 extern void sefDestroyEffectCf(void);
 extern void sefInitEffectBattle(void);
 static void dummyMapDraw(void);
+extern void xglStudioChange(int camera);
+extern void xglStudioGetCamera(SetPathCamera **camera, int index);
+extern void SinitCamera(void);
+static int debugEnemySelect(void);
+extern int srsEftNo2WeaponID(int effect);
+extern int srsAnalyzeEftNo(int effect, int *kind, int *variant);
+extern void sefSetupPlayer(int charaId, int weaponId, int setupParam1, int setupParam2);
+extern void sefSetupEnemy(int charaId);
+extern void sefSetupEffect(void);
+extern void sefHitEffect(void);
+
+static char * cfScript;
+
+static char basepath[23];
+
+static int cur_6;
+
+static SetPathEffectPeer * handle_9;
+
+static Vector4 point_10;
+
+static Vector4 angle_11;
+
+/* Initialized storage, in the original .sdata/.data order. */
+static char *filelist;
+
+static char *gridlexTop;
+
+static char *gridxtxTop;
+
+static char *hamalexTop;
+
+static char *hamaxtxTop;
+
+static s16 loaded;
+
+static s16 mapdisp;
+
+static s16 casdisp;
+
+static s16 tgtdisp;
+
+s16 _debugPause;
+
+static int cur_7;
+
+static Vector4 pos_14;
+
+static Vector4 caspos_15;
+
+static Vector4 tgtpos_16;
+
+static Vector4 scale_17;
+
+/* Initialized objects recovered for this TU. */
+/* PadData's storage export belongs in the defining TU's generated header. */
+static int cur_2;
+
+static int menumax_4;
+
+static char * menu_3[5];
 
 static int sftMode;
 
-/* Initialized objects recovered for this TU. */
+static int cur_5;
 
+static char basepath[23] = "host0:/home/xeno/work/";
+
+static char * menu_3[5] = { ColliTestBattleLabel, ColliTestBattleDebugLabel, ColliTestCfDebugLabel, ColliTestDebugLabel, ColliTestTitleLabel };
+
+static Vector4 point_10 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
+
+static Vector4 angle_11 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
+
+static Vector4 pos_14 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+static Vector4 caspos_15 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+static Vector4 tgtpos_16 = {0.0f, 0.0f, -4.0f, 1.0f};
+
+static Vector4 scale_17 = {0.1f, 0.1f, 0.1f, 1.0f};
+
+static unsigned char path_0[0x80];
+
+static unsigned char name_1[0x40];
+
+static SetPathEffectParams prm_8;
+
+static SetPathDummyActor dmyActor_12 __attribute__((aligned(16)));
+
+static SetPathEffectParams prm_13;
+
+static CfSelectState cfs;
+
+/* Initialized objects recovered for this TU. */
 static void splitName(unsigned char *filename, unsigned char *path, unsigned char *name)
 {
     int len;
@@ -459,12 +459,6 @@ static int debugEffectConfig(void)
     return cur_2;
 }
 
-static int cur_5;
-
-extern const char debugDbSelectFormat[];
-
-extern const char effectSelectionText[];
-
 static int debugEffectSelect(void)
 {
     char text[0x100];
@@ -606,23 +600,6 @@ static void SCamTake(void)
 
     func_A318B8();
 }
-
-/* The studio camera as SinitCamera writes it. */
-typedef struct SetPathCamera {
-    unsigned char unmodeled_00[0xd0];
-    Vector4 position;
-    unsigned char unmodeled_e0[0x20];
-    Vector4 target;
-    Vector4 unmodeled_110;
-    Vector4 up;
-    unsigned char unmodeled_130[0x4d0 - 0x130];
-} SetPathCamera;
-
-extern void xglStudioChange(int camera);
-
-extern void xglStudioGetCamera(SetPathCamera **camera, int index);
-
-extern void xglLightSetDefault(StudioLight *light);
 
 void SinitCamera(void)
 {
@@ -783,27 +760,6 @@ static void seffectDebugCf(void)
     _sdrawFloor = 0;
     sefDestroyEffectCf();
 }
-
-/* The effect request block sefCreateEffect reads: the debug viewers fill the
- * actor links with zero and select the effect and its variant. */
-
-extern const char setPathLoadingText[];
-
-extern void SinitCamera(void);
-
-static int debugEnemySelect(void);
-
-extern int srsEftNo2WeaponID(int effect);
-
-extern int srsAnalyzeEftNo(int effect, int *kind, int *variant);
-
-extern void sefSetupPlayer(int charaId, int weaponId, int setupParam1, int setupParam2);
-
-extern void sefSetupEnemy(int charaId);
-
-extern void sefSetupEffect(void);
-
-extern void sefHitEffect(void);
 
 static void seffectDebugBattle(void)
 {
@@ -1013,28 +969,7 @@ void SimajiriTest(void)
     }
 }
 
-extern char ColliTestTitleLabel[16];
-extern char ColliTestBattleLabel[16];
-extern char ColliTestCfDebugLabel[16];
-extern char ColliTestBattleDebugLabel[24];
-extern char ColliTestDebugLabel[16];
-
-static char basepath[23] = "host0:/home/xeno/work/";
-
-static char * menu_3[5] = { ColliTestBattleLabel, ColliTestBattleDebugLabel, ColliTestCfDebugLabel, ColliTestDebugLabel, ColliTestTitleLabel };
-
-static Vector4 point_10 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
-
-static Vector4 angle_11 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
-
-static Vector4 pos_14 = {0.0f, 0.0f, 0.0f, 1.0f};
-
-static Vector4 caspos_15 = {0.0f, 0.0f, 0.0f, 1.0f};
-
-static Vector4 tgtpos_16 = {0.0f, 0.0f, -4.0f, 1.0f};
-
-static Vector4 scale_17 = {0.1f, 0.1f, 0.1f, 1.0f};
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char debugVersionFormat[16] = "ver: %s %s";
 
 const char buildDateText[16] = "Sep  5 2002";

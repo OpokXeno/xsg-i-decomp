@@ -80,6 +80,13 @@ typedef struct Thread2SetTargetArguments {
 } Thread2SetTargetArguments;
 
 /*
+ * The cached "void" method-signature type findMethod's third argument
+ * accepts, already declared the same way (as a plain pointer) in
+ * src/main/scene_1.h and src/main/script.c.
+ */
+extern void *TYPE_Void;
+
+/*
  * Still INCLUDE_ASM in src/main/jni.c; this is chr.h's documented
  * signature for the same allocator (kind, frame words, stack words all
  * plain ints), returning the JThread it allocates.
@@ -102,12 +109,5 @@ extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
 
 /* Canonical spelling (config/header-canon.json). */
 extern SceneString *loadConstString(const char *bytes, int length);
-
-/*
- * The cached "void" method-signature type findMethod's third argument
- * accepts, already declared the same way (as a plain pointer) in
- * src/main/scene_1.h and src/main/script.c.
- */
-extern void *TYPE_Void;
 
 #endif /* SRC_MAIN_THREAD_2_H */

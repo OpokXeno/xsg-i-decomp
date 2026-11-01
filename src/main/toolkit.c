@@ -1,15 +1,58 @@
 #include "common.h"
-
 #include "shared.h"
 #include "main/jni.h"
-
 #include "toolkit.h"
+
+/* Used by getPeer_Stage for its short-valued Java id field. */
+#define JAVA_USHORT_FIELD(object, field) \
+    (*(unsigned short *)((char *)(object) + (field)->offset))
+
+/*
+ * A field of a Java object, reached through the handle `lookupClassField`
+ * returned for its name.  The offset is not a member of a C layout: the VM
+ * chose it when it laid the class out, and `JavaField.offset` (+0x10 of the
+ * handle) is where it reports it, so the readable name of each access is the
+ * field-name string the preceding lookup resolved, not a constant.
+ */
+#define JAVA_INT_FIELD(object, field) \
+    (*(int *)((char *)(object) + (field)->offset))
+
+#define JAVA_FLOAT_FIELD(object, field) \
+    (*(float *)((char *)(object) + (field)->offset))
+
+#define JAVA_OBJECT_FIELD(object, field) \
+    (*(void **)((char *)(object) + (field)->offset))
+
+/* Both native peer constructors import the Java position and Euler rotation. */
+#define TOOLKIT_IMPORT_TRANSFORM(class_object, java_object, px, py, pz, rx, ry, rz) { \
+    JavaField *component_field; \
+    component_field = lookupClassField((class_object), \
+        loadConstString(unit_field_px, -1), 0); \
+    (px) = JAVA_FLOAT_FIELD((java_object), component_field); \
+    component_field = lookupClassField((class_object), \
+        loadConstString(unit_field_py, -1), 0); \
+    (py) = JAVA_FLOAT_FIELD((java_object), component_field); \
+    component_field = lookupClassField((class_object), \
+        loadConstString(unit_field_pz, -1), 0); \
+    (pz) = JAVA_FLOAT_FIELD((java_object), component_field); \
+    component_field = lookupClassField((class_object), \
+        loadConstString(unit_field_rx, -1), 0); \
+    (rx) = JAVA_FLOAT_FIELD((java_object), component_field); \
+    component_field = lookupClassField((class_object), \
+        loadConstString(unit_field_ry, -1), 0); \
+    (ry) = JAVA_FLOAT_FIELD((java_object), component_field); \
+    component_field = lookupClassField((class_object), \
+        loadConstString(unit_field_rz, -1), 0); \
+    (rz) = JAVA_FLOAT_FIELD((java_object), component_field); \
+}
+
+typedef struct ToolkitPeerCall { void *object; } ToolkitPeerCall;
+
+typedef struct ToolkitUnitTransform { float m[4][4]; } ToolkitUnitTransform;
 
 /* Partial views of the map-unit records read by getPeer_Unit. Every named
  * member is accessed in the original function; the intervening storage is
  * explicitly unmodeled. Sequence indexing uses the original 0x260 stride. */
-typedef struct ToolkitPeerCall { void *object; } ToolkitPeerCall;
-typedef struct ToolkitUnitTransform { float m[4][4]; } ToolkitUnitTransform;
 typedef struct ToolkitMapUnitPeer {
     unsigned char unmodeled_00[0x10];
     float position_x, position_y, position_z;
@@ -24,6 +67,7 @@ typedef struct ToolkitMapUnitPeer {
     unsigned char unmodeled_a6[0xd0 - 0xa6];
     void *java_object;
 } ToolkitMapUnitPeer;
+
 typedef struct ToolkitUnitSequenceEntry {
     unsigned char unmodeled_00[0x10];
     unsigned short group;
@@ -31,27 +75,47 @@ typedef struct ToolkitUnitSequenceEntry {
     float pivot_x, pivot_y, pivot_z;
     unsigned char unmodeled_24c[0x260 - 0x24c];
 } ToolkitUnitSequenceEntry;
+
 typedef struct ToolkitMapModel {
     unsigned char unmodeled_00[0x50];
     unsigned int part_transform_offset;
 } ToolkitMapModel;
+
 typedef struct ToolkitMapDisplay {
     unsigned char unmodeled_00[4];
     ToolkitMapModel *model;
 } ToolkitMapDisplay;
+
 typedef struct ToolkitGameLoopState {
     unsigned char unmodeled_00[0x54];
     ToolkitMapDisplay *map_display;
 } ToolkitGameLoopState;
+
 typedef struct ToolkitActorSequenceEntry {
     unsigned char unmodeled_00[0x240];
     float pivot[3];
     unsigned char unmodeled_24c[0x260 - 0x24c];
 } ToolkitActorSequenceEntry;
 
+typedef struct ToolkitPeerGroupCall {
+    int group;
+    /* The operand stack transports the Java int as one raw 32-bit word. */
+    unsigned int valueBits;
+} ToolkitPeerGroupCall;
+
+/* The CF helper copies one complete 16-byte record. Its x/y/z prefix is
+ * modeled by the imported interface; the original leaves the fourth word
+ * unspecified, so it remains raw representation rather than a float value. */
+typedef struct ToolkitEffectVectorStorage {
+    ToolkitEffectVector xyz;
+    unsigned char unmodeled_0c[4];
+} ToolkitEffectVectorStorage;
+
 extern ToolkitGameLoopState GameLoopState;
 extern ToolkitUnitSequenceEntry unitSequence[];
 extern ToolkitActorSequenceEntry actSequence[64];
+extern unsigned short XTK_peerGroup[4];
+
 extern ToolkitMapUnitPeer *MAP_createUnitPeer(int identifier, int unit_id);
 extern ToolkitChrPeer *ACT_createChr(int identifier, int character_id);
 extern void ACT_updateNPC(ToolkitChrPeer *peer);
@@ -62,7 +126,6 @@ static void *getPeer_Effect(void *java_effect);
 static void *getPeer_Stage(void *java_stage);
 
 /* Referenced original data recovered from this translation unit. */
-
 const char unit_field_algorithm[16] = "algorithm";
 
 const char unit_field_id[8] = "id";
@@ -83,28 +146,6 @@ const char unit_field_peer[8] = "peer";
 
 const char lightPeerClassName[8] = "light";
 
-/* Used by getPeer_Stage for its short-valued Java id field. */
-
-#define JAVA_USHORT_FIELD(object, field) \
-    (*(unsigned short *)((char *)(object) + (field)->offset))
-
-/*
- * A field of a Java object, reached through the handle `lookupClassField`
- * returned for its name.  The offset is not a member of a C layout: the VM
- * chose it when it laid the class out, and `JavaField.offset` (+0x10 of the
- * handle) is where it reports it, so the readable name of each access is the
- * field-name string the preceding lookup resolved, not a constant.
- */
-
-#define JAVA_INT_FIELD(object, field) \
-    (*(int *)((char *)(object) + (field)->offset))
-
-#define JAVA_FLOAT_FIELD(object, field) \
-    (*(float *)((char *)(object) + (field)->offset))
-
-#define JAVA_OBJECT_FIELD(object, field) \
-    (*(void **)((char *)(object) + (field)->offset))
-
 static inline void writeUnitPosition(void *java_unit, void *unit_class,
                                      ToolkitMapUnitPeer *peer)
 {
@@ -120,14 +161,6 @@ static inline void writeUnitPosition(void *java_unit, void *unit_class,
                              loadConstString(unit_field_pz, -1), 0);
     JAVA_FLOAT_FIELD(java_unit, field) = peer->position_z;
 }
-
-typedef struct ToolkitPeerGroupCall {
-    int group;
-    /* The operand stack transports the Java int as one raw 32-bit word. */
-    unsigned int valueBits;
-} ToolkitPeerGroupCall;
-
-extern unsigned short XTK_peerGroup[4];
 
 void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_(
     JThread *thread, ToolkitPeerCall *arguments, void **result)
@@ -325,29 +358,6 @@ void *getPeer_Enepc(void *java_character)
     return peer;
 }
 
-/* Both native peer constructors import the Java position and Euler rotation. */
-#define TOOLKIT_IMPORT_TRANSFORM(class_object, java_object, px, py, pz, rx, ry, rz) { \
-    JavaField *component_field; \
-    component_field = lookupClassField((class_object), \
-        loadConstString(unit_field_px, -1), 0); \
-    (px) = JAVA_FLOAT_FIELD((java_object), component_field); \
-    component_field = lookupClassField((class_object), \
-        loadConstString(unit_field_py, -1), 0); \
-    (py) = JAVA_FLOAT_FIELD((java_object), component_field); \
-    component_field = lookupClassField((class_object), \
-        loadConstString(unit_field_pz, -1), 0); \
-    (pz) = JAVA_FLOAT_FIELD((java_object), component_field); \
-    component_field = lookupClassField((class_object), \
-        loadConstString(unit_field_rx, -1), 0); \
-    (rx) = JAVA_FLOAT_FIELD((java_object), component_field); \
-    component_field = lookupClassField((class_object), \
-        loadConstString(unit_field_ry, -1), 0); \
-    (ry) = JAVA_FLOAT_FIELD((java_object), component_field); \
-    component_field = lookupClassField((class_object), \
-        loadConstString(unit_field_rz, -1), 0); \
-    (rz) = JAVA_FLOAT_FIELD((java_object), component_field); \
-}
-
 /*
  * getPeer_Uwamono (main VA 0x002f93f8, 588 bytes, GLOBAL binding).
  * Native peer helper: reads the unit id Java field, creates the Uwamono
@@ -468,14 +478,6 @@ void *getPeer_Chr(void *java_character)
     JAVA_OBJECT_FIELD(light_object, field) = &peer->light_peer;
     return peer;
 }
-
-/* The CF helper copies one complete 16-byte record. Its x/y/z prefix is
- * modeled by the imported interface; the original leaves the fourth word
- * unspecified, so it remains raw representation rather than a float value. */
-typedef struct ToolkitEffectVectorStorage {
-    ToolkitEffectVector xyz;
-    unsigned char unmodeled_0c[4];
-} ToolkitEffectVectorStorage;
 
 static void *getPeer_Effect(void *java_effect)
 {

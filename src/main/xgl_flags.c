@@ -1,11 +1,12 @@
 #include "common.h"
+
 /*
  * Only the byte member beginning at SaveData + 0x74 is observed here.  This
  * external byte view intentionally does not describe the unknown SaveData
  * prefix or a complete SaveData layout.
  */
-
 #include "shared.h"
+
 #include "main/xgl_flags.h"
 #include "xgl_flags.h"
 

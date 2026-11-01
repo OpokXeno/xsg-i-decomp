@@ -7,14 +7,6 @@
 
 #include "shared.h"
 
-extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
-
-extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
-                            const Vector4 *vector);
-
-extern void xglVectorMulAdd(Vector4 *destination, const Vector4 *left,
-                            const Vector4 *right, const Vector4 *addend);
-
 /*
  * transformVector/transformVector2's fourth argument: a buffer its callers
  * (still asm; e.g. drawRect2, 0x00265338) build per draw call. world is the
@@ -33,6 +25,14 @@ typedef struct TransformParams {
     Vector4 screenOffset;
     Matrix4 *local;
 } TransformParams;
+
+extern void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
+
+extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
+                            const Vector4 *vector);
+
+extern void xglVectorMulAdd(Vector4 *destination, const Vector4 *left,
+                            const Vector4 *right, const Vector4 *addend);
 
 void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
                      TransformParams *params);

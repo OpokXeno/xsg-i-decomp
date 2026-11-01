@@ -1,79 +1,11 @@
 #include "common.h"
-
 #include "near_dir.h"
-
 #include "main/play.h"
-
-ActSequenceEntry actSequence[64] = { 0 };
-
 #include "main/xgl_studio.h"
 
 typedef struct {
     u32 active;
 } StudioCameraActivePrefix;
-
-extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
-
-/* Defined below in this file; forward-declared for the two callers here. */
-
-extern void ACT_updateMotion(Actor *actor);
-
-/* Undulate.c (main); no header is published for it yet. */
-
-extern float UnduGet(float x, float z);
-
-/* play.c (main); no header is published for it yet. */
-
-extern void *PLAY_getCurrent(void);
-
-/* Defined below in this file. */
-
-extern void SEQ_motion(Actor *actor);
-
-/* Undulate.c (main); no header is published for it yet. */
-
-extern float UnduGet2(void *destination, float x, float z);
-
-/* include/main/xgl_2.h's own declaration: not included directly because it
- * (through include/shared.h) redefines struct Vector4, which this TU's own
- * near_dir.h already defines locally. */
-
-extern void xglMatrixStackUnit(void);
-
-/* Undulate.c (main); no header is published for it yet, and its own
- * UnduWork type is TU-local there, so the destination stays opaque here,
- * exactly as UnduGet2 above already does. */
-
-extern void UnduParamInit(void *undulation);
-
-/* The 64-entry array itself (see the Actor doc comment above); no accepted
- * function in this TU has needed the symbol until now. */
-
-extern u8 actor[64 * 0xa70];
-
-/* Still original asm (0x003083b8, main); ACT_setHand's own call to it is a
- * genuine tail call (j, not jal), so its return value, if any, is never
- * observed here. */
-
-extern void ACT_setHumanHand(Actor *actor, int hand);
-
-/* nml_model_set.c (main); no header is published for it yet. */
-
-extern void nmlModelSetToumei(int enabled);
-
-extern void nmlModelSetZwrite(int enabled);
-
-extern void nmlModelSetStencil(int enabled);
-
-extern void nmlModelSetFilter(int mode, float filter_param_1, float filter_param_2);
-
-extern void nmlModelSetTransparency(float transparency);
-
-extern void nmlModelSetReflTransparency(float transparency);
-
-extern void ACT_updateSequence(Actor *actor);
-
-extern void ACT_updateNPC(Actor *actor);
 
 typedef struct MoveSplineTrack {
     void *spline;
@@ -100,10 +32,6 @@ typedef struct MovingSequence {
     Vector4 anchor;
 } MovingSequence;
 
-extern float nearDir(float from, float to);
-
-extern void ACT_setMotion(Actor *actor, unsigned int motion);
-
 typedef struct RotationTrack {
     Actor *target;
     u8 unmodeled_04[0x10 - 0x04];
@@ -119,7 +47,6 @@ typedef struct RotationTrack {
 /* The scale track of a sequence entry (+0x1b8): per-axis frame counts, then
  * the start, goal and per-frame step SEQ_scale walks the actor's scale
  * through. */
-
 typedef struct ScaleTrack {
     u8 unmodeled_00[0x10];
     int duration[3];
@@ -131,11 +58,7 @@ typedef struct ScaleTrack {
     float step[3];
 } ScaleTrack;
 
-/* The motion track of a sequence entry (+0x138): what SEQ_motion plays and
- * how it hands the values to the actor. */
-
 /* MotionTrack is defined by this TU's owning near_dir.h. */
-
 /* Additional sequence-owned Actor slots. The canonical Actor describes the
  * common head; ACT_updateNPC and ACT_initSequence witness these later slots. */
 typedef struct NearActorSequenceFields {
@@ -152,70 +75,7 @@ typedef struct NearActorSequenceFields {
 /* ACT_initSequence advances the actor table by 0xa70 at main:0x0030b4d0. */
 enum { ACTOR_RECORD_STRIDE = 0xa70 };
 
-/* The four idle motion ids SEQ_setMotion picks from (data of this TU, to be
- * defined here once every user of its literals is recovered). */
-
-extern unsigned short xglSRand(void);
-
-/* The original's own tables and entry points, still asm or data elsewhere. */
-
-extern Actor *GameLoopState[64];
-
-/* Still original asm elsewhere. */
-
-extern void SEQ_setMotion(Actor *actor);
-
-extern void SEQ_setPositionRAND(Actor *actor);
-
-extern void SEQ_moveNPC_XZ(Actor *actor);
-
-extern float UnduCheck(const Vector4 *position, void *exclude, void *param);
-
-/* Defined below in this file; forward-declared for the two callers here. */
-
 /* Undulate.c (main); no header is published for it yet. */
-
-static StudioCamera *getCurrentCamera(void);
-
-extern void ACT_updateDefault(Actor *actor);
-
-extern Actor *ACT_create(int type, int id);
-
-/* play.c (main); no header is published for it yet. */
-
-/* Defined below in this file. */
-
-/* Undulate.c (main); no header is published for it yet. */
-
-/* include/main/xgl_2.h's own declaration: not included directly because it
- * (through include/shared.h) redefines struct Vector4, which this TU's own
- * near_dir.h already defines locally. */
-
-/* Undulate.c (main); no header is published for it yet, and its own
- * UnduWork type is TU-local there, so the destination stays opaque here,
- * exactly as UnduGet2 above already does. */
-
-/* The 64-entry array itself (see the Actor doc comment above); no accepted
- * function in this TU has needed the symbol until now. */
-
-/* Still original asm (0x003083b8, main); ACT_setHand's own call to it is a
- * genuine tail call (j, not jal), so its return value, if any, is never
- * observed here. */
-
-/* nml_model_set.c (main); no header is published for it yet. */
-
-extern float newsToDirection[16];
-
-extern float xglSin(float angle);
-
-extern float xglCos(float angle);
-
-extern void ACT_setMotion2(Actor *actor, unsigned int motion, unsigned int flags);
-
-/* Defined below in this file; forward-declared for the two callers here. */
-
-/* Undulate.c (main); no header is published for it yet. */
-
 typedef struct PlayerPad {
     u8 unmodeled_00[0x28];
     u16 held;
@@ -227,22 +87,92 @@ typedef struct PlayerPad {
     u16 stick_in_use;
 } PlayerPad;
 
-extern PlayerPad PadData;
-
 typedef struct CameraBasis {
     u8 unmodeled_00[0x170];
     Matrix4 matrix;
 } CameraBasis;
 
+/* The 64-entry array itself (see the Actor doc comment above); no accepted
+ * function in this TU has needed the symbol until now. */
+extern u8 actor[64 * 0xa70];
+
+/* The original's own tables and entry points, still asm or data elsewhere. */
+extern Actor *GameLoopState[64];
+
+extern float newsToDirection[16];
+
+extern PlayerPad PadData;
+extern float invPi;
+extern float nearDirPi;
+extern float nearDirTwoPi;
+extern float piForDoubledWhole;
+
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+
+/* Defined below in this file; forward-declared for the two callers here. */
+extern void ACT_updateMotion(Actor *actor);
+
+/* Undulate.c (main); no header is published for it yet. */
+extern float UnduGet(float x, float z);
+
+/* play.c (main); no header is published for it yet. */
+extern void *PLAY_getCurrent(void);
+
+/* Defined below in this file. */
+extern void SEQ_motion(Actor *actor);
+
+/* Undulate.c (main); no header is published for it yet. */
+extern float UnduGet2(void *destination, float x, float z);
+
+/* include/main/xgl_2.h's own declaration: not included directly because it
+ * (through include/shared.h) redefines struct Vector4, which this TU's own
+ * near_dir.h already defines locally. */
+extern void xglMatrixStackUnit(void);
+
+/* Undulate.c (main); no header is published for it yet, and its own
+ * UnduWork type is TU-local there, so the destination stays opaque here,
+ * exactly as UnduGet2 above already does. */
+extern void UnduParamInit(void *undulation);
+
+/* Still original asm (0x003083b8, main); ACT_setHand's own call to it is a
+ * genuine tail call (j, not jal), so its return value, if any, is never
+ * observed here. */
+extern void ACT_setHumanHand(Actor *actor, int hand);
+
+/* nml_model_set.c (main); no header is published for it yet. */
+extern void nmlModelSetToumei(int enabled);
+
+extern void nmlModelSetZwrite(int enabled);
+extern void nmlModelSetStencil(int enabled);
+extern void nmlModelSetFilter(int mode, float filter_param_1, float filter_param_2);
+extern void nmlModelSetTransparency(float transparency);
+extern void nmlModelSetReflTransparency(float transparency);
+extern void ACT_updateSequence(Actor *actor);
+extern void ACT_updateNPC(Actor *actor);
+extern float nearDir(float from, float to);
+extern void ACT_setMotion(Actor *actor, unsigned int motion);
+
+extern unsigned short xglSRand(void);
+
+/* Still original asm elsewhere. */
+extern void SEQ_setMotion(Actor *actor);
+
+extern void SEQ_setPositionRAND(Actor *actor);
+extern void SEQ_moveNPC_XZ(Actor *actor);
+/* Undulate.c (main); no header is published for it yet. */
+extern float UnduCheck(const Vector4 *position, void *exclude, void *param);
+
+/* Defined below in this file; forward-declared for the two callers here. */
+static StudioCamera *getCurrentCamera(void);
+
+extern void ACT_updateDefault(Actor *actor);
+extern Actor *ACT_create(int type, int id);
+extern float xglSin(float angle);
+extern float xglCos(float angle);
+extern void ACT_setMotion2(Actor *actor, unsigned int motion, unsigned int flags);
 extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *vector);
 
-extern float invPi;
-
-extern float nearDirPi;
-
-extern float nearDirTwoPi;
-
-extern float piForDoubledWhole;
+ActSequenceEntry actSequence[64] = { 0 };
 
 float nearDir(float from, float to)
 {
@@ -629,6 +559,8 @@ void SEQ_moveChr(Actor *actor)
     }
 }
 
+/* The four idle motion ids SEQ_setMotion picks from (data of this TU, to be
+ * defined here once every user of its literals is recovered). */
 void SEQ_setMotion(Actor *actor)
 {
     SequenceState *sequence = &actSequence[actor->number].state;
@@ -1323,6 +1255,7 @@ void ACT_filterStealth(Actor *actor)
     nmlModelSetReflTransparency(actor->refl_transparency);
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 float invPi = 0.31830987334251404f;
 
 float nearDirPi = 3.1415927410125732f;

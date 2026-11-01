@@ -12,8 +12,6 @@
  * This owner uses that same record through its historical handle name. */
 typedef JThread JThreadHandle;
 
-void JTHREAD_defaultUnit(JThreadHandle *thread);
-
 /*
  * The Unit class's native peer, reached through its "peer" Java field
  * (lookupClassField(classJava_xeno_Unit, "peer", 0), the jthreadPeerName string
@@ -50,24 +48,12 @@ typedef struct JThreadStageObject {
 } JThreadStageObject;
 
 /*
- * lookupClassField/loadConstString/JNI_callMethod are the runtime's
- * class-field lookup and JVM-call primitives, already recovered with this
- * exact signature in src/main/jni.c (JNI_callMethod) and restated verbatim
- * in several other TUs' own headers (e.g. src/main/scene_1.h); a TU-local
- * header cannot be included from another TU, so they are declared verbatim
- * again here.
+ * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared
+ * type is TU-local by canon (config/header-canon.json): this TU evidences
+ * only the word at +0x10, which JTHREAD_waitFor tests bit 0x800 of (lw
+ * v0,-31088(v1) with v1=0x340000 at 0x00305824, 0x340000-31088 = 0x338690).
  */
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-extern SceneString *loadConstString(const char *bytes, int length);
-extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
-                           SceneObject *arguments, int *output);
-
-/*
- * The screen-space debug text primitive, already recovered with this exact
- * signature in several other TUs (e.g. src/main/script.c) and restated
- * verbatim here for the same reason as the primitives above.
- */
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+typedef unsigned int GameLoopStateWords[];
 
 /* The "peer" field-name string both functions below look up, byte-identical
    in the original binary. */
@@ -77,13 +63,30 @@ extern const char jthreadPeerName[]; /* "peer" */
    in the original binary. */
 extern const char jthreadDottedNameFormat[]; /* "%s.%s" */
 
-/*
- * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared
- * type is TU-local by canon (config/header-canon.json): this TU evidences
- * only the word at +0x10, which JTHREAD_waitFor tests bit 0x800 of (lw
- * v0,-31088(v1) with v1=0x340000 at 0x00305824, 0x340000-31088 = 0x338690).
- */
-typedef unsigned int GameLoopStateWords[];
 extern GameLoopStateWords GameLoopState;
+
+void JTHREAD_defaultUnit(JThreadHandle *thread);
+
+/*
+ * lookupClassField/loadConstString/JNI_callMethod are the runtime's
+ * class-field lookup and JVM-call primitives, already recovered with this
+ * exact signature in src/main/jni.c (JNI_callMethod) and restated verbatim
+ * in several other TUs' own headers (e.g. src/main/scene_1.h); a TU-local
+ * header cannot be included from another TU, so they are declared verbatim
+ * again here.
+ */
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
+
+extern SceneString *loadConstString(const char *bytes, int length);
+
+extern void JNI_callMethod(SceneVm *vm, SceneMethod *method,
+                           SceneObject *arguments, int *output);
+
+/*
+ * The screen-space debug text primitive, already recovered with this exact
+ * signature in several other TUs (e.g. src/main/script.c) and restated
+ * verbatim here for the same reason as the primitives above.
+ */
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 #endif /* SRC_MAIN_JTHREAD_H */

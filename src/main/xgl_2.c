@@ -1,22 +1,16 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "xgl_2.h"
 
 extern unsigned int D_004ADE80[];
-
-static unsigned long long iRandSeed;
+extern char Vu0CallSin[];
+extern char Vu0CallCos[];
+extern const int nextAxisTable[3];
 
 extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
-
 extern StudioCamera *xglStudioGetCamera2(int cameraId);
 
-extern char Vu0CallSin[];
-
-extern char Vu0CallCos[];
-
-extern const int nextAxisTable[3];
+static unsigned long long iRandSeed;
 
 float xglAtan2(float y, float x)
 {
@@ -1630,5 +1624,6 @@ float xglCos(float angle)
     return result;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 /* Defined after its consumer to retain the original runtime table copy. */
 const int nextAxisTable[3] = {1, 2, 0};

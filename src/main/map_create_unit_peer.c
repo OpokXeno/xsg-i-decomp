@@ -1,18 +1,30 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_2.h"
-
 #include "map_create_unit_peer.h"
 #include "main/map_2.h"
-
 #include "main/play.h"
 
+/* One component of `goal` carried through a bone matrix: the three
+ * rotation/scale rows, then the translation row. */
+#define MAP_BONE_TRANSFORM(bone, column) \
+    (goal.x * (bone)[0][column] + goal.y * (bone)[1][column] + \
+     goal.z * (bone)[2][column] + (bone)[3][column])
+
+/* Build the matrix from the position, rotation and scale kept by both
+ * sequenced units and motion-pack units. */
+#define MAP_BUILD_UNIT_TRANSFORM(unit) do { \
+    xglMatrixStackUnit(); \
+    xglMatrixStackTrans(&(unit)->position.x); \
+    xglMatrixStackRotX((unit)->rotation.x); \
+    xglMatrixStackRotY((unit)->rotation.y); \
+    xglMatrixStackRotZ((unit)->rotation.z); \
+    xglMatrixStackScale(&(unit)->scale.x); \
+    xglMatrixStackSave((unit)->matrix); \
+} while (0)
+
 extern void ANM_resetDefault(MapUnitAnmState *anim, int param);
-
 extern void *PLAY_getCurrent(void);
-
 extern void SEQ_motionUnit(MapUnitMotionRecord *unit);
 
 MapUnitGroupEntry *MAP_createUnitPeer(int slot, int serial)
@@ -57,12 +69,6 @@ MapUnitGroupEntry *MAP_createUnitPeer(int slot, int serial)
     }
     return unit;
 }
-
-/* One component of `goal` carried through a bone matrix: the three
- * rotation/scale rows, then the translation row. */
-#define MAP_BONE_TRANSFORM(bone, column) \
-    (goal.x * (bone)[0][column] + goal.y * (bone)[1][column] + \
-     goal.z * (bone)[2][column] + (bone)[3][column])
 
 void SEQ_rotYCNSUnitChr(MapUnitRecord *unit)
 {
@@ -503,18 +509,6 @@ int MAP_callUnitGroup(int group, void (*callback)(int *))
     }
     return 0;
 }
-
-/* Build the matrix from the position, rotation and scale kept by both
- * sequenced units and motion-pack units. */
-#define MAP_BUILD_UNIT_TRANSFORM(unit) do { \
-    xglMatrixStackUnit(); \
-    xglMatrixStackTrans(&(unit)->position.x); \
-    xglMatrixStackRotX((unit)->rotation.x); \
-    xglMatrixStackRotY((unit)->rotation.y); \
-    xglMatrixStackRotZ((unit)->rotation.z); \
-    xglMatrixStackScale(&(unit)->scale.x); \
-    xglMatrixStackSave((unit)->matrix); \
-} while (0)
 
 void MAP_updateUnitMPack(MapUnitMotionRecord *unit)
 {

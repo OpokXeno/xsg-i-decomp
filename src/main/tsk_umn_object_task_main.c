@@ -1,14 +1,14 @@
 /* UMN code embedded in MAIN, original OV02 translation unit 5. */
 #include "common.h"
+
 #include "shared.h"
 #include "main/xgl_cd.h"
-
 #include "ov02/tsk_umn_object_task_main.h"
-extern UmnWorkData UmnWork;
 #include "main/xgl_task.h"
 
 /* TU-local types of ov02/tu005 (src/ov02/tsk_umn_object_task_main.h). */
 typedef struct UmnObjectTask UmnObjectTask;
+
 typedef void (*UmnObjectTaskWorker)(UmnObjectTask *task, void *data);
 
 /* xglTaskEntryNext allocates a 0x80-byte task; these are the fields read here. */
@@ -19,12 +19,40 @@ struct UmnObjectTask {
     void *data;
     int zeroedOnCreate[0x19];
 };
+
+typedef struct {
+    unsigned char unmodeled_00[0x10];
+    unsigned short width;
+    unsigned short height;
+    unsigned short height2;
+} UmnMainRenderSize;
+
+extern UmnWorkData UmnWork;
 extern int UmnSimulationNo;
 extern int UmnMemory;
 extern unsigned char *umn_task;
 extern unsigned char *task_xmx;
 extern int UmnWorkEndTop;
 extern int UmnEventTextMakeWork;
+extern UmnMainRenderSize sRender;
+extern int MenuModelWorkTop;
+extern int UmnModelUkn;
+extern int UmnModelSon;
+
+/* "data\\endou\\umn\\cube.xtx", "data\\endou\\umn\\cube.lex" and
+ * "data\\endou\\umn\\umn00.xtx" filename buffers loaded below; original
+ * embedded-OV02 storage, no new data definitions. */
+extern const char D_00A11D40[24];
+
+extern const char D_00A11D58[24];
+extern const char D_00A11D70[32];
+extern const char D_00A11D90[32];
+extern const char D_00A11DB0[32];
+extern int UmnBgCubeXtx;
+extern int UmnBgCubeLex;
+extern int UmnTexAddr;
+extern int UmnWorkEnd;
+
 extern void endPrintInit(void);
 extern void GameCFSoundMenuPurge(int flag);
 extern void xglRenderClearDepth(void);
@@ -44,19 +72,9 @@ extern XglPacket *xglPacketGetCurrent(void);
 extern void endPrintDirectFrameCopy(XglPacket *packet, int width, int height);
 extern void xglSleep(void);
 extern void *memset(void *dest, int value, unsigned int size);
-typedef struct {
-    unsigned char unmodeled_00[0x10];
-    unsigned short width;
-    unsigned short height;
-    unsigned short height2;
-} UmnMainRenderSize;
-extern UmnMainRenderSize sRender;
-extern int MenuModelWorkTop;
 extern void MenuLoadInit(void);
 extern void MenuModelMemoryInit(void *base, int size);
 extern void MenuModelMemorySet(int count);
-extern int UmnModelUkn;
-extern int UmnModelSon;
 extern void UmnChangeTopLevel(int level);
 extern void GameSnapShotCheck(void);
 extern void UmnTopMenu(void);
@@ -69,6 +87,10 @@ extern void UmnInterface2Main(void);
 extern void MenuModelMain(void);
 extern void MenuModelAllBreak(void);
 extern void GameCFSoundMenuReload(void);
+extern void UmnProcuratorSet(void);
+
+/* UmnTextLoad is ov02:0x00a0f578 (src/ov02/umn_event_text_symbol_check.c). */
+extern int UmnTextLoad(int work, int mode);
 
 int tskUmnObjectTaskMain(XglTaskPrefix *base) {
     UmnObjectTask *task = (UmnObjectTask *)base;
@@ -105,8 +127,6 @@ void UmnObjectTaskCreate(UmnObjectTaskWorker worker, void *data) {
         task->zeroedOnCreate[i] = 0;
 }
 
-extern void UmnProcuratorSet(void);
-
 void UmnChangeTopLevel(int level) {
     UmnWorkQuadword zero = 0;
     int index = 0;
@@ -119,23 +139,6 @@ void UmnChangeTopLevel(int level) {
     UmnWork.stateOrCategory = 0;
     UmnProcuratorSet();
 }
-
-/* UmnTextLoad is ov02:0x00a0f578 (src/ov02/umn_event_text_symbol_check.c). */
-extern int UmnTextLoad(int work, int mode);
-
-/* "data\\endou\\umn\\cube.xtx", "data\\endou\\umn\\cube.lex" and
- * "data\\endou\\umn\\umn00.xtx" filename buffers loaded below; original
- * embedded-OV02 storage, no new data definitions. */
-extern const char D_00A11D40[24];
-extern const char D_00A11D58[24];
-extern const char D_00A11D70[32];
-extern const char D_00A11D90[32];
-extern const char D_00A11DB0[32];
-
-extern int UmnBgCubeXtx;
-extern int UmnBgCubeLex;
-extern int UmnTexAddr;
-extern int UmnWorkEnd;
 
 static void UmnFirstLoad(void) {
     UmnWorkEnd = UmnTextLoad(UmnWorkEnd, 0);

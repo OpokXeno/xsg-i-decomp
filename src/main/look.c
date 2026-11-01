@@ -1,10 +1,6 @@
 #include "common.h"
 #include "look.h"
 
-                                              /* MARK provisional: .lit4 0x004d8564 */
-
-extern StudioCamera *xglStudioGetActiveCamera(void);
-
 typedef struct LookEnemyPlace {
     unsigned long long words[2];
 } LookEnemyPlace;
@@ -20,7 +16,19 @@ typedef struct LookEnemyWorkEntry {
     unsigned char unmodeled_3870[0x40];
 } LookEnemyWorkEntry;
 
+enum LookEyeComponent { EYE_YAW, EYE_PITCH, EYE_DURATION, EYE_STEP };
+
 extern LookEnemyWorkEntry enepc[16];
+extern const char eyeTargetShionName[];
+extern const char eyeTargetKosmosName[];
+extern const char eyeTargetMomoName[];
+
+/* MARK provisional: .lit4 0x004d8564 */
+extern StudioCamera *xglStudioGetActiveCamera(void);
+
+int look_get_place(LookCharacter *actor, LookAlignedVector4 *place);
+void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side);
+extern char *strstr(const char *haystack, const char *needle);
 
 static inline void look_copy_place(LookAlignedVector4 *place, const Vector4 *source)
 {
@@ -225,8 +233,6 @@ void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
     return channels;
 }
 
-int look_get_place(LookCharacter *actor, LookAlignedVector4 *place);
-
 void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 {
     Matrix4 matrix;
@@ -301,7 +307,7 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
     return channels;
 }
 
-void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side);
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 static float s_fEyeOffset = 0.0f;
 
 void LOOK_eyeL_cont(int model, int target, int step)
@@ -316,15 +322,11 @@ void LOOK_eyeR_cont(int model, int target, int step)
     LOOK_eye_cont(model, target, step, 1);
 }
 
-enum LookEyeComponent { EYE_YAW, EYE_PITCH, EYE_DURATION, EYE_STEP };
-
 static const float s_aEyeIdling[22][4];
+
 static const float s_aEyeControl[15][4] ;
+
 static const float s_aEyeDefault[1][4];
-extern const char eyeTargetShionName[];
-extern const char eyeTargetKosmosName[];
-extern const char eyeTargetMomoName[];
-extern char *strstr(const char *haystack, const char *needle);
 
 void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side)
 {
@@ -468,6 +470,7 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
     return channels;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static const float s_aEyeIdling[22][4] = { { 0.0f, 0.01745329424738884f, 30.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 45.0f, 0.0052359881810843945f }, { 0.0f, 0.0087266471236944199f, 50.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 40.0f, 0.0052359881810843945f }, { 0.0087266471236944199f, 0.0f, 20.0f, 0.0052359881810843945f }, { 0.0f, 0.0017453293548896909f, 10.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 10.0f, 0.0052359881810843945f }, { 0.0017453293548896909f, 0.0017453293548896909f, 25.0f, 0.0052359881810843945f }, { 0.0f, 0.0017453293548896909f, 10.0f, 0.0052359881810843945f }, { 0.0017453293548896909f, 0.0f, 15.0f, 0.0052359881810843945f }, { 0.0f, 0.0034906587097793818f, 20.0f, 0.0052359881810843945f }, { 0.0017453293548896909f, 0.0017453293548896909f, 10.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 10.0f, 0.0052359881810843945f }, { 0.0f, 0.034906588494777679f, 100.0f, 0.0052359881810843945f }, { 0.0f, 0.0087266471236944199f, 50.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 40.0f, 0.0052359881810843945f }, { 0.0087266471236944199f, 0.0f, 20.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 100.0f, 0.0052359881810843945f }, { 0.0f, 0.034906588494777679f, 15.0f, 0.0069813174195587635f }, { 0.0f, 0.0f, 8.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 150.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, -1.0f, 0.00087266467744484544f } };
 
 static const float s_aEyeControl[15][4] = { { 0.0f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { -0.13962635397911072f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0f, 0.0f, 0.010471976362168789f }, { -0.13962635397911072f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.0f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { -0.13962635397911072f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.01745329424738884f, 0.0f, 0.010471976362168789f } };

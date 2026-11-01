@@ -1,7 +1,5 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "fx_screen_mask.h"
 
 static void screenMask(ScreenMaskTask *task);
@@ -64,6 +62,11 @@ static int fxAdapter(XglTaskPrefix *entry)
     return xglTaskRemove(entry);
 }
 
+/*
+ * FX_ScreenMask (0x0026adb8) stores its own three fade arguments directly
+ * into `color`, `duration` and `mode` (sw 0x20/0x24/0x28 at
+ * 0x0026ae20..0x0026ae28).
+ */
 void FX_ScreenMask(int unused, int color, int duration, int mode)
 {
     XglTaskScheduler *scheduler = GameLoopState[2];

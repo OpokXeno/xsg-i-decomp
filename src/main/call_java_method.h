@@ -6,29 +6,13 @@
 #define SRC_MAIN_CALL_JAVA_METHOD_H
 
 typedef struct EnemyWork EnemyWork;
-extern EnemyWork enepc[16];
 
 typedef unsigned int GameLoopStateWords[];
-extern GameLoopStateWords GameLoopState;
 
-/* from src/math/main/review09-002f6c50/private.h (unit math-main-002f6c50-review09, function LAYOUT_mapID_setUnit @ 0x002f6c50) */
 /* UnduDataGetHeader returns this bounded four-component result. */
 typedef struct LayoutHeader {
     float components[4];
 } LayoutHeader;
-
-/* from src/math/main/correction13-main-002d6668-allocation-2125441c2df4/form-4/candidate.c (unit math-correction13-4, function Get_LocaterType @ 0x002d6668) */
-char Get_LocaterType(short locator_index);
-
-/* from src/math/main/correction13-main-002d6668-allocation-2125441c2df4/form-4/candidate.c (unit math-correction13-4, function Get_LocaterType_Angle @ 0x002d6748) */
-char Get_LocaterType_Angle(float angle);
-
-/* from src/math/main/correction13-main-002d6668-allocation-2125441c2df4/form-4/candidate.c (unit math-correction13-4, function Get_LocaterType @ 0x002d6668) */
-extern float LocaterAngle[16];
-
-/* canon: config/header-canon.json chose src/math/main/review09-002f6c50/private.h over 1 other accepted spelling */
-/* from src/math/main/review09-002f6c50/private.h (unit math-main-002f6c50-review09, function LAYOUT_mapID_setUnit @ 0x002f6c50) */
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 
 typedef struct CallJavaActorPrefix {
     u32 flags;
@@ -71,9 +55,24 @@ typedef struct CallJavaEnemyWork {
     u8 unmodeled_37e6[0x38b0 - 0x37e6];
 } CallJavaEnemyWork;
 
+extern EnemyWork enepc[16];
+extern GameLoopStateWords GameLoopState;
+
+extern float LocaterAngle[16];
+
 extern short EventID;
 extern signed char FlagExEvent;
 extern signed char FLAG_FRAME_60;
 extern const char callJavaMethodStringBase[];
+
+/* from src/math/main/correction13-main-002d6668-allocation-2125441c2df4/form-4/candidate.c (unit math-correction13-4, function Get_LocaterType @ 0x002d6668) */
+char Get_LocaterType(short locator_index);
+
+/* from src/math/main/correction13-main-002d6668-allocation-2125441c2df4/form-4/candidate.c (unit math-correction13-4, function Get_LocaterType_Angle @ 0x002d6748) */
+char Get_LocaterType_Angle(float angle);
+
+/* canon: config/header-canon.json chose src/math/main/review09-002f6c50/private.h over 1 other accepted spelling */
+/* from src/math/main/review09-002f6c50/private.h (unit math-main-002f6c50-review09, function LAYOUT_mapID_setUnit @ 0x002f6c50) */
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 
 #endif /* SRC_MAIN_CALL_JAVA_METHOD_H */

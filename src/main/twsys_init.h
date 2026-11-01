@@ -3,44 +3,10 @@
 
 #include "main/xgl_font.h"
 
-/* TWindow belongs to main/tu143. Its width at +0x0C is read as a signed short:
- * TWIN_popScene compares a signed halfword there, and TW_setPos sign-extends
- * that halfword before its centering calculation. */
-
-/* TMenu belongs to main/tu143. TMENU_init initializes the pointer at +0x154
- * to its inline string workspace; TMENU_addItem advances it after each line.
- * The pointer at +0x148 retains the start of the active query text. */
-
 /* Declaration proposal owned by main/tu142, msg_init.c.
  * The queue is embedded in text windows at offset 0xAC. */
 #include "main/msg_init.h"
-
 #include "main/ew_sprt_set_cursor_uv.h"
-
-
-
-int MSG_queuePop(MsgQueue *queue, unsigned char *output, int glyphLimit);
-void MSG_queueReset(MsgQueue *queue, unsigned int flags);
-unsigned int MSG_convert(unsigned char *output, int capacity, const char *text, int length);
-char *strcpy(char *destination, const char *source);
-
-/* MBUF storage and allocation are defined by main/tu142, msg_init.c. */
-
-MsgBuffer *MBUF_create2(void);
-
-/* EW slot types are defined by main/tu155, ew_sprt_set_cursor_uv.c. */
-
-
-
-
-
-/* TWIN_create2 and TWIN_draw2 establish the label's line count at +0x14
- * and its caller-owned line pointer table at +0x24. */
-
-
-
-EwWidget *EW_create(int index, int type);
-int EW_addComponent(EwContainerWidget *widget, int index, unsigned short *child);
 
 /* Private proposal for the main/tu089 pad owner: the +0x2A pressed halfword
  * is also established by main/tu236's getEdge and main/tu144's slider input.
@@ -68,5 +34,18 @@ typedef struct XglPadRecord {
 } XglPadRecord;
 
 extern XglPadRecord PadData[2];
+
+int MSG_queuePop(MsgQueue *queue, unsigned char *output, int glyphLimit);
+void MSG_queueReset(MsgQueue *queue, unsigned int flags);
+unsigned int MSG_convert(unsigned char *output, int capacity, const char *text, int length);
+char *strcpy(char *destination, const char *source);
+
+/* MBUF storage and allocation are defined by main/tu142, msg_init.c. */
+MsgBuffer *MBUF_create2(void);
+
+/* EW slot types are defined by main/tu155, ew_sprt_set_cursor_uv.c. */
+EwWidget *EW_create(int index, int type);
+
+int EW_addComponent(EwContainerWidget *widget, int index, unsigned short *child);
 
 #endif

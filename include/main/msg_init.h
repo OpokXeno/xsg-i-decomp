@@ -30,7 +30,6 @@ typedef struct MsgQueueInfo {
 } MsgQueueInfo;
 
 void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor);
-
 MsgBuffer *MBUF_create(int entry_size, int entry_count);
 
 #endif /* INCLUDE_MAIN_MSG_INIT_H */

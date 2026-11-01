@@ -1,10 +1,14 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "sc_wait_parse_script.h"
-
 #include "main/sef.h"
+
+/* Capture the common command fields and the first record's z and tail parameter. */
+#define MISSILE_CAPTURE_COMMON_HEADER(spawn_value, data_value, first_entry_value, parameter_value) do { \
+    (spawn_value).command_value = (data_value)->command_value; \
+    (spawn_value).tail_parameters[0] = (first_entry_value)->position_z; \
+    (parameter_value) = (first_entry_value)->spawn_parameter; \
+} while (0)
 
 static int scWaitParseNopScript(ScriptObject *script);
 static int scWaitParseCntScript(ScriptObject *script);
@@ -13,11 +17,8 @@ static int scWaitParseEftScript(ScriptObject *script);
 static int scWaitParseMovieScript(ScriptObject *script);
 static int scWaitParseMovScript(ScriptObject *script);
 static int scWaitMissileScript(ScriptObject *script);
-
 extern int sefSearchMapperIndex(int effect_no);
-
 extern MissileImage *svGetImageListItem(int mapper_index, int image_index);
-
 extern void sefCaclAllTarget(int *target);
 
 /* OV01 MEfCreate at 0x00a33648 returns the allocation success status.
@@ -123,13 +124,6 @@ static int (*waitHandlerTbl[6])(ScriptObject *) = {
 
     return (short)result;
 }
-
-/* Capture the common command fields and the first record's z and tail parameter. */
-#define MISSILE_CAPTURE_COMMON_HEADER(spawn_value, data_value, first_entry_value, parameter_value) do { \
-    (spawn_value).command_value = (data_value)->command_value; \
-    (spawn_value).tail_parameters[0] = (first_entry_value)->position_z; \
-    (parameter_value) = (first_entry_value)->spawn_parameter; \
-} while (0)
 
 static int scWaitMissileScript(ScriptObject *script)
 {

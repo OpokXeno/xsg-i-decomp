@@ -1,12 +1,49 @@
 #include "common.h"
 #include "debug_break.h"
-
 #include "chr.h"
 
-/* Runtime Java fields occupy one EE VM value word. The descriptor
- * supplies its byte offset; its declared Java/native kind selects
- * the integer, floating or reference representation below. No fixed
- * Java-object field positions are assumed. */
+/* Bind a following target together with the enabled rotation axes. */
+#define CHR_SET_FOLLOW_TARGET(rotation_value, target_value, flags_value) do { \
+    (rotation_value)->target_actor = (target_value); \
+    (rotation_value)->follow_axes = (flags_value); \
+} while (0)
+
+/*
+ * The state byte at Actor+0xa40, past this TU's recovered head above:
+ * growing the struct there would move data_header and every field after it
+ * that other accepted functions in this file already read at their current
+ * offsets, so this one narrowly evidenced access stays a byte view, exactly
+ * as ACTOR_SLOT_NUMBER_OFFSET above does for +0x80. Only
+ * Java_xeno_Chr_setTranslate__ reads or writes it here: it tests bit 0 and,
+ * when set, stores the literal 2 back (lbu/andi/sb at
+ * 0x002feb9c-0x002febb0).
+ */
+#define ACTOR_TRANSLATE_STATE_OFFSET 0xa40
+
+#define CLEAR_SEQUENCE_STATE_FLAGS(sequence) \
+    do { (sequence)->state_flags = 0; } while (0)
+
+#define SET_THREAD_ACTOR_WAIT(thread, actor) \
+    do { \
+        (thread)->wait_target.object = (actor); \
+        (thread)->wait_kind = JTHREAD_WAIT_ACTOR; \
+        (thread)->resume_frames = (thread)->frame_depth; \
+        (thread)->flags |= 4; \
+    } while (0)
+
+#define SET_THREAD_WAIT_RESUME(thread) \
+    do { \
+        (thread)->resume_frames = (thread)->frame_depth; \
+        (thread)->flags |= 1; \
+    } while (0)
+
+/* Name interning and class-field resolution are the two VM operations
+ * performed by this native; its field descriptor is deliberately discarded. */
+#define CHR_RESOLVE_PEER_DESCRIPTOR() do { \
+    SceneString *peer_name = loadConstString(chr_peer_string, -1); \
+    (void)lookupClassField(classJava_xeno_Chr, peer_name, 0); \
+} while (0)
+
 typedef struct ChrRotFramesFollowCall {
     u8 *object;
     int frames;  /* +0x04 */
@@ -21,18 +58,10 @@ typedef struct ChrRotRateFollowCall {
     u8 wait;     /* +0x0c */
 } ChrRotRateFollowCall;
 
-extern float chrRotXFramesDegToRad;
-
-extern float chrRotXRateDegToRad;
-
-extern float chrRotXStepDegToRad;
-
-extern float chrRotZFramesDegToRad;
-
-extern float chrRotZRateDegToRad;
-
-extern float chrRotZStepDegToRad;
-
+/* Runtime Java fields occupy one EE VM value word. The descriptor
+ * supplies its byte offset; its declared Java/native kind selects
+ * the integer, floating or reference representation below. No fixed
+ * Java-object field positions are assumed. */
 typedef union ChrFieldValue {
     struct Actor * actor;
     float floating;
@@ -51,91 +80,31 @@ typedef struct ChrMotionRootCall {
     u8 *destination;
 } ChrMotionRootCall;
 
-static float defaultOffset[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-const char chr_algorithm_string[] = "algorithm";
-
-const char chr_peer_string[] = "peer";
-
-const char chrTranslateXKey[] = "px";
-
-const char chrTranslateYKey[] = "py";
-
-const char chrTranslateZKey[] = "pz";
-
-const char chrRotateXKey[] = "rx";
-
-const char chrRotateYKey[] = "ry";
-
-const char chrRotateZKey[] = "rz";
-
-/*
- * CHR_moveXZ is local to this file in the original (glabel ..., local); it
- * stays asm here but needs a prototype for the trampolines below to call.
- * Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
- */
-
 typedef union ChrMoveArgument {
     int integer;
     float floating;
     u8 *object;
     u8 byte;
 } ChrMoveArgument;
+
 struct ChrMoveCall {
     u8 *object;
     ChrMoveArgument argument[3];
     u8 wait;
 };
-static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
-                       u32 *failure_result);
-
-/*
- * CHR_rotX/CHR_rotY/CHR_rotZ are local to this file in the original (glabel
- * ..., local); they stay asm here but need a prototype for the trampolines
- * below to call. Overload -> mode: FFZ 1, IFZ 0, I,Object,Z 2, Object,F,Z 3
- * (same as CHR_sclX).
- */
 
 typedef union {
     int integer;
     float floating;
     u8 *object;
 } ChrRotArgument;
+
 struct ChrRotCall {
     u8 *object;
     ChrRotArgument first;
     ChrRotArgument second;
     u8 wait;
 };
-static void CHR_rotX(int mode, JThread *thread, ChrRotCall *arguments,
-                     u32 *failure_result);
-
-/* Bind a following target together with the enabled rotation axes. */
-#define CHR_SET_FOLLOW_TARGET(rotation_value, target_value, flags_value) do { \
-    (rotation_value)->target_actor = (target_value); \
-    (rotation_value)->follow_axes = (flags_value); \
-} while (0)
-
-static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
-                     u32 *failure_result);
-
-static void CHR_rotZ(int mode, JThread *thread, ChrRotCall *arguments,
-                     u32 *failure_result);
-
-/*
- * JTHREAD_get is local to jthread.c (still asm there) and only that TU
- * declares its own SceneThread-typed view; this TU needs its own prototype
- * over JThread, the type it already completes above (jal JTHREAD_get at
- * 0x002fe49c).
- */
-
-extern JThread *JTHREAD_get(void *object);
-
-/*
- * CHR_motion is local to this file in the original (glabel ..., local); it
- * stays asm here but needs a prototype for the trampolines below to call.
- * Overload -> mode: IIIIIFZ 1, IIFZ 0.
- */
 
 typedef union {
     int integer;
@@ -143,25 +112,11 @@ typedef union {
     u16 half;
     u8 byte;
 } ChrMotionArgument;
+
 struct ChrMotionCall {
     u8 *object;
     ChrMotionArgument argument[7];
 };
-static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
-                       u32 *failure_result);
-
-/*
- * The state byte at Actor+0xa40, past this TU's recovered head above:
- * growing the struct there would move data_header and every field after it
- * that other accepted functions in this file already read at their current
- * offsets, so this one narrowly evidenced access stays a byte view, exactly
- * as ACTOR_SLOT_NUMBER_OFFSET above does for +0x80. Only
- * Java_xeno_Chr_setTranslate__ reads or writes it here: it tests bit 0 and,
- * when set, stores the literal 2 back (lbu/andi/sb at
- * 0x002feb9c-0x002febb0).
- */
-
-#define ACTOR_TRANSLATE_STATE_OFFSET 0xa40
 
 typedef struct ChrSavedPartyPrefix {
     unsigned char unmodeled_00[0x100a4];
@@ -184,75 +139,6 @@ typedef struct ChrSplineSequencePrefix {
     unsigned char unmodeled_0c[0x18];
     void *handler[4];
 } ChrSplineSequencePrefix;
-
-extern struct {
-    u32 address;
-    int size;
-    int handle;
-    int state;
-} GameResource[128];
-
-extern u32 ACT_allocMatrix(Actor *actor, u32 matrix_id);
-
-extern void *ACT_create(int kind, int resource_id);
-
-extern void ACT_setModelWrapper(void *actor, int enabled);
-
-extern void ACT_setRelation(void *actor, void *parent, int relation, int enabled);
-
-extern void ACT_setHumanHand(void *actor, int hand);
-
-extern void ACT_setMotion(void *actor, int motion);
-
-extern int ACT_initMotion(void *actor);
-
-extern Actor *getPeer_Chr(u8 *object);
-
-extern const char chrIdKey[];
-
-extern void ACT_setParent(Actor *actor, int type, Actor *parent,
-                          int joint, int id);
-
-extern void ACT_updateSequence(Actor *actor);
-
-extern void ACT_filterGuno(Actor *actor);
-
-extern void ACT_filterStealth(Actor *actor);
-
-extern SceneClass *classJava_xeno_util_Vector4f;
-
-/*
- * CHR_moveXZ is local to this file in the original (glabel ..., local); it
- * stays asm here but needs a prototype for the trampolines below to call.
- * Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
- */
-
-extern float chrRotYFramesDegToRad;
-
-extern float chrRotYRateDegToRad;
-
-extern float chrRotYStepDegToRad;
-
-extern void SEQ_moveChr(Actor *actor);
-
-extern void SEQ_moveXZ(Actor *actor);
-
-extern void ACT_updateDefault(Actor *actor);
-
-extern void ACT_updatePlayer(Actor *actor);
-
-extern void ACT_updateMPack(Actor *actor);
-
-extern int SCRIPT_methodClearGet(void);
-
-extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
-                               void *signature_or_type);
-
-extern SceneType *TYPE_Void;
-
-extern void JNI_initThread(JThread *thread);
-
-extern void JTHREAD_defaultChr(JThread *thread);
 
 typedef struct ChrStartStringValue {
     unsigned char unmodeled_00[4];
@@ -282,33 +168,143 @@ struct ChrDropShadowEntry {
     unsigned char *tokens;
 };
 
-extern struct ChrDropShadowEntry DropShadowDefineTable[10];
-
 struct ChrShadowByteArray {
     unsigned char unmodeled_00[8];
     const signed char *bytes;
 };
+
 struct ChrShadowBytesCall {
     u8 *object;
     struct ChrShadowByteArray *bytes;
 };
 
-#define CLEAR_SEQUENCE_STATE_FLAGS(sequence) \
-    do { (sequence)->state_flags = 0; } while (0)
+extern float chrRotXFramesDegToRad;
+extern float chrRotXRateDegToRad;
+extern float chrRotXStepDegToRad;
+extern float chrRotZFramesDegToRad;
+extern float chrRotZRateDegToRad;
+extern float chrRotZStepDegToRad;
 
-#define SET_THREAD_ACTOR_WAIT(thread, actor) \
-    do { \
-        (thread)->wait_target.object = (actor); \
-        (thread)->wait_kind = JTHREAD_WAIT_ACTOR; \
-        (thread)->resume_frames = (thread)->frame_depth; \
-        (thread)->flags |= 4; \
-    } while (0)
+extern struct {
+    u32 address;
+    int size;
+    int handle;
+    int state;
+} GameResource[128];
 
-#define SET_THREAD_WAIT_RESUME(thread) \
-    do { \
-        (thread)->resume_frames = (thread)->frame_depth; \
-        (thread)->flags |= 1; \
-    } while (0)
+extern const char chrIdKey[];
+extern SceneClass *classJava_xeno_util_Vector4f;
+
+extern float chrRotYFramesDegToRad;
+extern float chrRotYRateDegToRad;
+extern float chrRotYStepDegToRad;
+extern SceneType *TYPE_Void;
+extern struct ChrDropShadowEntry DropShadowDefineTable[10];
+
+/*
+ * CHR_moveXZ is local to this file in the original (glabel ..., local); it
+ * stays asm here but needs a prototype for the trampolines below to call.
+ * Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
+ */
+static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
+                       u32 *failure_result);
+
+/*
+ * CHR_rotX/CHR_rotY/CHR_rotZ are local to this file in the original (glabel
+ * ..., local); they stay asm here but need a prototype for the trampolines
+ * below to call. Overload -> mode: FFZ 1, IFZ 0, I,Object,Z 2, Object,F,Z 3
+ * (same as CHR_sclX).
+ */
+static void CHR_rotX(int mode, JThread *thread, ChrRotCall *arguments,
+                     u32 *failure_result);
+
+static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
+                     u32 *failure_result);
+
+static void CHR_rotZ(int mode, JThread *thread, ChrRotCall *arguments,
+                     u32 *failure_result);
+
+/*
+ * JTHREAD_get is local to jthread.c (still asm there) and only that TU
+ * declares its own SceneThread-typed view; this TU needs its own prototype
+ * over JThread, the type it already completes above (jal JTHREAD_get at
+ * 0x002fe49c).
+ */
+extern JThread *JTHREAD_get(void *object);
+
+/*
+ * CHR_motion is local to this file in the original (glabel ..., local); it
+ * stays asm here but needs a prototype for the trampolines below to call.
+ * Overload -> mode: IIIIIFZ 1, IIFZ 0.
+ */
+static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
+                       u32 *failure_result);
+
+extern u32 ACT_allocMatrix(Actor *actor, u32 matrix_id);
+extern void *ACT_create(int kind, int resource_id);
+extern void ACT_setModelWrapper(void *actor, int enabled);
+extern void ACT_setRelation(void *actor, void *parent, int relation, int enabled);
+extern void ACT_setHumanHand(void *actor, int hand);
+extern void ACT_setMotion(void *actor, int motion);
+extern int ACT_initMotion(void *actor);
+extern Actor *getPeer_Chr(u8 *object);
+
+extern void ACT_setParent(Actor *actor, int type, Actor *parent,
+                          int joint, int id);
+
+extern void ACT_updateSequence(Actor *actor);
+extern void ACT_filterGuno(Actor *actor);
+extern void ACT_filterStealth(Actor *actor);
+extern void SEQ_moveChr(Actor *actor);
+extern void SEQ_moveXZ(Actor *actor);
+extern void ACT_updateDefault(Actor *actor);
+extern void ACT_updatePlayer(Actor *actor);
+extern void ACT_updateMPack(Actor *actor);
+extern int SCRIPT_methodClearGet(void);
+
+extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
+                               void *signature_or_type);
+
+extern void JNI_initThread(JThread *thread);
+extern void JTHREAD_defaultChr(JThread *thread);
+
+const char chr_algorithm_string[] = "algorithm";
+
+static float defaultOffset[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+const char chr_peer_string[] = "peer";
+
+const char chrTranslateXKey[] = "px";
+
+const char chrTranslateYKey[] = "py";
+
+const char chrTranslateZKey[] = "pz";
+
+const char chrRotateXKey[] = "rx";
+
+const char chrRotateYKey[] = "ry";
+
+const char chrRotateZKey[] = "rz";
+
+float chrRotXFramesDegToRad = 3.1415927410125732f;
+
+float chrRotXRateDegToRad = 3.1415927410125732f;
+
+float chrRotXStepDegToRad = 3.1415927410125732f;
+
+float chrRotYFramesDegToRad = 3.1415927410125732f;
+
+float chrRotYRateDegToRad = 3.1415927410125732f;
+
+float chrRotYStepDegToRad = 3.1415927410125732f;
+
+float chrRotZFramesDegToRad = 3.1415927410125732f;
+
+float chrRotZRateDegToRad = 3.1415927410125732f;
+
+float chrRotZStepDegToRad = 3.1415927410125732f;
+
+const char chrIdKey[3] = "id";
 
 void Java_xeno_Chr_getPlayer__(JThread *thread, ChrScaleCall *arguments)
 {
@@ -1492,13 +1488,6 @@ void Java_xeno_Chr_getState__(JThread *thread, ChrObjectCall *arguments,
     slot = ((u8 *)peer)[ACTOR_SLOT_NUMBER_OFFSET];
     *failure_result = actSequence[slot].state.state_flags;
 }
-
-/* Name interning and class-field resolution are the two VM operations
- * performed by this native; its field descriptor is deliberately discarded. */
-#define CHR_RESOLVE_PEER_DESCRIPTOR() do { \
-    SceneString *peer_name = loadConstString(chr_peer_string, -1); \
-    (void)lookupClassField(classJava_xeno_Chr, peer_name, 0); \
-} while (0)
 
 void Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_(JThread *thread,
                                                      ChrMotionRootCall *arguments,
@@ -2804,14 +2793,3 @@ void Java_xeno_Chr_ignoreShape__I(JThread *thread, ChrIntCall *arguments)
         peer->render_flags &= ~0x400;
     }
 }
-
-float chrRotXFramesDegToRad = 3.1415927410125732f;
-float chrRotXRateDegToRad = 3.1415927410125732f;
-float chrRotXStepDegToRad = 3.1415927410125732f;
-float chrRotYFramesDegToRad = 3.1415927410125732f;
-float chrRotYRateDegToRad = 3.1415927410125732f;
-float chrRotYStepDegToRad = 3.1415927410125732f;
-float chrRotZFramesDegToRad = 3.1415927410125732f;
-float chrRotZRateDegToRad = 3.1415927410125732f;
-float chrRotZStepDegToRad = 3.1415927410125732f;
-const char chrIdKey[3] = "id";

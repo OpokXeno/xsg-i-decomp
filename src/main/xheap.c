@@ -1,10 +1,9 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/string_utf_get_hash.h"
-
 #include "xheap.h"
+
+extern void reloadClassEntry(void *heap_boundary);
 
 static xheap_block *heap_top;
 
@@ -15,8 +14,6 @@ static xheap_frame *frame_stack;
 static xheap_block *freeBlock;
 
 void *jthreadCurrent;
-
-extern void reloadClassEntry(void *heap_boundary);
 
 static void xmemchk() {
 }

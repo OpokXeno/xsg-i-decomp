@@ -3,11 +3,11 @@
  * OV02 original TU 8: 0x00a04170..0x00a05738 (11 functions)
  */
 #include "common.h"
+
 #include "shared.h"
 #include "main/xgl_2.h"
 #include "main/e_message.h"
 #include "ov02/tsk_umn_object_task_main.h"
-extern UmnWorkData UmnWork;
 
 /* The two original UmnManzaiWin records have a 0xa4-byte stride. */
 typedef struct UmnManzaiWinTask {
@@ -82,11 +82,45 @@ typedef struct MenuModelUnit {
     MenuModelActor *actor;
 } MenuModelUnit;
 
+/* The light table is copied as fourteen original doublewords. */
+typedef union UmnLightSet {
+    Vector4 v[7];
+    u64 words[14];
+} UmnLightSet;
+
+/*
+ * These are bit-preserving copies of the camera's 16-byte vectors.  The
+ * original copies each vector with two aligned doublewords; the union keeps
+ * that evidenced storage representation alongside its float components.
+ */
+typedef union UmnMailVec {
+    Vector4 v;
+    u64 words[2];
+} UmnMailVec;
+
+extern UmnWorkData UmnWork;
 extern UmnManzaiWinTask UmnManzaiWin[2];
+extern PadPrefix PadData;
+extern const char D_00A12060[];
+extern const UmnLightSet D_00A120F0;
+extern UmnMailVec D_00A12230;
+
+extern int eMessageNextPage(void *page, int arg);
+extern void xglSoundEffectNormalID(int id, int arg);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+extern void xglLightIntensityParallel(void *light, int index,
+                                      const Vector4 *intensity);
+
+extern void xglLightIntensityAmbient(void *light,
+                                     const Vector4 *intensity);
+
+extern void xglLightDirection(void *light, unsigned int index,
+                              const Vector4 *direction);
+
 /*
  * TU-local declarations of ov02/tu008 (src/ov02/umn_procurator.c).
  */
-
 #ifndef SRC_OV02_UMN_PROCURATOR_H
 #define SRC_OV02_UMN_PROCURATOR_H
 
@@ -117,12 +151,6 @@ void tskUmnManzaiWin(void *task);
  */
 
 #endif /* SRC_OV02_UMN_PROCURATOR_H */
-
-extern PadPrefix PadData;
-extern int eMessageNextPage(void *page, int arg);
-extern void xglSoundEffectNormalID(int id, int arg);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char D_00A12060[];
 
 int UmnManzaiControl(void)
 {
@@ -190,21 +218,6 @@ int UmnManzaiInit(void)
 
 INCLUDE_ASM("asm/main/nonmatchings/ov02/08_umn_procurator", tskUmnManzaiWin);
 
-extern void xglLightIntensityParallel(void *light, int index,
-                                      const Vector4 *intensity);
-extern void xglLightIntensityAmbient(void *light,
-                                     const Vector4 *intensity);
-extern void xglLightDirection(void *light, unsigned int index,
-                              const Vector4 *direction);
-
-/* The light table is copied as fourteen original doublewords. */
-typedef union UmnLightSet {
-    Vector4 v[7];
-    u64 words[14];
-} UmnLightSet;
-
-extern const UmnLightSet D_00A120F0;
-
 static void LocalLightSet(void *model, int unused)
 {
     UmnLightSet lights = D_00A120F0;
@@ -240,18 +253,6 @@ static void Rotation(float *out, float *position, float *base, float *rotation)
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/ov02/08_umn_procurator", UmnProcuratorManzai);
-
-/*
- * These are bit-preserving copies of the camera's 16-byte vectors.  The
- * original copies each vector with two aligned doublewords; the union keeps
- * that evidenced storage representation alongside its float components.
- */
-typedef union UmnMailVec {
-    Vector4 v;
-    u64 words[2];
-} UmnMailVec;
-
-extern UmnMailVec D_00A12230;
 
 void UmnProcuratorMail(void *argument)
 {

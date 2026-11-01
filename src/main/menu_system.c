@@ -1,27 +1,22 @@
 #include "common.h"
-
-extern void subMenuSystemInit(int workEnd);
-
-extern void subMenuSystemMain(void);
-
-extern int MainMenuWorkEnd;
-
-/* The original stores the HDD mount result through this four-byte object. */
-extern int MenuHddCheck;
-
-extern void ChangeTopLevel(int level);
-
 #include "shared.h"
-
 #include "main/e_battle_win_open.h"
-
 #include "main/party.h"
-
 #include "main/xgl_hdd.h"
+#include "main/window_tex_load.h"
+#include "main/menu_top_command_check.h"
+#include "main/xgl_thread.h"
+
+/* Existing option names designate entries in the contiguous option array. */
+#define soundOutput options[0]
+
+#define padMode options[1]
+#define radarMode options[2]
+#define displayMode options[3]
+#define hddActive options[5]
 
 /* Offsets named here are touched by MenuSystemInfoMain, MenuSystemInitSet,
  * and the existing MenuSystem2 completion poll. */
-
 typedef struct MenuSystemWork {
     unsigned char unmodeled_00[3];
     unsigned char menuState;
@@ -38,15 +33,6 @@ typedef struct MenuSystemWork {
     unsigned char options[7];
 } MenuSystemWork;
 
-/* Existing option names designate entries in the contiguous option array. */
-#define soundOutput options[0]
-#define padMode options[1]
-#define radarMode options[2]
-#define displayMode options[3]
-#define hddActive options[5]
-
-extern MenuSystemWork MenuWork;
-
 typedef struct MenuSystemPad {
     unsigned char unmodeled_00[0x2a];
     unsigned short pressed;
@@ -60,14 +46,6 @@ typedef struct MenuSystemPartyDataPrefix {
     unsigned char unmodeled_00[0x2e];
     unsigned char radar_disp;
 } MenuSystemPartyDataPrefix;
-
-extern MenuSystemPad PadData;
-
-void SsdSetOutputMode(int mode);
-
-void PartyRadarDispSet(int enabled);
-
-void tyaDisplaySetting(int mode);
 
 typedef struct MenuSystemInfoBlock {
     unsigned char state;
@@ -103,37 +81,12 @@ typedef union MenuSystemMessageStorage {
     unsigned int words[8];
 } MenuSystemMessageStorage;
 
-extern MenuSystemInfoBlock *MenuSystemInfo;
-
-extern XglClock _CountTime;
-
-const MenuSystemMessageStorage messageTexts = {
-    .words = {0x004C9338, 0x004C9380, 0x004C93A8, 0x004C93D0,
-              0x004C93F8, 0x004C9428, 0x004C9460, 0}
-};
-
-extern void eMessageCpy(char *message, char *text);
-
-extern void MoveSlide(short *value, short *destination, float speed);
-
-extern void *memset(void *destination, int value, unsigned int count);
-
 enum {
     SAVE_DATA_BYTE_28 = 0x28,
     SAVE_DATA_BYTE_44 = 0x44,
     SAVE_DATA_BYTE_3C = 0x3c,
     SAVE_DATA_BYTE_40 = 0x40
 };
-
-extern void endPrintInit(void);
-
-extern void endPrintExtFunc(int kind, int id, void *data);
-
-/*
- * Drives the system-options screen for one frame and reports whether it is
- * still running: MenuWork.state is 0xFF once the screen driven by
- * subMenuSystemMain has finished.
- */
 
 typedef struct MenuSystemPanelWindow {
     short x;
@@ -173,19 +126,6 @@ typedef struct MenuSystemPasBlock {
     unsigned char unmodeled_1e0[0x334 - 0x1e0];
     MenuSystemPanelBox box;
 } MenuSystemPasBlock;
-
-extern MenuSystemPasBlock *MenuSystemPas;
-
-extern const char MenuSystemOptionHelpText[];
-
-static const char *msg00_0_0036DCF8[] = {MenuSystemOptionHelpText};
-
-extern void eMessageSet(void *message, const char *text);
-
-extern void eMessageMain(void *message);
-
-#include "main/window_tex_load.h"
-#include "main/menu_top_command_check.h"
 
 typedef struct MenuSystemWindow {
     short x;
@@ -247,14 +187,108 @@ typedef struct MenuSystemMenuBlock {
     MenuSystemChoice confirm;
 } MenuSystemMenuBlock;
 
+typedef const char *MenuSystemOptionNames[2];
+
+extern int MainMenuWorkEnd;
+
+/* The original stores the HDD mount result through this four-byte object. */
+extern int MenuHddCheck;
+
+extern MenuSystemWork MenuWork;
+extern MenuSystemPad PadData;
+extern MenuSystemInfoBlock *MenuSystemInfo;
+extern XglClock _CountTime;
+extern MenuSystemPasBlock *MenuSystemPas;
+extern const char MenuSystemOptionHelpText[];
 extern MenuSystemMenuBlock *MenuSystemMenu;
+extern const char configurationText[];
+extern const char selectionText[];
+static const char * msg01_2_0036DD20[] ;
+static const char * msg02_3_0036DD28[] ;
+static const char * msg03_4_0036DD30[] ;
+extern MenuSystemOptionNames *const settingLabelNames[];
+extern int MenuModelWorkTop;
+extern unsigned char optionStateTable[];
+extern int outputModeTable[];
+extern int displayModeTable[];
+extern int vibrationModeTable[];
+extern int padModeTable[];
+extern int hddModeTable[];
+extern char systemText[];
+extern char messageDelayFormat[];
+extern const char MenuSkillTitleText[8];
+extern const char MenuSystemDefaultText[8];
+extern const char MenuSystemHddText[8];
+extern const char MenuSystemStereoText[8];
+extern const char MenuSystemMonoText[8];
+extern const char MenuSystemOffText[8];
+extern const char MenuSystemOnText[8];
+extern const char MenuSystemYesNoText[8];
+extern const char MenuSkillSetSuffixText[8];
+
+extern void subMenuSystemInit(int workEnd);
+extern void subMenuSystemMain(void);
+extern void ChangeTopLevel(int level);
+void SsdSetOutputMode(int mode);
+void PartyRadarDispSet(int enabled);
+void tyaDisplaySetting(int mode);
+extern void eMessageCpy(char *message, char *text);
+extern void MoveSlide(short *value, short *destination, float speed);
+extern void *memset(void *destination, int value, unsigned int count);
+extern void endPrintInit(void);
+extern void endPrintExtFunc(int kind, int id, void *data);
+extern void eMessageSet(void *message, const char *text);
+extern void eMessageMain(void *message);
+extern void eCursolSet(void *cursor, signed char width);
+extern void eCursolMain(void *cursor);
+extern int MenuSelectMove(int selection, int count, int wrap);
+extern void MenuModelMemorySet(int mode);
+
+extern void MenuBibrationSet(unsigned char pad, unsigned char mode,
+                             unsigned char strength, unsigned char duration);
+
+extern void MenuSystemMenuMain(void);
+extern void xglSoundEffectNormalID(int id, int mode);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+
+const MenuSystemMessageStorage messageTexts = {
+    .words = {0x004C9338, 0x004C9380, 0x004C93A8, 0x004C93D0,
+              0x004C93F8, 0x004C9428, 0x004C9460, 0}
+};
+
+const char monitorSettingsText[24] = "Monitor Settings";
+
+const char radarDisplayText[16] = "Radar Display";
+
+const char vibrationText[16] = "Vibration";
+
+const char cursorLocationMemoryText[24] = "Cursor Location Memory";
+
+const char soundOutputText[16] = "Sound Output";
+
+const char proceedQuestionText[16] = " Proceed\?";
+
+const char configurationText[16] = "Configuration";
+
+const char selectionText[16] = "Selection";
+
+static const char *msg00_0_0036DCF8[] = {MenuSystemOptionHelpText};
+
+static const char * msg00_1_0036DD00[7];
+
+static const char * msg00_1_0036DD00[7] = { soundOutputText, cursorLocationMemoryText, vibrationText, radarDisplayText, monitorSettingsText, MenuSystemHddText, MenuSystemDefaultText };
+
+static const char * msg01_2_0036DD20[] = { MenuSystemStereoText, MenuSystemMonoText };
+
+static const char * msg02_3_0036DD28[] = { MenuSystemOnText, MenuSystemOffText };
+
+static const char * msg03_4_0036DD30[] = { proceedQuestionText, MenuSystemYesNoText };
 
 /*
  * Drives the system-options screen for one frame and reports whether it is
  * still running: MenuWork.state is 0xFF once the screen driven by
  * subMenuSystemMain has finished.
  */
-
 void MenuSystemPasMain(void)
 {
     MenuSystemPasBlock *panel = MenuSystemPas;
@@ -367,17 +401,6 @@ void MenuSystemInfoMain(void)
     info->message = info->text;
     WindowDXMain((WindowDX *)&info->x);
 }
-
-extern void eCursolSet(void *cursor, signed char width);
-extern void eCursolMain(void *cursor);
-extern const char configurationText[];
-extern const char selectionText[];
-static const char * msg00_1_0036DD00[7];
-static const char * msg01_2_0036DD20[] ;
-static const char * msg02_3_0036DD28[] ;
-static const char * msg03_4_0036DD30[] ;
-typedef const char *MenuSystemOptionNames[2];
-extern MenuSystemOptionNames *const settingLabelNames[];
 
 void MenuSystemMenuMain(void)
 {
@@ -574,25 +597,6 @@ void MenuSystemInitSet(void)
         MenuWork.hddActive = SaveData[SAVE_DATA_BYTE_40];
     }
 }
-
-extern int MenuSelectMove(int selection, int count, int wrap);
-extern void MenuModelMemorySet(int mode);
-extern void MenuBibrationSet(unsigned char pad, unsigned char mode,
-                             unsigned char strength, unsigned char duration);
-extern void MenuSystemMenuMain(void);
-extern int MenuModelWorkTop;
-extern void xglSoundEffectNormalID(int id, int mode);
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-#include "main/xgl_thread.h"
-
-extern unsigned char optionStateTable[];
-extern int outputModeTable[];
-extern int displayModeTable[];
-extern int vibrationModeTable[];
-extern int padModeTable[];
-extern int hddModeTable[];
-extern char systemText[];
-extern char messageDelayFormat[];
 
 void subMenuSystemMain(void)
 {
@@ -865,43 +869,8 @@ int MenuSystem2(void)
     return MenuWork.state != 0xFF;
 }
 
-const char monitorSettingsText[24] = "Monitor Settings";
-
-const char radarDisplayText[16] = "Radar Display";
-
-const char vibrationText[16] = "Vibration";
-
-const char cursorLocationMemoryText[24] = "Cursor Location Memory";
-
-const char soundOutputText[16] = "Sound Output";
-
-const char proceedQuestionText[16] = " Proceed\?";
-
-const char configurationText[16] = "Configuration";
-
-const char selectionText[16] = "Selection";
-
-extern const char MenuSkillTitleText[8];
-
-extern const char MenuSystemDefaultText[8];
-extern const char MenuSystemHddText[8];
-extern const char MenuSystemStereoText[8];
-extern const char MenuSystemMonoText[8];
-extern const char MenuSystemOffText[8];
-extern const char MenuSystemOnText[8];
-extern const char MenuSystemYesNoText[8];
-
-static const char * msg00_1_0036DD00[7] = { soundOutputText, cursorLocationMemoryText, vibrationText, radarDisplayText, monitorSettingsText, MenuSystemHddText, MenuSystemDefaultText };
-
-static const char * msg01_2_0036DD20[] = { MenuSystemStereoText, MenuSystemMonoText };
-
-static const char * msg02_3_0036DD28[] = { MenuSystemOnText, MenuSystemOffText };
-
-static const char * msg03_4_0036DD30[] = { proceedQuestionText, MenuSystemYesNoText };
-
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 MenuSystemOptionNames *const settingLabelNames[7] = { &msg01_2_0036DD20, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28 };
-
-extern const char MenuSkillSetSuffixText[8];
 
 unsigned char optionStateTable[8] = { 0x20, 0x50, 0x40, 0x30, 0x00, 0x70, 0x60, 0x00 };
 

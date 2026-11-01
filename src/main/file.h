@@ -1,3 +1,7 @@
+/*
+ * TU-local declarations of game/167_file (main#167).
+ */
+
 #ifndef MAIN_GAME_167_FILE_H
 #define MAIN_GAME_167_FILE_H
 
@@ -17,25 +21,6 @@ typedef union {
         long long stored_checksum;
     } fields;
 } FileChecksumData;
-
-void FileVersionCheck(SaveDataHeader *save_data);
-
-void FileObjectDataClear(void);
-
-extern byte *FileObjectData;
-
-extern byte *FileJpegDec;
-void FileCheckSumGet(FileChecksumData *source, long long *checksum);
-
-int FileCheckSumCheck(FileChecksumData *data);
-
-void FileSinkiSaveDataPush(void);
-
-/*
- * TU-local declarations of game/167_file (main#167).
- */
-
-int xglTaskWaitRemove(XglTaskPrefix *task);
 
 /*
  * The file menu's work block: MenuFileMain takes 0x80 bytes, 0x80-aligned, from
@@ -87,6 +72,16 @@ typedef struct FileWorkBlock {
     unsigned char unmodeled_49[0x80 - 0x49];
 } FileWorkBlock;
 
+extern byte *FileObjectData;
+extern byte *FileJpegDec;
 extern FileWorkBlock *FileWork;
+
+void FileVersionCheck(SaveDataHeader *save_data);
+void FileObjectDataClear(void);
+void FileCheckSumGet(FileChecksumData *source, long long *checksum);
+int FileCheckSumCheck(FileChecksumData *data);
+void FileSinkiSaveDataPush(void);
+
+int xglTaskWaitRemove(XglTaskPrefix *task);
 
 #endif /* MAIN_GAME_167_FILE_H */

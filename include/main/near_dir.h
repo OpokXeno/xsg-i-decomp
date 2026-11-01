@@ -2,7 +2,6 @@
 #define INCLUDE_MAIN_NEAR_DIR_H
 
 #include "shared.h"
-
 #include "main/xgl_studio.h"
 
 /*

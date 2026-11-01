@@ -1,19 +1,38 @@
 #include "common.h"
-
-static short pause_check;
-
 #include "shared.h"
-
-#include "game.h"
 #include "main/sdv.h"
-void GameStateSave(void);
+#include "main/xgl_thread.h"
+#include "main/control_entry.h"
+#include "main/xgl_sound.h"
+
+#define game_mode_flags (GameLoopState.flags)
+#define game_mode_kind (GameLoopState.kind)
+#define game_mode_status (GameLoopState.status)
+#define game_mode_saved_kind (GameLoopState.saved_kind)
+#define game_mode_debug_storage (GameLoopState.debug_menu.storage)
+#define game_mode_camera_callback (GameLoopState.camera_callback)
+#define ACTOR_NUMBER_OFFSET 0x80
+#define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
+
+/*
+ * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
+ * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
+ * src/main/enemy_2.h, src/main/set_motion.h, src/main/db_light_write.h and
+ * src/main/tya.c, which name the same two fields for the same reason).
+ * GameDrawShadow only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the
+ * in-use id ACT_create writes and ACT_update skips a slot on when it is
+ * zero; the offsets between them are not evidenced by this TU and stay
+ * unmodeled.
+ */
+#define ACTOR_COUNT 64
+
+#define ACTOR_IN_USE_ID_OFFSET 0x86
 
 /*
  * GNU EE native TI storage/copy type. Used only for the
  * 16-byte aligned typed storage that the original clears with por+sq; no
  * wide arithmetic.
  */
-
 typedef struct GameOrgRecord {
     u8 unmodeled_00[0x180];
 } GameOrgRecord;
@@ -41,22 +60,6 @@ typedef struct GameUserSave {
     u8 unmodeled_16344[0x16350 - 0x16344];
     u64 user_longs[2];
 } GameUserSave;
-
-extern GameOrgRecord orgData[33];
-
-extern GamePlayerRecord plChaData[16];
-
-extern u16 itmBox[255];
-
-extern u16 wpnBox[255];
-
-extern u16 bltBox[255];
-
-extern u16 accBox[255];
-
-extern u16 evtBox[255];
-
-extern long long moneyBox;
 
 typedef union GameVector8 {
     Vector4 vector;
@@ -111,38 +114,6 @@ typedef struct GameTestEnvironment {
     GamePackedXyz2 vertices[2];
 } GameTestEnvironment;
 
-extern GameClearEnvironment ClearEnv;
-
-/* Text: {color #000000}%4x\n%6x */
-static char str_0[12] = "\014\000\000\000%4x\n%6x";
-/* Text: {color #000000}%4x\n%6x */
-static char str_1[12] = "\014\000\000\000%4x\n%6x";
-static GameTestEnvironment TestEnv_2_00338620 = {
-    .vif_nop = { 0, 0, 0 },
-    .vif_directhl = 0x51000005U,
-    .gif_tag = 0x4003400000008001ULL,
-    .gif_registers = 0x551eULL,
-    .test = 0x00071001ULL,
-    .test_register = 0x47ULL,
-    .red = 0, .green = 0, .blue = 0, .alpha = 0,
-    .vertices = {
-        { .x = 0x6ff8, .y = 0x71f7, .z = 0x40000000U, .adc = 0 },
-        { .x = 0x8ff8, .y = 0x8df7, .z = 0x40000000U, .adc = 0 }
-    }
-};
-
-const char cfRegistSoundName[9] = "REGISTCF";
-const char eobAlwaysMethodName[11] = "EOB_Always";
-const char eobEscapeMethodName[11] = "EOB_Escape";
-
-static SchedulerState *saveEffe = 0;
-static SchedulerState *shopEffe = 0;
-static SchedulerState *evsEffe = 0;
-static SchedulerState *retEffe = 0;
-const char dispTagFormat[8] = "%4x\n%6x";
-
-extern int StudioEntrySkip;
-
 typedef struct GameSequenceSlot {
     u32 flags;
     u32 state_flags;
@@ -154,45 +125,10 @@ typedef struct GameSequenceSlot {
     u8 unmodeled_34[0x260 - 0x34];
 } GameSequenceSlot;
 
-extern GameSequenceSlot actSequence[64];
-
-/* GameDebugMenu accesses the first two bytes at GameLoopState+0x29f50.
- * Mode exits reset this complete 16-byte region with one native quadword
- * store. The remaining bytes have no field interpretation in these TUs. */
-typedef union GameDebugMenuStorage {
-    Quadword storage;
-    struct {
-        u8 page;
-        u8 page_initialized;
-        u8 unmodeled_02[14];
-    } fields;
-} GameDebugMenuStorage;
-
-/*
- * PARTIAL ACCESSED VIEW of GameLoopState (0x2a030-byte object at 0x338680).
- * Union of the offsets the merged handlers access:
- *  +0x0c kind u16, +0x10 flags u32, +0x28 camera_callback,
- *  +0x29f40 status u8 (read by GameModeCfEvent),
- *  +0x29f50 debug_menu 16-byte reset region (cleared with por+sq),
- *  +0x29f60 saved_kind u16.
- * Spans named _unmodeled_* are opaque sizing bytes never accessed by these
- * bodies; the remainder of the object beyond 0x29f62 is unmodeled. The name
- * is TU-local by canon
- */
-
-/*
- * GameStateSave/GameStateRestore back up and restore two more GameLoopState
- * halfwords (main VA 0x00243278/0x002432f0): +0x0e kindDetail, the halfword
- * GameStateSave copies alongside +0x0c kind, and the +0xe0/+0xe2 backup slot
- * GameStateSave writes them into and GameStateRestore reads back to restore
- * kind and kindDetail.
- */
-
 /* Private defining-owner proposals. NmlModel's canonical serialized
  * resource prefix/table comes from src/main/nml_model_set.h175..194.
  * The original Game_Data_Push reads each block's signed index at +0x2c.
  * The variable resource tail remains an explicit owner transport concern. */
-
 typedef struct NmlModel {
     unsigned char unmodeled_000[0x44];
     int blockCount;
@@ -218,6 +154,7 @@ typedef struct ActorUndulation {
     u8 unmodeled_00[8];
     s16 attr_mask;
 } ActorUndulation;
+
 typedef struct ActorHead {
     u32 flags;
     void (*update)(void *actor); /* +0x4 */
@@ -290,8 +227,6 @@ typedef struct MapUnitSlot {
     u8 unmodeled_1a4[0x300 - 0x1a4];
 } MapUnitSlot;
 
-extern MapUnitSlot MapUnit[64];
-
 typedef struct PlayerEffect PlayerEffect;
 
 struct LookAtPlayerActor {
@@ -340,19 +275,257 @@ struct LookAtPlayerActor {
     u8 unmodeled_a34[0xa70 - 0xa34];
 };
 
+typedef struct EnemyWorkPostTalk {
+    u8 unmodeled_00[0x4e];
+    u16 stiff_timer;
+    short effect_timer[2];
+    u8 unmodeled_54[0x37b4 - 0x54];
+    u32 post_talk_flags;
+    int enemy_id;
+    u8 unmodeled_37bc[0x3830 - 0x37bc];
+    short encount_lock;
+    u8 unmodeled_3832[0x38b0 - 0x3832];
+} EnemyWorkPostTalk;
+
+typedef struct GameActorAttributeView {
+    u8 unmodeled_00[0x4e8];
+    u64 attribute_flags;
+} GameActorAttributeView;
+
+typedef struct NmlModelBlockPrefix {
+    u8 unmodeled_00[0x20];
+    u32 flags;
+    u8 unmodeled_24[8];
+    int part_index;
+} NmlModelBlockPrefix;
+
+typedef struct GamePartyData {
+    u8 unmodeled_00[0x2c];
+    u16 leader_battle_id;
+} GamePartyData;
+
+typedef struct GameRadarParams {
+    int x;
+    int y;
+    int color;
+    u8 red;
+    u8 green;
+    u8 blue;
+    u8 alpha;
+} GameRadarParams;
+
+/* The RTPS producer writes integer screen xyz and float reciprocal w.
+ * Its frozen Vector4 output prototype remains an explicit nominal
+ * transport boundary; this private diagnostic does not erase that type. */
+typedef struct GameProjectedPoint {
+    int x;
+    int y;
+    int z;
+    float w;
+/* GameRadarDraw reads x/y, RGB and four unsigned RGBA bytes at+12..15. */
+} GameProjectedPoint;
+
+extern GameOrgRecord orgData[33];
+extern GamePlayerRecord plChaData[16];
+extern u16 itmBox[255];
+extern u16 wpnBox[255];
+extern u16 bltBox[255];
+extern u16 accBox[255];
+extern u16 evtBox[255];
+extern long long moneyBox;
+extern GameClearEnvironment ClearEnv;
+extern int StudioEntrySkip;
+extern GameSequenceSlot actSequence[64];
+extern MapUnitSlot MapUnit[64];
+extern EnemyWorkPostTalk enepc[16];
+extern ActorHead actor[ACTOR_COUNT];
+extern const char eobMethodName[];
+extern short NowTester;
+extern signed char FLAG_FRAME_60;
+extern void *const stageVM;
+extern u8 *WorkEnd;
+
+void GameStateSave(void);
+
 /* Partial defining-owner prefix, from act_2.h. Only these two genuine
  * parent fields are accessed; no complete Actor extent is claimed here. */
-
 extern void ACT_setMotion2(struct Actor *actor, int motion, unsigned int flags);
+
 extern void ACT_updateMotion(struct Actor *actor);
 extern int xglCdSync(void);
-#include "main/xgl_thread.h"
 extern void GameResourceLoad(int scene_id);
 void GameStateRestore(void);
 extern void sefPopEffect(void);
 extern void UnlockMapUnit(void);
 extern void ClearUwamonoEffect(MapUnitSlot *unit);
 extern void nmlModelSetPartsVisible(NmlModel *model, int part, int visible);
+extern void xglSoundEffectNormalDirect(int effect_id);
+extern void TWSYS_update(void);
+extern void EvtTools(void);
+extern void PauseMenu(void);
+extern void PartyTimePauseEnd(void);
+extern void ACT_pauseUpdate(void);
+extern StudioCamera *xglStudioGetCamera2(int camera_id);
+extern void JTHREAD_cntl(void);
+extern void PLAY_ctrl(void);
+extern void TCAMERA_update(void);
+extern void ACT_update(void);
+extern void MAP_updateUnit(void);
+extern void GameDebugMenu(void);
+int GameModeDebugMenu(void);
+extern void xglSoundSendEffect(void *swd, void *sed, int bank);
+extern void After_Talk(SceneObject object);
+void GameStateRestoreCameraLight(void);
+extern void GameStateRestoreKoware(void);
+
+/* Defined in src/main/act_3.c (main/tu265). */
+void ACT_DrawShadowBegin(void);
+
+void ACT_DrawShadow(ActorHead *unit);
+void ACT_DrawShadowEnd(void);
+extern void sefPushEffect(void);
+extern void ACT_setModelWrapper(ActorHead *actor, int enabled);
+extern void ACT_setHumanHand(ActorHead *actor, int hand);
+extern void xglFontLoad(int font, int mode);
+extern void Vibration_Stop(void);
+extern void xglPadRead(void);
+extern void UwamonoBgmFadeOut(void);
+extern void ACT_init(void);
+extern void MAP_initUnit(void);
+extern void GameCameraReset(void);
+extern void XTK_setWindowOwner(int owner);
+extern void ResetShootSys(void);
+extern void sefInitEffectCf(void);
+extern void xglLightSetDefault(void *light);
+extern void Player_System_Init(struct LookAtPlayerActor *player_actor);
+extern void xglRenderCopyDisp2Draw(void);
+extern float CheckDist3D(const Vector4 *a, const Vector4 *b);
+extern void SCRIPT_incCfTime(void);
+extern int WIN_checkActiveWindow(void);
+extern int SCRIPT_sceneChangeTimeGet(void);
+extern int SCRIPT_talkIgnoreGet(void);
+extern void nmlModelSendMenuStart(void);
+extern void nmlModelSendMenuEnd(void);
+extern void xglCullingIgnoreOff(void);
+extern void MainMenu(void);
+extern void nmlModelSendSignalStartBattle(void);
+extern void func_A22668(void);
+extern int func_00A0B5F0(void);
+extern void WindowTexLoad(int first, int second);
+extern void CallMethod_I(const char *name, int argument);
+extern int Enemy_After_Battle(int result);
+extern void Actor_LookAt_Init(ActorHead *actors);
+extern void Actor_LookAt(ActorHead *actor);
+extern void Actor_LookAt_Release(ActorHead *actor, int flag);
+extern void ACT_updateSequence(ActorHead *actor);
+extern void GameIdLightSet(ActorHead *actor, void *query);
+extern void GameCfPlayerMove(void);
+extern void SCRIPT_execEntered(int attribute);
+extern void SCRIPT_execTouchto(int touch);
+extern float Get_Angle(const Vector4 *from, const Vector4 *to);
+extern float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target, float speed);
+extern void GameRadarDraw(GameRadarParams *params);
+extern void MSG_init(void);
+extern void TWSYS_init(void);
+extern void xglSoundStreamStop(int stream);
+extern void nmlModelSetFadeInCancel(int frames);
+extern void nmlModelSetEffectWrite(int enabled);
+extern void Enemy_SystemInit(void);
+extern void InitUwamonoSys(void);
+extern void xglRenderClearDepth(void);
+extern void xglRenderGlobalFadeInit(void);
+extern void xglRenderClearOff(void);
+extern void xglStudioChange(int studio);
+extern void GameResourceInit(int first, int second);
+extern void MapInit(void);
+extern void SCRIPT_sceneChangeTimeInit(void);
+extern void SCRIPT_sceneChangeTimeDec(void);
+extern void SCRIPT_clrEventActiveFlag(void);
+extern void SCRIPT_talkIgnoreClr(void);
+extern void GameDefocusSet(int first, int second, int third);
+extern void GameBgDrawType0(void);
+extern void func_A22628(void);
+extern void *xglTaskInitial(void *manager, int capacity, int flags);
+extern u8 *SCRIPT_init(u8 *work);
+extern void GameRadarInit(void);
+extern void GameCfPlayerMoveInit(void);
+extern ActorHead *ACT_create(int kind, int flag);
+extern void Java_xeno_util_Runtime_jump_sub(int event_id, int mode);
+extern void nmlModelSendPauseSignal(int paused);
+extern void Disp_Homing(void);
+extern void GameMovieStop(void);
+extern void xglCdReset(void);
+extern void xglCullingMapInit(void);
+extern void xglStudioMainCameraInit(void);
+extern void nmlModelConstruct(void);
+extern void GameOver(void);
+extern void sefDeleteEffectCf(SchedulerState *effect);
+extern void PartyTimePauseStart(void);
+extern void xglCullingIgnore(void);
+extern void Java_xeno_util_Runtime_jumpCF__II(void *vm, void *arguments, void *result);
+static ActorHead *checkTouch(ActorHead *player);
+void checkTalkPoint(void);
+
+const char cfRegistSoundName[9] = "REGISTCF";
+
+const char eobAlwaysMethodName[11] = "EOB_Always";
+
+const char eobEscapeMethodName[11] = "EOB_Escape";
+
+/* Text: {color #000000}%4x\n%6x */
+static char str_0[12] = "\014\000\000\000%4x\n%6x";
+
+/* Text: {color #000000}%4x\n%6x */
+static char str_1[12] = "\014\000\000\000%4x\n%6x";
+
+static GameTestEnvironment TestEnv_2_00338620 = {
+    .vif_nop = { 0, 0, 0 },
+    .vif_directhl = 0x51000005U,
+    .gif_tag = 0x4003400000008001ULL,
+    .gif_registers = 0x551eULL,
+    .test = 0x00071001ULL,
+    .test_register = 0x47ULL,
+    .red = 0, .green = 0, .blue = 0, .alpha = 0,
+    .vertices = {
+        { .x = 0x6ff8, .y = 0x71f7, .z = 0x40000000U, .adc = 0 },
+        { .x = 0x8ff8, .y = 0x8df7, .z = 0x40000000U, .adc = 0 }
+    }
+};
+
+static SchedulerState *saveEffe = 0;
+
+static SchedulerState *shopEffe = 0;
+
+static SchedulerState *evsEffe = 0;
+
+static SchedulerState *retEffe = 0;
+
+static short pause_check;
+
+static int shopNo;
+
+static unsigned char GameCFSoundMenuPurgeFlag;
+
+static u64 attrPrev;
+
+static int prevTouch;
+
+/* Declared here, not at the top: moving it up changes the original code. */
+#include "game.h"
+
+const char dispTagFormat[8] = "%4x\n%6x";
+
+/* GameDebugMenu accesses the first two bytes at GameLoopState+0x29f50.
+ * Mode exits reset this complete 16-byte region with one native quadword
+ * store. The remaining bytes have no field interpretation in these TUs. */
+typedef union GameDebugMenuStorage {
+    Quadword storage;
+    struct {
+        u8 page;
+        u8 page_initialized;
+        u8 unmodeled_02[14];
+    } fields;
+} GameDebugMenuStorage;
 
 typedef struct GameLightParallel {
     Quadword intensity;
@@ -365,6 +538,24 @@ typedef struct GameLightSet {
     Quadword matrices[8];
 } GameLightSet;
 
+/*
+ * PARTIAL ACCESSED VIEW of GameLoopState (0x2a030-byte object at 0x338680).
+ * Union of the offsets the merged handlers access:
+ *  +0x0c kind u16, +0x10 flags u32, +0x28 camera_callback,
+ *  +0x29f40 status u8 (read by GameModeCfEvent),
+ *  +0x29f50 debug_menu 16-byte reset region (cleared with por+sq),
+ *  +0x29f60 saved_kind u16.
+ * Spans named _unmodeled_* are opaque sizing bytes never accessed by these
+ * bodies; the remainder of the object beyond 0x29f62 is unmodeled. The name
+ * is TU-local by canon
+ */
+/*
+ * GameStateSave/GameStateRestore back up and restore two more GameLoopState
+ * halfwords (main VA 0x00243278/0x002432f0): +0x0e kindDetail, the halfword
+ * GameStateSave copies alongside +0x0c kind, and the +0xe0/+0xe2 backup slot
+ * GameStateSave writes them into and GameStateRestore reads back to restore
+ * kind and kindDetail.
+ */
 typedef struct GameLoopStateLayout {
     u8 *saved_work_end;
     struct LookAtPlayerActor *controlled_actor;
@@ -446,8 +637,6 @@ typedef struct GameLoopStateLayout {
 
 GameLoopStateLayout GameLoopState = {0};
 
-/* Small initialized flags follow the existing evsExit literal below. */
-
 /*
  * PadData (0xd0-byte object at 0x490d90) through the shared
  * PadDataDebugLayout view (xeno/core/types.h): the merged handlers read the
@@ -457,161 +646,9 @@ GameLoopStateLayout GameLoopState = {0};
  * the prototypes this TU needs are repeated below in their canonical
  * spelling.
  */
-
 extern PadDataDebugLayout PadData;
 
-extern void xglSoundEffectNormalDirect(int effect_id);
-
-extern void TWSYS_update(void);
-
-extern void EvtTools(void);
-
-extern void PauseMenu(void);
-
-extern void PartyTimePauseEnd(void);
-
-extern void ACT_pauseUpdate(void);
-
-extern StudioCamera *xglStudioGetCamera2(int camera_id);
-
-extern void JTHREAD_cntl(void);
-
-extern void PLAY_ctrl(void);
-
-extern void TCAMERA_update(void);
-
-extern void ACT_update(void);
-
-extern void MAP_updateUnit(void);
-
-extern void GameDebugMenu(void);
-
-int GameModeDebugMenu(void);
-
-#define game_mode_flags (GameLoopState.flags)
-
-#define game_mode_kind (GameLoopState.kind)
-
-#define game_mode_status (GameLoopState.status)
-
-#define game_mode_saved_kind (GameLoopState.saved_kind)
-
-#define game_mode_debug_storage (GameLoopState.debug_menu.storage)
-
-#define game_mode_camera_callback (GameLoopState.camera_callback)
-
-extern void xglSoundSendEffect(void *swd, void *sed, int bank);
-
-extern void After_Talk(SceneObject object);
-
-typedef struct EnemyWorkPostTalk {
-    u8 unmodeled_00[0x4e];
-    u16 stiff_timer;
-    short effect_timer[2];
-    u8 unmodeled_54[0x37b4 - 0x54];
-    u32 post_talk_flags;
-    int enemy_id;
-    u8 unmodeled_37bc[0x3830 - 0x37bc];
-    short encount_lock;
-    u8 unmodeled_3832[0x38b0 - 0x3832];
-} EnemyWorkPostTalk;
-
-extern EnemyWorkPostTalk enepc[16];
-
-#define ACTOR_NUMBER_OFFSET 0x80
-
-void GameStateRestoreCameraLight(void);
-
-extern void GameStateRestoreKoware(void);
-
-static int shopNo;
-static unsigned char GameCFSoundMenuPurgeFlag;
-static u64 attrPrev;
-static int prevTouch;
-
-typedef struct GameActorAttributeView {
-    u8 unmodeled_00[0x4e8];
-    u64 attribute_flags;
-} GameActorAttributeView;
-
-#define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
-
-/*
- * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
- * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
- * src/main/enemy_2.h, src/main/set_motion.h, src/main/db_light_write.h and
- * src/main/tya.c, which name the same two fields for the same reason).
- * GameDrawShadow only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the
- * in-use id ACT_create writes and ACT_update skips a slot on when it is
- * zero; the offsets between them are not evidenced by this TU and stay
- * unmodeled.
- */
-
-#define ACTOR_COUNT 64
-
-#define ACTOR_IN_USE_ID_OFFSET 0x86
-
-extern ActorHead actor[ACTOR_COUNT];
-
-/* Defined in src/main/act_3.c (main/tu265). */
-
-void ACT_DrawShadowBegin(void);
-
-void ACT_DrawShadow(ActorHead *unit);
-
-void ACT_DrawShadowEnd(void);
-
-#include "main/control_entry.h"
-
-#include "main/xgl_sound.h"
-
-extern void sefPushEffect(void);
-
-typedef struct NmlModelBlockPrefix {
-    u8 unmodeled_00[0x20];
-    u32 flags;
-    u8 unmodeled_24[8];
-    int part_index;
-} NmlModelBlockPrefix;
-
-extern void ACT_setModelWrapper(ActorHead *actor, int enabled);
-
-extern void ACT_setHumanHand(ActorHead *actor, int hand);
-
-typedef struct GamePartyData {
-    u8 unmodeled_00[0x2c];
-    u16 leader_battle_id;
-} GamePartyData;
-
-extern void xglFontLoad(int font, int mode);
-
-extern void Vibration_Stop(void);
-
-extern void xglPadRead(void);
-
-extern void UwamonoBgmFadeOut(void);
-
-extern void ACT_init(void);
-
-extern void MAP_initUnit(void);
-
-extern void GameCameraReset(void);
-
-extern void XTK_setWindowOwner(int owner);
-
-extern void ResetShootSys(void);
-
-extern void sefInitEffectCf(void);
-
-extern void xglLightSetDefault(void *light);
-
-extern void Player_System_Init(struct LookAtPlayerActor *player_actor);
-
-extern void xglRenderCopyDisp2Draw(void);
-
 extern GameLightSet GameIdLight[16];
-
-extern float CheckDist3D(const Vector4 *a, const Vector4 *b);
 
 static inline Vector4 *GameSymbolPosition(int index)
 {
@@ -623,156 +660,6 @@ static inline s16 *GameSymbolKindAddress(int index)
 {
     return (s16 *)((u8 *)&MapUnit[0].symbol_kind + index * sizeof(MapUnitSlot));
 }
-
-extern const char eobMethodName[];
-
-typedef struct GameRadarParams {
-    int x;
-    int y;
-    int color;
-    u8 red;
-    u8 green;
-    u8 blue;
-    u8 alpha;
-} GameRadarParams;
-
-extern short NowTester;
-
-extern signed char FLAG_FRAME_60;
-
-extern void *const stageVM;
-
-extern void SCRIPT_incCfTime(void);
-
-extern int WIN_checkActiveWindow(void);
-
-extern int SCRIPT_sceneChangeTimeGet(void);
-
-extern int SCRIPT_talkIgnoreGet(void);
-
-extern void nmlModelSendMenuStart(void);
-
-extern void nmlModelSendMenuEnd(void);
-
-extern void xglCullingIgnoreOff(void);
-
-extern void MainMenu(void);
-
-extern void nmlModelSendSignalStartBattle(void);
-
-extern void func_A22668(void);
-
-extern int func_00A0B5F0(void);
-
-extern void WindowTexLoad(int first, int second);
-
-extern void CallMethod_I(const char *name, int argument);
-
-extern int Enemy_After_Battle(int result);
-
-extern void Actor_LookAt_Init(ActorHead *actors);
-
-extern void Actor_LookAt(ActorHead *actor);
-
-extern void Actor_LookAt_Release(ActorHead *actor, int flag);
-
-extern void ACT_updateSequence(ActorHead *actor);
-
-extern void GameIdLightSet(ActorHead *actor, void *query);
-
-extern void GameCfPlayerMove(void);
-
-extern void SCRIPT_execEntered(int attribute);
-
-extern void SCRIPT_execTouchto(int touch);
-
-extern float Get_Angle(const Vector4 *from, const Vector4 *to);
-
-extern float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target, float speed);
-
-extern void GameRadarDraw(GameRadarParams *params);
-
-extern void MSG_init(void);
-
-extern void TWSYS_init(void);
-
-extern void xglSoundStreamStop(int stream);
-
-extern void nmlModelSetFadeInCancel(int frames);
-
-extern void nmlModelSetEffectWrite(int enabled);
-
-extern void Enemy_SystemInit(void);
-
-extern void InitUwamonoSys(void);
-
-extern void xglRenderClearDepth(void);
-
-extern void xglRenderGlobalFadeInit(void);
-
-extern void xglRenderClearOff(void);
-
-extern void xglStudioChange(int studio);
-
-extern void GameResourceInit(int first, int second);
-
-extern void MapInit(void);
-
-extern void SCRIPT_sceneChangeTimeInit(void);
-
-extern void SCRIPT_sceneChangeTimeDec(void);
-
-extern void SCRIPT_clrEventActiveFlag(void);
-
-extern void SCRIPT_talkIgnoreClr(void);
-
-extern void GameDefocusSet(int first, int second, int third);
-
-extern void GameBgDrawType0(void);
-
-extern void func_A22628(void);
-
-extern void *xglTaskInitial(void *manager, int capacity, int flags);
-
-extern u8 *SCRIPT_init(u8 *work);
-
-extern void GameRadarInit(void);
-
-extern void GameCfPlayerMoveInit(void);
-
-extern ActorHead *ACT_create(int kind, int flag);
-
-extern void Java_xeno_util_Runtime_jump_sub(int event_id, int mode);
-
-extern void nmlModelSendPauseSignal(int paused);
-
-extern void Disp_Homing(void);
-
-extern void GameMovieStop(void);
-
-extern void xglCdReset(void);
-
-extern void xglCullingMapInit(void);
-
-extern void xglStudioMainCameraInit(void);
-
-extern void nmlModelConstruct(void);
-
-extern void GameOver(void);
-
-extern void sefDeleteEffectCf(SchedulerState *effect);
-
-extern void PartyTimePauseStart(void);
-
-extern void xglCullingIgnore(void);
-
-extern void Java_xeno_util_Runtime_jumpCF__II(void *vm, void *arguments, void *result);
-
-extern u8 *WorkEnd;
-
-static ActorHead *checkTouch(ActorHead *player);
-
-void checkTalkPoint(void);
 
 static void GameCFSoundPurgeSub(void)
 {
@@ -1567,16 +1454,6 @@ void CheckGameSymbol(struct LookAtPlayerActor *player)
     }
 }
 
-/* The RTPS producer writes integer screen xyz and float reciprocal w.
- * Its frozen Vector4 output prototype remains an explicit nominal
- * transport boundary; this private diagnostic does not erase that type. */
-typedef struct GameProjectedPoint {
-    int x;
-    int y;
-    int z;
-    float w;
-} GameProjectedPoint;
-
 static void GameDispTag(void)
 {
     Matrix4 matrix;
@@ -2142,6 +2019,7 @@ int GameModeCfMain(void)
     return 0;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char eobMethodName[4] = "EOB";
 
 void checkTalkPoint(void)
@@ -2409,7 +2287,12 @@ void Game(void)
     xglSleep();
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
+/* Small initialized flags follow the existing evsExit literal above. */
 unsigned char SnapDrawCreditFlag = 0;
+
 unsigned char UseTestPath = 0;
+
 const char GameEmptyName[1] = "";
+
 const char GameMcTestName[8] = "MC_TEST";

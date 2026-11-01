@@ -1,8 +1,14 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "fcv2.h"
+
+#define FCV2_CURSOR_COUNT_SCALE (1.5259021893143654e-05f)
+#define FCV2_PACK_OFFSET_FRAME_TIME (0.033333335071802139f)
+#define FCV2_RANGE_COUNT_SCALE (1.5259021893143654e-05f)
+#define FCV2_PACK_SCALE_FRAME_TIME (0.033333335071802139f)
+#define FCV2_KEY_FRAME_SCALE (0.033333335071802139f)
+#define FCV2_KEY_FRAME_TIME (0.033333335071802139f)
+#define FCV2_SEGMENT_FRAME_TIME (0.033333335071802139f)
 
 /*
  * FCVKeyData is the per-key-set source record FCV_resetPack reads: a packed
@@ -13,7 +19,6 @@
  * key_values is declared with one element only to name where the value
  * stream starts; its length is not evidenced here.
  */
-
 typedef struct FCVKeyData {
     unsigned char unmodeled_00[0x10];
     u8 key_types[4];
@@ -30,7 +35,6 @@ typedef struct FCVKeyData {
  * float through +0xC advancing it by 4, and reads/writes +0x10 as the key
  * index; the leading word it never touches stays unmodeled.
  */
-
 typedef struct FCVPack {
     unsigned char unmodeled_00[4];
     u8 *key_types;
@@ -38,16 +42,6 @@ typedef struct FCVPack {
     f32 *key_values;
     s16 key_index;
 } FCVPack;
-
-static f32 FCV_getPackVal2f(FCVPack *pack, s32 keyCount, f32 frame);
-
-/*
- * types is a packed array of 2-bit interpolation-type codes, four keys per
- * byte, stored in reverse bit order within each byte (FCV_getFKeyType,
- * VA 0x0030d060).
- */
-
-static f32 FCV2_getVal(void *output, void *data, s32 key, f32 frame);
 
 /*
  * FCV2Value is the curve FCV2_getValue samples: a cursor into its key table,
@@ -58,24 +52,15 @@ static f32 FCV2_getVal(void *output, void *data, s32 key, f32 frame);
  * argument in $f12; FCV2_getValue never writes $f12 before its tail call, so
  * `frame` is its own parameter, forwarded unchanged.
  */
-
 typedef struct FCV2Value {
     u16 cursor;
     u16 type;
     f32 value;
 } FCV2Value;
 
-/*
- * key is zeroed unconditionally, then forwarded to FCV2_getVal as its
- * output parameter only while walking a spline (curve->type == 3);
- * FCV2_getValue's equivalent call passes a null output there instead.
- */
-
 typedef struct FCV2DataHeader {
     u32 signature;
 } FCV2DataHeader;
-
-static f32 fcv2Step = 0.033333335f;
 
 typedef struct FCVKeyFrame {
     f32 frame;
@@ -91,13 +76,13 @@ typedef struct FCVCurve {
     u16 unmodeled_0A;
 } FCVCurve;
 
-/* Compact spline keys extend their type/frame prefix with value and tangents. */
 typedef struct FCV2SampleValues {
     f32 value;
     f32 in_tangent;
     f32 out_tangent;
 } FCV2SampleValues;
 
+/* Compact spline keys extend their type/frame prefix with value and tangents. */
 typedef struct FCV2Sample {
     u16 type;
     u16 frame;
@@ -110,10 +95,6 @@ typedef struct FCVFloatSample {
     f32 frame;
     FCV2SampleValues values;
 } FCVFloatSample;
-
-static f32 FCV_getPackVal2s(FCVPack *pack, u32 keyCount, f32 frame);
-
-static s32 FCV_getFKeyType(u32 keyIndex, u8 *types);
 
 typedef struct FCV2AttributeRecord {
     u16 size;
@@ -136,21 +117,11 @@ typedef struct FCV2CurveData {
     FCV2AttributeStream attributes;
 } FCV2CurveData;
 
-#define FCV2_CURSOR_COUNT_SCALE (1.5259021893143654e-05f)
-
-#define FCV2_PACK_OFFSET_FRAME_TIME (0.033333335071802139f)
-
-#define FCV2_RANGE_COUNT_SCALE (1.5259021893143654e-05f)
-
-#define FCV2_PACK_SCALE_FRAME_TIME (0.033333335071802139f)
-
 typedef struct FCV2Attribute {
     u16 size;
     u16 type;
     u8 payload[12];
 } FCV2Attribute;
-
-static FCV2Attribute defaultAttr;
 
 typedef struct FCV2KeyHeader {
     u16 key_count;
@@ -158,9 +129,24 @@ typedef struct FCV2KeyHeader {
     f32 value_or_spline_data;
 } FCV2KeyHeader;
 
+static f32 FCV_getPackVal2f(FCVPack *pack, s32 keyCount, f32 frame);
+
+static f32 FCV2_getVal(void *output, void *data, s32 key, f32 frame);
+
+static f32 FCV_getPackVal2s(FCVPack *pack, u32 keyCount, f32 frame);
+/*
+ * types is a packed array of 2-bit interpolation-type codes, four keys per
+ * byte, stored in reverse bit order within each byte (FCV_getFKeyType,
+ * VA 0x0030d060).
+ */
+static s32 FCV_getFKeyType(u32 keyIndex, u8 *types);
 static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 frame);
 
-#define FCV2_KEY_FRAME_SCALE (0.033333335071802139f)
+static f32 fcv2Step = 0.033333335f;
+
+static FCV2Attribute defaultAttr;
+
+static FCV2Attribute defaultAttr = { .size = 0, .type = 0, .payload = { 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
 
 f32 FCV_getValue(FCVCurve *curve, f32 frame)
 {
@@ -844,9 +830,6 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
     }
 }
 
-#define FCV2_KEY_FRAME_TIME (0.033333335071802139f)
-#define FCV2_SEGMENT_FRAME_TIME (0.033333335071802139f)
-
 static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
 {
     FCV2Sample **key_output = output;
@@ -1011,6 +994,11 @@ f32 FCV2_getValue(FCV2Value *curve, f32 frame)
     return 0.0f;
 }
 
+/*
+ * key is zeroed unconditionally, then forwarded to FCV2_getVal as its
+ * output parameter only while walking a spline (curve->type == 3);
+ * FCV2_getValue's equivalent call passes a null output there instead.
+ */
 f32 FCV2_getValueAndKey(s32 *key, FCV2Value *curve, f32 frame)
 {
     *key = 0;
@@ -1247,5 +1235,3 @@ void FCV2_dump(u16 *data)
         }
     }
 }
-
-static FCV2Attribute defaultAttr = { .size = 0, .type = 0, .payload = { 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };

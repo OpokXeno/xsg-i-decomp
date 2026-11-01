@@ -18,10 +18,6 @@ typedef struct MapPosition {
     float z;
 } MapPosition;
 
-extern float UnduGet(float x, float z);
-
-void MAP_getHeight(MapPosition *position);
-
 /*
  * TU-local view of one entry of the game-wide MapUnit[] array (0x300 bytes
  * apart; src/main/map_create_unit_peer.h, src/main/init_drill.c and
@@ -106,6 +102,8 @@ typedef struct MapUnitResource {
 
 extern MapUnitSlot MapUnit[64];
 
+extern float UnduGet(float x, float z);
+void MAP_getHeight(MapPosition *position);
 void MAP_drawUnitAt(MapUnitSlot *unit);
 
 #endif

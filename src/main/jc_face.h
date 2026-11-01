@@ -60,25 +60,32 @@ typedef struct JcElement {
 } JcElement;
 
 typedef void (*JcFilterFn)(void *work, void *param, int flag);
+
 typedef struct JntFilterList JntFilterList;
+
 typedef struct JntInterruptWork JntInterruptWork;
+
 typedef struct JntChannelList JntChannelList;
+
 extern JcFilterFn JNT_getFilter(void *work, JntFilterList *list);
 extern int JNT_setInterrupt(JntInterruptWork *work, JntChannelList *list);
 extern void xglMatrixUnit4s(Matrix *matrix);
-
 extern JcElement *JNT_getStaticVal(JcWork *work, JcElement *channel);
 extern JcElement *JNT_getVal2(JcWork *work, JcElement *channel, float frame);
+
 extern JcElement *JNT_getVal_HOGE2(JcWork *work, JcElement *channel,
                                    float frame);
+
 extern JcElement *JNT_getVal(JcWork *work, JcElement *channel, float frame);
+
 extern JcElement *JNT_getVal_staticChain(JcWork *work, JcElement *channel,
                                          float frame);
+
 extern JcElement *JNT_constructMatrix(JcWork *work, JcElement *channel);
 extern JcElement *JNT_interpolate(JcWork *work, JcElement *channel);
-
 extern void *JNT_getElement(void *elements, int index);
 extern void *JNT_nextElement(void *element);
+
 extern JntStaticChannel *JNT_getStaticVal2(JntWork *work,
                                         JntStaticChannel *channel);
 

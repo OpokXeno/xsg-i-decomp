@@ -1,15 +1,7 @@
 #include "common.h"
-
 #include "shared.h"
 
-const Vector4 windRotationAndScaleVector __attribute__((aligned(16))) = { 0.0f, 1.5707963705062866f, 0.0f, 1.0f };
-const Vector4 unitScaleVector = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-static signed char wtype;
-
-static StudioCamera *pCamera;
-
-static float crx;
+#define WIND_POSITION_PTR (&wpos.position.w)
 
 /* A pp_init particle (ppInit/ppNextStart/ppNextEnd read and write it up to
  * +0x34).  The original wind particles lie 0x40 apart (wpos 0x00585180, wvec
@@ -23,16 +15,6 @@ typedef struct WindParticle {
     float damping;
     unsigned char unmodeled_38[8];
 } WindParticle;
-
-static WindParticle cpos;
-
-static WindParticle wpos;
-
-#define WIND_POSITION_PTR (&wpos.position.w)
-
-extern double fptodp(float value);
-
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 /* CPU-decoded controller state: xglPadRead stores held/pressed/repeat at
  * +0x28/+0x2a/+0x2c and the signed analog axes at +0x64. Records are 0x68 bytes. */
@@ -51,32 +33,6 @@ typedef struct WindPadRecord {
     signed char axis[4];
 } WindPadRecord;
 
-extern WindPadRecord PadData[2];
-
-extern void ppNextStart(WindParticle *particle);
-
-extern void ppNextEnd(WindParticle *particle);
-
-extern void EXM_SetPointWind(Vector4 *particle);
-
-extern void EXM_SetDirectionalWind(Vector4 *particle);
-
-extern void EXM_SetShakePower(float power);
-
-extern void EXM_StepShakeWind(void);
-
-extern void EXM_InitWind(void);
-
-extern void xglRenderClearFrame(void);
-
-extern void xglSleep(void);
-
-static int InitTest(void);
-
-static void MoveCamera(void);
-
-static void MoveWind2(void);
-
 typedef union WindVectorBlock {
     Vector4 vector;
     u64 words[2];
@@ -84,25 +40,90 @@ typedef union WindVectorBlock {
 
 struct Actor;
 
+typedef struct WindTestDirectionalRecord {
+    u64 payload_words[2];
+    u32 zero_10;
+    float y_bias_14;
+    u32 zero_18;
+    float scalar_1c;
+    float direction_20[3];
+} WindTestDirectionalRecord;
+
+/* Actor prefix read and written by InitTest: the same layout act_2.h gives
+ * struct Actor through position (+0x10), rotation (+0x50) and scale (+0x60). */
+typedef struct WindActor {
+    u32 flags;
+    void (*update)(struct Actor *actor);
+    void (*draw)(struct Actor *actor);
+    u32 quadword_alignment_gap;
+    WindVectorBlock position;
+    unsigned char unmodeled_20[0x30];
+    WindVectorBlock rotation;
+    WindVectorBlock scale;
+} WindActor;
+
+extern WindPadRecord PadData[2];
+
+extern double fptodp(float value);
+extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
+extern void ppNextStart(WindParticle *particle);
+extern void ppNextEnd(WindParticle *particle);
+extern void EXM_SetPointWind(Vector4 *particle);
+extern void EXM_SetDirectionalWind(Vector4 *particle);
+extern void EXM_SetShakePower(float power);
+extern void EXM_StepShakeWind(void);
+extern void EXM_InitWind(void);
+extern void xglRenderClearFrame(void);
+extern void xglSleep(void);
+static int InitTest(void);
+static void MoveCamera(void);
+static void MoveWind2(void);
 extern void ACT_setMotion(struct Actor *actor, unsigned int motionId);
-
 extern void ACT_updateMotion(struct Actor *actor);
-
 extern void ACT_modelDraw(struct Actor *actor);
-
 extern double dpmul(double left, double right);
-
 extern double dpadd(double left, double right);
-
 extern double dpsub(double left, double right);
-
 extern float dptofp(double value);
-
 extern float atan2f(float y, float x);
-
 extern double cos(double angle);
-
 extern double sin(double angle);
+static void MoveWind(void);
+extern void GameResourceInit(int, int);
+extern void xglStudioInit(void);
+extern void xglStudioChange(int studio);
+extern void xglStudioMainCameraInit(void);
+extern void xglStudioGetCamera(StudioCamera **camera, int index);
+extern void ppInit(WindParticle *particle);
+extern void ppSetPos(WindParticle *particle, float x, float y, float z);
+extern void EXM_SetShakeTime(float time);
+extern void ACT_init(void);
+extern void ACT_resourceInit(void);
+extern void *ACT_create(int, int);
+extern void ACT_initMotion(struct Actor *actor);
+extern void ACT_loadMotion(struct Actor *actor, int, int);
+extern void ACT_loadResource(struct Actor *actor, int);
+extern void ACT_allocMatrix(struct Actor *actor, int);
+extern void ACT_setModelWrapper(struct Actor *actor, int);
+
+const Vector4 windRotationAndScaleVector __attribute__((aligned(16))) = { 0.0f, 1.5707963705062866f, 0.0f, 1.0f };
+
+const Vector4 unitScaleVector = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+static const u64 directionalRecordPayloadTable[2] = {
+    0x000000ff000000ffULL,
+    0x00000050000000ffULL,
+};
+
+static signed char wtype;
+
+static StudioCamera *pCamera;
+
+static float crx;
+
+static WindParticle cpos;
+
+static WindParticle wpos;
 
 /* LOCAL in the original .sbss (wtype 0x004DC610, cry 0x004DC61C, pAct
  * 0x004DC62C, shake 0x004DC630); the INCLUDE_ASM functions reach cry and pAct
@@ -120,67 +141,6 @@ static struct Actor *pAct;
 static float shake;
 
 static WindParticle wvec;
-
-static void MoveWind(void);
-
-static const u64 directionalRecordPayloadTable[2] = {
-    0x000000ff000000ffULL,
-    0x00000050000000ffULL,
-};
-
-typedef struct WindTestDirectionalRecord {
-    u64 payload_words[2];
-    u32 zero_10;
-    float y_bias_14;
-    u32 zero_18;
-    float scalar_1c;
-    float direction_20[3];
-} WindTestDirectionalRecord;
-
-extern void GameResourceInit(int, int);
-
-extern void xglStudioInit(void);
-
-extern void xglStudioChange(int studio);
-
-extern void xglStudioMainCameraInit(void);
-
-extern void xglStudioGetCamera(StudioCamera **camera, int index);
-
-extern void ppInit(WindParticle *particle);
-
-extern void ppSetPos(WindParticle *particle, float x, float y, float z);
-
-extern void EXM_SetShakeTime(float time);
-
-extern void ACT_init(void);
-
-extern void ACT_resourceInit(void);
-
-extern void *ACT_create(int, int);
-
-extern void ACT_initMotion(struct Actor *actor);
-
-extern void ACT_loadMotion(struct Actor *actor, int, int);
-
-extern void ACT_loadResource(struct Actor *actor, int);
-
-extern void ACT_allocMatrix(struct Actor *actor, int);
-
-extern void ACT_setModelWrapper(struct Actor *actor, int);
-
-/* Actor prefix read and written by InitTest: the same layout act_2.h gives
- * struct Actor through position (+0x10), rotation (+0x50) and scale (+0x60). */
-typedef struct WindActor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    WindVectorBlock position;
-    unsigned char unmodeled_20[0x30];
-    WindVectorBlock rotation;
-    WindVectorBlock scale;
-} WindActor;
 
 static int InitTest(void)
 {
@@ -498,4 +458,3 @@ void WindTest(void)
         EXM_InitWind();
     }
 }
-

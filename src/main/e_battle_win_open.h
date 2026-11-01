@@ -175,8 +175,33 @@ struct WindowDX {
     WindowDXSprite sprite;              /* +0x180 */
 };
 
-void WindowDXSet(WindowDX *window);
-
+/*
+ * WindowSPCursor is the SP (scrollable list) cursor record every WindowSP*
+ * function of this TU shares (WindowSPSelect, WindowSPSet,
+ * WindowSPItemChange, WindowSPSelectJump, WindowSPSetSelect -- all still
+ * assembler), and that WindowSPKeepSelect/WindowSPKeepSelectCheck save and
+ * clear on behalf of the seven MenuXxx screens (MenuItem, MenuCharactor,
+ * MenuAgws, MenuShopCore, MenuEther, MenuTec, MenuSkill -- outside this TU,
+ * not yet recovered) that call them. Only the members this allocation and
+ * its siblings touch are modeled:
+ *   +0x20 visible_top     WindowSPItemChange (0x00283cf0) clamps this
+ *                          against +0x22 (0x00283e18..0x00283e34), the shape
+ *                          of a scrolled list's first visible row.
+ *   +0x21 visible_bottom  the same function's symmetric clamp against +0x23
+ *                          (0x00283e64..0x00283e80).
+ *   +0x24 current_row     set from a row WindowSPItemChange computes by
+ *                          dividing item_count by the row/column grid at
+ *                          +0x14/+0x15 (0x00283d94..0x00283da8).
+ *   +0x28 selected_index  a signed halfword; WindowSPSet (0x00283b88) resets
+ *                          it to -1 ("nothing selected") and
+ *                          WindowSPItemChange advances it while it stays
+ *                          below item_count.
+ *   +0x2A item_count      a halfword; WindowSPSet walks a linked list from
+ *                          +0x1C to count it (0x00283bc4..0x00283bf4) and
+ *                          stores the result here.
+ * Everything else is unmodeled until a function that reads or writes it is
+ * recovered.
+ */
 typedef struct WindowSPCursor {
     unsigned char state;
     unsigned char draw_flags;
@@ -210,6 +235,13 @@ typedef struct WindowSPCursor {
     WindowDXRect rect;
 } WindowSPCursor;
 
+/*
+ * A saved snapshot of one WindowSPCursor: item_count, selected_index,
+ * visible_top, visible_bottom and current_row packed into 5 bytes in that
+ * order (see WindowSPKeepSelect). WindowSPKeepSelectCheck clears it when
+ * MenuCursorKeepCheck (main/menu_1.c, still assembler) reports nothing to
+ * restore.
+ */
 typedef unsigned char WindowSPKeepBuffer[5];
 
 typedef struct BattleWinPad {
@@ -220,14 +252,91 @@ typedef struct BattleWinPad {
     unsigned short half_34;
 } BattleWinPad;
 
-extern BattleWinPad PadData;
-
 typedef struct BattleWinTask {
     unsigned char unmodeled_00[0x1C];
     int buttons;
     int selection;
 } BattleWinTask;
 
+/*
+ * BW is the work area eBattleWinOpen/eBattleWinMain/eBattleWinClose share
+ * for the item/ether "get" screens: menuCloseEth and menuCloseItm
+ * (src/ov01/menu.c) each call eBattleWinClose on their own screen object,
+ * but eBattleWinClose ignores that argument and always clears BW itself
+ * ($a0 is overwritten before it is ever read), which is why the parameter
+ * below is unused. eBattleWinOpen embeds a WindowDX at +0x1740
+ * (`addiu $4,$4,0x1740` right before `jal WindowDXSet`, with $4 = BW), so
+ * window.state lands at BW+0x1750.
+ */
+typedef struct BattleWindow BattleWindow;
+
+struct BattleWindow {
+    unsigned char unmodeled_00;
+    unsigned char mode;              /* +0x0001 */
+    unsigned char unmodeled_02[2];
+    struct BattleWinCommand *commands;      /* +0x0004 */
+    WindowSPCursor list;             /* +0x0008 */
+    WindowDX window;                 /* +0x1740 */
+    BattleWinMessage message;        /* +0x18D4 */
+};
+
+/*
+ * BW2 is BW's counterpart for the second "get" screen: eBattleWinOpen2
+ * embeds a WindowDX at +0x8 (`addiu $4,$2,0x8` with $2 = BW2 right before
+ * `jal WindowDXSet`), so window.state lands at BW2+0x18.
+ */
+typedef struct BattleWindow2 BattleWindow2;
+
+struct BattleWindow2 {
+    int active;                        /* +0x00 */
+    int text_offset;                   /* +0x04 */
+    WindowDX window;                   /* +0x0008 */
+    BattleWinMessage message;          /* +0x019C */
+};
+
+/*
+ * BW3 is BW's counterpart for the third "get" screen: eBattleWinOpen3
+ * embeds a WindowDX at +0x4 (`addiu $4,$3,0x4` with $3 = BW3 right before
+ * `jal WindowDXSet`), so window.state lands at BW3+0x14. secondary_state is
+ * set to the same value as window.state whenever eBattleWinClose3 runs, but
+ * nothing in this allocation reads it back.
+ */
+typedef struct BattleWindow3 BattleWindow3;
+
+struct BattleWindow3 {
+    int active;                    /* +0x0000 */
+    WindowDX window;               /* +0x0004 */
+    BattleWinMessage messages[3];  /* +0x0198 */
+    BattleWinTagFont tag_font;     /* +0x0264 */
+    BattleWinNumber number;        /* +0x0284 */
+    WindowDX window2;              /* +0x0314 */
+    BattleWinTagFont tag_fonts[5]; /* +0x04A8 */
+    BattleWinNumber numbers[5];    /* +0x0548 */
+    BattleWinMessage messages2[4]; /* +0x0818 */
+};
+
+/*
+ * BW4 is BW's counterpart for the fourth "get" screen: eBattleWinOpen4
+ * embeds a WindowDX at +0x8 (`addiu $4,$2,0x8` with $2 = BW4 right before
+ * `jal WindowDXSet`), so window.state lands at BW4+0x18. page is the word
+ * eBattleWinPageCheck4 returns.
+ */
+typedef struct BattleWindow4 BattleWindow4;
+
+struct BattleWindow4 {
+    int active;               /* +0x0000 */
+    int page;                 /* +0x0004 */
+    WindowDX window;          /* +0x0008 */
+    BattleWinMessage message; /* +0x019C */
+};
+
+extern BattleWinPad PadData;
+extern BattleWindow *BW;
+extern BattleWindow2 *BW2;
+extern BattleWindow3 *BW3;
+extern BattleWindow4 *BW4;
+
+void WindowDXSet(WindowDX *window);
 void WindowDXMain(WindowDX *window);
 int WindowSPSelect(WindowSPCursor *cursor, int button_flags);
 void WindowSPSet(WindowSPCursor *list);
@@ -257,138 +366,18 @@ void eCursolSet(void *cursor, int index);
 void eCursolMain(void *cursor);
 void eCursolModeChange(void *cursor, int mode);
 void xglSoundEffectNormalID(int id, int volume);
-
-/*
- * BW is the work area eBattleWinOpen/eBattleWinMain/eBattleWinClose share
- * for the item/ether "get" screens: menuCloseEth and menuCloseItm
- * (src/ov01/menu.c) each call eBattleWinClose on their own screen object,
- * but eBattleWinClose ignores that argument and always clears BW itself
- * ($a0 is overwritten before it is ever read), which is why the parameter
- * below is unused. eBattleWinOpen embeds a WindowDX at +0x1740
- * (`addiu $4,$4,0x1740` right before `jal WindowDXSet`, with $4 = BW), so
- * window.state lands at BW+0x1750.
- */
-typedef struct BattleWindow BattleWindow;
-struct BattleWindow {
-    unsigned char unmodeled_00;
-    unsigned char mode;              /* +0x0001 */
-    unsigned char unmodeled_02[2];
-    struct BattleWinCommand *commands;      /* +0x0004 */
-    WindowSPCursor list;             /* +0x0008 */
-    WindowDX window;                 /* +0x1740 */
-    BattleWinMessage message;        /* +0x18D4 */
-};
-
-extern BattleWindow *BW;
-
 void eBattleWinClose(void *window);
-
-/*
- * BW2 is BW's counterpart for the second "get" screen: eBattleWinOpen2
- * embeds a WindowDX at +0x8 (`addiu $4,$2,0x8` with $2 = BW2 right before
- * `jal WindowDXSet`), so window.state lands at BW2+0x18.
- */
-typedef struct BattleWindow2 BattleWindow2;
-struct BattleWindow2 {
-    int active;                        /* +0x00 */
-    int text_offset;                   /* +0x04 */
-    WindowDX window;                   /* +0x0008 */
-    BattleWinMessage message;          /* +0x019C */
-};
-
-extern BattleWindow2 *BW2;
-
 void eBattleWinClose2(void);
-
-/*
- * BW3 is BW's counterpart for the third "get" screen: eBattleWinOpen3
- * embeds a WindowDX at +0x4 (`addiu $4,$3,0x4` with $3 = BW3 right before
- * `jal WindowDXSet`), so window.state lands at BW3+0x14. secondary_state is
- * set to the same value as window.state whenever eBattleWinClose3 runs, but
- * nothing in this allocation reads it back.
- */
-typedef struct BattleWindow3 BattleWindow3;
-struct BattleWindow3 {
-    int active;                    /* +0x0000 */
-    WindowDX window;               /* +0x0004 */
-    BattleWinMessage messages[3];  /* +0x0198 */
-    BattleWinTagFont tag_font;     /* +0x0264 */
-    BattleWinNumber number;        /* +0x0284 */
-    WindowDX window2;              /* +0x0314 */
-    BattleWinTagFont tag_fonts[5]; /* +0x04A8 */
-    BattleWinNumber numbers[5];    /* +0x0548 */
-    BattleWinMessage messages2[4]; /* +0x0818 */
-};
-
-extern BattleWindow3 *BW3;
-
 void eBattleWinClose3(void);
-
-/*
- * BW4 is BW's counterpart for the fourth "get" screen: eBattleWinOpen4
- * embeds a WindowDX at +0x8 (`addiu $4,$2,0x8` with $2 = BW4 right before
- * `jal WindowDXSet`), so window.state lands at BW4+0x18. page is the word
- * eBattleWinPageCheck4 returns.
- */
-typedef struct BattleWindow4 BattleWindow4;
-struct BattleWindow4 {
-    int active;               /* +0x0000 */
-    int page;                 /* +0x0004 */
-    WindowDX window;          /* +0x0008 */
-    BattleWinMessage message; /* +0x019C */
-};
-
-extern BattleWindow4 *BW4;
-
 void eBattleWinClose4(void);
-
 int eBattleWinPageCheck4(void);
-
 void *eBattleWinInit2(void *arg);
 
 /* Contiguous menu-work storage assigned by eBattleWinInit2. */
-
-
 /* Not yet recovered (src/main/window_tex_load.c); matches the prototype
  * already used at its other call sites (src/main/party.c). */
 void *MenuWorkEndGet(void);
 
 void eBattleWinInit(void);
-
-/*
- * WindowSPCursor is the SP (scrollable list) cursor record every WindowSP*
- * function of this TU shares (WindowSPSelect, WindowSPSet,
- * WindowSPItemChange, WindowSPSelectJump, WindowSPSetSelect -- all still
- * assembler), and that WindowSPKeepSelect/WindowSPKeepSelectCheck save and
- * clear on behalf of the seven MenuXxx screens (MenuItem, MenuCharactor,
- * MenuAgws, MenuShopCore, MenuEther, MenuTec, MenuSkill -- outside this TU,
- * not yet recovered) that call them. Only the members this allocation and
- * its siblings touch are modeled:
- *   +0x20 visible_top     WindowSPItemChange (0x00283cf0) clamps this
- *                          against +0x22 (0x00283e18..0x00283e34), the shape
- *                          of a scrolled list's first visible row.
- *   +0x21 visible_bottom  the same function's symmetric clamp against +0x23
- *                          (0x00283e64..0x00283e80).
- *   +0x24 current_row     set from a row WindowSPItemChange computes by
- *                          dividing item_count by the row/column grid at
- *                          +0x14/+0x15 (0x00283d94..0x00283da8).
- *   +0x28 selected_index  a signed halfword; WindowSPSet (0x00283b88) resets
- *                          it to -1 ("nothing selected") and
- *                          WindowSPItemChange advances it while it stays
- *                          below item_count.
- *   +0x2A item_count      a halfword; WindowSPSet walks a linked list from
- *                          +0x1C to count it (0x00283bc4..0x00283bf4) and
- *                          stores the result here.
- * Everything else is unmodeled until a function that reads or writes it is
- * recovered.
- */
-/*
- * A saved snapshot of one WindowSPCursor: item_count, selected_index,
- * visible_top, visible_bottom and current_row packed into 5 bytes in that
- * order (see WindowSPKeepSelect). WindowSPKeepSelectCheck clears it when
- * MenuCursorKeepCheck (main/menu_1.c, still assembler) reports nothing to
- * restore.
- */
-typedef unsigned char WindowSPKeepBuffer[5];
 
 #endif /* SRC_MAIN_E_BATTLE_WIN_OPEN_H */

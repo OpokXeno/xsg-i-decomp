@@ -7,6 +7,13 @@
 
 #include "shared.h"
 
+#define PAD_CIRCLE 0x0020
+#define PAD_CROSS  0x0040
+#define PAD_UP     0x1000
+#define PAD_RIGHT  0x2000
+#define PAD_DOWN   0x4000
+#define PAD_LEFT   0x8000
+
 typedef struct TwinWindow TwinWindow;
 
 /*
@@ -27,14 +34,6 @@ struct TwinWindow {
     signed char param;  /* +0x186 */
     signed char kind;   /* +0x187 */
 };
-
-extern TwinWindow *TWIN_create2(int component_id);
-
-extern void MSG_print2(TwinWindow *window, const char *text, int length);
-
-extern unsigned int strlen(const char *string);
-
-void *createItemGetWin(const char *text);
 
 /*
  * The same TWIN_create2 object as TwinWindow (createItemGetWin returns
@@ -57,6 +56,7 @@ void *createItemGetWin(const char *text);
  * (TWIN_initScene writes 0x30/3 for the scene-VM window).
  */
 typedef struct TwinWindow2 TwinWindow2;
+
 struct TwinWindow2 {
     unsigned char unmodeled_00[0x0c];
     unsigned short width;      /* +0x0c */
@@ -84,35 +84,12 @@ struct TwinWindow2 {
     signed char kind;          /* +0x187 */
 };
 
-extern void TWIN_init2(void *window);
-extern TwinWindow2 *TWSYS_createComponent(int slot, int type);
-
 /* This TU reads two consecutive PadData halfwords at +0x2a and +0x2c. */
 typedef struct TSliderPadData {
     unsigned char unmodeled_00[0x2a];
     unsigned short pressed; /* +0x2a */
     unsigned short repeat;  /* +0x2c */
 } TSliderPadData;
-extern TSliderPadData PadData;
-
-#define PAD_CIRCLE 0x0020
-#define PAD_CROSS  0x0040
-#define PAD_UP     0x1000
-#define PAD_RIGHT  0x2000
-#define PAD_DOWN   0x4000
-#define PAD_LEFT   0x8000
-
-extern unsigned char *STRING_int(unsigned char *buffer, int value);
-
-extern void STRING_h2zEUC(void *dst, const unsigned char *src);
-
-extern void xglFontPrintf(int x, int y, unsigned int color, void *arg);
-
-void TWIN_initCF(void *window);
-
-void TWIN_initScene(TwinWindow2 *window);
-
-void TSLIDER_drawDefault(TwinWindow2 *window);
 
 /* The TMENU_addQuery2 view of MenuNative's query text and row storage. */
 typedef struct MenuNative {
@@ -131,6 +108,20 @@ typedef struct MenuNative {
     unsigned char *textEnd;        /* +0x154 */
 } MenuNative;
 
+extern TSliderPadData PadData;
+
+extern TwinWindow *TWIN_create2(int component_id);
+extern void MSG_print2(TwinWindow *window, const char *text, int length);
+extern unsigned int strlen(const char *string);
+void *createItemGetWin(const char *text);
+extern void TWIN_init2(void *window);
+extern TwinWindow2 *TWSYS_createComponent(int slot, int type);
+extern unsigned char *STRING_int(unsigned char *buffer, int value);
+extern void STRING_h2zEUC(void *dst, const unsigned char *src);
+extern void xglFontPrintf(int x, int y, unsigned int color, void *arg);
+void TWIN_initCF(void *window);
+void TWIN_initScene(TwinWindow2 *window);
+void TSLIDER_drawDefault(TwinWindow2 *window);
 extern void TMENU_addItem(MenuNative *menu, const char *text);
 void TMENU_addQuery2(MenuNative *menu, char **texts, int count);
 

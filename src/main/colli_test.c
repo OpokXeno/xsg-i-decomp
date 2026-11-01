@@ -1,4 +1,6 @@
 #include "common.h"
+#include "shared.h"
+#include "main/xgl_studio.h"
 
 typedef struct CollisionPoint {
     float x;
@@ -6,9 +8,6 @@ typedef struct CollisionPoint {
     float z;
     float w;
 } CollisionPoint;
-
-int CheckIntersect(CollisionPoint *line_start, CollisionPoint *line_end,
-                    CollisionPoint *lower, CollisionPoint *upper);
 
 typedef struct CollisionBoundsFrame {
     CollisionPoint bounds[2];
@@ -20,6 +19,93 @@ typedef struct CollisionBoundsFrame {
 typedef struct FractionCell {
     float value;
 } FractionCell;
+
+typedef struct ParticleState {
+    CollisionPoint position;
+    CollisionPoint previous_position;
+    CollisionPoint velocity;
+    float gravity;
+    float damping;
+    /* The symbol's 0x40-byte extent is evidenced, while the last eight
+     * bytes have no known semantic use in this translation unit. */
+    unsigned char unmodeled_38[8];
+} ParticleState;
+
+typedef struct BallBoxCollisionArgs {
+    struct CollisionPoint *box_corner_a;
+    struct CollisionPoint *box_corner_b;
+    struct CollisionPoint *line_start;
+    struct CollisionPoint *line_end;
+} BallBoxCollisionArgs;
+
+typedef union CollisionPadButtons {
+    u64 bits;
+    struct {
+        u16 held;
+        u16 pressed;
+        u16 unmodeled_2c;
+        u16 unmodeled_2e;
+    } halves;
+} CollisionPadButtons;
+
+typedef struct CollisionPadState {
+    u8 unmodeled_00[0x28];
+    CollisionPadButtons state;
+    u16 movement;
+} CollisionPadState;
+
+extern CollisionPadState PadData;
+
+int CheckIntersect(CollisionPoint *line_start, CollisionPoint *line_end,
+                    CollisionPoint *lower, CollisionPoint *upper);
+
+extern void ppSetPos(ParticleState *particle, float x, float y, float z);
+
+static int CheckBallBoxCollision(CollisionPoint *hit_position,
+                                 const BallBoxCollisionArgs *args, int mode);
+
+static int InitTest(void);
+extern void xglRenderClearFrame(void);
+extern void xglSleep(void);
+extern void xglFontDebugPrintf(int x, int y, const char *text, ...);
+extern void ppNextStart(ParticleState *particle);
+extern void ppNextEnd(ParticleState *particle);
+
+/* Defining-owner interface proposals; transport belongs to integration. */
+extern void xglStudioInit(void);
+extern void xglStudioChange(int mode);
+extern void xglStudioMainCameraInit(void);
+extern void xglStudioGetCamera(StudioCamera **camera, int camera_index);
+extern void ppInit(ParticleState *particle);
+
+static int mode_004DB9D8 = 0;
+
+static int hit = 0;
+
+static unsigned int col1[4] = { 0x80, 0x80, 0x80, 0xff };
+
+static unsigned int col2[4] = { 0xa0, 0x00, 0x00, 0xff };
+
+static unsigned int col3[4] = { 0x00, 0x90, 0x90, 0xff };
+
+/* Original TU-local pointer storage remains in the unchanged scaffold. */
+static StudioCamera * pCamera_004DC65C;
+
+static float radius;
+
+static ParticleState pos1;
+
+static ParticleState pos2;
+
+static CollisionPoint box1;
+
+static CollisionPoint box2;
+
+static CollisionPoint hitpos;
+
+static CollisionPoint box3;
+
+static CollisionPoint box4;
 
 static void swapf(float *left, float *right)
 {
@@ -133,56 +219,6 @@ static int CheckInBox(const CollisionPoint *point, const CollisionPoint *lower,
         return 1;
     return 0;
 }
-
-#include "shared.h"
-#include "main/xgl_studio.h"
-/* Original TU-local pointer storage remains in the unchanged scaffold. */
-static StudioCamera * pCamera_004DC65C;
-typedef struct ParticleState {
-    CollisionPoint position;
-    CollisionPoint previous_position;
-    CollisionPoint velocity;
-    float gravity;
-    float damping;
-    /* The symbol's 0x40-byte extent is evidenced, while the last eight
-     * bytes have no known semantic use in this translation unit. */
-    unsigned char unmodeled_38[8];
-} ParticleState;
-extern void ppSetPos(ParticleState *particle, float x, float y, float z);
-static int mode_004DB9D8 = 0;
-static int hit = 0;
-static float radius;
-static ParticleState pos1;
-static ParticleState pos2;
-static CollisionPoint box1;
-static CollisionPoint box2;
-static CollisionPoint hitpos;
-static CollisionPoint box3;
-static CollisionPoint box4;
-typedef struct BallBoxCollisionArgs {
-    struct CollisionPoint *box_corner_a;
-    struct CollisionPoint *box_corner_b;
-    struct CollisionPoint *line_start;
-    struct CollisionPoint *line_end;
-} BallBoxCollisionArgs;
-typedef union CollisionPadButtons {
-    u64 bits;
-    struct {
-        u16 held;
-        u16 pressed;
-        u16 unmodeled_2c;
-        u16 unmodeled_2e;
-    } halves;
-} CollisionPadButtons;
-typedef struct CollisionPadState {
-    u8 unmodeled_00[0x28];
-    CollisionPadButtons state;
-    u16 movement;
-} CollisionPadState;
-extern CollisionPadState PadData;
-static int CheckBallBoxCollision(CollisionPoint *hit_position,
-                                 const BallBoxCollisionArgs *args, int mode);
-static int InitTest(void);
 
 static int CheckBallBoxCollision(CollisionPoint *hit_position,
                                  const BallBoxCollisionArgs *args, int mode)
@@ -371,23 +407,13 @@ static int CheckBallBoxCollision(CollisionPoint *hit_position,
     return 1;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* The debug payload begins with four in-band control bytes, including a
  * separator, followed by the CollisionHit!! label text. */
 static const char collisionHitLabel[24] = "\013\014\200\000\000CollisionHit!!";
+
 /* Text: {reset}CollisionTest */
 static const char collisionTestLabel[16] = "\013CollisionTest";
-extern void xglRenderClearFrame(void);
-extern void xglSleep(void);
-extern void xglFontDebugPrintf(int x, int y, const char *text, ...);
-extern void ppNextStart(ParticleState *particle);
-extern void ppNextEnd(ParticleState *particle);
-
-/* Defining-owner interface proposals; transport belongs to integration. */
-extern void xglStudioInit(void);
-extern void xglStudioChange(int mode);
-extern void xglStudioMainCameraInit(void);
-extern void xglStudioGetCamera(StudioCamera **camera, int camera_index);
-extern void ppInit(ParticleState *particle);
 
 static inline void SetPlanarPoint(CollisionPoint *point, float x, float z)
 {
@@ -533,6 +559,7 @@ void ColliTest(void)
     } while ((PadData.state.bits & 0x08000100ULL) != 0x08000100ULL);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: ＴＩＴＬＥ
  * EN: TITLE */
 const char ColliTestTitleLabel[16] = "\n\243\324\243\311\243\324\243\314\243\305";
@@ -552,9 +579,3 @@ const char ColliTestBattleDebugLabel[24] = "\n\243\302\243\301\243\324\243\324\2
 /* JP: ＢＡＴＴＬＥ
  * EN: BATTLE */
 const char ColliTestBattleLabel[16] = "\n\243\302\243\301\243\324\243\324\243\314\243\305";
-
-static unsigned int col1[4] = { 0x80, 0x80, 0x80, 0xff };
-
-static unsigned int col2[4] = { 0xa0, 0x00, 0x00, 0xff };
-
-static unsigned int col3[4] = { 0x00, 0x90, 0x90, 0xff };

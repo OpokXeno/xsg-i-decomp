@@ -1,18 +1,23 @@
 #include "common.h"
-
 #include "shared.h"
 #include "main/jni.h"
-
 #include "camera.h"
+#include "act_2.h"
 
-/* TCAMERA setters are defined in tcamera.c. Their callers
- * pass the studio camera in a0 and scalar/xyz floats in f12/f13/f14. */
+#define CAMERA_STUDIO_FOV(studio_camera) (((const StudioCameraOptics *)(studio_camera))->fov)
+
+/*
+ * The game loop mode byte, GameLoopState+0xc0. Java_xeno_Camera_getMode__
+ * copies it to its caller unchanged (lbu/sw at main:0x002fc5d4/0x002fc5dc).
+ * CameraLoopState (below, owned by camera_change's own allocation) stops
+ * short of +0xc0, so the byte is reached through GameLoopState's own address
+ * rather than growing that struct.
+ */
+#define GAME_LOOP_MODE_OFFSET 0xc0
+
+#define GAME_LOOP_MODE ((unsigned char *)((unsigned char *)&GameLoopState + GAME_LOOP_MODE_OFFSET))
+
 typedef struct TCamera TCamera;
-extern void TCAMERA_setRotate(TCamera *camera, float x, float y, float z);
-extern void TCAMERA_setRoll(TCamera *camera, float roll);
-extern void TCAMERA_setTranslate(TCamera *camera, float x, float y, float z);
-extern void TCAMERA_setFov(TCamera *camera, float fov);
-extern void TCAMERA_setView(TCamera *camera, float x, float y, float z);
 
 /* Native argument records use the four-byte VM slots described by camera.h.
  * Each field below has the Java descriptor's type and the original load offset. */
@@ -21,20 +26,24 @@ typedef struct CameraConstantArgs {
     SceneObject peer;
     float x, y, z;
 } CameraConstantArgs;
+
 typedef struct CameraVector3Args {
     CameraWork *camera;
     float x, y, z;
 } CameraVector3Args;
+
 typedef struct CameraScalarArgs {
     CameraWork *camera;
     float value;
 } CameraScalarArgs;
+
 typedef struct CameraCFAngleArgs {
     unsigned char unmodeled_00[4];
     int camera_index;
     float degrees[3];
     float angle_w;
 } CameraCFAngleArgs;
+
 typedef struct CameraCFAnglePersArgs {
     unsigned char unmodeled_00[4];
     int camera_index;
@@ -42,22 +51,26 @@ typedef struct CameraCFAnglePersArgs {
     float angle_w;
     float perspective;
 } CameraCFAnglePersArgs;
+
 typedef struct CameraCFHokanArgs {
     unsigned char unmodeled_00[4];
     int camera_index;
     float interpolation[2];
 } CameraCFHokanArgs;
+
 typedef struct CameraCFLockArgs {
     unsigned char unmodeled_00[4];
     int camera_index;
     int lock_mode;
     float lock_position[3];
 } CameraCFLockArgs;
+
 typedef struct CameraSetModeArgs {
     CameraWork *camera;
     unsigned char mode;
     unsigned char unmodeled_05[3];
 } CameraSetModeArgs;
+
 typedef struct CameraCFPedestalArgs {
     unsigned char unmodeled_00[4];
     unsigned int selector;
@@ -66,6 +79,7 @@ typedef struct CameraCFPedestalArgs {
     float angles[3];
     float scale;
 } CameraCFPedestalArgs;
+
 typedef struct CameraCFPedestalHokanArgs {
     unsigned char unmodeled_00[4];
     int camera_index;
@@ -81,10 +95,12 @@ typedef struct CameraConstantChannel {
     int reference_mode;
     Vector4 *reference_position;
 } CameraConstantChannel;
+
 typedef union CameraChannelPayload {
     CameraConstantChannel constant;
     CameraSpline spline;
 } CameraChannelPayload;
+
 typedef struct CameraAnimationWork {
     CameraWork head;
     unsigned char unmodeled_2c[4];
@@ -120,17 +136,10 @@ typedef struct StudioCameraOptics {
 } StudioCameraOptics;
 
 /*
- * getRotateX__/getRotateY__/getRotateZ__ each keep their own .lit4 copy of
- * the radian-to-degree divisor (bits 0x40490fdb, pi); the scaffold still
- * owns the pool and did not merge the three entries.
- */
-
-/*
  * The game loop's own record, as far as this unit reads it: only the
  * halfword camera_change latches the matched studio camera index into,
  * at +0xc8 (sh at 0x002fb5e0). Nothing before it is read or written here.
  */
-
 typedef struct {
     unsigned char unmodeled_00[0xc0];
     unsigned char cameraMode; /* +0xc0 */
@@ -139,16 +148,6 @@ typedef struct {
     short activeCameraIndex; /* +0xc8 */
 } CameraLoopState;
 
-extern CameraLoopState GameLoopState;
-
-/* This TU's own .lit4 copy of the fov-scale seed 1.2, stored at CameraWork
- * +0x12b4 (docs above CameraWork). */
-
-/* The engine's camera table (main:0x00465e10, size 0x9600 = 8 * 0x12c0):
- * TCAMERA_get (still asm, src/main/tcamera.c) indexes it the same way. */
-
-extern unsigned char tcamera[];
-
 /*
  * The studio camera's field-of-view scalar, at +0x94 inside StudioCamera's
  * unmodeled_90 span (include/shared.h): that struct is shared with other
@@ -156,7 +155,6 @@ extern unsigned char tcamera[];
  * shared layout. TCAMERA_setFov (src/main/tcamera.c) evidences the same
  * offset on the same record through its own local view.
  */
-
 enum CameraPayloadOffset {
     CAMERA_TRANSLATE_PAYLOAD_OFFSET = 0x30,
     CAMERA_VIEW_PAYLOAD_OFFSET = 0x4d0,
@@ -167,32 +165,6 @@ enum CameraPayloadOffset {
     CAMERA_CLASS_REFERENCE_OFFSET = 0x18,
     CAMERA_STUDIO_FOV_OFFSET = 0x94
 };
-
-#define CAMERA_STUDIO_FOV(studio_camera) (((const StudioCameraOptics *)(studio_camera))->fov)
-
-extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
-
-extern SceneString *loadConstString(const char *bytes, int length);
-
-extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-
-const char cameraPeerFieldName[];
-
-/* Keep the field name data after Java_xeno_Camera_start's external use. */
-
-/*
- * The game loop mode byte, GameLoopState+0xc0. Java_xeno_Camera_getMode__
- * copies it to its caller unchanged (lbu/sw at main:0x002fc5d4/0x002fc5dc).
- * CameraLoopState (above, owned by camera_change's own allocation) stops
- * short of +0xc0, so the byte is reached through GameLoopState's own address
- * rather than growing that struct.
- */
-
-#define GAME_LOOP_MODE_OFFSET 0xc0
-
-#define GAME_LOOP_MODE ((unsigned char *)((unsigned char *)&GameLoopState + GAME_LOOP_MODE_OFFSET))
-
-#include "act_2.h"
 
 /* Runtime Java fields occupy one EE VM value word. The descriptor
  * supplies its byte offset; its declared Java/native kind selects
@@ -205,8 +177,33 @@ typedef union CameraFieldValue {
     void * native_pointer;
 } CameraFieldValue;
 
+extern CameraLoopState GameLoopState;
+
+/* This TU's own .lit4 copy of the fov-scale seed 1.2, stored at CameraWork
+ * +0x12b4 (docs above CameraWork in camera.h). */
+/* The engine's camera table (main:0x00465e10, size 0x9600 = 8 * 0x12c0):
+ * TCAMERA_get (still asm, src/main/tcamera.c) indexes it the same way. */
+extern unsigned char tcamera[];
+
+const char cameraPeerFieldName[];
+
+/* TCAMERA setters are defined in tcamera.c. Their callers
+ * pass the studio camera in a0 and scalar/xyz floats in f12/f13/f14. */
+extern void TCAMERA_setRotate(TCamera *camera, float x, float y, float z);
+extern void TCAMERA_setRoll(TCamera *camera, float roll);
+extern void TCAMERA_setTranslate(TCamera *camera, float x, float y, float z);
+extern void TCAMERA_setFov(TCamera *camera, float fov);
+extern void TCAMERA_setView(TCamera *camera, float x, float y, float z);
+extern int JNI_isInstanceOf(SceneObject object, SceneClass *target_class);
+extern SceneString *loadConstString(const char *bytes, int length);
+extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 extern float I2F(int value);
 
+/*
+ * getRotateX__/getRotateY__/getRotateZ__ each keep their own .lit4 copy of
+ * the radian-to-degree divisor (bits 0x40490fdb, pi); the scaffold still
+ * owns the pool and did not merge the three entries.
+ */
 void Java_xeno_Camera_getRotateX__(JavaEnvironment *environment,
                                    CameraGetterArgs *arguments, float *result)
 {
@@ -1117,4 +1114,6 @@ void Java_xeno_Camera_setClipRange__FF(JavaEnvironment *environment,
     studio_camera->farClip = arguments->farClip;
 }
 
+/* Keep the field name data after Java_xeno_Camera_start's external use. */
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char cameraPeerFieldName[8] = "peer";

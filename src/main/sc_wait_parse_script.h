@@ -11,8 +11,6 @@ typedef struct EventTask {
     unsigned short active;
 } EventTask;
 
-extern EventTask *scGetTaskAdr(int script_index, int task_index);
-
 typedef struct ScriptObject ScriptObject;
 
 typedef struct MissileImagePair {
@@ -132,6 +130,8 @@ struct ScriptObject {
 
 extern int _nowScript;
 
+extern EventTask *scGetTaskAdr(int script_index, int task_index);
+
 /*
  * sdvSetAmbState/sdvSetAmbState2 are defined in src/main/sdv.c (main/tu215)
  * with external linkage, but that TU's own src/main/sdv.h does not yet
@@ -140,6 +140,7 @@ extern int _nowScript;
  * harvest gives them a canonical home in sdv.h.
  */
 extern void sdvSetAmbState(int state, int effect_no);
+
 extern void sdvSetAmbState2(int state, int effect_no);
 
 /*

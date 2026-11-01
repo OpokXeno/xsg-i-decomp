@@ -1,28 +1,11 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/xgl_studio.h"
-
 #include "game_init_camera.h"
 
-static int dbCX = 0;
-
-static int dbCY = 0;
-
-static int dbCZ = 0x00FFFFFF;
-
-static int dbCH = 24;
-
-static int dbMODE = 0;
-
-extern void xglLightSetDefault(StudioLight *light);
-
-extern unsigned int strlen(const char *string);
-
-extern char *strchr(const char *string, int character);
-
-extern char *strncpy(char *destination, const char *source, unsigned int count);
+#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
+#define va_end(ap) ((void)0)
+#define NULL ((void *)0)
 
 typedef struct PADControllerState {
     u8 unmodeled_00[0x28];
@@ -41,21 +24,27 @@ typedef struct PADKeyResult {
     u8 flags[8];
 } PADKeyResult;
 
-extern PADControllerState PadData[];
-
-extern int xglFontGetFlags(void);
-
 typedef char *va_list;
 
-#define va_start(ap, last) ((ap) = (va_list)__builtin_next_arg(last) - (8 - __builtin_args_info(2)) * 8)
+extern PADControllerState PadData[];
 
-#define va_end(ap) ((void)0)
-
+extern void xglLightSetDefault(StudioLight *light);
+extern unsigned int strlen(const char *string);
+extern char *strchr(const char *string, int character);
+extern char *strncpy(char *destination, const char *source, unsigned int count);
+extern int xglFontGetFlags(void);
 extern int vsprintf(char *buffer, const char *format, va_list args);
-
-#define NULL ((void *)0)
-
 extern char *strrchr(const char *s, int c);
+
+static int dbCX = 0;
+
+static int dbCY = 0;
+
+static int dbCZ = 0x00FFFFFF;
+
+static int dbCH = 24;
+
+static int dbMODE = 0;
 
 void GAME_initCamera(void)
 {
@@ -225,6 +214,7 @@ char *DB_pathFindName(char *path)
     return (slash != NULL) ? (slash + 1) : path;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: 遠藤
  * EN: Endo */
 const char GameEndouTestTitleText[8] = "\031\000\261\363\306\243";

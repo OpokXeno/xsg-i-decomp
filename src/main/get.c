@@ -1,9 +1,6 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/init_uwamono_sys.h"
-
 #include "main/xgl_2.h"
 
 /* Query layout and floating return follow the original UnduCheck accesses. */
@@ -27,18 +24,21 @@ typedef struct EnemySplineState {
     unsigned char unmodeled_48[0x38b0 - 0x48];
 } EnemySplineState;
 
-extern EnemySplineState enepc[];
-
 typedef struct Vector3 { float x, y, z; } Vector3;
+
 typedef Vector4 Point4;
+
 typedef struct ParabolaVec { float x, y, z, w; } ParabolaVec;
+
 typedef struct LayoutHeader LayoutHeader;
+
 typedef unsigned int GameLoopStateWords[];
-extern GameLoopStateWords GameLoopState;
+
 typedef struct PlayerActorHeaderView {
     unsigned char unmodeled_000[0x4e0];
     LayoutHeader *data_header;
 } PlayerActorHeaderView;
+
 typedef struct UnduParam {
     int queryFlags;
     unsigned char unmodeled_04[4];
@@ -51,13 +51,26 @@ typedef struct UnduParam {
     long long excluded_units; /* Check_Undu stores the excluded mask at +0x30. */
     long long query_mode;     /* Check_Undu stores the included mask at +0x38. */
 } UnduParam;
-extern void UnduParamInit(UnduParam *param);
-extern float UnduCheck(const Point4 *position, void *exclude, UnduParam *param);
-extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
+
+extern EnemySplineState enepc[];
+extern GameLoopStateWords GameLoopState;
 extern UnduParam UnduTest;
 extern UnduParam UnduTemp;
 extern const float unduDistanceTolerance;
 extern unsigned short *DataSpline;
+extern const float getPi;
+extern const float fanMinDistance;
+extern const float fanHeightTolerance;
+extern const float fanMaxHeightDelta;
+extern const char moveSquarePlaceholderText[];
+extern const char moveSquareForecastText[];
+extern long EneTerritoryID[20];
+extern const float wallFullTurnRadians;
+extern const float wallAngleStep;
+
+extern void UnduParamInit(UnduParam *param);
+extern float UnduCheck(const Point4 *position, void *exclude, UnduParam *param);
+extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 extern float cosf(float angle);
 extern float atan2f(float y, float x);
 float Get_Distance(const Point4 *first, const Point4 *second);
@@ -66,42 +79,17 @@ float Get_Decimal_Surplus_for_Radius(float angle);
 /* MARK: provisional extern block. The four words are _gp-relative .sdata
    witnesses at 0x004d81a8..0x004d81b4, not proven original declarations.
    Names below record roles observed in this function only. */
-
 extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
                           const Vector4 *point);
 
 /* Check_Angle: defined below in this file, still assembler. */
-
 int Check_Angle(float angle, float rangeStart, float rangeEnd);
-
-extern const float getPi;
-
-extern const float fanMinDistance;
-
-extern const float fanHeightTolerance;
-
-extern const float fanMaxHeightDelta;
 
 int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
                 Point4 *destination, int query_mode, int excluded_units,
                 int flags);
 
-/* MARK: provisional extern block. All eight words are _gp-relative .sdata
-   witnesses at 0x004d81cc..0x004d81e8. They are not proven original
-   declarations; names below record roles observed in this function only. */
-
-/* Role name for TwoPiD:
-   subtracted to wrap the cursor down at/above the high clamp. */
-
-#include "get.h"
-
-extern const char moveSquarePlaceholderText[];
-extern const char moveSquareForecastText[];
-
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-extern long EneTerritoryID[20];
-
 extern int HitCheckMapUnitPosSize(const Vector4 *position, float radius);
 
 int Check_Straight(const Point4 *start, const Point4 *end, short steps,
@@ -115,9 +103,13 @@ int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
 
 int Get_Attr(const Point4 *position, int mapIndex, int attrMask);
 
-extern const float wallFullTurnRadians;
-
-extern const float wallAngleStep;
+/* Declared here, not at the top: moving it up changes the original code. */
+/* MARK: provisional extern block. All eight words are _gp-relative .sdata
+   witnesses at 0x004d81cc..0x004d81e8. They are not proven original
+   declarations; names below record roles observed in this function only. */
+/* Role name for TwoPiD:
+   subtracted to wrap the cursor down at/above the high clamp. */
+#include "get.h"
 
 float Get_Decimal_Surplus_for_Radius(float angle)
 {
@@ -895,6 +887,7 @@ void GetBSplineLoopDummy(short frame, short count, short period,
     destination->w = 1.0f;
 }
 
+/* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const float wallFullTurnRadians = 6.2831854820251465f;
 
 const float wallAngleStep = 6.2831854820251465f;

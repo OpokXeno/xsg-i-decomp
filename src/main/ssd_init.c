@@ -1,36 +1,6 @@
 #include "common.h"
-
-extern void sceSifRegisterRpc(void *server, int rpc_number, void *(*function)(),
-                              void *buffer, void *(*cfunction)(), void *cbuffer, void *queue);
-
 #include "shared.h"
-
 #include "ssd_init.h"
-void RssdBusy(RssdRequest *request);
-void RssdSpuRead(RssdRequest *request);
-
-/*
- * libkernel syscall stub (main:0x00200550).
- */
-
-void *RssdSifRpcServer(unsigned int command, void *data, int size);
-
-extern const char rssdBindErrorFormat[];
-
-extern const char rssdSifTransferSizeOverMessage[];
-
-extern int iSignalSema(int sema_id);
-
-extern void SleepThread(void);
-
-/*
- * RssdInitIop is this TU's own IOP sound RPC client setup (its body is still
- * scaffold below); sceSifRpcLoop is the SCE SDK SIF RPC server loop.
- */
-
-extern void RssdInitIop(void);
-
-extern void sceSifRpcLoop(void *queue);
 
 enum {
     RSSD_CMD_QUIT    = 0x02,
@@ -39,55 +9,75 @@ enum {
     RSSD_FLAG_BUSY   = 0x02
 };
 
+extern const char rssdBindErrorFormat[];
+extern const char rssdSifTransferSizeOverMessage[];
+extern const char rssdGetResultErrorMessage[32];
+extern void *_gp;
+
+extern void sceSifRegisterRpc(void *server, int rpc_number, void *(*function)(),
+                              void *buffer, void *(*cfunction)(), void *cbuffer, void *queue);
+
+void RssdBusy(RssdRequest *request);
+void RssdSpuRead(RssdRequest *request);
+
+void *RssdSifRpcServer(unsigned int command, void *data, int size);
+
+/*
+ * libkernel syscall stub (main:0x00200550).
+ */
+extern int iSignalSema(int sema_id);
+extern void SleepThread(void);
+
+/*
+ * RssdInitIop is this TU's own IOP sound RPC client setup (its body is still
+ * scaffold below); sceSifRpcLoop is the SCE SDK SIF RPC server loop.
+ */
+extern void RssdInitIop(void);
+extern void sceSifRpcLoop(void *queue);
+
 /*
  * libkernel syscall stubs.
  */
-
 extern int DeleteSema(int sema_id);
-
 extern int DeleteThread(int thread_id);
-
 extern int TerminateThread(int thread_id);
 
 /*
  * This TU's own RPC completion handler (its body is still scaffold below);
  * sceSifRemoveRpc is the SCE SDK RPC server deregistration call.
  */
-
 extern int RssdFuncCallCompleted(int status);
-
 extern void *sceSifRemoveRpc(void *sd, void *qd);
+
+/* SIF RPC middleware bulk memory copy. */
+extern void SsdCopyMemory(void *dst, void *src, int size);
+extern int printf(const char *format, ...);
+extern int SignalSema(int sema_id);
+extern int CreateSema(SsdSemaCreateInfo *sema);
+extern int CreateThread(SsdThreadCreateInfo *thread);
+extern int StartThread(int thread_id, void *args);
+extern int WaitSema(int sema_id);
 
 /*
  * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
  * on the queue reserved at RssdWork.rpc_queue. It never returns.
  */
-
-/* SIF RPC middleware bulk memory copy. */
-
-extern void SsdCopyMemory(void *dst, void *src, int size);
-
-extern int printf(const char *format, ...);
-
-extern const char rssdGetResultErrorMessage[32];
-
-/*
- * libkernel syscall stub (main:0x00200550).
- */
-
-extern int SignalSema(int sema_id);
-
-extern int CreateSema(SsdSemaCreateInfo *sema);
-extern int CreateThread(SsdThreadCreateInfo *thread);
-extern int StartThread(int thread_id, void *args);
-extern int WaitSema(int sema_id);
-extern void *_gp;
-static unsigned char MYclientPtr[65600];
-static unsigned char MYserverPtr[65568];
-static unsigned char MYthreadStack[16384];
-static unsigned char MYwaveTransThStack[16384];
 extern void RSsdSifRpcThread(void);
 extern void RssdBackNextWaveThread(void);
+
+const char rssdSifTransferSizeOverMessage[32] = "Rssd sif transfer size over !!\n";
+
+const char rssdBindErrorFormat[32] = "Rssd(%04x) bind error !\n";
+
+const char rssdGetResultErrorMessage[32] = "Rssd get result error !\n";
+
+static unsigned char MYclientPtr[65600];
+
+static unsigned char MYserverPtr[65568];
+
+static unsigned char MYthreadStack[16384];
+
+static unsigned char MYwaveTransThStack[16384];
 
 void SsdInit(int init_size)
 {
@@ -456,9 +446,3 @@ void SsdSuspend(void)
     RssdWork.flags &= ~RSSD_FLAG_SUCCESS;
     RssdCallFunc(RSSD_CMD_SUSPEND, &request, 0, 0);
 }
-
-const char rssdSifTransferSizeOverMessage[32] = "Rssd sif transfer size over !!\n";
-
-const char rssdBindErrorFormat[32] = "Rssd(%04x) bind error !\n";
-
-const char rssdGetResultErrorMessage[32] = "Rssd get result error !\n";

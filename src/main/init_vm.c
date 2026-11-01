@@ -1,53 +1,20 @@
 #include "common.h"
 #include "init_vm.h"
 
-extern JavaClass _dummyClass;
+#define VM_ACC_STATIC 0x8
+#define VM_ACC_NATIVE 0x100
 
-const char clinitName[16] = "<clinit>";
-const char sourceFileAttrName[16] = "SourceFile";
-const char innerClassesAttrName[16] = "InnerClasses";
-const char exceptionsAttrName[16] = "Exceotions";
-const char lineNumberTableAttrName[16] = "LineNumberTable";
-const char constantValueAttrName[16] = "ConstantValue";
-const char localVariableTableAttrName[32] = "LocalVariableTable";
-const char initVmConstructorName[8] = "<init>";
-const char voidMethodDescriptor[8] = "()V";
-const char intVoidMethodDescriptor[8] = "(I)V";
-const char codeAttrName[8] = "Code";
-/*
- * initBaseClasses and initPrimitiveTypes are file-local (LOCAL in the
- * original symbol table); initPrimitiveTypes stays asm, so both are
- * declared static before their use below.
- */
-static void initBaseClasses(void);
-static void initPrimitiveTypes(void);
+/* The operand stack slot `n` places above (n > 0) or below (n < 0) the top. */
+#define STACK(n) (stack->base[stack->top + (n)])
 
-void initVM(void) {
-    int i;
+/* The big-endian 16-bit operand at code[pc + n]. */
+#define CODE_U16(n) ((code[frame->pc + (n)] << 8) | code[frame->pc + (n) + 1])
 
-    xheap_init(1, 0, 0);
-    classEntryPool = 0;
-    constStringTable = 0;
-    NAME_Init = loadConstString(clinitName, -1);
-    NAME_Constructor = loadConstString(initVmConstructorName, -1);
-    TYPE_Chr_talk = loadConstString(voidMethodDescriptor, -1);
-    TYPE_Stage_entered = loadConstString(intVoidMethodDescriptor, -1);
-    TYPE_Void = loadConstString(voidMethodDescriptor, -1);
-    ATTR_SourceFile = loadConstString(sourceFileAttrName, -1);
-    ATTR_InnerClasses = loadConstString(innerClassesAttrName, -1);
-    ATTR_Code = loadConstString(codeAttrName, -1);
-    ATTR_Exceptions = loadConstString(exceptionsAttrName, -1);
-    ATTR_LineNumberTable = loadConstString(lineNumberTableAttrName, -1);
-    ATTR_ConstantValue = loadConstString(constantValueAttrName, -1);
-    ATTR_LocalVariableTable = loadConstString(localVariableTableAttrName, -1);
-    jthreadResetFunc = 0;
-    jthreadTop = 0;
-    initVMThread = JNI_createThread(0, 8, 0x40);
-    initBaseClasses();
-    for (i = 3; i >= 0; i--) {
-        XTK_peerGroup[i] = 0;
-    }
-}
+/* The big-endian 32-bit operand at p[0..3] (tableswitch/lookupswitch). */
+#define CODE_S32(p) (((p)[0] << 24) | ((p)[1] << 16) | ((p)[2] << 8) | (p)[3])
+
+/* Branch to the 16-bit offset that follows the opcode. */
+#define BRANCH() (frame->nextPc = frame->pc + CODE_U16(0) - 1)
 
 /* JVM opcodes the interpreter implements (JVM specification numbering). */
 enum {
@@ -194,9 +161,6 @@ enum {
     VM_CONSTANT_STRING = 24
 };
 
-#define VM_ACC_STATIC 0x8
-#define VM_ACC_NATIVE 0x100
-
 typedef struct VMSlots {
     short top;
     unsigned short size;
@@ -275,6 +239,32 @@ typedef struct VMFieldRef {
     unsigned char unmodeled_08[8];
 } VMFieldRef;
 
+extern JavaClass _dummyClass;
+extern VMClass *primitiveClassTable[16];
+extern VMClass *classBoolean;
+extern VMClass *classByte;
+extern VMClass *classChar;
+extern VMClass *classShort;
+extern VMClass *classInt;
+extern VMClass *classLong;
+extern VMClass *classFloat;
+extern VMClass *classDouble;
+extern const char booleanTypeName[];
+extern const char byteTypeName[];
+extern const char charTypeName[];
+extern const char shortTypeName[];
+extern const char intTypeName[];
+extern const char longTypeName[];
+extern const char floatTypeName[];
+extern const char doubleTypeName[];
+
+/*
+ * initBaseClasses and initPrimitiveTypes are file-local (LOCAL in the
+ * original symbol table); initPrimitiveTypes stays asm, so both are
+ * declared static before their use below.
+ */
+static void initBaseClasses(void);
+static void initPrimitiveTypes(void);
 extern void resolveNativeMethod(VMMethod *method);
 extern void JNI_callMethod(VMThread *thread, VMMethod *method, VMSlot *arguments, VMSlot *result);
 extern void JNI_threadException();
@@ -283,25 +273,149 @@ extern VMMethod *getMethodSignatureClass(int index, VMOwner *owner, int mode);
 extern VMClass *getClass(int index, VMOwner *owner);
 extern void *newArray(VMClass *elementClass, int length);
 extern int JNI_isInstanceOf(void *object, VMClass *vmClass);
-extern VMClass *primitiveClassTable[16];
 
-/* The operand stack slot `n` places above (n > 0) or below (n < 0) the top. */
-#define STACK(n) (stack->base[stack->top + (n)])
+static void initWrapperClass(VMClass **class_slot, const char *name,
+                              signed char type_code, int element_size);
+
+const char clinitName[16] = "<clinit>";
+
+const char sourceFileAttrName[16] = "SourceFile";
+
+const char innerClassesAttrName[16] = "InnerClasses";
+
+const char exceptionsAttrName[16] = "Exceotions";
+
+const char lineNumberTableAttrName[16] = "LineNumberTable";
+
+const char constantValueAttrName[16] = "ConstantValue";
+
+const char localVariableTableAttrName[32] = "LocalVariableTable";
+
+const char initVmConstructorName[8] = "<init>";
+
+const char voidMethodDescriptor[8] = "()V";
+
+const char intVoidMethodDescriptor[8] = "(I)V";
+
+const char codeAttrName[8] = "Code";
+
+/* Keep these small-data definitions after their original external uses. */
+const char booleanTypeName[8] = "boolean";
+
+const char byteTypeName[8] = "byte";
+
+const char charTypeName[8] = "char";
+
+const char shortTypeName[8] = "short";
+
+const char intTypeName[8] = "int";
+
+const char longTypeName[8] = "long";
+
+const char floatTypeName[8] = "float";
+
+const char doubleTypeName[8] = "double";
+
+/* Keep the pointer's original zero-initialized storage after its extern uses. */
+VMClass *classBoolean = 0;
+
+JavaClass *classClass = &_dummyClass;
+
+/* Zero-initialized VM handles stored and initialized by this translation unit. */
+SceneString *ATTR_InnerClasses;
+
+SceneString *ATTR_LocalVariableTable;
+
+SceneString *ATTR_ConstantValue;
+
+SceneString *ATTR_LineNumberTable;
+
+unsigned short XTK_peerGroup[4];
+
+SceneClass *classStringBuffer;
+
+SceneString *TYPE_Chr_talk;
+
+SceneString *ATTR_SourceFile;
+
+SceneString *ATTR_Code;
+
+SceneString *TYPE_Void;
+
+SceneString *NAME_Constructor;
+
+SceneString *ATTR_Exceptions;
+
+SceneString *NAME_Init;
+
+SceneString *TYPE_Stage_entered;
+
+void *jthreadTop;
+
+VMClass *classByte;
+
+VMClass *classChar;
+
+VMClass *classVoid;
+
+VMClass *classShort;
+
+void (*jthreadResetFunc)(void);
+
+void *initVMThread;
+
+JavaClass *classObject;
+
+void *classEntryPool;
+
+VMClass *classFloat;
+
+VMClass *classDouble;
+
+VMClass *classLong;
+
+SceneClass *classString;
+
+VMClass *classInt;
+
+VMClass *primitiveClassTable[16];
+
+/* 0x0099D510, 0x400 bytes of COMMON storage allocated after primitiveClassTable;
+   no MAIN function reads it. */
+float key_value[256];
+
+void initVM(void) {
+    int i;
+
+    xheap_init(1, 0, 0);
+    classEntryPool = 0;
+    constStringTable = 0;
+    NAME_Init = loadConstString(clinitName, -1);
+    NAME_Constructor = loadConstString(initVmConstructorName, -1);
+    TYPE_Chr_talk = loadConstString(voidMethodDescriptor, -1);
+    TYPE_Stage_entered = loadConstString(intVoidMethodDescriptor, -1);
+    TYPE_Void = loadConstString(voidMethodDescriptor, -1);
+    ATTR_SourceFile = loadConstString(sourceFileAttrName, -1);
+    ATTR_InnerClasses = loadConstString(innerClassesAttrName, -1);
+    ATTR_Code = loadConstString(codeAttrName, -1);
+    ATTR_Exceptions = loadConstString(exceptionsAttrName, -1);
+    ATTR_LineNumberTable = loadConstString(lineNumberTableAttrName, -1);
+    ATTR_ConstantValue = loadConstString(constantValueAttrName, -1);
+    ATTR_LocalVariableTable = loadConstString(localVariableTableAttrName, -1);
+    jthreadResetFunc = 0;
+    jthreadTop = 0;
+    initVMThread = JNI_createThread(0, 8, 0x40);
+    initBaseClasses();
+    for (i = 3; i >= 0; i--) {
+        XTK_peerGroup[i] = 0;
+    }
+}
 
 /* The address of the operand stack's top slot, for relative access. */
 static inline VMSlot *_StackTop(VMSlots *stack)
 {
     return &stack->base[stack->top];
 }
-
-/* The big-endian 16-bit operand at code[pc + n]. */
-#define CODE_U16(n) ((code[frame->pc + (n)] << 8) | code[frame->pc + (n) + 1])
-
-/* The big-endian 32-bit operand at p[0..3] (tableswitch/lookupswitch). */
-#define CODE_S32(p) (((p)[0] << 24) | ((p)[1] << 16) | ((p)[2] << 8) | (p)[3])
-
-/* Branch to the 16-bit offset that follows the opcode. */
-#define BRANCH() (frame->nextPc = frame->pc + CODE_U16(0) - 1)
 
 void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *result)
 {
@@ -1357,9 +1471,12 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
     frame->nextPc = 0;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* These class names follow virtualMachine's generated opcode dispatch tables. */
 const char objectClassName[24] = "java/lang/Object";
+
 const char stringBufferClassName[24] = "java/lang/StringBuffer";
+
 const char stringClassName[24] = "java/lang/String";
 
 static void initBaseClasses(void) {
@@ -1368,26 +1485,6 @@ static void initBaseClasses(void) {
     loadStaticClass(&classStringBuffer, stringBufferClassName);
     loadStaticClass(&classString, stringClassName);
 }
-
-extern VMClass *classBoolean;
-extern VMClass *classByte;
-extern VMClass *classChar;
-extern VMClass *classShort;
-extern VMClass *classInt;
-extern VMClass *classLong;
-extern VMClass *classFloat;
-extern VMClass *classDouble;
-extern const char booleanTypeName[];
-extern const char byteTypeName[];
-extern const char charTypeName[];
-extern const char shortTypeName[];
-extern const char intTypeName[];
-extern const char longTypeName[];
-extern const char floatTypeName[];
-extern const char doubleTypeName[];
-
-static void initWrapperClass(VMClass **class_slot, const char *name,
-                              signed char type_code, int element_size);
 
 static void initPrimitiveTypes(void) {
     initWrapperClass(&classBoolean, booleanTypeName, 'Z', 1);
@@ -1425,53 +1522,3 @@ static void initWrapperClass(VMClass **class_slot, const char *name,
     stored_class->name = interned_name;
     (*class_slot)->element_size = element_size;
 }
-
-/* Keep these small-data definitions after their original external uses. */
-const char booleanTypeName[8] = "boolean";
-const char byteTypeName[8] = "byte";
-const char charTypeName[8] = "char";
-const char shortTypeName[8] = "short";
-const char intTypeName[8] = "int";
-const char longTypeName[8] = "long";
-const char floatTypeName[8] = "float";
-const char doubleTypeName[8] = "double";
-
-/* Keep the pointer's original zero-initialized storage after its extern uses. */
-VMClass *classBoolean = 0;
-
-JavaClass *classClass = &_dummyClass;
-
-/* Zero-initialized VM handles stored and initialized by this translation unit. */
-SceneString *ATTR_InnerClasses;
-SceneString *ATTR_LocalVariableTable;
-SceneString *ATTR_ConstantValue;
-SceneString *ATTR_LineNumberTable;
-unsigned short XTK_peerGroup[4];
-SceneClass *classStringBuffer;
-SceneString *TYPE_Chr_talk;
-SceneString *ATTR_SourceFile;
-SceneString *ATTR_Code;
-SceneString *TYPE_Void;
-SceneString *NAME_Constructor;
-SceneString *ATTR_Exceptions;
-SceneString *NAME_Init;
-SceneString *TYPE_Stage_entered;
-void *jthreadTop;
-VMClass *classByte;
-VMClass *classChar;
-VMClass *classVoid;
-VMClass *classShort;
-void (*jthreadResetFunc)(void);
-void *initVMThread;
-JavaClass *classObject;
-void *classEntryPool;
-VMClass *classFloat;
-VMClass *classDouble;
-VMClass *classLong;
-SceneClass *classString;
-VMClass *classInt;
-VMClass *primitiveClassTable[16];
-
-/* 0x0099D510, 0x400 bytes of COMMON storage allocated after primitiveClassTable;
-   no MAIN function reads it. */
-float key_value[256];

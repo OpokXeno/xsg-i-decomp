@@ -1,12 +1,10 @@
 #include "common.h"
-
 #include "stage_2.h"
 
-const char stagePeerFieldName[8] = "peer";
-
 void nmlModelSetMapLastInit(void);
-
 void nmlModelSetBackBufferClear(void);
+
+const char stagePeerFieldName[8] = "peer";
 
 void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
                                                  StageNativeSlot *arguments,

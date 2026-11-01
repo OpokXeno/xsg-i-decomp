@@ -7,6 +7,55 @@
 
 #include "shared.h"
 
+/* Head bounds, position adjustment and smoothing steps. */
+#define LOOK_HEAD_MIN_WEIGHT 0.0001f
+
+#define LOOK_HEAD_POSITION_Y_OFFSET 0.15f
+#define LOOK_HEAD_Z_MAX_ANGLE 1.0471975803375244f
+#define LOOK_HEAD_Z_MIN_ANGLE (-1.0471975803375244f)
+#define LOOK_HEAD_Y_MAX_ANGLE 1.483529806137085f
+#define LOOK_HEAD_Y_MIN_ANGLE (-1.483529806137085f)
+#define LOOK_HEAD_Y_SCALE (-0.7f)
+#define LOOK_HEAD_Z_SCALE 0.7f
+#define LOOK_HEAD_Y_STEP 0.1745329350233078f
+#define LOOK_HEAD_Z_STEP 0.0872664675116539f
+#define LOOK_HEAD_Y_LIMIT 0.1745329350233078f
+#define LOOK_HEAD_Z_LIMIT 0.0872664675116539f
+#define LOOK_SEBO_MIN_WEIGHT 0.0001f
+#define LOOK_SEBO_LIMIT 0.13962633907794952f
+#define LOOK_SEBO_STEP 0.13962633907794952f
+#define LOOK_SEBO_ROTATION_SCALE 0.2f
+
+/* MARK provisional: original .lit4 external witnesses, no original symbols. */
+#define xglAsin_cubic (-0.01872929931f)
+
+/* MARK provisional: .lit4 0x004d8554 */
+#define xglAsin_quadratic 0.07426100224f
+
+/* MARK provisional: .lit4 0x004d8558 */
+#define xglAsin_linear 0.2121143937f
+
+/* MARK provisional: .lit4 0x004d855c */
+#define xglAsin_pi_over_two_approx 1.570728779f
+
+/* MARK provisional: .lit4 0x004d8560 */
+#define xglAsin_pi_over_two 1.570796371f
+
+/* MARK provisional: .lit4 0x004d85a8 */
+#define LOOK_EYE_L_OFFSET 0.03999999911f
+
+/* MARK provisional: .lit4 0x004d85ac */
+#define LOOK_EYE_R_OFFSET (-0.03999999911f)
+
+/* Eye scale, step and rotation constants. */
+#define LOOK_EYE_IDLE_SCALE 0.4f
+
+#define LOOK_EYE_TRACK_STEP 0.005235988f
+#define LOOK_EYE_STEP 0.13962634f
+#define LOOK_EYE_LIMIT 0.13962634f
+#define LOOK_EYE_ROTATION_SCALE 0.3f
+#define LOOK_EYE_YAW_ROTATION_SCALE 0.6f
+
 /* Articulation elements have a 64-byte stride and three Euler rotation slots. */
 typedef struct LookJointElement {
     float scale[3];
@@ -86,29 +135,10 @@ typedef union LookAlignedVector4 {
     Vector4 v;
 } LookAlignedVector4;
 
-
 void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
 void xglMatrixInverse(Matrix4 destination, Matrix4 source);
 void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *source);
 float xglAtan2(float x, float y);
-/* Head bounds, position adjustment and smoothing steps. */
-#define LOOK_HEAD_MIN_WEIGHT 0.0001f
-#define LOOK_HEAD_POSITION_Y_OFFSET 0.15f
-#define LOOK_HEAD_Z_MAX_ANGLE 1.0471975803375244f
-#define LOOK_HEAD_Z_MIN_ANGLE (-1.0471975803375244f)
-#define LOOK_HEAD_Y_MAX_ANGLE 1.483529806137085f
-#define LOOK_HEAD_Y_MIN_ANGLE (-1.483529806137085f)
-#define LOOK_HEAD_Y_SCALE (-0.7f)
-#define LOOK_HEAD_Z_SCALE 0.7f
-#define LOOK_HEAD_Y_STEP 0.1745329350233078f
-#define LOOK_HEAD_Z_STEP 0.0872664675116539f
-#define LOOK_HEAD_Y_LIMIT 0.1745329350233078f
-#define LOOK_HEAD_Z_LIMIT 0.0872664675116539f
-#define LOOK_SEBO_MIN_WEIGHT 0.0001f
-#define LOOK_SEBO_LIMIT 0.13962633907794952f
-#define LOOK_SEBO_STEP 0.13962633907794952f
-#define LOOK_SEBO_ROTATION_SCALE 0.2f
-
 void CUR_MATRIX_Set(Matrix4 matrix);
 void CUR_MATRIX_Txyz4s(const float *displacement);
 void CUR_MATRIX_Rzyx4s(const float *angles);
@@ -116,45 +146,10 @@ void CUR_MATRIX_Get(Matrix4 matrix);
 void MATRIX_convert4(Matrix4 destination, Matrix4 source);
 void xglMatrixRotX(Matrix4 destination, Matrix4 source, float angle);
 void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
-
-
 float xglAsin(float value);
-
-/* MARK provisional: original .lit4 external witnesses, no original symbols. */
-#define xglAsin_cubic (-0.01872929931f)
-
 void look_limit(float *angle, float limit);
-
-/* MARK provisional: .lit4 0x004d8554 */
-#define xglAsin_quadratic 0.07426100224f
-
 void look_limit_add(float *angle, float target, float step);
-
-/* MARK provisional: .lit4 0x004d8558 */
-#define xglAsin_linear 0.2121143937f
-
-/* MARK provisional: .lit4 0x004d855c */
-#define xglAsin_pi_over_two_approx 1.570728779f
-
-/* MARK provisional: .lit4 0x004d8560 */
-#define xglAsin_pi_over_two 1.570796371f
-
 void LOOK_eyeL_cont(int model, int target, int step);
-
-/* MARK provisional: .lit4 0x004d85a8 */
-#define LOOK_EYE_L_OFFSET 0.03999999911f
-
 void LOOK_eyeR_cont(int model, int target, int step);
-
-/* MARK provisional: .lit4 0x004d85ac */
-#define LOOK_EYE_R_OFFSET (-0.03999999911f)
-
-/* Eye scale, step and rotation constants. */
-#define LOOK_EYE_IDLE_SCALE 0.4f
-#define LOOK_EYE_TRACK_STEP 0.005235988f
-#define LOOK_EYE_STEP 0.13962634f
-#define LOOK_EYE_LIMIT 0.13962634f
-#define LOOK_EYE_ROTATION_SCALE 0.3f
-#define LOOK_EYE_YAW_ROTATION_SCALE 0.6f
 
 #endif /* SRC_MAIN_LOOK_H */

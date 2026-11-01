@@ -3,6 +3,10 @@
 #define FILE_PRIVATE_H
 
 #include "main/xgl_mc.h"
+#include "main/xgl_packet.h"
+#include "main/party.h"
+#include "main/menu_1.h"
+#include "main/e_message.h"
 
 /*
  * file.c's own view of xglMcRequest's argument record: it stores integer
@@ -16,16 +20,6 @@ typedef struct McRequestArguments {
     int buffer;
     int size;
 } McRequestArguments;
-
-int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
-                 int *result);
-
-#include "main/xgl_packet.h"
-
-#include "main/party.h"
-
-#include "main/menu_1.h"
-#include "main/e_message.h"
 
 typedef struct SaveDataHead00 {
     u64 words[0x38 / 8];
@@ -83,15 +77,7 @@ typedef struct FileObjectSystem {
     unsigned char state[99];
 } FileObjectSystem;
 
-extern FileSaveRecord *FileSaveData;
-
-extern FileObjectSystem *FileObjectDataSystem;
-
 typedef struct PartyStateImage PartyStateImage;
-
-extern int PartyAllPartyGet2(int *out, PartyStateImage *state);
-
-extern void PartyTimeDispChange(XglClock *elapsed);
 
 typedef struct FileSaveData {
     u64 version;
@@ -109,7 +95,6 @@ typedef struct FileSaveData {
 } FileSaveOutput;
 
 /* Defining-owner interface proposals: game.c, menu_1.c and party.c. */
-
 typedef struct FileGameLoopState {
     unsigned char unmodeled_00[0x10];
     unsigned int runtime_flags;
@@ -117,22 +102,7 @@ typedef struct FileGameLoopState {
     short map_no;
 } FileGameLoopState;
 
-extern FileGameLoopState GameLoopState;
-
-extern void GamePushSaveDataUser(void);
-
-
-
-extern int MenuScenarioNoGet(void);
-
-extern XglClock *PartyTimeUpDate(void);
-
-extern void xglClockRead(XglClock *clock);
-
-extern void xglMcSetMapName(const unsigned char *primary, const unsigned char *secondary);
-
 /* e_message.c interface proposal and the FILE explanation context. */
-
 typedef struct FileMessage {
     unsigned char unmodeled_00;
     unsigned char mode;
@@ -154,29 +124,13 @@ typedef struct FileExplanation {
     FileMessage message;
 } FileExplanation;
 
-
-extern void MoveSlide(short *current, short *target, float rate);
-
-extern char *msg00_4_0036D658[3];
-
 /* xgl_render.c and SDK packet-builder interface proposals. */
-
 typedef struct FileRenderState {
     unsigned char unmodeled_00[0x10];
     unsigned short copy_width;
     unsigned short copy_height;
     unsigned short draw_back_value;
 } FileRenderState;
-
-extern FileRenderState sRender;
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
-
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
 typedef struct FileBackTexturePacket {
     u64 gif_tag;
@@ -208,5 +162,27 @@ typedef struct FileBackTexturePacket {
     u64 restored_depth_buffer;
     u64 restored_depth_buffer_register;
 } FileBackTexturePacket;
+
+extern FileSaveRecord *FileSaveData;
+extern FileObjectSystem *FileObjectDataSystem;
+extern FileGameLoopState GameLoopState;
+extern char *msg00_4_0036D658[3];
+extern FileRenderState sRender;
+
+int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
+                 int *result);
+
+extern int PartyAllPartyGet2(int *out, PartyStateImage *state);
+extern void PartyTimeDispChange(XglClock *elapsed);
+extern void GamePushSaveDataUser(void);
+extern int MenuScenarioNoGet(void);
+extern XglClock *PartyTimeUpDate(void);
+extern void xglClockRead(XglClock *clock);
+extern void xglMcSetMapName(const unsigned char *primary, const unsigned char *secondary);
+extern void MoveSlide(short *current, short *target, float rate);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
+extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
+extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
 #endif

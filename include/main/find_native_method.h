@@ -9,8 +9,6 @@ typedef struct JavaClass JavaClass;
 
 typedef struct ClassNameKey ClassNameKey;
 
-void *newObject(SceneClass *scene_class);
-
 typedef struct ElementType {
     u8 unmodeled_00[4];
     ClassNameKey *name; /* +0x4: lookupArray reads the class-name bytes */
@@ -58,8 +56,8 @@ struct JavaClass {
     ElementType *elementClass;
 };
 
+void *newObject(SceneClass *scene_class);
 void *newClass(void);
-
 void loadStaticClass(void *class_slot, const char *name);
 
 #endif /* INCLUDE_MAIN_FIND_NATIVE_METHOD_H */

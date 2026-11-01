@@ -4,11 +4,6 @@
 #include "shared.h"
 #include "main/find_native_method.h"
 
-extern JavaClass *classClass;
-extern JavaClass *classObject;
-extern SceneClass *classStringBuffer;
-extern SceneClass *classString;
-
 typedef union VMSlot {
     int i;
     float f;
@@ -17,9 +12,6 @@ typedef union VMSlot {
     short s;
     unsigned short c;
 } VMSlot;
-
-
-extern SceneString *loadConstString(const char *bytes, int length);
 
 /*
  * Partial view of the VM class object newClass() allocates: only the
@@ -32,6 +24,7 @@ extern SceneString *loadConstString(const char *bytes, int length);
  * 'J'/8 long, 'F'/4 float, 'D'/8 double).
  */
 typedef struct VMClass VMClass;
+
 struct VMClass {
     unsigned char unmodeled_00[4];
     SceneString *name;
@@ -42,8 +35,6 @@ struct VMClass {
     unsigned char element_size;
 };
 
-
-
 /*
  * xheap.c's (main/tu225) own free-block heap header. initVM never reads or
  * writes through it, only forwards a null base to reset the heap, exactly
@@ -51,28 +42,11 @@ struct VMClass {
  */
 typedef struct xheap_block xheap_block;
 
-extern void xheap_init(int keep_heap, xheap_block *heap, int size);
-
-/*
- * JNI_createThread is defined in main/tu241 (src/main/toolkit.c); this TU
- * only stores its result into initVMThread and never dereferences it, so
- * the returned handle is modeled as an opaque pointer here rather than
- * restating toolkit.c's own TU-local thread-object type.
- */
-extern void *JNI_createThread(int kind, int stack_words, int frame_words);
-
-/*
- * Defined in main/tu227 (src/main/find_native_method.c) and declared by that
- * TU's include/main/find_native_method.h; restated verbatim because that
- * header's newObject(SceneClass *) would clash with this TU's interpreter
- * declaration newObject(VMClass *) (init_vm.c), whose VMClass view the
- * interpreter's getClass/newArray/primitiveClassTable chain still uses.
- */
-extern void *newClass(void);
-extern void loadStaticClass(void *class_slot, const char *name);
-
+extern JavaClass *classClass;
+extern JavaClass *classObject;
+extern SceneClass *classStringBuffer;
+extern SceneClass *classString;
 extern void *initVMThread;
-
 extern SceneString *NAME_Init;
 extern SceneString *NAME_Constructor;
 extern SceneString *TYPE_Chr_talk;
@@ -89,7 +63,6 @@ extern SceneString *ATTR_LocalVariableTable;
 /* Neither ever dereferenced here: initVM only resets both to empty. */
 extern void *classEntryPool;
 extern void *constStringTable;
-
 extern void (*jthreadResetFunc)(void);
 
 /* Never dereferenced here: initVM only clears the list head. */
@@ -110,10 +83,30 @@ extern const char initVmConstructorName[]; /* "<init>" */
 extern const char voidMethodDescriptor[]; /* "()V" */
 extern const char intVoidMethodDescriptor[]; /* "(I)V" */
 extern const char codeAttrName[]; /* "Code" */
-
-
 extern const char objectClassName[]; /* "java/lang/Object" */
 extern const char stringBufferClassName[]; /* "java/lang/StringBuffer" */
 extern const char stringClassName[]; /* "java/lang/String" */
+
+extern SceneString *loadConstString(const char *bytes, int length);
+extern void xheap_init(int keep_heap, xheap_block *heap, int size);
+
+/*
+ * JNI_createThread is defined in main/tu241 (src/main/toolkit.c); this TU
+ * only stores its result into initVMThread and never dereferences it, so
+ * the returned handle is modeled as an opaque pointer here rather than
+ * restating toolkit.c's own TU-local thread-object type.
+ */
+extern void *JNI_createThread(int kind, int stack_words, int frame_words);
+
+/*
+ * Defined in main/tu227 (src/main/find_native_method.c) and declared by that
+ * TU's include/main/find_native_method.h; restated verbatim because that
+ * header's newObject(SceneClass *) would clash with this TU's interpreter
+ * declaration newObject(VMClass *) (init_vm.c), whose VMClass view the
+ * interpreter's getClass/newArray/primitiveClassTable chain still uses.
+ */
+extern void *newClass(void);
+
+extern void loadStaticClass(void *class_slot, const char *name);
 
 #endif /* INIT_VM_RECOVERY_PRIVATE_H */

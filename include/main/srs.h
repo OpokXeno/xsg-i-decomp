@@ -33,7 +33,6 @@ typedef struct SrsMemRes {
 extern SrsMemRes _srsMemRes;
 
 int srsLoadEffectData(void *buffer, int effectNo);
-
 int srsFileLoadCf(int cfId, int effectNo);
 
 #endif /* INCLUDE_MAIN_SRS_H */

@@ -24,7 +24,6 @@ typedef union JSLookupData {
 /* Primitive values, lookup entries and method entries occupy three words.
  * Their second and third words carry different roles for integer constants,
  * named class lookups and native methods. */
-
 struct JSLookupEntry {
     int type;
     JSLookupKey key;
@@ -42,55 +41,6 @@ struct JSClassRecord {
     JSMethodEntry methods[8];
 };
 
-extern void *RSRC_alloc(int heap, int size, int tag);
-
-JSPrimitive *primitive;
-
-int numClass;
-
-JSClassRecord *classes;
-
-int numPrimitive;
-
-static JSPrimitive js_type_int = {3, {0}, {0}};
-
-static JSPrimitive js_type_float = {4, {0}, {0}};
-
-static JSPrimitive js_type_string = {5, {0}, {0}};
-
-extern char jsTokenDelimiters[];
-char jsTokenDelimiters[8] = ".[](),";
-
-static char *tokenCurrent;
-
-static char *tokenLimit;
-
-static int tokenType;
-
-extern int strcmp(const char *left, const char *right);
-
-extern char *strchr(const char *text, int character);
-
-extern unsigned int strlen(const char *text);
-
-extern char *strcpy(char *destination, const char *source);
-
-extern int JS_callMethod(JSClassRecord *class_record, int token_type);
-
-extern char *STR_tokenGetNext(char *text, const char *delimiters);
-
-extern int STR_tokenGetType(void);
-
-static char *STR_getLine(char *destination, char *source, char *limit);
-
-static char *STR_trim(char *text);
-
-static char *STR_trim2(char *text, int delimiter);
-
-/* Resets the class/primitive tables and allocates their backing storage from
- * the caller's resource heap, sized for the requested primitive and class
- * capacities. */
-
 typedef void (*JSNativeMethod)(void);
 
 /*
@@ -101,18 +51,11 @@ typedef void (*JSNativeMethod)(void);
  * method table it appends to starts at +0xC. Only the two fields
  * JS_classSetup itself touches are modeled; the rest is unmodeled.
  */
-
 typedef struct JSClass {
     unsigned char unmodeled_00[4];
     JSNativeMethod get_peer; /* +0x4 */
     int method_count;        /* +0x8 */
 } JSClass;
-
-extern char jsCallSeparators[];
-
-extern char jsArgumentDelimiters[];
-
-extern double atof(const char *text);
 
 union JSArgumentValue {
     int integer;
@@ -128,11 +71,56 @@ struct JSCallArguments {
     union JSArgumentValue value[8];
 };
 
+extern char jsTokenDelimiters[];
+extern char jsCallSeparators[];
+extern char jsArgumentDelimiters[];
+
+extern void *RSRC_alloc(int heap, int size, int tag);
+extern int strcmp(const char *left, const char *right);
+extern char *strchr(const char *text, int character);
+extern unsigned int strlen(const char *text);
+extern char *strcpy(char *destination, const char *source);
+extern int JS_callMethod(JSClassRecord *class_record, int token_type);
+extern char *STR_tokenGetNext(char *text, const char *delimiters);
+extern int STR_tokenGetType(void);
+static char *STR_getLine(char *destination, char *source, char *limit);
+static char *STR_trim(char *text);
+static char *STR_trim2(char *text, int delimiter);
+extern double atof(const char *text);
 extern int atoi(const char *text);
 
 extern int JS_checkArgs(struct JSCallArguments *arguments,
                         int argument_count, char **argument_names);
 
+static JSPrimitive js_type_int = {3, {0}, {0}};
+
+static JSPrimitive js_type_float = {4, {0}, {0}};
+
+static JSPrimitive js_type_string = {5, {0}, {0}};
+
+char jsTokenDelimiters[8] = ".[](),";
+
+char jsCallSeparators[8] = ",()";
+
+char jsArgumentDelimiters[8] = ".[]";
+
+JSPrimitive *primitive;
+
+int numClass;
+
+JSClassRecord *classes;
+
+int numPrimitive;
+
+static char *tokenCurrent;
+
+static char *tokenLimit;
+
+static int tokenType;
+
+/* Resets the class/primitive tables and allocates their backing storage from
+ * the caller's resource heap, sized for the requested primitive and class
+ * capacities. */
 void JS_init(int heap, int primitiveCapacity, int classCapacity) {
     numClass = 0;
     numPrimitive = 0;
@@ -583,7 +571,3 @@ static char *STR_trim2(char *text, int delimiter) {
     }
     return text;
 }
-
-char jsCallSeparators[8] = ",()";
-
-char jsArgumentDelimiters[8] = ".[]";

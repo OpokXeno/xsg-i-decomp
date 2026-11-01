@@ -8,13 +8,25 @@
 #include "shared.h"
 
 typedef signed char s8;
+
 typedef struct JavaClass JavaClass;
 
 typedef struct ClassNameKey ClassNameKey;
 
-extern void *xmalloc(int size, int type);
+/* Header every heap array newArray creates begins with. */
+typedef struct ArrayHeader {
+    void *classPointer;
+    int length;
+    void *data;
+} ArrayHeader;
 
+extern void *xmalloc(int size, int type);
 void *newObject(SceneClass *scene_class);
+extern JavaClass *lookupArray(ElementType *elementType);
+void *newArray(ElementType *elementType, int length);
+JavaClass *loadClass(ClassNameKey *name, void *classLoader);
+SceneClass *getClassFromSignature(const char *signature, void *classLoader);
+void methodDescripter(u8 *descriptor, s16 *paramSize, s16 *returnSize, s8 *returnType);
 
 /*
  * Partial view of the element-type descriptor newArray and lookupArray use.
@@ -33,28 +45,11 @@ typedef struct ElementType {
 } ElementType;
 #endif
 
-extern JavaClass *lookupArray(ElementType *elementType);
-
 /* Header word every heap object newObject creates begins with. */
 #ifndef INCLUDE_MAIN_FIND_NATIVE_METHOD_H
 typedef struct ObjectHeader {
     void *classPointer;
 } ObjectHeader;
 #endif
-
-/* Header every heap array newArray creates begins with. */
-typedef struct ArrayHeader {
-    void *classPointer;
-    int length;
-    void *data;
-} ArrayHeader;
-
-void *newArray(ElementType *elementType, int length);
-
-JavaClass *loadClass(ClassNameKey *name, void *classLoader);
-
-SceneClass *getClassFromSignature(const char *signature, void *classLoader);
-
-void methodDescripter(u8 *descriptor, s16 *paramSize, s16 *returnSize, s8 *returnType);
 
 #endif /* SRC_MAIN_FIND_NATIVE_METHOD_H */

@@ -9,8 +9,8 @@
 #include "main/data_buffer.h"
 
 typedef struct ClassDescriptor ClassDescriptor;
+
 typedef struct ConstString ConstString;
-extern ConstString **constStringTable;
 
 typedef u32 ConstantPoolWord;
 
@@ -20,8 +20,6 @@ typedef union ClassConstantPoolValue {
     unsigned int word;
     unsigned short index;
 } ClassConstantPoolValue;
-
-DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
 
 typedef struct ClassFieldRecord {
     SceneString *name;
@@ -64,19 +62,6 @@ struct ClassDescriptor {
     ClassDescriptor *component_class;
 };
 
-void setupClass(ClassDescriptor *class_info, u32 this_class_index,
-                u32 super_class_index, u32 access_flags,
-                u32 class_loader);
-
-/*
- * classDB (0x0099d430, size 0x20) is the native loader's 8-slot table of
- * resolved classes indexed by class id (JNI_resolveClass in
- * src/main/jni.c); initClassDB clears every slot at JNI_initSystem startup.
- */
-extern int classDB[8];
-
-void initClassDB(void);
-
 /*
  * SceneMethod (forward-declared by shared.h) is completed here from
  * addCode's evidenced Code_attribute fields (JVM class file format): the
@@ -101,8 +86,32 @@ struct SceneMethod {
 };
 
 /*
+ * DataBuffer and its readers are defined by main/tu230
+ * (src/main/data_buffer.c); the two entry points readClass calls are
+ * declared verbatim from that TU's own src/main/data_buffer.h.
+ */
+typedef struct DataBuffer DataBuffer;
+
+extern ConstString **constStringTable;
+
+/*
+ * classDB (0x0099d430, size 0x20) is the native loader's 8-slot table of
+ * resolved classes indexed by class id (JNI_resolveClass in
+ * src/main/jni.c); initClassDB clears every slot at JNI_initSystem startup.
+ */
+extern int classDB[8];
+
+DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
+
+void setupClass(ClassDescriptor *class_info, u32 this_class_index,
+                u32 super_class_index, u32 access_flags,
+                u32 class_loader);
+
+void initClassDB(void);
+
+/*
  * DataBuffer_seek is defined by main/tu230 (src/main/data_buffer.c) but,
- * like DataBuffer_getUShortAt/DataBuffer_getUIntAt above, is not declared
+ * like DataBuffer_getUShortAt/DataBuffer_getUIntAt below, is not declared
  * by that TU's own src/main/data_buffer.h, so addCode's use of it is
  * declared verbatim here too.
  */
@@ -111,15 +120,7 @@ void DataBuffer_seek(DataBuffer *buffer, int offset);
 void addCode(DataBuffer *buffer, ClassDescriptor *class_info,
              SceneMethod *method, u32 attribute_length);
 
-/*
- * DataBuffer and its readers are defined by main/tu230
- * (src/main/data_buffer.c); the two entry points readClass calls are
- * declared verbatim from that TU's own src/main/data_buffer.h.
- */
-typedef struct DataBuffer DataBuffer;
-
 unsigned short DataBuffer_getUShortAt(DataBuffer *buffer);
-
 unsigned int DataBuffer_getUIntAt(DataBuffer *buffer);
 
 /*
@@ -134,9 +135,7 @@ unsigned int DataBuffer_getUIntAt(DataBuffer *buffer);
 static void readConstantPool(DataBuffer *buffer, ClassDescriptor *class_info);
 
 static void readInterfaces(DataBuffer *buffer, ClassDescriptor *class_info);
-
 static void readFields(DataBuffer *buffer, ClassDescriptor *class_info);
-
 static void readMethods(DataBuffer *buffer, ClassDescriptor *class_info);
 
 static void readAttributes(DataBuffer *buffer, ClassDescriptor *class_info,

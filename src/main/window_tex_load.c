@@ -1,15 +1,9 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "window_tex_load.h"
 
-/* MenuWorkEndGet clears and returns this entire 64 KiB work region. */
-
-/* The external data witness covers these 0x9c bytes; the spans around the
- * two evidenced bit sets remain unmodelled (see UmnDataBase). */
-
-static unsigned char Menu02Tex[0x40800];
+/* The defining headers supply the flags and renderer callback layouts. */
+#define GAME_LOOP_FLAG_UMN 0x04000000
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -21,23 +15,12 @@ typedef struct {
     Quadword reset_work[7];
 } MenuWorkState;
 
-extern MenuWorkState MenuWork;
-extern unsigned char MenuKeepSelect[0x64];
-
 typedef struct {
     unsigned char r;
     unsigned char g;
     unsigned char b;
     unsigned char unmodeled_03;
 } MenuBgColor;
-
-extern MenuBgColor MenuBgRgba;
-
-extern XglTaskScheduler *MenuBgTask;
-
-extern void MenuModelDirectSendZClear(void);
-
-extern void endBackTexDraw(MenuBgColor *color);
 
 typedef struct {
     unsigned char unmodeled_00[0x34];
@@ -50,54 +33,6 @@ typedef struct {
     short maxEp;  /* +0x02 */
 } UnitMaxHpEp;
 
-/*
- * The second argument here is not a real parameter of dataUnitOrgGet (which
- * takes only the character index): it is whatever value the loop-continue
- * flag below leaves in $a1, which the original compiler passed on for free
- * because the register already held it.
- */
-
-extern UnitOrgHpEp *func_A191C0(int chrNo, int continueFlag);
-
-extern UnitMaxHpEp *func_00A11108(int chrNo, int *attack, int *defense);
-
-extern void UmnMain2(int menuId);
-
-extern void UmnkosmosSpecialSet(void);
-
-extern void endPrintDirectFrameCopy(XglPacket *packet, int width, int height);
-
-extern int MenuModelOut[4];
-
-extern int UmnSimulationNo;
-
-extern int MenuScenarioNo;
-
-extern int MenuModelWorkTop;
-
-extern void *UmnGunoDataBaseTop;
-
-extern short UmnKosmosSpecialBox[4];
-
-extern XglTaskScheduler *MenuTask_XMX;
-
-extern unsigned char *MainMenuWorkEnd;
-
-extern int MenuLoadCount;
-
-extern unsigned char MenuBibrationCount;
-
-extern unsigned char MenuBibrationAct;
-
-extern unsigned char MenuBibrationSpeed;
-
-extern unsigned char MenuBibrationPad;
-
-extern void xglCdLoadOverlay(int overlayId);
-
-/* The defining headers supply the flags and renderer callback layouts. */
-#define GAME_LOOP_FLAG_UMN 0x04000000
-
 /* MainMenu copies the whole light setup as aligned doublewords (ld/sd), so the
  * record carries eight-byte alignment. */
 typedef union {
@@ -108,9 +43,92 @@ typedef union {
     } light;
     unsigned long long words[14];
 } MenuLightConfig;
+
+typedef struct MenuBgCameraSnapshot {
+    u64 words[0x5f0 / 8];
+} MenuBgCameraSnapshot;
+
+extern MenuWorkState MenuWork;
+extern unsigned char MenuKeepSelect[0x64];
+extern MenuBgColor MenuBgRgba;
+extern XglTaskScheduler *MenuBgTask;
+extern int MenuModelOut[4];
+extern int UmnSimulationNo;
+extern int MenuScenarioNo;
+extern int MenuModelWorkTop;
+extern void *UmnGunoDataBaseTop;
+extern short UmnKosmosSpecialBox[4];
+extern XglTaskScheduler *MenuTask_XMX;
+extern unsigned char *MainMenuWorkEnd;
+extern int MenuLoadCount;
+extern unsigned char MenuBibrationCount;
+extern unsigned char MenuBibrationAct;
+extern unsigned char MenuBibrationSpeed;
+extern unsigned char MenuBibrationPad;
 extern const MenuLightConfig mainMenuLighting;
 extern const char mainMenuLabel[];
+extern unsigned char defaultCharacterBuffer[4];
+extern int MenuDrillCall;
+extern int mini_game_no;
+extern unsigned char * MenuTairetuModelXtxAddr;
+extern unsigned char * MenuTairetuModelLexAddr;
+extern unsigned char * MenuTairetuModelPointerXtxAddr;
+extern unsigned char * MenuTairetuModelPointerLexAddr;
+extern XglTaskScheduler * MenuTask;
+extern unsigned char * MenuWinAddr;
+extern MenuBgTaskParameters * MenuBgParam;
+extern int MenuBgCameraId;
+extern u64 * MenuBgKeepCamera;
+extern const MenuModelPath tairetuTexturePath;
+extern const UmnTextPageMap menuTextPageTable;
+extern int MenuHddCheck;
+extern int debug_flag;
+extern const char OpenCloseCfwinPath[32];
+extern const char OpenCloseMenu01Path[24];
+extern const char OpenCloseMenu02Path[24];
+extern XglRenderFadeCallback MenuCfTaiki[8];
+extern unsigned char MenuTask_BG[4];
+extern unsigned char model_work[4];
+extern unsigned char MenuBackRgba[4];
+
+extern void MenuModelDirectSendZClear(void);
+extern void endBackTexDraw(MenuBgColor *color);
+
+/*
+ * The second argument here is not a real parameter of dataUnitOrgGet (which
+ * takes only the character index): it is whatever value the loop-continue
+ * flag below leaves in $a1, which the original compiler passed on for free
+ * because the register already held it.
+ */
+extern UnitOrgHpEp *func_A191C0(int chrNo, int continueFlag);
+
+extern UnitMaxHpEp *func_00A11108(int chrNo, int *attack, int *defense);
+extern void UmnMain2(int menuId);
+extern void UmnkosmosSpecialSet(void);
+extern void endPrintDirectFrameCopy(XglPacket *packet, int width, int height);
+extern void xglCdLoadOverlay(int overlayId);
+
+static const char * file_name_0[3];
+
+static const char * file_name_0[3] = { OpenCloseCfwinPath, OpenCloseMenu01Path, OpenCloseMenu02Path };
+
+MenuWorkState MenuWork = { 0 };
+
+/* Twelve consecutive five-byte saved menu-selection records. */
+unsigned char MenuKeepSelect[0x64] = { 0 };
+
+int MenuModelOut[4] = { 0 };
+
+XglRenderFadeCallback MenuCfTaiki[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+/* The external data witness covers these 0x9c bytes; the spans around the
+ * two evidenced bit sets remain unmodelled (see UmnDataBase). */
+static unsigned char Menu02Tex[0x40800];
+
+/* MenuWorkEndGet clears and returns this entire 64 KiB work region. */
 static unsigned char MenuWorkEndTop[0x10000];
+
+static int original_font_no_1;
 
 int WindowTexLoad(unsigned char *buffer, unsigned int request)
 {
@@ -410,10 +428,6 @@ void MenuCfTaikiPop(void)
     for (index = 0; index < 8; ++index)
         sRender.final_packet_callback[index] = MenuCfTaiki[index];
 }
-
-typedef struct MenuBgCameraSnapshot {
-    u64 words[0x5f0 / 8];
-} MenuBgCameraSnapshot;
 
 unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
 {
@@ -919,63 +933,7 @@ int hen(void)
     return MenuModelInit(0);
 }
 
-extern unsigned char defaultCharacterBuffer[4];
-
-extern int MenuDrillCall;
-
-extern int mini_game_no;
-
-extern unsigned char * MenuTairetuModelXtxAddr;
-
-extern unsigned char * MenuTairetuModelLexAddr;
-
-extern unsigned char * MenuTairetuModelPointerXtxAddr;
-
-extern unsigned char * MenuTairetuModelPointerLexAddr;
-
-extern XglTaskScheduler * MenuTask;
-
-extern unsigned char * MenuWinAddr;
-
-extern MenuBgTaskParameters * MenuBgParam;
-
-extern int MenuBgCameraId;
-
-extern u64 * MenuBgKeepCamera;
-
-static int original_font_no_1;
-
-extern const MenuModelPath tairetuTexturePath;
-
-extern const UmnTextPageMap menuTextPageTable;
-
-extern int MenuHddCheck;
-
-extern int debug_flag;
-
-extern const char OpenCloseCfwinPath[32];
-extern const char OpenCloseMenu01Path[24];
-extern const char OpenCloseMenu02Path[24];
-
-static const char * file_name_0[3];
-
-extern XglRenderFadeCallback MenuCfTaiki[8];
-extern unsigned char MenuTask_BG[4];
-extern unsigned char model_work[4];
-extern unsigned char MenuBackRgba[4];
-
-static const char * file_name_0[3] = { OpenCloseCfwinPath, OpenCloseMenu01Path, OpenCloseMenu02Path };
-
-MenuWorkState MenuWork = { 0 };
-
-/* Twelve consecutive five-byte saved menu-selection records. */
-
-unsigned char MenuKeepSelect[0x64] = { 0 };
-
-int MenuModelOut[4] = { 0 };
-
-XglRenderFadeCallback MenuCfTaiki[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const MenuModelPath tairetuTexturePath = { .path = "data\\endou\\poly\\tai00.xtx" };
 
 const MenuLightConfig mainMenuLighting = { .light = { .ambient = { 0.30000001192092896f, 0.30000001192092896f, 0.30000001192092896f, 1.0f }, .parallel = { { 0.5f, 0.5f, 0.5f, 1.0f }, { 0.5f, 0.5f, 0.5f, 1.0f }, { 0.5f, 0.5f, 0.5f, 1.0f } }, .direction = { { 1.0f, 1.0f, 0.5f, 1.0f }, { -1.0f, 1.0f, 0.5f, 1.0f }, { 0.0f, 1.0f, 0.5f, 1.0f } } } };

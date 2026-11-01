@@ -1,6 +1,9 @@
 #include "common.h"
 #include "shared.h"
 
+#define PARTICLE_GRAVITY (-0.05f)
+#define PARTICLE_DAMPING (0.8f)
+
 typedef union PpVector4 {
     Vector4 vector;
     unsigned long long words[2];
@@ -13,9 +16,6 @@ typedef struct PpParticle {
     float gravity;
     float damping;
 } PpParticle;
-
-#define PARTICLE_GRAVITY (-0.05f)
-#define PARTICLE_DAMPING (0.8f)
 
 void ppInit(PpParticle *particle)
 {

@@ -1,15 +1,17 @@
 #include "common.h"
-
 #include "shared.h"
-
 #include "main/control_entry.h"
+
+#define GAME_BG_DRAW_TYPE1_SCRATCH ((GameBgDrawType1Packet *)0x70000000)
 
 /* Exact existing light view from src/main/game_id_light_set.h:8-20. */
 typedef unsigned int IdLightQuadword __attribute__((mode(TI)));
+
 typedef struct IdLightPair {
     IdLightQuadword color;
     IdLightQuadword direction;
 } IdLightPair;
+
 typedef struct IdLightSet {
     IdLightQuadword ambientColor;
     IdLightPair lights[3];
@@ -137,19 +139,6 @@ typedef struct GameBgSetupEnvironment {
     } trxdir;
 } GameBgSetupEnvironment;
 
-extern float xglFRand(void);
-
-static unsigned char TestEnv_0_00367AA0[0x60] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x51, 0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x03, 0x40, 0x1E, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x6F, 0x00, 0x00, 0xF7, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x8F, 0x00, 0x00, 0xF7, 0x8D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
-};
-
-/* Background draw type 0 draws nothing; Game calls it directly. */
-
-/*
- * The do-nothing hook GameBgDrawType1Entry and GameBgDrawType2Entry install
- * at GameLoopState+0x30; GameDrawSync calls it with no arguments.
- */
-
 typedef struct GameBgDrawType1Particle {
     u16 x;
     u16 y;
@@ -173,41 +162,6 @@ typedef struct GameLoopBackgroundCallbacks {
     void (*background_sync)(void);
     u8 unmodeled_34[0x2a030 - 0x34];
 } GameLoopBackgroundCallbacks;
-
-/* Original TestEnv.1, main VA 0x00367b00, 11 quadwords. */
-static GameBgSetupEnvironment TestEnv_1_00367B00[1] = {
-    {
-        .directhl = { .quadwords = 10, .command = 0x51 },
-        .gif_tag = { .loop_count = 9, .end_of_packet = 1,
-                     .format = 0, .register_count = 1 },
-        .gif_registers = 0x0e,
-        .alpha = { .source_color = 0, .subtract_color = 2,
-                   .alpha_source = 0, .add_color = 1, .address = 0x42 },
-        .test = { .alpha_test_enable = 1, .alpha_fail = 1,
-                  .depth_test_enable = 1, .depth_test_method = 3,
-                  .address = 0x47 },
-        .tex0 = { .texture_base = 0x3800, .buffer_width = 8,
-                  .pixel_format = 0, .width_log2 = 5, .height_log2 = 6,
-                  .color_components = 1, .texture_function = 0,
-                  .clut_load = 1, .address = 0x06 },
-        .tex1 = { .magnification_filter = 1, .minification_filter = 1,
-                  .address = 0x14 },
-        .clamp = { .wrap_s = 0, .wrap_t = 0, .address = 0x08 },
-        .bitbltbuf = { .destination_base = 0x3800,
-                      .destination_width = 8, .destination_format = 0,
-                      .address = 0x50 },
-        .trxpos = { .source_x = 0, .source_y = 0, .destination_x = 0,
-                    .destination_y = 0, .pixel_order = 0, .address = 0x51 },
-        .trxreg = { .width = 32, .height = 64, .address = 0x52 },
-        .trxdir = { .direction = 0, .address = 0x53 }
-    }
-};
-
-GameBgDrawType1Parameters GameBgDrawType1Param = {0};
-
-extern GameLoopBackgroundCallbacks GameLoopState;
-
-void GameBgDrawType1(void);
 
 typedef struct GameBgDrawType1PacketHeader {
     u32 header_pad_00[3];
@@ -244,25 +198,6 @@ typedef struct GameBgDrawType1Packet {
     GameBgDrawType1PacketHeader header;
     GameBgDrawType1Vertex vertices[1];
 } GameBgDrawType1Packet;
-
-#define GAME_BG_DRAW_TYPE1_SCRATCH ((GameBgDrawType1Packet *)0x70000000)
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
-
-/* Background draw type 0 draws nothing; Game calls it directly. */
-
-/*
- * The do-nothing hook GameBgDrawType1Entry and GameBgDrawType2Entry install
- * at GameLoopState+0x30; GameDrawSync calls it with no arguments.
- */
-
-extern float I2F(int value);
-
-extern float xglCos(float angle);
-
-extern float xglSin(float angle);
 
 typedef struct GameBgScreenPosition {
     int x;
@@ -355,22 +290,114 @@ typedef struct GameBgBandScratch {
     GameBgBandVertex vertices[4];
 } GameBgBandScratch;
 
-extern void xglRenderClearColor(unsigned int color);
+typedef struct GameBgBand {
+    float angular_velocity;
+    float texture_velocity;
+    float angle;
+    float texture_phase;
+    /* Interleaved x, y coordinates for the circular point ring. */
+    float coordinates[128];
+} GameBgBand;
 
+typedef struct GameBgDepth {
+    float z;
+    unsigned int unmodeled_04;
+} GameBgDepth;
+
+typedef struct GameBgBandTexture GameBgBandTexture;
+
+typedef struct GameBgBandParameters {
+    unsigned char initialized;
+    unsigned char unmodeled_01[2];
+    unsigned char point_count;
+    float radius;
+    float angular_step;
+    float scale;
+    GameBgBand bands[4];
+    GameBgDepth depths[7];
+    unsigned char unmodeled_888[72];
+    GameBgBandTexture *texture_packet;
+} GameBgBandParameters;
+
+struct GameBgBandTexture {
+    unsigned int header[8];
+    unsigned int pixels[2048];
+};
+
+struct StageBackground;
+
+extern GameLoopBackgroundCallbacks GameLoopState;
+
+extern float xglFRand(void);
+void GameBgDrawType1(void);
+extern void sceVif1PkCnt(XglPacket *packet, int count);
+extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
+
+extern float I2F(int value);
+
+extern float xglCos(float angle);
+extern float xglSin(float angle);
+extern void xglRenderClearColor(unsigned int color);
 extern unsigned int xglLRand(void);
 
 extern void xglRotTransPersN(GameBgProjectedPoint *destination, Matrix4 *matrix,
                            const Vector4 *source, int count, int mode);
+
+void GameBgDrawType2(void);
+
+static unsigned char TestEnv_0_00367AA0[0x60] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x51, 0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x03, 0x40, 0x1E, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x6F, 0x00, 0x00, 0xF7, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x8F, 0x00, 0x00, 0xF7, 0x8D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
+};
+
+/* Original TestEnv.1, main VA 0x00367b00, 11 quadwords. */
+static GameBgSetupEnvironment TestEnv_1_00367B00[1] = {
+    {
+        .directhl = { .quadwords = 10, .command = 0x51 },
+        .gif_tag = { .loop_count = 9, .end_of_packet = 1,
+                     .format = 0, .register_count = 1 },
+        .gif_registers = 0x0e,
+        .alpha = { .source_color = 0, .subtract_color = 2,
+                   .alpha_source = 0, .add_color = 1, .address = 0x42 },
+        .test = { .alpha_test_enable = 1, .alpha_fail = 1,
+                  .depth_test_enable = 1, .depth_test_method = 3,
+                  .address = 0x47 },
+        .tex0 = { .texture_base = 0x3800, .buffer_width = 8,
+                  .pixel_format = 0, .width_log2 = 5, .height_log2 = 6,
+                  .color_components = 1, .texture_function = 0,
+                  .clut_load = 1, .address = 0x06 },
+        .tex1 = { .magnification_filter = 1, .minification_filter = 1,
+                  .address = 0x14 },
+        .clamp = { .wrap_s = 0, .wrap_t = 0, .address = 0x08 },
+        .bitbltbuf = { .destination_base = 0x3800,
+                      .destination_width = 8, .destination_format = 0,
+                      .address = 0x50 },
+        .trxpos = { .source_x = 0, .source_y = 0, .destination_x = 0,
+                    .destination_y = 0, .pixel_order = 0, .address = 0x51 },
+        .trxreg = { .width = 32, .height = 64, .address = 0x52 },
+        .trxdir = { .direction = 0, .address = 0x53 }
+    }
+};
+
+GameBgDrawType1Parameters GameBgDrawType1Param = {0};
+
+GameBgBandParameters GameBgDrawType2Param = {0};
+
+IdLightSet GameIdLight[16] = {0};
 
 static void clear(void)
 {
     sceVif1PkRef(xglPacketGetCurrent(), TestEnv_0_00367AA0, 6, 0, 0, 0);
 }
 
+/* Background draw type 0 draws nothing; Game calls it directly. */
 void GameBgDrawType0(void)
 {
 }
 
+/*
+ * The do-nothing hook GameBgDrawType1Entry and GameBgDrawType2Entry install
+ * at GameLoopState+0x30; GameDrawSync calls it with no arguments.
+ */
 static void nullfunc(void)
 {
 }
@@ -463,45 +490,6 @@ void GameBgDrawType1Entry(void)
     GameBgDrawType1Param.spawn_y = -32768;
     GameBgDrawType1Param.initialized = 0;
 }
-
-typedef struct GameBgBand {
-    float angular_velocity;
-    float texture_velocity;
-    float angle;
-    float texture_phase;
-    /* Interleaved x, y coordinates for the circular point ring. */
-    float coordinates[128];
-} GameBgBand;
-
-typedef struct GameBgDepth {
-    float z;
-    unsigned int unmodeled_04;
-} GameBgDepth;
-
-typedef struct GameBgBandTexture GameBgBandTexture;
-
-typedef struct GameBgBandParameters {
-    unsigned char initialized;
-    unsigned char unmodeled_01[2];
-    unsigned char point_count;
-    float radius;
-    float angular_step;
-    float scale;
-    GameBgBand bands[4];
-    GameBgDepth depths[7];
-    unsigned char unmodeled_888[72];
-    GameBgBandTexture *texture_packet;
-} GameBgBandParameters;
-
-GameBgBandParameters GameBgDrawType2Param = {0};
-
-IdLightSet GameIdLight[16] = {0};
-void GameBgDrawType2(void);
-
-struct GameBgBandTexture {
-    unsigned int header[8];
-    unsigned int pixels[2048];
-};
 
 void GameBgDrawType2(void)
 {
@@ -770,8 +758,6 @@ void GameBgDrawType2(void)
         return;
     }
 }
-
-struct StageBackground;
 
 void GameBgDrawType2Entry(int parameter, struct StageBackground *background)
 {

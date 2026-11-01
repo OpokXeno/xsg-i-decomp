@@ -2,8 +2,11 @@
 #define SRC_MAIN_ANM_H
 
 typedef struct FpkFcvPack FpkFcvPack;
+
 typedef struct FpkAnimationEntry FpkAnimationEntry;
+
 typedef struct AnmClock AnmClock;
+
 typedef struct AnmDefaultState AnmDefaultState;
 
 FpkAnimationEntry *ANM_getEntry(AnmClock *clock, FpkFcvPack *pack);

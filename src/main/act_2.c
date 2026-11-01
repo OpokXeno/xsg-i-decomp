@@ -1,7 +1,4 @@
 #include "common.h"
-
-void JNT_animSetFlags(int anim_flags);
-
 #include "act_2.h"
 #include "main/act_1.h"
 #include "main/jnt.h"
@@ -51,30 +48,11 @@ typedef struct ActorResource {
     void *move;
 } ActorResource;
 
-extern Actor actor[64];
-
-/*
- * JNT_getMoveElement (main/tu261, src/main/jnt.c) is not yet recovered as C.
- * It dereferences its argument (main:0x00313b50, addiu v1,a0,16; lhu
- * a3,8(a0)), so the parameter is a pointer.
- */
-
-extern int JNT_getMoveElement(void *move);
-
-/*
- * FCV2_checkData is not yet recovered as C. It dereferences its argument to
- * compare a signature word (main:0x0030d8c8..0x0030d8d8), so the parameter is
- * a pointer.
- */
-
-extern int FCV2_checkData(void *data);
-
 /* One of the eight Java camera records embedded at `tcamera + n * 0x12c0`.
  * TCAMERA_update establishes the four 0x4a0 channel strides and TCAMERA_init
  * establishes the 0x12c0 record stride. The channel union names the fields
  * proved by the channel callers; the rest stays explicitly unmodeled storage
  * until another access gives it meaning. */
-
 typedef struct CameraChannelSpline {
     unsigned char unmodeled_00[4];
     unsigned short weight_mode;
@@ -114,10 +92,45 @@ typedef struct CameraRecord {
     unsigned char unmodeled_12b8[8]; /* +0x12b8 to the established 0x12c0 stride */
 } CameraRecord;
 
-CameraRecord tcamera[8] = {0};
+typedef unsigned int Quadword __attribute__((mode(TI)));
 
+struct JntProducer;
+
+struct JntMoveResource;
+
+enum { HAND_NAME, HAND_SUFFIX, HAND_NAME_MASK, HAND_SUFFIX_MASK };
+
+typedef struct ActorEnemyLookTarget {
+    unsigned char unmodeled_00[8];
+    float control;
+    float *point;
+} ActorEnemyLookTarget;
+
+typedef struct ActorEnemyLookLimits {
+    float *minimum;
+    float *maximum;
+} ActorEnemyLookLimits;
+
+extern Actor actor[64];
+extern unsigned int GameLoopState[];
+extern EnemyWorkEntry enepc[16];
+
+void JNT_animSetFlags(int anim_flags);
+
+/*
+ * JNT_getMoveElement (main/tu261, src/main/jnt.c) is not yet recovered as C.
+ * It dereferences its argument (main:0x00313b50, addiu v1,a0,16; lhu
+ * a3,8(a0)), so the parameter is a pointer.
+ */
+extern int JNT_getMoveElement(void *move);
+
+/*
+ * FCV2_checkData is not yet recovered as C. It dereferences its argument to
+ * compare a signature word (main:0x0030d8c8..0x0030d8d8), so the parameter is
+ * a pointer.
+ */
+extern int FCV2_checkData(void *data);
 void ACT_resetParent(Actor *actor, Actor *parent);
-
 void ACT_setHumanHand(Actor *actor, int hand);
 
 /*
@@ -126,129 +139,98 @@ void ACT_setHumanHand(Actor *actor, int hand);
  * ACT_setHumanHand(other, 0) puts the character's own hand back to its
  * default (main:0x00306ae8..0x00306b1c).
  */
-
 Actor *ACT_setParent(Actor *actor, int type, Actor *parent, int joint, int flags);
-
 void ACT_setVisible(Actor *actor, int part, int visible);
-
-/*
- * Attaches `actor` to `parent` at joint 0x30 (type 2, id `faceId`); on
- * success (main:0x00306d40..0x00306d64) it hides the base model's own FACE
- * part with ACT_setVisible(parent, 0x46414345, 0) - 0x46414345 is "FACE"
- * read from most- to least-significant byte, matching lui 0x4641/ori 0x4345
- * at 0x00306d44/0x00306d5c.
- */
-
-typedef unsigned int Quadword __attribute__((mode(TI)));
-
 static void ACT_updateMotionCore(Actor *actor, int pause);
 static void ACT_modelDrawSub(Actor *actor);
-
-/* main:0x00307c38 is `jr ra` / nop: no argument is read and no state changes. */
-
-/* main:0x00307c40 is `jr ra` / nop: no argument is read and no state changes. */
-
 extern void *PACK_getEntry(void *table, int id);
-
 extern void ANM_getEntry(ActorAnimSlot *slot, void *entry);
-
 extern void MDL_setGroupVisible(void *model, int part, int visible);
-
 extern void MDL_setVisible(void *model, int part, int visible);
+extern void JNT_initProducer(struct JntProducer *producer);
+extern void JC_setParent(void *work, void *parameter, int flags);
+extern void *JNT_getAccessories(struct JntMoveResource *move);
+extern void JC_face(void *work, void *parameter, int flags);
+
+Actor *ACT_setParent2(Actor *actor, int type, Actor *parent, int joint, int flags,
+                      void (*filter)(void *work, void *parameter, int flags));
+extern void nmlModelSetZwrite(int enabled);
+extern void nmlModelSetStencil(int enabled);
+extern void nmlModelSetToumei(int enabled);
+extern void nmlModelSetAlpha(unsigned long long alpha);
+extern void nmlModelSetTransparency(float transparency);
+extern void nmlModelSetFogCol(float *color);
+extern void nmlModelSetFogDist(float nearDistance, float farDistance, float nearIntensity, float farIntensity);
+extern void nmlModelSetPointLight(int index, float *position, float *color);
+extern int MDL_create(void *model, void *resource);
+extern void *JNT_getRootElement(void *joint);
+void ACT_resetMatrix(Actor *actor);
+extern void JNT_setFlags(int flags);
+extern void JNT_setModel(void *model, void *move);
+extern void JNT_setMatrix(void *matrices);
+extern void JNT_setModelMatrix(void);
+extern void *ANM_reset(ActorAnimSlot *slot, void *pack);
+extern int RES_loadFile(int command, int callback, int resource_id, int flags);
+extern int MDL_setNameVisible(void *model, const void *pattern, int visible);
+extern int JNT_startProduction(float frame, JntProducer *producer, void *actor);
+extern void JNT_setClipR(float clipRadius);
+extern void FCV2_setStep(float frameStep);
+extern void CUR_MATRIX_Rx4s(const float *rotation);
+extern void CUR_MATRIX_Ry4s(const float *rotation);
+extern void CUR_MATRIX_Rz4s(const float *rotation);
+extern void JNT_setInterpMatrix(void *matrixBuffer, float interpolation);
+extern void JNT_setCurve(void *staticValueRecords, void *valueRecords);
+extern void JNT_setFCurve(void *fcurve, int slot);
+extern void JNT_getRootTrans(void *translation);
+extern void ANM_update(void *slot);
+extern char *strstr(const char *haystack, const char *needle);
+static void ACT_updateMotionSub(Actor *actor, int pause);
+extern void ACT_initMotion(Actor *actor);
+void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags);
+extern void MATRIX_convert4(void *out, unsigned int matrices);
+extern void nmlModelSetShapeId(int shapeId, float weight);
+void ACT_setDrawEnv(Actor *actor);
+extern void nmlModelSetLight(void *light, void *colors);
+extern void nmlModelSetScale(void *scale);
+extern void nmlModelClear(void);
+extern void nmlModelSetParent(unsigned int parent);
+extern void nmlModelSetWindow(unsigned short window);
+extern void nmlModelSetRenderLevel(unsigned int level);
+extern void nmlModelSetAxisSymmetry(float symmetry);
+extern void nmlModelSetFaceModel(int enabled);
+extern void nmlModelSetHumanModel(unsigned char human);
+extern void nmlModelSetSortOffset(float offset);
+extern void nmlModelSetPixelAlpha(unsigned int alpha);
+extern void nmlModelSetPartsPixelAlpha(short part, short alpha);
+extern void nmlModelSetClip(int clip);
+extern void nmlModelSetShadowHeight(float height);
+extern void nmlModelSetTexture(unsigned int texture);
+extern void nmlModelSetPlace(void *matrix);
+extern void nmlModelEntry(unsigned int entry);
+extern void nmlModelGetGblPosition(void *position);
+extern void MDL_partsSetVisible(void *model);
+extern void MDL_draw(void *model, void *matrix);
+extern float xglPointLengthXZ(const Vector4 *point1, const Vector4 *point2);
+extern int nmlModelAskNonLinearCamera(void);
+extern unsigned int xglStudioSelectGetActiveCamera(int studio_index);
+extern void nmlModelSetMapShadowParts(int partId);
+extern void nmlModelSetTexMap(int mode, int size, float weight);
+extern void *xglStudioGetLight2(void);
+extern void xglLightCalcMatrix(void *light);
+void *JNT_computeMatrix(JntWork *work, JntStaticChannel *channels, int argument);
+void *LOOK_eyeL_cont(JntWork *work, JntStaticChannel *channels, int argument);
+void *LOOK_eyeR_cont(JntWork *work, JntStaticChannel *channels, int argument);
+void *LOOK_sebo_cont(JntWork *work, JntStaticChannel *channels, int argument);
+void *LOOK_head_cont(JntWork *work, JntStaticChannel *channels, int argument);
+
+CameraRecord tcamera[8] = {0};
 
 static unsigned int tblHand[9] = {
     0x54453030, 0x54453031, 0x54453032, 0x54453033,
     0x54453034, 0x54453035, 0x54453036, 0x54453037, 0
 };
 
-struct JntProducer;
-
-extern void JNT_initProducer(struct JntProducer *producer);
-
-extern void JC_setParent(void *work, void *parameter, int flags);
-
-struct JntMoveResource;
-
-extern void *JNT_getAccessories(struct JntMoveResource *move);
-
-extern void JC_face(void *work, void *parameter, int flags);
-
-Actor *ACT_setParent2(Actor *actor, int type, Actor *parent, int joint, int flags,
-                      void (*filter)(void *work, void *parameter, int flags));
-
-extern void nmlModelSetZwrite(int enabled);
-
-extern void nmlModelSetStencil(int enabled);
-
-extern void nmlModelSetToumei(int enabled);
-
-extern void nmlModelSetAlpha(unsigned long long alpha);
-
-extern void nmlModelSetTransparency(float transparency);
-
-extern void nmlModelSetFogCol(float *color);
-
-extern void nmlModelSetFogDist(float nearDistance, float farDistance, float nearIntensity, float farIntensity);
-
-extern void nmlModelSetPointLight(int index, float *position, float *color);
-
-extern int MDL_create(void *model, void *resource);
-
-extern void *JNT_getRootElement(void *joint);
-
-/* main:0x00307c38 is `jr ra` / nop: no argument is read and no state changes. */
-
-/* main:0x00307c40 is `jr ra` / nop: no argument is read and no state changes. */
-
-void ACT_resetMatrix(Actor *actor);
-
-extern void JNT_setFlags(int flags);
-
-extern void JNT_setModel(void *model, void *move);
-
-extern void JNT_setMatrix(void *matrices);
-
-extern void JNT_setModelMatrix(void);
-
-extern void *ANM_reset(ActorAnimSlot *slot, void *pack);
-
-extern unsigned int GameLoopState[];
-
-extern int RES_loadFile(int command, int callback, int resource_id, int flags);
-
-extern int MDL_setNameVisible(void *model, const void *pattern, int visible);
-
-enum { HAND_NAME, HAND_SUFFIX, HAND_NAME_MASK, HAND_SUFFIX_MASK };
-
-extern int JNT_startProduction(float frame, JntProducer *producer, void *actor);
-
-extern void JNT_setClipR(float clipRadius);
-
-extern void FCV2_setStep(float frameStep);
-
-extern void CUR_MATRIX_Rx4s(const float *rotation);
-
-extern void CUR_MATRIX_Ry4s(const float *rotation);
-
-extern void CUR_MATRIX_Rz4s(const float *rotation);
-
-extern void JNT_setInterpMatrix(void *matrixBuffer, float interpolation);
-
-extern void JNT_setCurve(void *staticValueRecords, void *valueRecords);
-
-extern void JNT_setFCurve(void *fcurve, int slot);
-
-extern void JNT_getRootTrans(void *translation);
-
-extern void ANM_update(void *slot);
-
-extern char *strstr(const char *haystack, const char *needle);
-
-static void ACT_updateMotionSub(Actor *actor, int pause);
-
-extern void ACT_initMotion(Actor *actor);
-
-void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags);
+float newsToDirection[16] = { 0.0f, 3.1415927410125732f, 1.5707963705062866f, 2.3561944961547852f, -1.5707963705062866f, -2.3561944961547852f, 0.0f, 0.0f, 0.0f, 0.0f, 0.78539818525314331f, 0.0f, -0.78539818525314331f, 0.0f, 0.0f, 0.0f };
 
 void ACT_resetMatrix(Actor *actor)
 {
@@ -511,6 +493,13 @@ Actor *ACT_setRelation(Actor *actor, Actor *parent, int relation, int flags)
     return ACT_setParent2(actor, type, parent, joint, flags, filter);
 }
 
+/*
+ * Attaches `actor` to `parent` at joint 0x30 (type 2, id `faceId`); on
+ * success (main:0x00306d40..0x00306d64) it hides the base model's own FACE
+ * part with ACT_setVisible(parent, 0x46414345, 0) - 0x46414345 is "FACE"
+ * read from most- to least-significant byte, matching lui 0x4641/ori 0x4345
+ * at 0x00306d44/0x00306d5c.
+ */
 Actor *ACT_setFace(Actor *actor, Actor *parent, int faceId)
 {
     Actor *result;
@@ -565,8 +554,6 @@ void ACT_updateMotionPause(Actor *actor)
 {
     ACT_updateMotionCore(actor, 1);
 }
-
-extern EnemyWorkEntry enepc[16];
 
 static inline void ACT_runQueuedMotion(Actor *actor, ActorAnimSlot *queue)
 {
@@ -768,38 +755,6 @@ void ACT_modelDraw(Actor *actor)
         }
     }
 }
-
-extern void MATRIX_convert4(void *out, unsigned int matrices);
-extern void nmlModelSetShapeId(int shapeId, float weight);
-void ACT_setDrawEnv(Actor *actor);
-extern void nmlModelSetLight(void *light, void *colors);
-extern void nmlModelSetScale(void *scale);
-extern void nmlModelClear(void);
-extern void nmlModelSetParent(unsigned int parent);
-extern void nmlModelSetWindow(unsigned short window);
-extern void nmlModelSetRenderLevel(unsigned int level);
-extern void nmlModelSetAxisSymmetry(float symmetry);
-extern void nmlModelSetFaceModel(int enabled);
-extern void nmlModelSetHumanModel(unsigned char human);
-extern void nmlModelSetSortOffset(float offset);
-extern void nmlModelSetPixelAlpha(unsigned int alpha);
-extern void nmlModelSetPartsPixelAlpha(short part, short alpha);
-extern void nmlModelSetClip(int clip);
-extern void nmlModelSetShadowHeight(float height);
-extern void nmlModelSetTexture(unsigned int texture);
-extern void nmlModelSetPlace(void *matrix);
-extern void nmlModelEntry(unsigned int entry);
-extern void nmlModelGetGblPosition(void *position);
-extern void MDL_partsSetVisible(void *model);
-extern void MDL_draw(void *model, void *matrix);
-extern void JNT_setModelMatrix(void);
-extern float xglPointLengthXZ(const Vector4 *point1, const Vector4 *point2);
-extern int nmlModelAskNonLinearCamera(void);
-extern unsigned int xglStudioSelectGetActiveCamera(int studio_index);
-extern void nmlModelSetMapShadowParts(int partId);
-extern void nmlModelSetTexMap(int mode, int size, float weight);
-extern void *xglStudioGetLight2(void);
-extern void xglLightCalcMatrix(void *light);
 
 static void ACT_modelDrawSub(Actor *actor)
 {
@@ -1067,6 +1022,8 @@ void ACT_loadResource(Actor *actor, int resourceId)
     }
 }
 
+/* main:0x00307c38 is `jr ra` / nop: no argument is read and no state changes. */
+/* main:0x00307c40 is `jr ra` / nop: no argument is read and no state changes. */
 void ACT_initMTNResource(void)
 {
 }
@@ -1074,23 +1031,6 @@ void ACT_initMTNResource(void)
 void ACT_resourceInit(void)
 {
 }
-
-void *JNT_computeMatrix(JntWork *work, JntStaticChannel *channels, int argument);
-void *LOOK_eyeL_cont(JntWork *work, JntStaticChannel *channels, int argument);
-void *LOOK_eyeR_cont(JntWork *work, JntStaticChannel *channels, int argument);
-void *LOOK_sebo_cont(JntWork *work, JntStaticChannel *channels, int argument);
-void *LOOK_head_cont(JntWork *work, JntStaticChannel *channels, int argument);
-
-typedef struct ActorEnemyLookTarget {
-    unsigned char unmodeled_00[8];
-    float control;
-    float *point;
-} ActorEnemyLookTarget;
-
-typedef struct ActorEnemyLookLimits {
-    float *minimum;
-    float *maximum;
-} ActorEnemyLookLimits;
 
 void ACT_initMotion(Actor *actor)
 {
@@ -1417,5 +1357,3 @@ void ACT_setHumanHand(Actor *actor, int hand)
         }
     }
 }
-
-float newsToDirection[16] = { 0.0f, 3.1415927410125732f, 1.5707963705062866f, 2.3561944961547852f, -1.5707963705062866f, -2.3561944961547852f, 0.0f, 0.0f, 0.0f, 0.0f, 0.78539818525314331f, 0.0f, -0.78539818525314331f, 0.0f, 0.0f, 0.0f };

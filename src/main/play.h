@@ -8,38 +8,13 @@
 #include "shared.h"
 #include "main/jni.h"
 
-/*
- * The engine's playback controller, recovered head.
- *
- * `PLAY_setTimeChart` (main:0x0026a770) is the only function in this TU that
- * touches the object so far: it stores its second argument at +0x08. Its
- * caller Java_xeno_PlayControl_loadTimeChart (main:0x002fa4c0, not in this
- * TU) reads the pointer at +0x00 of the Java peer it is handed as this
- * object's address, and the value at +0x04 of that same peer as the value
- * stored here, matching both the annotation ("Assigns a time-chart resource
- * to the supplied playback controller") and the Java method name
- * (`loadTimeChart`). PLAY_ctrl passes this member of `playControl`
- * (the object PLAY_getCurrent returns) as the first argument of TCH_getInfo,
- * which dereferences it, so the member is a pointer to a time-chart resource
- * whose layout belongs to tch.c.
- *
- * Nothing between +0x00 and +0x08 is recovered yet: the other PLAY_*
- * functions of this TU (`PLAY_getCurrent`, `PLAY_setupDefault`, `PLAY_setup`,
- * `PLAY_setObserver`, `PLAY_ctrl`, `PLAY_getCallBackParams`,
- * `PLAY_checkTCH`) are still assembly and are the evidence for any further
- * member.
- */
+#define PLAY_FLAG_ENABLED 0x01
+#define PLAY_FLAG_MANUAL_TIME 0x02
+#define PLAY_FLAG_LOOP 0x04
+#define PLAY_SOURCE_FORMAT_MAC 0x004D4143
+#define PLAY_PAD_FAST 0x0100
+#define PLAY_PAD_SHOW_FRAME 0x0200
 
-/*
- * +0x04 of the span above is `state`: PLAY_setupDefault clears it
- * (sw $0,4 at 0x0026a650). Nothing between +0x00 and +0x04 is recovered.
- */
-
-/*
- * The pointer PLAY_setupDefault clears (sw $0,12 at 0x0026a674). Its
- * pointee is read by PLAY_setup, still assembly in this TU, so it stays
- * opaque here.
- */
 typedef struct PlaySource PlaySource;
 
 struct PlaySource {
@@ -53,10 +28,6 @@ typedef struct TCamera {
     unsigned char unmodeled_00[0x0c];
     unsigned int mode[3];
 } TCamera;
-
-extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
-extern TCamera *TCAMERA_get(int camera_id);
-extern const float playRuntimeFloat;
 
 /*
  * One registered playback observer (Play.observers, 32 entries of 12 bytes
@@ -88,21 +59,13 @@ typedef struct TCHParams {
     int curveIndex;                 /* +0x0c */
 } TCHParams;
 
-/*
- * The per-function .lit4 float constants of this TU (still scaffold-owned):
- * playSetupDefaultRate/playSetupDefaultFrameTime (10/3 and 1/30) are PLAY_setupDefault's defaults.
- */
-extern const float playSetupDefaultRate;
-extern const float playSetupDefaultFrameTime;
-
 typedef struct FCV2Value FCV2Value;
+
 typedef struct PlayTCHCurveSet {
     unsigned short count;
     unsigned char unmodeled_02[6];
     FCV2Value *curves[1];
 } PlayTCHCurveSet;
-
-extern float FCV2_getValueAndKey(int *key, FCV2Value *curve, float frame);
 
 typedef struct PlayPadData {
     struct {
@@ -115,27 +78,36 @@ typedef struct PlayPadData {
     signed char axisY;
 } PlayPadData;
 
-extern PlayPadData PadData;
-
-#define PLAY_FLAG_ENABLED 0x01
-#define PLAY_FLAG_MANUAL_TIME 0x02
-#define PLAY_FLAG_LOOP 0x04
-#define PLAY_SOURCE_FORMAT_MAC 0x004D4143
-#define PLAY_PAD_FAST 0x0100
-#define PLAY_PAD_SHOW_FRAME 0x0200
-
-extern void DB_reset(int x, int y);
-extern void DB_println(const char *format, ...);
-extern void FCV2_setStep(float frame_step);
-extern PlayTCHCurveSet *TCH_getInfo(void *time_chart, unsigned short key_index);
-extern void TCAMERA_transMPack(StudioCamera *camera, PlaySource *source, float frame);
-extern void TCAMERA_transMPack2(StudioCamera *camera, PlaySource *source, float frame);
-extern void SCRIPT_test(SceneObject argument, SceneMethod *method);
-/* PLAY_ctrl loads each frame divisor once on its guarded path. */
-extern volatile const float playFrameDivisorPrimary;
-extern volatile const float playFrameDivisorSecondary;
-extern const char playFrameFormat[];
-
+/*
+ * The engine's playback controller, recovered head.
+ *
+ * `PLAY_setTimeChart` (main:0x0026a770) is the only function in this TU that
+ * touches the object so far: it stores its second argument at +0x08. Its
+ * caller Java_xeno_PlayControl_loadTimeChart (main:0x002fa4c0, not in this
+ * TU) reads the pointer at +0x00 of the Java peer it is handed as this
+ * object's address, and the value at +0x04 of that same peer as the value
+ * stored here, matching both the annotation ("Assigns a time-chart resource
+ * to the supplied playback controller") and the Java method name
+ * (`loadTimeChart`). PLAY_ctrl passes this member of `playControl`
+ * (the object PLAY_getCurrent returns) as the first argument of TCH_getInfo,
+ * which dereferences it, so the member is a pointer to a time-chart resource
+ * whose layout belongs to tch.c.
+ *
+ * Nothing between +0x00 and +0x08 is recovered yet: the other PLAY_*
+ * functions of this TU (`PLAY_getCurrent`, `PLAY_setupDefault`, `PLAY_setup`,
+ * `PLAY_setObserver`, `PLAY_ctrl`, `PLAY_getCallBackParams`,
+ * `PLAY_checkTCH`) are still assembly and are the evidence for any further
+ * member.
+ */
+/*
+ * +0x04 of the span above is `state`: PLAY_setupDefault clears it
+ * (sw $0,4 at 0x0026a650). Nothing between +0x00 and +0x04 is recovered.
+ */
+/*
+ * The pointer PLAY_setupDefault clears (sw $0,12 at 0x0026a674). Its
+ * pointee is read by PLAY_setup, still assembly in this TU, so it stays
+ * opaque here.
+ */
 /*
  * The remaining members PLAY_setupDefault evidences (PLAY_setup,
  * PLAY_setObserver and PLAY_ctrl, still assembly in this TU, evidence
@@ -168,6 +140,33 @@ typedef struct Play {
     TCHParams callbackParams;        /* +0x1cc */
 } Play;
 
+extern const float playRuntimeFloat;
+
+/*
+ * The per-function .lit4 float constants of this TU (still scaffold-owned):
+ * playSetupDefaultRate/playSetupDefaultFrameTime (10/3 and 1/30) are PLAY_setupDefault's defaults.
+ */
+extern const float playSetupDefaultRate;
+
+extern const float playSetupDefaultFrameTime;
+extern PlayPadData PadData;
+
+/* PLAY_ctrl loads each frame divisor once on its guarded path. */
+extern volatile const float playFrameDivisorPrimary;
+
+extern volatile const float playFrameDivisorSecondary;
+extern const char playFrameFormat[];
 extern Play playControl;
+
+extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
+extern TCamera *TCAMERA_get(int camera_id);
+extern float FCV2_getValueAndKey(int *key, FCV2Value *curve, float frame);
+extern void DB_reset(int x, int y);
+extern void DB_println(const char *format, ...);
+extern void FCV2_setStep(float frame_step);
+extern PlayTCHCurveSet *TCH_getInfo(void *time_chart, unsigned short key_index);
+extern void TCAMERA_transMPack(StudioCamera *camera, PlaySource *source, float frame);
+extern void TCAMERA_transMPack2(StudioCamera *camera, PlaySource *source, float frame);
+extern void SCRIPT_test(SceneObject argument, SceneMethod *method);
 
 #endif

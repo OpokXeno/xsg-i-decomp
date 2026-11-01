@@ -7,6 +7,12 @@
 
 #include "shared.h"
 
+#define DISP_REQUEST_ON  0
+#define DISP_REQUEST_OFF 1
+#define MAP_LOAD_MAP_ONLY      0x100
+#define MAP_LOAD_SCRIPT_ONLY   0x101
+#define MAP_LOAD_MAP_AND_EVENT 0x102
+
 /*
  * The game loop's own record, as far as this unit reads it.  Three spans are
  * evidenced, and nothing between them is modelled: the task scheduler every
@@ -25,8 +31,6 @@ typedef struct {
     unsigned char unmodeled_14[62];     /* +0x14 */
     unsigned short map_event_index;     /* +0x52 */
 } GameLoopStateRecord;
-
-extern GameLoopStateRecord GameLoopState;
 
 /*
  * The task body behind the scheduler's 0x80-byte pool node.
@@ -79,9 +83,6 @@ typedef struct {
     int delay;              /* +0x24 */
 } DispSwitchTask;
 
-#define DISP_REQUEST_ON  0
-#define DISP_REQUEST_OFF 1
-
 /*
  * LoadMap (0x0025ab90), LoadMap2 (0x0025ac20) and LoadMapOnly (0x0025acb8), and
  * their callback loader (0x0025aa38).  `request` selects what loader does with
@@ -99,10 +100,6 @@ typedef struct {
     int event_index;        /* +0x28 */
 } MapLoadTask;
 
-#define MAP_LOAD_MAP_ONLY      0x100
-#define MAP_LOAD_SCRIPT_ONLY   0x101
-#define MAP_LOAD_MAP_AND_EVENT 0x102
-
 /*
  * setEventTimerTaskEntry (0x0025ada0) and its callback EventTimerTask
  * (0x0025ad30), which counts `countdown` down once per visit (lw/addiu/sw 0x20
@@ -116,6 +113,8 @@ typedef struct {
     const char *method_reference;   /* +0x30 */
 } EventTimerWork;
 
+extern GameLoopStateRecord GameLoopState;
+
 /* canon: config/header-canon.json chose src/core/main-0021c5c0/xglTaskEntryPrev.c over 0 other accepted spellings */
 XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
@@ -125,13 +124,9 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
 int xglTaskRemove(XglTaskPrefix *task);
 
 void DISP_on(int countdown);
-
 static int disptest(XglTaskPrefix *task);
-
 void DISP_off(int countdown);
-
 void setEventTimerTaskEntry(const char *method_reference, int countdown);
-
 extern int EventTimerTask(XglTaskPrefix *task);
 
 #endif /* SRC_MAIN_DISP_ON_H */

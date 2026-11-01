@@ -1,5 +1,4 @@
 #include "common.h"
-
 #include "jc_face.h"
 
 static inline void copyMatrix(XglQuadword *destination,

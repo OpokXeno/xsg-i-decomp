@@ -1,19 +1,34 @@
 #include "common.h"
 #include "main/menu_top_command_check.h"
 #include "main/e_battle_win_open.h"
-
-void WindowSPSet(WindowSPCursor *cursor);
-void WindowSPMain(WindowSPCursor *cursor);
-void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
-
 #include "main/menu_1.h"
 
-/*
- * The retail ELF names these ov01 data-table accessors (still assembler in
- * their own TU, src/ov01/data_unit_org_get.c) dataEthGet (0x00a1a488) and
- * dataTecGet (0x00a1a378); until that TU recovers them, the synthetic
- * linker script only binds their scaffold func_<VA> spelling.
- */
+#include "shared.h"
+
+#define PAD_L1 0x0004
+#define PAD_R1 0x0008
+#define MENU_STATE_CHANGED 0x01
+#define PAD_CIRCLE   0x0020
+#define PAD_CROSS    0x0040
+#define PAD_SQUARE   0x0080
+#define PAD_UP       0x1000
+#define PAD_RIGHT    0x2000
+#define PAD_DOWN     0x4000
+#define PAD_LEFT     0x8000
+#define SE_DECIDE 1
+#define SE_CANCEL 2
+#define SE_CURSOR 3
+#define SE_BUZZER 5
+#define ETHER_DATA_SIZE    0x800
+#define ETHER_PAS_SIZE     0x3B0
+#define ETHER_INFO_SIZE    0x450
+#define ETHER_STATUS_SIZE  0x4EF4
+#define ETHER_STATUS2_SIZE 0x4F64
+#define ETHER_MENU_SIZE    0xF20
+#define ETHER_LIST_SIZE    0x343C
+#define ETHER_LIST2_SIZE   0x43C
+#define ETHER_EX_SIZE      0x28C
+#define ETHER_L1R1_SIZE    0x58
 
 typedef struct EtherStatus {
     unsigned char unmodeled_00[2];
@@ -29,24 +44,6 @@ typedef struct TecStatus {
     unsigned char unmodeled_02[2];
     signed char type;     /* +4 */
 } TecStatus;
-
-extern EtherStatus *func_A1A488(int etherId);
-
-/* dataEthGet */
-
-extern TecStatus *func_A1A378(short tecId);
-
-/* dataTecGet */
-
-#include "shared.h"
-
-extern const char etherEvolveMenuText[];
-extern const char etherUseMenuText[];
-extern const char etherConfirmText[];
-extern char etherYesNoText[8];
-extern char etherWtText[8];
-extern char etherPointsText[8];
-extern const char etherSetSearchText[20];
 
 typedef struct EtherUnitRecord {
     unsigned char unmodeled_00[0x17];
@@ -99,8 +96,6 @@ typedef struct MenuEtherWork {
     unsigned char targetList[8];    /* +0x60 */
 } MenuEtherWork;
 
-extern MenuEtherWork MenuWork;
-
 typedef struct EtherListRow {
     const char *name;   /* +0x00 */
     int amount;         /* +0x04 */
@@ -116,33 +111,7 @@ typedef struct MenuEtherPadData {
     unsigned short repeat;  /* +0x34 */
 } MenuEtherPadData;
 
-extern MenuTextEntry *func_A2C5A8(unsigned int etherId);
-
 typedef MenuTextEntry EtherTextEntry;
-
-extern EtherUnitRecord *func_A191C0(int chrNo);
-
-extern EtherCharRecord *func_A19210(int chrNo);
-
-EtherListRow *MenuListGet(int listIndex);
-
-extern void MenuListMake(int listIndex, int mode);
-
-extern int *MenuSortAddrGet(int listIndex);
-
-int MenuSortCheck(int listIndex);
-
-int MenuEtherUseCheck(short etherId);
-
-int func_00A11220(int chrNo, int etherId);
-
-extern MenuEtherPadData PadData;
-
-#define PAD_L1 0x0004
-
-#define PAD_R1 0x0008
-
-extern unsigned char (*MenuEtherDataBuf)[4];
 
 typedef struct EtherL1R1SpriteIdPair {
     short id[2];
@@ -152,57 +121,7 @@ typedef struct EtherL1R1SlideStep {
     signed char side[2];
 } EtherL1R1SlideStep;
 
-extern const EtherL1R1SpriteIdPair etherL1R1SpriteTable[];
-
-extern const EtherL1R1SlideStep etherL1R1SlideTable[];
-
-extern const char etherTreePath[32];
-
-extern const char etherChooseCharacterText[48];
-
 typedef struct EtherInfoCharacterHelp { const char *text[2]; } EtherInfoCharacterHelp;
-
-extern EtherInfoCharacterHelp etherCharacterHelp[];
-
-extern char etherCancelText[8];
-
-extern char etherPeriodText[];
-
-extern char etherToText[8];
-
-extern char etherEmptyText[];
-
-extern char etherPeriodNewlineText[];
-
-extern char etherPeriodEndText[];
-
-extern char etherOfText[];
-
-extern char etherQuestionText[];
-
-extern char etherMenuTitleText[];
-
-extern char etherSelectTitleText[];
-
-extern char etherResultTitleText[];
-
-/* The four-byte record of an ether (its slot ethers), or 0 outside 1..80. */
-
-extern void MoveSlide(short *current, short *target, float rate);
-
-extern void eSpriteSet(void *sprite, short spriteId);
-
-extern void eSpriteMain(void *sprite);
-
-extern void MenuPasWindow(void);
-
-extern int MenuPasLengthGet(const char *text);
-
-extern void endPrintExtFunc(int kind, int id, void *data);
-
-extern void eMessageSet(void *message, const char *text);
-
-extern void eMessageMain(void *message);
 
 typedef struct EtherPasWindow {
     short x; /* +0x00 */
@@ -257,27 +176,6 @@ typedef struct EtherPasWork {
     unsigned char callbackWork[1]; /* +0x340 */
 } EtherPasWork;
 
-extern EtherPasWork *MenuEtherPas;
-
-static const char *msg_0_0036DC00[6] = {
-    "Ether",
-    "/Use",
-    "/Set",
-    "/Use E.Pts",
-    "/Evolve",
-    "/Transfer"
-};
-
-static const char * msg00_1_0036DC18[] = { etherUseMenuText, etherEvolveMenuText };
-
-static const char * msg01_2_0036DC20[] = { etherYesNoText, etherConfirmText };
-
-static const char * msg00_3_0036DC28[] = { etherPointsText, etherWtText };
-
-static char * msg01_4_0036DC30[] = { etherSetSearchText };
-
-short MenuEtherParty[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-
 typedef struct EtherMenuWindowDX {
     short x; /* +0x00 */
     short y; /* +0x02 */
@@ -311,8 +209,6 @@ typedef struct EtherMenuScreen {
     EtherMenuList list[2]; /* +0x330 */
 } EtherMenuScreen;
 
-extern EtherMenuScreen *MenuEtherMenu;
-
 typedef struct EtherL1R1Sprite {
     unsigned char unmodeled_00[0x04];
     short x; /* +0x04 */
@@ -329,32 +225,6 @@ typedef struct EtherL1R1Work {
     EtherL1R1Sprite sprite[2]; /* +0x08: L1, then R1 */
 } EtherL1R1Work;
 
-extern EtherL1R1Work *MenuEtherL1R1;
-
-#define MENU_STATE_CHANGED 0x01
-
-#define PAD_CIRCLE   0x0020
-
-#define PAD_CROSS    0x0040
-
-#define PAD_SQUARE   0x0080
-
-#define PAD_UP       0x1000
-
-#define PAD_RIGHT    0x2000
-
-#define PAD_DOWN     0x4000
-
-#define PAD_LEFT     0x8000
-
-#define SE_DECIDE 1
-
-#define SE_CANCEL 2
-
-#define SE_CURSOR 3
-
-#define SE_BUZZER 5
-
 typedef struct EtherScreenWork {
     unsigned char state;
 } EtherScreenWork;
@@ -370,42 +240,6 @@ typedef struct EtherListWork {
     EtherListSPWindow window;       /* +0x0C */
 } EtherListWork;
 
-#define ETHER_DATA_SIZE    0x800
-
-#define ETHER_PAS_SIZE     0x3B0
-
-#define ETHER_INFO_SIZE    0x450
-
-#define ETHER_STATUS_SIZE  0x4EF4
-
-#define ETHER_STATUS2_SIZE 0x4F64
-
-#define ETHER_MENU_SIZE    0xF20
-
-#define ETHER_LIST_SIZE    0x343C
-
-#define ETHER_LIST2_SIZE   0x43C
-
-#define ETHER_EX_SIZE      0x28C
-
-#define ETHER_L1R1_SIZE    0x58
-
-extern EtherScreenWork *MenuEtherInfo;
-
-extern EtherScreenWork *MenuEtherEx;
-
-extern EtherScreenWork *MenuEtherStatus;
-
-extern EtherScreenWork *MenuEtherStatus2;
-
-extern EtherListWork *MenuEtherList;
-
-extern EtherScreenWork *MenuEtherList2;
-
-extern int MainMenuWorkEnd;
-
-extern unsigned char MenuKeepSelect[0x64];
-
 typedef struct EtherPartySlot {
     unsigned short party_id;
     unsigned char unmodeled_02[0x02];
@@ -415,84 +249,6 @@ typedef struct EtherPartyData {
     unsigned char unmodeled_00[0x30];
     EtherPartySlot attack_slots[3]; /* +0x30 */
 } EtherPartyData;
-
-void func_A194E0(int chrNo, int etherId);
-
-int func_A19578(int chrNo, int etherId);
-
-void func_00A11270(int chrNo, int targetChrNo, int etherId);
-
-int EtherTreeInit();
-
-void EtherTreeMain(void);
-
-void MenuEtherCapSet(void);
-
-void MenuEtherPasMain(void);
-
-void MenuEtherInfoMain(void);
-
-void MenuEtherMenuMain(void);
-
-void MenuEtherExMain(void);
-
-void MenuEtherL1R1Main(void);
-
-void MenuEtherStatusMain(void);
-
-void MenuEtherStatusMain2(void);
-
-void MenuEtherListMain(void);
-
-void MenuEtherListMain2(void);
-
-void MenuEtherListMake00(void);
-
-void MenuEtherListMake01(void);
-
-void MenuEtherListMake02(int listIndex);
-
-void MenuEtherListMake03(int listIndex);
-
-int MenuEtherEquip(void);
-
-int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-
-void xglSoundEffectNormalID(int sound_id, int variant);
-
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
-
-unsigned char *PartyDataGet(void);
-
-int PartyFriendLockCheck(int id, int flag);
-
-int PartyAttackerCheck(int id);
-
-int MenuMaryIdChange(int id);
-
-int MenuMainCharCheck(int chrNo);
-
-int MenuCharHpCheck(int chrNo);
-
-void MenuWorkEndCheck(unsigned char *end);
-
-void MenuKeepSelectReset(void);
-
-int MenuCursorKeepCheck(void);
-
-int MenuSelectMove(int cursor, int count, int wrap);
-
-void MenuSortSet(int listIndex, int type, int order);
-
-int MenuSortGet(int listIndex, int index);
-
-void ChangeTopLevel(int level);
-
-/*
- * The ether menu. The first call loads etree.bin, lays out the sub-screen
- * work blocks after it and builds the party list; every later call advances
- * the MenuWork.state machine and runs the sub-screens.
- */
 
 typedef struct EtherInfoCommandHelp {
     const char *text[5];
@@ -545,30 +301,6 @@ typedef struct EtherInfoWork {
     EtherInfoMessage message;
     char text[256];
 } EtherInfoWork;
-
-extern const EtherInfoCommandHelp etherCommandHelp;
-
-extern const EtherInfoActionHelp etherActionHelp;
-
-extern const EtherInfoAcquireHelp etherAcquireHelp;
-
-extern const EtherInfoTransferHelp etherTransferHelp;
-
-extern const char etherCapLimitText[];
-
-extern const char etherCompleteText[];
-
-extern char *MenuCharNameGet(unsigned int charId);
-
-extern void eMessageCpy(char *message, const char *text);
-
-extern void eMessageCat(const char *text);
-
-static inline EtherInfoWork *EtherInfoWorkGet(EtherScreenWork **slot) {
-    return (void *)*slot;
-}
-
-extern void eCursolMain(void *cursor);
 
 typedef struct EtherStatusPanelNumber {
     short x;
@@ -632,12 +364,6 @@ typedef struct EtherPartyStatusWorkEarly {
     EtherStatusCursorEarly cursor[2];
 } EtherPartyStatusWorkEarly;
 
-extern char *MenuTagTextGet(int index);
-
-extern void eCursolSet(void *cursor, int width);
-
-extern void eCursolModeChange(void *cursor, unsigned int mode);
-
 typedef struct EtherStatusPanel {
     signed char chrNo;
     signed char mode;
@@ -697,14 +423,6 @@ typedef struct EtherTargetStatusWork {
     unsigned char unmodeled_4f58[0x4F64 - 0x4F58];
 } EtherTargetStatusWork;
 
-extern const char etherListEpTitleText[9];
-
-extern const char etherListWtTitleText[9];
-
-extern const char etherListEPointsTitleText[12];
-
-extern const char etherListSubTitleText[12];
-
 typedef struct EtherMenuListWindow {
     unsigned char state;
     unsigned char itemType;
@@ -754,6 +472,7 @@ typedef struct EtherDetailNumber {
     int value;
     unsigned char unmodeled_18[0x90 - 0x18];
 } EtherDetailNumber;
+
 typedef struct EtherMenuListsWork {
     EtherMenuListEntry window[2];
     EtherMenuListHeader endHeader;
@@ -798,8 +517,194 @@ typedef struct EtherResultWork {
     EtherListCursor cursor;
 } EtherResultWork;
 
+typedef struct EtherDetailRibbon {
+    short x;
+    short y;
+    int work;
+    short width;
+    short height;
+    unsigned char unmodeled_0c[0x70 - 0x0C];
+} EtherDetailRibbon;
+
+typedef struct EtherDetailFont {
+    unsigned char unmodeled_00[4];
+    short x;
+    short y;
+    int work;
+    unsigned char unmodeled_0c[0x20 - 0x0C];
+} EtherDetailFont;
+
+typedef struct EtherDetailRow {
+    EtherDetailRibbon ribbon;
+    EtherDetailFont font;
+    EtherDetailNumber number;
+} EtherDetailRow;
+
+typedef struct EtherDetailWork {
+    unsigned char state;
+    unsigned char unmodeled_01[3];
+    int work;
+    EtherDetailRow rows[2];
+    EtherPasMessage message;
+} EtherDetailWork;
+
+extern const char etherEvolveMenuText[];
+extern const char etherUseMenuText[];
+extern const char etherConfirmText[];
+extern char etherYesNoText[8];
+extern char etherWtText[8];
+extern char etherPointsText[8];
+extern const char etherSetSearchText[20];
+extern MenuEtherWork MenuWork;
+extern MenuEtherPadData PadData;
+extern unsigned char (*MenuEtherDataBuf)[4];
+extern const EtherL1R1SpriteIdPair etherL1R1SpriteTable[];
+extern const EtherL1R1SlideStep etherL1R1SlideTable[];
+extern const char etherTreePath[32];
+extern const char etherChooseCharacterText[48];
+extern EtherInfoCharacterHelp etherCharacterHelp[];
+extern char etherCancelText[8];
+extern char etherPeriodText[];
+extern char etherToText[8];
+extern char etherEmptyText[];
+extern char etherPeriodNewlineText[];
+extern char etherPeriodEndText[];
+extern char etherOfText[];
+extern char etherQuestionText[];
+extern char etherMenuTitleText[];
+extern char etherSelectTitleText[];
+extern char etherResultTitleText[];
+extern EtherPasWork *MenuEtherPas;
+extern EtherMenuScreen *MenuEtherMenu;
+extern EtherL1R1Work *MenuEtherL1R1;
+extern EtherScreenWork *MenuEtherInfo;
+extern EtherScreenWork *MenuEtherEx;
+extern EtherScreenWork *MenuEtherStatus;
+extern EtherScreenWork *MenuEtherStatus2;
+extern EtherListWork *MenuEtherList;
+extern EtherScreenWork *MenuEtherList2;
+extern int MainMenuWorkEnd;
+extern unsigned char MenuKeepSelect[0x64];
+extern const EtherInfoCommandHelp etherCommandHelp;
+extern const EtherInfoActionHelp etherActionHelp;
+extern const EtherInfoAcquireHelp etherAcquireHelp;
+extern const EtherInfoTransferHelp etherTransferHelp;
+extern const char etherCapLimitText[];
+extern const char etherCompleteText[];
+extern const char etherListEpTitleText[9];
+extern const char etherListWtTitleText[9];
+extern const char etherListEPointsTitleText[12];
+extern const char etherListSubTitleText[12];
 extern const char etherTransferRenderTitle[];
 
+void WindowSPSet(WindowSPCursor *cursor);
+void WindowSPMain(WindowSPCursor *cursor);
+void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
+/*
+ * The retail ELF names these ov01 data-table accessors (still assembler in
+ * their own TU, src/ov01/data_unit_org_get.c) dataEthGet (0x00a1a488) and
+ * dataTecGet (0x00a1a378); until that TU recovers them, the synthetic
+ * linker script only binds their scaffold func_<VA> spelling.
+ */
+/* dataEthGet */
+extern EtherStatus *func_A1A488(int etherId);
+
+/* dataTecGet */
+extern TecStatus *func_A1A378(short tecId);
+
+extern MenuTextEntry *func_A2C5A8(unsigned int etherId);
+extern EtherUnitRecord *func_A191C0(int chrNo);
+extern EtherCharRecord *func_A19210(int chrNo);
+EtherListRow *MenuListGet(int listIndex);
+extern void MenuListMake(int listIndex, int mode);
+extern int *MenuSortAddrGet(int listIndex);
+int MenuSortCheck(int listIndex);
+int MenuEtherUseCheck(short etherId);
+int func_00A11220(int chrNo, int etherId);
+
+extern void MoveSlide(short *current, short *target, float rate);
+
+extern void eSpriteSet(void *sprite, short spriteId);
+extern void eSpriteMain(void *sprite);
+extern void MenuPasWindow(void);
+extern int MenuPasLengthGet(const char *text);
+extern void endPrintExtFunc(int kind, int id, void *data);
+extern void eMessageSet(void *message, const char *text);
+extern void eMessageMain(void *message);
+void func_A194E0(int chrNo, int etherId);
+int func_A19578(int chrNo, int etherId);
+void func_00A11270(int chrNo, int targetChrNo, int etherId);
+int EtherTreeInit();
+void EtherTreeMain(void);
+void MenuEtherCapSet(void);
+void MenuEtherPasMain(void);
+void MenuEtherInfoMain(void);
+void MenuEtherMenuMain(void);
+void MenuEtherExMain(void);
+void MenuEtherL1R1Main(void);
+void MenuEtherStatusMain(void);
+void MenuEtherStatusMain2(void);
+void MenuEtherListMain(void);
+void MenuEtherListMain2(void);
+void MenuEtherListMake00(void);
+void MenuEtherListMake01(void);
+void MenuEtherListMake02(int listIndex);
+void MenuEtherListMake03(int listIndex);
+int MenuEtherEquip(void);
+int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
+void xglSoundEffectNormalID(int sound_id, int variant);
+void xglFontDebugPrintf(int x, int y, const char *format, ...);
+unsigned char *PartyDataGet(void);
+int PartyFriendLockCheck(int id, int flag);
+int PartyAttackerCheck(int id);
+int MenuMaryIdChange(int id);
+int MenuMainCharCheck(int chrNo);
+int MenuCharHpCheck(int chrNo);
+void MenuWorkEndCheck(unsigned char *end);
+void MenuKeepSelectReset(void);
+int MenuCursorKeepCheck(void);
+int MenuSelectMove(int cursor, int count, int wrap);
+void MenuSortSet(int listIndex, int type, int order);
+int MenuSortGet(int listIndex, int index);
+void ChangeTopLevel(int level);
+extern char *MenuCharNameGet(unsigned int charId);
+extern void eMessageCpy(char *message, const char *text);
+extern void eMessageCat(const char *text);
+extern void eCursolMain(void *cursor);
+extern char *MenuTagTextGet(int index);
+extern void eCursolSet(void *cursor, int width);
+extern void eCursolModeChange(void *cursor, unsigned int mode);
+void eRibbonSet(void *ribbon, int mode);
+void eRibbonMain(void *ribbon);
+void eTagFontSet(void *font, const char *text);
+void eTagFontMain(void *font);
+void eNumberSet(void *number, int mode);
+void eNumberMain(void *number);
+
+static const char *msg_0_0036DC00[6] = {
+    "Ether",
+    "/Use",
+    "/Set",
+    "/Use E.Pts",
+    "/Evolve",
+    "/Transfer"
+};
+
+static const char * msg00_1_0036DC18[] = { etherUseMenuText, etherEvolveMenuText };
+
+static const char * msg01_2_0036DC20[] = { etherYesNoText, etherConfirmText };
+
+static const char * msg00_3_0036DC28[] = { etherPointsText, etherWtText };
+
+static char * msg01_4_0036DC30[] = { etherSetSearchText };
+
+short MenuEtherParty[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+static inline EtherInfoWork *EtherInfoWorkGet(EtherScreenWork **slot) {
+    return (void *)*slot;
+}
+
+/* The four-byte record of an ether (its slot ethers), or 0 outside 1..80. */
 unsigned char *MenuEtherDataGet(int etherId)
 {
     unsigned char (*records)[4] = MenuEtherDataBuf;
@@ -999,6 +904,7 @@ void MenuEtherPasMain(void) {
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char etherChooseCharacterText[48] =
     /* Text: Choose a character. |  cannot be chosen. */
     "Choose a character.\0\0\0\0\0 cannot be chosen.\0\0\0\0\0";
@@ -1302,6 +1208,7 @@ void MenuEtherInfoMain(void) {
     WindowDXMain((WindowDX *)(void *)(window));
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char etherEvolveMenuText[] = "Evolve\nTransfer\nCancel";
 
 const char etherUseMenuText[] = "Use\nSet\nUse E.Pts\nCancel";
@@ -1406,44 +1313,7 @@ void MenuEtherMenuMain(void) {
     }
 }
 
-typedef struct EtherDetailRibbon {
-    short x;
-    short y;
-    int work;
-    short width;
-    short height;
-    unsigned char unmodeled_0c[0x70 - 0x0C];
-} EtherDetailRibbon;
-
-typedef struct EtherDetailFont {
-    unsigned char unmodeled_00[4];
-    short x;
-    short y;
-    int work;
-    unsigned char unmodeled_0c[0x20 - 0x0C];
-} EtherDetailFont;
-
-typedef struct EtherDetailRow {
-    EtherDetailRibbon ribbon;
-    EtherDetailFont font;
-    EtherDetailNumber number;
-} EtherDetailRow;
-
-typedef struct EtherDetailWork {
-    unsigned char state;
-    unsigned char unmodeled_01[3];
-    int work;
-    EtherDetailRow rows[2];
-    EtherPasMessage message;
-} EtherDetailWork;
-
-void eRibbonSet(void *ribbon, int mode);
-void eRibbonMain(void *ribbon);
-void eTagFontSet(void *font, const char *text);
-void eTagFontMain(void *font);
-void eNumberSet(void *number, int mode);
-void eNumberMain(void *number);
-
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* JP: ： Set Search
  * EN: : Set Search */
 const char etherSetSearchText[20] = "\014\200\200\200\036\000\241\247 Set Search";
@@ -1590,6 +1460,7 @@ void MenuEtherExMain(void)
   eMessageMain(&screen->message);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const EtherL1R1SpriteIdPair etherL1R1SpriteTable[1] = { { .id = { 274, 272 } } };
 
 const EtherL1R1SlideStep etherL1R1SlideTable[1] = { { .side = { 1, -1 } } };
@@ -2157,6 +2028,7 @@ void MenuEtherStatusMain2(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /* Text: List{x 668}Ep */
 const char etherListEpTitleText[9] = "List\003\234Ep";
 
@@ -2371,6 +2243,7 @@ void MenuEtherListMain(void)
     }
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char etherTransferRenderTitle[14] = "TransferEther";
 
 char etherResultTitleText[8] = "Result";
@@ -2675,8 +2548,14 @@ int MenuEtherEquip(void) {
     return 1;
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char etherTreePath[32] = "data\\endou\\ether\\etree.bin";
 
+/*
+ * The ether menu. The first call loads etree.bin, lays out the sub-screen
+ * work blocks after it and builds the party list; every later call advances
+ * the MenuWork.state machine and runs the sub-screens.
+ */
 void MenuEther(void)
 {
     if (MenuWork.state == 0) {
@@ -3343,6 +3222,7 @@ void MenuEther(void)
     xglFontDebugPrintf(0, 0x88, "\vumm%2d", MenuWork.slotCount);
 }
 
+/* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 unsigned char (*MenuEtherDataBuf)[4] = 0;
 
 EtherPasWork *MenuEtherPas = 0;

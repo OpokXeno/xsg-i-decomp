@@ -1,10 +1,6 @@
 #ifndef INCLUDE_MAIN_XGL_SOUND_H
 #define INCLUDE_MAIN_XGL_SOUND_H
 
-extern int xglSoundStreamMain(void);
-
-extern void xglSoundEffectNormalID(int sound_id, int variant);
-
 typedef struct SoundChannelEntry {
     unsigned short _unmodeled_00;
     unsigned short sequence;
@@ -28,8 +24,9 @@ typedef struct SePacket {
     int arguments[4];
 } SePacket;
 
+extern int xglSoundStreamMain(void);
+extern void xglSoundEffectNormalID(int sound_id, int variant);
 void xglSoundEffectStopID(int soundEffectId, int source);
-
 void xglSoundSendEffect(void *swd, void *sed, int bank);
 
 #endif /* INCLUDE_MAIN_XGL_SOUND_H */

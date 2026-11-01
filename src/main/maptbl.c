@@ -2,8 +2,8 @@
 #include "maptbl.h"
 
 /* MapFileNameGet indexes group.names by map ID and reads group.count. */
-
 extern const char MapFileNameMcVok12b[];
+
 extern const char MapFileNameMcVok14b[];
 extern const char MapFileNameMcVok13b[];
 extern const char MapFileNameMcVok10b[];
@@ -760,5 +760,4 @@ CfCameraDefinition CfCameraDefine[33] = {{0}};
 
 /* GameCameraStateSave/Restore copies the complete 0x5f0-byte camera image.
  * The eight-byte word view follows its existing CameraImage declaration. */
-
 CameraImage save_cam = {{0}};

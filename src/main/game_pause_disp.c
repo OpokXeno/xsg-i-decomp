@@ -17,9 +17,11 @@ static PauseShadowCommand ShadowEnv = {
 
 /* In-band font commands precede the English pause captions. */
 static char pause_0[13] = "\013\015\003\031\003PAUSE\031\002";
+
 /* JP: △  Button : Skip and proceed
  * EN: Triangle Button : Skip and proceed */
 static char msg1_1[44] = "\013\015\003\014 \200 \242\244\014\200\200\200\031\003 Button : Skip and proceed\031\002";
+
 /* Text: {reset}{effect 3}{style 3}START Button : Cancel PAUSE{style 2} */
 static char msg2_2[35] = "\013\015\003\031\003START Button : Cancel PAUSE\031\002";
 
