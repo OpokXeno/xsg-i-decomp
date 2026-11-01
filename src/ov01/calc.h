@@ -97,7 +97,16 @@ struct CalcUnitParam {
     short maxHp;                /* +0x00: calcIdol2Chk's threshold base */
     short maxEp;                /* +0x02: calcEp's clamp ceiling */
     short baseAtk;                /* +0x04: calcWpnAtkGet override term */
-    unsigned char unmodeled_06[0x0C - 0x06];
+    /*
+     * +0x06/+0x08/+0x0A: three halfwords calcSkillInitSub (this TU) raises
+     * and clamps to 999 (`lhu $2,0x6($6)`, `lhu $2,0x8($6)`, `lhu $2,0xA($6)`,
+     * 0x00a11dd8/0x00a11e74/0x00a11ea8), under the SkillParam bits 0x4000,
+     * 0x800 and 0x400. +0x06/+0x0A are the phyDefense/magDefense pair that
+     * src/main/menu_para_pt_rate_get.c names on the same record.
+     */
+    short phyDefense;
+    short magAttack;
+    short magDefense;
     unsigned char hitStat;      /* +0x0C: calcHitParaGet's own signed view */
     /*
      * +0x0D: calcHitRate (this TU, 0x00a13010) loads the target's byte with
@@ -133,7 +142,8 @@ struct CalcUnitParam {
     signed char dblActKind;     /* +0x3A: calcDblActChk */
     signed char bcLimit;        /* +0x3B: calcBc's own clamp ceiling */
     signed char bcValue;        /* +0x3C: calcBc's own running counter */
-    unsigned char unmodeled_3d[0x3E - 0x3D];
+    signed char bpGauge;        /* +0x3D: calcBp's `lbu $2,0x3D($16)`/`sb`,
+                                 * the promoted sum is compared as signed against 50 (`slti`) and reduced with a signed modulo, which is what the field's signed type reproduces */
     short turnBias;             /* +0x3E: calcWct/calcTurnEnd */
     short waitCount;            /* +0x40: calcTurnEnd/calcWctDec */
     short waitCountBase;        /* +0x42: calcTurnEnd */
@@ -152,7 +162,10 @@ struct CalcUnitParam {
     short normalTechniqueId[CALC_NORMAL_TECHNIQUE_COUNT]; /* +0x76 */
     short slotTechniqueId[2];   /* +0x82: calcSlotAChk's own pair, right
                                  * after normalTechniqueId. */
-    unsigned char unmodeled_86[0xA6 - 0x86];
+    unsigned char unmodeled_86[0x8E - 0x86];
+    short etherId[12];           /* +0x8E: calcEthEnableChk's `lh $3,0xE($2)`
+                                  * from calcUPGet(unit) + 0x80 + 2 * slot,
+                                  * mirroring CalcCharParaData's etherId */
     short skillId[3];            /* +0xA6: calcSkillEquChk's `lh $3,0x6($2)`,
                                   * mirroring CalcCharParaData's skillId at
                                   * the same offset. */
@@ -190,6 +203,9 @@ enum CalcUnitFlag {
     /* calcHitRate alone (0x00a1314c, on the target): set, it blocks the
      * result 1 of the second roll. */
     CALC_UNIT_FLAG_NO_HIT_RESULT_1 = 0x2,
+    /* calcStatSetChk alone (`andi $2,$4,0x8`, 0x00a17394): with BIT12 set,
+     * it lets status category 5 through. Role not established. */
+    CALC_UNIT_FLAG_BIT3 = 0x8,
     /* The unit is an AGWS. src/ov01/data_unit_org_get.h already spells this
      * bit CALC_UNIT_FLAG_AGWS, as a macro; this enumerator is spelled
      * differently because that header is not visible to calc.c and a macro of
@@ -211,7 +227,17 @@ enum CalcUnitFlag {
     CALC_UNIT_FLAG_NO_RANGE0_ATTACK = 0x100,
     /* calcBackLineChk alone (0x00a16370, selector 0, on a unit standing
      * further back): set, the check fails. */
-    CALC_UNIT_FLAG_BLOCKS_BACK_LINE = 0x800
+    CALC_UNIT_FLAG_BLOCKS_BACK_LINE = 0x800,
+    /* Tested on the target by calcDmgItem (`andi $3,$3,0x200`, 0x00a159ac):
+     * set, a recoverHp item's amount changes sign; and by calcHitItem
+     * (`andi $3,$3,0x200`, 0x00a15830): set, the recoverHp item's hit
+     * result 2 is reversed through calcRevHit. */
+    CALC_UNIT_FLAG_ITEM_REVERSED = 0x200,
+    /* Two readers, both on the target: calcStatSetChk (`andi $2,$4,0x1000`,
+     * 0x00a17380): set, status categories 0..3 are refused, clear, 4..6 are;
+     * calcDmgItem: set, a recoverHp item whose useFlags bit 1 is set has its
+     * amount zeroed. The flag's full role is not established. */
+    CALC_UNIT_FLAG_BIT12 = 0x1000
 };
 
 /*
@@ -286,6 +312,11 @@ typedef BattleActor CalcActorRecord;
  * macro once this enum reaches the generated header.
  */
 enum CalcActorFlag {
+    /* Cleared on the target when calcBattleChk refuses it, by calcStatClr
+     * (`addiu $3,$0,-0x11`/`and` at 0x00a14d00..0x00a14d08) and by calcStat
+     * for a mode-1 hit (`addiu $4,$0,-0x11`/`and` at 0x00a148f8..0x00a14904).
+     * Both uses only clear it, so its role is not established. */
+    CALC_ACTOR_FLAG_BIT4 = 0x10,
     /* The enemy bit src/ov01/unit_cmd.h evidences (unitLoad picks
      * sefSetupEnemy on it); tested here by calcWpnAtkGet (0x00a13460),
      * calcPowLevGet (0x00a136a0), calcBackLineChk (0x00a162d8) and the
@@ -367,6 +398,15 @@ struct CalcCharParaData {
     short specialId[6];         /* +0x82 */
     short etherId[12];          /* +0x8E */
     short skillId[3];            /* +0xA6 */
+    unsigned char unmodeled_ac[0xBC - 0xAC];
+    /*
+     * +0xBC: CalcUnitParam.statAltMask's counterpart. calcUseItemMenu (this
+     * TU) saves and restores eight halfwords from +0xBC of the origin record
+     * it hands to calcUseItem as a unit parameter block (`addiu $5,$16,0xBC`/
+     * `lhu $3,0x0($5)`, 0x00a11574..0x00a11580), and copies calcTotalParaMenu's
+     * recalculated eight over them in between.
+     */
+    u16 statAltMask[8];
 };
 
 CalcCharParaData *calcTotalParaMenu(int charaId, int *attack, int *defense);
