@@ -128,7 +128,13 @@ struct RgWeapon {
     RgEquip equip;
     int shotMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     int shotStartMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
-    unsigned char unmodeled_13c[0x48];
+    /*
+     * _CommonPassTime (ov12:0x00a19688) indexes 0x13c with the same
+     * (charID*3+shotMotionOffset) arithmetic and starts that motion once
+     * the actor's current one has ended: a third table, named after
+     * shotStartMotionTable.
+     */
+    int shotEndMotionTable[RG_ACTOR_CHAR_ROBNUM][3];
     /*
      * _CheckLockOn (ov12:0x00a1c098) computes the locked-on target's angle
      * in the weapon's own local XZ-plane (atan2f of the inverse-local-space
@@ -136,7 +142,7 @@ struct RgWeapon {
      * range to decide whether the target counts as locked on.
      *
      * The published unmodeled_13c[0x64] (0x13c..0x1a0, 100 bytes) is split
-     * here into unmodeled_13c[0x48] (0x13c..0x184, 72 bytes) + lockOnAngleMin
+     * here into shotEndMotionTable (0x13c..0x184, 72 bytes) + lockOnAngleMin
      * (4) + lockOnAngleMax (4) + unmodeled_18c[4] (0x18c..0x190, 4 bytes) +
      * targetPosition (RgVector, 16 bytes): 0x48+4+4+4+0x10 = 0x64, so the
      * total size and the following member's offset (targeting at 0x1a0) are

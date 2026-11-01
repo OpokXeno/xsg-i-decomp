@@ -185,7 +185,24 @@ void _CommonDispose(void)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov12/rg_weapon", _CommonPassTime);
+extern int XrgActorIsEndOfMotion(XrgActor *pActor);
+
+void _CommonPassTime(RgWeapon *weapon, float dt)
+{
+    int charID;
+    int motion;
+    int offset;
+
+    charID = _GetParentCharID(weapon);
+    if (weapon->actor != 0 && 0 <= charID && charID < RG_ACTOR_CHAR_ROBNUM) {
+        offset = weapon->shotMotionOffset;
+        motion = weapon->shotEndMotionTable[charID][offset];
+        if (motion != -1 && XrgActorIsEndOfMotion(weapon->actor) != 0) {
+            XrgActorSetMotion(weapon->actor, motion);
+        }
+    }
+    _CheckAttach(&weapon->shotAttach);
+}
 
 /* Opaque here: rg_matrices_effector.c (ov12/tu068) owns MatrixConstraint's definition. */
 typedef struct MatrixConstraint MatrixConstraint;
