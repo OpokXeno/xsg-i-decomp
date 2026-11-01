@@ -24,17 +24,17 @@ void InitRgRobotSpec(RgRobotSpec *pSpec)
     }
     pSpec->charID = -1;
     pSpec->type = 0;
-    pSpec->baseSpeed = 20.0f;
+    pSpec->moveSpeedMax = 20.0f;
     pSpec->dashSpeedMax = 40.0f;
     pSpec->turnRate = 0.35298797f;
     pSpec->rotSpeedBottomRate = 0.1f;
-    pSpec->speedRating = 1000.0f;
-    pSpec->accelRate = 60000.0f;
+    pSpec->weight = 1000.0f;
+    pSpec->enginePower = 60000.0f;
     pSpec->rotateForce = 62831.855f;
     pSpec->moveResist = 2.8f;
     pSpec->rotResist = 9.0f;
     pSpec->dashTime = 0.3f;
-    pSpec->attackAdvanceRate = 3.0f;
+    pSpec->dashPower = 3.0f;
     pSpec->dashCooldown = 0.2f;
     pSpec->m_aAutoHoming[0].value = 0.03f;
     pSpec->m_aAutoHoming[0].flags = 3;
@@ -86,7 +86,7 @@ static void _AnaAutoHoming(RgRobotSpec *pSpec, char *pszString, int index)
         if (nID >= 2) {
             assert_prog(D_00A51E98, D_00A51E78, 77);
         }
-        pSpec->m_aAutoHoming[nID].value = atof(pszString) * 3.1415927410125732;
+        pSpec->m_aAutoHoming[nID].value = atof(pszString) * 3.1415927f;
         pSpec->m_aAutoHoming[nID].flags = 0;
         return;
     }

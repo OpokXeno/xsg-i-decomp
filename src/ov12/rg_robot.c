@@ -150,7 +150,7 @@ static float _GetSleepTimeHomingThread(RgHomingThread *thread)
 }
 
 extern float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
-                            float speed, float turnRate);
+                            float speed, float deltaTime);
 
 static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
 {
@@ -178,15 +178,15 @@ static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
 
 static float _CalcMaxSpeed(RgBody *body, float baseSpeed)
 {
-    float speedRating;
-    float weight;
+    float specWeight;
+    float geomWeight;
 
-    speedRating = body->spec->speedRating;
-    weight = RgGeomPointGetWeight(body->geometry);
+    specWeight = body->spec->weight;
+    geomWeight = RgGeomPointGetWeight(body->geometry);
     if (!(baseSpeed > 0.0f)) {
         assert_prog(D_00A51858, D_00A51840, 247);
     }
-    return (baseSpeed * speedRating) / weight;
+    return (baseSpeed * specWeight) / geomWeight;
 }
 
 static void _StopAllShotThread(RgBody *body)
@@ -443,7 +443,7 @@ static void _HissatuExit(RgRobotStatus *status, RgBody *body)
     (void)status;
     weapon0 = body->weapon[0];
     weapon1 = body->weapon[1];
-    maxSpeed = _CalcMaxSpeed(body, body->spec->baseSpeed);
+    maxSpeed = _CalcMaxSpeed(body, body->spec->moveSpeedMax);
     if (weapon0 != 0) {
         RgWeaponRestartLockon(weapon0);
         RgWeaponShotStop(weapon0);
@@ -571,7 +571,7 @@ static void _DashExit(RgRobotStatus *status, RgBody *body)
     RgRobotSpec *spec;
 
     spec = body->spec;
-    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->moveSpeedMax));
     RgRobotEffectTermJet(body->effect);
     RgRobotEffectTermDash(body->effect);
     if (status->restoreDashTime != 0) {
@@ -603,7 +603,7 @@ INCLUDE_ASM("asm/nonmatchings/ov12/rg_robot", _DashVRPassTime);
 static void _DashVRExit(RgRobotStatus *status, RgBody *body)
 {
     (void)status;
-    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, body->spec->baseSpeed));
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, body->spec->moveSpeedMax));
     RgRobotEffectTermJet(body->effect);
     RgRobotEffectTermDash(body->effect);
     XrgSoundRingStopMoving(body->landingSoundID);
@@ -882,7 +882,7 @@ static void _BodyAdvanceForAttack(RgBody *body, float attackPower,
     /* row 2 of the local frame: the body's forward (z) axis */
     XrgNegateVector(direction, &localFrame[8]);
     RgRobSubAcceralate(geometry, direction,
-                       spec->accelRate * spec->attackAdvanceRate * 0.3f * attackFactor);
+                       spec->enginePower * spec->dashPower * 0.3f * attackFactor);
 }
 
 /* ov12:0x00a51a68 contains the assertion expression "pBody != NIL". */
@@ -916,7 +916,7 @@ static void _BodySetSpec(RgBody *body, RgRobotSpec *spec)
         body->spec = spec;
         body->dashTime = spec->dashTime;
         body->lifeMax = body->life = spec->life;
-        RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+        RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->moveSpeedMax));
         RgRobotEffectSetJetPtclName(body->effect, spec->jetEffect);
         RgRobotEffectSetDashPtclName(body->effect, spec->dashEffect);
     }
@@ -948,12 +948,12 @@ static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry)
     }
     spec = body->spec;
     body->geometry = geometry;
-    RgGeomPointSetWeight(geometry, spec->speedRating);
+    RgGeomPointSetWeight(geometry, spec->weight);
     RgGeomPointSetMoveResist(geometry, spec->moveResist);
     RgGeomRobotSetRotResist(geometry, spec->rotResist);
     body->rotate = RgGeomRobotGetRotate(geometry);
     RgRobotEffectSetGeom(body->effect, geometry);
-    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->baseSpeed));
+    RgGeomPointSetMaxXYSpd(body->geometry, _CalcMaxSpeed(body, spec->moveSpeedMax));
 }
 
 
@@ -1098,7 +1098,7 @@ static void _BodyGeomPassTime(RgBody *body, float deltaTime)
     geometry = body->geometry;
     spec = body->spec;
     speed = RgGeomPointGetSpeed(geometry);
-    maxSpeed = _CalcMaxSpeed(body, spec->baseSpeed);
+    maxSpeed = _CalcMaxSpeed(body, spec->moveSpeedMax);
     if (!(body->flags & 1)) {
         rotVelScale = (maxSpeed - speed) / maxSpeed;
         if (!(rotVelScale > 0.5f)) {
@@ -1234,8 +1234,8 @@ static int _ExecAccelarateCmd(RgStatus *status, RgBody *body, RgCmd *command)
 
     spec = body->spec;
     geometry = body->geometry;
-    RgGeomPointSetMaxXYSpd(geometry, _CalcMaxSpeed(body, spec->baseSpeed));
-    RgRobSubAcceralate(geometry, (float *) command, spec->accelRate);
+    RgGeomPointSetMaxXYSpd(geometry, _CalcMaxSpeed(body, spec->moveSpeedMax));
+    RgRobSubAcceralate(geometry, (float *) command, spec->enginePower);
     XrgSoundRingMoving(body->landingSoundID, 0, 0.2f);
     return 1;
 }

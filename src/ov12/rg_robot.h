@@ -70,7 +70,7 @@ typedef struct RgHomingThread {
 /*
  * _BodyGeomPassTime evidences two more RgRobotSpec fields, each read by
  * exactly one lwc1 at the offset shown:
- *   +0x0c baseSpeed the value it passes as _CalcMaxSpeed's own baseSpeed
+ *   +0x0c moveSpeedMax the value it passes as _CalcMaxSpeed's own baseSpeed
  *                    argument (lwc1 0xC($18), ov12:0x00a06bc8)
  *   +0x14 turnRate   scaled by the damped rotation ratio and handed to
  *                    RgGeomRobotSetMaxRotVel (lwc1 0x14($18),
@@ -80,12 +80,12 @@ typedef struct RgHomingThread {
 /*
  * _ExecAccelarateCmd and _BodyAdvanceForAttack evidence two trailing
  * RgRobotSpec fields, each read by exactly one lwc1 at the offset shown:
- *   +0x20 accelRate         the scale _ExecAccelarateCmd hands
+ *   +0x20 enginePower       the scale _ExecAccelarateCmd hands
  *                            RgRobSubAcceralate directly (lwc1 0x20($18),
  *                            ov12:0x00a075dc) and _BodyAdvanceForAttack
- *                            multiplies by attackAdvanceRate (lwc1 0x20($16),
+ *                            multiplies by dashPower (lwc1 0x20($16),
  *                            ov12:0x00a06008)
- *   +0x34 attackAdvanceRate multiplied by accelRate for
+ *   +0x34 dashPower         multiplied by enginePower for
  *                            _BodyAdvanceForAttack's own acceleration scale
  *                            (lwc1 0x34($16), ov12:0x00a0600c)
  * Bytes 0x24-0x33 stay unmodeled; the struct is not known to end at 0x38.
@@ -127,11 +127,11 @@ typedef struct RgHomingThread {
  *         "nID < sizeof(pSpec->m_aAutoHoming) / ...": per entry a float
  *         value (atof times pi) and a flag word ORed from "see-target" 1,
  *         "lock-on" 2, "shot" 4 and "in-scrn" 8
- * The same table names fields this header already carries under other
- * names: +0x0c "move-spd-max" (baseSpeed), +0x1c "weight" (speedRating),
- * +0x20 "engine-power"/"engine-impulse" (accelRate), +0x34 "dash-power"
- * (attackAdvanceRate); +0x04 (type) receives the "dash-mode" keyword
- * (normal 0, vr 1, neo 2, neo2 3, neo3 4). They are left unrenamed here.
+ * The same table names +0x0c "move-spd-max" (moveSpeedMax), +0x1c
+ * "weight" (weight; also RgGeomPointSetWeight's argument in _BodySetGeom),
+ * +0x20 "engine-power"/"engine-impulse" (enginePower) and +0x34
+ * "dash-power" (dashPower); +0x04 (type) receives the "dash-mode" keyword
+ * (normal 0, vr 1, neo 2, neo2 3, neo3 4).
  */
 typedef struct RgAutoHoming {
     float value;
@@ -142,17 +142,17 @@ typedef struct RgRobotSpec {
     int charID;                      /* +0x00 */
     int type;                        /* +0x04 */
     unsigned char unmodeled_08[4];   /* +0x08 */
-    float baseSpeed;                 /* +0x0c */
+    float moveSpeedMax;              /* +0x0c */
     float dashSpeedMax;              /* +0x10 */
     float turnRate;                  /* +0x14 */
     float rotSpeedBottomRate;        /* +0x18 */
-    float speedRating;                /* +0x1c */
-    float accelRate;                 /* +0x20 */
+    float weight;                    /* +0x1c */
+    float enginePower;               /* +0x20 */
     float rotateForce;               /* +0x24 */
     float moveResist;                /* +0x28 */
     float rotResist;                 /* +0x2c */
     float dashTime;                  /* +0x30 */
-    float attackAdvanceRate;          /* +0x34 */
+    float dashPower;                 /* +0x34 */
     float dashCooldown;              /* +0x38 */
     RgAutoHoming m_aAutoHoming[2];   /* +0x3c */
     float life;                      /* +0x4c */

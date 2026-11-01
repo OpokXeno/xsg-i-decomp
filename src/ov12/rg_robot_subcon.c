@@ -109,7 +109,7 @@ float RgRobSubTargetting(RgGeomPoint *geometry,
 }
 
 float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
-                     float speed, float turnRate)
+                     float speed, float deltaTime)
 {
     RgVector targetPosition;
 
@@ -117,7 +117,7 @@ float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
         __RgGeomPointGetPos(targetGeometry, (RgPointVector *)targetPosition,
                             D_00A51E18, 70);
         return RgRobSubTargetting(geometry, (RgPointVector *)targetPosition,
-                                  speed, turnRate);
+                                  speed, deltaTime);
     }
     return 0.0f;
 }
