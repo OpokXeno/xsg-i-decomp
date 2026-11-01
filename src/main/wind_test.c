@@ -2,8 +2,8 @@
 
 #include "shared.h"
 
-const Vector4 D_004CBB60 __attribute__((aligned(16))) = { 0.0f, 1.5707963705062866f, 0.0f, 1.0f };
-const Vector4 D_004CBB70 = { 1.0f, 1.0f, 1.0f, 1.0f };
+const Vector4 windRotationAndScaleVector __attribute__((aligned(16))) = { 0.0f, 1.5707963705062866f, 0.0f, 1.0f };
+const Vector4 unitScaleVector = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 static signed char wtype;
 
@@ -28,7 +28,7 @@ static WindParticle cpos;
 
 static WindParticle wpos;
 
-#define D_0058518C (&wpos.position.w)
+#define WIND_POSITION_PTR (&wpos.position.w)
 
 extern double fptodp(float value);
 
@@ -123,7 +123,7 @@ static WindParticle wvec;
 
 static void MoveWind(void);
 
-static const u64 D_004CBBD0[2] = {
+static const u64 directionalRecordPayloadTable[2] = {
     0x000000ff000000ffULL,
     0x00000050000000ffULL,
 };
@@ -215,8 +215,8 @@ static int InitTest(void)
     ACT_allocMatrix(pAct, -1);
     ACT_setModelWrapper(pAct, 0);
     memset(localBlock, 0, 16);
-    rotationAndScale[0] = *(const WindVectorBlock *)&D_004CBB60;
-    rotationAndScale[1] = *(const WindVectorBlock *)&D_004CBB70;
+    rotationAndScale[0] = *(const WindVectorBlock *)&windRotationAndScaleVector;
+    rotationAndScale[1] = *(const WindVectorBlock *)&unitScaleVector;
     local.vector.w = 1.0f;
     actor = (WindActor *)pAct;
     actor->position.words[0] = localBlock->words[0];
@@ -398,15 +398,20 @@ static void PrintDisp(void)
 {
     const char *position_format;
 
+    /* Text: {reset}WindTest */
     xglFontDebugPrintf(0, 0, "\013WindTest");
     if (wtype == 2) {
+        /* Text: {reset}point */
         xglFontDebugPrintf(8, 8, "\013point");
     } else {
+        /* Text: {reset}directional */
         xglFontDebugPrintf(8, 8, "\013directional");
     }
+    /* Text: {reset}{glyph 24}{glyph 30}{glyph 31}WindPow:%f */
     position_format = "\013\033\030\033\036\033\037WindPow:%f";
-    xglFontDebugPrintf(0x64, 0xC8, position_format, fptodp(D_0058518C[0]));
+    xglFontDebugPrintf(0x64, 0xC8, position_format, fptodp(WIND_POSITION_PTR[0]));
     xglFontDebugPrintf(0x64, 0xD0,
+                       /* Text: {reset}{glyph 24}{glyph 29}{glyph 28}RandPow:%f */
                        "\013\033\030\033\035\033\034RandPow:%f",
                        fptodp(shake));
 }
@@ -467,8 +472,8 @@ void WindTest(void)
                     EXM_SetPointWind(&wpos.position);
                 } else {
                     EXM_SetDirectionalWind(&wvec.position);
-                    directional_record.payload_words[0] = D_004CBBD0[0];
-                    directional_record.payload_words[1] = D_004CBBD0[1];
+                    directional_record.payload_words[0] = directionalRecordPayloadTable[0];
+                    directional_record.payload_words[1] = directionalRecordPayloadTable[1];
                     directional_record.zero_10 = 0;
                     directional_record.y_bias_14 = directional_y_bias;
                     directional_record.zero_18 = 0;
@@ -493,3 +498,4 @@ void WindTest(void)
         EXM_InitWind();
     }
 }
+

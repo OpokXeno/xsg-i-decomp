@@ -8,7 +8,7 @@ static int infoIndex;
 
 static int infoLength;
 
-extern char D_004C23C0[];
+extern char EWDefaultResourcePath[];
 
 static char *rsrcDefaultPath;
 
@@ -48,7 +48,7 @@ extern void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name)
 
 static char * markedSTR[2][2];
 
-static char * selectedSTR[2][2] __attribute__((section(".data")));
+static char * selectedSTR[2][2];
 
 static char * unselectedSTR[2][2];
 
@@ -457,54 +457,35 @@ RsrcItem *RSRC_getDirtyItem(RsrcManager *manager, u32 size)
     return 0;
 }
 
-extern const char D_004DA5D0[];
-extern const char D_004DA5D8[];
-extern const char D_004DA5E0[];
-extern const char D_004DA5F0[];
+extern const char rsrcBlankText[];
+extern const char rsrcDirtyMarkText[];
+extern const char dimColorTag[];
+extern const char spaceText[];
 
-static char * markedSTR[2][2];
+extern const char grayColorTag[];
 
-static char * unselectedSTR[2][2];
+static char * markedSTR[2][2] = { { (char *)rsrcDirtyMarkText, (char *)rsrcBlankText }, { (char *)rsrcDirtyMarkText, (char *)rsrcBlankText } };
 
-static char * normalSTR[2][2];
+static char * selectedSTR[2][2] = { { (char *)rsrcBlankText, (char *)rsrcBlankText }, { (char *)grayColorTag, (char *)dimColorTag } };
 
-extern const char D_004DA5D0[8];
+static char * unselectedSTR[2][2] = { { (char *)rsrcBlankText, (char *)rsrcBlankText }, { (char *)dimColorTag, (char *)dimColorTag } };
 
-extern const char D_004DA5D8[8];
-
-extern const char D_004DA5E0[8];
-
-extern const char D_004DA5F0[4];
-
-extern const char D_004DA5D0[];
-extern const char D_004DA5E8[];
-extern const char D_004DA5E0[];
-
-static char * selectedSTR[2][2] __attribute__((section(".data")));
-
-extern const char D_004DA5E8[8];
-
-
-static char * markedSTR[2][2] = { { (char *)D_004DA5D8, (char *)D_004DA5D0 }, { (char *)D_004DA5D8, (char *)D_004DA5D0 } };
-
-static char * selectedSTR[2][2] __attribute__((section(".data"))) = { { (char *)D_004DA5D0, (char *)D_004DA5D0 }, { (char *)D_004DA5E8, (char *)D_004DA5E0 } };
-
-static char * unselectedSTR[2][2] = { { (char *)D_004DA5D0, (char *)D_004DA5D0 }, { (char *)D_004DA5E0, (char *)D_004DA5E0 } };
-
-static char * normalSTR[2][2] = { { (char *)D_004DA5F0, (char *)D_004DA5D0 }, { (char *)D_004DA5F0, (char *)D_004DA5D0 } };
+static char * normalSTR[2][2] = { { (char *)spaceText, (char *)rsrcBlankText }, { (char *)spaceText, (char *)rsrcBlankText } };
 
 static int infoIndex = -1;
 
 static int infoLength = -1;
 
-const char D_004DA5D0[8] = "";
+const char rsrcBlankText[8] = "";
 
-const char D_004DA5D8[8] = "*";
+const char rsrcDirtyMarkText[8] = "*";
 
-const char D_004DA5E0[8] = "\014@@@";
+/* Text: {color #404040} */
+const char dimColorTag[8] = "\014@@@";
 
-const char D_004DA5E8[8] = "\014\200\200\200";
+/* Text: {color #808080} */
+const char grayColorTag[8] = "\014\200\200\200";
 
-const char D_004DA5F0[4] = " ";
+const char spaceText[4] = " ";
 
-static char *rsrcDefaultPath = D_004C23C0;
+static char *rsrcDefaultPath = EWDefaultResourcePath;

@@ -16,7 +16,7 @@ void JTHREAD_defaultUnit(JThreadHandle *thread);
 
 /*
  * The Unit class's native peer, reached through its "peer" Java field
- * (lookupClassField(classJava_xeno_Unit, "peer", 0), the D_004DC080 string
+ * (lookupClassField(classJava_xeno_Unit, "peer", 0), the jthreadPeerName string
  * below). src/main/unit.h recovers the whole record as `UnitPeer` for
  * main/tu249; a TU-local header cannot be included from another TU, so
  * only the one word this TU reads is modelled here, under its own tag:
@@ -71,11 +71,11 @@ extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 /* The "peer" field-name string both functions below look up, byte-identical
    in the original binary. */
-extern const char D_004DC080[]; /* "peer" */
+extern const char jthreadPeerName[]; /* "peer" */
 
 /* The "Class.method" debug format JTHREAD_defaultStage prints, byte-identical
    in the original binary. */
-extern const char D_004DC088[]; /* "%s.%s" */
+extern const char jthreadDottedNameFormat[]; /* "%s.%s" */
 
 /*
  * GameLoopState is a 0x2a030-byte global (main VA 0x00338680) whose declared

@@ -33,10 +33,10 @@ static McRequestStorage mw;
 static unsigned char queue_top;
 static unsigned char queue_end;
 
-static unsigned char D_0093E120[17 * 2];
-extern unsigned char base_0_00491770[];
-extern unsigned char n_1[];
-extern unsigned char n_2[];
+static unsigned char mapNameBuffer[17 * 2];
+static unsigned char base_0_00491770[18];
+static unsigned char n_1[10];
+static unsigned char n_2[14];
 
 int sceMcOpen(int port, int slot, const char *name, int mode);
 int sceMcClose(int fd);
@@ -46,7 +46,6 @@ int sceMcSync(int mode, int *command, int *result);
 int sceMcGetInfo(int port, int slot, int *type, int *free, int *format);
 
 /* One queued memory-card request; the request routines fill the queue slot. */
-
 
 /* The caller's request parameters: file slot, name, data and size. */
 
@@ -72,7 +71,7 @@ typedef struct McRequestEntry {
     McRequestPath path;
 } McRequestEntry;
 
-extern McRequestEntry queue[8];
+static McRequestEntry queue[8];
 
 int sceMcGetDir(int port, int slot, unsigned char *entries, int mode,
                 int max_entries, int reserved);
@@ -119,7 +118,7 @@ typedef struct McWorkspaceView {
     McRequestEntry request;
 } McWorkspaceView;
 
-extern float D_004D8794;
+extern float checksumNoiseScale;
 
 float xglFRand(void);
 
@@ -127,9 +126,9 @@ void FlushCache(int mode);
 
 int sceMcDelete(int port, int slot, const char *path);
 
-extern int D_0093E0A4[];
+extern int mcMainStatus[];
 
-extern McRequestEntry D_0093E144;
+static McRequestEntry savedMcRequest;
 
 typedef struct McDirectoryEntry {
     unsigned char unmodeled_00[9];
@@ -273,7 +272,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
     unsigned char trail;
 
     primary = primary_euc_name;
-    destination = D_0093E120;
+    destination = mapNameBuffer;
     character_count = 0;
 
     if (primary != 0)
@@ -553,7 +552,7 @@ static int create_sub2(int result)
             trailer = (McSaveChecksum *)((unsigned char *)payload + (payload->entry_count * 8 + 16) * payload->group_count);
             checksum = &trailer->checksum;
             size = save->end - save->start - 40;
-            *checksum = (xglFRand() - 1.5f) * D_004D8794 + 1.0f;
+            *checksum = (xglFRand() - 1.5f) * checksumNoiseScale + 1.0f;
             FlushCache(0);
             sceMcWrite(mw.state.descriptor, write_data, size);
             break;
@@ -629,7 +628,7 @@ int xglMcMain(void)
     case 0:
         if (queue_end != queue_top) {
             request = &queue[queue_top];
-            D_0093E144 = *request;
+            savedMcRequest = *request;
             execute(request);
             queue_top = (queue_top + 1) & 7;
             return 0xFF00FF;
@@ -720,7 +719,7 @@ int xglMcMain(void)
         mw.state.phase = 0;
         break;
     }
-    return D_0093E0A4[0];
+    return mcMainStatus[0];
 }
 
 int xglMcEasyLoad(const char *path, void *buffer, int size)
@@ -806,3 +805,12 @@ void xglMcInitial(void)
     sceMcInit();
     xglMcReset();
 }
+
+static unsigned char base_0_00491770[18] = "/BASLUS-20469Xeno";
+
+static unsigned char n_1[10] = "/icon.sys";
+
+static unsigned char n_2[14] = "/xenosaga.ico";
+
+float checksumNoiseScale = 0.60000002384185791f;
+

@@ -36,9 +36,9 @@ typedef struct TyaJpegRequest {
 
 extern TyaDisplayEnvironment DispEnv;
 
-extern const char D_004C15E8[];
+extern const char displaySettingImagePath[];
 
-extern const char D_004C1600[];
+extern const char displayHalfwordFormat[];
 
 extern void sceGsSetDefDispEnv(TyaDisplayEnvironment *environment,
     int psm, int width, int height, int x_offset, int y_offset);

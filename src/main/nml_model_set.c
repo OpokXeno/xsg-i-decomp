@@ -8,7 +8,7 @@
 #include "main/xgl_studio.h"
 #include "main/get.h"
 
-extern unsigned char s_aDispVisible[];
+static unsigned char s_aDispVisible[1024];
 
 int g_aSubWindow[4] = { 0 };
 
@@ -79,10 +79,11 @@ static Vector4 s_inGblPos;
  * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
  * Keep its definition between s_inGblPos and s_inProReal, matching the
  * original local-storage order. set_circle_shadow_ratio writes entries 0-7
- * and 16-23.
+ * and 16-23. The original storage is 0x1000 bytes (no other label until
+ * s_aAlphaGroup at 0x00957940); only the first 0x400 are read.
  */
 
-static int D_00956940[256];
+static int circleShadowRatioTable[1024];
 
 /*
  * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
@@ -134,9 +135,6 @@ typedef struct NmlProRealState {
     unsigned char unmodeled_1d8[0x1e0 - 0x1d8];
 } NmlProRealState;
 
-
-
-
 static NmlProRealState s_inProReal[1];
 
 static int s_inBackBuffer[10];
@@ -152,7 +150,6 @@ static FadeControl s_inActiveFadeOut;
 static FadeControl s_inActiveFadeIn;
 
 #define NML_RENDER_MAP_ENTRY 0x10000u
-
 
 static void CONSTRUCT_MODELSYSTEM(void);
 
@@ -172,12 +169,6 @@ static void INIT_BACK_BUFFER(void);
  * nmlModelSetBackBufferToBattle.
  */
 
-
-
-
-
-
-
 /*
  * nmlModelSetFadeInCancel/nmlModelSetFadeOutCancel/nmlModelSetBackBuffer
  * (below, this TU) and nmlModelSetBackBufferToBattle (still INCLUDE_ASM)
@@ -196,42 +187,42 @@ void nmlModelSetBackBufferToBattle(int ownerIndex);
 static void fade_render(NmlPacket packet, FadeControl *control);
 
 /*
- * D_0095DB90 is main:0x0095DB90, the same byte the FadeControl comment above
+ * fadeOutLockedFlag is main:0x0095DB90, the same byte the FadeControl comment above
  * ties to s_inFadeOut's "locked" field at +0x30 (0x0095DB60 + 0x30): cited
  * there only as evidence, not as claimed source. Addressing it through
  * &s_inFadeOut+0x30 rather than its own symbol changes the emitted %lo
  * immediate (sw v0,48(v1) for the original's sw v0,0(v1)), so this
  * function keeps the flat scaffold symbol, as an unsized array so -G8
  * small-data gp-relative addressing does not apply to it either (matching
- * D_0095BB3C/D_0095BB44 above).
+ * nmlModelBackBufferRequestFlags/nmlModelMpeg2CrossFadeTime above).
  */
 
-extern int D_0095DB90[];
+extern int fadeOutLockedFlag[];
 
-/* D_0095DC48 is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
- * D_0095DB90 comment above for why it stays a flat scaffold symbol. */
+/* activeFadeInCancelFrames is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
+ * fadeOutLockedFlag comment above for why it stays a flat scaffold symbol. */
 
-extern int D_0095DC48[];
+extern int activeFadeInCancelFrames[];
 
-/* D_0095DBC8 is s_inFadeIn's "cancelFrames" byte (+0x28). */
+/* fadeInCancelFrames is s_inFadeIn's "cancelFrames" byte (+0x28). */
 
-extern int D_0095DBC8[];
+extern int fadeInCancelFrames[];
 
-/* D_0095DC08 is s_inActiveFadeOut's "cancelFrames" byte (+0x28). */
+/* activeFadeOutCancelFrames is s_inActiveFadeOut's "cancelFrames" byte (+0x28). */
 
-extern int D_0095DC08[];
+extern int activeFadeOutCancelFrames[];
 
-/* D_0095DB88 is s_inFadeOut's "cancelFrames" byte (+0x28). */
+/* fadeOutCancelFrames is s_inFadeOut's "cancelFrames" byte (+0x28). */
 
-extern int D_0095DB88[];
+extern int fadeOutCancelFrames[];
 
-/* D_0095DB84 is s_inFadeOut's "dispose" byte (+0x24). */
+/* fadeOutDisposeFlag is s_inFadeOut's "dispose" byte (+0x24). */
 
-extern int D_0095DB84[];
+extern int fadeOutDisposeFlag[];
 
-/* D_0095DBC4 is s_inFadeIn's "dispose" byte (+0x24). */
+/* fadeInDisposeFlag is s_inFadeIn's "dispose" byte (+0x24). */
 
-extern int D_0095DBC4[];
+extern int fadeInDisposeFlag[];
 
 /*
  * TU-local partial view of GameLoopState (main 0x00338680, size 0x2a030;
@@ -261,9 +252,6 @@ typedef struct {
     NmlFadeValues previousFade; /* +0xa0 */
 } NmlGameLoopState;
 
-
-
-
 extern NmlGameLoopState GameLoopState;
 
 /* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
@@ -275,12 +263,9 @@ static void fade_set(FadeControl *, float *, int, int, int, int, int);
 
 #define NML_RENDER_STENCIL 0x4u
 
-
 #define NML_RENDER_ZWRITE 0x8u
 
-
 #define NML_RENDER_TOUMEI 0x20u
-
 
 /*
  * Bounds and alignment a model texture pointer must satisfy: the pointer
@@ -292,12 +277,9 @@ static void fade_set(FadeControl *, float *, int, int, int, int, int);
 
 #define NML_TEXTURE_RAM_BASE 0x00200000u
 
-
 #define NML_TEXTURE_RAM_MAX_OFFSET 0x01dfffffu
 
-
 #define NML_TEXTURE_ALIGN_MASK 0xfu
-
 
 /*
  * Stores the current model matrix pointer in the pointer-width s_inLayout
@@ -311,7 +293,6 @@ static void fade_set(FadeControl *, float *, int, int, int, int, int);
 static void nmlModelFogPara(Vector4 *fog, float fogNear, float fogFar, float fogMin, float fogMax);
 
 #define NML_RENDER_FOG 0x2u
-
 
 /* The four fog distances of RgFog.dist (defaults 50, 250, 0, 1). */
 
@@ -331,12 +312,9 @@ int nmlModelLexDataCheck(NmlModel *model);
 
 #define NML_NAME_MATCH_PREFIX 1
 
-
 #define NML_NAME_MATCH_EXACT 2
 
-
 #define NML_NAME_MATCH_SUBSTRING 3
-
 
 /* nmlModelDirectXtxSub (above) is still INCLUDE_ASM; declare it so this
  * caller does not see an implicit declaration. */
@@ -393,22 +371,20 @@ static void FLUSH_MODELSYSTEM(void);
  * by this TU's C callers.
  */
 
-extern int s_nDispVisible;
+static int s_nDispVisible;
 
-extern char s_aTexName[32];
+static char s_aTexName[32];
 
 typedef struct NmlMaterialName {
     char text[32];
 } NmlMaterialName;
-extern NmlMaterialName s_aMatName;
+static NmlMaterialName s_aMatName;
 
-extern Matrix4 s_inGblPlace;
+static Matrix4 s_inGblPlace;
 
 extern void xglStudioChange(int);
 
 extern void xglLightCalcMatrix(StudioLight *);
-
-extern Matrix4 s_inGblPlace;
 
 extern void xglStudioChange(int);
 
@@ -419,24 +395,17 @@ struct NmlShadowTexture {
     unsigned char pixels[64][64];
 };
 
+static struct NmlShadowTexture s_aCircleShadow;
 
+static unsigned int s_aCircleShadowClut[8];
 
-
-extern struct NmlShadowTexture s_aCircleShadow;
-
-extern unsigned int s_aCircleShadowClut[8];
-
-extern int s_nCircleShadow;
+static int s_nCircleShadow;
 
 extern float xglPointLength(Vector4 *first, Vector4 *second);
 
-extern float D_004D88D8;
+extern float nonLinearCameraMinAngleY;
 
-extern float D_004D88DC;
-
-
-
-
+extern float nonLinearCameraMaxAngleY;
 
 typedef struct NmlDirectRecord {
     void *data;
@@ -444,10 +413,7 @@ typedef struct NmlDirectRecord {
     s16 attribute;
 } NmlDirectRecord;
 
-
-
-
-extern NmlDirectRecord s_aDirect[];
+static NmlDirectRecord s_aDirect[5500];
 
 extern u8 *nmlPacketSetAttributeData16N(const void *data, int count);
 
@@ -457,9 +423,6 @@ typedef struct {
     int entriesOffset;
 } NmlDirectXtxBlock;
 
-
-
-
 typedef struct {
     unsigned int packed;
     unsigned int word4;
@@ -468,38 +431,35 @@ typedef struct {
     int dataOffset;
 } NmlDirectXtxEntry;
 
-
-
-
-extern u64 TestEnv_0_004A9170[12];
+static u64 TestEnv_0_004A9170[12];
 
 extern void nmlFilterStealthMake(int, f32, void *, LayoutSlot *);
 
-extern f32 D_004D88E4;
+extern f32 stealthDepthScale;
 
 extern f32 tanf(f32);
 
-extern f32 D_004D88E8;
+extern f32 stealthSortThreshold;
 
-extern f32 D_004D88EC;
+extern f32 stealthDistanceTolerance;
 
-extern void *s_apBlock[];
+static void * s_apBlock[4096];
 
-extern unsigned short s_aBlockLayout[];
+static unsigned short s_aBlockLayout[4096];
 
-extern void *s_apBlockLast[];
+static void * s_apBlockLast[32];
 
-extern unsigned short s_aBlockLayoutLast[];
+static unsigned short s_aBlockLayoutLast[32];
 
-extern LayoutStore *s_apModelLayout[];
+static LayoutStore * s_apModelLayout[512];
 
-extern int s_nCount;
+static int s_nCount;
 
-extern int s_aShapeMathPara[10];
+static int s_aShapeMathPara[10];
 
-extern Vector4 s_inMulColor;
+static Vector4 s_inMulColor;
 
-extern f32 D_004D88E0;
+extern f32 shapeWeightEpsilon;
 
 typedef struct NmlModelSampleView {
     unsigned char unmodeled_000[0x48];
@@ -511,59 +471,44 @@ typedef struct NmlModelSampleView {
     Vector4 samplePosition;
 } NmlModelSampleView;
 
-
-
-
 extern int nmlModelCalcClipStudio(Vector4 *, int);
 
-extern f32 D_004D88F4;
+extern f32 entryClipWidthScale;
 
-extern f32 D_004D88F8;
+extern f32 entryClipPoolHead;
 
-extern f32 D_004D88FC;
+extern f32 entryClipPoolBody;
 
-extern f32 D_004D8900;
+extern f32 entryClipPoolTail;
 
-extern f32 D_004D8904;
+extern f32 entryClipPoolInner;
 
-extern f32 D_004D8908;
+extern f32 entryClipPoolOuter;
 
-extern f32 D_004D890C;
+extern f32 entryClipPoolUpper;
 
-extern f32 D_004D8910;
+extern f32 entryClipPoolLower;
 
-extern f32 D_004D8914;
+extern f32 entryClipPoolMid;
 
-extern f32 D_004D8918;
+extern f32 entryClipPoolRear;
 
-extern char D_004DC470[];
+extern char faceNameSuffix[];
 
 static float deapth_for_studio(int studio, Vector4 *position, float scale);
 
-extern float D_004D88F0;
+extern float calcSampleThreshold;
 
 typedef struct {
     unsigned char unmodeled_00[0x94];
     float fov;
 } NmlStudioFovView;
 
-
-
-
 typedef int NmlProjectedPoint[4];
-
-
-
 
 typedef struct NmlMaterialRenderState NmlMaterialRenderState;
 
-
-
-
 typedef struct NmlModelRenderState NmlModelRenderState;
-
-
-
 
 struct NmlModelRenderRange {
     short first;
@@ -571,9 +516,6 @@ struct NmlModelRenderRange {
     unsigned char unmodeled_04[8];
     LayoutStore *layout;
 };
-
-
-
 
 extern void nmlPacketGsInit(void);
 
@@ -605,7 +547,7 @@ extern void nmlPacketAddBlockMaterial(NmlMaterialRenderState *,
 
 extern void nmlFilterSetFrameAlphaClear(void);
 
-extern int s_nStencilVal;
+static int s_nStencilVal;
 
 extern void nmlPacketAddGsFrame(int, int);
 
@@ -615,7 +557,7 @@ extern void nmlPacketAddGsFBA1(unsigned int);
 
 extern void nmlFilterSetFrameToBuffer(int);
 
-extern int s_nRenderCancel;
+static int s_nRenderCancel;
 
 extern int g_nPacketOver;
 
@@ -649,13 +591,7 @@ typedef struct NmlProRealOrigin {
     u64 word8;
 } NmlProRealOrigin;
 
-
-extern NmlProRealOrigin D_004D2820;
-
-
-
-
-
+extern const NmlProRealOrigin proRealOrigin;
 
 typedef struct {
     short x;                            /* +0x00 */
@@ -663,9 +599,6 @@ typedef struct {
     unsigned char unmodeled_004[8];
     int ownerAddress;                   /* +0x0c, 32-bit word */
 } NmlCircleOrigin;
-
-
-
 
 typedef struct {
     unsigned char unmodeled_000[0x250];
@@ -676,22 +609,16 @@ typedef struct {
     float scale;                        /* +0x2c0 */
 } NmlCircleModelView;
 
-
-
-
 typedef struct {
     unsigned char unmodeled_000[0x26c];
     float viewLimit;                    /* +0x26c */
 } NmlCircleOwnerView;
 
-
-
-
 static int nmlModelRenderProreal(LayoutStore *model, int frame);
 
 void nmlPacketSendCircleTexture(void *shadow, void *clut);
 
-extern float D_004D894C;
+extern float circleViewLimitMin;
 
 static void set_circle_shadow_ratio(int scale);
 
@@ -700,8 +627,6 @@ static void _WeightToGlobalVec(Vector4 *destination, const Matrix4 matrix, const
 void nmlFadePacketWrite(NmlPacket packet);
 
 void nmlModelDirectSend(int mode, const void *data, int count);
-
-
 
 typedef struct NmlCircleLayout {
     unsigned char unmodeled_000[0x250];
@@ -712,8 +637,6 @@ typedef struct NmlCircleLayout {
     unsigned char unmodeled_274[0x2c0 - 0x274];
     float ratioScale;
 } NmlCircleLayout;
-
-
 
 void nmlModelFlushClear(void);
 
@@ -737,17 +660,13 @@ typedef struct NmlFlushMaterialView {
     unsigned int material_flags; /* +0xc0 */
 } NmlFlushMaterialView;
 
-
-
 typedef struct NmlDirectEntry {
     const void *data;
     unsigned short size;
     unsigned short type;
 } NmlDirectEntry;
 
-
-
-extern const char D_004D2890[];
+extern const char magicCarpetComeName[];
 
 /* The block range is reached through a union (alias set 0): in
  * nmlModelEntryEffect the original keeps the blockCount store ahead of the
@@ -767,9 +686,9 @@ typedef struct NmlNonAlphaGroup {
     } owner;             /* +0x0c */
 } NmlNonAlphaGroup;
 
-extern NmlNonAlphaGroup s_aNonAlphaGroup[];
+static NmlNonAlphaGroup s_aNonAlphaGroup[512];
 
-extern const char D_004DC478[];
+extern const char eyeMaterialName[];
 
 extern void nmlPacketClrModelCache(void);
 
@@ -1437,7 +1356,7 @@ void nmlModelSendBackBufferSignal(void)
 
 int nmlModelIsBackBufferRequest(void)
 {
-    return D_0095BB3C[0];
+    return nmlModelBackBufferRequestFlags[0];
 }
 
 void nmlModelSendPauseSignal(int pause)
@@ -1473,7 +1392,7 @@ void nmlModelSendSignalEventFinish(void)
 void nmlModelSendPacketChangeSignal(void)
 {
     s_nPacketSignal = 0;
-    D_0095BB3C[0] = 0;
+    nmlModelBackBufferRequestFlags[0] = 0;
 }
 
 void nmlModelSendSignalMovieStart(void)
@@ -1487,12 +1406,12 @@ void nmlModelSendSignalMovieStart(void)
 
 void nmlModelSetMpeg2CrossFadeTime(int time)
 {
-    D_0095BB44[0] = time;
+    nmlModelMpeg2CrossFadeTime[0] = time;
 }
 
 static inline void NmlMovieRestoreSavedBuffer(void)
 {
-    nmlModelSetBackBuffer(D_0095BB44[0], 1, sRender.draw_buffer_base, 1);
+    nmlModelSetBackBuffer(nmlModelMpeg2CrossFadeTime[0], 1, sRender.draw_buffer_base, 1);
     nmlModelSetFadeInCancel(30);
 }
 
@@ -1655,27 +1574,27 @@ static void fade_set(FadeControl *control, float *color, int skipRender,
 }
 
 void nmlModelSetFadeOutLock(void) {
-    D_0095DB90[0] = 1;
+    fadeOutLockedFlag[0] = 1;
 }
 
 void nmlModelSetFadeOutLockOff(void) {
-    D_0095DB90[0] = 0;
+    fadeOutLockedFlag[0] = 0;
 }
 
 void nmlModelSetActiveFadeInCancel(int frames) {
-    D_0095DC48[0] = (frames < 0) ? 0 : frames;
+    activeFadeInCancelFrames[0] = (frames < 0) ? 0 : frames;
 }
 
 void nmlModelSetFadeInCancel(int frames) {
-    D_0095DBC8[0] = (frames < 0) ? 0 : frames;
+    fadeInCancelFrames[0] = (frames < 0) ? 0 : frames;
 }
 
 void nmlModelSetActiveFadeOutCancel(int frames) {
-    D_0095DC08[0] = (frames < 0) ? 0 : frames;
+    activeFadeOutCancelFrames[0] = (frames < 0) ? 0 : frames;
 }
 
 void nmlModelSetFadeOutCancel(int frames) {
-    D_0095DB88[0] = (frames < 0) ? 0 : frames;
+    fadeOutCancelFrames[0] = (frames < 0) ? 0 : frames;
 }
 
 void nmlModelFadeDoit(void)
@@ -1700,11 +1619,11 @@ void nmlModelSetFadeDoit(void)
 }
 
 void nmlModelSetFadeOutDispose(void) {
-    D_0095DB84[0] = 1;
+    fadeOutDisposeFlag[0] = 1;
 }
 
 void nmlModelSetFadeInDispose(void) {
-    D_0095DBC4[0] = 1;
+    fadeInDisposeFlag[0] = 1;
 }
 
 void nmlModelSetFadeOut(int duration, int mode) {
@@ -1807,7 +1726,7 @@ int nmlModelAskNonLinearCamera(void)
                     : "r"(&angleDelta), "r"(&camera->rotation), "r"(&s_inMainCameraAng)
                     : "memory");
                 angleY = __builtin_fabsf(angleDelta.y);
-                if (D_004D88D8 < angleY && angleY < D_004D88DC) {
+                if (nonLinearCameraMinAngleY < angleY && angleY < nonLinearCameraMaxAngleY) {
                     s_nMainCameraWarp = 2;
                 }
             }
@@ -2026,8 +1945,8 @@ void nmlModelSetProreal(NmlProRealState *input)
     screenHeight = 0x200;
     scale.x = (float)input->fields.unmodeled_108 * 0.015625f * input->fields.unmodeled_120;
     scale.y = (float)input->fields.unmodeled_10c * 0.015625f * input->fields.unmodeled_124;
-    transformOrigin[0] = D_004D2820.word0;
-    transformOrigin[1] = D_004D2820.word8;
+    transformOrigin[0] = proRealOrigin.word0;
+    transformOrigin[1] = proRealOrigin.word8;
     scale.w = 1.0f;
     scale.z = 1.0f;
     xglMatrixScale(scaledTransform, (const float (*)[4])input->fields.matrix_000, &scale.x);
@@ -2941,7 +2860,7 @@ static void set_circle_shadow_ratio(int scale)
     for (i = 0; i < 16; i++) {
         int index = (i < 8) ? i : i + 8;
 
-        D_00956940[index] = (int)(128.0f - (float)i * ratio) << 24;
+        circleShadowRatioTable[index] = (int)(128.0f - (float)i * ratio) << 24;
     }
 }
 
@@ -2962,7 +2881,7 @@ int nmlModelLexDataCheck(NmlModel *model)
                     + offsets[model->blockCount - 1]),
                 name = (char *) lastBlock + lastBlock->baseOffset,
                 name += model->unclassified_a0 != 0 ? model->blockCount << 4 : 0,
-                strstr(name + lastBlock->textOffset, D_004D2890) != 0)) {
+                strstr(name + lastBlock->textOffset, magicCarpetComeName) != 0)) {
             long long count = model->blockCount;
 
             if (count > 0) {
@@ -3064,7 +2983,7 @@ static void nmlModelLexBlockDoit(NmlModel *model)
                 }
                 if ((float)block->shapeWeight <= s_aShapeWeight[s_nShapeNum]) {
                     s_aShapeWeight[s_nShapeNum] =
-                        (float)block->shapeWeight - D_004D88E0;
+                        (float)block->shapeWeight - shapeWeightEpsilon;
                 }
                 ++s_nShapeNum;
             }
@@ -3089,7 +3008,7 @@ static void nmlModelStealthEntry(void *arg0, void *arg1)
                          (const float *)&camera->screenOffset);
     samplePosition = &s_inLayout.fields.unmodeled_1f0;
     _CurRotTransPersClip(projected, samplePosition);
-    depth = ((float)projected[2] * D_004D88E4) / tanf(fovView->fov * 0.5f);
+    depth = ((float)projected[2] * stealthDepthScale) / tanf(fovView->fov * 0.5f);
 
     if (model->sampleCount != 0) {
         LayoutStore *const layout = &s_inLayout;
@@ -3098,9 +3017,9 @@ static void nmlModelStealthEntry(void *arg0, void *arg1)
             ++layout->fields.stealthEntryCount;
         }
         {
-            float sortThreshold = D_004D88E8;
+            float sortThreshold = stealthSortThreshold;
             LayoutStore *const sortLayout = layout;
-            float distanceTolerance = D_004D88EC;
+            float distanceTolerance = stealthDistanceTolerance;
             swapped = 1;
             while (swapped != 0) {
                 swapped = 0;
@@ -3197,7 +3116,7 @@ static void nmlModelCalcSample(void *arg0, void **arg1)
         }
     }
 
-    if (s_inLayout.slots[0x7F].f < D_004D88F0) {
+    if (s_inLayout.slots[0x7F].f < calcSampleThreshold) {
         s_inLayout.slots[0x7F].f = 1.0f;
     }
     {
@@ -3231,7 +3150,7 @@ static int nmlModelCalcEntryClip(NmlModelSampleView *model, StudioCamera *camera
             : "r"(&clip), "r"(&s_inLayout.slots[0x7C])
                 : "$2", "memory"
         );
-        clip.w *= D_004D88F4;
+        clip.w *= entryClipWidthScale;
 
         if (model->sampleCount != 0) {
             anySubwindow = 0;
@@ -3294,7 +3213,7 @@ static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
     int flags;
     int index;
 
-    if (strstr((char *)model + 0x10, D_004DC470) == 0 && s_nParent != 0) {
+    if (strstr((char *)model + 0x10, faceNameSuffix) == 0 && s_nParent != 0) {
         NmlModelSampleView *parent = (NmlModelSampleView *)(unsigned int)s_nParent;
         distanceScale = parent->samplePosition.w;
     }
@@ -3414,6 +3333,7 @@ static void nmlModelCalcDropShadow(NmlModel *model)
     }
 }
 
+typedef union { Vector4 v; u64 q[2]; } ProjectionQuad;
 
 static void nmlModelCalcEntryProjectCircle(NmlModel *model)
 {
@@ -3421,15 +3341,14 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     extern void xglMatrixStackInverse(void);
     extern void xglVectorNormal(Vector4 *, const Vector4 *);
     extern void xglVectorScaleXYZ(Vector4 *, const Vector4 *, float);
-    typedef union { Vector4 v; u64 q[2]; } ProjectionQuad;
-    extern ProjectionQuad D_004D28B0;
-    extern ProjectionQuad D_004D28C0;
-    extern ProjectionQuad D_004D28D0;
+    extern ProjectionQuad circleScaleVector;
+    extern ProjectionQuad circleCenterVector;
+    extern ProjectionQuad circleOffsetVector;
     Vector3 projectionAngles;
     Matrix savedMatrix;
-    ProjectionQuad screenScaleStorage = D_004D28B0;
-    ProjectionQuad screenCenter = D_004D28C0;
-    ProjectionQuad screenOffsetStorage = D_004D28D0;
+    ProjectionQuad screenScaleStorage = circleScaleVector;
+    ProjectionQuad screenCenter = circleCenterVector;
+    ProjectionQuad screenOffsetStorage = circleOffsetVector;
     Vector4 cameraTranslation;
     Vector4 normal;
     Vector4 spare;
@@ -3564,9 +3483,9 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     extern void xglVectorScale(Vector4 *, const Vector4 *, float);
     extern void xglVectorScaleXYZ(Vector4 *, const Vector4 *, float);
     extern float atan2f(float, float);
-    extern const NmlVector4Overlay D_004D28E0;
-    extern const NmlVector4Overlay D_004D28F0;
-    extern const NmlVector4Overlay D_004D2900;
+    extern const NmlVector4Overlay mapScaleVector;
+    extern const NmlVector4Overlay mapCenterVector;
+    extern const NmlVector4Overlay mapOffsetVector;
     Vector3 angles;
     Matrix savedMatrix;
     NmlVector4Overlay projectionScale;
@@ -3584,9 +3503,9 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     /* Empty loop kept from the original: its loop notes order the prologue
      * (callee saves before the projection constant loads). */
     do { } while (0);
-    projectionScale = D_004D28E0;
-    screenCenter = D_004D28F0;
-    screenOffset = D_004D2900;
+    projectionScale = mapScaleVector;
+    screenCenter = mapCenterVector;
+    screenOffset = mapOffsetVector;
     denom = model->entryTranslation.w;
     if (5.0f + camera->position.y < s_inLayout.slots[0x7d].f) {
         if (5.0f + camera->position.y < s_inLayout.slots[0x2d].f) {
@@ -3737,7 +3656,7 @@ static inline void nmlModelWeightAttributeVector(
     _WeightToGlobalVec(destination, (const void *)transform, (const void *)weights);
 }
 
-extern float D_004D8940;
+extern float entryPartsClipScale;
 extern int nmlModelCalcClip(Vector4 *);
 extern int nmlModelCalcClipNoCulling(Vector4 *);
 extern void _ApplyMatrix(Vector4 *, const Matrix4, const Vector4 *);
@@ -3800,7 +3719,7 @@ static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
                     clipIndex = block->matrixIndices[weightedIndex + 1]
                               - firstWeightedMatrix - 1;
                     clipBounds = &((Vector4 *)0x70000000)[clipIndex];
-                    clipBounds->w = block->clipBounds[3] * D_004D8940;
+                    clipBounds->w = block->clipBounds[3] * entryPartsClipScale;
                     if (nmlModelCalcClipNoCulling(clipBounds) != 0) {
                         ++passingCount;
                     }
@@ -3821,8 +3740,8 @@ void xglMemCopy4(void *destination, const void *source, int count);
 void *nmlPacketSetAttributeAlloc16N(int count);
 u8 *nmlPacketSetAttributeData64N(const void *data, int count);
 unsigned char nmlModelCalcClipMat2AllCam(const void *a, const void *b, void *c);
-extern unsigned short s_aBLsave[];
-extern unsigned int s_aBPsave[];
+static unsigned short s_aBLsave[256];
+static unsigned int s_aBPsave[256];
 
 void nmlModelEntry(NmlModel *model)
 {
@@ -3899,7 +3818,7 @@ void nmlModelEntry(NmlModel *model)
             if (s_inLayout.fields.render_status & 0x800000) {
                 LAYOUT_W(0x220) = 1.0f;
             }
-            if (strstr((char *)model + 0x11, D_004DC470) != 0) {
+            if (strstr((char *)model + 0x11, faceNameSuffix) != 0) {
                 s_inLayout.fields.render_status |= 0x100000;
             }
             xglCullingMapLastCheck();
@@ -4540,7 +4459,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
 static int nmlModelRenderTexture(struct NmlModelRenderRange *range, int step,
                                  int frame)
 {
-    extern float D_004D8948;
+    extern float textureTransparencyMin;
     extern void nmlFilterSetTexClear(int);
     extern void nmlFilterSetTexFillDraw(int, LayoutStore *);
     extern void nmlPacketAddGsScissor(u64);
@@ -4616,7 +4535,7 @@ render_body:
     goto render_done;
 
 test_fov:
-    if (D_004D8948 >= range->layout->fields.textureTransparency) {
+    if (textureTransparencyMin >= range->layout->fields.textureTransparency) {
         goto render_done;
     }
     firstLayout = 0;
@@ -4628,8 +4547,8 @@ render_done:
 
 static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int frame)
 {
-    extern unsigned short s_aBlockLayout[];
-    extern float D_004D894C;
+    extern unsigned short s_aBlockLayout[4096];
+    extern float circleViewLimitMin;
     NmlCircleOwnerView *owner;
     LayoutStore *model;
     int result;
@@ -4640,7 +4559,7 @@ static int nmlModelRenderCircle(const NmlCircleOrigin *origin, int pitch, int fr
     model = 0;
     result = 0;
     owner = (NmlCircleOwnerView *) origin->ownerAddress;
-    if (owner->viewLimit <= D_004D894C) {
+    if (owner->viewLimit <= circleViewLimitMin) {
         result = 0;
     } else {
         index = origin->x - pitch;
@@ -4815,7 +4734,7 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
                 if ((material->material_flags & 0x1000) &&
                     (!(layout->fields.featureFlags & 0x10) ||
                      ((layout->fields.render_status & 0x100000) &&
-                      strstr(material->name, D_004DC478) != 0))) {
+                      strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflRot(material, layout);
                     nmlPacketAddReflectParam(material, layout);
                 }
@@ -5005,7 +4924,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                 if ((material->material_flags & 0x1000) != 0 &&
                     ((layout->fields.featureFlags & 0x10) == 0 ||
                      ((layout->fields.render_status & 0x100000) != 0 &&
-                      strstr(material->name, D_004DC478) != 0))) {
+                      strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflRot(material, layout);
                 }
                 nmlPacketAddBlockMaterial(material, layout, 0, viewport);
@@ -5025,7 +4944,7 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
                 if ((material->material_flags & 0x1000) != 0 &&
                     ((layout->fields.featureFlags & 0x10) == 0 ||
                      ((layout->fields.render_status & 0x100000) != 0 &&
-                      strstr(material->name, D_004DC478) != 0))) {
+                      strstr(material->name, eyeMaterialName) != 0))) {
                     nmlPacketAddReflectParam(material, layout);
                 }
                 nmlPacketAddExecProg(material, layout, 1, 0);
@@ -5243,7 +5162,7 @@ void nmlModelInit(void)
     INIT_MAP_HANDLE(s_inMapHandle);
     nmlModelClear();
     s_inLayout.fields.render_status = 0;
-    D_0095BB44[0] = 30;
+    nmlModelMpeg2CrossFadeTime[0] = 30;
 }
 
 void nmlModelClear(void) {
@@ -5400,3 +5319,103 @@ void nmlModelFlushClear(void) {
     FLUSH_BACK_BUFFER();
     nmlModelClear();
 }
+
+static int s_aShapeMathPara[10] = { 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048 };
+
+const NmlProRealOrigin proRealOrigin = { .word0 = 0ULL, .word8 = 4575657222557270016ULL };
+
+const char magicCarpetComeName[16] = "MagicCarpetCome";
+
+const ProjectionQuad circleScaleVector = { .v = { .x = 64.0f, .y = -64.0f, .z = 8000.0f, .w = 1.0f } };
+
+const ProjectionQuad circleCenterVector = { .v = { .x = 64.0f, .y = 64.0f, .z = 1.0f, .w = 1.0f } };
+
+const ProjectionQuad circleOffsetVector = { .v = { .x = 2048.0f, .y = 2048.0f, .z = 0.0f, .w = 1.0f } };
+
+const NmlVector4Overlay mapScaleVector = { .v = { .x = 128.0f, .y = -128.0f, .z = 8000.0f, .w = 1.0f } };
+
+const NmlVector4Overlay mapCenterVector = { .v = { .x = 256.0f, .y = 224.0f, .z = 1.0f, .w = 1.0f } };
+
+const NmlVector4Overlay mapOffsetVector = { .v = { .x = 2045.5f, .y = 2046.0f, .z = 0.0f, .w = 1.0f } };
+
+float nonLinearCameraMinAngleY = 1.0471975803375244f;
+
+float nonLinearCameraMaxAngleY = 5.235987663269043f;
+
+f32 shapeWeightEpsilon = 0.0010000000474974513f;
+
+f32 stealthDepthScale = 0.018999999389052391f;
+
+f32 stealthSortThreshold = 0.0099999997764825821f;
+
+f32 stealthDistanceTolerance = 0.10000000149011612f;
+
+float calcSampleThreshold = 0.0099999997764825821f;
+
+f32 entryClipWidthScale = 1.2999999523162842f;
+
+float entryPartsClipScale = 1.2000000476837158f;
+
+float textureTransparencyMin = 0.0010000000474974513f;
+
+float circleViewLimitMin = 0.0010000000474974513f;
+
+static int s_nCircleShadow = 0;
+
+static float s_fSortOffset = 0.0f;
+
+static int s_nDispVisible = -1;
+
+static int s_nStencilVal = -2147483648;
+
+static int s_nCount = 0;
+
+static int s_nModel = 0;
+
+static int s_nBlocks = 1;
+
+static int s_nDirect = 0;
+
+static int s_nBlocksAlpha = 0;
+
+static int s_nBlocksAlphaLast = 0;
+
+static int s_nAnotherStudio = 0;
+
+static int s_nUseStealth = 0;
+
+static int s_nUseGnosys = 0;
+
+static int s_nMapAlphaEntry = 0;
+
+static int s_nMainCameraWarp = 0;
+
+static int s_nRenderCancel = 0;
+
+char faceNameSuffix[8] = "_face";
+
+const char eyeMaterialName[8] = "eye";
+
+int g_nPacketOver = 0;
+
+static float s_aTexOffset[2];
+
+static Vector4 s_inScale;
+
+static NmlParentBuffer s_aParentBuf[512];
+
+static Vector4 s_inGblPointC[4];
+
+static Vector4 s_inGblFogPara;
+
+static Vector4 s_inMainCameraPos;
+
+static Vector4 s_inMainCameraAng;
+
+static NmlAlphaGroup s_aAlphaGroup[512];
+
+static u64 TestEnv_0_004A9170[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x4000000000008001ULL, 0x000000000000eeeeULL, 0x0000000000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x0000000000000000ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
+
+static NmlPointQuadword s_inGblPointP[4];
+
+static NmlPointQuadword s_inGblFogCol[1];

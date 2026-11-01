@@ -82,20 +82,20 @@ void Java_xeno_util_Window_signal__I(JThread *thread, WindowSignalCall *argument
     arguments->window->closeState = arguments->value;
 }
 
-const char D_004D1658[] = "/[clear()]";
+const char windowClearCommand[] = "/[clear()]";
 
 void Java_xeno_util_Window_clear__(JThread *thread, WindowCall *arguments,
                                    void *result)
 {
-    MSG_print2(arguments->window, D_004D1658, -1);
+    MSG_print2(arguments->window, windowClearCommand, -1);
 }
 
-const char D_004D1668[] = "/[close()]";
+const char windowCloseCommand[] = "/[close()]";
 
 void Java_xeno_util_Window_close__(JThread *thread, WindowCall *arguments,
                                    void *result)
 {
-    MSG_print2(arguments->window, D_004D1668, -1);
+    MSG_print2(arguments->window, windowCloseCommand, -1);
 }
 
 /* The call block of Window.waitkey(int)/Window.wait(int): the target window
@@ -105,7 +105,7 @@ typedef struct WindowIntCall {
     int value;
 } WindowIntCall;
 
-const char D_004D1678[] = "/[waitkey(%d)]";
+const char windowWaitKeyCommandFormat[] = "/[waitkey(%d)]";
 extern int sprintf(char *destination, const char *format, ...);
 
 void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
@@ -115,11 +115,11 @@ void Java_xeno_util_Window_waitkey__I(JThread *thread, WindowIntCall *arguments,
     char buffer[0x40];
 
     window = arguments->window;
-    sprintf(buffer, D_004D1678, arguments->value);
+    sprintf(buffer, windowWaitKeyCommandFormat, arguments->value);
     MSG_print2(window, buffer, -1);
 }
 
-const char D_004D1688[] = "/[wait(%d)]";
+const char windowWaitCommandFormat[] = "/[wait(%d)]";
 
 void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
                                    void *result)
@@ -128,7 +128,7 @@ void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
     char buffer[0x40];
 
     window = arguments->window;
-    sprintf(buffer, D_004D1688, arguments->value);
+    sprintf(buffer, windowWaitCommandFormat, arguments->value);
     MSG_print2(window, buffer, -1);
 }
 
@@ -332,10 +332,10 @@ void Java_xeno_util_Window_setName__Ljava_lang_String_(JThread *thread, void *ar
 {
 }
 
-const char D_004D1698[] = "/[waitkey(0);close()]";
+const char windowCloseWaitKeyCommand[] = "/[waitkey(0);close()]";
 
 void Java_xeno_util_Window_closeWaitKey__(JThread *thread, WindowCall *arguments,
                                           void *result)
 {
-    MSG_print2(arguments->window, D_004D1698, -1);
+    MSG_print2(arguments->window, windowCloseWaitKeyCommand, -1);
 }

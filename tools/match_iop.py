@@ -79,6 +79,24 @@ def resolve_original_object(root, profile, packet):
         require(len(matching) == 1, "hard IOP FDR filename/index differs from original ECOFF")
         hard[assignment["index"]] = assignment["filename"]
     functions = packet.get("functions")
+    data_fdr = packet.get("data_fdr")
+    if functions == [] and data_fdr is not None:
+        # A data-only original object (e.g. ssd_data.c) has an FDR without
+        # procedures; it is selected by its exact original index and filename.
+        require(isinstance(data_fdr, dict) and set(data_fdr) == {"index", "filename"},
+                "invalid data-only IOP FDR selector")
+        matching = [r for r in records if r["index"] == data_fdr["index"]
+                    and r["source"] == data_fdr["filename"]]
+        require(len(matching) == 1 and not any(s["kind"] in (6, 14) for s in matching[0]["symbols"]),
+                "data-only IOP FDR differs from original ECOFF or has procedures")
+        record = matching[0]
+        return dict(schema="iop-original-object/1", unit=unit, binary_sha256=module["sha256"],
+                    fdr_index=record["index"], filename=record["source"],
+                    fdr_file_offset=record["fdr_offset"],
+                    float_mode="hard" if record["index"] in hard else "soft",
+                    mdebug_sha256=section["sha256"],
+                    policy_sha256=digest(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()),
+                    functions=[])
     require(isinstance(functions, list) and functions,
             "IOP object selector has no original functions")
     resolved, seen = [], set()

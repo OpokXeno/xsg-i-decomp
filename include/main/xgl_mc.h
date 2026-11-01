@@ -8,14 +8,4 @@ extern void xglMcSetMapName(const unsigned char *primary_euc_name,
 
 void xglMcWriteMapName(char *buffer, int slot);
 
-typedef struct McRequestArguments {
-    int slot;
-    const unsigned char *path;
-    int buffer;
-    int size;
-} McRequestArguments;
-
-int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
-                 int *result);
-
 #endif /* INCLUDE_MAIN_XGL_MC_H */

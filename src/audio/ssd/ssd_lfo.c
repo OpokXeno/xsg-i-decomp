@@ -10,6 +10,8 @@ typedef struct SsdLfoParam {
     unsigned short fadeStep;
 } SsdLfoParam;
 typedef struct SsdLfoState SsdLfoState;
+/* One LFO waveform step; only the noise steps also read the driver work. */
+typedef int (*SsdLfoProcedure)(SsdLfoState *state, void *ssd);
 struct SsdLfoState {
     SsdLfoParam param;
     int (*process)(SsdLfoState *, void *);
@@ -59,7 +61,7 @@ typedef struct SsdDriverState {
     int lfoRandom;
 } SsdDriverState;
 
-extern int (*WaveformTable[])(SsdLfoState *, void *);
+extern SsdLfoProcedure WaveformTable[];
 
 void SsdInitLfoWork(SsdLfoWork *work);
 void SsdInitLfoParam(SsdLfoWork *work, SsdLfoParam *params);
@@ -329,3 +331,23 @@ int SsdGetRSLFORandom(SsdDriverState *work)
     work->lfoRandom = random;
     return random & 0x7fff;
 }
+
+/* LFO waveform procedures by waveform number; unused numbers are off. */
+SsdLfoProcedure WaveformTable[16] = {
+    /*  0 */ (SsdLfoProcedure)SsdLfoRectangularSingleProc,
+    /*  1 */ (SsdLfoProcedure)SsdLfoRectangularDoubleProc,
+    /*  2 */ (SsdLfoProcedure)SsdLfoTriangularSingleProc,
+    /*  3 */ (SsdLfoProcedure)SsdLfoTriangularDoubleProc,
+    /*  4 */ (SsdLfoProcedure)SsdLfoSawtoothSingleProc,
+    /*  5 */ (SsdLfoProcedure)SsdLfoSawtoothSingleProc,
+    /*  6 */ SsdLfoNoiseSingleProc,
+    /*  7 */ SsdLfoNoiseDoubleProc,
+    /*  8 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /*  9 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /* 10 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /* 11 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /* 12 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /* 13 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /* 14 */ (SsdLfoProcedure)SsdLfoOffProc,
+    /* 15 */ (SsdLfoProcedure)SsdLfoOffProc,
+};

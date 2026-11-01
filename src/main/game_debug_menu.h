@@ -123,16 +123,16 @@ extern DebugMenuPageState GameLoopState;
 
 static const char *tbl_1_00367A70[];
 
-extern const char D_004C04B0[];
-extern char D_004D9F18[];
-extern char D_004D9F20[];
-extern const char D_004C0528[];
-extern const char D_004C0538[];
-extern char D_004D9F48[];
-extern const char D_004C0548[];
-extern char D_004D9F28[];
-extern char D_004D9F30[];
-extern char D_004D9F38[];
+extern const char debugMenuHeaderLabel[];
+extern char memoryUsedGlyph[];
+extern char debugCursorText[];
+extern const char yesDisp1Text[];
+extern const char yesSoftText[];
+extern char noText[];
+extern const char playerPositionLabel[];
+extern char mapChangeIdNameFormat[];
+extern char debugPathFormat[];
+extern char scriptJumpIdFormat[];
 
 /* SaveData (include/umbrella/public.h) up to the leader's battle id
  * (+0x100a4); the TU reads only that halfword. */
@@ -209,38 +209,38 @@ extern unsigned char SnapDrawCreditFlag;
 
 extern u8 GameDiskChangeT10K;
 
-extern const char D_004C03A8[];
+extern const char debugFlagsHeaderLabel[];
 
-extern char D_004D9F00[];
+extern char fullWidthCursorText[];
 
-extern char D_004D9F08[];
+extern char hexDigitFormat[];
 
-extern char D_004D9F10[];
+extern char snapQualityFormat[];
 
 static const char *tbl_0_00367A50[];
 
 
-extern const char D_004C0310[17];
-extern const char D_004C0328[17];
-extern const char D_004C0340[19];
-extern const char D_004C0358[13];
-extern const char D_004C0368[19];
-extern const char D_004C0380[15];
-extern const char D_004C0390[19];
-extern const char D_004C0410[11];
-extern const char D_004C0420[13];
-extern const char D_004C0430[9];
-extern const char D_004C0440[15];
-extern const char D_004C0450[15];
-extern const char D_004C0460[15];
-extern const char D_004C0470[9];
-extern const char D_004C0480[11];
-extern const char D_004C0490[13];
-extern const char D_004C04A0[11];
-extern const char D_004C04D0[16];
-extern const char D_004C04E0[16];
-extern const char D_004C04F0[16];
-extern const char D_004C0500[16];
-extern const char D_004C0510[24];
+extern const char discCheckLabel[17];
+extern const char alphaOnCaptureLabel[17];
+extern const char modelNumberCheckLabel[19];
+extern const char snapQualityLabel[13];
+extern const char snapCreditLabel[19];
+extern const char modelNumberTagLabel[15];
+extern const char cfCameraSwitchLabel[19];
+extern const char scanlineInterpolationLabel[11];
+extern const char runEventLabel[13];
+extern const char runCfLabel[9];
+extern const char sceneFolderLabel[15];
+extern const char mapFolderLabel[15];
+extern const char modelFolderLabel[15];
+extern const char snapLabel[9];
+extern const char runBattleLabel[11];
+extern const char changeLeaderLabel[13];
+extern const char changeMapLabel[11];
+extern const char memoryUsedFormat[16];
+extern const char memoryRemainFormat[16];
+extern const char snapShotFileNameFormat[16];
+extern const char dataDirectoryPath[16];
+extern const char dataTestDirectoryPath[24];
 
 #endif /* SRC_MAIN_GAME_DEBUG_MENU_H */

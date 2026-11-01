@@ -17,17 +17,15 @@ static MenuShopWorkData *MenuShopWork;
 
 /* Referenced original data recovered from this translation unit. */
 
-const char D_004C7858[40] = "List                   Price";
+const char menuShopPriceListTitleText[40] = "List                   Price";
 
-extern const char D_004DB230[];
+extern const char menuShopBulletTitleText[];
 
 typedef struct ShopDataCategory {
     unsigned short count;
     unsigned char unmodeled_02[30];
     unsigned short slots[4];
 } ShopDataCategory;
-
-
 
 typedef union ShopDataTail {
     struct {
@@ -37,15 +35,11 @@ typedef union ShopDataTail {
     unsigned short agwsSlots[4];
 } ShopDataTail;
 
-
-
 typedef struct MenuShopListRow {
     const char *name;
     int amount;
     unsigned char flag;
 } MenuShopListRow;
-
-
 
 typedef struct MenuShopWindowDX {
     short x;
@@ -58,8 +52,6 @@ typedef struct MenuShopWindowDX {
     unsigned char unmodeled_11[0x183];
 } MenuShopWindowDX;
 
-
-
 typedef struct MenuShopMessage {
     unsigned char unmodeled_00;
     unsigned char mode;
@@ -71,16 +63,12 @@ typedef struct MenuShopMessage {
     const char *text;
 } MenuShopMessage;
 
-
-
 typedef struct MenuShopEx2Work {
     unsigned char unmodeled_00[4];
     int color;
     MenuShopWindowDX window;
     MenuShopMessage message;
 } MenuShopEx2Work;
-
-
 
 typedef struct MenuShopWeapon {
     unsigned short shopParameter1;
@@ -92,8 +80,6 @@ typedef struct MenuShopWeapon {
     short bullet;
     unsigned short shopParameter2;
 } MenuShopWeapon;
-
-
 
 /* Nine 0x28-byte categories and the final eight-byte slot/count view share
  * the original 0x170-byte storage extent. */
@@ -153,8 +139,6 @@ typedef struct MenuShopWindowSP {
     unsigned char state;
 } MenuShopWindowSP;
 
-
-
 static MenuShopWindowSP *MenuShopWinSP;
 
 extern unsigned char MenuKeepSelect[0x64];
@@ -181,8 +165,6 @@ struct MenuShopPasMessage {
     unsigned char unmodeled_1c[0x28];
 };
 
-
-
 struct MenuShopModelTransform {
     unsigned char unmodeled_00[0x10];
     Vector4 position;
@@ -191,14 +173,10 @@ struct MenuShopModelTransform {
     float fade;
 };
 
-
-
 struct MenuShopModelActor {
     unsigned char unmodeled_00[0xC0];
     struct MenuShopModelTransform transform;
 };
-
-
 
 struct MenuShopModelUnit {
     unsigned char unmodeled_00[0x10];
@@ -210,16 +188,12 @@ struct MenuShopModelUnit {
     struct MenuShopModelActor *actor;
 };
 
-
-
 struct MenuShopModelCallbackData {
     unsigned char unmodeled_00[0x10];
     unsigned char state;
     unsigned char unmodeled_11[0x0B];
     int modelId;
 };
-
-
 
 /* The map anchors nine 0x28-byte count records and a separate 8-byte tail.
  * The remaining bytes stay explicitly unmodeled. */
@@ -228,8 +202,6 @@ struct MenuShopAgwsListState {
     unsigned char unmodeled_00[0x160];
     unsigned short itemIds[4];
 };
-
-
 
 typedef struct AgwsModelTransform {
     unsigned char unmodeled_00[0x10];
@@ -283,8 +255,6 @@ typedef struct MenuShopUnitData {
     unsigned char unmodeled_70[0x110];
 } MenuShopUnitData;
 
-
-
 struct MenuShopListWork {
     unsigned char state;
     unsigned char active;
@@ -294,28 +264,20 @@ struct MenuShopListWork {
     MenuShopWindowSP window;
 };
 
-
-
 struct MenuShopSortOption {
     unsigned char type;
     unsigned char unmodeled_01[3];
     int order;
 };
 
-
-
 struct MenuShopSortOptionTable {
     struct MenuShopSortOption entries[9];
 };
-
-
 
 typedef struct MenuShopLineContext {
     unsigned char unmodeled_00[0x10];
     unsigned char mode;
 } MenuShopLineContext;
-
-
 
 typedef struct MenuShopLineRow {
     int text_id;
@@ -323,8 +285,6 @@ typedef struct MenuShopLineRow {
     short position;
     short target;
 } MenuShopLineRow;
-
-
 
 typedef struct MenuShopLineDisplay {
     unsigned char unmodeled_00[3];
@@ -335,29 +295,19 @@ typedef struct MenuShopLineDisplay {
     int unmodeled_48;
 } MenuShopLineDisplay;
 
-
-
 struct MenuShopRowCountTable {
     unsigned char values[18];
 };
-
-
 
 extern int MenuShopListChange00(int list);
 
 typedef signed char s8;
 
-
-
 typedef int s32;
-
-
 
 #define NULL ((void *)0)
 
 typedef struct { unsigned char bytes[8]; } M2C_BLOCK8;
-
-
 
 typedef struct MenuShopSortEntry {
     const short *itemIds;
@@ -365,35 +315,25 @@ typedef struct MenuShopSortEntry {
     int count;
 } MenuShopSortEntry;
 
-
-
 typedef struct MenuShopSortTable {
     MenuShopSortEntry entries[11];
 } MenuShopSortTable;
 
-
-
-extern const MenuShopSortTable D_004C7738;
+extern const MenuShopSortTable menuShopRecordSortTable;
 
 struct MenuShopEquipRecord {
     unsigned char unmodeled_00[0x5e];
     short itemIds[3][3];
 };
 
-
-
 struct MenuShopEquipScratch {
     int partyIds[15];
     int slotIndex[9];
 };
 
-
-
 int PartyAgwsGet(int *);
 
 typedef struct { unsigned char bytes[4]; } M2C_BLOCK4;
-
-
 
 typedef union {
     struct {
@@ -405,11 +345,7 @@ typedef union {
     s16 ids[11];
 } MenuShopIconIds;
 
-
-
 typedef long long s64;
-
-
 
 /* The calculator and unit snapshots each copy a complete 0x180-byte record.
  * Only the statistics used by the shop are modeled here. */
@@ -425,8 +361,6 @@ typedef struct ShopCalculatedPara {
     unsigned short currentHp;
     unsigned char unmodeled_36[0x14A];
 } ShopCalculatedPara;
-
-
 
 ShopCalculatedPara *func_00A11108(int, int *, int *);
 
@@ -444,8 +378,6 @@ typedef struct MenuShopAccessoryData {
     unsigned char shopParameter2;
     unsigned char shopParameter3;
 } MenuShopAccessoryData;
-
-
 
 extern MenuShopAccessoryData *func_A1A548(int item);
 
@@ -467,10 +399,6 @@ int MenuSelectMove(int, int, int);
 
 int MenuSelectMove2(int, int, int);
 
-
-
-
-
 int dataMoneyBoxDec(s32);
 
 int dataMoneyBoxInc(s32);
@@ -479,35 +407,31 @@ void xglFontDebugHex(int, int, unsigned int, int);
 
 void xglFontDebugPrintf(int, int, const char *, ...);
 
-extern const char D_004C7A68[];
+extern const char menuShopDebugModeFormat[];
 
-extern const char D_004C7A78[];
+extern const char menuShopDebugCategoryFormat[];
 
-extern const char D_004C7A88[];
+extern const char menuShopDebugListFormat[];
 
-extern const char D_004C7A98[];
+extern const char menuShopDebugUnitSelectionFormat[];
 
-extern u8 D_004DB238[];
+extern u8 menuShopBulletTailFirst[];
 
-extern u8 D_004DB240[];
+extern u8 menuShopBulletTailSecond[];
 
-extern u8 D_004DB248[];
+extern u8 menuShopBulletTailThird[];
 
-extern u8 D_004DB250[];
+extern u8 menuShopBulletTailFourth[];
 
 typedef struct MenuShopItemData {
     unsigned char unmodeled_00[4];
     unsigned short flags;
 } MenuShopItemData;
 
-
-
 typedef struct MenuShopAttackData {
     unsigned char unmodeled_00[10];
     unsigned short flags;
 } MenuShopAttackData;
-
-
 
 extern MenuShopWeapon *dataWpnGet(int item);
 
@@ -521,19 +445,9 @@ extern MenuShopItemData *func_A1A4E8(int item);
 #include "main/xgl_sound.h"
 extern PadPrefix PadData;
 
-
 void WindowSPSet(WindowSPCursor *cursor);
 void WindowSPMain(WindowSPCursor *cursor);
 void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
-
-
-
-
-
-
-
-
-
 
 typedef struct MenuShopPasMessageSlot {
     unsigned char unmodeled_00;
@@ -547,8 +461,6 @@ typedef struct MenuShopPasMessageSlot {
     unsigned char unmodeled_1c[0x28];
 } MenuShopPasMessageSlot;
 
-
-
 typedef struct MenuShopPasBounds {
     short x1;
     short y1;
@@ -557,14 +469,10 @@ typedef struct MenuShopPasBounds {
     short y2;
 } MenuShopPasBounds;
 
-
-
 typedef struct MenuShopPasWindow {
     WindowDX common;
     unsigned char unmodeled_30[0x194 - 0x30];
 } MenuShopPasWindow;
-
-
 
 typedef struct MenuShopPasData {
     unsigned char unmodeled_00[4];
@@ -576,45 +484,35 @@ typedef struct MenuShopPasData {
     MenuShopPasBounds bounds;
 } MenuShopPasData;
 
-
-
 /* Referenced original data recovered from this translation unit. */
 
 extern int PartyTakeAgwsCheck(int id);
 
-extern const char *D_004C74B0[4];
+extern const char * const menuShopMainPromptTexts[4];
 
-extern const char *D_004C7500[4];
+extern const char * const menuShopQuantityPromptTexts[4];
 
-extern const char *D_004C7520[3];
+extern const char * const menuShopUnitCountPromptTexts[3];
 
-extern const char *D_004C7580[4];
+extern const char * const menuShopFramePromptTexts[4];
 
-extern const char *D_004C75A0[3];
+extern const char * const menuShopPurchasedPromptTexts[3];
 
-extern const char *D_004C7650[8];
+extern const char * const menuShopExchangePromptTexts[8];
 
-extern const char *D_004DB138[];
+extern const char *menuShopMakerNames[];
 
-extern const char D_004DB140[];
+extern const char menuShopBlankText[];
 
-extern const char D_004DB148[];
+extern const char menuShopPeriodText[];
 
-extern const char D_004DB150[];
-
-
-
-
-
-
+extern char menuShopPeriodEndText[];
 
 typedef struct MenuShopInfoPanel {
     short textOffset[2];
     unsigned char unmodeled_04[8];
     const char *text;
 } MenuShopInfoPanel;
-
-
 
 typedef struct MenuShopInfoWork {
     unsigned char unmodeled_00[2];
@@ -627,10 +525,6 @@ typedef struct MenuShopInfoWork {
     unsigned char unmodeled_1b0[416];
     char message[128];
 } MenuShopInfoWork;
-
-
-
-
 
 extern MenuTextEntry *func_A2C918(unsigned int itemId);
 
@@ -646,31 +540,17 @@ extern const char *MenuNumberTextGet(long value, int digits, int flag);
 
 typedef struct MenuShopInfoT0 { const char *p[4]; } MenuShopInfoT0;
 
-
-
 typedef struct MenuShopInfoT16 { const char *p[4]; } MenuShopInfoT16;
-
-
 
 typedef struct MenuShopInfoT32 { const char *p[3]; } MenuShopInfoT32;
 
-
-
 typedef struct MenuShopInfoT48 { const char *p[4]; } MenuShopInfoT48;
-
-
 
 typedef struct MenuShopInfoT64 { const char *p[3]; } MenuShopInfoT64;
 
-
-
 typedef struct MenuShopInfoT80 { const char *p[8]; } MenuShopInfoT80;
 
-
-
 typedef struct MenuShopInfoT112 { const char *p[2]; } MenuShopInfoT112;
-
-
 
 struct MenuShopListDisplay {
     unsigned char state;
@@ -680,12 +560,6 @@ struct MenuShopListDisplay {
     int color;
     WindowSPCursor window;
 };
-
-
-
-
-
-
 
 extern void eSpriteSet(void *sprite, short spriteId);
 
@@ -705,8 +579,6 @@ struct MenuShopPortrait {
     short spriteId;
 };
 
-
-
 struct MenuShopUnitPanel {
     unsigned char state;
     unsigned char active;
@@ -720,17 +592,13 @@ struct MenuShopUnitPanel {
     BattleWinCursor cursor;
 };
 
-
-
-extern const char D_004DB1B8[];
+extern const char menuShopTargetTagText[];
 
 extern unsigned short MenuFaceEpidGet(int unitId, int smallPortrait);
 
 struct MenuShopIconIds {
     short ids[11];
 };
-
-
 
 struct MenuShopIconSprite {
     signed char state;
@@ -746,8 +614,6 @@ struct MenuShopIconSprite {
     short spriteId;
 };
 
-
-
 struct MenuShopIconDisplay {
     signed char state;
     unsigned char unmodeled_01;
@@ -762,13 +628,11 @@ struct MenuShopIconDisplay {
     struct MenuShopIconSprite sprites[11];
 };
 
+extern const struct MenuShopIconIds menuShopIconSpriteTable;
 
+extern const float menuShopIconScaleGrowStep;
 
-extern const struct MenuShopIconIds D_004C79F8;
-
-extern const float D_004D7E64;
-
-extern const float D_004D7E68;
+extern const float menuShopIconScaleShrinkStep;
 
 struct MenuShopParameterLabel {
     unsigned char state;
@@ -784,8 +648,6 @@ struct MenuShopParameterLabel {
     unsigned char unmodeled_10[12];
     const char *text;
 };
-
-
 
 struct MenuShopParameterNumber {
     unsigned short x;
@@ -804,8 +666,6 @@ struct MenuShopParameterNumber {
     unsigned char unmodeled_18[0x78];
 };
 
-
-
 struct MenuShopParameterDisplay {
     unsigned char state;
     unsigned char active;
@@ -817,23 +677,17 @@ struct MenuShopParameterDisplay {
     struct MenuShopParameterNumber numbers[9];
 };
 
-
-
 struct MenuShopParameterDigits8 { unsigned char digits[8]; };
-
-
 
 struct MenuShopParameterDigits7 { signed char digits[7]; };
 
+extern const struct MenuShopParameterDigits8 menuShopCharacterDigitsTable[];
 
+extern struct MenuShopParameterDigits7 menuShopAgwsDigitsTable[];
 
-extern const struct MenuShopParameterDigits8 D_004DB220[];
+static const char * msg00_9[7];
 
-extern const struct MenuShopParameterDigits7 D_004DB228[];
-
-extern const char *msg00_9[];
-
-extern const char *msg01_10[];
+static const char * msg01_10[6];
 
 static void MenuShopList(TskObject *task, struct MenuShopListDisplay *work);
 
@@ -885,7 +739,6 @@ struct MenuShopExDisplay {
     struct MenuShopExBullet bullet;
 };
 
-
 struct MenuShopSelectConfirm {
     WindowDX window;
     MenuTopMenuPanel panel;
@@ -904,22 +757,9 @@ struct MenuShopSelectDisplay {
     struct MenuShopSelectConfirm confirmation[2];
 };
 
+static const char * msg01_8_0036DBA0[] ;
 
-
-
-
-
-
-
-
-
-
-
-
-
-extern const char *msg01_8_0036DBA0[];
-
-extern const char D_004DB1A0[];
+extern const char menuShopPayText[];
 
 typedef struct MenuShopSeisan02Work {
     unsigned char state;
@@ -992,9 +832,9 @@ struct MenuShopSalePanel {
     struct MenuShopSaleRibbon ribbon;
 };
 
-extern const char *msg00_6[];
+static const char * msg00_6[3];
 
-extern const char *msg01_7[4];
+static const char * msg01_7[4];
 
 typedef enum MenuShopListIndex {
     MENU_SHOP_LIST_NONE = -1
@@ -1061,21 +901,21 @@ typedef struct MenuShopSelectWork {
     MenuShopChoicePane choices[1];
 } MenuShopSelectWork;
 
-extern const char *msg00_1_0036DB30[8];
+static const char * msg00_1_0036DB30[8];
 
-extern const char *msg01_2_0036DB50[4];
+static const char * msg01_2_0036DB50[4];
 
-extern const char D_004DB168[];
+extern const char menuShopMenuTagText[];
 
-extern const char D_004DB170[];
+extern const char menuShopSelectTagText[];
 
-extern const struct MenuShopSortOptionTable D_004C77D8;
+extern const struct MenuShopSortOptionTable menuShopSortOptionTable;
 
-extern const struct MenuShopRowCountTable D_004C7820;
+extern const struct MenuShopRowCountTable menuShopRowCountTable;
 
-extern const char *msg00_4_0036DB60[];
+static const char * msg00_4_0036DB60[] ;
 
-extern const char *msg00_5_0036DB68[];
+static const char * msg00_5_0036DB68[5];
 
 static void MenuShopModelMain(TskObject *task, void *data);
 
@@ -1199,13 +1039,12 @@ void MenuShopModelDisp(AgwsModelUnit *unit)
     }
 }
 
-
 typedef struct MenuShopModelTask {
     TskObject base;
     int modelId;
 } MenuShopModelTask;
 
-extern const float D_004C7390[4];
+extern const float menuShopModelCameraVector[4];
 extern int MenuModelOut[4];
 extern void xglCameraInit(StudioCamera *camera);
 extern void MenuModelCreate(int *slot, int partyId);
@@ -1232,8 +1071,8 @@ static void MenuShopModelMain(TskObject *task, void *data)
     switch (task->state) {
     case 0:
         *modelId = 0;
-        position[0] = ((s64 *)D_004C7390)[0];
-        position[1] = ((s64 *)D_004C7390)[1];
+        position[0] = ((s64 *)menuShopModelCameraVector)[0];
+        position[1] = ((s64 *)menuShopModelCameraVector)[1];
         MenuModelOut[0] = 0;
         memset(rotation, 0, 16);
         ((float *)rotation)[3] = 1.0f;
@@ -1295,9 +1134,7 @@ typedef struct MenuShopHelpWork {
     MenuShopPasBounds bounds;
 } MenuShopHelpWork;
 
-
-
-extern const char *msg00_0_0036DAF0[];
+static const char * msg00_0_0036DAF0[16];
 extern void endPrintExtFunc(int depth, int mode, void *vertices);
 
 static void MenuShopPas(TskObject *task, void *data)
@@ -1405,13 +1242,13 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
     unsigned char *unit;
     short value;
 
-    tab0 = *(MenuShopInfoT0 *)D_004C74B0;
-    tab16 = *(MenuShopInfoT16 *)D_004C7500;
-    tab32 = *(MenuShopInfoT32 *)D_004C7520;
-    tab48 = *(MenuShopInfoT48 *)D_004C7580;
-    tab64 = *(MenuShopInfoT64 *)D_004C75A0;
-    tab80 = *(MenuShopInfoT80 *)D_004C7650;
-    tab112 = *(MenuShopInfoT112 *)D_004DB138;
+    tab0 = *(MenuShopInfoT0 *)menuShopMainPromptTexts;
+    tab16 = *(MenuShopInfoT16 *)menuShopQuantityPromptTexts;
+    tab32 = *(MenuShopInfoT32 *)menuShopUnitCountPromptTexts;
+    tab48 = *(MenuShopInfoT48 *)menuShopFramePromptTexts;
+    tab64 = *(MenuShopInfoT64 *)menuShopPurchasedPromptTexts;
+    tab80 = *(MenuShopInfoT80 *)menuShopExchangePromptTexts;
+    tab112 = *(MenuShopInfoT112 *)menuShopMakerNames;
 
     switch (task->state) {
     case 0:
@@ -1450,7 +1287,7 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
     case 48:
     case 144:
         if (MenuShopWork->itemId == 0) {
-            eMessageCpy(work->message, D_004DB140);
+            eMessageCpy(work->message, menuShopBlankText);
         } else if ((MenuShopWork->itemId >> 16) == 7) {
             if (MenuShopWork->modelId >= 23)
                 eMessageCpy(work->message, tab112.p[0]);
@@ -1491,7 +1328,7 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
             eMessageCpy(work->message, MenuNumberTextGet(MenuShopWork->quantity, 2, 0));
             eMessageCat(tab64.p[0]);
             eMessageCat(MenuTextGet(MenuShopWork->itemId)->name);
-            eMessageCat(D_004DB140);
+            eMessageCat(menuShopBlankText);
             eMessageCat(tab64.p[MenuShopWork->mode + 1]);
         }
         break;
@@ -1509,7 +1346,7 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
         break;
     case 208:
         if (MenuShopWork->listIndex < 0 || MenuShopWork->equipmentId == 0) {
-            eMessageCpy(work->message, D_004DB140);
+            eMessageCpy(work->message, menuShopBlankText);
         } else {
             eMessageCpy(work->message, (const char *)func_A2C968(MenuShopWork->equipmentId)->auxiliary);
         }
@@ -1537,9 +1374,9 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
                 if (MenuShopWork->equipmentId != 0)
                     eMessageCat(func_A2C918(MenuShopWork->equipmentId)->name);
             }
-            eMessageCat(D_004DB148);
+            eMessageCat(menuShopPeriodText);
         } else {
-            eMessageCpy(work->message, D_004DB140);
+            eMessageCpy(work->message, menuShopBlankText);
         }
         break;
     case 214:
@@ -1555,7 +1392,7 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
             if (MenuShopWork->equipmentId != 0)
                 eMessageCat(func_A2C918(MenuShopWork->equipmentId)->name);
         }
-        eMessageCat(D_004DB150);
+        eMessageCat(menuShopPeriodEndText);
         break;
     default:
         targetY = 480;
@@ -1566,8 +1403,6 @@ static void MenuShopInfo(TskObject *task, MenuShopInfoWork *work)
     work->panel.text = work->message;
     WindowDXMain((WindowDX *)(void *)(&work->window));
 }
-
-
 
 static void MenuShopSelect(TskObject *task, void *data)
 {
@@ -1613,7 +1448,7 @@ static void MenuShopSelect(TskObject *task, void *data)
             work->menus[i].window.height = 102;
             work->menus[i].window.close_callback_arg = &work->menus[i].panel;
             work->menus[i].window.close_callback = (void (*)(WindowDX *, void *))MenuSelectWindow;
-            work->menus[i].window.tag_id = D_004DB168;
+            work->menus[i].window.tag_id = menuShopMenuTagText;
             work->menus[i].panel.cursor = 0;
             work->menus[i].panel.commands = ListMake(i);
             work->menus[i].panel.displayMode = 2;
@@ -1627,7 +1462,7 @@ static void MenuShopSelect(TskObject *task, void *data)
             work->choices[i].window.width = 169;
             work->choices[i].window.height = 102;
             work->choices[i].window.style = work->depth;
-            work->choices[i].window.tag_id = D_004DB170;
+            work->choices[i].window.tag_id = menuShopSelectTagText;
             work->choices[i].panel.choices = msg01_2_0036DB50[3];
             work->choices[i].panel.prompt = msg01_2_0036DB50[0];
             work->choices[i].window.close_callback_arg = &work->choices[i].panel;
@@ -1791,7 +1626,7 @@ void MenuShopSortSet(int list, int type, int order, int option)
     MenuShopSortTable table;
     int *output = MenuSortAddrGet(list);
 
-    table = D_004C7738;
+    table = menuShopRecordSortTable;
 
     if (type == 0x12)
         type = 9;
@@ -1984,7 +1819,6 @@ void MenuShopListColorChange(int list, int kind)
     }
 }
 
-
 int MenuShopListChange00(int list)
 {
     struct MenuShopSortOptionTable sortOptions;
@@ -2000,13 +1834,13 @@ int MenuShopListChange00(int list)
         MenuListMake(0, -10);
         MenuShopListColorChange(0, 0);
     } else {
-        sortOptions = D_004C77D8;
+        sortOptions = menuShopSortOptionTable;
         MenuSortSet(0, sortOptions.entries[MenuShopWork->category].type,
                     sortOptions.entries[MenuShopWork->category].order);
         MenuListMake(0, 0);
         MenuShopListColorChange(0, 0);
     }
-    rowCounts = D_004C7820;
+    rowCounts = menuShopRowCountTable;
     shop = MenuShopWorkRead();
     columns = 1;
     visibleRows = 7;
@@ -2048,7 +1882,7 @@ int MenuShopListChange01(int list)
     window->height = 222;
     window->width = window_width;
     MenuShopWinSP->columns = 1;
-    MenuShopWinSP->title = D_004C7858;
+    MenuShopWinSP->title = menuShopPriceListTitleText;
     MenuShopWinSP->row_count = 7;
     MenuShopWinSP->items = MenuListGet(0);
     WindowSPItemChange((WindowSPCursor *)(void *)((void *)MenuShopWinSP));
@@ -2071,7 +1905,7 @@ static void MenuShopList(TskObject *task, struct MenuShopListDisplay *work)
         work->color = 0xffff0;
         work->window.style = 0xffff0;
         work->window.draw_flags = 7;
-        work->window.title = D_004DB140;
+        work->window.title = menuShopBlankText;
         work->window.rows = 0xb;
         work->window.height = 0x10e;
         work->window.state = 0;
@@ -2632,7 +2466,7 @@ static void MenuShopSeisan02(TskObject *task, MenuShopSeisan02Work *work)
         work->window.style = work->ticker;
         work->window.width = 208;
         work->window.height = 80;
-        work->window.tag_id = D_004DB1A0;
+        work->window.tag_id = menuShopPayText;
         tagSlot = &work->window.tag_id;
         work->window.state = 1;
         WindowDXMain(&work->window);
@@ -2784,7 +2618,7 @@ static void MenuShopEx02(TskObject *task, struct MenuShopUnitPanel *work)
         work->ribbon.style = work->depth;
         work->ribbon.width = 0x100;
         work->ribbon.height = 0x90;
-        eTagFontSet((ETagFont *)(void *)(&work->label), D_004DB1B8);
+        eTagFontSet((ETagFont *)(void *)(&work->label), menuShopTargetTagText);
         work->label.style = work->depth + 2;
         for (i = 0; i < MenuShopWork->unitCount; i++) {
             unitIds = MenuShopWork->unitIds;
@@ -2919,7 +2753,7 @@ static void MenuShopIcon(TskObject *task, struct MenuShopIconDisplay *work)
     switch (task->state) {
     case 0:
         {
-            struct MenuShopIconIds spriteIds = D_004C79F8;
+            struct MenuShopIconIds spriteIds = menuShopIconSpriteTable;
             work->depth = 0xfffff0;
             for (i = 0; i < 11; i++) {
                 eSpriteSet(&work->sprites[i], spriteIds.ids[i]);
@@ -2983,7 +2817,7 @@ static void MenuShopIcon(TskObject *task, struct MenuShopIconDisplay *work)
             }
             if (work->slide != 0)
                 work->slide--;
-            work->scale += D_004D7E64;
+            work->scale += menuShopIconScaleGrowStep;
             if (work->scale > 1.0f)
                 work->scale = 1.0f;
             break;
@@ -2997,7 +2831,7 @@ static void MenuShopIcon(TskObject *task, struct MenuShopIconDisplay *work)
         default:
             if (work->slide != 0)
                 work->slide--;
-            work->scale -= D_004D7E68;
+            work->scale -= menuShopIconScaleShrinkStep;
             if (work->scale < 0.0f)
                 work->scale = 0.0f;
             break;
@@ -3050,8 +2884,6 @@ typedef struct AgwsParaDisplay {
     short value[7];
 } AgwsParaDisplay;
 
-
-
 /* Partial equipment records: the four contiguous values are displayed by
  * frame selection, and the engine selection reads the first value at +8. */
 typedef struct MenuShopEquipmentValues {
@@ -3059,14 +2891,10 @@ typedef struct MenuShopEquipmentValues {
     unsigned short value[4];
 } MenuShopEquipmentValues;
 
-
-
 typedef struct MenuShopEngineValue {
     unsigned char unmodeled_00[8];
     unsigned short value;
 } MenuShopEngineValue;
-
-
 
 extern AgwsParaDisplay MenuShopPara;
 extern AgwsParaDisplay MenuShopPara2;
@@ -3248,8 +3076,8 @@ static void MenuShopParameter(TskObject *task, void *data);
 static void MenuShopParameter(TskObject *task, void *data)
 {
     struct MenuShopParameterDisplay *work = data;
-    struct MenuShopParameterDigits8 characterDigits = D_004DB220[0];
-    struct MenuShopParameterDigits7 agwsDigits = D_004DB228[0];
+    struct MenuShopParameterDigits8 characterDigits = menuShopCharacterDigitsTable[0];
+    struct MenuShopParameterDigits7 agwsDigits = menuShopAgwsDigitsTable[0];
     short targetX;
     int i;
 
@@ -3434,7 +3262,7 @@ static void MenuShopEx2(TskObject *task, MenuShopEx2Work *work)
         work->window.y = 0x100;
         work->window.width = 0xA6;
         work->window.height = 0x1E;
-        work->window.title = D_004DB230;
+        work->window.title = menuShopBulletTitleText;
         work->window.state = 1;
         WindowDXMain((WindowDX *)(void *)((void *)&work->window));
         work->window.state = 3;
@@ -3462,7 +3290,7 @@ static void MenuShopEx2(TskObject *task, MenuShopEx2Work *work)
 }
 
 /* MenuShopEx2 takes the window title by address; the string follows it in .sdata. */
-const char D_004DB230[8] = "Bullet";
+const char menuShopBulletTitleText[8] = "Bullet";
 
 /* PrintLine consumes x/y, depth and RGBA records until a zero depth. */
 typedef struct MenuShopDividerVertex {
@@ -3480,16 +3308,12 @@ typedef struct MenuShopDividerVertex {
     };
 } MenuShopDividerVertex;
 
-
-
 typedef struct MenuShopDividerWork {
     unsigned char unmodeled_00[3];
     unsigned char alpha;
     int depth;
     MenuShopDividerVertex vertices[6];
 } MenuShopDividerWork;
-
-
 
 extern void endPrintExtFunc(int depth, int mode, void *vertices);
 
@@ -3601,7 +3425,6 @@ void MenuShopInfoSet(void)
     }
 }
 
-
 /* Each list selection updates the item and its signed model key together. */
 #define MENU_SHOP_PREVIEW_ITEM(listIndex) \
     { \
@@ -3617,15 +3440,11 @@ typedef struct MenuShopSelection {
     u8 quantityLimit;
 } MenuShopSelection;
 
-
-
 typedef struct MenuShopItem {
     int listIndex;
     int itemId;
     int modelId;
 } MenuShopItem;
-
-
 
 typedef struct MenuShopAgws {
     short unitId;
@@ -3636,8 +3455,6 @@ typedef struct MenuShopAgws {
     signed char unitSelection;
     signed char sort_mode_selector;
 } MenuShopAgws;
-
-
 
 static inline MenuShopSelection *MenuShopSelectionGet(void)
 {
@@ -3657,8 +3474,6 @@ static inline MenuShopAgws *MenuShopAgwsGet(void)
 typedef struct MenuShopParty {
     short unitIds[6];
 } MenuShopParty;
-
-
 
 static inline MenuShopParty *MenuShopPartyGet(void)
 {
@@ -4310,11 +4125,15 @@ void MenuShopCore(void) {
     MenuShopWork->stateFlags &= 0xFD;
     xglFontDebugHex(0, 0x48, MenuShopWork->state, 2);
     xglFontDebugHex(0, 0x50, MenuShopWork->nextState, 2);
-    xglFontDebugPrintf(0, 0x60, D_004C7A68, MenuShopWork->mode);
-    xglFontDebugPrintf(0, 0x68, D_004C7A78, MenuShopWork->category);
-    xglFontDebugPrintf(0, 0x70, D_004C7A88, MenuShopWork->listIndex);
-    xglFontDebugPrintf(0, 0x80, D_004C7A98, MenuShopWork->unitSelection);
+    xglFontDebugPrintf(0, 0x60, menuShopDebugModeFormat, MenuShopWork->mode);
+    xglFontDebugPrintf(0, 0x68, menuShopDebugCategoryFormat, MenuShopWork->category);
+    xglFontDebugPrintf(0, 0x70, menuShopDebugListFormat, MenuShopWork->listIndex);
+    xglFontDebugPrintf(0, 0x80, menuShopDebugUnitSelectionFormat, MenuShopWork->unitSelection);
 }
+
+static XglTaskScheduler * MenuShopTask;
+
+static unsigned char * ShopDataBufTop;
 
 void MenuShopMain(int shopType)
 {
@@ -4327,7 +4146,7 @@ void MenuShopMain(int shopType)
     extern unsigned int GameLoopState[];
     extern XglTaskScheduler *MenuShopTask;
     extern unsigned char *ShopDataBufTop;
-    extern const char D_004C7AA8[];
+    extern const char menuShopDataPath[];
     extern void *MenuWorkEndGet(void);
     extern unsigned char *MenuBgTaskInit(unsigned char *work, int cameraId);
     extern void *xglTaskInitial(void *pool, int capacity, int flags);
@@ -4466,7 +4285,7 @@ void MenuShopMain(int shopType)
     MenuFontLoad(1, 1);
     WindowTexLoad(0, 0x10001);
     WindowTexLoad(0, 0x10002);
-    MenuLoadFile(D_004C7AA8, ShopDataBufTop);
+    MenuLoadFile(menuShopDataPath, ShopDataBufTop);
     xglSoundEffectNormalID(1, 0);
 
     while (MenuLoadSync() != 0) {
@@ -4541,10 +4360,290 @@ void MenuShopMain(int shopType)
 }
 
 /* MenuShopModelMain copies all four coordinates to the camera at +0xD0. */
-const float D_004C7390[4] = { -2.0f, 1.8f, 8.5f, 1.0f };
+const float menuShopModelCameraVector[4] = { -2.0f, 1.8f, 8.5f, 1.0f };
 
-extern const char D_004C7670[];
-extern const char D_004C7698[];
+extern const char menuShopHyamsMakerText[];
+extern const char menuShopVectorMakerText[];
 
 /* MenuShopInfo copies this pair and chooses the AG or VX maker prompt. */
-const char *D_004DB138[2] = { D_004C7670, D_004C7698 };
+const char *menuShopMakerNames[2] = { menuShopHyamsMakerText, menuShopVectorMakerText };
+
+extern const char menuShopAgwsWeaponsText[24];
+extern const char menuShopAgwsAmmoText[16];
+extern const char MenuShopSellText[5];
+extern const char MenuShopItemsText[6];
+extern const char menuShopBuyFrameText[16];
+extern const char menuShopCharacterAccessoriesText[24];
+extern const char MenuShopCardsText[6];
+extern const char menuShopFhpRestorationText[16];
+extern const char menuShopAgwsText[16];
+extern const char menuShopBuyGeneratorText[16];
+extern const char menuShopCharacterAmmoText[16];
+extern const char menuShopAgwsTuningText[16];
+extern const char menuShopCharacterWeaponsText[24];
+extern const char menuShopAgwsAccessoriesText[24];
+extern const char MenuShopStoreText[5];
+extern const char MenuShopBuyText[4];
+extern const char menuShopQuitText[8];
+extern const char menuShopBuyGeneratorCommandText[16];
+extern const char menuShopRestoreFhpText[16];
+extern const char menuShopSellItPromptText[16];
+extern const char menuShopBuyItPromptText[24];
+extern const char menuShopYesNoText[8];
+extern const char menuShopRestoreItPromptText[16];
+extern const char menuShopStockColumnText[16];
+extern const char menuShopPriceColumnText[16];
+extern const char menuShopMoneyText[8];
+extern const char menuShopTargetText[8];
+extern const char menuShopPriceText[8];
+extern const char menuShopEquipText[8];
+extern const char menuShopStockText[8];
+extern const char menuShopResultText[8];
+extern const char menuShopTotalText[8];
+extern const char menuShopAglText[8];
+extern const char menuShopEatkText[8];
+extern const char menuShopVitText[8];
+extern const char menuShopDexText[8];
+extern const char menuShopStrText[8];
+extern const char menuShopEvaText[8];
+extern const char menuShopEdefText[8];
+extern const char menuShopParmText[8];
+extern const char menuShopFhpText[8];
+extern const char menuShopDpowText[8];
+extern const char menuShopWaglText[8];
+extern const char menuShopEarmText[8];
+extern const char menuShopTuneAgwsText[16];
+extern const char menuShopBuyItemsWeaponsText[24];
+extern const char menuShopSellItemsWeaponsText[24];
+extern const char MenuShopQuitText[6];
+extern const char menuShopQuantityPromptText[32];
+extern const char MenuShopSelectText[8];
+extern const char menuShopSellItemsText[16];
+extern const char menuShopBuyItemsText[16];
+extern const char menuShopRestoreFhpDescriptionText[24];
+extern const char menuShopBuyGeneratorDescriptionText[32];
+extern const char menuShopBuyFrameDescriptionText[24];
+
+static const char * msg00_0_0036DAF0[16] = { MenuShopStoreText, MenuShopBuyText, MenuShopSellText, MenuShopItemsText, menuShopCharacterWeaponsText, menuShopCharacterAccessoriesText, menuShopCharacterAmmoText, menuShopAgwsWeaponsText, menuShopAgwsAccessoriesText, menuShopAgwsAmmoText, menuShopAgwsText, MenuShopCardsText, menuShopAgwsTuningText, menuShopFhpRestorationText, menuShopBuyFrameText, menuShopBuyGeneratorText };
+
+static const char * msg00_1_0036DB30[8] = { MenuShopBuyText, MenuShopSellText, menuShopAgwsTuningText, menuShopQuitText, menuShopBuyFrameText, menuShopBuyGeneratorCommandText, menuShopRestoreFhpText, menuShopQuitText };
+
+static const char * msg01_2_0036DB50[4] = { menuShopBuyItPromptText, menuShopSellItPromptText, menuShopRestoreItPromptText, menuShopYesNoText };
+
+static const char * msg00_4_0036DB60[] = { menuShopPriceColumnText, menuShopStockColumnText };
+
+static const char * msg00_5_0036DB68[5] = { menuShopStockText, menuShopMoneyText, menuShopTargetText, menuShopEquipText, menuShopPriceText };
+
+static const char * msg00_6[3] = { MenuShopBuyText, MenuShopSellText, menuShopPayText };
+
+static const char * msg01_7[4] = { menuShopStockText, menuShopTotalText, menuShopMoneyText, menuShopResultText };
+
+static const char * msg01_8_0036DBA0[] = { menuShopMoneyText, menuShopResultText };
+
+static const char * msg00_9[7] = { menuShopStrText, menuShopVitText, menuShopEatkText, menuShopEdefText, menuShopDexText, menuShopEvaText, menuShopAglText };
+
+static const char * msg01_10[6] = { menuShopFhpText, menuShopDpowText, menuShopParmText, menuShopEarmText, menuShopAglText, menuShopWaglText };
+
+AgwsParaDisplay MenuShopPara = { .value = { 0, 0, 0, 0, 0, 0, 0 } };
+
+AgwsParaDisplay MenuShopPara2 = { .value = { 0, 0, 0, 0, 0, 0, 0 } };
+
+const char menuShopBuyGeneratorText[16] = "Buy Generator ";
+
+const char menuShopBuyFrameText[16] = "Buy Frame";
+
+const char menuShopFhpRestorationText[16] = "FHP Restoration";
+
+const char menuShopAgwsTuningText[16] = "A.G.W.S. Tuning";
+
+const char menuShopAgwsText[16] = "A.G.W.S.";
+
+const char menuShopAgwsAmmoText[16] = "A.G.W.S. Ammo";
+
+const char menuShopAgwsAccessoriesText[24] = "A.G.W.S. Accessories";
+
+const char menuShopAgwsWeaponsText[24] = "A.G.W.S. Weapons";
+
+const char menuShopCharacterAmmoText[16] = "Character Ammo";
+
+const char menuShopCharacterAccessoriesText[24] = "Character Accessories";
+
+const char menuShopCharacterWeaponsText[24] = "Character Weapons";
+
+const char menuShopBuyItemsWeaponsText[24] = "Buy items and weapons.";
+
+const char menuShopSellItemsWeaponsText[24] = "Sell items and weapons.";
+
+const char menuShopTuneAgwsText[16] = "Tune A.G.W.S.";
+
+const char * const menuShopMainPromptTexts[4] = { menuShopBuyItemsWeaponsText, menuShopSellItemsWeaponsText, menuShopTuneAgwsText, MenuShopQuitText };
+
+const char menuShopBuyItemsText[16] = "Buy items.";
+
+const char menuShopSellItemsText[16] = "Sell items.";
+
+/* Text: quantity.\nPress \x1E\x01 to accept. */
+const char menuShopQuantityPromptText[32] = "quantity.\nPress \036\001 to accept.";
+
+const char * const menuShopQuantityPromptTexts[4] = { menuShopBuyItemsText, menuShopSellItemsText, MenuShopSelectText, menuShopQuantityPromptText };
+
+const char menuShopUnitOfText[16] = " unit(s) of ";
+
+const char menuShopBuyFrameDescriptionText[24] = "Buy an A.G.W.S. Frame.";
+
+const char menuShopBuyGeneratorDescriptionText[32] = "Buy an A.G.W.S. Generator.";
+
+const char menuShopRestoreFhpDescriptionText[24] = "Restore A.G.W.S. FHP.";
+
+const char * const menuShopFramePromptTexts[4] = { menuShopBuyFrameDescriptionText, menuShopBuyGeneratorDescriptionText, menuShopRestoreFhpDescriptionText, MenuShopQuitText };
+
+/* Text:  purchased.\x1F */
+const char menuShopPurchasedText[16] = " purchased.\037";
+
+const char menuShopFhpFullyRestoredText[32] = " FHP will be fully restored.";
+
+const char menuShopEquippedWithText[16] = " equipped with ";
+
+const char menuShopExchangeWithText[16] = "Exchange with ";
+
+const char menuShopPossessiveFrameText[16] = "'s frame ";
+
+const char menuShopPossessiveGeneratorText[16] = "'s generator ";
+
+const char menuShopExchangedWithText[32] = "has been exchanged with ";
+
+/* Text:  FHP has been fully restored. \x1F */
+const char menuShopFhpHasBeenRestoredText[32] = " FHP has been fully restored. \037";
+
+const char menuShopRestoreFhpText[16] = "Restore FHP ";
+
+const char menuShopBuyGeneratorCommandText[16] = "Buy Generator";
+
+const char menuShopRestoreItPromptText[16] = " Restore it\?";
+
+const char menuShopSellItPromptText[16] = " Sell it\?";
+
+const char menuShopBuyItPromptText[24] = " Buy it\?";
+
+const struct MenuShopSortOptionTable menuShopSortOptionTable = { .entries = { { .type = 1, .unmodeled_01 = { 0, 0, 0 }, .order = 0 }, { .type = 4, .unmodeled_01 = { 0, 0, 0 }, .order = -1 }, { .type = 16, .unmodeled_01 = { 0, 0, 0 }, .order = -1 }, { .type = 8, .unmodeled_01 = { 0, 0, 0 }, .order = -1 }, { .type = 4, .unmodeled_01 = { 0, 0, 0 }, .order = -2 }, { .type = 16, .unmodeled_01 = { 0, 0, 0 }, .order = -2 }, { .type = 8, .unmodeled_01 = { 0, 0, 0 }, .order = -2 }, { .type = 2, .unmodeled_01 = { 0, 0, 0 }, .order = -1 }, { .type = 2, .unmodeled_01 = { 0, 0, 0 }, .order = -1 } } };
+
+const struct MenuShopRowCountTable menuShopRowCountTable = { .values = { 11, 9, 9, 9, 6, 9, 9, 4, 3, 11, 7, 9, 9, 6, 9, 9, 4, 3 } };
+
+/* Text: List{x 653}{x 524}Stock */
+const char menuShopStockColumnText[16] = "List\003\215\003\014Stock";
+
+/* Text: List{x 653}{x 536}Price */
+const char menuShopPriceColumnText[16] = "List\003\215\003\030Price";
+
+const char menuShopDebugModeFormat[16] = "tra  %3d";
+
+const char menuShopDebugCategoryFormat[16] = "cate %3d";
+
+const char menuShopDebugListFormat[16] = "list %3d";
+
+const char menuShopDebugUnitSelectionFormat[16] = "ag_sl %3d";
+
+const char menuShopDataPath[40] = "data\\endou\\shop\\shopdata.bin";
+
+const float menuShopIconScaleGrowStep = 0.20000000298023224f;
+
+const float menuShopIconScaleShrinkStep = 0.20000000298023224f;
+
+const char menuShopBlankText[8] = "";
+
+const char menuShopPeriodText[8] = ".";
+
+const char menuShopQuitText[8] = "Quit";
+
+const char menuShopYesNoText[8] = "Yes\nNo";
+
+const char menuShopMenuTagText[8] = "Menu";
+
+const char menuShopSelectTagText[8] = "Select";
+
+/* Text: \x01Price */
+const char menuShopPriceText[8] = "\001Price";
+
+/* Text: \x01Equip */
+const char menuShopEquipText[8] = "\001Equip";
+
+/* Text: \x01Target */
+const char menuShopTargetText[8] = "\001Target";
+
+/* Text: \x01Money */
+const char menuShopMoneyText[8] = "\001Money";
+
+/* Text: \x01Stock */
+const char menuShopStockText[8] = "\001Stock";
+
+const char menuShopPayText[8] = "Pay";
+
+/* Text: \x01Result */
+const char menuShopResultText[8] = "\001Result";
+
+/* Text: \x01Total */
+const char menuShopTotalText[8] = "\001Total";
+
+const char menuShopTargetTagText[8] = "Target";
+
+/* Text: \x01AGL */
+const char menuShopAglText[8] = "\001AGL";
+
+/* Text: \x01EVA */
+const char menuShopEvaText[8] = "\001EVA";
+
+/* Text: \x01DEX */
+const char menuShopDexText[8] = "\001DEX";
+
+/* Text: \x01EDEF */
+const char menuShopEdefText[8] = "\001EDEF";
+
+/* Text: \x01EATK */
+const char menuShopEatkText[8] = "\001EATK";
+
+/* Text: \x01VIT */
+const char menuShopVitText[8] = "\001VIT";
+
+/* Text: \x01STR */
+const char menuShopStrText[8] = "\001STR";
+
+/* Text: \x01WAGL */
+const char menuShopWaglText[8] = "\001WAGL";
+
+/* Text: \x01EARM */
+const char menuShopEarmText[8] = "\001EARM";
+
+/* Text: \x01PARM */
+const char menuShopParmText[8] = "\001PARM";
+
+/* Text: \x01DPOW */
+const char menuShopDpowText[8] = "\001DPOW";
+
+/* Text: \x01FHP */
+const char menuShopFhpText[8] = "\001FHP";
+
+const struct MenuShopParameterDigits8 menuShopCharacterDigitsTable[1] = { { .digits = { 3, 3, 3, 3, 2, 2, 2, 3 } } };
+
+extern const char MenuShopIsText[];
+extern const char MenuShopGoldUnitText[];
+extern const char MenuShopSoldText[];
+extern const char MenuShopPeriodText[];
+
+const char * const menuShopUnitCountPromptTexts[3] = { MenuShopIsText, MenuShopGoldUnitText, menuShopUnitOfText };
+
+const char * const menuShopPurchasedPromptTexts[3] = { menuShopUnitOfText, menuShopPurchasedText, MenuShopSoldText };
+
+const char * const menuShopExchangePromptTexts[8] = { menuShopFhpFullyRestoredText, menuShopEquippedWithText, MenuShopPeriodText, menuShopExchangeWithText, menuShopPossessiveFrameText, menuShopPossessiveGeneratorText, menuShopExchangedWithText, menuShopFhpHasBeenRestoredText };
+
+const MenuShopSortTable menuShopRecordSortTable = { { { (const short *)&ShopData.records[0], 1, 20 }, { (const short *)&ShopData.records[1], 3, 20 }, { (const short *)&ShopData.records[2], 5, 20 }, { (const short *)&ShopData.records[3], 4, 20 }, { (const short *)&ShopData.records[4], 3, 20 }, { (const short *)&ShopData.records[5], 5, 20 }, { (const short *)&ShopData.records[6], 4, 20 }, { (const short *)&ShopData.tail, 7, 4 }, { 0, 0, 0 }, { (const short *)&ShopData.records[7], 11, 20 }, { (const short *)&ShopData.records[8], 12, 20 } } };
+
+const struct MenuShopIconIds menuShopIconSpriteTable = { { 0x0109, 0x010a, 0x0322, 0x0324, 0x0325, 0x0328, 0x0326, 0x0327, 0x0329, 0x032a, 0x0323 } };
+
+/* Text: . \x1F */
+char menuShopPeriodEndText[8] = ". \037";
+
+struct MenuShopParameterDigits7 menuShopAgwsDigitsTable[1] = { { { 4, 3, 3, 3, 2, 2, 3 } } };
+
+const char menuShopHyamsMakerText[40] = "Hyams Heavy Industries - AG Series";
+
+const char menuShopVectorMakerText[32] = "Vector Industries - VX Series";

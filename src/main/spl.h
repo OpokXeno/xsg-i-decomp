@@ -39,7 +39,7 @@ struct SplineWorkspace {
     float second_derivative[32];
 };
 
-extern float D_004D84FC;
+extern float minCardinalInterval;
 
 static void setWeightLen(SplinePoint *points, int count);
 static void setWeightLen2(SplinePoint *points, int count);

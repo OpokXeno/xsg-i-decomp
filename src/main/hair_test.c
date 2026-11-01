@@ -143,17 +143,21 @@ static int pause;
 
 static PpParticle cpos_00585200;
 
-const HairTestVectorBlock D_004CBBE0 = {
+const HairTestVectorBlock hairTestScaleVector = {
     .vector = { 1.0f, 1.0f, 1.0f, 1.0f }
 };
 
-const char D_004CBBF0[] = "\x0bHairTest";
+/* Text: {reset}HairTest */
+const char hairTestLabel[] = "\x0bHairTest";
 
-const char D_004CBC00[] = "\x0bmodel:%3d/%s";
+/* Text: {reset}model:%3d/%s */
+const char hairTestModelFormat[] = "\x0bmodel:%3d/%s";
 
-const char D_004CBC10[] = "\x0bmotion:%3d/%3d";
+/* Text: {reset}motion:%3d/%3d */
+const char hairTestMotionFormat[] = "\x0bmotion:%3d/%3d";
 
-const char D_004CBC20[16] = "\x0b* PUASE *";
+/* Text: {reset}* PUASE * */
+const char hairTestPauseLabel[16] = "\x0b* PUASE *";
 
 static HairResourceEntry list[] = {
     { 1, "shion" }, { 9, "shion1" }, { 10, "shion2" },
@@ -226,8 +230,6 @@ extern struct Actor *ACT_create(int actorIndex, int resourceId);
 
 extern JointChannel *__JNT_computeMatrix(JntHairJoint *joint, JointChannel *matrix, int consumerArgument);
 
-
-
 #define HAIR_RESOURCE(i) (list[(i)].resourceId)
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
@@ -238,8 +240,6 @@ typedef struct HairTestAct {
     unsigned char unmodeled_000[0x724];
     FpkFcvHeader *fcvHeader;
 } HairTestAct;
-
-struct Actor;
 
 typedef struct Actor {
     unsigned char unmodeled_000[16];
@@ -306,7 +306,7 @@ typedef struct HairTestPad {
 
 extern HairTestPad PadData[2];
 
-#define D_004D824C (9.9999997473787516e-05f)
+#define HAIR_TEST_PAD_SCALE (9.9999997473787516e-05f)
 
 static void InitTest(void)
 {
@@ -352,7 +352,7 @@ static void InitTest(void)
     initialPosition.vector.w = 1.0f;
     memset(&initialRotationAndScale[0], 0, sizeof(initialRotationAndScale[0]));
     initialRotationAndScale[0].vector.w = 1.0f;
-    initialRotationAndScale[1] = D_004CBBE0;
+    initialRotationAndScale[1] = hairTestScaleVector;
     ((HairTestActInitial *)pAct_004DC638)->position = initialPosition;
     ((HairTestActInitial *)pAct_004DC638)->rotation = initialRotationAndScale[0];
     ((HairTestActInitial *)pAct_004DC638)->scale = initialRotationAndScale[1];
@@ -364,11 +364,11 @@ static void InitTest(void)
 
 static void PrintDisp(void)
 {
-    xglFontDebugPrintf(0, 0, D_004CBBF0);
-    xglFontDebugPrintf(0x64, 0xC, D_004CBC00, listpos, list[listpos].name);
-    xglFontDebugPrintf(0x5C, 0x14, D_004CBC10, mot, getNumFCV(pAct_004DC638->fcvHeader) - 1);
+    xglFontDebugPrintf(0, 0, hairTestLabel);
+    xglFontDebugPrintf(0x64, 0xC, hairTestModelFormat, listpos, list[listpos].name);
+    xglFontDebugPrintf(0x5C, 0x14, hairTestMotionFormat, mot, getNumFCV(pAct_004DC638->fcvHeader) - 1);
     if (pause != 0) {
-        xglFontDebugPrintf(0x50, 0, D_004CBC20);
+        xglFontDebugPrintf(0x50, 0, hairTestPauseLabel);
     }
 }
 
@@ -406,8 +406,8 @@ void HairTest(void)
         if (PadData[0].held & 4) {
             lookY += 0.02f;
         }
-        moveX = PadData[0].rightX * D_004D824C;
-        moveZ = PadData[0].rightY * D_004D824C;
+        moveX = PadData[0].rightX * HAIR_TEST_PAD_SCALE;
+        moveZ = PadData[0].rightY * HAIR_TEST_PAD_SCALE;
         position = cpos_00585200.position.vector.x;
         horizontalMove = moveX;
         rotatedMove = horizontalMove * cos(-cry_004DC654);
@@ -940,5 +940,4 @@ static int getNumFCV(FpkFcvHeader *header)
     }
     return result;
 }
-
 

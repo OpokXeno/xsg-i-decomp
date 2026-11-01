@@ -141,22 +141,22 @@ struct EffectUnitPeer {
 };
 
 /* Field-name string constants, byte-identical in the original binary:
-   D_004DC130 "id", D_004DC138 "args", D_004DC140 "peer", D_004DC148 "px",
-   D_004DC150 "py", D_004DC158 "pz", D_004DC160 "rx", D_004DC168 "ry",
-   D_004DC170 "rz". None has a config/symbols/main.txt name yet. */
-extern char D_004DC130[];
-extern char D_004DC138[];
-extern char D_004DC140[];
-extern char D_004DC148[];
-extern char D_004DC150[];
-extern char D_004DC158[];
-extern char D_004DC160[];
-extern char D_004DC168[];
-extern char D_004DC170[];
+   effectIdName "id", effectArgsName "args", effectPeerName "peer", effectPositionXName "px",
+   effectPositionYName "py", effectPositionZName "pz", effectRotationXName "rx", effectRotationYName "ry",
+   effectRotationZName "rz". None has a config/symbols/main.txt name yet. */
+extern char effectIdName[];
+extern char effectArgsName[];
+extern char effectPeerName[];
+extern char effectPositionXName[];
+extern char effectPositionYName[];
+extern char effectPositionZName[];
+extern char effectRotationXName[];
+extern char effectRotationYName[];
+extern char effectRotationZName[];
 
 /* Radian-to-degree conversion constant (value 3.14159274f, i.e. pi); no
    config/symbols/main.txt name yet. */
-extern float D_004D83BC;
+extern float radianToDegreeScale;
 
 /* sefRewindEffectCf accepts the SchedulerState record defined by main/tu211. */
 typedef struct SchedulerState SchedulerState;

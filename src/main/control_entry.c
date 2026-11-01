@@ -1,19 +1,19 @@
 #include "common.h"
 #include "shared.h"
 
-extern char D_004D8A00[];
-extern char D_004D8A08[];
-extern char D_004D8A10[];
-extern char D_004D8A18[];
-extern char D_004D8A20[];
-extern char D_004D8A28[];
-extern char D_004D8A30[];
-extern char D_004D8A38[];
+extern char soundEffectBankName[];
+extern char sio2manModuleName[];
+extern char mcmanModuleName[];
+extern char mcservModuleName[];
+extern char padmanModuleName[];
+extern char libsdModuleName[];
+extern char ssdModuleName[];
+extern char rssdModuleName[];
 extern u8 *WorkEnd;
 extern int main_param_argc;
 extern int main_param_argv;
-extern const char D_004BE280[16];
-extern const char D_004BE290[32];
+extern const char soundRegist2Path[16];
+extern const char iopRebootImagePath[32];
 
 extern void BootDisplay(void);
 extern void xglThreadInitial(void);
@@ -56,8 +56,8 @@ void ControlEntry(void)
     int (*entry)(void);
 
     xglSleep();
-    xglSoundLoadEffect(D_004D8A00, WorkEnd, 0);
-    xglSoundLoadSwd(D_004BE280, WorkEnd);
+    xglSoundLoadEffect(soundEffectBankName, WorkEnd, 0);
+    xglSoundLoadSwd(soundRegist2Path, WorkEnd);
     SsdAddWaveData(WorkEnd, 0, 0);
     while (SsdSpuDmaCompleted(0) != 0) {
     }
@@ -113,12 +113,11 @@ extern void xglFontInitial(void);
 extern int xglMovieInit(void);
 extern void xglMenuInitial(void);
 
-
 static void InitializeSystem(void)
 {
     sceSifInitRpc(0);
     sceCdInit(0);
-    while (sceSifRebootIop(D_004BE290) == 0) {
+    while (sceSifRebootIop(iopRebootImagePath) == 0) {
     }
     while (sceSifSyncIop() == 0) {
     }
@@ -128,13 +127,13 @@ static void InitializeSystem(void)
     sceCdInit(0);
     sceCdMmode(2);
     sceFsReset();
-    xglCdSifLoadModule(D_004D8A08, 0);
-    xglCdSifLoadModule(D_004D8A10, 0);
-    xglCdSifLoadModule(D_004D8A18, 0);
-    xglCdSifLoadModule(D_004D8A20, 0);
-    xglCdSifLoadModule(D_004D8A28, 0);
-    xglCdSifLoadModule(D_004D8A30, 0);
-    xglCdSifLoadModule(D_004D8A38, 0);
+    xglCdSifLoadModule(sio2manModuleName, 0);
+    xglCdSifLoadModule(mcmanModuleName, 0);
+    xglCdSifLoadModule(mcservModuleName, 0);
+    xglCdSifLoadModule(padmanModuleName, 0);
+    xglCdSifLoadModule(libsdModuleName, 0);
+    xglCdSifLoadModule(ssdModuleName, 0);
+    xglCdSifLoadModule(rssdModuleName, 0);
     sceCdPOffCallback(xglCdPowerOffCB, 0);
     WorkEnd = (u8 *)0xA80000;
     xglSoundInitial();
@@ -167,16 +166,16 @@ int main(int argc, int argv)
     return 0;
 }
 
-char D_004D8A00[8] = "REGIST";
-char D_004D8A08[8] = "sio2man";
-char D_004D8A10[8] = "mcman";
-char D_004D8A18[8] = "mcserv";
-char D_004D8A20[8] = "padman";
-char D_004D8A28[8] = "libsd";
-char D_004D8A30[8] = "ssd";
-char D_004D8A38[8] = "rssd";
+char soundEffectBankName[8] = "REGIST";
+char sio2manModuleName[8] = "sio2man";
+char mcmanModuleName[8] = "mcman";
+char mcservModuleName[8] = "mcserv";
+char padmanModuleName[8] = "padman";
+char libsdModuleName[8] = "libsd";
+char ssdModuleName[8] = "ssd";
+char rssdModuleName[8] = "rssd";
 u8 *WorkEnd = 0;
 int main_param_argc = 0;
 int main_param_argv = 0;
-const char D_004BE280[16] = "sed\\REGIST2";
-const char D_004BE290[32] = "cdrom0:\\IOP\\IOPRP24D.IMG;1";
+const char soundRegist2Path[16] = "sed\\REGIST2";
+const char iopRebootImagePath[32] = "cdrom0:\\IOP\\IOPRP24D.IMG;1";

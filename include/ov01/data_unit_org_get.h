@@ -19,4 +19,14 @@ UnitInitData *dataUnitInitGet(int entry);
  * always returns 0 and ignores it. */
 int dataDefWpnGet(void *unit);
 
+/*
+ * One 12-byte entry of the special-weapon table, terminated by a zero
+ * tecId. dataTid2WepSp only reads tecId; dataFileLoadWepSp* (still asm)
+ * read the words at +0x04 and +0x08.
+ */
+typedef struct WepSpEntry {
+    int tecId;                       /* +0x00 */
+    unsigned char unmodeled_04[8];
+} WepSpEntry;
+
 #endif /* INCLUDE_OV01_DATA_UNIT_ORG_GET_H */

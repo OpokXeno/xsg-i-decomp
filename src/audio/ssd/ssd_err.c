@@ -1,4 +1,4 @@
-/* Partial SSD work prefix; the remaining original storage stays scaffolding. */
+/* Partial view of the SSD work prefix used by this FDR; SsdWork is defined in ssd_init.c. */
 struct SsdErrorState {
     signed char function_code;
     signed char warning_code;

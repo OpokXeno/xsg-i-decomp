@@ -176,7 +176,7 @@ extern SceneString *loadConstString(const char *bytes, int length);
 
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 
-const char D_004DC178[];
+const char cameraPeerFieldName[];
 
 /* Keep the field name data after Java_xeno_Camera_start's external use. */
 
@@ -401,12 +401,12 @@ void Java_xeno_Camera_transCNS__Ljava_lang_Object_FFF(JavaEnvironment *environme
     camera->mode[CAMERA_CHANNEL_TRANSLATE] = CAMERA_MODE_CONSTANT;
     if (JNI_isInstanceOf(peer, classJava_xeno_Chr) == 1) {
         peer_field = lookupClassField(classJava_xeno_Chr,
-                                      loadConstString(D_004DC178, -1), 0);
+                                      loadConstString(cameraPeerFieldName, -1), 0);
         actor = *(Actor **)(peer + peer_field->offset);
         animation->translate.constant.reference_position = &actor->position;
     } else if (JNI_isInstanceOf(peer, classJava_xeno_Unit) == 1) {
         peer_field = lookupClassField(classJava_xeno_Unit,
-                                      loadConstString(D_004DC178, -1), 0);
+                                      loadConstString(cameraPeerFieldName, -1), 0);
         actor = *(Actor **)(peer + peer_field->offset);
         animation->translate.constant.reference_position = &actor->position;
     }
@@ -500,12 +500,12 @@ void Java_xeno_Camera_viewCNS__Ljava_lang_Object_FFF(JavaEnvironment *environmen
     camera->mode[CAMERA_CHANNEL_VIEW] = CAMERA_MODE_CONSTANT;
     if (JNI_isInstanceOf(peer, classJava_xeno_Chr) == 1) {
         peer_field = lookupClassField(classJava_xeno_Chr,
-                                      loadConstString(D_004DC178, -1), 0);
+                                      loadConstString(cameraPeerFieldName, -1), 0);
         actor = *(Actor **)(peer + peer_field->offset);
         animation->view.constant.reference_position = &actor->position;
     } else if (JNI_isInstanceOf(peer, classJava_xeno_Unit) == 1) {
         peer_field = lookupClassField(classJava_xeno_Unit,
-                                      loadConstString(D_004DC178, -1), 0);
+                                      loadConstString(cameraPeerFieldName, -1), 0);
         actor = *(Actor **)(peer + peer_field->offset);
         animation->view.constant.reference_position = &actor->position;
     }
@@ -704,7 +704,7 @@ void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
         if (peer != 0) {
             if (JNI_isInstanceOf(peer, classJava_xeno_Chr) != 0) {
                 peer_field = lookupClassField(classJava_xeno_Chr,
-                                              loadConstString(D_004DC178, -1), 0);
+                                              loadConstString(cameraPeerFieldName, -1), 0);
                 /* `peer` is a field of the Java class xeno.Chr, so its
                  * position inside the object is the offset the JVM hands
                  * back at run time, exactly as CHR_sclX (src/main/chr.c)
@@ -1117,4 +1117,4 @@ void Java_xeno_Camera_setClipRange__FF(JavaEnvironment *environment,
     studio_camera->farClip = arguments->farClip;
 }
 
-const char D_004DC178[8] = "peer";
+const char cameraPeerFieldName[8] = "peer";

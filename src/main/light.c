@@ -12,11 +12,11 @@ typedef struct LightVectorCall {
     float z;
 } LightVectorCall;
 
-extern const char D_004DC180[];
-extern const char D_004DC188[];
+extern const char lightIdFieldName[];
+extern const char lightPeerFieldName[];
 /* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */
 #define PI_F (3.141592741f)
-#define D_004D83EC PI_F
+#define HALF_TURN_RADIANS PI_F
 
 extern SceneString *loadConstString(const char *bytes, int length);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
@@ -38,10 +38,10 @@ void Java_xeno_Light_setColor__FFF(JThread *thread, LightVectorCall *arguments)
     Vector4 intensity;
 
     id_field = lookupClassField(classJava_xeno_Light,
-                                loadConstString(D_004DC180, -1), 0);
+                                loadConstString(lightIdFieldName, -1), 0);
     light_id = *(int *)(object + id_field->offset);
     peer_field = lookupClassField(classJava_xeno_Light,
-                                  loadConstString(D_004DC188, -1), 0);
+                                  loadConstString(lightPeerFieldName, -1), 0);
     light = *(void **)(object + peer_field->offset);
     if (light == 0) {
         light = xglStudioGetLight2();
@@ -69,18 +69,18 @@ void Java_xeno_Light_setDirection__FFF(JThread *thread,
     Vector4 angles;
 
     id_field = lookupClassField(classJava_xeno_Light,
-                                loadConstString(D_004DC180, -1), 0);
+                                loadConstString(lightIdFieldName, -1), 0);
     light_id = *(int *)(object + id_field->offset);
     peer_field = lookupClassField(classJava_xeno_Light,
-                                  loadConstString(D_004DC188, -1), 0);
+                                  loadConstString(lightPeerFieldName, -1), 0);
     light = *(void **)(object + peer_field->offset);
     if (light == 0) {
         light = xglStudioGetLight2();
     }
 
-    angles.x = (arguments->x / 180.0f) * D_004D83EC;
-    angles.y = (arguments->y / 180.0f) * D_004D83EC;
-    angles.z = (arguments->z / 180.0f) * D_004D83EC;
+    angles.x = (arguments->x / 180.0f) * HALF_TURN_RADIANS;
+    angles.y = (arguments->y / 180.0f) * HALF_TURN_RADIANS;
+    angles.z = (arguments->z / 180.0f) * HALF_TURN_RADIANS;
     angles.w = 1.0f;
     xglLightAngle(light, light_id - 1, &angles);
 }
@@ -97,10 +97,10 @@ void Java_xeno_Light_setDirection2__FFF(JThread *thread,
     Vector4 direction;
 
     id_field = lookupClassField(classJava_xeno_Light,
-                                loadConstString(D_004DC180, -1), 0);
+                                loadConstString(lightIdFieldName, -1), 0);
     light_id = *(int *)(object + id_field->offset);
     peer_field = lookupClassField(classJava_xeno_Light,
-                                  loadConstString(D_004DC188, -1), 0);
+                                  loadConstString(lightPeerFieldName, -1), 0);
     light = *(void **)(object + peer_field->offset);
     if (light == 0) {
         light = xglStudioGetLight2();
@@ -165,5 +165,5 @@ void Java_xeno_Light_setGlobalPointLightReset__(void)
     nmlModelSetGlobalPointLightReset();
 }
 
-const char D_004DC180[8] = "id";
-const char D_004DC188[8] = "peer";
+const char lightIdFieldName[8] = "id";
+const char lightPeerFieldName[8] = "peer";

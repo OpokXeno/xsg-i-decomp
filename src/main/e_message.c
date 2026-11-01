@@ -69,9 +69,6 @@ void eMessageCat(char *src);
 
 /* Number of message sprites currently allocated by the print routines. */
 
-
-
-
 /* Current write position of the message text being built. */
 
 char *eMessageNextGyou(const char *text);
@@ -280,7 +277,6 @@ char *eMessageNextWaitKeySearch(char *text)
 }
 
 /* Partial sprite record: byte 18 is not interpreted by this TU. */
-
 
 void eMessageDrawType01(EMessageParam *message)
 {

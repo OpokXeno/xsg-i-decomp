@@ -13,7 +13,7 @@
  * independent of the other partial views other TUs give the same symbol
  * (GameLoopFlagsPrefix, GameLoopStateAddressView, ...; */
 
-extern const float D_004D7C08;
+extern const float cameraYawHalfTurn;
 
 struct CameraCenterSource {
     unsigned char unmodeled_00[0x10];
@@ -52,8 +52,6 @@ typedef struct GameLoopCameraView {
     unsigned char unmodeled_250[0x2a030 - 0x250];
 } GameLoopCameraView;
 
-
-
 extern GameLoopCameraView GameLoopState;
 
 #define MoveHokanStateFlag (GameLoopState.camera_flags)
@@ -63,9 +61,6 @@ extern GameLoopCameraView GameLoopState;
 
 void xglVectorScaleAddXYZ(float scale, Vector4 *destination,
                           const Vector4 *source, const Vector4 *other);
-
-
-
 
 static float CfCameraOfsNow[4];
 
@@ -153,18 +148,11 @@ struct CameraScratchpad {
     CameraPoint saved_position;                     /* +0x190 */
 };
 
-
-
-
 /* One record of the camera table CfCameraDefine (main:0x00362e80, 33 records
  * of 0xa0 bytes, defined by src/main/maptbl.c). Only the members the camera
  * update reads or resets are named. */
 
-
-
-
 /* The view block of the studio camera record, from StudioCamera + 0x90. */
-
 
 /* Interpolation state of the camera pair (position, look-at): the per-frame
  * step, the frames still to run and the yaw being blended, bss at
@@ -178,13 +166,9 @@ typedef struct HokanState {
     float current_yaw;        /* +0x14 */
 } HokanState;
 
-
-
 static HokanState HokanNow;
 
 typedef struct LayoutHeader LayoutHeader;
-
-
 
 /* Floor mesh header returned by UnduDataGetHeader: a triangle list whose
  * corners are byte offsets into the vertex block. */
@@ -196,8 +180,6 @@ struct CameraFloorTriangle {
     unsigned char unmodeled_16[2];
 };
 
-
-
 struct LayoutHeader {
     unsigned short triangle_count;        /* +0x00 */
     unsigned char unmodeled_02[2];
@@ -205,9 +187,6 @@ struct LayoutHeader {
     unsigned char unmodeled_08[4];
     const struct CameraFloorTriangle *triangles; /* +0x0c */
 };
-
-
-
 
 /* Query block of UnduCheck (still original bytes in src/main/Undulate.c): the
  * ground probe each camera point owns. Only the members the camera update
@@ -226,8 +205,6 @@ typedef struct CameraUnduParam {
     unsigned char unmodeled_28[0x18];
 } CameraUnduParam;
 
-
-
 static CameraUnduParam CamLookAt;
 static Vector4 CamLookAtPos;
 static CameraUnduParam CamPos;
@@ -237,8 +214,6 @@ extern LayoutHeader *UnduDataGetHeader(int, int);
 
 /* The camera record copied by value as doubleword pairs. */
 #include "main/maptbl.h"
-
-
 
 extern StudioCamera *xglStudioGetActiveCamera(void);
 extern float xglAtan2(float, float);
@@ -253,27 +228,21 @@ typedef struct CameraDefocusLayer {
     int parameters[16];
 } CameraDefocusLayer;
 
-
-
 extern CameraDefocusLayer GameDefocusParam[16];
 extern void GameDefocusCheck(void);
 void GameCameraChangeID(int id, int unused1, int unused2);
 
+extern const float nearestCenterInitialDistance;
 
+extern const float oneThirdCornerSum;
 
-extern const float D_004D7BB8;
-
-extern const float D_004D7BBC;
-
-extern const float D_004D7BC0;
+extern const float oneThirdCentroid;
 
 typedef struct CameraFloorVertex {
     float x;
     float y;
     float z;
 } CameraFloorVertex;
-
-
 
 extern double sqrt(double);
 
@@ -292,10 +261,7 @@ static __inline__ float FloorSlope(float rise, float run)
     return rise / run;
 }
 
-extern const float D_004D7BF0;
-
-
-
+extern const float cameraLookAtMargin;
 
 typedef struct CameraEnemyWork {
     unsigned char unmodeled_00[0x3830];
@@ -327,8 +293,6 @@ extern void nmlModelSetGlobalFogDist(float start, float end, float parameter0, f
 
 extern void nmlModelSetGlobalFogCol(const Vector4 *color);
 
-
-
 #define FLOOR_DETERMINANT(px, pz, qx, qz, rx, rz) \
     ((px) * (qz) + (qx) * (rz) + (rx) * (pz) - (px) * (rz) - (qx) * (pz) - (rx) * (qz))
 
@@ -344,9 +308,7 @@ static void CameraType1Core(void);
 
 typedef int s32;
 
-
 typedef s32 M2C_UNK;
-
 
 static void CameraType0(void);
 
@@ -621,7 +583,7 @@ static void GetNearestCenter(Vector4 *center, const LayoutHeader *header,
 
     count = header->triangle_count;
     nearest = 0;
-    best = D_004D7BB8;
+    best = nearestCenterInitialDistance;
     triangle = header->triangles;
     vertices = header->vertices;
     if (count != 0) {
@@ -640,8 +602,8 @@ static void GetNearestCenter(Vector4 *center, const LayoutHeader *header,
             corner_first = (const CameraFloorVertex *)(vertices + first_offset);
             corner_second = (const CameraFloorVertex *)(vertices + second_offset);
             corner_third = (const CameraFloorVertex *)(vertices + third_offset);
-            dx = (corner_first->x + corner_second->x + corner_third->x) * D_004D7BBC - point->x;
-            dz = (corner_first->z + corner_second->z + corner_third->z) * D_004D7BBC - point->z;
+            dx = (corner_first->x + corner_second->x + corner_third->x) * oneThirdCornerSum - point->x;
+            dz = (corner_first->z + corner_second->z + corner_third->z) * oneThirdCornerSum - point->z;
             distance = dx * dx + dz * dz;
             if (distance < best) {
                 best = distance;
@@ -653,9 +615,9 @@ static void GetNearestCenter(Vector4 *center, const LayoutHeader *header,
     first = (const CameraFloorVertex *)(vertices + nearest->corner[0]);
     second = (const CameraFloorVertex *)(vertices + nearest->corner[1]);
     third = (const CameraFloorVertex *)(vertices + nearest->corner[2]);
-    center->x = (first->x + second->x + third->x) * D_004D7BC0;
-    center->y = (first->y + second->y + third->y) * D_004D7BC0;
-    center->z = (first->z + second->z + third->z) * D_004D7BC0;
+    center->x = (first->x + second->x + third->x) * oneThirdCentroid;
+    center->y = (first->y + second->y + third->y) * oneThirdCentroid;
+    center->z = (first->z + second->z + third->z) * oneThirdCentroid;
 }
 
 static void CalcLookAt(struct CameraScratchpad *scratchpad)
@@ -1017,8 +979,8 @@ static void CameraType1Core(void)
               &scratchpad->view->look_at, &HokanNow.look_at_remaining);
     MoveHokan(scratchpad, HokanNow.position_step, &CamPosPos,
               &scratchpad->view->position, &HokanNow.position_remaining);
-    if (scratchpad->view->position.z - D_004D7BF0 < scratchpad->view->look_at.z) {
-        scratchpad->view->look_at.z = scratchpad->view->position.z - D_004D7BF0;
+    if (scratchpad->view->position.z - cameraLookAtMargin < scratchpad->view->look_at.z) {
+        scratchpad->view->look_at.z = scratchpad->view->position.z - cameraLookAtMargin;
     }
 }
 
@@ -1155,7 +1117,7 @@ static void CameraType4(void)
                 :
                 : "r" (&scratchpad->view->look_at), "r" (&scratchpad->view->position), "r" (&scratchpad->look_at_delta)
                 : "memory");
-            scratchpad->view->rotation.y = xglAtan2(scratchpad->look_at_delta.x, scratchpad->look_at_delta.z) + D_004D7C08;
+            scratchpad->view->rotation.y = xglAtan2(scratchpad->look_at_delta.x, scratchpad->look_at_delta.z) + cameraYawHalfTurn;
             horizontal = __builtin_sqrtf(scratchpad->look_at_delta.x * scratchpad->look_at_delta.x
                                              + scratchpad->look_at_delta.z * scratchpad->look_at_delta.z);
             scratchpad->view->rotation.x = xglAtan2(scratchpad->look_at_delta.y, horizontal);
@@ -1469,14 +1431,12 @@ void GameCamera(void)
     GameLoopState.camera_flags &= 0x3f;
 }
 
+const float nearestCenterInitialDistance = 1000000.0f;
 
+const float oneThirdCornerSum = 0.3333333432674408f;
 
-const float D_004D7BB8 = 1000000.0f;
+const float oneThirdCentroid = 0.3333333432674408f;
 
-const float D_004D7BBC = 0.3333333432674408f;
+const float cameraLookAtMargin = 0.0099999997764825821f;
 
-const float D_004D7BC0 = 0.3333333432674408f;
-
-const float D_004D7BF0 = 0.0099999997764825821f;
-
-const float D_004D7C08 = 3.1415927410125732f;
+const float cameraYawHalfTurn = 3.1415927410125732f;

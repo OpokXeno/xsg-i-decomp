@@ -41,7 +41,6 @@ typedef union GsClearPacket {
     XglQuadword quadwords[6];
 } GsClearPacket;
 
-
 /* GS PMODE register: display circuit enables and the alpha blend value. */
 typedef struct GsPmode {
     unsigned int en1 : 1;
@@ -105,7 +104,6 @@ typedef struct GsDispEnv {
     u64 extdata;                       /* +0x40 */
     u64 extwrite;                      /* +0x48 */
 } GsDispEnv;
-
 
 /*
  * Packed GS registers of the draw-environment block below, laid out as
@@ -279,7 +277,6 @@ typedef union GsDrawPacket {
     XglQuadword quadwords[16];
 } GsDrawPacket;
 
-
 extern GsDrawPacket DrawEnv;
 
 extern GsClearPacket ClearEnv;
@@ -392,8 +389,6 @@ volatile int VSyncCount = 0;
 
 int ScanLineInterpolate = 0;
 
-extern GsDrawPacket DrawEnv;
-
 extern void xglRenderInit(void);
 
 static void xglRenderMove(void);
@@ -472,12 +467,6 @@ typedef union RenderTestPacket {
 } RenderTestPacket;
 static RenderTestPacket TestEnv_0_004A8E80;
 
-extern GsDispEnv DispEnv;
-
-extern GsClearPacket ClearEnv;
-
-extern XglRenderState sRender;
-
 extern int sceGsSyncPath(int mode, int timeout);
 
 extern void xglStudioInit(void);
@@ -534,9 +523,6 @@ static XglRenderVram asVramBase[6];
 /* VIF DIRECT sends one GIFtag, one A+D PRIM, one RGBAQ and two XYZ2 values. */
 
 /* VIF error registers used by the original renderer initialization. */
-
-
-
 
 /* VIF DIRECT sends one GIFtag, one A+D PRIM, one RGBAQ and two XYZ2 values. */
 
@@ -1113,7 +1099,6 @@ void xglRenderEntry(void)
         xglSleep();
     }
 }
-
 
 static XglRenderReso asDispReso[6] = {
     { 0x31, 0, 640, 448 },

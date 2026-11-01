@@ -16,15 +16,15 @@ typedef struct YosikawaPadInputPrefix {
 } YosikawaPadInputPrefix;
 extern YosikawaPadInputPrefix PadData;
 static int csr;
-extern const char D_004DB9C8[];
+extern const char yosikawaTestCursorControl[];
 extern void HairTest(void);
 extern void WindTest(void);
 extern void ColliTest(void);
 static void (*funclist[3])(void);
-extern const char D_004CBB18[];
-extern const char D_004CBB28[];
-extern const char D_004CBB38[];
-extern const char D_004CBB48[];
+extern const char CallJavaMethodYosikawaTestText[];
+extern const char CallJavaMethodHairTestLabel[];
+extern const char CallJavaMethodWindTestLabel[];
+extern const char CallJavaMethodColliTestLabel[];
 extern void xglRenderClearFrame(void);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
@@ -79,15 +79,16 @@ void YosikawaTest(void)
             return;
         }
 
-        xglFontDebugPrintf(0, 0, D_004CBB18);
-        xglFontDebugPrintf(16, 16, D_004CBB28);
-        xglFontDebugPrintf(16, 24, D_004CBB38);
-        xglFontDebugPrintf(16, 32, D_004CBB48);
-        xglFontDebugPrintf(8, (csr * 8) + 16, D_004DB9C8);
+        xglFontDebugPrintf(0, 0, CallJavaMethodYosikawaTestText);
+        xglFontDebugPrintf(16, 16, CallJavaMethodHairTestLabel);
+        xglFontDebugPrintf(16, 24, CallJavaMethodWindTestLabel);
+        xglFontDebugPrintf(16, 32, CallJavaMethodColliTestLabel);
+        xglFontDebugPrintf(8, (csr * 8) + 16, yosikawaTestCursorControl);
         xglSleep();
     }
 }
 
 static int csr = 0;
-const char D_004DB9C8[8] = "\013\033\034";
+/* Text: {reset}{glyph 28} */
+const char yosikawaTestCursorControl[8] = "\013\033\034";
 static void (*funclist[3])(void) = { HairTest, WindTest, ColliTest };

@@ -12,9 +12,10 @@
 
 extern unsigned char EvtItemTbl[255 * 0x80];
 
-const char D_004CA4D0[16] = "Obtained %d G.";
+const char obtainedMoneyFormat[16] = "Obtained %d G.";
 
 const char evt_item_format_special[24] =
+    /* Text: Obtained {color #329BBE}%s{color #808080}. */
     "Obtained \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
 
 extern int dataBoxInc(int category, int id);
@@ -109,7 +110,8 @@ extern void sefDeleteEffectCf(int effectId);
 
 const char evt_item_format_normal[16] = "Obtained %s.";
 
-const char D_004CA508[24] = "Obtained %s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
+/* Text: Obtained %s {color #329BBE}%s{color #808080}. */
+const char obtainedColoredItemFormat[24] = "Obtained %s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80.";
 
 typedef struct ItemOwnerUnit {
     unsigned int flags;
@@ -130,12 +132,12 @@ extern void nmlModelSetPartsVisible(void *model, short partsNo, int visible);
 
 extern void DrawActiveCursol(ItemMapUnit *unit);
 
-
-#define D_004D7F7C (0.05f)
+#define UNIT_ITEM_SPIN_STEP (0.05f)
 
 extern signed char printflg;
 
-const char D_004CA530[32] = "Obtained %s%s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80";
+/* Text: Obtained %s%s {color #329BBE}%s{color #808080} */
+const char obtainedColoredCountItemFormat[32] = "Obtained %s%s \x0c\x32\x9b\xbe%s\x0c\x80\x80\x80";
 
 extern void nmlModelEntry(int entry);
 
@@ -184,7 +186,6 @@ static void taskItemGet(XglTaskPrefix *entry);
 
 /* Position records are copied by two aligned doubleword loads and stores. */
 
-
 typedef struct ItemBoxRecord {
     unsigned char category;
     unsigned char item;
@@ -225,57 +226,54 @@ extern int CallMethod_I(const char *method, int value);
 
 extern char *strcat(char *destination, const char *source);
 
-extern const char D_004DB730[];
+extern const char CreateEvtItemGetDigit9Text[];
 
-extern const char D_004DB738[];
+extern const char CreateEvtItemGetDigit8Text[];
 
-extern const char D_004DB740[];
+extern const char CreateEvtItemGetDigit7Text[];
 
-extern const char D_004DB748[];
+extern const char CreateEvtItemGetDigit6Text[];
 
-extern const char D_004DB750[];
+extern const char CreateEvtItemGetDigit5Text[];
 
-extern const char D_004DB758[];
+extern const char CreateEvtItemGetDigit4Text[];
 
-extern const char D_004DB760[];
+extern const char CreateEvtItemGetDigit3Text[];
 
-extern const char D_004DB768[];
+extern const char CreateEvtItemGetDigit2Text[];
 
-extern const char D_004DB770[];
+extern const char CreateEvtItemGetDigit1Text[];
 
-extern const char D_004DB778[];
-
-
+extern const char CreateEvtItemGetDigit0Text[];
 
 static const char *strno[10];
 
 extern ItemBoxRecord ItemBoxTbl[601];
 
 static const char *strno[10] = {
-    D_004DB778, D_004DB770, D_004DB768, D_004DB760, D_004DB758,
-    D_004DB750, D_004DB748, D_004DB740, D_004DB738, D_004DB730
+    CreateEvtItemGetDigit0Text, CreateEvtItemGetDigit1Text, CreateEvtItemGetDigit2Text, CreateEvtItemGetDigit3Text, CreateEvtItemGetDigit4Text,
+    CreateEvtItemGetDigit5Text, CreateEvtItemGetDigit6Text, CreateEvtItemGetDigit7Text, CreateEvtItemGetDigit8Text, CreateEvtItemGetDigit9Text
 };
 
 ItemBoxRecord ItemBoxTbl[601] = {{0}};
 
 unsigned char EvtItemTbl[255 * 0x80] = { 0 };
 
+const char obtainedCountItemFormat[24] = "Obtained %s%s %s";
 
-const char D_004CA550[24] = "Obtained %s%s %s";
+static const char itemBoxSerialErrorFormat[32] = "ItemBox serial error!! %d\n";
 
-static const char D_004CA5B0[32] = "ItemBox serial error!! %d\n";
+const char obtainedItemFormat[16] = "Obtained %s %s.";
 
-const char D_004CA520[16] = "Obtained %s %s.";
+static const char itemSymbolSerialErrorFormat[32] = "ItemSymbol serial error!! %d\n";
 
-static const char D_004CA5D0[32] = "ItemSymbol serial error!! %d\n";
+static const char unitDeleteFormat[48] = "unit koware delete id=0x%x serial=%d\n";
 
-static const char D_004CA650[48] = "unit koware delete id=0x%x serial=%d\n";
+const char illegalGroupFormat[16] = "Illegal grp %d\n";
 
-const char D_004CA568[16] = "Illegal grp %d\n";
+#define UNIT_ITEM_SYMBOL_SPIN_STEP (0.05f)
 
-#define D_004D7F60 (0.05f)
-
-#define D_004D7F64 (0.8f)
+#define UNIT_ITEM_PICKUP_DISTANCE (0.8f)
 
 /* Definitions follow their callers so references remain address-based. */
 
@@ -304,7 +302,7 @@ static void taskItemGet(XglTaskPrefix *entry)
         xglFlagsSet1(item_index + 0x79EC7, 1);
         task->window_created = 1;
         if (task->money != 0) {
-            sprintf(message, D_004CA4D0, task->money);
+            sprintf(message, obtainedMoneyFormat, task->money);
             dataMoneyBoxInc(task->money);
         } else if (task->count == 1) {
             task->item_name = GetItemName(task->category, item_id);
@@ -320,14 +318,14 @@ static void taskItemGet(XglTaskPrefix *entry)
             task->item_name = GetItemName(task->category, item_id);
             if (task->count < 10) {
                 if (task->category == 10) {
-                    sprintf(message, D_004CA508, strno[count], task->item_name);
+                    sprintf(message, obtainedColoredItemFormat, strno[count], task->item_name);
                 } else {
-                    sprintf(message, D_004CA520, strno[count], task->item_name);
+                    sprintf(message, obtainedItemFormat, strno[count], task->item_name);
                 }
             } else if (task->category == 10) {
-                sprintf(message, D_004CA530, strno[count / 10], strno[count % 10], task->item_name);
+                sprintf(message, obtainedColoredCountItemFormat, strno[count / 10], strno[count % 10], task->item_name);
             } else {
-                sprintf(message, D_004CA550, strno[count / 10], strno[count % 10], task->item_name);
+                sprintf(message, obtainedCountItemFormat, strno[count / 10], strno[count % 10], task->item_name);
             }
             if (count > 0) {
                 do {
@@ -428,7 +426,7 @@ char *GetItemName(int category, int item)
         name = dataEvtItmNameGet(item);
         return name != 0 ? name : deb;
     default:
-        printf(D_004CA568, category);
+        printf(illegalGroupFormat, category);
         return 0;
     }
 }
@@ -549,7 +547,7 @@ void InitItemBox(ItemMapUnit *unit)
         unit->serial = (unsigned short) -1;
         unit->update = 0;
         unit->draw = 0;
-        printf(D_004CA5B0, (short) info->itemNo);
+        printf(itemBoxSerialErrorFormat, (short) info->itemNo);
         return;
     }
     if (xglFlagsGet1(0x79EC7 + (short) info->itemNo) == 1) {
@@ -589,7 +587,7 @@ void InitItemSymbol(ItemMapUnit *unit)
         unit->draw = 0;
         unit->update = 0;
         unit->serial = (unsigned short) -1;
-        printf(D_004CA5D0, (short) info->itemNo);
+        printf(itemSymbolSerialErrorFormat, (short) info->itemNo);
         return;
     }
     if (xglFlagsGet1(0x79EC7 + (short) info->itemNo) == 1) {
@@ -784,12 +782,12 @@ void MAP_updateUnitItemSymbol(ItemMapUnit *unit)
     int (*callback)(XglTaskPrefix *);
 
     info = &unit->info;
-    unit->rotation.y += D_004D7F60;
+    unit->rotation.y += UNIT_ITEM_SYMBOL_SPIN_STEP;
     UwamonoCommonFunc(unit);
     switch (unit->actionSub) {
     case 0:
         if (CheckDist3D(&((ItemMapUnit *) GameLoopState[1])->position,
-                        &unit->position) < D_004D7F64 &&
+                        &unit->position) < UNIT_ITEM_PICKUP_DISTANCE &&
             (GameLoopState[4] & 0x20000) == 0) {
             scheduler = (XglTaskScheduler *) GameLoopState[2];
             callback = (int (*)(XglTaskPrefix *)) taskItemGet;
@@ -870,7 +868,7 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
     }
     unit->flags &= ~4;
     DrawActiveCursol(unit);
-    unit->rotation.y = unit->rotation.y + D_004D7F7C;
+    unit->rotation.y = unit->rotation.y + UNIT_ITEM_SPIN_STEP;
     switch (unit->actionSub) {
     case 0:
         if (unit->actionNo == 1) {
@@ -893,7 +891,7 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
         }
         nmlModelSetPartsVisible(((MapDisplayRecord *) GameLoopState[0x54 / sizeof(unsigned int)])->model, unit->serial, 0);
         if (printflg != 0) {
-            printf(D_004CA650, (short) unit->serial, unit->seChannel);
+            printf(unitDeleteFormat, (short) unit->serial, unit->seChannel);
         }
         unit->update = 0;
         unit->flags = 0;
@@ -902,8 +900,6 @@ void MAP_updateUnitItem(ItemMapUnit *unit)
     }
 }
 
-
-
 /* JP: 上物用デバッグメニュー
  * EN: Field object debug menu */
-const char D_004CA680[24] = "\276\345\312\252\315\321\245\307\245\320\245\303\245\260\245\341\245\313\245\345\241\274";
+const char PauseMenuFieldObjectLabel[24] = "\276\345\312\252\315\321\245\307\245\320\245\303\245\260\245\341\245\313\245\345\241\274";

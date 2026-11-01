@@ -184,13 +184,13 @@ static void SPL_cardinalInit(SplineState *spline)
 
                     workspace->interval[segment] = interval;
                     if (interval == 0.0f)
-                        workspace->interval[segment] = D_004D84FC;
+                        workspace->interval[segment] = minCardinalInterval;
                     workspace->slope[segment] =
                         (samples[next + component + 1] - samples[current + component + 1]) /
                         workspace->interval[segment];
                 } while (++segment < last);
             }
-        
+
             workspace->diagonal[0] =
                 (workspace->interval[0] + workspace->interval[1]) * 2.0f;
             workspace->right_hand_side[0] =
@@ -198,7 +198,7 @@ static void SPL_cardinalInit(SplineState *spline)
             for (segment = 1; segment < last; ++segment) {
                 float previous_interval = workspace->interval[segment - 1];
                 float previous_diagonal = workspace->diagonal[segment - 1];
-        
+
                 workspace->diagonal[segment] =
                     (workspace->interval[segment] + previous_interval) * 2.0f -
                     previous_interval * previous_interval / previous_diagonal;
@@ -453,3 +453,5 @@ void SPL_getValueXYZ(float *destination, void *state, float frame)
         return;
     }
 }
+
+float minCardinalInterval = 9.9999999747524271e-07f;

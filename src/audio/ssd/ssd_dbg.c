@@ -139,7 +139,7 @@ typedef struct SsdEffectPlayParameters {
 
 extern SsdGlobalWork SsdWork;
 
-extern SsdDebugState SsdDebWork;
+SsdDebugState SsdDebWork;
 
 extern const char *SsdSpuMemTypeTextTable[13];
 
@@ -398,3 +398,32 @@ char *NextTextPtr(char *text)
     }
     return text - 1;
 }
+
+/* Names of the SPU memory block types printed by the memory report. */
+char SsdSpuMemUnuseText[] = "Unuse";
+char SsdSpuMemSystemText[] = "System";
+char SsdSpuMemDriverText[] = "Driver";
+char SsdSpuMemStreamText[] = "Stream";
+char SsdSpuMemRevCore0Text[] = "RevCore0";
+char SsdSpuMemRevCore1Text[] = "RevCore1";
+char SsdSpuMemRevCore2Text[] = "RevCore2";
+char SsdSpuMemRevCore3Text[] = "RevCore3";
+char SsdSpuMemOWBlockText[] = "OWBlock";
+char SsdSpuMemWaveText[] = "Wave";
+char SsdSpuMemSampleText[] = "Sampling";
+
+const char *SsdSpuMemTypeTextTable[13] = {
+    SsdSpuMemUnuseText,
+    SsdSpuMemSystemText,
+    SsdSpuMemDriverText,
+    SsdSpuMemStreamText,
+    SsdSpuMemRevCore0Text,
+    SsdSpuMemRevCore1Text,
+    SsdSpuMemRevCore2Text,
+    SsdSpuMemRevCore3Text,
+    SsdSpuMemOWBlockText,
+    SsdSpuMemWaveText,
+    SsdSpuMemSampleText,
+    0,
+    0,
+};

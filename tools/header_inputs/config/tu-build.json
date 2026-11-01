@@ -711,18 +711,18 @@
           "c_runs": [
             {
               "also_referenced_by_c": [
-                "D_004D8798",
-                "D_004D879C",
-                "D_004D87A0",
-                "D_004D87A4",
-                "D_004D87A8",
-                "D_004D87AC",
-                "D_004D87B0",
-                "D_004D87B4",
-                "D_004D87B8",
-                "D_004D87BC",
-                "D_004D87C0",
-                "D_004D87C4"
+                "dctOddWeight1",
+                "dctOddWeight3",
+                "dctOddWeight5",
+                "dctOddWeight7",
+                "dctEvenWeight2",
+                "dctEvenWeight6",
+                "dctNegativeOddWeight7",
+                "dctNegativeOddWeight5",
+                "dctNegativeOddWeight3",
+                "dctNegativeOddWeight1",
+                "dctNegativeEvenWeight6",
+                "dctNegativeEvenWeight2"
               ],
               "basis": {
                 "cc1_assembly_sha256": "2fcd39b62896b9f6eae1f1e9cce12e05bb334a5ce1ebec0edbdd290df7dd8392",
@@ -2391,7 +2391,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004D27C8"
+                "nextAxisTable"
               ],
               "c_input_spans": [
                 {
@@ -2405,7 +2405,7 @@
                     12
                   ],
                   "symbols": [
-                    "D_004D27C8"
+                    "nextAxisTable"
                   ]
                 }
               ],
@@ -2841,7 +2841,7 @@
             ],
             "generated_by": [],
             "c_owned_symbols": [
-              "D_004D27C8"
+              "nextAxisTable"
             ],
             "note": "only the listed run comes from the TU's C object; the rest of the piece stays scaffolding"
           }
@@ -6165,7 +6165,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004DC4D0"
+                "nmlEmptyName"
               ],
               "c_input_spans": [
                 {
@@ -6179,7 +6179,7 @@
                     "0x004dc4d4"
                   ],
                   "symbols": [
-                    "D_004DC4D0"
+                    "nmlEmptyName"
                   ],
                   "credit": "verified"
                 }
@@ -6299,7 +6299,7 @@
               "s_inReflRotY",
               "eye_name",
               "lenz_name",
-              "D_004DC4D0"
+              "nmlEmptyName"
             ],
             "note": "only the listed runs come from the TU's C object; the rest of the piece stays scaffolding"
           }
@@ -7141,7 +7141,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004D4A60"
+                "rssdBindErrorFormat"
               ],
               "c_input_spans": [
                 {
@@ -7155,7 +7155,7 @@
                     "0x004d4a80"
                   ],
                   "symbols": [
-                    "D_004D4A60"
+                    "rssdBindErrorFormat"
                   ],
                   "credit": "verified"
                 }
@@ -7173,7 +7173,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004D4A80"
+                "rssdSifTransferSizeOverMessage"
               ],
               "c_input_spans": [
                 {
@@ -7187,7 +7187,7 @@
                     "0x004d4aa0"
                   ],
                   "symbols": [
-                    "D_004D4A80"
+                    "rssdSifTransferSizeOverMessage"
                   ],
                   "credit": "verified"
                 }
@@ -7205,7 +7205,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004D4AA0"
+                "rssdGetResultErrorMessage"
               ],
               "c_input_spans": [
                 {
@@ -7219,7 +7219,7 @@
                     "0x004d4ac0"
                   ],
                   "symbols": [
-                    "D_004D4AA0"
+                    "rssdGetResultErrorMessage"
                   ],
                   "credit": "verified"
                 }
@@ -7265,9 +7265,9 @@
             ],
             "generated_by": [],
             "c_owned_symbols": [
-              "D_004D4A60",
-              "D_004D4A80",
-              "D_004D4AA0"
+              "rssdBindErrorFormat",
+              "rssdSifTransferSizeOverMessage",
+              "rssdGetResultErrorMessage"
             ],
             "note": "only the listed runs come from the TU's C object; the rest of the piece stays scaffolding"
           }
@@ -7932,7 +7932,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004C0738"
+                "gameOverSavePromptText"
               ],
               "c_input_spans": [
                 {
@@ -7946,7 +7946,7 @@
                     344
                   ],
                   "symbols": [
-                    "D_004C0738"
+                    "gameOverSavePromptText"
                   ]
                 }
               ],
@@ -7992,7 +7992,7 @@
               "GameEndSaveQuestion",
               "GameOverImagePath",
               "GameOverStreamPath",
-              "D_004C0738"
+              "gameOverSavePromptText"
             ],
             "note": "only the listed runs come from the TU's C object; the rest of the piece stays scaffolding"
           }
@@ -8630,10 +8630,10 @@
                 "k_positive_pi"
               ],
               "also_referenced_by_c": [
-                "D_004D81B8",
-                "D_004D81BC",
-                "D_004D81C0",
-                "D_004D81C4"
+                "getPi",
+                "fanMinDistance",
+                "fanHeightTolerance",
+                "fanMaxHeightDelta"
               ],
               "basis": {
                 "batch": 4,
@@ -8657,7 +8657,7 @@
                 "Get_EnemyIDPos"
               ],
               "c_owned_symbols": [
-                "D_004D81C8",
+                "getRandomFloat",
                 "D_004D81EC",
                 "kAbsBoundPi",
                 "kNegPi",
@@ -8669,7 +8669,7 @@
                 "kTwoPiWrapLo"
               ],
               "also_referenced_by_c": [
-                "D_004D81F0"
+                "unduDistanceTolerance"
               ],
               "basis": {
                 "kind": "datacarve-repair-20261009",
@@ -8744,7 +8744,7 @@
               "kFullCircleSub",
               "k_negative_pi",
               "k_positive_pi",
-              "D_004D81C8",
+              "getRandomFloat",
               "D_004D81EC",
               "kAbsBoundPi",
               "kNegPi",
@@ -9535,7 +9535,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004DC050"
+                "primitiveArrayDescriptorFormat"
               ],
               "also_referenced_by_c": [],
               "c_input_spans": [
@@ -9550,7 +9550,7 @@
                     "0x004dc058"
                   ],
                   "symbols": [
-                    "D_004DC050"
+                    "primitiveArrayDescriptorFormat"
                   ],
                   "credit": "verified"
                 }
@@ -9573,7 +9573,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004DC058"
+                "nestedArrayDescriptorFormat"
               ],
               "also_referenced_by_c": [],
               "c_input_spans": [
@@ -9588,7 +9588,7 @@
                     "0x004dc060"
                   ],
                   "symbols": [
-                    "D_004DC058"
+                    "nestedArrayDescriptorFormat"
                   ],
                   "credit": "verified"
                 }
@@ -9611,7 +9611,7 @@
               ],
               "generated_by": [],
               "c_owned_symbols": [
-                "D_004DC060"
+                "objectArrayDescriptorFormat"
               ],
               "also_referenced_by_c": [],
               "c_input_spans": [
@@ -9626,7 +9626,7 @@
                     "0x004dc068"
                   ],
                   "symbols": [
-                    "D_004DC060"
+                    "objectArrayDescriptorFormat"
                   ],
                   "credit": "verified"
                 }
@@ -9682,9 +9682,9 @@
             "generated_by": [],
             "c_owned_symbols": [
               "D_004DC048",
-              "D_004DC050",
-              "D_004DC058",
-              "D_004DC060"
+              "primitiveArrayDescriptorFormat",
+              "nestedArrayDescriptorFormat",
+              "objectArrayDescriptorFormat"
             ],
             "note": "only the listed runs come from the TU's C object; the rest of the piece stays scaffolding"
           }

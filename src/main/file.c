@@ -76,16 +76,16 @@ typedef struct FileObjectEntryView {
 
 void FileJpegDecode(int number);
 
-extern char D_004DAA00[];
+extern char MenuFileSlot1Text[];
 
-extern char D_004DA9F8[];
+extern char MenuFileSlot2Text[];
 
-extern char D_004C3A90[];
+extern char MenuFileHardDiskDriveText[];
 
 static char *name_0_0036D628[3] = {
-    D_004DAA00,
-    D_004DA9F8,
-    D_004C3A90,
+    MenuFileSlot1Text,
+    MenuFileSlot2Text,
+    MenuFileHardDiskDriveText,
 };
 
 FileWorkBlock *FileWork = 0;
@@ -244,7 +244,7 @@ typedef struct FilePasWork {
     struct FilePassClip rect;
 } FilePasWork;
 
-extern char *msg00_1_0036D638[6];
+static char * msg00_1_0036D638[6];
 
 extern int MenuPasLengthGet(const char *text);
 
@@ -314,31 +314,33 @@ struct FileProgressTexts {
     char *text[4];
 };
 
-extern char *D_004C3D48[3];
+extern const struct FileDeviceTexts fileDeviceTexts;
 
-extern char *D_004C3DF0[3];
+extern const struct FileOperationTexts fileOperationTexts;
 
-extern char *D_004C3EA0[4];
+extern const struct FileSelectionTexts fileSelectionTexts;
 
-extern char *D_004DAA28[];
+extern char *fileListTexts[];
 
-extern char *D_004C4018[12];
+extern char * const fileConfirmationTexts[12];
 
-extern char *D_004C40E0[3];
+extern const struct FileSlotTexts fileSlotTexts;
 
-extern char *D_004C41B0[6];
+extern char * const fileSlotStateTexts[6];
 
-extern char *D_004C4290[7];
+extern const struct FileCardTexts fileCardTexts;
 
-extern char *D_004C42E8[9];
+extern const struct FileRequestTexts fileRequestTexts;
 
-extern char *D_004C4418[3];
+extern const struct FileFormatTexts fileFormatTexts;
 
-extern char *D_004DAA38[];
+extern char *fileFinishTexts[];
 
-extern char *D_004C45E0[4];
+extern char * const fileProgressTexts[4];
 
-extern char D_004DAA40[], D_004DAA48[], D_004C4310[];
+extern char periodText[];
+extern char periodEndText[];
+extern const char insertCardPromptText[];
 
 extern void eMessageCpy(char *destination, char *source);
 
@@ -361,7 +363,7 @@ struct FileLoadGauge {
     struct FileGaugeColor unfilled_color;
 };
 
-extern struct FileLoadGauge gauge;
+static struct FileLoadGauge gauge;
 
 void tyaDrawGauge(struct FileLoadGauge *progress);
 
@@ -377,13 +379,13 @@ extern unsigned char *FileCardDataBuf;
 
 extern unsigned char *FileExistCheckWork;
 
-extern unsigned char D_004C4D80[];
+extern const unsigned char cardDataNewPath[];
 
-extern unsigned char D_004C4D98[];
+extern const unsigned char newDataThumbnailPath[];
 
-extern unsigned char D_004C4DB0[];
+extern const unsigned char unusedDataThumbnailPath[];
 
-extern unsigned char D_004C4DC8[];
+extern const unsigned char brokenDataThumbnailPath[];
 
 void endPrintDirectFrameCopy(XglPacket *packet, int source, int destination);
 
@@ -1002,20 +1004,20 @@ static void MenuFileInfo(TskObject *task, void *data)
     short target_height;
     struct FileInfoContext *view;
 
-    *(struct FileDeviceTexts *)device_text = *(struct FileDeviceTexts *)D_004C3D48;
-    *(struct FileOperationTexts *)operation_text = *(struct FileOperationTexts *)D_004C3DF0;
-    *(struct FileSelectionTexts *)selection_text = *(struct FileSelectionTexts *)D_004C3EA0;
+    *(struct FileDeviceTexts *)device_text = fileDeviceTexts;
+    *(struct FileOperationTexts *)operation_text = fileOperationTexts;
+    *(struct FileSelectionTexts *)selection_text = fileSelectionTexts;
     view = data;
-    *(struct FileListTexts *)list_text = *(struct FileListTexts *)D_004DAA28;
-    *(struct FileConfirmationTexts *)confirmation_text = *(struct FileConfirmationTexts *)D_004C4018;
-    *(struct FileSlotTexts *)slot_text = *(struct FileSlotTexts *)D_004C40E0;
-    *(struct FileSlotStateTexts *)slot_state_text = *(struct FileSlotStateTexts *)D_004C41B0;
-    *(struct FileCardTexts *)card_text = *(struct FileCardTexts *)D_004C4290;
-    *(struct FileRequestTexts *)request_text = *(struct FileRequestTexts *)D_004C42E8;
-    status_text = D_004C4310;
-    *(struct FileFormatTexts *)format_text = *(struct FileFormatTexts *)D_004C4418;
-    *(struct FileFinishTexts *)finish_text = *(struct FileFinishTexts *)D_004DAA38;
-    *(struct FileProgressTexts *)progress_text = *(struct FileProgressTexts *)D_004C45E0;
+    *(struct FileListTexts *)list_text = *(struct FileListTexts *)fileListTexts;
+    *(struct FileConfirmationTexts *)confirmation_text = *(struct FileConfirmationTexts *)fileConfirmationTexts;
+    *(struct FileSlotTexts *)slot_text = fileSlotTexts;
+    *(struct FileSlotStateTexts *)slot_state_text = *(struct FileSlotStateTexts *)fileSlotStateTexts;
+    *(struct FileCardTexts *)card_text = fileCardTexts;
+    *(struct FileRequestTexts *)request_text = fileRequestTexts;
+    status_text = insertCardPromptText;
+    *(struct FileFormatTexts *)format_text = fileFormatTexts;
+    *(struct FileFinishTexts *)finish_text = *(struct FileFinishTexts *)fileFinishTexts;
+    *(struct FileProgressTexts *)progress_text = *(struct FileProgressTexts *)fileProgressTexts;
 
     switch (task->state) {
     case 0: {
@@ -1059,7 +1061,7 @@ static void MenuFileInfo(TskObject *task, void *data)
                 case 130:
                     eMessageCpy(view->text, selection_text[2]);
                     eMessageCat(FileSlotNameGet(FileWork->device_selection));
-                    eMessageCat(D_004DAA40);
+                    eMessageCat(periodText);
                     break;
                 }
                 break;
@@ -1123,7 +1125,7 @@ static void MenuFileInfo(TskObject *task, void *data)
                         if (FileObjectDataSystem->state[card_slot] == 2) {
                             eMessageCpy(view->text, confirmation_text[0]);
                             eMessageCat(FileSlotNameGet(FileWork->card_number));
-                            eMessageCat(D_004DAA40);
+                            eMessageCat(periodText);
                         } else {
                             eMessageCpy(view->text, confirmation_text[1]);
                         }
@@ -1132,11 +1134,11 @@ static void MenuFileInfo(TskObject *task, void *data)
                     if (FileWork->use_hdd) {
                         eMessageCpy(view->text, slot_text[2]);
                         eMessageCat(FileSlotNameGet(2));
-                        eMessageCat(D_004DAA40);
+                        eMessageCat(periodText);
                     } else {
                         eMessageCpy(view->text, slot_text[0]);
                         eMessageCat(FileSlotNameGet(FileWork->card_number));
-                        eMessageCat(D_004DAA40);
+                        eMessageCat(periodText);
                     }
                 }
             }
@@ -1198,7 +1200,7 @@ static void MenuFileInfo(TskObject *task, void *data)
             if (FileWork->input_flags & 1) {
                 eMessageCpy(view->text, card_text[1]);
                 eMessageCat(FileSlotNameGet(FileWork->card_number));
-                eMessageCat(D_004DAA40);
+                eMessageCat(periodText);
             }
             break;
         case 134:
@@ -1217,7 +1219,7 @@ static void MenuFileInfo(TskObject *task, void *data)
             if (FileWork->input_flags & 1) {
                 eMessageCpy(view->text, request_text[4]);
                 eMessageCat(FileSlotNameGet(FileWork->card_number));
-                eMessageCat(D_004DAA48);
+                eMessageCat(periodEndText);
             }
             break;
         case 146:
@@ -1288,7 +1290,7 @@ static void MenuFileInfo(TskObject *task, void *data)
                 if (FileWork->use_hdd) {
                     eMessageCpy(view->text, finish_text[1]);
                     eMessageCat(FileSlotNameGet(2));
-                    eMessageCat(D_004DAA48);
+                    eMessageCat(periodEndText);
                 } else {
                     eMessageCpy(view->text, finish_text[0]);
                 }
@@ -1305,9 +1307,6 @@ static void MenuFileInfo(TskObject *task, void *data)
         break;
     }
 }
-
-
-
 
 struct FileSelectItem {
     char *text;
@@ -1343,11 +1342,11 @@ struct FileSelectSource {
     char *title;
 };
 
-extern char D_004C4858[];
-extern char D_004C4870[];
-extern char D_004DAA58[];
-extern char D_004DAA60[];
-extern struct FileSelectSource msg01_2_0036D650[];
+extern const char memoryCardSlot1Text[];
+extern const char memoryCardSlot2Text[];
+extern char cancelText[];
+extern char fileSelectText[];
+static struct FileSelectSource msg01_2_0036D650[] ;
 
 static void tskFileSelect(TskObject *task, void *data)
 {
@@ -1377,11 +1376,11 @@ static void tskFileSelect(TskObject *task, void *data)
         struct FileSelectSource *confirmation;
 
         view->work = 0xfffff0;
-        view->entries[0].text = D_004C4858;
-        view->entries[1].text = D_004C4870;
+        view->entries[0].text = memoryCardSlot1Text;
+        view->entries[1].text = memoryCardSlot2Text;
         for (i = 0; i < 2; ++i)
             view->entries[i].color_state = 0;
-        view->entries[i].text = D_004DAA58;
+        view->entries[i].text = cancelText;
         view->entries[i].color_state = 0;
         view->entries[i + 1].text = 0;
         ListColorChage();
@@ -1394,7 +1393,7 @@ static void tskFileSelect(TskObject *task, void *data)
             view->windows[i].height = 78;
             view->lists[i].selected = 0;
             view->lists[i].items = view->entries;
-            view->windows[i].parameters = D_004DAA60;
+            view->windows[i].parameters = fileSelectText;
             view->lists[i].layout_mode = 2;
         }
         view->windows[i].height = 102;
@@ -1405,7 +1404,7 @@ static void tskFileSelect(TskObject *task, void *data)
             view->windows[i].data = &view->lists[i];
             view->windows[i].draw = MenuSelectWindow;
             view->windows[i].width = 207;
-            view->windows[i].parameters = D_004DAA60;
+            view->windows[i].parameters = fileSelectText;
             view->lists[i].title = confirmation->title;
             view->windows[i].height = 102;
             view->lists[i].selected = 0;
@@ -1541,13 +1540,13 @@ typedef struct FileThumbnailSaveEntry {
     unsigned char unmodeled_105c[4];
 } FileThumbnailSaveEntry;
 
-extern char D_004C48B8[];
-extern char D_004C48C8[];
-extern char D_004C48D8[];
-extern char D_004C48E8[];
-extern char D_004C48F8[];
-extern char D_004DAA78[];
-extern char *msg00_5_0036D668[];
+extern const char shionLevelText[];
+extern const char newFileText[];
+extern const char corruptDataText[];
+extern const char cannotSaveText[];
+extern const char cannotLoadText[];
+extern char slotNumberText[];
+static char * msg00_5_0036D668[] ;
 
 void FileThumbnailDisp(struct FileThumbnailContext *panel)
 {
@@ -1573,7 +1572,7 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
         panel->window.x = 576;
         panel->window.color = panel->color;
         panel->window.width = 336;
-        panel->window.parameters = D_004C48B8;
+        panel->window.parameters = shionLevelText;
         layer_anchor = (unsigned char *)panel + ((unsigned char *)&panel->window.parameters - (unsigned char *)panel);
         panel->window.height = 96;
         panel->window.state = 1;
@@ -1617,7 +1616,7 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
             }
         }
         slot_layer = &panel->slot_label.color;
-        eTagFontSet((struct ETagFont *)&panel->slot_label, D_004DAA78);
+        eTagFontSet((struct ETagFont *)&panel->slot_label, slotNumberText);
         *slot_layer = panel->color + 2;
         slot_number_layer = (int *)(window_origin + ((unsigned char *)&panel->slot_number.color - (unsigned char *)panel) - ((unsigned char *)&panel->window - (unsigned char *)panel));
         ribbon_width = 144;
@@ -1661,17 +1660,17 @@ void FileThumbnailDisp(struct FileThumbnailContext *panel)
         switch (FileObjectDataSystem->state[panel->slot]) {
         case 2:
             panel->messages[1].text = 0;
-            panel->messages[0].text = D_004C48C8;
+            panel->messages[0].text = newFileText;
             break;
         case 4:
             panel->messages[1].text = 0;
-            panel->messages[0].text = D_004C48D8;
+            panel->messages[0].text = corruptDataText;
             break;
         case 3:
             if (FileWork->text_index == 0)
-                panel->messages[0].text = D_004C48E8;
+                panel->messages[0].text = cannotSaveText;
             else
-                panel->messages[0].text = D_004C48F8;
+                panel->messages[0].text = cannotLoadText;
             panel->messages[1].text = 0;
             break;
         default:
@@ -2071,9 +2070,9 @@ extern FileMenuPadData PadData;
 typedef union FileCardNumber {
     int number;
 } FileCardNumber;
-extern const char D_004DAA80[];
-extern const char D_004DAA88[];
-extern const char D_004DAA90[];
+extern const char shortNumberFormat[];
+extern const char memoryCardMarkerText[];
+extern const char wideNumberFormat[];
 
 void MenuFile(void) {
     unsigned char delay;
@@ -3144,42 +3143,42 @@ void MenuFile(void) {
     xglFontDebugHex(0, 0x50, FileWork->command, 2);
     xglFontDebugHex(0, 0x58, FileWork->input_flags, 2);
     xglFontDebugHex(0, 0x60, FileWork->menu_substate, 2);
-    xglFontDebugPrintf(0, 0x68, D_004DAA80,
+    xglFontDebugPrintf(0, 0x68, shortNumberFormat,
                        FileWork->debug_value_11);
-    xglFontDebugPrintf(0x10, 0x68, D_004DAA80,
+    xglFontDebugPrintf(0x10, 0x68, shortNumberFormat,
                        FileWork->debug_value_12);
-    xglFontDebugPrintf(0, 0x70, D_004DAA80,
+    xglFontDebugPrintf(0, 0x70, shortNumberFormat,
                        FileWork->device_selection);
-    xglFontDebugPrintf(0x10, 0x70, D_004DAA80,
+    xglFontDebugPrintf(0x10, 0x70, shortNumberFormat,
                        FileWork->debug_value_14);
-    xglFontDebugPrintf(0, 0x78, D_004DAA80,
+    xglFontDebugPrintf(0, 0x78, shortNumberFormat,
                        FileWork->debug_value_16);
-    xglFontDebugPrintf(0x10, 0x78, D_004DAA80,
+    xglFontDebugPrintf(0x10, 0x78, shortNumberFormat,
                        FileWork->debug_value_17);
-    xglFontDebugPrintf(0, 0x80, D_004DAA80,
+    xglFontDebugPrintf(0, 0x80, shortNumberFormat,
                        FileWork->selected_panel);
-    xglFontDebugPrintf(0x10, 0x80, D_004DAA80,
+    xglFontDebugPrintf(0x10, 0x80, shortNumberFormat,
                        (signed char) FileWork->panel_count);
-    xglFontDebugPrintf(0, 0x88, D_004DAA80,
+    xglFontDebugPrintf(0, 0x88, shortNumberFormat,
                        FileWork->scroll_direction);
-    xglFontDebugPrintf(0x10, 0x88, D_004DAA80,
+    xglFontDebugPrintf(0x10, 0x88, shortNumberFormat,
                        FileWork->debug_value_1b);
-    xglFontDebugPrintf(0, 0x90, D_004DAA80,
+    xglFontDebugPrintf(0, 0x90, shortNumberFormat,
                        FileWork->action_selection);
-    xglFontDebugPrintf(0, 0x98, D_004DAA80,
+    xglFontDebugPrintf(0, 0x98, shortNumberFormat,
                        FileWork->selected_slot);
-    xglFontDebugPrintf(0x10, 0x98, D_004DAA80,
+    xglFontDebugPrintf(0x10, 0x98, shortNumberFormat,
                        FileWork->slot_count);
-    xglFontDebugPrintf(0x20, 0x30, D_004DAA88);
+    xglFontDebugPrintf(0x20, 0x30, memoryCardMarkerText);
     xglFontDebugHex(0x20, 0x38, FileWork->card.status[0], 2);
     xglFontDebugHex(0x20, 0x40, FileWork->card.status[1], 2);
-    xglFontDebugPrintf(0x20, 0x50, D_004DAA90,
+    xglFontDebugPrintf(0x20, 0x50, wideNumberFormat,
                        FileWork->available_blocks);
-    xglFontDebugPrintf(0x20, 0x58, D_004DAA90,
+    xglFontDebugPrintf(0x20, 0x58, wideNumberFormat,
                        FileWork->directory_result);
-    xglFontDebugPrintf(0x20, 0x60, D_004DAA90,
+    xglFontDebugPrintf(0x20, 0x60, wideNumberFormat,
                        FileWork->hdd_result);
-    xglFontDebugPrintf(0x20, 0x68, D_004DAA90,
+    xglFontDebugPrintf(0x20, 0x68, wideNumberFormat,
                        FileWork->request_result);
 }
 
@@ -3329,10 +3328,10 @@ int MenuFileMain(int menu_mode)
     WindowTexLoad(0, 0x10002);
     task_work = MenuSaveMapTextLoad(task_work, 1);
     if (menu_mode == 0)
-        MenuLoadFile(D_004C4D80, FileCardDataBuf);
-    MenuLoadFile(D_004C4D98, ((FileObjectImages *)FileObjectData)->templates[0].thumbnail);
-    MenuLoadFile(D_004C4DB0, ((FileObjectImages *)FileObjectData)->templates[1].thumbnail);
-    MenuLoadFile(D_004C4DC8, ((FileObjectImages *)FileObjectData)->templates[2].thumbnail);
+        MenuLoadFile(cardDataNewPath, FileCardDataBuf);
+    MenuLoadFile(newDataThumbnailPath, ((FileObjectImages *)FileObjectData)->templates[0].thumbnail);
+    MenuLoadFile(unusedDataThumbnailPath, ((FileObjectImages *)FileObjectData)->templates[1].thumbnail);
+    MenuLoadFile(brokenDataThumbnailPath, ((FileObjectImages *)FileObjectData)->templates[2].thumbnail);
     MenuWorkEndCheck(task_work);
     if (menu_mode == 0)
         xglSoundEffectNormalID(1, 0);
@@ -3364,3 +3363,263 @@ int MenuFileMain(int menu_mode)
     GameLoopState.runtime_flags &= 0xfbffffff;
     return FileWork->result == 0;
 }
+
+extern char MenuFileMemoryCardSlot2Path[24];
+extern char MenuFileLoadText[8];
+extern char MenuFileFormatText[8];
+extern char MenuFileSaveText[8];
+extern char MenuFileHardDiskDrivePath[24];
+extern char MenuFileMemoryCardSlot1Path[32];
+extern const char savingText[16];
+extern const char formattingText[16];
+extern const char loadingText[16];
+extern char timeText[8];
+extern char fileMoneyText[8];
+extern const char cardRemoveWarningText[72];
+extern const char savingToCardText[48];
+extern const char newDataSaveText[64];
+extern const char loadingFromCardText[48];
+extern const char overwriteSaveDataText[32];
+extern const char savingNewDataText[24];
+extern const char powerOffWarningText[32];
+extern const char saveCompleteText[24];
+extern const char formattingCardText[48];
+extern char saveStateBlankText[8];
+extern const char saveFailedText[16];
+extern const char loadFailedNotFoundText[48];
+extern const char loadFailedCorruptedText[48];
+extern const char saveDataCorruptedText[64];
+extern const char loadFailedText[16];
+extern const char maxSaveFilesHddText[64];
+extern const char maxSaveFilesExceededText[104];
+extern const char maxFoldersExceededText[104];
+extern const char notEnoughSpaceText[56];
+
+static char * msg00_1_0036D638[6] = { MenuFileSaveText, MenuFileLoadText, MenuFileMemoryCardSlot1Path, MenuFileMemoryCardSlot2Path, MenuFileHardDiskDrivePath, MenuFileFormatText };
+
+static char * msg00_4_0036D658[3] = { savingText, loadingText, formattingText };
+
+static char * msg00_5_0036D668[] = { timeText, fileMoneyText };
+
+const char cardRemoveWarningText[72] = ".\nDo not remove Memory Card (PS2), reset, or switch off the console.";
+
+const char powerOffWarningText[32] = ".\nDo not turn power off.";
+
+const char checkingCardText[48] = "Checking Memory Card (PS2) in MEMORY CARD ";
+
+const char selectSlotToSaveText[40] = "Select MEMORY CARD slot to save.";
+
+const char selectSlotToLoadText[40] = "Select MEMORY CARD slot to load.";
+
+const char noCardInSlotText[40] = "No Memory Card (PS2) in MEMORY CARD ";
+
+const char hddNotConnectedText[40] = "Hard Disk Drive is not connected.";
+
+const char newDataSaveText[64] = "New data will be saved to the Memory Card (PS2) in\nMEMORY CARD ";
+
+const char overwriteSaveDataText[32] = "Overwrite selected save data\?";
+
+const char formattingCardText[48] = "Formatting Memory Card (PS2) in MEMORY CARD ";
+
+/* Text: Save complete! \x1F */
+const char saveCompleteText[24] = "Save complete! \037";
+
+const char savingToCardText[48] = "Saving to Memory Card (PS2) in MEMORY CARD ";
+
+const char loadingFromCardText[48] = "Loading from Memory Card (PS2) in MEMORY CARD ";
+
+const char savingNewDataText[24] = "Saving new game data.";
+
+char * const fileConfirmationTexts[12] = { newDataSaveText, overwriteSaveDataText, formattingCardText, saveCompleteText, savingToCardText, loadingFromCardText, powerOffWarningText, savingToCardText, loadingFromCardText, cardRemoveWarningText, savingNewDataText, cardRemoveWarningText };
+
+const char loadSlotPromptText[64] = "Load selected data from Memory Card (PS2) in \nMEMORY CARD ";
+
+/* Text: Load complete! \x1F */
+const char loadCompleteText[24] = "Load complete! \037";
+
+const char loadSlotPromptBreakText[64] = "Load selected data from Memory Card (PS2) in\nMEMORY CARD ";
+
+/* Text: Save failed. \x1F */
+const char saveFailedText[16] = "Save failed. \037";
+
+/* Text: Selected save data is corrupted and cannot be overwritten. \x1F */
+const char saveDataCorruptedText[64] = "Selected save data is corrupted and cannot be overwritten. \037";
+
+/* Text: Load failed. \x1F */
+const char loadFailedText[16] = "Load failed. \037";
+
+/* Text: Load failed. Selected save data is corrupted. \x1F */
+const char loadFailedCorruptedText[48] = "Load failed. Selected save data is corrupted. \037";
+
+/* Text: Load failed. Save data does not exist. \x1F */
+const char loadFailedNotFoundText[48] = "Load failed. Save data does not exist. \037";
+
+char * const fileSlotStateTexts[6] = { saveFailedText, saveDataCorruptedText, saveStateBlankText, loadFailedText, loadFailedCorruptedText, loadFailedNotFoundText };
+
+const char cardInSlotText[40] = "Memory Card (PS2) in MEMORY CARD ";
+
+const char formatCardText[48] = "Format Memory Card (PS2) in MEMORY CARD ";
+
+/* Text: Formatting complete! \x1F */
+const char formatCompleteText[24] = "Formatting complete! \037";
+
+/* Text: Formatting failed. \x1F */
+const char formatFailedText[24] = "Formatting failed. \037";
+
+const char unformattedCardPrefixText[40] = "The Memory Card (PS2) in MEMORY CARD\n";
+
+/* Text:  is unformatted. \x1F */
+const char unformattedSuffixText[24] = " is unformatted. \037";
+
+const char cancelSaveText[16] = "Cancel Save.";
+
+const char cancelLoadText[16] = "Cancel load.";
+
+/* Text: \ncannot be accessed. \x1F */
+const char cannotBeAccessedText[24] = "\ncannot be accessed. \037";
+
+/* Text: Insert a Memory Card (PS2)\nin MEMORY CARD slot 1 or slot 2. Press \x1E\x01 to continue. \x1F */
+const char insertCardPromptText[88] = "Insert a Memory Card (PS2)\nin MEMORY CARD slot 1 or slot 2. Press \036\001 to continue. \037";
+
+const char insufficientCardSpaceText[64] = "Insufficient space on the Memory Card (PS2) in \nMEMORY CARD ";
+
+/* Text: Insufficient free space to\ncreate save data. \x1F */
+const char insufficientFreeSpaceText[48] = "Insufficient free space to\ncreate save data. \037";
+
+/* Text: . Xenosaga requires 165KB of free \nspace to save data. \x1F */
+const char saveSpaceRequirementText[64] = ". Xenosaga requires 165KB of free \nspace to save data. \037";
+
+/* Text: Exceeds the maximum number of save files\non Hard Disk Drive.Additional save files cannot be\ncreated. \x1F */
+const char maxSaveFilesExceededText[104] = "Exceeds the maximum number of save files\non Hard Disk Drive.Additional save files cannot be\ncreated. \037";
+
+/* Text: Exceeds the maximum number of folders that\nmay be created.\nAdditional folders may not be created. \x1F */
+const char maxFoldersExceededText[104] = "Exceeds the maximum number of folders that\nmay be created.\nAdditional folders may not be created. \037";
+
+/* Text: Not enough free space exists to\ncreate save files. \x1F */
+const char notEnoughSpaceText[56] = "Not enough free space exists to\ncreate save files. \037";
+
+const char maxSaveFilesHddText[64] = "Exceeds the maximum number of save\nfiles on Hard Disk Drive.";
+
+char * const fileProgressTexts[4] = { maxSaveFilesExceededText, maxFoldersExceededText, notEnoughSpaceText, maxSaveFilesHddText };
+
+const char isThisOkayText[16] = "Is this okay\?";
+
+const char memoryCardSlot1Text[24] = "MEMORY CARD slot 1";
+
+const char memoryCardSlot2Text[24] = "MEMORY CARD slot 2";
+
+const char formattingText[16] = "Formatting...";
+
+const char loadingText[16] = "Loading...";
+
+const char savingText[16] = "Saving...";
+
+const char shionLevelText[16] = "Shion:Lv";
+
+const char newFileText[16] = "New file";
+
+const char corruptDataText[16] = "Corrupt data";
+
+const char cannotSaveText[16] = "Cannot save";
+
+const char cannotLoadText[24] = "Cannot load";
+
+const unsigned char cardDataNewPath[24] = "data\\carddata.new";
+
+const unsigned char newDataThumbnailPath[24] = "data\\endou\\new_d.jpg";
+
+const unsigned char unusedDataThumbnailPath[24] = "data\\endou\\n_use.jpg";
+
+const unsigned char brokenDataThumbnailPath[24] = "data\\endou\\brk_d.jpg";
+
+const char segmentFileText[16] = "Segment File";
+
+const char agwsAmmoText[16] = "A.G.W.S. Ammo";
+
+const char agwsAccessoriesText[24] = "A.G.W.S. Accessories";
+
+const char agwsWeaponsText[24] = "A.G.W.S. Weapons";
+
+const char characterAmmoText[16] = "Character Ammo";
+
+const char characterAccessoriesText[24] = "Character Accessories";
+
+const char characterWeaponsText[24] = "Character Weapons";
+
+/* Text: Special Items | Categorical Order | Numerical Order | Alphabetical Order | Sort by */
+const char MenuItemInfoLabelsText[96] = "Special Items\000\000\000Categorical Order\000\000\000\000\000\000\000Numerical Order\000Alphabetical Order\000\000\000\000\000\000Sort by ";
+
+char saveStateBlankText[8] = "";
+
+char periodText[8] = ".";
+
+const char yesNoText[8] = "Yes\nNo";
+
+char cancelText[8] = "Cancel";
+
+char fileSelectText[8] = "Select";
+
+/* Text: \x01Money */
+char fileMoneyText[8] = "\001Money";
+
+/* Text: \x01Time */
+char timeText[8] = "\001Time";
+
+char slotNumberText[8] = "No.";
+
+const char shortNumberFormat[8] = "%3d";
+
+const char memoryCardMarkerText[8] = "-MC-";
+
+const char wideNumberFormat[4] = "%6d";
+
+XglTaskScheduler * FileTask = 0;
+
+unsigned char * FileCardDataBuf = 0;
+
+FileSaveRecord * FileSaveData = 0;
+
+unsigned char * FileExistCheckWork = 0;
+
+FileObjectSystem * FileObjectDataSystem = 0;
+
+const char itemsText[8] = "Items";
+
+const char MenuItemCancelText[8] = "Cancel.";
+
+extern char MenuFileCancelText[8];
+
+static struct FileSelectSource msg01_2_0036D650[] = { { .message = isThisOkayText, .title = yesNoText } };
+
+const struct FileDeviceTexts fileDeviceTexts = { { MenuFileCancelText, MenuFileSaveText, MenuFileLoadText } };
+
+const struct FileOperationTexts fileOperationTexts = { { cardRemoveWarningText, powerOffWarningText, checkingCardText } };
+
+const struct FileSelectionTexts fileSelectionTexts = { { selectSlotToSaveText, selectSlotToLoadText, noCardInSlotText, hddNotConnectedText } };
+
+const char selectSaveLocationText[32] = "Select location for save data.";
+
+const char selectLoadDataText[40] = "Select the data you wish to load.";
+
+const struct FileSlotTexts fileSlotTexts = { { loadSlotPromptText, loadCompleteText, loadSlotPromptBreakText } };
+
+const struct FileCardTexts fileCardTexts = { { cardInSlotText, formatCardText, formatCompleteText, formatFailedText, unformattedCardPrefixText, unformattedSuffixText, unformattedSuffixText } };
+
+const struct FileRequestTexts fileRequestTexts = { { saveFailedText, loadFailedText, cancelSaveText, cancelLoadText, noCardInSlotText, cardInSlotText, cardInSlotText, cannotBeAccessedText, cannotBeAccessedText } };
+
+const struct FileFormatTexts fileFormatTexts = { { insufficientCardSpaceText, insufficientFreeSpaceText, saveSpaceRequirementText } };
+
+/* Text: Xenosaga save data does not exist. \x1F */
+const char saveDataNotExistText[40] = "Xenosaga save data does not exist. \037";
+
+const char saveDataNotExistCardText[72] = "Xenosaga save data does not exist\non Memory Card (PS2) in MEMORY CARD ";
+
+char *fileListTexts[2] = { selectSaveLocationText, selectLoadDataText };
+
+char *fileFinishTexts[2] = { saveDataNotExistText, saveDataNotExistCardText };
+
+/* Text: . \x1F */
+char periodEndText[8] = ". \037";
+
+int FileWorkEndTop = 0;
+

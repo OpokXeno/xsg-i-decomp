@@ -8,7 +8,6 @@ static short pause_check;
 #include "main/sdv.h"
 void GameStateSave(void);
 
-
 /*
  * GNU EE native TI storage/copy type. Used only for the
  * 16-byte aligned typed storage that the original clears with por+sq; no
@@ -18,12 +17,6 @@ void GameStateSave(void);
 typedef struct GameOrgRecord {
     u8 unmodeled_00[0x180];
 } GameOrgRecord;
-
-
-
-
-
-
 
 typedef struct GameUserSave {
     u8 unmodeled_0000[0x101b0];
@@ -49,8 +42,6 @@ typedef struct GameUserSave {
     u64 user_longs[2];
 } GameUserSave;
 
-
-
 extern GameOrgRecord orgData[33];
 
 extern GamePlayerRecord plChaData[16];
@@ -72,8 +63,6 @@ typedef union GameVector8 {
     u64 pair[2];
 } GameVector8;
 
-
-
 typedef struct GameMapUnit {
     u32 flags;
     u8 unmodeled_04[0x10 - 0x04];
@@ -93,8 +82,6 @@ typedef struct GameMapUnit {
     u8 unmodeled_1a5[0x300 - 0x1a5];
 } GameMapUnit;
 
-
-
 typedef struct GameClearEnvironment {
     u8 unmodeled_00[0x20];
     u32 red;
@@ -102,8 +89,6 @@ typedef struct GameClearEnvironment {
     u32 blue;
     u32 alpha;
 } GameClearEnvironment;
-
-
 
 typedef struct GamePackedXyz2 {
     u32 x;
@@ -126,11 +111,11 @@ typedef struct GameTestEnvironment {
     GamePackedXyz2 vertices[2];
 } GameTestEnvironment;
 
-
-
 extern GameClearEnvironment ClearEnv;
 
+/* Text: {color #000000}%4x\n%6x */
 static char str_0[12] = "\014\000\000\000%4x\n%6x";
+/* Text: {color #000000}%4x\n%6x */
 static char str_1[12] = "\014\000\000\000%4x\n%6x";
 static GameTestEnvironment TestEnv_2_00338620 = {
     .vif_nop = { 0, 0, 0 },
@@ -146,15 +131,15 @@ static GameTestEnvironment TestEnv_2_00338620 = {
     }
 };
 
-const char D_004BE2B0[9] = "REGISTCF";
-const char D_004BE2C0[11] = "EOB_Always";
-const char D_004BE2D0[11] = "EOB_Escape";
+const char cfRegistSoundName[9] = "REGISTCF";
+const char eobAlwaysMethodName[11] = "EOB_Always";
+const char eobEscapeMethodName[11] = "EOB_Escape";
 
 static SchedulerState *saveEffe = 0;
 static SchedulerState *shopEffe = 0;
 static SchedulerState *evsEffe = 0;
 static SchedulerState *retEffe = 0;
-const char D_004D8A60[8] = "%4x\n%6x";
+const char dispTagFormat[8] = "%4x\n%6x";
 
 extern int StudioEntrySkip;
 
@@ -169,8 +154,6 @@ typedef struct GameSequenceSlot {
     u8 unmodeled_34[0x260 - 0x34];
 } GameSequenceSlot;
 
-
-
 extern GameSequenceSlot actSequence[64];
 
 /* GameDebugMenu accesses the first two bytes at GameLoopState+0x29f50.
@@ -184,8 +167,6 @@ typedef union GameDebugMenuStorage {
         u8 unmodeled_02[14];
     } fields;
 } GameDebugMenuStorage;
-
-
 
 /*
  * PARTIAL ACCESSED VIEW of GameLoopState (0x2a030-byte object at 0x338680).
@@ -219,16 +200,12 @@ typedef struct NmlModel {
     int blockOffsets[1];
 } NmlModel;
 
-
-
 /* Only the loaded data pointer at +4 is used by the original here.
  * No complete resource-handle extent or unknown prefix field is claimed. */
 typedef struct GameResourceModelPrefix {
     unsigned char unmodeled_00[4];
     struct NmlModel *data;
 } GameResourceModelPrefix;
-
-
 
 struct Actor {
     u8 unmodeled_00[0x86];
@@ -292,9 +269,6 @@ typedef struct ActorHead {
     u8 unmodeled_9fc[0xA70 - 0x9fc];
 } ActorHead;
 
-
-
-
 /* Accurate defining-owner proposals; normal owner transport is pending.
  * MapUnitSlot fields/extent: src/main/map_2.h. ActorUndulation and
  * LookAtPlayerActor spelling: src/main/look_at_player.c21..75. */
@@ -316,13 +290,9 @@ typedef struct MapUnitSlot {
     u8 unmodeled_1a4[0x300 - 0x1a4];
 } MapUnitSlot;
 
-
 extern MapUnitSlot MapUnit[64];
 
-
-
 typedef struct PlayerEffect PlayerEffect;
-
 
 struct LookAtPlayerActor {
     u32 flags;
@@ -370,7 +340,6 @@ struct LookAtPlayerActor {
     u8 unmodeled_a34[0xa70 - 0xa34];
 };
 
-
 /* Partial defining-owner prefix, from act_2.h. Only these two genuine
  * parent fields are accessed; no complete Actor extent is claimed here. */
 
@@ -390,15 +359,11 @@ typedef struct GameLightParallel {
     Quadword direction;
 } GameLightParallel;
 
-
-
 typedef struct GameLightSet {
     Quadword ambient_intensity;
     GameLightParallel parallel[3];
     Quadword matrices[8];
 } GameLightSet;
-
-
 
 typedef struct GameLoopStateLayout {
     u8 *saved_work_end;
@@ -479,8 +444,6 @@ typedef struct GameLoopStateLayout {
     u64 user_longs[2]; /* +0x2a020 */
 } GameLoopStateLayout;
 
-
-
 GameLoopStateLayout GameLoopState = {0};
 
 /* Small initialized flags follow the existing evsExit literal below. */
@@ -553,18 +516,14 @@ typedef struct EnemyWorkPostTalk {
     u8 unmodeled_3832[0x38b0 - 0x3832];
 } EnemyWorkPostTalk;
 
-
-
 extern EnemyWorkPostTalk enepc[16];
 
 #define ACTOR_NUMBER_OFFSET 0x80
-
 
 void GameStateRestoreCameraLight(void);
 
 extern void GameStateRestoreKoware(void);
 
-static short pause_check;
 static int shopNo;
 static unsigned char GameCFSoundMenuPurgeFlag;
 static u64 attrPrev;
@@ -575,10 +534,7 @@ typedef struct GameActorAttributeView {
     u64 attribute_flags;
 } GameActorAttributeView;
 
-
-
 #define ACTOR_SCRIPT_FLAGS_OFFSET 0x124
-
 
 /*
  * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
@@ -593,10 +549,7 @@ typedef struct GameActorAttributeView {
 
 #define ACTOR_COUNT 64
 
-
 #define ACTOR_IN_USE_ID_OFFSET 0x86
-
-
 
 extern ActorHead actor[ACTOR_COUNT];
 
@@ -621,8 +574,6 @@ typedef struct NmlModelBlockPrefix {
     int part_index;
 } NmlModelBlockPrefix;
 
-
-
 extern void ACT_setModelWrapper(ActorHead *actor, int enabled);
 
 extern void ACT_setHumanHand(ActorHead *actor, int hand);
@@ -631,8 +582,6 @@ typedef struct GamePartyData {
     u8 unmodeled_00[0x2c];
     u16 leader_battle_id;
 } GamePartyData;
-
-
 
 extern void xglFontLoad(int font, int mode);
 
@@ -662,7 +611,6 @@ extern void xglRenderCopyDisp2Draw(void);
 
 extern GameLightSet GameIdLight[16];
 
-
 extern float CheckDist3D(const Vector4 *a, const Vector4 *b);
 
 static inline Vector4 *GameSymbolPosition(int index)
@@ -676,11 +624,7 @@ static inline s16 *GameSymbolKindAddress(int index)
     return (s16 *)((u8 *)&MapUnit[0].symbol_kind + index * sizeof(MapUnitSlot));
 }
 
-extern const char D_004BE2C0[];
-
-extern const char D_004D8A68[];
-
-extern const char D_004BE2D0[];
+extern const char eobMethodName[];
 
 typedef struct GameRadarParams {
     int x;
@@ -692,12 +636,9 @@ typedef struct GameRadarParams {
     u8 alpha;
 } GameRadarParams;
 
-
-
 extern short NowTester;
 
 extern signed char FLAG_FRAME_60;
-
 
 extern void *const stageVM;
 
@@ -756,7 +697,6 @@ extern void MSG_init(void);
 extern void TWSYS_init(void);
 
 extern void xglSoundStreamStop(int stream);
-
 
 extern void nmlModelSetFadeInCancel(int frames);
 
@@ -822,7 +762,6 @@ extern void GameOver(void);
 
 extern void sefDeleteEffectCf(SchedulerState *effect);
 
-
 extern void PartyTimePauseStart(void);
 
 extern void xglCullingIgnore(void);
@@ -872,7 +811,7 @@ static void GameCFSoundReload(void)
     }
     SsdResetSegmentAllocMode(0xA8000);
     SsdSetSegmentAllocMode(0x70000, 0x10000);
-    xglSoundLoadEffect(D_004BE2B0, segment, 1);
+    xglSoundLoadEffect(cfRegistSoundName, segment, 1);
     GameCFSoundPurgeSub();
 }
 
@@ -1526,10 +1465,6 @@ static GameMapUnit *checkItemBox(ActorHead *actor)
     return best_unit;
 }
 
-
-
-
-
 void CheckGameSymbol(struct LookAtPlayerActor *player)
 {
     int save_unit;
@@ -1641,8 +1576,6 @@ typedef struct GameProjectedPoint {
     int z;
     float w;
 } GameProjectedPoint;
-
-
 
 static void GameDispTag(void)
 {
@@ -1761,7 +1694,7 @@ static void GameDispTag(void)
         map_format[3] = color;
         xglFontDebugPrintf(((screen_x >> 4) - 0x700) >> 1,
                            ((screen_y >> 4) - 0x720) >> 1,
-                           D_004D8A60, index + 0x300, depth);
+                           dispTagFormat, index + 0x300, depth);
     }
 }
 
@@ -2069,19 +2002,19 @@ int GameModeCfMain(void)
         Game_Data_Pop();
         xglFontLoad(1, 0);
         WindowTexLoad(0, 0);
-        always_method = D_004BE2C0;
+        always_method = eobAlwaysMethodName;
         battle_enemies = enepc;
         CallMethod_I(always_method,
             battle_enemies[((ActorHead *)GameLoopState.battle_enemy)->number].enemy_id);
         switch (battle_result) {
         case 1:
             Enemy_After_Battle(1);
-            CallMethod_I(D_004D8A68,
+            CallMethod_I(eobMethodName,
                 battle_enemies[((ActorHead *)GameLoopState.battle_enemy)->number].enemy_id);
             break;
         case 3:
             Enemy_After_Battle(3);
-            CallMethod_I(D_004BE2D0,
+            CallMethod_I(eobEscapeMethodName,
                 battle_enemies[((ActorHead *)GameLoopState.battle_enemy)->number].enemy_id);
             break;
         default:
@@ -2209,7 +2142,7 @@ int GameModeCfMain(void)
     return 0;
 }
 
-const char D_004D8A68[4] = "EOB";
+const char eobMethodName[4] = "EOB";
 
 void checkTalkPoint(void)
 {
@@ -2478,5 +2411,5 @@ void Game(void)
 
 unsigned char SnapDrawCreditFlag = 0;
 unsigned char UseTestPath = 0;
-const char D_004D8A80[1] = "";
-const char D_004D8A88[8] = "MC_TEST";
+const char GameEmptyName[1] = "";
+const char GameMcTestName[8] = "MC_TEST";

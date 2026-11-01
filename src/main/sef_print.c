@@ -6,7 +6,7 @@ typedef char *va_list;
 
 extern int printf(const char *format, ...);
 extern int vsprintf(char *buffer, const char *format, va_list args);
-extern const unsigned char D_004DBB78[];
+extern const unsigned char tracePrintFormat[];
 
 void tracePrint(const char *format, ...) {
     va_list args;
@@ -14,7 +14,7 @@ void tracePrint(const char *format, ...) {
 
     va_start(args, format);
     vsprintf(buffer, format, args);
-    printf(D_004DBB78, buffer);
+    printf(tracePrintFormat, buffer);
     va_end(args);
 }
 
@@ -33,563 +33,556 @@ void sefPrintMatrix()
 {
 }
 
-extern const unsigned char D_004DBB78[8];
+extern const char sdvOpNameJsrW[8];
 
-extern const char D_004DBB88[8];
+extern const char sdvOpNameGotoW[8];
 
-extern const char D_004DBB90[8];
+extern const char sdvOpNameIfnull[8];
 
-extern const char D_004DBB98[8];
+extern const char sdvOpNameWide[8];
 
-extern const char D_004DBBA0[8];
+extern const char sdvOpNameAthrow[8];
 
-extern const char D_004DBBA8[8];
+extern const char sdvOpNameNew[8];
 
-extern const char D_004DBBB0[8];
+extern const char sdvOpNameReturn[8];
 
-extern const char D_004DBBC0[8];
+extern const char sdvOpNameAreturn[8];
 
-extern const char D_004DBBC8[8];
+extern const char sdvOpNameDreturn[8];
 
-extern const char D_004DBBD0[8];
+extern const char sdvOpNameFreturn[8];
 
-extern const char D_004DBBD8[8];
+extern const char sdvOpNameLreturn[8];
 
-extern const char D_004DBBE0[8];
+extern const char sdvOpNameIreturn[8];
 
-extern const char D_004DBBE8[8];
+extern const char sdvOpNameRet[8];
 
-extern const char D_004DBBF0[8];
+extern const char sdvOpNameJsr[8];
 
-extern const char D_004DBBF8[8];
+extern const char sdvOpNameGoto[8];
 
-extern const char D_004DBC00[8];
+extern const char sdvOpNameIfle[8];
 
-extern const char D_004DBC08[8];
+extern const char sdvOpNameIfgt[8];
 
-extern const char D_004DBC10[8];
+extern const char sdvOpNameIfge[8];
 
-extern const char D_004DBC18[8];
+extern const char sdvOpNameIflt[8];
 
-extern const char D_004DBC20[8];
+extern const char sdvOpNameIfne[8];
 
-extern const char D_004DBC28[8];
+extern const char sdvOpNameIfeq[8];
 
-extern const char D_004DBC30[8];
+extern const char sdvOpNameDcmpg[8];
 
-extern const char D_004DBC38[8];
+extern const char sdvOpNameDcmpl[8];
 
-extern const char D_004DBC40[8];
+extern const char sdvOpNameFcmpg[8];
 
-extern const char D_004DBC48[8];
+extern const char sdvOpNameFcmpl[8];
 
-extern const char D_004DBC50[8];
+extern const char sdvOpNameLcmp[8];
 
-extern const char D_004DBC58[8];
+extern const char sdvOpNameD2f[8];
 
-extern const char D_004DBC60[8];
+extern const char sdvOpNameD2l[8];
 
-extern const char D_004DBC68[8];
+extern const char sdvOpNameD2i[8];
 
-extern const char D_004DBC70[8];
+extern const char sdvOpNameF2d[8];
 
-extern const char D_004DBC78[8];
+extern const char sdvOpNameF2l[8];
 
-extern const char D_004DBC80[8];
+extern const char sdvOpNameF2i[8];
 
-extern const char D_004DBC88[8];
+extern const char sdvOpNameL2d[8];
 
-extern const char D_004DBC90[8];
+extern const char sdvOpNameL2f[8];
 
-extern const char D_004DBC98[8];
+extern const char sdvOpNameL2i[8];
 
-extern const char D_004DBCA0[8];
+extern const char sdvOpNameI2d[8];
 
-extern const char D_004DBCA8[8];
+extern const char sdvOpNameI2f[8];
 
-extern const char D_004DBCB0[8];
+extern const char sdvOpNameI2l[8];
 
-extern const char D_004DBCB8[8];
+extern const char sdvOpNameIinc[8];
 
-extern const char D_004DBCC0[8];
+extern const char sdvOpNameLxor[8];
 
-extern const char D_004DBCC8[8];
+extern const char sdvOpNameIxor[8];
 
-extern const char D_004DBCD0[8];
+extern const char sdvOpNameLor[8];
 
-extern const char D_004DBCD8[8];
+extern const char sdvOpNameIor[8];
 
-extern const char D_004DBCE0[8];
+extern const char sdvOpNameLand[8];
 
-extern const char D_004DBCE8[8];
+extern const char sdvOpNameIand[8];
 
-extern const char D_004DBCF0[8];
+extern const char sdvOpNameLushr[8];
 
-extern const char D_004DBCF8[8];
+extern const char sdvOpNameIushr[8];
 
-extern const char D_004DBD00[8];
+extern const char sdvOpNameLshr[8];
 
-extern const char D_004DBD08[8];
+extern const char sdvOpNameIshr[8];
 
-extern const char D_004DBD10[8];
+extern const char sdvOpNameLshl[8];
 
-extern const char D_004DBD18[8];
+extern const char sdvOpNameIshl[8];
 
-extern const char D_004DBD20[8];
+extern const char sdvOpNameDneg[8];
 
-extern const char D_004DBD28[8];
+extern const char sdvOpNameFneg[8];
 
-extern const char D_004DBD30[8];
+extern const char sdvOpNameLneg[8];
 
-extern const char D_004DBD38[8];
+extern const char sdvOpNameIneg[8];
 
-extern const char D_004DBD40[8];
+extern const char sdvOpNameDrem[8];
 
-extern const char D_004DBD48[8];
+extern const char sdvOpNameFrem[8];
 
-extern const char D_004DBD50[8];
+extern const char sdvOpNameLrem[8];
 
-extern const char D_004DBD58[8];
+extern const char sdvOpNameIrem[8];
 
-extern const char D_004DBD60[8];
+extern const char sdvOpNameDdiv[8];
 
-extern const char D_004DBD68[8];
+extern const char sdvOpNameFdiv[8];
 
-extern const char D_004DBD70[8];
+extern const char sdvOpNameLdiv[8];
 
-extern const char D_004DBD78[8];
+extern const char sdvOpNameIdiv[8];
 
-extern const char D_004DBD80[8];
+extern const char sdvOpNameDmul[8];
 
-extern const char D_004DBD88[8];
+extern const char sdvOpNameFmul[8];
 
-extern const char D_004DBD90[8];
+extern const char sdvOpNameLmul[8];
 
-extern const char D_004DBD98[8];
+extern const char sdvOpNameImul[8];
 
-extern const char D_004DBDA0[8];
+extern const char sdvOpNameDsub[8];
 
-extern const char D_004DBDA8[8];
+extern const char sdvOpNameFsub[8];
 
-extern const char D_004DBDB0[8];
+extern const char sdvOpNameLsub[8];
 
-extern const char D_004DBDB8[8];
+extern const char sdvOpNameIsub[8];
 
-extern const char D_004DBDC0[8];
+extern const char sdvOpNameDadd[8];
 
-extern const char D_004DBDC8[8];
+extern const char sdvOpNameFadd[8];
 
-extern const char D_004DBDD0[8];
+extern const char sdvOpNameLadd[8];
 
-extern const char D_004DBDD8[8];
+extern const char sdvOpNameIadd[8];
 
-extern const char D_004DBDE0[8];
+extern const char sdvOpNameSwap[8];
 
-extern const char D_004DBDE8[8];
+extern const char sdvOpNameDup2X2[8];
 
-extern const char D_004DBDF0[8];
+extern const char sdvOpNameDup2X1[8];
 
-extern const char D_004DBDF8[8];
+extern const char sdvOpNameDup2[8];
 
-extern const char D_004DBE00[8];
+extern const char sdvOpNameDupX2[8];
 
-extern const char D_004DBE08[8];
+extern const char sdvOpNameDupX1[8];
 
-extern const char D_004DBE10[8];
+extern const char sdvOpNameDup[8];
 
-extern const char D_004DBE18[8];
+extern const char sdvOpNamePop2[8];
 
-extern const char D_004DBE20[8];
+extern const char sdvOpNamePop[8];
 
-extern const char D_004DBE28[8];
+extern const char sdvOpNameSastore[8];
 
-extern const char D_004DBE30[8];
+extern const char sdvOpNameCastore[8];
 
-extern const char D_004DBE38[8];
+extern const char sdvOpNameBastore[8];
 
-extern const char D_004DBE40[8];
+extern const char sdvOpNameAastore[8];
 
-extern const char D_004DBE48[8];
+extern const char sdvOpNameDastore[8];
 
-extern const char D_004DBE50[8];
+extern const char sdvOpNameFastore[8];
 
-extern const char D_004DBE58[8];
+extern const char sdvOpNameLastore[8];
 
-extern const char D_004DBE60[8];
+extern const char sdvOpNameIastore[8];
 
-extern const char D_004DBE68[8];
+extern const char sdvOpNameAstore[8];
 
-extern const char D_004DBE70[8];
+extern const char sdvOpNameDstore[8];
 
-extern const char D_004DBE78[8];
+extern const char sdvOpNameFstore[8];
 
-extern const char D_004DBE80[8];
+extern const char sdvOpNameLstore[8];
 
-extern const char D_004DBE88[8];
+extern const char sdvOpNameIstore[8];
 
-extern const char D_004DBE90[8];
+extern const char sdvOpNameSaload[8];
 
-extern const char D_004DBE98[8];
+extern const char sdvOpNameCaload[8];
 
-extern const char D_004DBEA0[8];
+extern const char sdvOpNameBaload[8];
 
-extern const char D_004DBEA8[8];
+extern const char sdvOpNameAaload[8];
 
-extern const char D_004DBEB0[8];
+extern const char sdvOpNameDaload[8];
 
-extern const char D_004DBEB8[8];
+extern const char sdvOpNameFaload[8];
 
-extern const char D_004DBEC0[8];
+extern const char sdvOpNameLaload[8];
 
-extern const char D_004DBEC8[8];
+extern const char sdvOpNameIaload[8];
 
-extern const char D_004DBED0[8];
+extern const char sdvOpNameAload3[8];
 
-extern const char D_004DBED8[8];
+extern const char sdvOpNameAload2[8];
 
-extern const char D_004DBEE0[8];
+extern const char sdvOpNameAload1[8];
 
-extern const char D_004DBEE8[8];
+extern const char sdvOpNameAload0[8];
 
-extern const char D_004DBEF0[8];
+extern const char sdvOpNameDload3[8];
 
-extern const char D_004DBEF8[8];
+extern const char sdvOpNameDload2[8];
 
-extern const char D_004DBF00[8];
+extern const char sdvOpNameDload1[8];
 
-extern const char D_004DBF08[8];
+extern const char sdvOpNameDload0[8];
 
-extern const char D_004DBF10[8];
+extern const char sdvOpNameFload3[8];
 
-extern const char D_004DBF18[8];
+extern const char sdvOpNameFload2[8];
 
-extern const char D_004DBF20[8];
+extern const char sdvOpNameFload1[8];
 
-extern const char D_004DBF28[8];
+extern const char sdvOpNameFload0[8];
 
-extern const char D_004DBF30[8];
+extern const char sdvOpNameLload3[8];
 
-extern const char D_004DBF38[8];
+extern const char sdvOpNameLload2[8];
 
-extern const char D_004DBF40[8];
+extern const char sdvOpNameLload1[8];
 
-extern const char D_004DBF48[8];
+extern const char sdvOpNameLload0[8];
 
-extern const char D_004DBF50[8];
+extern const char sdvOpNameIload3[8];
 
-extern const char D_004DBF58[8];
+extern const char sdvOpNameIload2[8];
 
-extern const char D_004DBF60[8];
+extern const char sdvOpNameIload1[8];
 
-extern const char D_004DBF68[8];
+extern const char sdvOpNameIload0[8];
 
-extern const char D_004DBF70[8];
+extern const char sdvOpNameAload[8];
 
-extern const char D_004DBF78[8];
+extern const char sdvOpNameDload[8];
 
-extern const char D_004DBF80[8];
+extern const char sdvOpNameFload[8];
 
-extern const char D_004DBF88[8];
+extern const char sdvOpNameLload[8];
 
-extern const char D_004DBF90[8];
+extern const char sdvOpNameIload[8];
 
-extern const char D_004DBF98[8];
+extern const char sdvOpNameLdc2w[8];
 
-extern const char D_004DBFA0[8];
+extern const char sdvOpNameLdc2[8];
 
-extern const char D_004DBFA8[8];
+extern const char sdvOpNameLdc1[8];
 
-extern const char D_004DBFB0[8];
+extern const char sdvOpNameSipush[8];
 
-extern const char D_004DBFB8[8];
+extern const char sdvOpNameBipush[8];
 
-extern const char D_004DBFC0[8];
-
-extern const char D_004DBFC8[8];
-
-
+extern const char sdvOpNameNop[8];
 
 extern int vmDebugMask;
 
+extern const char sdvOpNameUnknown[4];
 
-
-extern const char D_004DBBB8[4];
-
-
-const unsigned char D_004DBB78[8] = "%s\n";
+const unsigned char tracePrintFormat[8] = "%s\n";
 
 int vmDebugMask = 0;
 
-const char D_004DBB88[8] = "jsr_w";
+const char sdvOpNameJsrW[8] = "jsr_w";
 
-const char D_004DBB90[8] = "goto_w";
+const char sdvOpNameGotoW[8] = "goto_w";
 
-const char D_004DBB98[8] = "ifnull";
+const char sdvOpNameIfnull[8] = "ifnull";
 
-const char D_004DBBA0[8] = "wide";
+const char sdvOpNameWide[8] = "wide";
 
-const char D_004DBBA8[8] = "athrow";
+const char sdvOpNameAthrow[8] = "athrow";
 
-const char D_004DBBB0[8] = "new";
+const char sdvOpNameNew[8] = "new";
 
-const char D_004DBBB8[4] = "\?\?\?";
+const char sdvOpNameUnknown[4] = "\?\?\?";
 
-const char D_004DBBC0[8] = "return";
+const char sdvOpNameReturn[8] = "return";
 
-const char D_004DBBC8[8] = "areturn";
+const char sdvOpNameAreturn[8] = "areturn";
 
-const char D_004DBBD0[8] = "dreturn";
+const char sdvOpNameDreturn[8] = "dreturn";
 
-const char D_004DBBD8[8] = "freturn";
+const char sdvOpNameFreturn[8] = "freturn";
 
-const char D_004DBBE0[8] = "lreturn";
+const char sdvOpNameLreturn[8] = "lreturn";
 
-const char D_004DBBE8[8] = "ireturn";
+const char sdvOpNameIreturn[8] = "ireturn";
 
-const char D_004DBBF0[8] = "ret";
+const char sdvOpNameRet[8] = "ret";
 
-const char D_004DBBF8[8] = "jsr";
+const char sdvOpNameJsr[8] = "jsr";
 
-const char D_004DBC00[8] = "goto";
+const char sdvOpNameGoto[8] = "goto";
 
-const char D_004DBC08[8] = "ifle";
+const char sdvOpNameIfle[8] = "ifle";
 
-const char D_004DBC10[8] = "ifgt";
+const char sdvOpNameIfgt[8] = "ifgt";
 
-const char D_004DBC18[8] = "ifge";
+const char sdvOpNameIfge[8] = "ifge";
 
-const char D_004DBC20[8] = "iflt";
+const char sdvOpNameIflt[8] = "iflt";
 
-const char D_004DBC28[8] = "ifne";
+const char sdvOpNameIfne[8] = "ifne";
 
-const char D_004DBC30[8] = "ifeq";
+const char sdvOpNameIfeq[8] = "ifeq";
 
-const char D_004DBC38[8] = "dcmpg";
+const char sdvOpNameDcmpg[8] = "dcmpg";
 
-const char D_004DBC40[8] = "dcmpl";
+const char sdvOpNameDcmpl[8] = "dcmpl";
 
-const char D_004DBC48[8] = "fcmpg";
+const char sdvOpNameFcmpg[8] = "fcmpg";
 
-const char D_004DBC50[8] = "fcmpl";
+const char sdvOpNameFcmpl[8] = "fcmpl";
 
-const char D_004DBC58[8] = "lcmp";
+const char sdvOpNameLcmp[8] = "lcmp";
 
-const char D_004DBC60[8] = "d2f";
+const char sdvOpNameD2f[8] = "d2f";
 
-const char D_004DBC68[8] = "d2l";
+const char sdvOpNameD2l[8] = "d2l";
 
-const char D_004DBC70[8] = "d2i";
+const char sdvOpNameD2i[8] = "d2i";
 
-const char D_004DBC78[8] = "f2d";
+const char sdvOpNameF2d[8] = "f2d";
 
-const char D_004DBC80[8] = "f2l";
+const char sdvOpNameF2l[8] = "f2l";
 
-const char D_004DBC88[8] = "f2i";
+const char sdvOpNameF2i[8] = "f2i";
 
-const char D_004DBC90[8] = "l2d";
+const char sdvOpNameL2d[8] = "l2d";
 
-const char D_004DBC98[8] = "l2f";
+const char sdvOpNameL2f[8] = "l2f";
 
-const char D_004DBCA0[8] = "l2i";
+const char sdvOpNameL2i[8] = "l2i";
 
-const char D_004DBCA8[8] = "i2d";
+const char sdvOpNameI2d[8] = "i2d";
 
-const char D_004DBCB0[8] = "i2f";
+const char sdvOpNameI2f[8] = "i2f";
 
-const char D_004DBCB8[8] = "i2l";
+const char sdvOpNameI2l[8] = "i2l";
 
-const char D_004DBCC0[8] = "iinc";
+const char sdvOpNameIinc[8] = "iinc";
 
-const char D_004DBCC8[8] = "lxor";
+const char sdvOpNameLxor[8] = "lxor";
 
-const char D_004DBCD0[8] = "ixor";
+const char sdvOpNameIxor[8] = "ixor";
 
-const char D_004DBCD8[8] = "lor";
+const char sdvOpNameLor[8] = "lor";
 
-const char D_004DBCE0[8] = "ior";
+const char sdvOpNameIor[8] = "ior";
 
-const char D_004DBCE8[8] = "land";
+const char sdvOpNameLand[8] = "land";
 
-const char D_004DBCF0[8] = "iand";
+const char sdvOpNameIand[8] = "iand";
 
-const char D_004DBCF8[8] = "lushr";
+const char sdvOpNameLushr[8] = "lushr";
 
-const char D_004DBD00[8] = "iushr";
+const char sdvOpNameIushr[8] = "iushr";
 
-const char D_004DBD08[8] = "lshr";
+const char sdvOpNameLshr[8] = "lshr";
 
-const char D_004DBD10[8] = "ishr";
+const char sdvOpNameIshr[8] = "ishr";
 
-const char D_004DBD18[8] = "lshl";
+const char sdvOpNameLshl[8] = "lshl";
 
-const char D_004DBD20[8] = "ishl";
+const char sdvOpNameIshl[8] = "ishl";
 
-const char D_004DBD28[8] = "dneg";
+const char sdvOpNameDneg[8] = "dneg";
 
-const char D_004DBD30[8] = "fneg";
+const char sdvOpNameFneg[8] = "fneg";
 
-const char D_004DBD38[8] = "lneg";
+const char sdvOpNameLneg[8] = "lneg";
 
-const char D_004DBD40[8] = "ineg";
+const char sdvOpNameIneg[8] = "ineg";
 
-const char D_004DBD48[8] = "drem";
+const char sdvOpNameDrem[8] = "drem";
 
-const char D_004DBD50[8] = "frem";
+const char sdvOpNameFrem[8] = "frem";
 
-const char D_004DBD58[8] = "lrem";
+const char sdvOpNameLrem[8] = "lrem";
 
-const char D_004DBD60[8] = "irem";
+const char sdvOpNameIrem[8] = "irem";
 
-const char D_004DBD68[8] = "ddiv";
+const char sdvOpNameDdiv[8] = "ddiv";
 
-const char D_004DBD70[8] = "fdiv";
+const char sdvOpNameFdiv[8] = "fdiv";
 
-const char D_004DBD78[8] = "ldiv";
+const char sdvOpNameLdiv[8] = "ldiv";
 
-const char D_004DBD80[8] = "idiv";
+const char sdvOpNameIdiv[8] = "idiv";
 
-const char D_004DBD88[8] = "dmul";
+const char sdvOpNameDmul[8] = "dmul";
 
-const char D_004DBD90[8] = "fmul";
+const char sdvOpNameFmul[8] = "fmul";
 
-const char D_004DBD98[8] = "lmul";
+const char sdvOpNameLmul[8] = "lmul";
 
-const char D_004DBDA0[8] = "imul";
+const char sdvOpNameImul[8] = "imul";
 
-const char D_004DBDA8[8] = "dsub";
+const char sdvOpNameDsub[8] = "dsub";
 
-const char D_004DBDB0[8] = "fsub";
+const char sdvOpNameFsub[8] = "fsub";
 
-const char D_004DBDB8[8] = "lsub";
+const char sdvOpNameLsub[8] = "lsub";
 
-const char D_004DBDC0[8] = "isub";
+const char sdvOpNameIsub[8] = "isub";
 
-const char D_004DBDC8[8] = "dadd";
+const char sdvOpNameDadd[8] = "dadd";
 
-const char D_004DBDD0[8] = "fadd";
+const char sdvOpNameFadd[8] = "fadd";
 
-const char D_004DBDD8[8] = "ladd";
+const char sdvOpNameLadd[8] = "ladd";
 
-const char D_004DBDE0[8] = "iadd";
+const char sdvOpNameIadd[8] = "iadd";
 
-const char D_004DBDE8[8] = "swap";
+const char sdvOpNameSwap[8] = "swap";
 
-const char D_004DBDF0[8] = "dup2_x2";
+const char sdvOpNameDup2X2[8] = "dup2_x2";
 
-const char D_004DBDF8[8] = "dup2_x1";
+const char sdvOpNameDup2X1[8] = "dup2_x1";
 
-const char D_004DBE00[8] = "dup2";
+const char sdvOpNameDup2[8] = "dup2";
 
-const char D_004DBE08[8] = "dup_x2";
+const char sdvOpNameDupX2[8] = "dup_x2";
 
-const char D_004DBE10[8] = "dup_x1";
+const char sdvOpNameDupX1[8] = "dup_x1";
 
-const char D_004DBE18[8] = "dup";
+const char sdvOpNameDup[8] = "dup";
 
-const char D_004DBE20[8] = "pop2";
+const char sdvOpNamePop2[8] = "pop2";
 
-const char D_004DBE28[8] = "pop";
+const char sdvOpNamePop[8] = "pop";
 
-const char D_004DBE30[8] = "sastore";
+const char sdvOpNameSastore[8] = "sastore";
 
-const char D_004DBE38[8] = "castore";
+const char sdvOpNameCastore[8] = "castore";
 
-const char D_004DBE40[8] = "bastore";
+const char sdvOpNameBastore[8] = "bastore";
 
-const char D_004DBE48[8] = "aastore";
+const char sdvOpNameAastore[8] = "aastore";
 
-const char D_004DBE50[8] = "dastore";
+const char sdvOpNameDastore[8] = "dastore";
 
-const char D_004DBE58[8] = "fastore";
+const char sdvOpNameFastore[8] = "fastore";
 
-const char D_004DBE60[8] = "lastore";
+const char sdvOpNameLastore[8] = "lastore";
 
-const char D_004DBE68[8] = "iastore";
+const char sdvOpNameIastore[8] = "iastore";
 
-const char D_004DBE70[8] = "astore";
+const char sdvOpNameAstore[8] = "astore";
 
-const char D_004DBE78[8] = "dstore";
+const char sdvOpNameDstore[8] = "dstore";
 
-const char D_004DBE80[8] = "fstore";
+const char sdvOpNameFstore[8] = "fstore";
 
-const char D_004DBE88[8] = "lstore";
+const char sdvOpNameLstore[8] = "lstore";
 
-const char D_004DBE90[8] = "istore";
+const char sdvOpNameIstore[8] = "istore";
 
-const char D_004DBE98[8] = "saload";
+const char sdvOpNameSaload[8] = "saload";
 
-const char D_004DBEA0[8] = "caload";
+const char sdvOpNameCaload[8] = "caload";
 
-const char D_004DBEA8[8] = "baload";
+const char sdvOpNameBaload[8] = "baload";
 
-const char D_004DBEB0[8] = "aaload";
+const char sdvOpNameAaload[8] = "aaload";
 
-const char D_004DBEB8[8] = "daload";
+const char sdvOpNameDaload[8] = "daload";
 
-const char D_004DBEC0[8] = "faload";
+const char sdvOpNameFaload[8] = "faload";
 
-const char D_004DBEC8[8] = "laload";
+const char sdvOpNameLaload[8] = "laload";
 
-const char D_004DBED0[8] = "iaload";
+const char sdvOpNameIaload[8] = "iaload";
 
-const char D_004DBED8[8] = "aload_3";
+const char sdvOpNameAload3[8] = "aload_3";
 
-const char D_004DBEE0[8] = "aload_2";
+const char sdvOpNameAload2[8] = "aload_2";
 
-const char D_004DBEE8[8] = "aload_1";
+const char sdvOpNameAload1[8] = "aload_1";
 
-const char D_004DBEF0[8] = "aload_0";
+const char sdvOpNameAload0[8] = "aload_0";
 
-const char D_004DBEF8[8] = "dload_3";
+const char sdvOpNameDload3[8] = "dload_3";
 
-const char D_004DBF00[8] = "dload_2";
+const char sdvOpNameDload2[8] = "dload_2";
 
-const char D_004DBF08[8] = "dload_1";
+const char sdvOpNameDload1[8] = "dload_1";
 
-const char D_004DBF10[8] = "dload_0";
+const char sdvOpNameDload0[8] = "dload_0";
 
-const char D_004DBF18[8] = "fload_3";
+const char sdvOpNameFload3[8] = "fload_3";
 
-const char D_004DBF20[8] = "fload_2";
+const char sdvOpNameFload2[8] = "fload_2";
 
-const char D_004DBF28[8] = "fload_1";
+const char sdvOpNameFload1[8] = "fload_1";
 
-const char D_004DBF30[8] = "fload_0";
+const char sdvOpNameFload0[8] = "fload_0";
 
-const char D_004DBF38[8] = "lload_3";
+const char sdvOpNameLload3[8] = "lload_3";
 
-const char D_004DBF40[8] = "lload_2";
+const char sdvOpNameLload2[8] = "lload_2";
 
-const char D_004DBF48[8] = "lload_1";
+const char sdvOpNameLload1[8] = "lload_1";
 
-const char D_004DBF50[8] = "lload_0";
+const char sdvOpNameLload0[8] = "lload_0";
 
-const char D_004DBF58[8] = "iload_3";
+const char sdvOpNameIload3[8] = "iload_3";
 
-const char D_004DBF60[8] = "iload_2";
+const char sdvOpNameIload2[8] = "iload_2";
 
-const char D_004DBF68[8] = "iload_1";
+const char sdvOpNameIload1[8] = "iload_1";
 
-const char D_004DBF70[8] = "iload_0";
+const char sdvOpNameIload0[8] = "iload_0";
 
-const char D_004DBF78[8] = "aload";
+const char sdvOpNameAload[8] = "aload";
 
-const char D_004DBF80[8] = "dload";
+const char sdvOpNameDload[8] = "dload";
 
-const char D_004DBF88[8] = "fload";
+const char sdvOpNameFload[8] = "fload";
 
-const char D_004DBF90[8] = "lload";
+const char sdvOpNameLload[8] = "lload";
 
-const char D_004DBF98[8] = "iload";
+const char sdvOpNameIload[8] = "iload";
 
-const char D_004DBFA0[8] = "ldc2w";
+const char sdvOpNameLdc2w[8] = "ldc2w";
 
-const char D_004DBFA8[8] = "ldc2";
+const char sdvOpNameLdc2[8] = "ldc2";
 
-const char D_004DBFB0[8] = "ldc1";
+const char sdvOpNameLdc1[8] = "ldc1";
 
-const char D_004DBFB8[8] = "sipush";
+const char sdvOpNameSipush[8] = "sipush";
 
-const char D_004DBFC0[8] = "bipush";
+const char sdvOpNameBipush[8] = "bipush";
 
-const char D_004DBFC8[8] = "nop";
+const char sdvOpNameNop[8] = "nop";

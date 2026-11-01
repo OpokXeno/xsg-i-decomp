@@ -22,13 +22,13 @@ typedef struct {
     JsLightColor color[3];
 } JsClassLight;
 
-extern char D_004DA5A8[];
+extern char jsClassLightGetPeerLightClassName[];
 extern void initLight2(void);
 
 void *JS_classLight_getPeer(int identifier)
 {
     if (identifier == -1)
-        return D_004DA5A8;
+        return jsClassLightGetPeerLightClassName;
     return 0;
 }
 
@@ -84,4 +84,4 @@ int JS_classLight_setDirection2(void *peer)
     return 0;
 }
 
-char D_004DA5A8[8] = "light";
+char jsClassLightGetPeerLightClassName[8] = "light";

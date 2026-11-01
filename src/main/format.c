@@ -19,10 +19,7 @@ typedef struct JThread JThread;
 
 extern unsigned int strlen(const char *string);
 
-const char D_004DC098[4] = "%d";
-
-
-
+const char integerFormat[4] = "%d";
 
 void Java_xeno_util_Format_floatToIntBits__F(JThread *thread, int *arguments, unsigned int *result)
 {
@@ -51,7 +48,7 @@ void Java_xeno_util_Format_toString__C(JThread *thread, VMSlot *arguments,
     allocated_array = newArray(classByte, 255);
     string->value = allocated_array;
     character = arguments[0].s;
-    sprintf((char *)allocated_array->data, D_004DC098, character);
+    sprintf((char *)allocated_array->data, integerFormat, character);
     stored_array = string->value;
     stored_array->length = strlen((char *)stored_array->data);
     result[0].ref = string;
@@ -68,7 +65,7 @@ void Java_xeno_util_Format_toString__F(JThread *thread, float *arguments,
         JAVA_tmpString->value = newArray(classByte, 255);
     }
 
-    sprintf((char *)JAVA_tmpString->value->data, D_004DC0A0, (double)arguments[0]);
+    sprintf((char *)JAVA_tmpString->value->data, floatFormat, (double)arguments[0]);
     array = JAVA_tmpString->value;
     array->length = strlen((char *)array->data);
     string_slot = &JAVA_tmpString;
@@ -110,11 +107,11 @@ void Java_xeno_util_Format_toString__Z(JThread *thread,
         string = JAVA_tmpString;
     }
 
-    sprintf((char *)string->value->data, D_004DC098, arguments[0]);
+    sprintf((char *)string->value->data, integerFormat, arguments[0]);
     array = JAVA_tmpString->value;
     array->length = strlen((char *)array->data);
     string_slot = &JAVA_tmpString;
     *result = (int)*string_slot;
 }
 
-const char D_004DC0A0[8] = "%f";
+const char floatFormat[8] = "%f";

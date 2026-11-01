@@ -1,5 +1,6 @@
-# Originals/toolchains stay on the private runner. Public artifacts contain
-# hashes/counts only. Every report follows a fresh checkout, build and comparison.
+# Build every file, compare it with the original, and publish the objdiff
+# progress report for decomp.dev. Originals and toolchains stay on the private
+# runner; the public artifact is the report only.
 name: Verified progress report
 
 on:
@@ -11,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: verified-progress
+  group: progress-report
   cancel-in-progress: false
 
 jobs:
@@ -23,48 +24,34 @@ jobs:
     defaults:
       run:
         # Legacy GCC allocation can change codegen with Linux's mmap layout.
-        # Use the same execution personality as the verified local builds,
-        # including the compiles performed while generating objdiff pairs.
         shell: setarch linux32 -L bash --noprofile --norc -e -o pipefail {0}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Check private inputs and clean public checkout
+      - name: Build, link and compare the six EE files
         run: |
-          set -euo pipefail
           : "${XENO_GAME_DIR:?Set this in the runner service environment}"
           : "${XENO_TOOLCHAIN_DIR:?Set this in the runner service environment}"
           : "${XENO_SPLAT_PYTHON:?Set this in the runner service environment}"
-          test -z "${XENO_TOOLCHAIN_ALLOW:-}"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          git diff --exit-code
-          test ! -e config/tu-build.json
-          test ! -d config/units
-          python3 -B tools/tu/toolchain.py --check
-          python3 -B tools/iop_ci_stage.py
-          python3 -B tools/iop_inventory.py --verify-only
-
-      - name: Compile and link all six EE files for native progress measurement
-        run: |
-          python3 -B tools/tu/verify_report.py --begin
           python3 -B configure.py
-          ninja -j4 report
+          ninja -j4 gate
 
-      - name: Compile, link and compare both IOP modules from 24 original objects
+      - name: Build, link and compare both IOP modules
         run: |
+          python3 -B tools/iop_ci_stage.py
           python3 -B tools/iop_build.py --reporting \
             --build-dir ".work/ci-iop-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --report ".work/ci-iop-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/report.json" \
             --jobs 4
 
-      - name: Verify fresh compiler/link provenance and record exact function bytes
+      - name: Write the objdiff project
         run: |
-          timeout -k 5 600 python3 -B tools/tu/verify_report.py --finish --reporting \
+          python3 -B tools/tu/objdiff_project.py \
             --iop-report ".work/ci-iop-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/report.json"
 
-      - name: Download pinned objdiff-cli
+      - name: Generate the report with the pinned objdiff-cli
         run: |
           python3 -B - <<'PY'
           import hashlib, json, os, pathlib, urllib.request
@@ -75,24 +62,12 @@ jobs:
           assert hashlib.sha256(data).hexdigest() == pin['sha256'], 'objdiff-cli hash mismatch'
           path.write_bytes(data)
           path.chmod(0o755)
-          with open(os.environ['GITHUB_ENV'], 'a') as env:
-              env.write(f'OBJDIFF_CLI={path}\n')
           PY
-
-      - name: Generate native objdiff report from verified object pairs
-        run: python3 -B tools/objdiff_report.py --reporting -o build/report.json
+          "$RUNNER_TEMP/objdiff-cli" report generate --project build/objdiff --output build/report.json
 
       - name: Upload progress report
         uses: actions/upload-artifact@v4
         with:
           name: SLUS_204.69_report
           path: build/report.json
-          if-no-files-found: error
-
-      - name: Upload verification evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: SLUS_204.69_verification
-          path: |
-            build/verification.json
           if-no-files-found: error

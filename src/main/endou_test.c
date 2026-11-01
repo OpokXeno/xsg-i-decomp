@@ -7,9 +7,9 @@
 
 #include "endou_test.h"
 
-extern int Select_82;
+static int Select_82;
 
-extern int TopMode_86;
+static int TopMode_86;
 
 typedef struct PartyAttackSlot {
     unsigned short character;
@@ -17,28 +17,24 @@ typedef struct PartyAttackSlot {
     unsigned char unmodeled_03;
 } PartyAttackSlot;
 
-
-
 typedef struct PartyDataView {
     unsigned char unmodeled_00[0x30];
     PartyAttackSlot attack_slots[3];
 } PartyDataView;
 
+extern const char attackerHeadingLabel[];
 
+extern const char attackerControlsLabel[];
 
-extern const char D_004C2F10[];
+static const char * text00_83[10];
 
-extern const char D_004C2F30[];
+static const char * text01_84[3];
 
-extern const char *text00_83[10];
+static const char * text02_85[] ;
 
-extern const char *text01_84[3];
+extern const char partyDebugTitleLabel[];
 
-extern const char *text02_85[];
-
-extern const char D_004C2F68[];
-
-extern const char D_004C2F90[];
+extern const char partyDebugToggleLabel[];
 
 typedef struct EndouBattleWindowParams {
     int x;
@@ -46,13 +42,11 @@ typedef struct EndouBattleWindowParams {
     int style;
     int information_x;
     int information_y;
-    void *commands;
+    struct BattleWinCommand *commands;
     const char *title;
     int repeat;
     int selection;
 } EndouBattleWindowParams;
-
-
 
 typedef struct EndouBattleMessageParams {
     int x;
@@ -61,8 +55,6 @@ typedef struct EndouBattleMessageParams {
     const char *title;
     const char *text;
 } EndouBattleMessageParams;
-
-
 
 typedef struct EndouBattleAnalysisParams {
     int x;
@@ -82,8 +74,6 @@ typedef struct EndouBattleAnalysisParams {
     unsigned short rare_drop;
 } EndouBattleAnalysisParams;
 
-
-
 typedef struct EndouBattleRewardParams {
     int x;
     int y;
@@ -93,27 +83,33 @@ typedef struct EndouBattleRewardParams {
     const char *title;
 } EndouBattleRewardParams;
 
+typedef struct BattleWinCommand {
+    const char *text;
+    const char *description;
+    unsigned char flags;
+    signed char icon;
+    unsigned char unmodeled_0a[2];
+} BattleWinCommand;
 
+static BattleWinCommand data_15[20];
 
-extern unsigned char data_15[];
+static const char * tag_16[] ;
 
-extern const char *tag_16[];
+static char text_17[171] ;
 
-extern const char text_17[];
+static const char * msg_19[] ;
 
-extern const char *msg_19[];
+static char tag_20[17] ;
 
-extern const char tag_20[];
+static int count_18;
 
-extern int count_18;
+extern const char battleWindowTestLabel[];
 
-extern const char D_004C2A70[];
+extern const char condorPasaName[];
 
-extern const char D_004C2A88[];
+extern const char battleWindowTitleText[];
 
-extern const char D_004DA720[];
-
-extern const char D_004DA730[];
+extern const char padRepeatFormat[];
 
 extern void xglSleep(void);
 
@@ -130,8 +126,6 @@ typedef struct PadDataButtonView {
         } input;
     } buttons;
 } PadDataButtonView;
-
-
 
 extern PadDataButtonView PadData;
 
@@ -151,8 +145,6 @@ typedef struct EModelTestState {
     unsigned char unmodeled_12[1];
     unsigned char extFuncFlag;
 } EModelTestState;
-
-
 
 extern void MenuModelUnitOpen(void *unit, int drawType);
 
@@ -180,7 +172,7 @@ extern void MenuModelMain(void);
 
 /* JP: モデルテスト
  * EN: Model test */
-const unsigned char D_004C2AE8[16] =
+const unsigned char eModelTestLabel[16] =
     "\x0B\xA5\xE2\xA5\xC7\xA5\xEB\xA5\xC6\xA5\xB9\xA5\xC8";
 
 static const char not_found_format[16] = "%s/NotFound";
@@ -193,14 +185,10 @@ typedef struct GifPackedTag {
     u64 register_descriptors;
 } GifPackedTag;
 
-
-
 typedef struct GifAdWrite {
     u64 value;
     u64 register_id;
 } GifAdWrite;
-
-
 
 typedef struct GifPackedRgbaq {
     unsigned int red;
@@ -209,16 +197,12 @@ typedef struct GifPackedRgbaq {
     unsigned int alpha;
 } GifPackedRgbaq;
 
-
-
 typedef struct GifUv {
     unsigned int u;
     unsigned int v;
     unsigned int q;
     unsigned int reserved;
 } GifUv;
-
-
 
 typedef struct GifXyz2 {
     unsigned int x;
@@ -227,14 +211,10 @@ typedef struct GifXyz2 {
     unsigned int fog;
 } GifXyz2;
 
-
-
 typedef struct BgTestRenderState {
     unsigned char unmodeled_00[0x14];
     unsigned short packetControl;
 } BgTestRenderState;
-
-
 
 typedef struct BgTestEnvironment {
     unsigned int vif_nop[3];
@@ -250,8 +230,6 @@ typedef struct BgTestEnvironment {
     GifXyz2 second_vertex;
 } BgTestEnvironment;
 
-
-
 enum {
     BG_TEST_COMMAND_HIGH = 0xc800,
     BG_TEST_COMMAND_BASE = 0x2412,
@@ -259,8 +237,6 @@ enum {
     BG_TEST_CONTROL_SHIFT = 5,
     BG_TEST_COMMAND_HIGH_SHIFT = 19
 };
-
-
 
 extern BgTestRenderState sRender;
 
@@ -315,8 +291,6 @@ typedef struct WinTexEnvironment {
     GifAdWrite transfer_direction;
 } WinTexEnvironment;
 
-
-
 /* VIF DIRECTHL carries a GIF PACKED tag and five GS A+D register writes. */
 
 static WinTexEnvironment WinTexEnv_65 = {
@@ -339,8 +313,6 @@ typedef struct ETestContext {
     XglPacket *packet;
 } ETestContext;
 
-
-
 extern void xglFontReloadTexture(ETestContext *context, int mode);
 
 /*
@@ -362,8 +334,6 @@ typedef struct EndouPadDataPrefix {
     } buttons;
 } EndouPadDataPrefix;
 
-
-
 typedef struct EndouClearEnvironment {
     u8 unmodeled_00[0x20];
     u32 color_r;
@@ -372,35 +342,33 @@ typedef struct EndouClearEnvironment {
     u32 color_a;
 } EndouClearEnvironment;
 
-
-
 extern EndouClearEnvironment ClearEnv;
 
-extern const char D_004C2440[];
+extern const char settlementScreenTestLabel[];
 
-extern const char D_004C2458[];
+extern const char textTestSquareLabel[];
 
-extern const char D_004C2468[];
+extern const char messageTestCrossLabel[];
 
-extern const char D_004C2480[];
+extern const char miscTestCircleLabel[];
 
-extern const char D_004C2498[];
+extern const char modelTestL1Label[];
 
-extern const char D_004C24B0[];
+extern const char loadTestL2Label[];
 
-extern const char D_004C24C8[];
+extern const char textureTestR1Label[];
 
-extern const char D_004C24E0[];
+extern const char jpegTestR2Label[];
 
-extern const char D_004C24F8[];
+extern const char battleWindowTestUpLabel[];
 
-extern const char D_004C2510[];
+extern const char saveTestDownLabel[];
 
-extern const char D_004C2528[];
+extern const char modelTestRightLabel[];
 
-extern const char D_004C2540[];
+extern const char shopTestLeftLabel[];
 
-extern const char D_004DA660[];
+extern const char GameEndouTestTitleText[];
 
 extern void endPrintInit(void);
 
@@ -429,8 +397,6 @@ extern int MenuFileMain(int mode);
 typedef struct ShopDataRecord {
     u16 values[0xb8];
 } ShopDataRecord;
-
-
 
 extern void PartyFriendOn(int party_id);
 
@@ -467,8 +433,6 @@ typedef struct EMessageTestWindow {
     u8 unmodeled_1d[0x33];
 } EMessageTestWindow;
 
-
-
 extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
 
 extern void eMessageSet(void *message, const char *text);
@@ -485,11 +449,11 @@ extern void endPrintExtFunc(int mode, int amount, void *data);
 
 extern void xglFontDebugHex(int x, int y, int value, int digits);
 
-extern const char *msg_45[5];
+static const char * msg_45[5];
 
-extern const char text00_46[];
+static char text00_46[176];
 
-extern const char D_004C2C70[];
+extern const char eMessageTestLabel[];
 
 #include "main/control_entry.h"
 
@@ -497,11 +461,11 @@ extern const char D_004C2C70[];
 
 #include "main/xgl_font.h"
 
-extern const char D_004C2CF0[];
+extern const char reLoadTestFloorPath[];
 
-extern const char D_004C2D08[];
+extern const char reLoadTestLabel[];
 
-extern const char D_004C2D18[];
+extern const char kanjiTestText[];
 
 extern void xglFontPrintExtFunc(unsigned int mask,
                                 void (*callback)(ETestContext *),
@@ -511,8 +475,6 @@ typedef struct UmnEventTextRecord {
     u32 unmodeled_00;
     const char *message_text;
 } UmnEventTextRecord;
-
-
 
 typedef struct TextTestMessage {
     u8 unmodeled_00[4];
@@ -524,8 +486,6 @@ typedef struct TextTestMessage {
     u8 unmodeled_1d[0x33];
 } TextTestMessage;
 
-
-
 extern u8 *UmnEventTextInit(u8 *work_end);
 
 extern int UmnEventTextMake(int mode);
@@ -534,7 +494,7 @@ extern UmnEventTextRecord *UmnEventTextNextGet(int index);
 
 extern void eMessageModeChange(void *message, u8 mode);
 
-extern const char D_004C2558[];
+extern const char textTestLabel[];
 
 typedef struct UmnMailDisplayParams {
     int mode;
@@ -551,15 +511,13 @@ typedef struct UmnMailDisplayParams {
     u8 unmodeled_20[0x20];
 } UmnMailDisplayParams;
 
-
-
 extern void tyaUmlDispInit(void);
 
 extern void tyaUmlDispParamReset(UmnMailDisplayParams *params, int mode);
 
 extern void tyaUmlDispMain(UmnMailDisplayParams *params);
 
-extern const char D_004C2CD0[];
+extern const char umnMailDispTestLabel[];
 
 typedef struct JpegTestDecodeRequest {
     void *source;
@@ -572,8 +530,6 @@ typedef struct JpegTestDecodeRequest {
     u8 unmodeled_18[8];
 } JpegTestDecodeRequest;
 
-
-
 typedef struct JpegTestDisplay {
     u16 x;
     u16 y;
@@ -585,43 +541,41 @@ typedef struct JpegTestDisplay {
     void *image_data;
 } JpegTestDisplay;
 
-
-
 extern int GameSnapShotSaveThumbnail(int quality, void *jpeg_buffer);
 
-extern const char D_004C2DA8[];
+extern const char jpegTestLabel[];
 
-extern int Select_74;
+static int Select_74;
 
-extern int Select_76;
+static int Select_76;
 
-extern int Select_78;
+static int Select_78;
 
-extern int Select_80;
+static int Select_80;
 
-extern const char D_004C2DF0[];
+extern const char takeAgwsHeadingLabel[];
 
-extern const char D_004C2E08[];
+extern const char takeAgwsControlsLabel[];
 
-extern const char D_004C2E38[];
+extern const char lockPartyHeadingLabel[];
 
-extern const char D_004C2E58[];
+extern const char toggleControlsLabel[];
 
-extern const char D_004C2E88[];
+extern const char outFriendHeadingLabel[];
 
-extern const char D_004C2EA8[];
+extern const char friendHeadingLabel[];
 
-extern const char D_004C2EC0[];
+extern const char friendControlsLabel[];
 
-extern const char D_004DA768[];
+extern const char menuCursorText[];
 
-extern const char *text00_75[];
+static const char * text00_75[] ;
 
-extern const char *text00_77[];
+static const char * text00_77[] ;
 
-extern const char *text00_79[];
+static const char * text00_79[] ;
 
-extern const char *text00_81[];
+static const char * text00_81[] ;
 
 extern char *MenuCharNameGet(int characterId);
 
@@ -641,13 +595,25 @@ extern int dataMoneyBoxInc(int amount);
 
 extern void MenuShopMain(int menu_selection);
 
-extern const char D_004C2568[], D_004C2588[], D_004C2598[], D_004C25B0[], D_004C25C8[];
+extern const char shopDataPath[];
+extern const char shopTestLabel[];
+extern const char shopNumberChangeLabel[];
+extern const char shopRunQuitLabel[];
+extern const char shopNoFormat[];
 
-extern const char D_004DA668[], D_004DA670[], D_004DA678[], D_004DA680[], D_004DA688[];
+extern char shopHeadingIText[];
+extern const char shopHeadingCwText[];
+extern const char shopHeadingCaText[];
+extern const char shopHeadingCbText[];
+extern const char shopHeadingAwText[];
 
-extern const char D_004DA690[], D_004DA698[], D_004DA6A0[], D_004DA6A8[], D_004DA6B0[];
+extern const char shopHeadingAaText[];
+extern const char shopHeadingAbText[];
+extern const char shopHeadingAfText[];
+extern const char shopHeadingAeText[];
+extern char shopHeadingAText[];
 
-extern const char D_004DA6B8[];
+extern const char shopRowNumberFormat[];
 
 static inline void endouShopHeading(int y, const char *format, int shop_number)
 {
@@ -660,33 +626,25 @@ typedef struct FileLoadState {
     unsigned char unmodeled_08[0x40];
 } FileLoadState;
 
+static FileLoadState files;
 
+static u64 eNumberTexEnv_69[12];
 
-extern FileLoadState files;
+static u64 TestEnv_70[20];
 
-extern u64 eNumberTexEnv_69[12];
+static int x_71;
 
-extern u64 TestEnv_70[20];
+extern const char fileLoadTestMenuPath[];
 
-extern int x_71;
-
-extern const char D_004C2D80[];
-
-extern const char D_004C2D98[];
+extern const char fileLoadTestLabel[];
 
 extern void (*xglCdSetCallback(void (*callback)(int, int)))(int, int);
 
 typedef int s32;
 
-
-
 typedef s32 M2C_UNK;
 
-
-
 typedef struct StudioLight StudioLight;
-
-
 
 typedef Vector4 EndouVector __attribute__((aligned(16)));
 typedef struct EndouModelActor {
@@ -705,8 +663,6 @@ typedef struct EndouModelActor {
     unsigned char unmodeled_8fc[0x9d8 - 0x8fc];
     unsigned long long draw_alpha;
 } EndouModelActor;
-
-
 
 M2C_UNK ACT_initMotion();
 
@@ -770,38 +726,33 @@ static __inline__ void EndouApplyModelLighting(StudioLight **light_slot,
     xglLightDirection(*light_slot, 2, &profile.direction[2]);
 }
 
+extern const EndouTestLighting modelTestLighting;
 
+extern const char modelTestFpkName[152];
 
-extern const EndouTestLighting D_004C25E0;
+extern const char modelTestMotionName[];
 
-extern const signed char D_004C2650[];
+extern const unsigned long long modelTestQuadWordTable[8];
 
-extern const char D_004C2658[];
+extern const char modelTestLexExtension[8];
 
-extern const char D_004C26F0[];
+extern const char modelTestXtxExtension[8];
 
+extern const char modelTestJntExtension[];
 
-extern const unsigned long long D_004C2720[8];
+static float ang_0[4];
 
-extern const char D_004DA6C0[5];
+static const char * msg00_14[4];
 
-extern const char D_004DA6C8[5];
+static unsigned char msg_11[80];
 
-extern const char D_004DA6D0[];
+static s32 no_13;
 
-extern float ang_0[4];
+static f32 pipo_2;
 
-extern const char *msg00_14[];
+static float pos_1[4];
 
-extern struct EMessageParam msg_11;
-
-extern s32 no_13;
-
-extern f32 pipo_2;
-
-extern float pos_1[4];
-
-extern s32 time_10;
+static s32 time_10;
 
 typedef struct EndouModelLineVertex {
     int x;
@@ -810,47 +761,41 @@ typedef struct EndouModelLineVertex {
     int terminator;
 } EndouModelLineVertex;
 
-
-
 typedef struct EndouModelLinePoint {
     EndouModelLineVertex vertex;
     unsigned char color[4];
     unsigned char unmodeled_14[12];
 } EndouModelLinePoint;
 
+static EndouModelLinePoint line00_3[7];
 
+static EndouModelLinePoint line01_4[7];
 
-extern EndouModelLinePoint line00_3[7];
+static EndouModelLinePoint line02_5[7];
 
-extern EndouModelLinePoint line01_4[7];
+static EndouModelLinePoint line03_6[7];
 
-extern EndouModelLinePoint line02_5[7];
+static EndouModelLinePoint line10_7[7];
 
-extern EndouModelLinePoint line03_6[7];
+static EndouModelLinePoint line11_8[7];
 
-extern EndouModelLinePoint line10_7[7];
-
-extern EndouModelLinePoint line11_8[7];
-
-extern EndouModelLinePoint line12_9[7];
+static EndouModelLinePoint line12_9[7];
 
 typedef struct EndouOrientationStorage {
     EndouVector rotation;
     EndouVector scale;
 } EndouOrientationStorage;
 
+extern unsigned char modelTestColumnAlphaTable[];
 
-
-extern const unsigned char D_004DA6E0[];
-
-extern const unsigned char D_004DA6E8[];
+extern unsigned char modelTestRowAlphaTable[];
 
 typedef struct EndouModelBackQuad {
     int vertices[4][4];
     float uv[4];
 } EndouModelBackQuad;
 
-extern EndouModelBackQuad bsp_12;
+static EndouModelBackQuad bsp_12;
 
 typedef struct EndouPrintLinePoint {
     int x;
@@ -860,8 +805,6 @@ typedef struct EndouPrintLinePoint {
     u8 color[4];
     u8 unmodeled_14[12];
 } EndouPrintLinePoint;
-
-
 
 typedef struct EndouELinePoint {
     int x;
@@ -881,8 +824,6 @@ typedef struct EndouELineSetData {
     u8 unmodeled_009[3];
     EndouELinePoint points[5];
 } EndouELineSetData;
-
-
 
 void eLineSet(EndouELineSetData *line, int unused);
 
@@ -908,11 +849,11 @@ void eSpriteSet(ESprite *sprite, int flags);
 
 void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 
-extern u8 time_37;
+static u8 time_37;
 
-extern const char D_004C2AD8[];
+extern const char eNumberTestLabel[];
 
-extern ECursolMainData cur_25;
+static ECursolMainData cur_25;
 
 typedef struct EndouSpriteQuadVertex {
     int x;
@@ -930,21 +871,21 @@ typedef struct EndouSpriteQuad {
     unsigned char unmodeled_050[16];
 } EndouSpriteQuad;
 
-extern EndouSpriteQuad d_28;
+static EndouSpriteQuad d_28;
 
-extern ENumberSpriteDescriptor d_33;
+static ENumberSpriteDescriptor d_33;
 
-extern ENumberSpriteDescriptor d_35[2];
+static ENumberSpriteDescriptor d_35[2];
 
-extern ENumberSpriteDescriptor d_36;
+static ENumberSpriteDescriptor d_36;
 
-extern ENumberSpriteDescriptor d_38;
+static ENumberSpriteDescriptor d_38;
 
-extern ENumberRenderDescriptor d_39;
+static ENumberRenderDescriptor d_39;
 
-extern ENumberRenderDescriptor d_40;
+static ENumberRenderDescriptor d_40;
 
-extern ENumberSpriteDescriptor d_41;
+static ENumberSpriteDescriptor d_41;
 
 typedef struct EndouPrintPoint {
     short x;
@@ -953,9 +894,9 @@ typedef struct EndouPrintPoint {
     unsigned char color[4];
 } EndouPrintPoint;
 
-extern EndouPrintPoint d_42[7];
+static EndouPrintPoint d_42[7];
 
-extern EndouPrintPoint d_43;
+static EndouPrintPoint d_43;
 
 typedef struct EndouQuadColor {
     signed char red;
@@ -976,23 +917,23 @@ typedef struct EndouQuadDescriptor {
     unsigned int format;
 } EndouQuadDescriptor;
 
-extern EndouQuadDescriptor d_44;
+static EndouQuadDescriptor d_44;
 
-extern EndouELineEntry line_23[4];
+static EndouELineEntry line_23[4];
 
-extern EndouPrintPoint line_34[6];
+static EndouPrintPoint line_34[6];
 
-extern unsigned char moji2_27[];
+static unsigned char moji2_27[27];
 
-extern unsigned char moji_26[];
+static unsigned char moji_26[27];
 
-extern ENumberMainData num_29[1];
+static ENumberMainData num_29[1];
 
-extern ENumberMainData num_30[1];
+static ENumberMainData num_30[1];
 
-extern ENumberMainData num_31[1];
+static ENumberMainData num_31[1];
 
-extern ENumberMainData num_32[1];
+static ENumberMainData num_32[1];
 
 typedef struct EndouRibbonRecord {
     short x;
@@ -1008,44 +949,24 @@ typedef struct EndouRibbonRecord {
     unsigned char unmodeled_058[0x18];
 } EndouRibbonRecord;
 
-extern EndouRibbonRecord rbn_21[3];
+static EndouRibbonRecord rbn_21[4];
 
-extern ESprite spr_22[4];
+static ESprite spr_22[4];
 
 typedef union EndouTagFontViews {
     ETagFont control;
     ETagFontMainData draw;
 } EndouTagFontViews;
 
-extern EndouTagFontViews tgf_24[2];
+static EndouTagFontViews tgf_24[2];
 
-extern unsigned char *buffer_72;
+static unsigned char * buffer_72;
 
-extern char mm_73[];
+static char mm_73[352];
 
-extern const char D_004C2DB8[], D_004C2DD0[], D_004C2DE0[];
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+extern const char umlTestFilePath[];
+extern const char umlTestLabel[];
+extern const char umlTestColorControl[];
 
 #define NULL ((void *)0)
 
@@ -1070,10 +991,6 @@ typedef struct EndouModelMessagePrefix {
 } EndouModelMessagePrefix;
 #define ENDOU_MODEL_MESSAGE ((EndouModelMessagePrefix *)(void *)&msg_11)
 
-
-
-
-
 enum FileLoadDrawState {
     FILE_DRAW_UNINITIALIZED = -1,
     FILE_DRAW_ENABLED = 1
@@ -1085,12 +1002,10 @@ struct FileLoadInfo {
     char filename[64];
 };
 
-
 struct FileLoadDrawEnvironment {
     unsigned char unmodeled_00[0x30];
     unsigned long long texture_parameters;
 };
-
 
 void EndouTest(void)
 {
@@ -1109,63 +1024,63 @@ void EndouTest(void)
             break;
         }
 
-        xglFontDebugPrintf(0, 0, D_004DA660);
-        xglFontDebugPrintf(0, 0x10, D_004C2440);
+        xglFontDebugPrintf(0, 0, GameEndouTestTitleText);
+        xglFontDebugPrintf(0, 0x10, settlementScreenTestLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x10) != 0) {
             SeisanTest();
         }
 
-        xglFontDebugPrintf(0, 0x20, D_004C2458);
+        xglFontDebugPrintf(0, 0x20, textTestSquareLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_28 & 0x80) != 0) {
             TextTest();
         }
 
-        xglFontDebugPrintf(0, 0x30, D_004C2468);
+        xglFontDebugPrintf(0, 0x30, messageTestCrossLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x40) != 0) {
             eMessageTest();
         }
 
-        xglFontDebugPrintf(0, 0x40, D_004C2480);
+        xglFontDebugPrintf(0, 0x40, miscTestCircleLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x20) != 0) {
             eNumberTest();
         }
 
-        xglFontDebugPrintf(0, 0x50, D_004C2498);
+        xglFontDebugPrintf(0, 0x50, modelTestL1Label);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x4) != 0) {
             eModelTest();
         }
 
-        xglFontDebugPrintf(0, 0x60, D_004C24B0);
+        xglFontDebugPrintf(0, 0x60, loadTestL2Label);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x1) != 0) {
             MenuFileMain(1);
         }
 
-        xglFontDebugPrintf(0, 0x70, D_004C24C8);
+        xglFontDebugPrintf(0, 0x70, textureTestR1Label);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x8) != 0) {
             TexturTest();
         }
 
-        xglFontDebugPrintf(0, 0x80, D_004C24E0);
+        xglFontDebugPrintf(0, 0x80, jpegTestR2Label);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x2) != 0) {
             JpegTest();
         }
 
-        xglFontDebugPrintf(0, 0x90, D_004C24F8);
+        xglFontDebugPrintf(0, 0x90, battleWindowTestUpLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x1000) != 0) {
             BattleWindowTest();
         }
 
-        xglFontDebugPrintf(0, 0xa0, D_004C2510);
+        xglFontDebugPrintf(0, 0xa0, saveTestDownLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x4000) != 0) {
             MenuFileMain(0);
         }
 
-        xglFontDebugPrintf(0, 0xb0, D_004C2528);
+        xglFontDebugPrintf(0, 0xb0, modelTestRightLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x2000) != 0) {
             ModelTest();
         }
 
-        xglFontDebugPrintf(0, 0xc0, D_004C2540);
+        xglFontDebugPrintf(0, 0xc0, shopTestLeftLabel);
         if ((ENDOU_PAD_INPUT->buttons.halves.half_2a & 0x8000) != 0) {
             ShopTest();
         }
@@ -1197,7 +1112,7 @@ void TextTest(void)
     message.page_state = 2;
     eMessageModeChange(&message, 0x22);
 
-    while (xglFontDebugPrintf(0, 0x10, D_004C2558),
+    while (xglFontDebugPrintf(0, 0x10, textTestLabel),
            (PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
         eMessageMain(&message);
         if ((PadData.buttons.input.pressed & 8U) != 0 &&
@@ -1232,7 +1147,7 @@ void ShopTest(void)
     ACT_init();
 
     shop_file = (ShopFile *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
-    WorkEnd = (u8 *)shop_file + xglCdReadFile(D_004C2568, shop_file, 0, 1);
+    WorkEnd = (u8 *)shop_file + xglCdReadFile(shopDataPath, shop_file, 0, 1);
     PartyFriendOn(3);
     PartyFriendOn(2);
     menu_open = 0;
@@ -1246,7 +1161,7 @@ void ShopTest(void)
     xglRenderClearFrame();
 
     for (;;) {
-        xglFontDebugPrintf(0, 0x10, D_004C2588);
+        xglFontDebugPrintf(0, 0x10, shopTestLabel);
         if ((PadData.buttons.button_state & 0x08000100U) == 0x08000100U)
             break;
         pressed = PadData.buttons.input.pressed;
@@ -1268,25 +1183,25 @@ void ShopTest(void)
                 menu_selection = menu_selection == 0x14 ? 1 : menu_selection + 1;
             if ((pressed & 0x20) != 0)
                 menu_open = 1;
-            xglFontDebugPrintf(0, 0x20, D_004C2598);
-            xglFontDebugPrintf(0x80, 0x20, D_004C25B0);
-            endouShopHeading(0x30, D_004C25C8, menu_selection);
+            xglFontDebugPrintf(0, 0x20, shopNumberChangeLabel);
+            xglFontDebugPrintf(0x80, 0x20, shopRunQuitLabel);
+            endouShopHeading(0x30, shopNoFormat, menu_selection);
 
             {
             u16 (*const page)[0xb8] =
                 &shop_file->records[menu_selection];
 
-            endouShopHeading(0x40, D_004DA668, menu_selection);
-            endouShopHeading(0x50, D_004DA670, menu_selection);
+            endouShopHeading(0x40, shopHeadingIText, menu_selection);
+            endouShopHeading(0x50, shopHeadingCwText, menu_selection);
             selected_page = page - 1;
-            endouShopHeading(0x60, D_004DA678, menu_selection);
-            endouShopHeading(0x70, D_004DA680, menu_selection);
-            endouShopHeading(0x80, D_004DA688, menu_selection);
-            endouShopHeading(0x90, D_004DA690, menu_selection);
-            endouShopHeading(0xa0, D_004DA698, menu_selection);
-            endouShopHeading(0xb0, D_004DA6A0, menu_selection);
-            endouShopHeading(0xc0, D_004DA6A8, menu_selection);
-            endouShopHeading(0xd0, D_004DA6B0, menu_selection);
+            endouShopHeading(0x60, shopHeadingCaText, menu_selection);
+            endouShopHeading(0x70, shopHeadingCbText, menu_selection);
+            endouShopHeading(0x80, shopHeadingAwText, menu_selection);
+            endouShopHeading(0x90, shopHeadingAaText, menu_selection);
+            endouShopHeading(0xa0, shopHeadingAbText, menu_selection);
+            endouShopHeading(0xb0, shopHeadingAfText, menu_selection);
+            endouShopHeading(0xc0, shopHeadingAeText, menu_selection);
+            endouShopHeading(0xd0, shopHeadingAText, menu_selection);
 
             row_index = 0;
             extra_values = page[-1] + 4;
@@ -1295,39 +1210,39 @@ void ShopTest(void)
 
             do {
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0x40, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0x40, shopRowNumberFormat,
                                    *entry_values);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0x50, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0x50, shopRowNumberFormat,
                                    neighbor_values[-0x78]);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0x60, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0x60, shopRowNumberFormat,
                                    entry_values[0x28]);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0x70, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0x70, shopRowNumberFormat,
                                    neighbor_values[-0x50]);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0x80, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0x80, shopRowNumberFormat,
                                    entry_values[0x50]);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0x90, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0x90, shopRowNumberFormat,
                                    neighbor_values[-0x28]);
                 ab_column_offset = 6 * 20;
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0xa0, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0xa0, shopRowNumberFormat,
                                    entry_values[ab_column_offset]);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0xb0, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0xb0, shopRowNumberFormat,
                                    *neighbor_values++);
                 xglFontDebugPrintf((row_index % 10) * 0x18 + 0x10,
-                                   (row_index / 10) * 8 + 0xc0, D_004DA6B8,
+                                   (row_index / 10) * 8 + 0xc0, shopRowNumberFormat,
                                    (entry_values++)[0xa0]);
             } while (++row_index < 0x14);
             for (row_index = 0; row_index < 4; row_index++) {
                 int x = (row_index % 10) * 0x18 + 0x10;
                 int y = (row_index / 10) * 8;
 
-                xglFontDebugPrintf(x, y + 0xd0, D_004DA6B8,
+                xglFontDebugPrintf(x, y + 0xd0, shopRowNumberFormat,
                                    extra_values[0xb0 + row_index]);
             }
             }
@@ -1366,15 +1281,8 @@ void ModelTest(void) {
 
     motion = 1;
     xglStudioChange((M2C_UNK) 0);
-    EndouApplyModelLighting(&light, D_004C25E0);
+    EndouApplyModelLighting(&light, modelTestLighting);
     {
-    char sp70[128];
-    char spF0[128];
-    EndouTestLighting unused_lighting;
-    char sp1E0[128];
-    char sp260[128];
-    char sp2E0[128];
-    char sp360[128];
     int point_index;
     StudioCamera *temp_17_4;
     StudioCamera *temp_2;
@@ -1438,34 +1346,36 @@ void ModelTest(void) {
     ACT_init();
     temp_2_3 = (EndouModelActor *)(void *)ACT_create(-1, 0x2101);
     ACT_initMotion(temp_2_3);
-    __builtin_memcpy(sp70, D_004C2650, 2);
-    memset(&sp70[2], 0, 0x7EU);
-    __builtin_memcpy(spF0, D_004C2650, 2);
-    memset(&spF0[2], 0, 0x7EU);
+    {
+    char sp70[128] = "\0";
+    char spF0[128] = "\0";
+    EndouTestLighting unused_lighting;
+
     RES_GetMdlFileName(sp70, temp_2_3->resource_kind);
     resource_buffer = (u8 *)((u32)((*work_end) + 0x7f) & ~0x7fU);
     strcpy(spF0, sp70);
-    strcat(spF0, D_004DA6C0);
+    strcat(spF0, modelTestLexExtension);
     temp_2_5 = xglCdReadFile(&spF0, resource_buffer, 0, 0);
     temp_3 = (*work_end) + temp_2_5;
     temp_2_3->model_resource = resource_buffer;
     (*work_end) = temp_3;
     resource_buffer = (u8 *)((u32)(temp_3 + 0x7f) & ~0x7fU);
     strcpy(spF0, sp70);
-    strcat(spF0, D_004DA6C8);
+    strcat(spF0, modelTestXtxExtension);
     temp_2_7 = xglCdReadFile(&spF0, resource_buffer, 0, 0);
     temp_3_2 = (*work_end) + temp_2_7;
     temp_2_3->matrix_resource = resource_buffer;
     (*work_end) = temp_3_2;
     resource_buffer = (u8 *)((u32)(temp_3_2 + 0x7f) & ~0x7fU);
     strcpy(spF0, sp70);
-    strcat(spF0, D_004DA6D0);
+    strcat(spF0, modelTestJntExtension);
     temp_2_9 = xglCdReadFile(&spF0, resource_buffer, 0, 0);
+    }
     temp_3_3 = ((*work_end) + temp_2_9);
     temp_2_3->move = resource_buffer;
     resource_buffer = (u8 *)((u32)(temp_3_3 + 0x7f) & ~0x7fU);
     (*work_end) = temp_3_3;
-    temp_2_11 = xglCdReadFile(&D_004C2658, resource_buffer, 0, 0);
+    temp_2_11 = xglCdReadFile(&modelTestFpkName, resource_buffer, 0, 0);
     temp_3_4 = (*work_end) + temp_2_11;
     temp_2_3->anim_pack_tables[0] = resource_buffer;
     (*work_end) = temp_3_4;
@@ -1474,34 +1384,35 @@ void ModelTest(void) {
     ACT_setMotion(temp_2_3, (s32) 1);
     temp_2_12 = (EndouModelActor *)(void *)ACT_create(-1, 1);
     ACT_initMotion(temp_2_12);
-    __builtin_memcpy(sp1E0, D_004C2650, 2);
-    memset(&sp1E0[2], 0, 0x7EU);
-    __builtin_memcpy(sp260, D_004C2650, 2);
-    memset(&sp260[2], 0, 0x7EU);
+    {
+    char sp1E0[128] = "\0";
+    char sp260[128] = "\0";
+
     RES_GetMdlFileName(sp1E0, temp_2_12->resource_kind);
     resource_buffer = (u8 *)((u32)((*work_end) + 0x7f) & ~0x7fU);
     strcpy(sp260, sp1E0);
-    strcat(sp260, D_004DA6C0);
+    strcat(sp260, modelTestLexExtension);
     temp_2_14 = xglCdReadFile(&sp260, resource_buffer, 0, 0);
     temp_3_5 = (*work_end) + temp_2_14;
     temp_2_12->model_resource = resource_buffer;
     (*work_end) = temp_3_5;
     resource_buffer = (u8 *)((u32)(temp_3_5 + 0x7f) & ~0x7fU);
     strcpy(sp260, sp1E0);
-    strcat(sp260, D_004DA6C8);
+    strcat(sp260, modelTestXtxExtension);
     temp_2_16 = xglCdReadFile(&sp260, resource_buffer, 0, 0);
     temp_3_6 = (*work_end) + temp_2_16;
     temp_2_12->matrix_resource = resource_buffer;
     (*work_end) = temp_3_6;
     resource_buffer = (u8 *)((u32)(temp_3_6 + 0x7f) & ~0x7fU);
     strcpy(sp260, sp1E0);
-    strcat(sp260, D_004DA6D0);
+    strcat(sp260, modelTestJntExtension);
     temp_2_18 = xglCdReadFile(&sp260, resource_buffer, 0, 0);
+    }
     temp_3_7 = (*work_end) + temp_2_18;
     temp_2_12->move = resource_buffer;
     resource_buffer = (u8 *)((u32)(temp_3_7 + 0x7f) & ~0x7fU);
     (*work_end) = temp_3_7;
-    temp_2_20 = xglCdReadFile(&D_004C26F0, resource_buffer, 0, 0);
+    temp_2_20 = xglCdReadFile(&modelTestMotionName, resource_buffer, 0, 0);
     temp_3_8 = (*work_end) + temp_2_20;
     temp_2_12->anim_pack_tables[0] = resource_buffer;
     (*work_end) = temp_3_8;
@@ -1509,28 +1420,28 @@ void ModelTest(void) {
     ACT_setModelWrapper(temp_2_12, 0);
     ACT_setMotion(temp_2_12, (s32) 1);
     temp_23_9 = (EndouModelActor *)(void *)ACT_create(-1, 0x3003);
-    __builtin_memcpy(sp2E0, D_004C2650, 2);
-    memset(&sp2E0[2], 0, 0x7EU);
-    __builtin_memcpy(sp360, D_004C2650, 2);
-    memset(&sp360[2], 0, 0x7EU);
+    {
+    char sp2E0[128] = "\0";
+    char sp360[128] = "\0";
+
     RES_GetMdlFileName(sp2E0, temp_23_9->resource_kind);
     accessory_resource_buffer = (u8 *)((u32)((*work_end) + 0x7f) & ~0x7fU);
     strcpy(sp360, sp2E0);
-    strcat(sp360, D_004DA6C0);
+    strcat(sp360, modelTestLexExtension);
     temp_2_22 = xglCdReadFile(&sp360, accessory_resource_buffer, 0, 0);
     temp_3_9 = (*work_end) + temp_2_22;
     temp_23_9->model_resource = accessory_resource_buffer;
     (*work_end) = temp_3_9;
     accessory_resource_buffer = (u8 *)((u32)(temp_3_9 + 0x7f) & ~0x7fU);
     strcpy(sp360, sp2E0);
-    strcat(sp360, D_004DA6C8);
+    strcat(sp360, modelTestXtxExtension);
     temp_2_24 = xglCdReadFile(&sp360, accessory_resource_buffer, 0, 0);
     temp_3_10 = (*work_end) + temp_2_24;
     temp_23_9->matrix_resource = accessory_resource_buffer;
     (*work_end) = temp_3_10;
     accessory_resource_buffer = (u8 *)((u32)(temp_3_10 + 0x7f) & ~0x7fU);
     strcpy(sp360, sp2E0);
-    strcat(sp360, D_004DA6D0);
+    strcat(sp360, modelTestJntExtension);
     if (xglCdGetFileSize(&sp360) < 0) {
         temp_23_9->move = NULL;
     } else {
@@ -1538,6 +1449,7 @@ void ModelTest(void) {
         temp_3_11 = (*work_end) + temp_2_26;
         temp_23_9->move = accessory_resource_buffer;
         (*work_end) = temp_3_11;
+    }
     }
     ACT_allocMatrix((ActRecord *)(void *)temp_23_9, -1);
     ACT_setModelWrapper(temp_23_9, 0);
@@ -1701,9 +1613,9 @@ void ModelTest(void) {
                     }
                 }
             }
-            __builtin_memcpy(column_alphas, D_004DA6E0,
+            __builtin_memcpy(column_alphas, modelTestColumnAlphaTable,
                              sizeof(column_alphas));
-            __builtin_memcpy(row_alphas, D_004DA6E8, sizeof(row_alphas));
+            __builtin_memcpy(row_alphas, modelTestRowAlphaTable, sizeof(row_alphas));
             xglMatrixStackUnit();
             xglMatrixStackSave(projection_matrix);
             xglRotTransPersN(screen_points, projection_matrix, world_points, 30, 0);
@@ -1811,7 +1723,7 @@ void ModelTest(void) {
             endPrintExtFunc(0xFFFFF4, 0xB, line10_7);
             endPrintExtFunc(0xFFFFF5, 0xB, line11_8);
             endPrintExtFunc(0xFFFFF6, 0xB, line12_9);
-            __builtin_memcpy(quad_words, D_004C2720, sizeof(quad_words));
+            __builtin_memcpy(quad_words, modelTestQuadWordTable, sizeof(quad_words));
             endPrintExtFunc(0, 0x6A, NULL);
             endPrintExtFunc(0, 0x6C, NULL);
             if (*message_time == 0) {
@@ -1869,11 +1781,11 @@ void BattleWindowTest(void)
 
     if ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
     do {
-        xglFontDebugPrintf(0, 0, D_004C2A70);
+        xglFontDebugPrintf(0, 0, battleWindowTestLabel);
         if ((PadData.buttons.input.pressed & 0x10U) != 0) {
             message.x = 16;
             message.y = 32;
-            message.title = D_004DA720;
+            message.title = battleWindowTitleText;
             message.style = 0x00fffffd;
             message.text = text_17;
             eBattleWinOpen4(&message);
@@ -1896,7 +1808,7 @@ void BattleWindowTest(void)
             analysis.common_drop = 5;
             analysis.rare_drop = 10;
             analysis.style = 0x00fffff0;
-            analysis.name = D_004C2A88;
+            analysis.name = condorPasaName;
             eBattleWinOpen3(&analysis);
         }
         if ((PadData.buttons.input.pressed & 0x80U) != 0)
@@ -1920,7 +1832,7 @@ void BattleWindowTest(void)
         if ((PadData.buttons.input.pressed & 2U) != 0)
             eBattleWinClose(&window);
         window.repeat = PadData.buttons.input.repeat;
-        xglFontDebugPrintf(0, 32, D_004DA730, PadData.buttons.input.repeat);
+        xglFontDebugPrintf(0, 32, padRepeatFormat, PadData.buttons.input.repeat);
         eBattleWinMain(&window);
         xglSleep();
     } while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U);
@@ -1985,7 +1897,7 @@ void eNumberTest(void) {
         number_order = 0xFFFFFE;
         sprite_order = 0x02FFFFF0;
         do {
-            xglFontDebugPrintf(0, 0, D_004C2AD8);
+            xglFontDebugPrintf(0, 0, eNumberTestLabel);
             d_28.uv = 0xE00;
             d_28.vertices[0].x = 0x100;
             d_28.vertices[0].y = 0x40;
@@ -2343,7 +2255,7 @@ void eModelTest(void)
     MenuModelExtFuncSet(model_id, eModelTestMain, 0);
 
     while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
-        xglFontDebugPrintf(0, 0, D_004C2AE8);
+        xglFontDebugPrintf(0, 0, eModelTestLabel);
         MenuModelMain();
         xglSleep();
     }
@@ -2380,7 +2292,7 @@ void eMessageTest(void)
 
     if ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
         do {
-            xglFontDebugPrintf(0, 0, D_004C2C70);
+            xglFontDebugPrintf(0, 0, eMessageTestLabel);
             if ((PadData.buttons.input.pressed & 0x20U) != 0) {
                 eMessageNextPage(&current, 0);
             }
@@ -2448,8 +2360,6 @@ typedef struct TexturTestHeader {
     u32 entries_offset;
 } TexturTestHeader;
 
-
-
 typedef struct TexturTestEntry {
     u32 width_and_pitch;
     u32 height;
@@ -2458,30 +2368,26 @@ typedef struct TexturTestEntry {
     u32 data_offset;
 } TexturTestEntry;
 
-
-
 typedef struct TexturTestUploadEnvironment {
     u8 unmodeled_00[0x20];
     u64 destination_parameters;
     u8 unmodeled_28[0x18];
     u64 transfer_dimensions;
+    u8 unmodeled_48[0x18];
 } TexturTestUploadEnvironment;
-
-
 
 typedef struct TexturTestDrawEnvironment {
     u8 unmodeled_00[0x50];
     u64 texture_parameters;
+    u8 unmodeled_58[0x68];
 } TexturTestDrawEnvironment;
 
-
-
-extern TexturTestUploadEnvironment eNumberTexEnv_48;
-extern TexturTestDrawEnvironment TestEnv_52;
-extern int x_53;
-extern const char D_004C2C88[];
-extern const char D_004C2CA0[];
-extern const char D_004C2CB8[];
+static TexturTestUploadEnvironment eNumberTexEnv_48;
+static TexturTestDrawEnvironment TestEnv_52;
+static int x_53;
+extern const char textureTestNewdMenuPath[];
+extern const char textureTestDataMenuPath[];
+extern const char textureTestLabel[];
 extern XglPacket *xglPacketGetCurrent(void);
 extern void xglRenderClearDepth(void);
 extern void FlushCache(int mode);
@@ -2495,13 +2401,13 @@ void TexturTest(void)
     u8 *texture_end;
     void *second_file;
 
-    size = xglCdReadFile(D_004C2C88, texture_file, 0, 0);
+    size = xglCdReadFile(textureTestNewdMenuPath, texture_file, 0, 0);
     if (size < 0)
         return;
     texture_end = (u8 *)texture_file + size;
     second_file = (void *)(((u32)texture_end + 15U) & 0xfffffff0U);
     WorkEnd = texture_end;
-    size = xglCdReadFile(D_004C2CA0, second_file, 0, 0);
+    size = xglCdReadFile(textureTestDataMenuPath, second_file, 0, 0);
     if (size < 0)
         return;
     WorkEnd = (u8 *)second_file + size;
@@ -2514,7 +2420,7 @@ void TexturTest(void)
         u16 repeated;
 
         BgTest();
-        xglFontDebugPrintf(0, 0, D_004C2CB8);
+        xglFontDebugPrintf(0, 0, textureTestLabel);
         if ((PadData.buttons.button_state & 0x08000100U) == 0x08000100U)
             break;
         index = 0;
@@ -2594,7 +2500,7 @@ void UmnMailDispTest(void)
     windows[1].view_height = 0x180;
 
     while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
-        xglFontDebugPrintf(0, 0, D_004C2CD0);
+        xglFontDebugPrintf(0, 0, umnMailDispTestLabel);
         if ((PadData.buttons.input.repeat & 0x1000U) != 0) {
             windows[0].scroll_y -= 8;
         }
@@ -2649,13 +2555,13 @@ void ReLoadTest(void)
     xglSleep();
     test_data = (void *)(((u32)WorkEnd + 0x0fU) & 0xfffffff0U);
     WorkEnd = (u8 *)test_data +
-        xglCdReadFile(D_004C2CF0, test_data, 0, 0);
+        xglCdReadFile(reLoadTestFloorPath, test_data, 0, 0);
 
     while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
-        xglFontDebugPrintf(0, 0, D_004C2D08);
-        xglFontPrint(0x40, 0x28, 0x00ffffff, D_004C2D18);
+        xglFontDebugPrintf(0, 0, reLoadTestLabel);
+        xglFontPrint(0x40, 0x28, 0x00ffffff, kanjiTestText);
         xglFontPrintExtFunc(0x01ffffffU, e_test, 0);
-        xglFontPrint(0x40, 0x48, 0x02ffffff, D_004C2D18);
+        xglFontPrint(0x40, 0x48, 0x02ffffff, kanjiTestText);
         xglSleep();
     }
 }
@@ -2698,9 +2604,6 @@ static void endCallback(int result, int amount)
     }
 }
 
-
-
-
 extern XglPacket *xglPacketGetCurrent(void);
 
 void FileLoadTest(void)
@@ -2715,7 +2618,7 @@ void FileLoadTest(void)
     files.buffer = (void *)(((u32)WorkEnd + 0x7fU) & 0xffffff80U);
     WorkEnd = (u8 *)files.buffer + 0x100000;
     previous_callback = xglCdSetCallback(endCallback);
-    xglCdReadFile(D_004C2D80, files.buffer, 0, 0);
+    xglCdReadFile(fileLoadTestMenuPath, files.buffer, 0, 0);
     files.state = 1U;
     pad_words = (u64 *)&PadData;
     pad_mask = 0x08000100U;
@@ -2723,7 +2626,7 @@ void FileLoadTest(void)
 
     if ((pad_state & pad_mask) != pad_mask)
     do {
-        xglFontDebugPrintf(0, 0, D_004C2D98);
+        xglFontDebugPrintf(0, 0, fileLoadTestLabel);
         if (files.state == 1) {
             XglPacket *packet = xglPacketGetCurrent();
 
@@ -2780,7 +2683,7 @@ void JpegTest(void)
     display.image_data = destination_buffer;
 
     while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
-        xglFontDebugPrintf(0, 0, D_004C2DA8);
+        xglFontDebugPrintf(0, 0, jpegTestLabel);
         endPrintExtFunc(0, 0x0d, &display);
         xglSleep();
     }
@@ -2802,7 +2705,7 @@ void UmlTest(void)
     WorkEnd = file_buffer + 0x20000;
     buffer_72 = file_buffer;
     memset(file_buffer, 0, 0x10000);
-    file_name = D_004C2DB8;
+    file_name = umlTestFilePath;
     read_buffer = file_buffer;
     xglCdReadFile(file_name, read_buffer, 0, 0);
     output = (unsigned char *)mm_73;
@@ -2871,8 +2774,8 @@ test_character:
     } while (character != 0);
     *output = 0;
     while ((PadData.buttons.button_state & 0x08000100U) != 0x08000100U) {
-        xglFontDebugPrintf(0, 0, D_004C2DD0);
-        xglFontPrint(0, 64, 0x00fffff0, D_004C2DE0);
+        xglFontDebugPrintf(0, 0, umlTestLabel);
+        xglFontPrint(0, 64, 0x00fffff0, umlTestColorControl);
         xglFontPrint(0, 64, 0x00ffffff, mm_73);
         xglSleep();
     }
@@ -2912,13 +2815,13 @@ void PauseMenuPagePartyDebugTakeAgws(void)
         }
     }
 
-    xglFontDebugPrintf(8, 0x20, D_004C2DF0);
-    xglFontDebugPrintf((Select_74 % 2) * 0x80 + 8, (Select_74 / 2) * 0x10 + 0x30, D_004DA768);
+    xglFontDebugPrintf(8, 0x20, takeAgwsHeadingLabel);
+    xglFontDebugPrintf((Select_74 % 2) * 0x80 + 8, (Select_74 / 2) * 0x10 + 0x30, menuCursorText);
     for (i = 0; i < 0xc; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 0x11));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x68, (i / 2) * 0x10 + 0x30, text00_75[PartyTakeAgwsCheck(i + 0x11)]);
     }
-    xglFontDebugPrintf(8, 0xc0, D_004C2E08);
+    xglFontDebugPrintf(8, 0xc0, takeAgwsControlsLabel);
 }
 
 void PauseMenuPagePartyDebugLockParty(void)
@@ -2955,13 +2858,13 @@ void PauseMenuPagePartyDebugLockParty(void)
         }
     }
 
-    xglFontDebugPrintf(8, 0x20, D_004C2E38);
-    xglFontDebugPrintf((Select_76 % 2) * 0x80 + 8, (Select_76 / 2) * 0x10 + 0x30, D_004DA768);
+    xglFontDebugPrintf(8, 0x20, lockPartyHeadingLabel);
+    xglFontDebugPrintf((Select_76 % 2) * 0x80 + 8, (Select_76 / 2) * 0x10 + 0x30, menuCursorText);
     for (i = 0; i < 0xc; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 1));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x58, (i / 2) * 0x10 + 0x30, text00_77[PartyLockPartyCheck(i + 1)]);
     }
-    xglFontDebugPrintf(8, 0xc0, D_004C2E58);
+    xglFontDebugPrintf(8, 0xc0, toggleControlsLabel);
 }
 
 void PauseMenuPagePartyDebugOutFriend(void)
@@ -2998,13 +2901,13 @@ void PauseMenuPagePartyDebugOutFriend(void)
         }
     }
 
-    xglFontDebugPrintf(8, 0x20, D_004C2E88);
-    xglFontDebugPrintf((Select_78 % 2) * 0x80 + 8, (Select_78 / 2) * 0x10 + 0x30, D_004DA768);
+    xglFontDebugPrintf(8, 0x20, outFriendHeadingLabel);
+    xglFontDebugPrintf((Select_78 % 2) * 0x80 + 8, (Select_78 / 2) * 0x10 + 0x30, menuCursorText);
     for (i = 0; i < 0xc; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 1));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x58, (i / 2) * 0x10 + 0x30, text00_79[PartyOutFriendCheck(i + 1)]);
     }
-    xglFontDebugPrintf(8, 0xc0, D_004C2E58);
+    xglFontDebugPrintf(8, 0xc0, toggleControlsLabel);
 }
 
 void PauseMenuPagePartyDebugFriend(void)
@@ -3041,13 +2944,13 @@ void PauseMenuPagePartyDebugFriend(void)
         }
     }
 
-    xglFontDebugPrintf(8, 0x20, D_004C2EA8);
-    xglFontDebugPrintf((Select_80 % 2) * 0x80 + 8, (Select_80 / 2) * 0x10 + 0x30, D_004DA768);
+    xglFontDebugPrintf(8, 0x20, friendHeadingLabel);
+    xglFontDebugPrintf((Select_80 % 2) * 0x80 + 8, (Select_80 / 2) * 0x10 + 0x30, menuCursorText);
     for (i = 0; i < 7; i++) {
         xglFontDebugPrintf((i % 2) * 0x80 + 0x10, (i / 2) * 0x10 + 0x30, MenuCharNameGet(i + 1));
         xglFontDebugPrintf((i % 2) * 0x80 + 0x58, (i / 2) * 0x10 + 0x30, text00_81[PartyFriendCheck(i + 1)]);
     }
-    xglFontDebugPrintf(8, 0xc0, D_004C2EC0);
+    xglFontDebugPrintf(8, 0xc0, friendControlsLabel);
 }
 
 void PauseMenuPagePartyDebugAttacker(void)
@@ -3097,8 +3000,8 @@ void PauseMenuPagePartyDebugAttacker(void)
     }
 
     party = (PartyDataView *)PartyDataGet();
-    xglFontDebugPrintf(8, 0x20, D_004C2F10);
-    xglFontDebugPrintf(8, Select_82 * 0x10 + 0x30, D_004DA768);
+    xglFontDebugPrintf(8, 0x20, attackerHeadingLabel);
+    xglFontDebugPrintf(8, Select_82 * 0x10 + 0x30, menuCursorText);
     for (i = 0; i < 3; i++) {
         xglFontDebugPrintf(0x10, i * 0x10 + 0x30, text01_84[i]);
         xglFontDebugPrintf(0x30, i * 0x10 + 0x30, text02_85[0]);
@@ -3109,13 +3012,13 @@ void PauseMenuPagePartyDebugAttacker(void)
         xglFontDebugPrintf(0x30, i * 0x10 + 0x60, text02_85[1]);
         xglFontDebugPrintf(0x70, i * 0x10 + 0x60, text00_83[party->attack_slots[i].position]);
     }
-    xglFontDebugPrintf(8, 0xc0, D_004C2F30);
+    xglFontDebugPrintf(8, 0xc0, attackerControlsLabel);
 }
 
 void PauseMenuPagePartyDebug(void)
 {
-    xglFontDebugPrintf(8, 0x10, D_004C2F68);
-    xglFontDebugPrintf(8, 0xb0, D_004C2F90);
+    xglFontDebugPrintf(8, 0x10, partyDebugTitleLabel);
+    xglFontDebugPrintf(8, 0xb0, partyDebugToggleLabel);
 
     if (PadData.buttons.input.repeat & 0x80) {
         if (TopMode_86 == 4) {
@@ -3143,3 +3046,831 @@ void PauseMenuPagePartyDebug(void)
         break;
     }
 }
+
+extern const char modelTestHiraganaKatakanaText[16];
+extern const char modelTestKatakanaHiraganaText[16];
+extern const char modelTestHiraganaText[16];
+extern const char modelTestKatakanaText[16];
+extern const char gradeOneTagText[8];
+extern const char temptationMessageText[16];
+extern const char slowMessageText[40];
+extern const char yesText[8];
+extern const char endouTestNoText[8];
+extern const char offText[8];
+extern const char onText[8];
+extern const char absentText[8];
+extern const char presentText[8];
+extern const char a1Text[8];
+extern const char p4Text[8];
+extern const char a2Text[8];
+extern const char p6Text[8];
+extern const char nullText[16];
+extern const char p1Text[8];
+extern const char p3Text[8];
+extern const char p5Text[8];
+extern const char p2Text[8];
+extern const char a3Text[8];
+extern const char number3Text[8];
+extern const char number2Text[8];
+extern const char number1Text[8];
+extern const char characterText[8];
+extern const char positionText[16];
+
+static float ang_0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+static float pos_1[4] = { 0.0f, 0.0f, 4.0f, 1.0f };
+
+static const char * msg00_14[4] = { modelTestKatakanaText, modelTestHiraganaKatakanaText, modelTestKatakanaHiraganaText, modelTestHiraganaText };
+
+static const char * tag_16[] = { gradeOneTagText };
+
+static const char * msg_19[] = { slowMessageText, temptationMessageText };
+
+static char tag_20[17] = "BattleWindowTest";
+
+static unsigned char moji_26[27] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+static unsigned char moji2_27[27] = "abcdefghijklmnopqrstuvwxyz";
+
+static EndouPrintPoint line_34[6] = { { .x = 64, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 128, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 256, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 128 } }, { .x = 384, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 96 } }, { .x = 448, .y = 256, .depth = 33554416, .color = { 96, 96, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
+
+static EndouPrintPoint d_42[7] = { { .x = 100, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 100, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 200, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 112 } }, { .x = 200, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 128 } }, { .x = 400, .y = 300, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 400, .y = 316, .depth = 16777200, .color = { 64, 64, 128, 0 } }, { .x = 0, .y = 0, .depth = 0, .color = { 0, 0, 0, 0 } } };
+
+static EndouPrintPoint d_43 = { .x = 256, .y = 256, .depth = 268435455, .color = { 255, 255, 255, 128 } };
+
+static u64 eNumberTexEnv_69[12] = { 0ULL, 5836665138832211968ULL, 1152921504606846980ULL, 14ULL, 2317770511351808ULL, 80ULL, 0ULL, 81ULL, 549755814400ULL, 82ULL, 0ULL, 83ULL };
+
+static const char * text00_75[] = { endouTestNoText, yesText };
+
+static const char * text00_77[] = { offText, onText };
+
+static const char * text00_79[] = { offText, onText };
+
+static const char * text00_81[] = { absentText, presentText };
+
+static const char * text00_83[10] = { nullText, p1Text, p2Text, p3Text, p4Text, p5Text, p6Text, a1Text, a2Text, a3Text };
+
+static const char * text01_84[3] = { number1Text, number2Text, number3Text };
+
+static const char * text02_85[] = { characterText, positionText };
+
+/* JP: 清算画面テスト  △
+ * EN: Settlement screen test  Triangle */
+const char settlementScreenTestLabel[24] = "\013\300\266\273\273\262\350\314\314\245\306\245\271\245\310\241\241\241\241\242\244";
+
+/* JP: テキスト　□
+ * EN: Text  Square */
+const char textTestSquareLabel[16] = "\013\245\306\245\255\245\271\245\310\241\241\242\242";
+
+/* JP: メッセージテスト　×
+ * EN: Message test  X */
+const char messageTestCrossLabel[24] = "\013\245\341\245\303\245\273\241\274\245\270\245\306\245\271\245\310\241\241\241\337";
+
+/* JP: いろいろテスト  ○
+ * EN: Misc test  Circle */
+const char miscTestCircleLabel[24] = "\013\244\244\244\355\244\244\244\355\245\306\245\271\245\310\241\241\241\241\241\373";
+
+/* JP: モデルテスト  Ｌ１
+ * EN: Model test  L1 */
+const char modelTestL1Label[24] = "\013\245\342\245\307\245\353\245\306\245\271\245\310\241\241\241\241\243\314\243\261";
+
+/* JP: ロードテスト  Ｌ２
+ * EN: Load test  L2 */
+const char loadTestL2Label[24] = "\013\245\355\241\274\245\311\245\306\245\271\245\310\241\241\241\241\243\314\243\262";
+
+/* JP: テクスチャテストＲ１
+ * EN: Texture test R1 */
+const char textureTestR1Label[24] = "\013\245\306\245\257\245\271\245\301\245\343\245\306\245\271\245\310\243\322\243\261";
+
+/* JP: ＪＰＥＧテスト　Ｒ２
+ * EN: JPEG test  R2 */
+const char jpegTestR2Label[24] = "\013\243\312\243\320\243\305\243\307\245\306\245\271\245\310\241\241\243\322\243\262";
+
+/* JP: バトルウィンドー　↑
+ * EN: Battle window  Up */
+const char battleWindowTestUpLabel[24] = "\013\245\320\245\310\245\353\245\246\245\243\245\363\245\311\241\274\241\241\242\254";
+
+/* JP: セーブテスト  ↓
+ * EN: Save test  Down */
+const char saveTestDownLabel[24] = "\013\245\273\241\274\245\326\245\306\245\271\245\310\241\241\241\241\241\241\242\255";
+
+/* JP: モデルテスト  →
+ * EN: Model test  Right */
+const char modelTestRightLabel[24] = "\013\245\342\245\307\245\353\245\306\245\271\245\310\241\241\241\241\241\241\242\252";
+
+/* JP: ショップテスト  ←
+ * EN: Shop test  Left */
+const char shopTestLeftLabel[24] = "\013\245\267\245\347\245\303\245\327\245\306\245\271\245\310\241\241\241\241\242\253";
+
+/* JP: テキストテスト
+ * EN: Text test */
+const char textTestLabel[16] = "\013\245\306\245\255\245\271\245\310\245\306\245\271\245\310";
+
+const char shopDataPath[32] = "data\\endou\\shop\\shopdata.bin";
+
+/* JP: ショップテスト
+ * EN: Shop test */
+const char shopTestLabel[16] = "\013\245\267\245\347\245\303\245\327\245\306\245\271\245\310";
+
+/* JP: ナンバーチェンジ　↑↓
+ * EN: Number change  Up/Down */
+const char shopNumberChangeLabel[24] = "\013\245\312\245\363\245\320\241\274\245\301\245\247\245\363\245\270\241\241\242\254\242\255";
+
+/* JP: 実行　○  終了　×
+ * EN: Run Circle  Quit X */
+const char shopRunQuitLabel[24] = "\013\274\302\271\324\241\241\241\373\241\241\241\241\275\252\316\273\241\241\241\337";
+
+/* Text: {reset}ShopNo = %2d */
+const char shopNoFormat[24] = "\013ShopNo = %2d";
+
+const EndouTestLighting modelTestLighting = { .ambient = { 4510805389542529434ULL, 4575657222458677658ULL }, .parallel_intensity = { { 4546834186569882010ULL, 4575657222467066266ULL }, { 0ULL, 4575657221408423936ULL }, { 0ULL, 4575657221408423936ULL } }, .direction = { { .x = 0.0f, .y = 0.0f, .z = 1.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
+
+const char modelTestMotionName[32] = "newd\\motion\\chaos_cf.fpk";
+
+const unsigned long long modelTestQuadWordTable[8] = { 4453159315607388160ULL, 4575657221408423936ULL, 13676531352462163968ULL, 4575657221408423936ULL, 4453159313459904512ULL, 4575657221408423936ULL, 13676531350314680320ULL, 4575657221408423936ULL };
+
+/* JP: もでるてすと
+ * EN: Model test */
+const char modelTestHiraganaText[16] = "\244\342\244\307\244\353\244\306\244\271\244\310";
+
+/* JP: モデルてすと
+ * EN: Model test */
+const char modelTestKatakanaHiraganaText[16] = "\245\342\245\307\245\353\244\306\244\271\244\310";
+
+/* JP: もでるテスト
+ * EN: Model test */
+const char modelTestHiraganaKatakanaText[16] = "\244\342\244\307\244\353\245\306\245\271\245\310";
+
+/* JP: モデルテスト
+ * EN: Model test */
+const char modelTestKatakanaText[16] = "\245\342\245\307\245\353\245\306\245\271\245\310";
+
+/* JP: バトルウィンドーテスト
+ * EN: Battle window test */
+const char battleWindowTestLabel[24] = "\013\245\320\245\310\245\353\245\246\245\243\245\363\245\311\241\274\245\306\245\271\245\310";
+
+/* JP: Ｅコンドルパサー
+ * EN: E. Condor Pasa */
+const char condorPasaName[24] = "\243\305\245\263\245\363\245\311\245\353\245\321\245\265\241\274";
+
+/* JP: 誘惑 / 誘惑誘惑
+ * EN: Temptation / Temptation temptation */
+const char temptationMessageText[16] = "\315\266\317\307\n\315\266\317\307\315\266\317\307";
+
+/* JP: スロウ / data\endou\bustup.xtx
+ * EN: Slow / data\endou\bustup.xtx */
+const char slowMessageText[40] = "\241\241\245\271\245\355\245\246\n\000\000\000\000\000\000\000data\\endou\\bustup.xtx";
+
+/* JP: いろいろテスト
+ * EN: Misc test */
+const char eNumberTestLabel[16] = "\013\244\244\244\355\244\244\244\355\245\306\245\271\245\310";
+
+/* JP: メッセージテスト
+ * EN: Message test */
+const char eMessageTestLabel[24] = "\013\245\341\245\303\245\273\241\274\245\270\245\306\245\271\245\310";
+
+const char textureTestNewdMenuPath[24] = "newd\\endou\\menu01.xtx";
+
+const char textureTestDataMenuPath[24] = "data\\endou\\menu01.xtx";
+
+/* JP: テクスチャーテスト
+ * EN: Texture test */
+const char textureTestLabel[24] = "\013\245\306\245\257\245\271\245\301\245\343\241\274\245\306\245\271\245\310";
+
+/* JP: Ｕ．Ｍ．Ｎ．ＭａｉｌＤｉｓｐ
+ * EN: U.M.N. MailDisp */
+const char umnMailDispTestLabel[32] = "\013\243\325\241\245\243\315\241\245\243\316\241\245\243\315\243\341\243\351\243\354\243\304\243\351\243\363\243\360";
+
+const char reLoadTestFloorPath[24] = "data\\endou\\floor.xtx";
+
+/* JP: リロードテスト
+ * EN: Reload test */
+const char reLoadTestLabel[16] = "\013\245\352\245\355\241\274\245\311\245\306\245\271\245\310";
+
+/* JP: 漢字のテスト０１２３ＡＢＣＤ
+ * EN: Kanji test 0123ABCD */
+const char kanjiTestText[32] = "\264\301\273\372\244\316\245\306\245\271\245\310\243\260\243\261\243\262\243\263\243\301\243\302\243\303\243\304";
+
+const char fileLoadTestMenuPath[24] = "data\\endou\\menu00.xtx";
+
+/* JP: ロードテスト
+ * EN: Load test */
+const char fileLoadTestLabel[16] = "\013\245\355\241\274\245\311\245\306\245\271\245\310";
+
+/* JP: ＪＰＥＧテスト
+ * EN: JPEG test */
+const char jpegTestLabel[16] = "\013\243\312\243\320\243\305\243\307\245\306\245\271\245\310";
+
+const char umlTestFilePath[24] = "data\\endou\\test00.txt";
+
+/* JP: ＵＭＬテスト
+ * EN: UML test */
+const char umlTestLabel[16] = "\013\243\325\243\315\243\314\245\306\245\271\245\310";
+
+/* Text: {effect 0}{line height 12}{color #AD0000} */
+const char umlTestColorControl[16] = "\r\000\025\002\001\014\014\255";
+
+/* JP: ー　ＡＧＷＳ設定　ー
+ * EN: - AGWS settings - */
+const char takeAgwsHeadingLabel[24] = "\241\274\241\241\243\301\243\307\243\327\243\323\300\337\304\352\241\241\241\274";
+
+/* JP: 十字キー：カーソル移動  ○：あり／なし
+ * EN: D-pad: move cursor  Circle: yes/no */
+const char takeAgwsControlsLabel[48] = "\275\275\273\372\245\255\241\274\241\247\245\253\241\274\245\275\245\353\260\334\306\260\241\241\241\241\241\241\241\373\241\247\244\242\244\352\241\277\244\312\244\267";
+
+/* JP: ー　ロックパーティー設定　ー
+ * EN: - Locked party settings - */
+const char lockPartyHeadingLabel[32] = "\241\274\241\241\245\355\245\303\245\257\245\321\241\274\245\306\245\243\241\274\300\337\304\352\241\241\241\274";
+
+/* JP: 十字キー：カーソル移動  ○：オン／オフ
+ * EN: D-pad: move cursor  Circle: on/off */
+const char toggleControlsLabel[48] = "\275\275\273\372\245\255\241\274\241\247\245\253\241\274\245\275\245\353\260\334\306\260\241\241\241\241\241\241\241\373\241\247\245\252\245\363\241\277\245\252\245\325";
+
+/* JP: ー　アウトフレンド設定　ー
+ * EN: - Out-friend settings - */
+const char outFriendHeadingLabel[32] = "\241\274\241\241\245\242\245\246\245\310\245\325\245\354\245\363\245\311\300\337\304\352\241\241\241\274";
+
+/* JP: ー　フレンド設定　ー
+ * EN: - Friend settings - */
+const char friendHeadingLabel[24] = "\241\274\241\241\245\325\245\354\245\363\245\311\300\337\304\352\241\241\241\274";
+
+/* JP: 十字キー：カーソル移動  ○：いる／いない
+ * EN: D-pad: move cursor  Circle: present/absent */
+const char friendControlsLabel[48] = "\275\275\273\372\245\255\241\274\241\247\245\253\241\274\245\275\245\353\260\334\306\260\241\241\241\241\241\241\241\373\241\247\244\244\244\353\241\277\244\244\244\312\244\244";
+
+/* JP: ＮＵＬＬ
+ * EN: NULL */
+const char nullText[16] = "\243\316\243\325\243\314\243\314";
+
+/* JP: ポジション
+ * EN: Position */
+const char positionText[16] = "\245\335\245\270\245\267\245\347\245\363";
+
+/* JP: ー　バトルメンバー設定　ー
+ * EN: - Battle member settings - */
+const char attackerHeadingLabel[32] = "\241\274\241\241\245\320\245\310\245\353\245\341\245\363\245\320\241\274\300\337\304\352\241\241\241\274";
+
+/* JP: ↑↓：カーソル移動　←→：キャラ／ポジション変更
+ * EN: Up/Down: move cursor  Left/Right: change character/position */
+const char attackerControlsLabel[56] = "\242\254\242\255\241\247\245\253\241\274\245\275\245\353\260\334\306\260\241\241\242\253\242\252\241\247\245\255\245\343\245\351\241\277\245\335\245\270\245\267\245\347\245\363\312\321\271\271";
+
+/* JP: ＝＝　パーティーデバックメニュー　＝＝
+ * EN: == Party debug menu == */
+const char partyDebugTitleLabel[40] = "\241\341\241\341\241\241\245\321\241\274\245\306\245\243\241\274\245\307\245\320\245\303\245\257\245\341\245\313\245\345\241\274\241\241\241\341\241\341";
+
+/* JP: □：設定切り替え
+ * EN: Square: toggle setting */
+const char partyDebugToggleLabel[32] = "\242\242\241\247\300\337\304\352\300\332\244\352\302\330\244\250";
+
+const char shopRowNumberFormat[8] = "%3d";
+
+const char modelTestJntExtension[8] = ".jnt";
+
+static f32 pipo_2 = 0.0f;
+
+static s32 time_10 = 0;
+
+static s32 no_13 = 0;
+
+const char gradeOneTagText[8] = "G One";
+
+const char battleWindowTitleText[8] = "Test";
+
+static int count_18 = 0;
+
+const char padRepeatFormat[3] = "%d";
+
+static u8 time_37 = 0;
+
+static int x_53 = 56832;
+
+static int x_71 = 52992;
+
+static int Select_74 = 0;
+
+/* JP: あり
+ * EN: Yes */
+const char yesText[8] = "\244\242\244\352";
+
+/* JP: なし
+ * EN: No */
+const char endouTestNoText[8] = "\244\312\244\267";
+
+/* JP: ＞
+ * EN: > */
+const char menuCursorText[4] = "\241\344";
+
+static int Select_76 = 0;
+
+/* JP: オン
+ * EN: On */
+const char onText[8] = "\245\252\245\363";
+
+/* JP: オフ
+ * EN: Off */
+const char offText[8] = "\245\252\245\325";
+
+static int Select_78 = 0;
+
+static int Select_80 = 0;
+
+/* JP: いる
+ * EN: Present */
+const char presentText[8] = "\244\244\244\353";
+
+/* JP: いない
+ * EN: Absent */
+const char absentText[8] = "\244\244\244\312\244\244";
+
+static int Select_82 = 0;
+
+/* JP: Ａ３
+ * EN: A3 */
+const char a3Text[8] = "\243\301\243\263";
+
+/* JP: Ａ２
+ * EN: A2 */
+const char a2Text[8] = "\243\301\243\262";
+
+/* JP: Ａ１
+ * EN: A1 */
+const char a1Text[8] = "\243\301\243\261";
+
+/* JP: Ｐ６
+ * EN: P6 */
+const char p6Text[8] = "\243\320\243\266";
+
+/* JP: Ｐ５
+ * EN: P5 */
+const char p5Text[8] = "\243\320\243\265";
+
+/* JP: Ｐ４
+ * EN: P4 */
+const char p4Text[8] = "\243\320\243\264";
+
+/* JP: Ｐ３
+ * EN: P3 */
+const char p3Text[8] = "\243\320\243\263";
+
+/* JP: Ｐ２
+ * EN: P2 */
+const char p2Text[8] = "\243\320\243\262";
+
+/* JP: Ｐ１
+ * EN: P1 */
+const char p1Text[8] = "\243\320\243\261";
+
+/* JP: ３．
+ * EN: 3. */
+const char number3Text[8] = "\243\263\241\245";
+
+/* JP: ２．
+ * EN: 2. */
+const char number2Text[8] = "\243\262\241\245";
+
+/* JP: １．
+ * EN: 1. */
+const char number1Text[8] = "\243\261\241\245";
+
+/* JP: キャラ
+ * EN: Character */
+const char characterText[8] = "\245\255\245\343\245\351";
+
+static int TopMode_86 = 0;
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+static unsigned int TestEnv_49[48];
+static BgTestEnvironment TestEnv_54;
+static unsigned int TestEnv_56[44];
+static unsigned int TestEnv_58[48];
+static unsigned int TestEnv_59[44];
+static unsigned int TestEnv_60[48];
+static unsigned int TestEnv_61[44];
+static unsigned int TestEnv_63[68];
+static unsigned int TestEnv_64[52];
+extern const char grandPrixText[16];
+extern const char arimaKinenText[16];
+extern const char twoYearOldFilliesChampionText[24];
+extern const char hanshinJuvenileFilliesText[16];
+extern const char olderHorsesRoyalRoadText[24];
+extern const char japanCupText[16];
+extern const char autumnMileChampionshipText[24];
+extern const char mileChampionshipText[16];
+extern const char filliesMaresChampionshipText[16];
+extern const char queenElizabethIiCupText[24];
+extern const char olderHorsesCursedTennoShoText[24];
+extern const char tennoShoAutumnText[16];
+extern const char coltsClassicsThirdLegText[24];
+extern const char filliesClassicsThirdLegText[24];
+extern const char autumnSprintChampionshipText[24];
+extern const char sprintersStakesText[24];
+extern const char springGrandPrixText[16];
+extern const char takarazukaKinenText[16];
+extern const char springMileChampionshipText[24];
+extern const char yasudaKinenText[16];
+extern const char coltsClassicsSecondLegText[32];
+extern const char japaneseDerbyText[16];
+extern const char filliesClassicsSecondLegText[32];
+extern const char oaksText[16];
+extern const char foreignBredMilersChampionshipText[32];
+extern const char nhkMileCupText[16];
+extern const char springLongDistanceChampionshipText[24];
+extern const char tennoShoSpringText[16];
+extern const char coltsClassicsFirstLegText[24];
+extern const char filliesClassicsFirstLegText[24];
+extern const char springSprintChampionshipText[24];
+extern const char takamatsunomiyaKinenText[16];
+extern const char dirtChampionshipText[16];
+extern const char februaryStakesText[16];
+extern const char horseNameListText[64];
+extern const char vowelKanaListText[24];
+extern const char winningRaceListText[144];
+extern const char deviceListText[144];
+extern const char shukaShoText[8];
+extern const char satsukiShoText[8];
+extern const char okaShoText[8];
+static int x_50;
+static int x_51;
+static int x_55;
+static int x_57;
+static int xx_62;
+
+static const char * msg_45[5] = { deviceListText, winningRaceListText, vowelKanaListText, horseNameListText, 0 };
+
+static BgTestEnvironment TestEnv_54 = { .vif_nop = { 0U, 0U, 0U }, .vif_directhl_nine_quadwords = 1358954505U, .tag = { .loop_count_and_eop = 32769U, .primitive_flags_and_register_count = 2156609536U, .register_descriptors = 1397956334ULL }, .texture_setup = { .value = 68ULL, .register_id = 66ULL }, .packet_write = { .value = 2308076694620355584ULL, .register_id = 6ULL }, .primitive_setup = { .value = 327680ULL, .register_id = 71ULL }, .color = { .red = 128U, .green = 128U, .blue = 128U, .alpha = 128U }, .first_uv = { .u = 4096U, .v = 0U, .q = 0U, .reserved = 0U }, .first_vertex = { .x = 32760U, .y = 32760U, .z = 262144U, .fog = 0U }, .second_uv = { .u = 8192U, .v = 4096U, .q = 0U, .reserved = 0U }, .second_vertex = { .x = 36856U, .y = 36344U, .z = 262144U, .fog = 0U } };
+
+static unsigned int TestEnv_58[48] = { 0U, 0U, 0U, 1358954507U, 32769U, 2710257664U, 893316846U, 229U, 262624U, 0U, 77U, 0U, 0U, 0U, 25U, 0U, 4278194175U, 0U, 9U, 0U, 1744911360U, 6U, 7U, 0U, 200705U, 0U, 72U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 4096U, 4096U, 0U, 0U, 2048U, 4096U, 0U, 0U, 0U, 0U, 63U, 0U };
+
+static unsigned int TestEnv_61[44] = { 0U, 0U, 0U, 1358954506U, 32769U, 2425044992U, 892464878U, 5U, 68U, 0U, 66U, 0U, 4278194175U, 0U, 8U, 0U, 0U, 0U, 6U, 0U, 327680U, 0U, 71U, 0U, 128U, 128U, 128U, 128U, 0U, 0U, 0U, 0U, 28664U, 32760U, 262144U, 0U, 8192U, 4096U, 0U, 0U, 36856U, 36344U, 262144U, 0U };
+
+static unsigned int TestEnv_63[68] = { 0U, 0U, 0U, 1358954512U, 32770U, 268435456U, 14U, 0U, 68U, 0U, 66U, 0U, 327680U, 0U, 71U, 0U, 32774U, 539410432U, 81U, 0U, 128U, 128U, 128U, 128U, 32768U, 32768U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U };
+
+static unsigned int TestEnv_64[52] = { 0U, 0U, 0U, 1358954508U, 32770U, 268435456U, 14U, 0U, 68U, 0U, 66U, 0U, 327680U, 0U, 71U, 0U, 32769U, 2149990400U, 1364283857U, 0U, 128U, 128U, 128U, 0U, 29696U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 29696U, 35328U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 30208U, 16777215U, 0U, 128U, 128U, 128U, 0U, 35840U, 35328U, 16777215U, 0U };
+
+/* JP: グランプリ
+ * EN: Grand Prix */
+const char grandPrixText[16] = "\245\260\245\351\245\363\245\327\245\352";
+
+/* JP: 有馬記念
+ * EN: Arima Kinen */
+const char arimaKinenText[16] = "\315\255\307\317\265\255\307\260";
+
+/* JP: ２歳牝馬チャンピオン
+ * EN: 2-year-old fillies' champion */
+const char twoYearOldFilliesChampionText[24] = "\243\262\272\320\314\306\307\317\245\301\245\343\245\363\245\324\245\252\245\363";
+
+/* JP: 阪神ＪＦ
+ * EN: Hanshin Juvenile Fillies */
+const char hanshinJuvenileFilliesText[16] = "\272\345\277\300\243\312\243\306";
+
+/* JP: 古馬王道　世界の壁
+ * EN: Older horses' royal road: the world's wall */
+const char olderHorsesRoyalRoadText[24] = "\270\305\307\317\262\246\306\273\241\241\300\244\263\246\244\316\312\311";
+
+/* JP: ジャパンカップ
+ * EN: Japan Cup */
+const char japanCupText[16] = "\245\270\245\343\245\321\245\363\245\253\245\303\245\327";
+
+/* JP: 秋のマイル王決定戦
+ * EN: Autumn mile championship */
+const char autumnMileChampionshipText[24] = "\275\251\244\316\245\336\245\244\245\353\262\246\267\350\304\352\300\357";
+
+/* JP: マイルＣＳ
+ * EN: Mile Championship */
+const char mileChampionshipText[16] = "\245\336\245\244\245\353\243\303\243\323";
+
+/* JP: 牝馬女王決定戦
+ * EN: Fillies' and mares' championship */
+const char filliesMaresChampionshipText[16] = "\314\306\307\317\275\367\262\246\267\350\304\352\300\357";
+
+/* JP: エリザベス女王杯
+ * EN: Queen Elizabeth II Cup */
+const char queenElizabethIiCupText[24] = "\245\250\245\352\245\266\245\331\245\271\275\367\262\246\307\325";
+
+/* JP: 古馬王道　魔の天皇賞
+ * EN: Older horses' royal road: the cursed Tenno Sho */
+const char olderHorsesCursedTennoShoText[24] = "\270\305\307\317\262\246\306\273\241\241\313\342\244\316\305\267\271\304\276\336";
+
+/* JP: 天皇賞（秋）
+ * EN: Tenno Sho (Autumn) */
+const char tennoShoAutumnText[16] = "\305\267\271\304\276\336\241\312\275\251\241\313";
+
+/* JP: 牡馬クラシック第三弾
+ * EN: Third leg of the colts' classics */
+const char coltsClassicsThirdLegText[24] = "\262\264\307\317\245\257\245\351\245\267\245\303\245\257\302\350\273\260\303\306";
+
+/* JP: 牝馬クラシック第三弾
+ * EN: Third leg of the fillies' classics */
+const char filliesClassicsThirdLegText[24] = "\314\306\307\317\245\257\245\351\245\267\245\303\245\257\302\350\273\260\303\306";
+
+/* JP: 秋の短距離王決定戦
+ * EN: Autumn sprint championship */
+const char autumnSprintChampionshipText[24] = "\275\251\244\316\303\273\265\367\316\245\262\246\267\350\304\352\300\357";
+
+/* JP: スプリンターズＳ
+ * EN: Sprinters Stakes */
+const char sprintersStakesText[24] = "\245\271\245\327\245\352\245\363\245\277\241\274\245\272\243\323";
+
+/* JP: 春のグランプリ
+ * EN: Spring Grand Prix */
+const char springGrandPrixText[16] = "\275\325\244\316\245\260\245\351\245\363\245\327\245\352";
+
+/* JP: 宝塚記念
+ * EN: Takarazuka Kinen */
+const char takarazukaKinenText[16] = "\312\365\304\315\265\255\307\260";
+
+/* JP: 春のマイル王決定戦
+ * EN: Spring mile championship */
+const char springMileChampionshipText[24] = "\275\325\244\316\245\336\245\244\245\353\262\246\267\350\304\352\300\357";
+
+/* JP: 安田記念
+ * EN: Yasuda Kinen */
+const char yasudaKinenText[16] = "\260\302\305\304\265\255\307\260";
+
+/* JP: 牡馬クラシック第二弾　東京優駿
+ * EN: Second leg of the colts' classics: Tokyo Yushun */
+const char coltsClassicsSecondLegText[32] = "\262\264\307\317\245\257\245\351\245\267\245\303\245\257\302\350\306\363\303\306\241\241\305\354\265\376\315\245\275\331";
+
+/* JP: 日本ダービー
+ * EN: Japanese Derby */
+const char japaneseDerbyText[16] = "\306\374\313\334\245\300\241\274\245\323\241\274";
+
+/* JP: 牝馬クラシック第二弾　牝馬優駿
+ * EN: Second leg of the fillies' classics: Yushun Himba */
+const char filliesClassicsSecondLegText[32] = "\314\306\307\317\245\257\245\351\245\267\245\303\245\257\302\350\306\363\303\306\241\241\314\306\307\317\315\245\275\331";
+
+/* JP: オークス
+ * EN: Oaks */
+const char oaksText[16] = "\245\252\241\274\245\257\245\271";
+
+/* JP: 外国産馬３歳マイル王決定戦
+ * EN: Championship for foreign-bred 3-year-old milers */
+const char foreignBredMilersChampionshipText[32] = "\263\260\271\361\273\272\307\317\243\263\272\320\245\336\245\244\245\353\262\246\267\350\304\352\300\357";
+
+/* JP: ＮＨＫマイルＣ
+ * EN: NHK Mile Cup */
+const char nhkMileCupText[16] = "\243\316\243\310\243\313\245\336\245\244\245\353\243\303";
+
+/* JP: 春の古馬長距離王決定戦
+ * EN: Spring long-distance championship for older horses */
+const char springLongDistanceChampionshipText[24] = "\275\325\244\316\270\305\307\317\304\271\265\367\316\245\262\246\267\350\304\352\300\357";
+
+/* JP: 天皇賞（春）
+ * EN: Tenno Sho (Spring) */
+const char tennoShoSpringText[16] = "\305\267\271\304\276\336\241\312\275\325\241\313";
+
+/* JP: 牡馬クラシック第一弾
+ * EN: First leg of the colts' classics */
+const char coltsClassicsFirstLegText[24] = "\262\264\307\317\245\257\245\351\245\267\245\303\245\257\302\350\260\354\303\306";
+
+/* JP: 牝馬クラシック第一弾
+ * EN: First leg of the fillies' classics */
+const char filliesClassicsFirstLegText[24] = "\314\306\307\317\245\257\245\351\245\267\245\303\245\257\302\350\260\354\303\306";
+
+/* JP: 春の短距離王決定戦
+ * EN: Spring sprint championship */
+const char springSprintChampionshipText[24] = "\275\325\244\316\303\273\265\367\316\245\262\246\267\350\304\352\300\357";
+
+/* JP: 高松宮記念
+ * EN: Takamatsunomiya Kinen */
+const char takamatsunomiyaKinenText[16] = "\271\342\276\276\265\334\265\255\307\260";
+
+/* JP: ダート王決定戦
+ * EN: Dirt championship */
+const char dirtChampionshipText[16] = "\245\300\241\274\245\310\262\246\267\350\304\352\300\357";
+
+/* JP: フェブラリーＳ
+ * EN: February Stakes */
+const char februaryStakesText[16] = "\245\325\245\247\245\326\245\351\245\352\241\274\243\323";
+
+const char modelTestLexExtension[8] = ".lex";
+
+const char modelTestXtxExtension[8] = ".xtx";
+
+/* JP: 秋華賞
+ * EN: Shuka Sho */
+const char shukaShoText[8] = "\275\251\262\332\276\336";
+
+/* JP: 皐月賞
+ * EN: Satsuki Sho */
+const char satsukiShoText[8] = "\273\251\267\356\276\336";
+
+/* JP: 桜花賞
+ * EN: Oka Sho */
+const char okaShoText[8] = "\272\371\262\326\276\336";
+
+static int x_50 = 0;
+
+static int x_51 = 56832;
+
+static int x_55 = 57088;
+
+static int x_57 = 56832;
+
+static int xx_62 = 0;
+
+static FileLoadState files = { .state = -1, .buffer = 0, .unmodeled_08 = { 100, 97, 116, 97, 92, 101, 110, 100, 111, 117, 92, 109, 101, 110, 117, 48, 48, 46, 120, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
+
+extern const char kikukaShoText[8];
+
+static BattleWinCommand data_15[20] = {
+    { februaryStakesText, dirtChampionshipText, 1, 2 },
+    { takamatsunomiyaKinenText, springSprintChampionshipText, 1, 3 },
+    { okaShoText, filliesClassicsFirstLegText, 1, 4 },
+    { satsukiShoText, coltsClassicsFirstLegText, 1, 4 },
+    { tennoShoSpringText, springLongDistanceChampionshipText, 1, 4 },
+    { nhkMileCupText, foreignBredMilersChampionshipText, 1, 5 },
+    { oaksText, filliesClassicsSecondLegText, 0, 5 },
+    { japaneseDerbyText, coltsClassicsSecondLegText, 0, 5 },
+    { yasudaKinenText, springMileChampionshipText, 0, 5 },
+    { takarazukaKinenText, springGrandPrixText, 0, 6 },
+    { sprintersStakesText, autumnSprintChampionshipText, 0, 10 },
+    { shukaShoText, filliesClassicsThirdLegText, 0, 10 },
+    { kikukaShoText, coltsClassicsThirdLegText, 0, 10 },
+    { tennoShoAutumnText, olderHorsesCursedTennoShoText, 0, 10 },
+    { queenElizabethIiCupText, filliesMaresChampionshipText, 0, 11 },
+    { mileChampionshipText, autumnMileChampionshipText, 0, 11 },
+    { japanCupText, olderHorsesRoyalRoadText, 0, 11 },
+    { hanshinJuvenileFilliesText, twoYearOldFilliesChampionText, 0, 11 },
+    { arimaKinenText, grandPrixText, 0, 11 },
+    { 0, 0, 0, 0 }
+};
+
+/* JP: あ あああ / い　い  ボタン  いいい  いいいいい /  赤赤赤赤赤赤赤赤赤赤赤 青青青青青青青青青青青 う / えええ ┐┐ おおおおおおおおおおおおおおおおお おおお！！
+ * EN: A aaa / I  I  button  iii (test text) Iiiii / Red red red... Blue blue blue... U / Eee (test text) Ooooo... Ooooh!! */
+static char text_17[171] = "\244\242\037\244\242\244\242\244\242\012\244\244\241\241\244\244\241\241\036\001\245\334\245\277\245\363\241\241\241\241\244\244\244\244\244\244\241\241\241\241"
+    "\241\241\244\244\244\244\244\244\244\244\244\244\012\014\200\000\000\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\300\326\014"
+    "\000\000\200\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\300\304\037\014\200\200\200\244\246\012\244\250\244\250\244\250\244"
+    "\250\244\250\244\250\037\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252\244\252"
+    "\244\252\244\252\244\252\241\252\241\252";
+
+/* JP: Ｐｌ :ａｙ / Ｓｔａｔｉｏｎ２ : ;エ < ル =コ >ン ?ド ル  / パ サ ー スペ シャルウィーク グラスワンダー ! "セイウンスカイ キングヘイローーーー ーーーーーー あ
+ * EN: PlayStation 2 / (control codes) El Condor / Pasa / Spe(cial) Shall Week / Grass Wonder Seiun Sky / King Halo ------ A */
+static char text00_46[176] = "\031\001\243\320\243\354\036:\243\341\243\371\012\243\323\243\364\243\341\243\364\243\351\243\357\243\356\243\262\037\031\000\036:\036;\245\250\036<"
+    "\245\353\036=\245\263\036>\245\363\036\077\245\311\036\011\245\353\036\012\245\321\036\013\245\265\036\014\241\274\037\036\001\245\271\245\332\036\033\036"
+    "\034\036\035\036\036\245\267\245\343\245\353\245\246\245\243\241\274\245\257\037\036\002\245\260\245\351\245\271\245\357\245\363\245\300\241\274\037\036\037\036"
+    " \036!\036\042\245\273\245\244\245\246\245\363\245\271\245\253\245\244\037\245\255\245\363\245\260\245\330\245\244\245\355\241\274\241\274\241\274\241\274"
+    "\241\274\241\274\241\274\241\274\241\274\241\274\037\244\242";
+
+static TexturTestUploadEnvironment eNumberTexEnv_48 = {
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x05, 0x00, 0x00, 0x51,
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    0x00083c0000000000ULL,
+    {
+        0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x51, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    0x0000008000000400ULL,
+    {
+        0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+};
+
+static unsigned int TestEnv_49[48] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
+    0x00008001, 0xB08B4000, 0x31EEEEEE, 0x00000535,
+    0x003FFFF0, 0x00000000, 0x00000008, 0x00000000,
+    0x00000044, 0x00000000, 0x00000042, 0x00000000,
+    0x69343C00, 0x2007E786, 0x00000006, 0x00000000,
+    0x00030003, 0x00000000, 0x00000047, 0x00000000,
+    0x00000000, 0x00000000, 0x0000003F, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00006FF8, 0x00007FF8, 0x00040000, 0x00000000,
+    0x00003000, 0x00001000, 0x00000000, 0x00000000,
+    0x00008FF8, 0x00008DF8, 0x00040000, 0x00000000
+};
+
+static TexturTestDrawEnvironment TestEnv_52 = {
+    {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x51,
+        0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x0b, 0xa0, 0xee, 0xee, 0x1e, 0x42, 0x42, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0xff, 0x01, 0x00, 0x00, 0xbf, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    0x0000000000000000ULL,
+    {
+        0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+        0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x6f, 0x00, 0x00, 0xf8, 0x71, 0x00, 0x00,
+        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x80, 0x3f,
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x8f, 0x00, 0x00, 0xf8, 0x8d, 0x00, 0x00,
+        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00 }
+};
+
+static unsigned int TestEnv_56[44] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
+    0x00008001, 0x908B4000, 0x3531EEEE, 0x00000005,
+    0x00000044, 0x00000000, 0x00000042, 0x00000000,
+    0x003FDFF0, 0x00000000, 0x00000008, 0x00000000,
+    0x69343C00, 0x2007EF06, 0x00000006, 0x00000000,
+    0x00050000, 0x00000000, 0x00000047, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00006FF8, 0x000071F8, 0x00040000, 0x00000000,
+    0x00003000, 0x00001000, 0x00000000, 0x00000000,
+    0x00008FF8, 0x00007FF8, 0x00040000, 0x00000000
+};
+
+static unsigned int TestEnv_59[44] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000A,
+    0x00008001, 0x908B4000, 0x3531EEEE, 0x00000005,
+    0x00000044, 0x00000000, 0x00000042, 0x00000000,
+    0x003FDFF0, 0x00000000, 0x00000008, 0x00000000,
+    0x69343C00, 0x2007EF06, 0x00000006, 0x00000000,
+    0x00050000, 0x00000000, 0x00000047, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00006FF8, 0x000071F8, 0x00040000, 0x00000000,
+    0x00002000, 0x00001000, 0x00000000, 0x00000000,
+    0x00008FF8, 0x00007FF8, 0x00040000, 0x00000000
+};
+
+static unsigned int TestEnv_60[48] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5100000B,
+    0x00008001, 0xA18B4000, 0x353EEEEE, 0x000000E5,
+    0x00000000, 0x00000000, 0x0000004D, 0x00000000,
+    0x00000000, 0x00000000, 0x00000019, 0x00000000,
+    0x007FDFF0, 0x00000000, 0x00000009, 0x00000000,
+    0x69343C00, 0x2007EF06, 0x00000007, 0x00000000,
+    0x00031001, 0x00000000, 0x00000048, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00002000, 0x00001000, 0x00000000, 0x00000000,
+    0x00002000, 0x00001000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x0000003F, 0x00000000
+};
+
+static u64 TestEnv_70[20] = {
+    0x0000000000000000ULL, 0x5100000900000000ULL,
+    0x80AB400000008001ULL, 0x0000000053531EEEULL,
+    0x0000000000000044ULL, 0x0000000000000042ULL,
+    0x2007EF8669343C00ULL, 0x0000000000000006ULL,
+    0x0000000000050000ULL, 0x0000000000000047ULL,
+    0x0000008000000080ULL, 0x0000008000000080ULL,
+    0x0000000000001000ULL, 0x0000000000000000ULL,
+    0x00007FF800007FF8ULL, 0x0000000040000000ULL,
+    0x0000100000002000ULL, 0x0000000000000000ULL,
+    0x00008DF800008FF8ULL, 0x0000000040000000ULL
+};
+
+const char modelTestFpkName[152] = { 110, 101, 119, 100, 92, 121, 97, 109, 97, 109, 111, 116, 111, 92, 102, 112, 107, 92, 97, 103, 48, 50, 46, 102, 112, 107, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -51, -52, 76, 62, -51, -52, 76, 62, -51, -52, 76, 62, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128, 63 };
+
+/* JP: スペシャルウィーク /  グラスワンダー / エルコンドルパサー
+ * EN: Special Week / Grass Wonder / El Condor Pasa */
+const char horseNameListText[64] = "\r\002\n\245\271\245\332\245\267\245\343\245\353\245\246\245\243\241\274\245\257\n\014\200\000\000\245\260\245\351\245\271\245\357\245\363\245\300\241\274\n\245\250\245\353\245\263\245\363\245\311\245\353\245\321\245\265\241\274";
+
+/* JP: ?あ / い / う / え / お
+ * EN: A / I / U / E / O */
+const char vowelKanaListText[24] = "\r\002\031\001\014\?\000\000\244\242\n\244\244\n\244\246\n\244\250\n\244\252";
+
+/* JP: 天皇賞春秋連覇 / スペシャルウィーク / グランプリ３連覇 / グラスワンダー / エルコンドルパサー / サンデーサイレンス / 皐月賞 / 日本ダービー / 菊花賞
+ * EN: Tenno Sho spring/autumn double / Special Week / Grand Prix triple / Grass Wonder / El Condor Pasa / Sunday Silence / Satsuki Sho / Japanese Derby / Kikuka Sho */
+const char winningRaceListText[144] = "\r\002\014\037\037\037\305\267\271\304\276\336\275\325\275\251\317\242\307\306\n\245\271\245\332\245\267\245\343\245\353\245\246\245\243\241\274\245\257\n\245\260\245\351\245\363\245\327\245\352\243\263\317\242\307\306\n\245\260\245\351\245\271\245\357\245\363\245\300\241\274\n\245\250\245\353\245\263\245\363\245\311\245\353\245\321\245\265\241\274\n\245\265\245\363\245\307\241\274\245\265\245\244\245\354\245\363\245\271\n\273\251\267\356\276\336\n\306\374\313\334\245\300\241\274\245\323\241\274\n\265\306\262\326\276\336";
+
+/* JP: ＰｌａｙＳｔａｔｉｏｎ２ /  ゼノサ 璽  /  ＭＥＭＯＲＹＣＡＲＤ /  差込口 ＭＥＭＯＲＹＣＡＲＤ /  差込口２ ハードディスク
+ * EN: PlayStation 2 / Xenosa(ga) (seal) / MEMORY CARD / slot MEMORY CARD / slot 2 Hard disk */
+const char deviceListText[144] = "\015\002\031\001\031\002\243\320\243\354\243\341\243\371\243\323\243\364\243\341\243\364\243\351\243\357\243\356\243\262\012\031\000\245\274\245\316\245\265\241"
+    "\274\245\254\012\031\001\014\200\000\000\243\315\243\305\243\315\243\317\243\322\243\331\243\303\243\301\243\322\243\304\012\031\000\272\271\271\376\270\375\243"
+    "\261\012\031\001\014\000\200\000\243\315\243\305\243\315\243\317\243\322\243\331\243\303\243\301\243\322\243\304\012\031\000\272\271\271\376\270\375\243\262\037"
+    "\031\000\014\000\000\200\245\317\241\274\245\311\245\307\245\243\245\271\245\257\000\000\000";
+
+/* Text: {reset}I */
+char shopHeadingIText[8] = "\013I ";
+
+/* Text: {reset}CW */
+const char shopHeadingCwText[8] = "\013CW\000\000\000\000";
+
+/* Text: {reset}CA */
+const char shopHeadingCaText[8] = "\013CA\000\000\000\000";
+
+/* Text: {reset}CB */
+const char shopHeadingCbText[8] = "\013CB\000\000\000\000";
+
+/* Text: {reset}AW */
+const char shopHeadingAwText[8] = "\013AW\000\000\000\000";
+
+/* Text: {reset}AA */
+const char shopHeadingAaText[8] = "\013AA\000\000\000\000";
+
+/* Text: {reset}AB */
+const char shopHeadingAbText[8] = "\013AB\000\000\000\000";
+
+/* Text: {reset}AF */
+const char shopHeadingAfText[8] = "\013AF\000\000\000\000";
+
+/* Text: {reset}AE */
+const char shopHeadingAeText[8] = "\013AE\000\000\000\000";
+
+/* Text: {reset}A */
+char shopHeadingAText[8] = "\013A ";
+
+unsigned char modelTestColumnAlphaTable[8] = { 0, 96, 128, 96, 0, 0, 0, 0 };
+
+unsigned char modelTestRowAlphaTable[8] = { 0, 96, 128, 128, 96, 0, 0, 0 };
+
+/* JP: 菊花賞
+ * EN: Kikuka Sho */
+const char kikukaShoText[8] = "\265\306\262\326\276\336";
+

@@ -5,4 +5,6 @@
 
 void nmlFilterSetTexClear(int frameBase);
 
+void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model);
+
 #endif /* INCLUDE_MAIN_NML_FILTER_SET_H */

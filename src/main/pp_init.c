@@ -14,14 +14,14 @@ typedef struct PpParticle {
     float damping;
 } PpParticle;
 
-#define D_004D8290 (-0.05f)
-#define D_004D8294 (0.8f)
+#define PARTICLE_GRAVITY (-0.05f)
+#define PARTICLE_DAMPING (0.8f)
 
 void ppInit(PpParticle *particle)
 {
     float zero = 0.0f;
-    register float gravity = D_004D8290;
-    register float damping = D_004D8294;
+    register float gravity = PARTICLE_GRAVITY;
+    register float damping = PARTICLE_DAMPING;
 
     particle->damping = damping;
     particle->gravity = gravity;

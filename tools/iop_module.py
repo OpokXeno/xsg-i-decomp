@@ -283,11 +283,12 @@ def normalize_candidates(candidates, original):
         obj = Elf(item["object"])
         require(obj.header[1] == 1 and obj.header[7] in (0, 1),
                 "candidate object must be native MIPS-I ET_REL flags=0 or noreorder=1")
-        claims = item.get("functions") or [dict(name=item["function"], offset=item["offset"], size=item["size"])]
+        claims = (item["functions"] if "functions" in item else
+                  [dict(name=item["function"], offset=item["offset"], size=item["size"])])
         claims = [dict(name=f.get("name", f.get("function")), offset=integer(f["offset"]),
                        size=integer(f["size"])) for f in claims]
         claims.sort(key=lambda f: f["offset"])
-        require(claims, "candidate has no function claims")
+        require(claims or item.get("generated_data"), "candidate has no function claims")
         for claim in claims:
             original_symbol = original.named_symbol(claim["name"])
             emitted = obj.named_symbol(claim["name"])
@@ -310,15 +311,16 @@ def normalize_candidates(candidates, original):
         extra_functions = [s["name"] for s in obj.symbols if s["type"] == 2 and s["size"] and
                            s["name"] not in {f["name"] for f in claims}]
         require(not extra_functions, f"unclaimed compiler functions: {extra_functions}")
-        start = claims[0]["offset"]
-        end = max(f["offset"] + f["size"] for f in claims)
-        object_start = claims[0]["object_symbol"]["value"]
+        # A data-only source owns no text span.
+        start = claims[0]["offset"] if claims else None
+        end = max(f["offset"] + f["size"] for f in claims) if claims else None
+        object_start = claims[0]["object_symbol"]["value"] if claims else None
         for claim in claims:
             require(claim["offset"] - start == claim["object_symbol"]["value"] - object_start,
                     "candidate function ordering/internal spacing differs from original scope")
         # No original function may be hidden inside a compiler-owned contiguous span.
         claim_names = {f["name"] for f in claims}
-        for symbol in functions:
+        for symbol in functions if claims else ():
             if start <= symbol["value"] < end:
                 require(symbol["name"] in claim_names, "compiler text span crosses an unclaimed function")
         streams, namespace = namespace_streams(
@@ -380,6 +382,31 @@ def relocation_expressions(original):
     return expressions
 
 
+def nobits_padding(lines, offset):
+    """Resolve packaged COMMON `.balign` at its known mapped offset.
+
+    The mapping fixes where the storage starts; an alignment directive would
+    also raise the container section alignment and round its size past the
+    original extent. Explicit zero-fill of the same length keeps both.
+    """
+    resolved = []
+    for line in lines:
+        align = re.fullmatch(r"\s*\.balign\s+(\d+)\s*", line)
+        space = re.fullmatch(r"\s*\.space\s+(\d+)\s*", line)
+        if align:
+            pad = -offset % int(align.group(1))
+            if pad:
+                resolved.append(f".space {pad}")
+            offset += pad
+            continue
+        require(not re.match(r"\s*\.(?:p2align|align|byte|half|word|ascii|asciz)\b", line),
+                "unsupported NOBITS compiler stream directive")
+        if space:
+            offset += int(space.group(1))
+        resolved.append(line)
+    return resolved
+
+
 def generate_assembly(original, module, original_bytes, candidates, disassembly):
     instructions = {}
     for line in disassembly.splitlines():
@@ -405,20 +432,31 @@ def generate_assembly(original, module, original_bytes, candidates, disassembly)
         if name and name not in seen_names:
             symbols[(original.sections[symbol["section_index"]]["name"], symbol["value"])].append(symbol)
             seen_names.add(name)
-    source = ["/* Original scaffold plus compiler streams with private symbol namespaces. */",
-              ".set noreorder", ".set noat", ".globl _iop_module_base"]
+    source_header = ["/* Original scaffold plus compiler streams with private symbol namespaces. */",
+                     ".set noreorder", ".set noat", ".globl _iop_module_base"]
     provenance = []
+    # Each compiler stream keeps its own assembly-time view: the initialized
+    # data a source defines (its string/constant labels) precedes that
+    # source's code, as in the compiler output, while data owned by later
+    # sources, scaffolding and COMMON/BSS storage stay forward references
+    # (undefined at their use, as in the original separate assembly). GAS
+    # relaxes `la`/symbolic loads and fills delay slots differently for a
+    # defined local label than for a forward or external one.
+    section_lines, block_marks = {}, {}
     for name in (".text", ".rodata", ".data", ".sdata", ".sbss", ".bss"):
         if name not in original.by_name:
             continue
         section = original.by_name[name]
+        source = section_lines[name] = []
+        block_marks[name] = {}
         source.extend([section_directive(name), ".set noreorder", ".set noat"])
         if name == ".text":
             source.append("_iop_module_base:")
         blocks = []
         for c in candidates:
             if name == ".text":
-                blocks.append((c["start"], c["end"], c["streams"].get(name, []), c))
+                if c["functions"]:
+                    blocks.append((c["start"], c["end"], c["streams"].get(name, []), c))
             else:
                 for mapping in c["data_maps"]:
                     if mapping["section"] == name:
@@ -435,7 +473,11 @@ def generate_assembly(original, module, original_bytes, candidates, disassembly)
         while position < end:
             if position in by_start:
                 start, stop, lines, candidate = by_start[position]
+                if name == ".text":
+                    block_marks[name][id(candidate)] = len(source)
                 require(start >= section["address"] and stop <= end and lines, "empty/outside compiler stream mapping")
+                if section["type"] == 8:
+                    lines = nobits_padding(lines, start - section["address"])
                 source.extend([f".org 0x{position-section['address']:x}",
                                ".set reorder", ".set at", *lines,
                                section_directive(name), ".set noreorder", ".set noat"])
@@ -444,6 +486,8 @@ def generate_assembly(original, module, original_bytes, candidates, disassembly)
                                        assembly_sha256=sha(candidate["assembly"].read_bytes()),
                                        namespace_transport=candidate["namespace_transport"]))
                 emitted_blocks.add(start)
+                if name != ".text":
+                    block_marks[name][id(candidate)] = len(source)
                 position = stop
                 continue
             for symbol in symbols.get((name, position), []):
@@ -491,6 +535,32 @@ def generate_assembly(original, module, original_bytes, candidates, disassembly)
             position += count
         require(emitted_blocks == set(by_start), "compiler section mapping was not emitted")
         source.append(f".org 0x{section['size']:x}")
+    header = source_header
+    source = list(header)
+    interleaved = [n for n in (".rodata", ".data", ".sdata") if n in section_lines]
+    cursor = {n: 0 for n in interleaved}
+    text = section_lines.get(".text", [])
+    text_marks = sorted((index, key) for key, index in block_marks.get(".text", {}).items())
+    previous = 0
+    for index, key in text_marks:
+        source.extend(text[previous:index])
+        previous = index
+        for n in interleaved:
+            stop = block_marks[n].get(key)
+            if stop is not None and stop > cursor[n]:
+                chunk = section_lines[n][cursor[n]:stop]
+                if cursor[n]:
+                    chunk = [section_directive(n), ".set noreorder", ".set noat", *chunk]
+                source.extend([*chunk, ".text", ".set noreorder", ".set noat"])
+                cursor[n] = stop
+    source.extend(text[previous:])
+    for n in (".rodata", ".data", ".sdata", ".sbss", ".bss"):
+        if n not in section_lines:
+            continue
+        rest = section_lines[n][cursor.get(n, 0):]
+        if cursor.get(n, 0):
+            rest = [section_directive(n), ".set noreorder", ".set noat", *rest]
+        source.extend(rest)
     return "\n".join(source) + "\n", provenance, tables
 
 

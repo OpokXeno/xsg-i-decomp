@@ -17,7 +17,7 @@ extern SceneString *loadConstString(const char *bytes, int length);
 
 /* The "id" field name every lookupClassField(classJava_xeno_util_Input, ...)
  * call below looks up. */
-extern const char D_004DC0A8[];
+extern const char inputIdFieldName[];
 
 /*
  * Call block of Java_xeno_util_Input_create__I: the controller number the
@@ -47,7 +47,7 @@ void Java_xeno_util_Input_create__I(JThread *thread, InputCreateCall *arguments,
 
     object = newObject(classJava_xeno_util_Input);
     id_field = lookupClassField(classJava_xeno_util_Input,
-                                loadConstString(D_004DC0A8, -1), 0);
+                                loadConstString(inputIdFieldName, -1), 0);
     *(int *)(object + id_field->offset) = arguments->id;
     *result = (int)object;
 }
@@ -97,7 +97,7 @@ void Java_xeno_util_Input_getButton__(JThread *thread, InputObjectCall *argument
 
     object = arguments->object;
     id_field = lookupClassField(classJava_xeno_util_Input,
-                                loadConstString(D_004DC0A8, -1), 0);
+                                loadConstString(inputIdFieldName, -1), 0);
     id = *(int *)(object + id_field->offset);
     *result = PadData[id].held;
 }
@@ -111,7 +111,7 @@ void Java_xeno_util_Input_getEdge__(JThread *thread, InputObjectCall *arguments,
 
     object = arguments->object;
     id_field = lookupClassField(classJava_xeno_util_Input,
-                                loadConstString(D_004DC0A8, -1), 0);
+                                loadConstString(inputIdFieldName, -1), 0);
     id = *(int *)(object + id_field->offset);
     *result = PadData[id].pressed;
 }
@@ -125,9 +125,9 @@ void Java_xeno_util_Input_getRepeat__(JThread *thread, InputObjectCall *argument
 
     object = arguments->object;
     id_field = lookupClassField(classJava_xeno_util_Input,
-                                loadConstString(D_004DC0A8, -1), 0);
+                                loadConstString(inputIdFieldName, -1), 0);
     id = *(int *)(object + id_field->offset);
     *result = PadData[id].repeat;
 }
 
-const char D_004DC0A8[] = "id";
+const char inputIdFieldName[] = "id";

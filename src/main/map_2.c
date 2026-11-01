@@ -58,9 +58,6 @@ extern void xglMatrixStackPush(void);
 
 extern void xglMatrixStackPop(int count);
 
-
-
-
 int MAP_loadUnitResource(MapUnitSlot *unit, int resource_id)
 {
     MapUnitResource *resource = RES_loadFile(-1, 4, resource_id, 0);
@@ -373,5 +370,4 @@ void MAP_getHeight(MapPosition *position)
         position->y = height;
     }
 }
-
 

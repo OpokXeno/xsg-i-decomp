@@ -111,11 +111,11 @@ extern void xglRotTransPersN(MenuBgProjectedPoint *destination,
 
 #define MENUBG_MIN_HORIZONTAL_SCALE (0.001f) /* 0x004D7C90: 6f 12 83 3a */
 
-#define D_004D7C88 MENUBG_VERTICAL_OFFSET_SCALE
+#define MENU_BG_VERTICAL_OFFSET_FACTOR MENUBG_VERTICAL_OFFSET_SCALE
 
-#define D_004D7C8C MENUBG_HORIZONTAL_SCALE_DECAY
+#define MENU_BG_HORIZONTAL_DECAY MENUBG_HORIZONTAL_SCALE_DECAY
 
-#define D_004D7C90 MENUBG_MIN_HORIZONTAL_SCALE
+#define MENU_BG_MIN_HORIZONTAL_LIMIT MENUBG_MIN_HORIZONTAL_SCALE
 
 /* DMA/VIF header and GIF tag are stored little-endian on EE. These
  * initializer helpers express packet words, not opaque packet-byte blobs. */
@@ -142,7 +142,8 @@ extern void xglRotTransPersN(MenuBgProjectedPoint *destination,
 /* 11-qword palette transfer: DMA/VIF header, GIFtag, four A+D writes,
  * then five original zero qwords retained by the original transfer count. */
 
-static u8 TestEnv_2_0036AAA0[176];static u8 TestEnv_3_0036AB50[112];
+static u8 TestEnv_2_0036AAA0[176];
+static u8 TestEnv_3_0036AB50[112];
 
 static int task_menubg(XglTaskPrefix *task);
 
@@ -300,7 +301,7 @@ static int task_menubg(XglTaskPrefix *task_prefix)
     switch (task->state) {
     case 0:
         task->horizontal_offset = 2.0f * (xglFRand() - 1.5f);
-        task->vertical_offset = I2F((8 - task->index) * 2) * D_004D7C88;
+        task->vertical_offset = I2F((8 - task->index) * 2) * MENU_BG_VERTICAL_OFFSET_FACTOR;
         task->depth_offset = (xglFRand() - 1.5f) * 0.5f;
         task->horizontal_scale = 2.0f * xglFRand() + 7.0f;
         task->mirrored_depth_offset = (xglFRand() - 1.5f) * 0.5f;
@@ -316,8 +317,8 @@ static int task_menubg(XglTaskPrefix *task_prefix)
         task->state = 2;
         /* fall through */
     case 2:
-        task->horizontal_scale *= D_004D7C8C;
-        if (task->horizontal_scale < D_004D7C90) {
+        task->horizontal_scale *= MENU_BG_HORIZONTAL_DECAY;
+        if (task->horizontal_scale < MENU_BG_MIN_HORIZONTAL_LIMIT) {
             task->horizontal_scale = 0.0f;
             task->state = 3;
         }
@@ -390,7 +391,6 @@ void tyaMenuBgEntry(XglTaskScheduler *scheduler, MenuBgWork *work)
     }
 }
 
-
 static u8 TestEnv_2_0036AAA0[176] = {
     NML_DIRECT_HEADER(0x51000005),
     GIF_TAG_WORDS(0x8004, 0x10000000, 0x0000000e, 0),
@@ -401,7 +401,6 @@ static u8 TestEnv_2_0036AAA0[176] = {
     NML_ZERO_QWORD, NML_ZERO_QWORD, NML_ZERO_QWORD,
     NML_ZERO_QWORD, NML_ZERO_QWORD,
 };
-
 
 /* 7-qword entry transfer: DMA/VIF header, GIFtag, and five A+D writes. */
 

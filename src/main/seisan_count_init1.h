@@ -142,7 +142,7 @@ typedef struct SeisanUnitRecord {
 extern SeisanUnitRecord *func_A191C0(int chrNo);
 
 /*
- * D_004C7350 (.rodata, 0x40 bytes): SeisanDisp copies it onto its stack with
+ * seisanRibbonTable (.rodata, 0x40 bytes): SeisanDisp copies it onto its stack with
  * the ldl/ldr/sdl/sdr unaligned-doubleword sequence at 0x002a1900..0x002a1974
  * and passes the copy's address to endPrintDirectRibbon (still asm, main/tu164
  * src/main/end_print.c); the fields it holds are not otherwise evidenced here.
@@ -151,7 +151,7 @@ typedef struct SeisanRibbonData {
     unsigned int unmodeled_00[15];
 } SeisanRibbonData;
 
-extern const SeisanRibbonData D_004C7350;
+extern const SeisanRibbonData seisanRibbonTable;
 
 extern void endPrintDirectRibbon(SeisanRibbonData *ribbon);
 
@@ -315,8 +315,8 @@ typedef struct SeisanItemEntry {
 extern SeisanItemEntry *SeisanItemBox;
 extern const char *msg00_2_0036DAD0[];
 extern const unsigned short *msg_number[10];
-extern const char D_004DB090[];
-extern const char D_004DB098[];
+extern const char seisanOrdinalPrefixText[];
+extern const char seisanQuantityMarkText[];
 
 /* The name prefix returned by MenuTextGet (main/tu169). */
 typedef struct SeisanItemTextEntry {
@@ -411,7 +411,7 @@ extern void endSpriteSet(void *sprite, int flags);
 
 extern SeisanItemTextEntry *func_A2C7D8(int abilityId);
 
-extern const char D_004C7340[];
+extern const char combatantTitleText[];
 
 extern const char *msg00_3_0036DAD8[];
 
@@ -447,7 +447,7 @@ typedef struct SeisanItemCategoryTable {
     short entries[4];
 } SeisanItemCategoryTable;
 
-extern const SeisanItemCategoryTable D_004DB0B8[];
+extern const SeisanItemCategoryTable seisanItemCategoryTable[];
 
 extern void *MenuWorkEndGet(void);
 

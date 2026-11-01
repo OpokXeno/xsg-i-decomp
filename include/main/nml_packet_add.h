@@ -9,7 +9,21 @@
 /* RssdWork storage is defined by main/tu107; its layout is owned by main/tu110. */
 extern RssdWorkFlags RssdWork;
 
-extern const char D_004DC4D0[4];
+extern const char nmlEmptyName[4];
+
+/* One stealth part: two joints, outline widths, end extensions and the
+ * longitudinal stretch applied to each of the four cross-section rings. */
+struct NmlStealthDescriptor {
+    int firstJoint;
+    int secondJoint;
+    unsigned char unmodeled_08[4];
+    int sortClass;
+    float firstWidth;
+    float secondWidth;
+    float firstExtension;
+    float secondExtension;
+    float longitudinalStretch[4];
+};
 
 typedef union GsTag {
     u64 value;

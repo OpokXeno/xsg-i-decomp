@@ -6189,8 +6189,8 @@ def verified_current_storage_placement_alignment(args, tu, tu_rel, obj, elf, dat
     admits neither a function/header attribute nor a TU132 fallback, and does
     not assert original alignment, spelling or hardware requirements.
     """
-    identities={('main/tu179','src/main/ether_tree.c'):('D_004C9AB0',0x4c9ab0),
-                ('main/tu204','src/main/wind_test.c'):('D_004CBB60',0x4cbb60)}
+    identities={('main/tu179','src/main/ether_tree.c'):('etherTreeLineColorTable',0x4c9ab0),
+                ('main/tu204','src/main/wind_test.c'):('windRotationAndScaleVector',0x4cbb60)}
     identity=identities.get((getattr(args,'tu_id',None),tu_rel))
     if args.unit!='main' or identity is None or not data_row:
         return {},[]
@@ -6915,10 +6915,10 @@ def data_attribute_existing_C_owner(args,name,section,physical_slot,baseline_inp
     """Closed existing-owner provenance, never a new DATA claim or capacity."""
     import stat
     allowed={
-        'main/tu169':{'D_004C51A8':(0x4c51a8,0x4c51c0), 'D_004C51C0':(0x4c51c0,0x4c51d8),
-            'D_004C51D8':(0x4c51d8,0x4c51e8), 'D_004C5250':(0x4c5250,0x4c5260),
-            'D_004C5260':(0x4c5260,0x4c5270), 'D_004C5270':(0x4c5270,0x4c5280),
-            'D_004C5280':(0x4c5280,0x4c5290), 'D_004C5290':(0x4c5290,0x4c52a0)},
+        'main/tu169':{'registeredReserveText':(0x4c51a8,0x4c51c0), 'registeredCombatantText':(0x4c51c0,0x4c51d8),
+            'combatantText':(0x4c51d8,0x4c51e8), 'dexterityText':(0x4c5250,0x4c5260),
+            'etherDefenseText':(0x4c5260,0x4c5270), 'etherAttackText':(0x4c5270,0x4c5280),
+            'vitalityText':(0x4c5280,0x4c5290), 'strengthText':(0x4c5290,0x4c52a0)},
         'main/tu170':{'msg_0_0036D8A8':(0x36d8a8,0x36d8d8), 'msg01_1':(0x36d8d8,0x36d8e4),
             'msg01_3':(0x36d8f8,0x36d900), 'msg_6':(0x36d930,0x36d934),
             'msg_7_0036D938':(0x36d938,0x36d940)}}
@@ -7010,24 +7010,24 @@ def data_attribute_original_reference_exclusion(record,original,Elf,interval):
 def data_attribute_character_composition_scope(args,record):
     """The exact eighteen reviewed character prefixes; never scalar views."""
     allowed={
-        ('main/tu155','D_004C23C0'):(0x4c23c0,0x4c23d7,0x4c23d8),
-        ('main/tu169','D_004C51A8'):(0x4c51a8,0x4c51bb,0x4c51c0),
-        ('main/tu169','D_004C51C0'):(0x4c51c0,0x4c51d5,0x4c51d8),
-        ('main/tu169','D_004C51D8'):(0x4c51d8,0x4c51e2,0x4c51e8),
-        ('main/tu169','D_004C5250'):(0x4c5250,0x4c525a,0x4c5260),
-        ('main/tu169','D_004C5260'):(0x4c5260,0x4c526e,0x4c5270),
-        ('main/tu169','D_004C5270'):(0x4c5270,0x4c527d,0x4c5280),
-        ('main/tu169','D_004C5280'):(0x4c5280,0x4c5289,0x4c5290),
-        ('main/tu169','D_004C5290'):(0x4c5290,0x4c5299,0x4c52a0),
-        ('main/tu169','D_004C52A0'):(0x4c52a0,0x4c52a9,0x4c52b0),
-        ('main/tu169','D_004C52B0'):(0x4c52b0,0x4c52b9,0x4c52c0),
-        ('main/tu169','D_004C52C0'):(0x4c52c0,0x4c52c9,0x4c52d0),
-        ('main/tu169','D_004C52D0'):(0x4c52d0,0x4c52db,0x4c52e0),
-        ('main/tu169','D_004C52E0'):(0x4c52e0,0x4c52eb,0x4c52f0),
-        ('main/tu169','D_004C52F0'):(0x4c52f0,0x4c52fb,0x4c5300),
-        ('main/tu169','D_004C54D8'):(0x4c54d8,0x4c54e1,0x4c54f0),
-        ('main/tu174','D_004C82D8'):(0x4c82d8,0x4c82ec,0x4c82f0),
-        ('main/tu178','D_004C9940'):(0x4c9940,0x4c9953,0x4c9960)}
+        ('main/tu155','EWDefaultResourcePath'):(0x4c23c0,0x4c23d7,0x4c23d8),
+        ('main/tu169','registeredReserveText'):(0x4c51a8,0x4c51bb,0x4c51c0),
+        ('main/tu169','registeredCombatantText'):(0x4c51c0,0x4c51d5,0x4c51d8),
+        ('main/tu169','combatantText'):(0x4c51d8,0x4c51e2,0x4c51e8),
+        ('main/tu169','dexterityText'):(0x4c5250,0x4c525a,0x4c5260),
+        ('main/tu169','etherDefenseText'):(0x4c5260,0x4c526e,0x4c5270),
+        ('main/tu169','etherAttackText'):(0x4c5270,0x4c527d,0x4c5280),
+        ('main/tu169','vitalityText'):(0x4c5280,0x4c5289,0x4c5290),
+        ('main/tu169','strengthText'):(0x4c5290,0x4c5299,0x4c52a0),
+        ('main/tu169','vx20000Name'):(0x4c52a0,0x4c52a9,0x4c52b0),
+        ('main/tu169','vx10000Name'):(0x4c52b0,0x4c52b9,0x4c52c0),
+        ('main/tu169','catalinaText'):(0x4c52c0,0x4c52c9,0x4c52d0),
+        ('main/tu169','cassiriaText'):(0x4c52d0,0x4c52db,0x4c52e0),
+        ('main/tu169','blankNameText'):(0x4c52e0,0x4c52eb,0x4c52f0),
+        ('main/tu169','ziggurat8Name'):(0x4c52f0,0x4c52fb,0x4c5300),
+        ('main/tu169','gunoMotionName'):(0x4c54d8,0x4c54e1,0x4c54f0),
+        ('main/tu174','etherSetSearchText'):(0x4c82d8,0x4c82ec,0x4c82f0),
+        ('main/tu178','skillSetSearchText'):(0x4c9940,0x4c9953,0x4c9960)}
     key=(record.get('tu'),record.get('name'))
     data_attribute_require(args.unit=='main' and record.get('unit')=='main' and key in allowed and
         args.tu_id==key[0] and record.get('semantic_range')==list(allowed[key][:2]) and

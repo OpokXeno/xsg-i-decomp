@@ -85,22 +85,22 @@ extern MapGameLoopStateView GameLoopState;
 
 extern DbLightWritePadData PadData;
 
-extern int visible_0;
+static int visible_0;
 
-extern int partsIndex;
+static int partsIndex;
 
-extern const char D_004C2158[];
+extern const char matrixRowFormat[];
 
-extern const char D_004DA520[];
+extern const char partsIndexFormat[];
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 extern void nmlModelSetPartsVisible(MapPartListView *parts,
                                     int part_index, int visible);
 
-extern Vector4 lightDir[6];
+static Vector4 lightDir[6];
 
-extern RgVector lightCol[6];
+static RgVector lightCol[6];
 
 extern void xglLightIntensityParallel(void *light, int index,
                                       const Vector4 *intensity);
@@ -117,16 +117,15 @@ extern float xglSin(float angle);
 
 extern float xglCos(float angle);
 
-
 extern int sceWrite(int descriptor, const void *buffer, int size);
 
 extern double fptodp(float value);
 
-extern const char D_004C2020[];
+extern const char lightSetColorFormat[];
 
-extern const char D_004C2050[];
+extern const char lightSetDirection2Format[];
 
-extern const char D_004C2088[];
+extern const char stageSetColorFormat[];
 
 /* Clear-environment colour words (the GS clear block's color_r/g/b at 0x20). */
 typedef struct {
@@ -151,7 +150,7 @@ extern void xglVectorMulMat(Vector4 *destination, const void *matrix,
 
 extern void xglVectorNormal(Vector4 *destination, const Vector4 *vector);
 
-extern const float D_004D7CBC;
+extern const float cursorDirectionLength;
 
 extern void ACT_updateSequence(ActorHead *actor);
 
@@ -172,37 +171,37 @@ typedef struct {
 
 extern CameraChannelRecord tcamera;
 
-extern float cursorSpeed[];
+static float cursorSpeed[9];
 
-extern const float D_004D7CD0;
+extern const float cursorPlaneRotateDecrement;
 
-extern const float D_004D7CD4;
+extern const float cursorPlaneRotateIncrement;
 
-extern const char D_004C20B8[];
+extern const char mapHeightFormat[];
 
-extern const char D_004C20C8[];
+extern const char mapHoleHeightText[];
 
-extern unsigned short keyData[];
+static unsigned short keyData[8];
 
 extern float UnduGet(float x, float z);
 
 void updateCursorModePlane(void);
 
-extern const float D_004D7CD8;
+extern const float cursorMode0RotateDecrement;
 
-extern const float D_004D7CDC;
+extern const float cursorMode0RotateIncrement;
 
-extern int toolFlags;
+static int toolFlags;
 
-extern int cursorMode;
+int cursorMode;
 
-extern int cursorModeName[];
+static const char * cursorModeName[5];
 
-extern const char D_004C2108[];
+extern const char cursorPositionFormat[];
 
-extern const char D_004C2128[];
+extern const char cameraPositionFormat[];
 
-extern const char D_004C2148[];
+extern const char cursorModeSpeedFormat[];
 
 extern void PAD_getKey(unsigned short *keys, int port, int mask);
 
@@ -230,51 +229,51 @@ typedef struct WindMarker {
 
 extern void EXM_ResetWind(void);
 
-extern int dispy_2;
+static int dispy_2;
 
-extern int csr_1;
+static int csr_1;
 
-extern const char D_004DA558[];
+extern const char windSettingsText[];
 
-extern const char D_004DA560[];
+extern const char windTypeText[];
 
-extern const char D_004DA568[];
+extern const char windOffText[];
 
-extern const char D_004DA570[];
+extern const char windPointText[];
 
-extern const char D_004DA578[];
+extern const char windShakeText[];
 
-extern const char D_004DA580[];
+extern const char windVectorText[];
 
-extern const char D_004DA588[];
+extern const char cursorMarkerText[];
 
-extern const char D_004C21C8[];
+extern const char windOffSelectedText[];
 
-extern const char D_004C21D8[];
+extern const char windDirectionalSelectedText[];
 
-extern const char D_004C21F0[];
+extern const char windDirectionalText[];
 
-extern const char D_004C2200[];
+extern const char windPointSelectedText[];
 
-extern const char D_004C2210[];
+extern const char windPowerFormat[];
 
-extern const char D_004C2220[];
+extern const char windSpeedFormat[];
 
-extern const char D_004C2230[];
+extern const char windXFormat[];
 
-extern const char D_004C2240[];
+extern const char windYFormat[];
 
-extern const char D_004C2250[];
+extern const char windZFormat[];
 
-extern const char D_004C2260[];
+extern const char windWFormat[];
 
-extern const char D_004C2270[];
+extern const char windShakeCommandFormat[];
 
-extern const char D_004C2290[];
+extern const char directionalWindCommandFormat[];
 
-extern const char D_004C22C8[];
+extern const char pointWindCommandFormat[];
 
-extern const char D_004C22F8[];
+extern const char stopWindCommandFormat[];
 
 void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index);
 
@@ -320,7 +319,7 @@ void DB_lightWrite(int descriptor)
     xglStudioGetLight(&light);
     sceWrite(descriptor, buffer,
              sprintf(buffer,
-                     D_004C2020,
+                     lightSetColorFormat,
                      0, light->ambient_color.x, light->ambient_color.y,
                      light->ambient_color.z));
 
@@ -328,12 +327,12 @@ void DB_lightWrite(int descriptor)
     do {
         lightNumber = lightIndex + 1;
         sceWrite(descriptor, buffer,
-                 sprintf(buffer, D_004C2020, lightNumber,
+                 sprintf(buffer, lightSetColorFormat, lightNumber,
                          ((LightFloats *)light)->f[lightIndex * 8 + 4],
                          ((LightFloats *)light)->f[lightIndex * 8 + 5],
                          ((LightFloats *)light)->f[lightIndex * 8 + 6]));
         sceWrite(descriptor, buffer,
-                 sprintf(buffer, D_004C2050, lightNumber,
+                 sprintf(buffer, lightSetDirection2Format, lightNumber,
                          ((LightFloats *)light)->f[lightIndex * 8 + 8],
                          ((LightFloats *)light)->f[lightIndex * 8 + 9],
                          ((LightFloats *)light)->f[lightIndex * 8 + 10]));
@@ -341,7 +340,7 @@ void DB_lightWrite(int descriptor)
     } while (lightIndex < 3);
 
     {
-        const char *stage_format = D_004C2088;
+        const char *stage_format = stageSetColorFormat;
         double stage_red;
         double stage_green;
         double stage_blue;
@@ -375,8 +374,8 @@ typedef struct {
     Vector4 positions[5];
 } DebugRectScratch;
 
-extern unsigned char col[56];
-extern const Vector4 vRect[4];
+static unsigned char col[56];
+static Vector4 vRect[4] ;
 extern void transformVector(Vector4 *destination, const Vector4 *vectors,
                             int count, DebugDrawTransform *params);
 extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *tag, int count);
@@ -436,7 +435,7 @@ void drawRect2(Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, (const void *)0x70000000, 9);
 }
 
-extern const Vector4 vBox[5];
+static Vector4 vBox[5] ;
 
 void drawBox2(Matrix4 *matrix, int color_index)
 {
@@ -617,8 +616,6 @@ void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, (const void *)0x70000000, 5);
 }
 
-
-
 void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
                   DebugLineScratch *scratch)
 {
@@ -673,7 +670,7 @@ void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
 #include "main/xgl_2.h"
 
 extern void xglMatrixStackLoad(Matrix4 matrix);
-extern const Vector4 vGridXZ[5];
+static Vector4 vGridXZ[5] ;
 typedef struct DebugCursorColour {
     unsigned char red;
     unsigned char green;
@@ -761,7 +758,7 @@ static StudioCamera *getCurrentCamera(void)
     }
 }
 
-extern const Vector4 vCursor[6];
+static Vector4 vCursor[6] ;
 
 void drawAxis(Matrix4 matrix, float scale)
 {
@@ -952,7 +949,6 @@ void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
                        (int)((output->y - 2048.0f + 224.0f) * 0.5f), label);
 }
 
-
 void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
@@ -1114,7 +1110,7 @@ void updateCursorMode1(void)
         camera_matrix[3][2] = 0.0f;
         xglVectorMulMat(&transformed, camera_matrix, &direction);
         xglVectorNormal(&transformed, &transformed);
-        direction_length = D_004D7CBC;
+        direction_length = cursorDirectionLength;
         cursor_position->x += transformed.x * direction_length;
         cursor_position->y += transformed.y * direction_length;
         cursor_position->z += transformed.z * direction_length;
@@ -1356,10 +1352,10 @@ void updateCursorModePlane(void)
         }
     }
     if (keys[0] & 0x2000) {
-        camera->rotation.z -= D_004D7CD0;
+        camera->rotation.z -= cursorPlaneRotateDecrement;
     }
     if (keys[0] & 0x8000) {
-        camera->rotation.z += D_004D7CD4;
+        camera->rotation.z += cursorPlaneRotateIncrement;
     }
     length = cursorSpeed[((CursorState *)cursor)->step];
     if (keys[0] & 4) {
@@ -1373,11 +1369,11 @@ void updateCursorModePlane(void)
     if (keys[0] & 0x40) {
         height = UnduGet(position->x, position->z);
         if (height != -1000.0f) {
-            height_format = D_004C20B8;
+            height_format = mapHeightFormat;
             position->y = height;
             xglFontDebugPrintf(4, 0xC4, height_format, fptodp(height));
         } else {
-            missing_format = D_004C20C8;
+            missing_format = mapHoleHeightText;
             xglFontDebugPrintf(4, 0xC4, missing_format, fptodp(height));
         }
         if (((CursorState *)cursor)->flag_34 != 0) {
@@ -1524,10 +1520,10 @@ void updateCursorMode0(void)
         }
     }
     if (keys[0] & 0x2000) {
-        camera->rotation.z -= D_004D7CD8;
+        camera->rotation.z -= cursorMode0RotateDecrement;
     }
     if (keys[0] & 0x8000) {
-        camera->rotation.z += D_004D7CDC;
+        camera->rotation.z += cursorMode0RotateIncrement;
     }
     length = cursorSpeed[((CursorState *)cursor)->step];
     if (keys[0] & 4) {
@@ -1541,11 +1537,11 @@ void updateCursorMode0(void)
     if (keys[0] & 0x40) {
         height = UnduGet(position->x, position->z);
         if (height != -1000.0f) {
-            height_format = D_004C20B8;
+            height_format = mapHeightFormat;
             position->y = height;
             xglFontDebugPrintf(4, 0xC4, height_format, fptodp(height));
         } else {
-            missing_format = D_004C20C8;
+            missing_format = mapHoleHeightText;
             xglFontDebugPrintf(4, 0xC4, missing_format, fptodp(height));
         }
         if (((CursorState *)cursor)->flag_34 != 0) {
@@ -1730,11 +1726,11 @@ void updateCursor(int mode)
         updateCursorMode2();
         if (toolFlags == 0) {
             camera_position = &camera->position;
-            position_format = D_004C2108;
+            position_format = cursorPositionFormat;
             sprintf(text, position_format, fptodp(position->x), fptodp(position->y),
                     fptodp(position->z));
             xglFontDebugPrintf(0xAA, 0xAA, text);
-            camera_format = D_004C2128;
+            camera_format = cameraPositionFormat;
             sprintf(text, camera_format, fptodp(camera_position->x), fptodp(camera_position->y),
                     fptodp(camera_position->z));
             xglFontDebugPrintf(0xAA, 0xC6, text);
@@ -1749,7 +1745,7 @@ void updateCursor(int mode)
         selected = ((CursorState *)cursor)->mode;
     }
     if (toolFlags == 0) {
-        xglFontDebugPrintf(4, 0xB4, D_004C2148, cursorModeName[selected], ((CursorState *)cursor)->flag_04,
+        xglFontDebugPrintf(4, 0xB4, cursorModeSpeedFormat, cursorModeName[selected], ((CursorState *)cursor)->flag_04,
                            ((CursorState *)cursor)->step + 1);
     }
 }
@@ -1814,7 +1810,7 @@ static void printM(int x, int y, const float *matrix)
     rowIndex = 0;
     do {
         rowIndex++;
-        sprintf(buffer, D_004C2158,
+        sprintf(buffer, matrixRowFormat,
                 rowEnd[-3], rowEnd[-2], rowEnd[-1], rowEnd[0]);
         xglFontDebugPrintf(x, y, buffer);
         if (rowIndex > 3)
@@ -1858,7 +1854,7 @@ void MAP_serach(void)
                 partsIndex = 0;
             matrix_data = matrix_base + partsIndex * sizeof(Matrix4);
             printM(0x20, 0x40, matrix_data);
-            sprintf(buffer, D_004DA520, partsIndex);
+            sprintf(buffer, partsIndexFormat, partsIndex);
             xglFontDebugPrintf(8, 0x20, buffer);
             nmlModelSetPartsVisible(model->parts, partsIndex,
                                     (visible_0 >> 4) & 1);
@@ -1884,14 +1880,6 @@ void EvtTools(void)
     updateCursor(0);
     drawCursor();
 }
-
-
-
-
-
-
-
-
 
 void initLight3(void)
 {
@@ -2044,18 +2032,17 @@ void initLight(void)
 }
 
 extern float lightSpeedTbl[4];
-extern int lightIndex;
-extern int lightColIndex;
-extern int lightSpeed;
-extern int lightStateOffset;
+static int lightIndex;
+static int lightColIndex;
+static int lightSpeed;
+static int lightStateOffset;
 extern void xglStudioFlushActiveCamera(void);
-extern const char D_004C2170[];
-extern const char D_004C2190[];
-extern const char D_004DA530[];
-extern const char D_004DA538[];
-extern const char D_004DA540[];
-extern const char D_004DA548[];
-
+extern const char rgbColorFormat[];
+extern const char directionVectorFormat[];
+extern const char lightSpeedFormat[];
+extern const char ambientText[];
+extern const char backgroundText[];
+extern const char mapText[];
 
 /* The lighting editor copies direction into the bar position with doubleword
    ld/sd pairs: the vector storage is eight-byte aligned. The union gives it
@@ -2285,17 +2272,17 @@ void updateLight(int mode)
     }
 
     baseX = 192 + lightStateOffset / 2;
-    sprintf(text, D_004DA530, 1 + lightSpeed);
+    sprintf(text, lightSpeedFormat, 1 + lightSpeed);
     xglFontDebugPrintf(baseX, 160, text);
-    sprintf(text, D_004C2170, stick.x, stick.y, stick.z);
+    sprintf(text, rgbColorFormat, stick.x, stick.y, stick.z);
     xglFontDebugPrintf(baseX, 170, text);
-    sprintf(text, D_004C2190, direction.vector.x, direction.vector.y, direction.vector.z);
+    sprintf(text, directionVectorFormat, direction.vector.x, direction.vector.y, direction.vector.z);
     xglFontDebugPrintf(baseX, 198, text);
 
     baseX = 200 + lightStateOffset / 2;
-    xglFontDebugPrintf(baseX, 88, D_004DA538);
-    xglFontDebugPrintf(baseX + 4, 114, D_004DA540);
-    xglFontDebugPrintf(baseX, 140, D_004DA548);
+    xglFontDebugPrintf(baseX, 88, ambientText);
+    xglFontDebugPrintf(baseX + 4, 114, backgroundText);
+    xglFontDebugPrintf(baseX, 140, mapText);
     stick.x = 116.0f;
     stick.y = 56.0f;
     stick.z = 1.0f;
@@ -2379,23 +2366,22 @@ void updateLight(int mode)
 
         i = 0;
         xglStudioGetLight((StudioLight **)&dumpLight);
-        sprintf(dumpText, D_004C2020, i, dumpLight->ambient_color[0],
+        sprintf(dumpText, lightSetColorFormat, i, dumpLight->ambient_color[0],
                 dumpLight->ambient_color[1], dumpLight->ambient_color[2]);
         state = &GameLoopState;
         do {
-            sprintf(dumpText, D_004C2020, i + 1, dumpLight->lights[i].color[0],
+            sprintf(dumpText, lightSetColorFormat, i + 1, dumpLight->lights[i].color[0],
                     dumpLight->lights[i].color[1],
                     dumpLight->lights[i].color[2]);
-            sprintf(dumpText, D_004C2050, i + 1, dumpLight->lights[i].direction[0],
+            sprintf(dumpText, lightSetDirection2Format, i + 1, dumpLight->lights[i].direction[0],
                     dumpLight->lights[i].direction[1],
                     dumpLight->lights[i].direction[2]);
-            sprintf(dumpText, D_004C2088, state->stage_color.x,
+            sprintf(dumpText, stageSetColorFormat, state->stage_color.x,
                     state->stage_color.y,
                     state->stage_color.z);
         } while (++i < 3);
     }
 }
-
 
 void updateWind(WindRecord *wind)
 {
@@ -2503,43 +2489,43 @@ void updateWind(WindRecord *wind)
         }
     }
 
-    xglFontDebugPrintf(0, 0, D_004DA558);
-    xglFontDebugPrintf(150, dispy_2 - 12, D_004DA560);
+    xglFontDebugPrintf(0, 0, windSettingsText);
+    xglFontDebugPrintf(150, dispy_2 - 12, windTypeText);
     mode = wind->mode;
     if (mode == 0) {
-        xglFontDebugPrintf(162, dispy_2, D_004C21C8);
+        xglFontDebugPrintf(162, dispy_2, windOffSelectedText);
     } else {
-        xglFontDebugPrintf(162, dispy_2, D_004DA568);
+        xglFontDebugPrintf(162, dispy_2, windOffText);
     }
     if (mode == 1) {
-        xglFontDebugPrintf(162, dispy_2 + 12, D_004C21D8);
+        xglFontDebugPrintf(162, dispy_2 + 12, windDirectionalSelectedText);
     } else {
-        xglFontDebugPrintf(162, dispy_2 + 12, D_004C21F0);
+        xglFontDebugPrintf(162, dispy_2 + 12, windDirectionalText);
     }
     if (mode == 2) {
-        xglFontDebugPrintf(162, dispy_2 + 24, D_004C2200);
+        xglFontDebugPrintf(162, dispy_2 + 24, windPointSelectedText);
     } else {
-        xglFontDebugPrintf(162, dispy_2 + 24, D_004DA570);
+        xglFontDebugPrintf(162, dispy_2 + 24, windPointText);
     }
-    xglFontDebugPrintf(150, dispy_2 + 36, D_004DA578);
-    format1 = D_004C2210;
+    xglFontDebugPrintf(150, dispy_2 + 36, windShakeText);
+    format1 = windPowerFormat;
     sprintf(text, format1, fptodp(wind->offset_a));
     xglFontDebugPrintf(162, dispy_2 + 48, text);
-    format2 = D_004C2220;
+    format2 = windSpeedFormat;
     sprintf(text, format2, fptodp(wind->offset_b));
     xglFontDebugPrintf(162, dispy_2 + 60, text);
-    xglFontDebugPrintf(170, dispy_2 + 72, D_004DA580);
-    format3 = D_004C2230;
+    xglFontDebugPrintf(170, dispy_2 + 72, windVectorText);
+    format3 = windXFormat;
     line = text_line;
     sprintf(line, format3, fptodp(wind->x));
     xglFontDebugPrintf(182, dispy_2 + 80, line);
-    format4 = D_004C2240;
+    format4 = windYFormat;
     sprintf(line, format4, fptodp(wind->y));
     xglFontDebugPrintf(182, dispy_2 + 88, line);
-    format5 = D_004C2250;
+    format5 = windZFormat;
     sprintf(line, format5, fptodp(wind->z));
     xglFontDebugPrintf(182, dispy_2 + 96, line);
-    format6 = D_004C2260;
+    format6 = windWFormat;
     sprintf(line, format6, fptodp(wind->w));
     xglFontDebugPrintf(182, dispy_2 + 104, line);
     if (wind->mode == 1) {
@@ -2555,25 +2541,25 @@ void updateWind(WindRecord *wind)
         marker.from.vector.w = 0.05f;
     }
     if (csr_1 < 3) {
-        xglFontDebugPrintf(150, dispy_2 + csr_1 * 12, D_004DA588);
+        xglFontDebugPrintf(150, dispy_2 + csr_1 * 12, cursorMarkerText);
     } else {
-        xglFontDebugPrintf(150, dispy_2 + csr_1 * 12 + 12, D_004DA588);
+        xglFontDebugPrintf(150, dispy_2 + csr_1 * 12 + 12, cursorMarkerText);
     }
     if (pad->half_2a & 0x100) {
         wide_text = text_wide;
-        format7 = D_004C2270;
+        format7 = windShakeCommandFormat;
         sprintf(wide_text, format7, fptodp(wind->offset_a), fptodp(wind->offset_b));
         switch (wind->mode) {
         case 1:
-            format8 = D_004C2290;
+            format8 = directionalWindCommandFormat;
             sprintf(wide_text, format8, fptodp(wind->x), fptodp(wind->y), fptodp(wind->z), fptodp(wind->w));
             break;
         case 2:
-            format9 = D_004C22C8;
+            format9 = pointWindCommandFormat;
             sprintf(wide_text, format9, fptodp(wind->x), fptodp(wind->y), fptodp(wind->z), fptodp(wind->w));
             break;
         case 0:
-            format10 = D_004C22F8;
+            format10 = stopWindCommandFormat;
             sprintf(wide_text, format10);
             break;
         }
@@ -2610,3 +2596,147 @@ void VW_getCursor(HomogeneousVector *destination)
     destination->z = cursor[1].z;
     destination->w = 1.0f;
 }
+
+static float cursorSpeed[9] = { 0.010000000707805157f, 0.01666666753590107f, 0.066666670143604279f, 0.13333334028720856f, 0.26666668057441711f, 0.3333333432674408f, 0.53333336114883423f, 1.0666667222976685f, 4.2666668891906738f };
+
+static Vector4 vGridXZ[5] = { { .x = -0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = 0.5f, .w = 1.0f }, { .x = -0.5f, .y = 0.0f, .z = 0.5f, .w = 1.0f }, { .x = -0.5f, .y = 0.0f, .z = -0.5f, .w = 1.0f } };
+
+static Vector4 vCursor[6] = { { .x = -0.5f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.5f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.5f, .w = 1.0f } };
+
+DebugCursorColour cCursor[6] = { { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 192, .green = 0, .blue = 0, .alpha = 128 }, { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 0, .green = 192, .blue = 0, .alpha = 128 }, { .red = 192, .green = 192, .blue = 192, .alpha = 128 }, { .red = 0, .green = 0, .blue = 192, .alpha = 128 } };
+
+static Vector4 vRect[4] = { { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = -1.0f, .z = 0.0f, .w = 1.0f }, { .x = 1.0f, .y = -1.0f, .z = 0.0f, .w = 1.0f } };
+
+static Vector4 vBox[5] = { { .x = -0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f }, { .x = 0.5f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = -0.5f, .y = -0.5f, .z = 0.0f, .w = 1.0f }, { .x = -0.5f, .y = 0.5f, .z = 0.0f, .w = 1.0f } };
+
+static Vector4 lightDir[6] = { { .x = 0.0f, .y = 1.0f, .z = 0.77999997138977051f, .w = 1.0f }, { .x = 0.77999997138977051f, .y = 1.0f, .z = 0.0f, .w = 1.0f }, { .x = -0.61500000953674316f, .y = -1.0f, .z = -0.61500000953674316f, .w = 1.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f }, { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f } };
+
+float lightSpeedTbl[4] = { 0.004999999888241291f, 0.0099999997764825821f, 0.019999999552965164f, 0.029999999329447746f };
+
+const char lightSetColorFormat[48] = "light.setColor(%2d, %7.3ff, %7.3ff, %7.3ff);\n";
+
+const char lightSetDirection2Format[56] = "light.setDirection2(%2d, %7.3ff, %7.3ff, %7.3ff);\n";
+
+const char stageSetColorFormat[48] = "Stage.setColor(%1.3ff, %1.3ff, %1.3ff);\n";
+
+const char mapHeightFormat[16] = "MAP-HEIGHT: %f";
+
+/* Text: MAP-HEIGHT:{color #800000}HOLE_HEIGHT{color #808080} */
+const char mapHoleHeightText[40] = "MAP-HEIGHT:\014\200\000\000HOLE_HEIGHT\014\200\200\200 ";
+
+const char cursorPositionFormat[32] = "IX:%7.3f\nIY:%7.3f\nIZ:%7.3f";
+
+const char cameraPositionFormat[32] = "PX:%7.3f\nPY:%7.3f\nPZ:%7.3f";
+
+const char cursorModeSpeedFormat[16] = "%s %1d SPD:%1d";
+
+const char matrixRowFormat[24] = "%6.2f %6.2f %6.2f %6.2f";
+
+const char rgbColorFormat[32] = "R: %4.3f\nG: %4.3f\nB: %4.3f";
+
+const char directionVectorFormat[32] = "X:%6.3f\nY:%6.3f\nZ:%6.3f";
+
+/* Text: {reset}{color #800000}OFF */
+const char windOffSelectedText[16] = "\013\014\200\000\000OFF";
+
+/* Text: {reset}{color #800000}DIRECTIONAL */
+const char windDirectionalSelectedText[24] = "\013\014\200\000\000DIRECTIONAL";
+
+/* Text: {reset}DIRECTIONAL */
+const char windDirectionalText[16] = "\013DIRECTIONAL";
+
+/* Text: {reset}{color #800000}POINT */
+const char windPointSelectedText[16] = "\013\014\200\000\000POINT";
+
+/* Text: {reset}POW:%+2.3f */
+const char windPowerFormat[16] = "\013POW:%+2.3f";
+
+/* Text: {reset}SPD:%+2.3f */
+const char windSpeedFormat[16] = "\013SPD:%+2.3f";
+
+/* Text: {reset}X: %4.4f */
+const char windXFormat[16] = "\013X: %4.4f";
+
+/* Text: {reset}Y: %4.4f */
+const char windYFormat[16] = "\013Y: %4.4f";
+
+/* Text: {reset}Z: %4.4f */
+const char windZFormat[16] = "\013Z: %4.4f";
+
+/* Text: {reset}W: %4.4f */
+const char windWFormat[16] = "\013W: %4.4f";
+
+const char windShakeCommandFormat[32] = "setWindShake(%3.4ff, %3.4ff);\n";
+
+const char directionalWindCommandFormat[56] = "setDirectionalWind(%3.4ff, %3.4ff, %3.4ff, %3.4ff);\n";
+
+const char pointWindCommandFormat[48] = "setPointWind(%3.4ff, %3.4ff, %3.4ff, %3.4ff);\n";
+
+const char stopWindCommandFormat[16] = "stopWind();\n";
+
+const float cursorDirectionLength = 0.13333334028720856f;
+
+const float cursorPlaneRotateDecrement = 0.01163552887737751f;
+
+const float cursorPlaneRotateIncrement = 0.01163552887737751f;
+
+const float cursorMode0RotateDecrement = 0.01163552887737751f;
+
+const float cursorMode0RotateIncrement = 0.01163552887737751f;
+
+static int visible_0 = 0;
+
+const char partsIndexFormat[4] = "%3d";
+
+static int lightColIndex = 3;
+
+static int lightSpeed = 1;
+
+static int lightStateOffset = 0;
+
+const char lightSpeedFormat[8] = "SPD: %d";
+
+const char ambientText[8] = "AMB";
+
+const char backgroundText[8] = "BG";
+
+const char mapText[4] = "MAP";
+
+static int csr_1 = 0;
+
+static int dispy_2 = 32;
+
+/* JP: 風設定
+ * EN: Wind settings */
+const char windSettingsText[8] = "\311\367\300\337\304\352";
+
+/* Text: {reset}TYPE */
+const char windTypeText[8] = "\013TYPE";
+
+/* Text: {reset}OFF */
+const char windOffText[8] = "\013OFF";
+
+/* Text: {reset}POINT */
+const char windPointText[8] = "\013POINT";
+
+/* Text: {reset}SHAKE */
+const char windShakeText[8] = "\013SHAKE";
+
+/* Text: {reset}VECTOR */
+const char windVectorText[8] = "\013VECTOR";
+
+/* Text: {reset}> */
+const char cursorMarkerText[8] = "\013>";
+
+extern const char DBCursorModeXzLabel[8];
+extern const char DBCursorModeFreeLabel[8];
+extern const char DBCursorModeYzLabel[8];
+extern const char DBCursorModeXyLabel[8];
+extern const char DBCursorModeFcvLabel[8];
+
+static const char * cursorModeName[5] = { DBCursorModeFreeLabel, DBCursorModeYzLabel, DBCursorModeXzLabel, DBCursorModeXyLabel, DBCursorModeFcvLabel };
+
+static unsigned char col[56] = { 192, 192, 192, 128, 192, 0, 0, 128, 192, 192, 192, 128, 0, 192, 0, 128, 192, 192, 192, 128, 0, 0, 192, 128, 192, 192, 192, 128, 192, 192, 0, 128, 192, 192, 192, 128, 0, 192, 192, 128, 192, 192, 192, 128, 192, 0, 192, 128, 16, 16, 16, 128, 192, 192, 192, 128 };
+
+static RgVector lightCol[6] = { { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.6f, 0.6f, 0.6f, 1.0f }, { 0.2f, 0.2f, 0.2f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } };
+

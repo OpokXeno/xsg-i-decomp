@@ -14,7 +14,6 @@ typedef struct ChrRotFramesFollowCall {
     u8 wait;     /* +0x0c */
 } ChrRotFramesFollowCall;
 
-
 typedef struct ChrRotRateFollowCall {
     u8 *object;
     u8 *target;  /* +0x04 */
@@ -22,18 +21,17 @@ typedef struct ChrRotRateFollowCall {
     u8 wait;     /* +0x0c */
 } ChrRotRateFollowCall;
 
+extern float chrRotXFramesDegToRad;
 
-extern float D_004D83F0;
+extern float chrRotXRateDegToRad;
 
-extern float D_004D83F4;
+extern float chrRotXStepDegToRad;
 
-extern float D_004D83F8;
+extern float chrRotZFramesDegToRad;
 
-extern float D_004D8408;
+extern float chrRotZRateDegToRad;
 
-extern float D_004D840C;
-
-extern float D_004D8410;
+extern float chrRotZStepDegToRad;
 
 typedef union ChrFieldValue {
     struct Actor * actor;
@@ -42,7 +40,6 @@ typedef union ChrFieldValue {
     void * native_pointer;
     u8 * object;
 } ChrFieldValue;
-
 
 /* system.evt's xeno/Chr.mtnGetRoot descriptor is
  * (ILxeno/util/Vector4f;)V. The receiver and its two explicit arguments
@@ -54,25 +51,23 @@ typedef struct ChrMotionRootCall {
     u8 *destination;
 } ChrMotionRootCall;
 
-
-
 static float defaultOffset[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 const char chr_algorithm_string[] = "algorithm";
 
 const char chr_peer_string[] = "peer";
 
-const char D_004DC1A0[] = "px";
+const char chrTranslateXKey[] = "px";
 
-const char D_004DC1A8[] = "py";
+const char chrTranslateYKey[] = "py";
 
-const char D_004DC1B0[] = "pz";
+const char chrTranslateZKey[] = "pz";
 
-const char D_004DC1B8[] = "rx";
+const char chrRotateXKey[] = "rx";
 
-const char D_004DC1C0[] = "ry";
+const char chrRotateYKey[] = "ry";
 
-const char D_004DC1C8[] = "rz";
+const char chrRotateZKey[] = "rz";
 
 /*
  * CHR_moveXZ is local to this file in the original (glabel ..., local); it
@@ -173,14 +168,12 @@ typedef struct ChrSavedPartyPrefix {
     u16 player_character_id;
 } ChrSavedPartyPrefix;
 
-
 /* JNI argument slots carry either object references or raw scalar bits. */
 typedef union ChrVmArgumentSlot {
     u8 *object;
     u32 bits;
     float floating;
 } ChrVmArgumentSlot;
-
 
 /* Spline natives select their channel group at sequence+8. The remaining
  * prefix agrees with the shared SequenceState and its four handler slots. */
@@ -191,7 +184,6 @@ typedef struct ChrSplineSequencePrefix {
     unsigned char unmodeled_0c[0x18];
     void *handler[4];
 } ChrSplineSequencePrefix;
-
 
 extern struct {
     u32 address;
@@ -216,7 +208,7 @@ extern int ACT_initMotion(void *actor);
 
 extern Actor *getPeer_Chr(u8 *object);
 
-extern const char D_004DC198[];
+extern const char chrIdKey[];
 
 extern void ACT_setParent(Actor *actor, int type, Actor *parent,
                           int joint, int id);
@@ -235,11 +227,11 @@ extern SceneClass *classJava_xeno_util_Vector4f;
  * Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
  */
 
-extern float D_004D83FC;
+extern float chrRotYFramesDegToRad;
 
-extern float D_004D8400;
+extern float chrRotYRateDegToRad;
 
-extern float D_004D8404;
+extern float chrRotYStepDegToRad;
 
 extern void SEQ_moveChr(Actor *actor);
 
@@ -268,19 +260,16 @@ typedef struct ChrStartStringValue {
     const char *data;
 } ChrStartStringValue;
 
-
 typedef struct ChrStartString {
     unsigned char unmodeled_00[4];
     struct ChrStartStringValue *value;
 } ChrStartString;
-
 
 typedef struct ChrStartCall {
     u8 *object;
     int mode;
     struct ChrStartString *method_name;
 } ChrStartCall;
-
 
 struct ChrDropShadowEntry {
     union {
@@ -292,7 +281,6 @@ struct ChrDropShadowEntry {
     } match;
     unsigned char *tokens;
 };
-
 
 extern struct ChrDropShadowEntry DropShadowDefineTable[10];
 
@@ -354,7 +342,7 @@ void Java_xeno_Chr_setPlayer__(JThread *thread, ChrScaleCall *arguments)
     if ((GameResource[0].size == 0x12a000) &&
         (GameResource[1].state == 9)) {
         field = lookupClassField(
-            classJava_xeno_Chr, loadConstString(D_004DC198, -1), 0);
+            classJava_xeno_Chr, loadConstString(chrIdKey, -1), 0);
         *(u32 *)(object + field->offset) = player_id;
         player = getPeer_Chr(object);
 
@@ -646,7 +634,7 @@ static void CHR_rotX(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes &= ~1;
         rotation->target[0] =
             ((arguments->second.floating + rotation_source[0]) / 180.0f) *
-            D_004D83F0;
+            chrRotXFramesDegToRad;
         wait = arguments->wait;
         break;
     case 1:
@@ -654,9 +642,9 @@ static void CHR_rotX(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes &= ~1;
         rotation->target[0] =
             ((arguments->first.floating + rotation_source[0]) / 180.0f) *
-            D_004D83F4;
+            chrRotXRateDegToRad;
         rotation->step[0] =
-            ((arguments->second.floating / 180.0f) * D_004D83F4) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotXRateDegToRad) / 30.0f;
         wait = arguments->wait;
         break;
     case 2: {
@@ -675,7 +663,7 @@ static void CHR_rotX(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->frames[0] = -1;
         rotation->target_actor = target_peer;
         rotation->step[0] =
-            ((arguments->second.floating / 180.0f) * D_004D83F8) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotXStepDegToRad) / 30.0f;
         wait = arguments->wait;
         break;
     }
@@ -737,7 +725,7 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes &= ~2;
         rotation->target[1] =
             ((arguments->second.floating + rotation_source[1]) / 180.0f) *
-            D_004D83FC;
+            chrRotYFramesDegToRad;
         wait = arguments->wait;
         break;
     case 1:
@@ -745,9 +733,9 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes &= ~2;
         rotation->target[1] =
             ((arguments->first.floating + rotation_source[1]) / 180.0f) *
-            D_004D8400;
+            chrRotYRateDegToRad;
         rotation->step[1] =
-            ((arguments->second.floating / 180.0f) * D_004D8400) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotYRateDegToRad) / 30.0f;
         wait = arguments->wait;
         break;
     case 2: {
@@ -770,7 +758,7 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes |= 2;
         rotation->target_actor = target_peer;
         rotation->step[1] =
-            ((arguments->second.floating / 180.0f) * D_004D8404) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotYStepDegToRad) / 30.0f;
         wait = arguments->wait;
         break;
     }
@@ -834,7 +822,7 @@ static void CHR_rotZ(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes &= ~4;
         rotation->target[2] =
             ((arguments->second.floating + rotation_source[2]) / 180.0f) *
-            D_004D8408;
+            chrRotZFramesDegToRad;
         wait = arguments->wait;
         break;
     case 1:
@@ -842,9 +830,9 @@ static void CHR_rotZ(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->follow_axes &= ~4;
         rotation->target[2] =
             ((arguments->first.floating + rotation_source[2]) / 180.0f) *
-            D_004D840C;
+            chrRotZRateDegToRad;
         rotation->step[2] =
-            ((arguments->second.floating / 180.0f) * D_004D840C) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotZRateDegToRad) / 30.0f;
         wait = arguments->wait;
         break;
     case 2: {
@@ -863,7 +851,7 @@ static void CHR_rotZ(int mode, JThread *thread, ChrRotCall *arguments,
         rotation->frames[2] = -1;
         rotation->target_actor = target_peer;
         rotation->step[2] =
-            ((arguments->second.floating / 180.0f) * D_004D8410) / 30.0f;
+            ((arguments->second.floating / 180.0f) * chrRotZStepDegToRad) / 30.0f;
         wait = arguments->wait;
         break;
     }
@@ -1068,22 +1056,22 @@ void Java_xeno_Chr_stop__(JThread *thread, ChrObjectCall *arguments,
         chr_thread->flags &= ~0x10;
     }
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1A0, -1), 0);
+                             loadConstString(chrTranslateXKey, -1), 0);
     *(float *)(object + field->offset) = peer->position.x;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1A8, -1), 0);
+                             loadConstString(chrTranslateYKey, -1), 0);
     *(float *)(object + field->offset) = peer->position.y;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1B0, -1), 0);
+                             loadConstString(chrTranslateZKey, -1), 0);
     *(float *)(object + field->offset) = peer->position.z;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1B8, -1), 0);
+                             loadConstString(chrRotateXKey, -1), 0);
     *(float *)(object + field->offset) = peer->rotation.x;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1C0, -1), 0);
+                             loadConstString(chrRotateYKey, -1), 0);
     *(float *)(object + field->offset) = peer->rotation.y;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1C8, -1), 0);
+                             loadConstString(chrRotateZKey, -1), 0);
     *(float *)(object + field->offset) = peer->rotation.z;
 }
 
@@ -1224,13 +1212,13 @@ void Java_xeno_Chr_setRotate__(JThread *thread, ChrObjectCall *arguments)
     rotation = &peer->rotation;
 
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1B8, -1), 0);
+                             loadConstString(chrRotateXKey, -1), 0);
     rotation->x = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1C0, -1), 0);
+                             loadConstString(chrRotateYKey, -1), 0);
     rotation->y = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1C8, -1), 0);
+                             loadConstString(chrRotateZKey, -1), 0);
     rotation->z = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
 }
 
@@ -1249,13 +1237,13 @@ void Java_xeno_Chr_setTranslate__(JThread *thread, ChrObjectCall *arguments)
     position = &peer->position;
 
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1A0, -1), 0);
+                             loadConstString(chrTranslateXKey, -1), 0);
     position->x = *(float *)(object + field->offset);
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1A8, -1), 0);
+                             loadConstString(chrTranslateYKey, -1), 0);
     position->y = *(float *)(object + field->offset);
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1B0, -1), 0);
+                             loadConstString(chrTranslateZKey, -1), 0);
     z = *(float *)(object + field->offset);
 
     peer->status_flags |= 0x1000;
@@ -1281,13 +1269,13 @@ void Java_xeno_Chr_getRotate__(JThread *thread, ChrScaleCall *arguments,
     rotation = &peer->rotation;
 
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1B8, -1), 0);
+                             loadConstString(chrRotateXKey, -1), 0);
     *(float *)(object + field->offset) = rotation->x / 3.1415927f * 180.0f;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1C0, -1), 0);
+                             loadConstString(chrRotateYKey, -1), 0);
     *(float *)(object + field->offset) = rotation->y / 3.1415927f * 180.0f;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1C8, -1), 0);
+                             loadConstString(chrRotateZKey, -1), 0);
     *(float *)(object + field->offset) = rotation->z / 3.1415927f * 180.0f;
 }
 
@@ -1307,13 +1295,13 @@ void Java_xeno_Chr_getTranslate__(JThread *thread, ChrScaleCall *arguments,
     position = &peer->position;
 
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1A0, -1), 0);
+                             loadConstString(chrTranslateXKey, -1), 0);
     *(float *)(object + field->offset) = position->x;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1A8, -1), 0);
+                             loadConstString(chrTranslateYKey, -1), 0);
     *(float *)(object + field->offset) = position->y;
     field = lookupClassField(classJava_xeno_Chr,
-                             loadConstString(D_004DC1B0, -1), 0);
+                             loadConstString(chrTranslateZKey, -1), 0);
     *(float *)(object + field->offset) = position->z;
 }
 
@@ -2817,13 +2805,13 @@ void Java_xeno_Chr_ignoreShape__I(JThread *thread, ChrIntCall *arguments)
     }
 }
 
-float D_004D83F0 = 3.1415927410125732f;
-float D_004D83F4 = 3.1415927410125732f;
-float D_004D83F8 = 3.1415927410125732f;
-float D_004D83FC = 3.1415927410125732f;
-float D_004D8400 = 3.1415927410125732f;
-float D_004D8404 = 3.1415927410125732f;
-float D_004D8408 = 3.1415927410125732f;
-float D_004D840C = 3.1415927410125732f;
-float D_004D8410 = 3.1415927410125732f;
-const char D_004DC198[3] = "id";
+float chrRotXFramesDegToRad = 3.1415927410125732f;
+float chrRotXRateDegToRad = 3.1415927410125732f;
+float chrRotXStepDegToRad = 3.1415927410125732f;
+float chrRotYFramesDegToRad = 3.1415927410125732f;
+float chrRotYRateDegToRad = 3.1415927410125732f;
+float chrRotYStepDegToRad = 3.1415927410125732f;
+float chrRotZFramesDegToRad = 3.1415927410125732f;
+float chrRotZRateDegToRad = 3.1415927410125732f;
+float chrRotZStepDegToRad = 3.1415927410125732f;
+const char chrIdKey[3] = "id";

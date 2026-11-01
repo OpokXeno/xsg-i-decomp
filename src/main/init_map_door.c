@@ -97,13 +97,13 @@ int MjDoorFunc(DoorUnit *door);
 /* MAP_updateUnitDoor passes the door; DoubleDoorFunc itself takes no parameter. */
 void DoubleDoorFunc();
 
-const char D_004CA280[56] = "InitMapDoor id=%d kind=%d doorType=%d doorRange=%f\n";
+const char doorInfoFormat[56] = "InitMapDoor id=%d kind=%d doorType=%d doorRange=%f\n";
 
-const char D_004CA2B8[32] = "doorpos[X]=%f Y=%f Z=%f\n";
+const char doorPositionFormat[32] = "doorpos[X]=%f Y=%f Z=%f\n";
 
-const char D_004CA2D8[32] = "hitsize[X]=%f Y=%f Z=%f\n";
+const char doorHitSizeFormat[32] = "hitsize[X]=%f Y=%f Z=%f\n";
 
-const char D_004CA2F8[40] = "range=%f scope=%f spd=%d\n";
+const char doorRangeFormat[40] = "range=%f scope=%f spd=%d\n";
 
 void InitMapDoor(DoorUnit *door)
 {
@@ -151,12 +151,12 @@ void InitMapDoor(DoorUnit *door)
     if (!printflg) {
         return;
     }
-    printf(D_004CA280, door->door_number, params->kind,
+    printf(doorInfoFormat, door->door_number, params->kind,
            params->door_type, params->travel_distance);
-    printf(D_004CA2B8, door->x, door->y, door->z);
-    printf(D_004CA2D8, door->resting_position.values.x,
+    printf(doorPositionFormat, door->x, door->y, door->z);
+    printf(doorHitSizeFormat, door->resting_position.values.x,
            door->resting_position.values.y, door->resting_position.values.z);
-    printf(D_004CA2F8, params->travel_distance,
+    printf(doorRangeFormat, params->travel_distance,
            params->trigger_distance, params->open_limit);
 }
 
@@ -399,9 +399,9 @@ int AutoDoorCloseOpeFunc(DoorUnit *door)
 }
 
 /* Defined here, after the tables of the functions above, to keep .rodata in original address order. */
-const char D_004CA3B8[16] = "id=%d DoorOpen\n";
+const char doorOpenFormat[16] = "id=%d DoorOpen\n";
 
-const char D_004CA3C8[24] = "id=%d DoorClose\n";
+const char doorCloseFormat[24] = "id=%d DoorClose\n";
 
 void EventDoorStanbyFunc(DoorUnit *door)
 {
@@ -418,7 +418,7 @@ void EventDoorStanbyFunc(DoorUnit *door)
     event_signal = params->event_signal;
     if (event_signal == 1) {
         if (printflg != 0) {
-            printf((char *) D_004CA3B8, door->door_number);
+            printf((char *) doorOpenFormat, door->door_number);
         }
         if (xglSoundEffectCheckID(params->move_sound_channel, door->sound_channel + 1) != 0) {
             xglSoundEffectStopID(params->move_sound_channel, door->sound_channel + 1);
@@ -454,7 +454,7 @@ void EventDoorOpenNowFunc(DoorUnit *door)
     DoorOpenStanbyFunc(door);
     if (params->event_signal == 0) {
         if (printflg != 0) {
-            printf((char *) D_004CA3C8, door->door_number);
+            printf((char *) doorCloseFormat, door->door_number);
         }
         door->open_phase = 3;
         door->open_timer = params->open_limit;
@@ -655,5 +655,4 @@ void CheckDoorPos(DoorUnit *door, DoorPosition *position)
     position->values.y = door->y;
     position->values.z = door->z - (door->z - target_unit->position.values.z) * 0.5f;
 }
-
 

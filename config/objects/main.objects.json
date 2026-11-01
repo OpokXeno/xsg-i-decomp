@@ -5818,15 +5818,15 @@
     "va": "0x004DFF60"
    },
    {
-    "name": "D_004C7670",
-    "target": "D_004C7650",
+    "name": "menuShopHyamsMakerText",
+    "target": "menuShopExchangePromptTexts",
     "offset": 32,
     "va": "0x004C7670",
     "reason": "inside existing scaffold storage"
    },
    {
-    "name": "D_004C7698",
-    "target": "D_004C7650",
+    "name": "menuShopVectorMakerText",
+    "target": "menuShopExchangePromptTexts",
     "offset": 72,
     "va": "0x004C7698",
     "reason": "inside existing scaffold storage"

@@ -336,17 +336,17 @@ extern DrillHitActor actor[64];
 extern DrillEnemyWork enepc[16];
 
 /* These unchanged data records are supplied by the original scaffolding. */
-extern const char D_004CA940[];
-extern const char D_004CA970[];
-extern const char D_004CA9A0[];
-extern const char D_004CA9B8[];
-extern const char D_004CA9C8[];
-extern char D_004DB7E0[];
-extern char D_004DB7E8[];
-extern const char D_004CAA00[];
-extern const char D_004CAA10[];
-extern const char D_004CAA20[];
-extern const char D_004CAA30[];
+extern const char initDrillDebugFormat[];
+extern const char rareItemPlacedFormat[];
+extern const char elapsedTimeText[];
+extern const char drillTimeoverMethodName[];
+extern const char timeRemainingText[];
+extern char drillTextControl[];
+extern char enemyBrokenMethodName[];
+extern const char drillPowerOffText[];
+extern const char drillStopText[];
+extern const char drillStandbyText[];
+extern const char drillStopMethodName[];
 
 int xglFlagsGet1(int bit_offset);
 unsigned short xglSRand(void);
@@ -379,7 +379,7 @@ void Enemy_Command_Freeze(DrillHitActor *target, int frozen);
 void CallMethod_I(const char *method, int argument);
 void ACT_setMotion2(DrillMotionActor *actor, int motion, int mode);
 
-extern const char D_004CA960[];
+extern const char setContainerFormat[];
 
 int CreateContainer(int, int);
 
@@ -474,7 +474,7 @@ void InitDrill(Drill *drill)
     DrillSave *save = &drill->save;
     DrillEffectRef *effect;
 
-    printf((char *) D_004CA940, save->partIndexA, save->partIndexB, drill->serial);
+    printf((char *) initDrillDebugFormat, save->partIndexA, save->partIndexB, drill->serial);
     GetPartsPos(drill);
     save->runState = 0;
     drill->phase = 0;
@@ -516,7 +516,7 @@ void InitDrill(Drill *drill)
 
 void SetContainer(int count)
 {
-    printf((char *) D_004CA960);
+    printf((char *) setContainerFormat);
     DrillClearContainer();
     if (count > 0) {
         do {
@@ -575,7 +575,7 @@ int CreateContainer(int identifier, int unit_id)
                 item = pick + 0x21D;
                 if (xglFlagsGet1(pick + 0x7A0E4) == 0) {
                     SetContainerItem((DrillItemUnit *)unit, item);
-                    printf((char *) D_004CA970, item);
+                    printf((char *) rareItemPlacedFormat, item);
                     return (int)unit;
                 }
             }
@@ -752,15 +752,15 @@ void MAP_updateUnitDrill(Drill *drill)
                 seconds = (int)((float)save->frameCount / 30.0f);
                 seconds = seconds < 1000 ? seconds : 999;
                 length = HexToStr(seconds, text);
-                xglFontPrint(336, 24, 0xFFF0, D_004CA9A0);
+                xglFontPrint(336, 24, 0xFFF0, elapsedTimeText);
                 xglFontPrint(472 - length * 10, 24, 0xFFF0, text);
-                xglFontPrintDirectOT(0xFFF0, D_004DB7E0);
+                xglFontPrintDirectOT(0xFFF0, drillTextControl);
             } else {
                 seconds = (int)((float)(save->frameLimit - save->frameCount) / 30.0f);
                 seconds = seconds < 1000 ? seconds : 999;
                 if (seconds <= 0) {
                     if (!(flags & 0x80000000)) {
-                        CallMethod(D_004CA9B8);
+                        CallMethod(drillTimeoverMethodName);
                         save->flags |= 0x80000000;
                         if (drill->phase != 5) {
                             DrillEffectRef *effect;
@@ -775,9 +775,9 @@ void MAP_updateUnitDrill(Drill *drill)
                     seconds = 0;
                 }
                 length = HexToStr(seconds, text);
-                xglFontPrint(328, 24, 0xFFF0, D_004CA9C8);
+                xglFontPrint(328, 24, 0xFFF0, timeRemainingText);
                 xglFontPrint(480 - length * 10, 24, 0xFFF0, text);
-                xglFontPrintDirectOT(0xFFF0, D_004DB7E0);
+                xglFontPrintDirectOT(0xFFF0, drillTextControl);
             }
         }
         if (save->command != 2) {
@@ -831,7 +831,7 @@ void DrillPowerOffFunc(Drill *drill)
     DrillEffectRef *effect;
     signed char hit;
 
-    xglFontDebugPrintf(8, 16, D_004CAA00);
+    xglFontDebugPrintf(8, 16, drillPowerOffText);
     drill->position.vector.x = -2.9f;
     drill->position.vector.y = 4.5f;
     drill->position.vector.z = -12.5f;
@@ -869,7 +869,7 @@ void DrillStandbyFunc(Drill *drill)
 
     if (save->command == 2) {
         save->cameraPreset = 1;
-        xglFontDebugPrintf(8, 16, (char *) D_004CAA10);
+        xglFontDebugPrintf(8, 16, (char *) drillStopText);
         DrillResetCameraPos(drill, camera);
         return;
     } else if (save->command == 1) {
@@ -880,7 +880,7 @@ void DrillStandbyFunc(Drill *drill)
         save->hit = 0;
         save->command = 0;
     } else {
-        xglFontDebugPrintf(8, 16, (char *) D_004CAA20);
+        xglFontDebugPrintf(8, 16, (char *) drillStandbyText);
         if ((int) save->flags >= 0) {
             DrillCameraControlFunc(drill, camera);
             drill->crashTimer = 0;
@@ -905,34 +905,34 @@ void DrillStandbyFunc(Drill *drill)
                 && ((save->flags & 1) == 0 || save->frameLimit - save->frameCount >= 60)
                 && save->command != 1) {
                 save->command = 2;
-                CallMethod((const char *) D_004CAA30);
+                CallMethod((const char *) drillStopMethodName);
             }
         }
     }
 }
 
-extern const char D_004CAA40[];
+extern const char drillZMoveText[];
 
-extern const char D_004CAA50[];
+extern const char drillZStandbyText[];
 
-extern const char D_004CAA60[];
+extern const char drillXMoveText[];
 
-extern const char D_004CAA70[];
+extern const char drillCrashFormat[];
 
-extern const char D_004CAA80[];
+extern const char drillReturnText[];
 
-extern const char D_004CAA90[];
+extern const char drillStandbyMethodName[];
 
-extern const char D_004CAAA0[];
+extern const char drillEndMethodName[];
 
-extern const char D_004CAAB0[16];
+extern const char cameraControlText[16];
 
 void DrillZMoveFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
     DrillEffectRef *effect;
 
-    xglFontDebugPrintf(8, 16, (char *) D_004CAA40);
+    xglFontDebugPrintf(8, 16, (char *) drillZMoveText);
     Vibration_Set_Strong(128, 128, 2);
     save->cameraPreset = 1;
 
@@ -970,7 +970,7 @@ void DrillZStopFunc(Drill *drill)
     DrillCamera *camera;
     DrillEffectRef *effect;
 
-    xglFontDebugPrintf(8, 16, (char *) D_004CAA50);
+    xglFontDebugPrintf(8, 16, (char *) drillZStandbyText);
     camera = xglStudioGetActiveCamera();
     DrillCameraControlFunc(drill, camera);
 
@@ -1005,7 +1005,7 @@ void DrillXMoveFunc(Drill *drill)
     DrillEffectRef *effect;
 
     camera = xglStudioGetActiveCamera();
-    xglFontDebugPrintf(8, 16, (char *) D_004CAA60);
+    xglFontDebugPrintf(8, 16, (char *) drillXMoveText);
     Vibration_Set_Strong(128, 128, 2);
 
     if ((PadData.half_28 & 0x80) != 0) {
@@ -1077,7 +1077,7 @@ void DrillCrashFunc(Drill *drill)
     effect = save->effect1;
     effect->hidden = 0;
     camera = xglStudioGetActiveCamera();
-    xglFontDebugPrintf(8, 16, (char *) D_004CAA70, save->hitCount);
+    xglFontDebugPrintf(8, 16, (char *) drillCrashFormat, save->hitCount);
 
     drill->crashTimer++;
     drill->rotationY += drill->crashTimer * 0.1f;
@@ -1120,7 +1120,7 @@ void DrillReturnFunc(DrillReturnView *drill)
     DrillReturnEffectRef *effect;
     DrillCamera *camera;
 
-    xglFontDebugPrintf(8, 16, (const char *)D_004CAA80);
+    xglFontDebugPrintf(8, 16, (const char *)drillReturnText);
     if (drill->crashTimer > 0) {
         drill->crashTimer--;
         drill->rotationY += drill->crashTimer * 0.1f;
@@ -1195,7 +1195,7 @@ void DrillReturnFunc(DrillReturnView *drill)
     if (save->returnLimit == -1) {
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectStopID(0x30098, 0);
-        CallMethod((const char *)D_004CAA90);
+        CallMethod((const char *)drillStandbyMethodName);
         return;
     }
     if (save->returnLimit < save->returnCount) {
@@ -1207,11 +1207,11 @@ void DrillReturnFunc(DrillReturnView *drill)
         save->hit = 0;
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectStopID(0x30098, 0);
-        CallMethod((const char *)D_004CAAA0);
+        CallMethod((const char *)drillEndMethodName);
     } else {
         xglSoundEffectStopID(0x30096, 0);
         xglSoundEffectStopID(0x30098, 0);
-        CallMethod((const char *)D_004CAA90);
+        CallMethod((const char *)drillStandbyMethodName);
     }
 }
 
@@ -1220,7 +1220,7 @@ void DrillCameraControlFunc(Drill *drill, DrillCamera *camera)
     DrillSave *save;
     DrillCameraAngles *angles = &camera->angles;
 
-    xglFontDebugPrintf(8, 32, (char *) D_004CAAB0);
+    xglFontDebugPrintf(8, 32, (char *) cameraControlText);
     save = &drill->save;
 
     camera->state = 0;
@@ -1422,36 +1422,12 @@ int HitCheckEnemy(Vector4 *position, float radius)
             sefCreateEffectCf(635, &target->position, 0);
             xglSoundEffectNormalID(0x10003, 0);
             Enemy_Command_Freeze(target, 1);
-            CallMethod_I(D_004DB7E8, target->methodArg);
+            CallMethod_I(enemyBrokenMethodName, target->methodArg);
             return i;
         }
     }
     return -1;
 }
-
-
-
-extern const char D_004CA940[32];
-
-extern const char D_004CA970[48];
-
-extern const char D_004CA9A0[24];
-
-extern const char D_004CA9B8[16];
-
-extern const char D_004CA9C8[24];
-
-extern const char D_004CAA00[16];
-
-extern const char D_004CAA10[16];
-
-extern const char D_004CAA20[16];
-
-extern const char D_004CAA30[16];
-
-extern char D_004DB7E8[8];
-
-
 
 DrillContainerDef container[31] = { { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 501, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 503, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 505, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 507, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 509, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 511, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 513, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 515, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 517, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 519, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 521, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 2, .unmodeled_01 = { 0, 0, 0 }, .modelId = 648, .itemBase = 523, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 525, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 527, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 529, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 602, .itemBase = 531, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 614, .itemBase = 533, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 614, .itemBase = 535, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 642, .itemBase = 537, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 1, .unmodeled_01 = { 0, 0, 0 }, .modelId = 642, .itemBase = 539, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 629, .itemBase = 1, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 632, .itemBase = 3, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.5f, .y = 1.0f, .z = 1.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 635, .itemBase = 5, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.0f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 7, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 604, .itemBase = 9, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.5f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 1, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.25f, .y = 1.5f, .z = 0.25f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 3, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.40000000596046448f, .y = 1.5f, .z = 0.40000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 7, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.5f, .y = 1.5f, .z = 0.5f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 601, .itemBase = 8, .unmodeled_0c = 0 } }, { .type = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 1.0f, .y = 1.5f, .z = 1.0f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 604, .itemBase = 9, .unmodeled_0c = 0 } }, { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .size = { .vector = { .x = 0.15000000596046448f, .y = 1.0f, .z = 0.15000000596046448f, .w = 0.0f } }, .model = { .hitMode = 0, .unmodeled_01 = { 0, 0, 0 }, .modelId = 628, .itemBase = 10, .unmodeled_0c = 0 } } };
 
@@ -1459,54 +1435,50 @@ extern short Times;
 
 extern short NowTester;
 
-static u32 * pDrillFlag;
+const char initDrillDebugFormat[32] = "InitDrill D1=%d D2=%d D3=%d\n";
 
-
-
-extern char D_004DB7E0[8];
-
-
-const char D_004CA940[32] = "InitDrill D1=%d D2=%d D3=%d\n";
-
-const char D_004CA960[] = "SetContainer\n";
+const char setContainerFormat[] = "SetContainer\n";
 
 /* JP: うーくんボールに%dのレアアイテムが入った\n
  * EN: Rare item %d was placed in the U-kun Ball.\n */
-const char D_004CA970[48] = "\244\246\241\274\244\257\244\363\245\334\241\274\245\353\244\313%d\244\316\245\354\245\242\245\242\245\244\245\306\245\340\244\254\306\376\244\303\244\277\n";
+const char rareItemPlacedFormat[48] = "\244\246\241\274\244\257\244\363\245\334\241\274\245\353\244\313%d\244\316\245\354\245\242\245\242\245\244\245\306\245\340\244\254\306\376\244\303\244\277\n";
 
-const char D_004CA9A0[24] = "\r\000\031\003Elapsed Time\025\002\004\001";
+/* Text: {effect 0}{style 3}Elapsed Time{proportional 1} */
+const char elapsedTimeText[24] = "\r\000\031\003Elapsed Time\025\002\004\001";
 
-const char D_004CA9B8[16] = "drill_timeover";
+const char drillTimeoverMethodName[16] = "drill_timeover";
 
-const char D_004CA9C8[24] = "\r\000\031\003Time Remaining\025\002\004\001";
+/* Text: {effect 0}{style 3}Time Remaining{proportional 1} */
+const char timeRemainingText[24] = "\r\000\031\003Time Remaining\025\002\004\001";
 
-const char D_004CAA00[16] = "DRILL POWEROFF";
+const char drillPowerOffText[16] = "DRILL POWEROFF";
 
-const char D_004CAA10[16] = "DRILL STOP";
+const char drillStopText[16] = "DRILL STOP";
 
-const char D_004CAA20[16] = "DRILL STANDBY";
+const char drillStandbyText[16] = "DRILL STANDBY";
 
-const char D_004CAA30[16] = "drill_stop";
+const char drillStopMethodName[16] = "drill_stop";
 
-const char D_004CAA40[] = "DRILL ZMOVE";
+const char drillZMoveText[] = "DRILL ZMOVE";
 
-const char D_004CAA50[] = "DRILL ZSTANDBY";
+const char drillZStandbyText[] = "DRILL ZSTANDBY";
 
-const char D_004CAA60[] = "DRILL XMOVE";
+const char drillXMoveText[] = "DRILL XMOVE";
 
-const char D_004CAA70[] = "DRILL CRASH %2d";
+const char drillCrashFormat[] = "DRILL CRASH %2d";
 
-const char D_004CAA80[] = "DRILL RETURN";
+const char drillReturnText[] = "DRILL RETURN";
 
-const char D_004CAA90[] = "drill_stanby";
+const char drillStandbyMethodName[] = "drill_stanby";
 
-const char D_004CAAA0[] = "drill_end";
+const char drillEndMethodName[] = "drill_end";
 
-const char D_004CAAB0[16] = "CAMERA CONTROL";
+const char cameraControlText[16] = "CAMERA CONTROL";
 
-char D_004DB7E0[8] = "\025\002\004";
+/* Text: {proportional 0} */
+char drillTextControl[8] = "\025\002\004";
 
-char D_004DB7E8[8] = "broken";
+char enemyBrokenMethodName[8] = "broken";
 
 short Times = 0;
 

@@ -4,6 +4,22 @@
 
 #include "main/xgl_mc.h"
 
+/*
+ * file.c's own view of xglMcRequest's argument record: it stores integer
+ * addresses in `buffer`. xgl_mc.c defines the same record with `void *buffer`;
+ * each spelling is what its unit's exact bytes need (config/header-canon.json,
+ * McRequestArguments, tu_local).
+ */
+typedef struct McRequestArguments {
+    int slot;
+    const unsigned char *path;
+    int buffer;
+    int size;
+} McRequestArguments;
+
+int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
+                 int *result);
+
 #include "main/xgl_packet.h"
 
 #include "main/party.h"

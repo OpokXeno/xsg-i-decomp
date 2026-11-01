@@ -31,4 +31,6 @@ int MenuMainCharCheck(int charId);
 
 unsigned short MenuFaceEpidGet(int charId, int smallPortrait);
 
+int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex);
+
 #endif /* INCLUDE_MAIN_MENU_1_H */

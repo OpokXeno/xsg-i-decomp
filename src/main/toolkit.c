@@ -81,7 +81,7 @@ const char unit_field_rz[8] = "rz";
 
 const char unit_field_peer[8] = "peer";
 
-const char D_004DC118[8] = "light";
+const char lightPeerClassName[8] = "light";
 
 /* Used by getPeer_Stage for its short-valued Java id field. */
 
@@ -316,7 +316,7 @@ void *getPeer_Enepc(void *java_character)
     peer->rotation_z = peer->rotation_z / 180.0f * 3.1415927f;
 
     field = lookupClassField(character_class,
-                             loadConstString(D_004DC118, -1), 0);
+                             loadConstString(lightPeerClassName, -1), 0);
     light_object = newObject(classJava_xeno_Light);
     JAVA_OBJECT_FIELD(java_character, field) = light_object;
     field = lookupClassField(classJava_xeno_Light,
@@ -460,7 +460,7 @@ void *getPeer_Chr(void *java_character)
     }
 
     field = lookupClassField(character_class,
-                             loadConstString(D_004DC118, -1), 0);
+                             loadConstString(lightPeerClassName, -1), 0);
     light_object = newObject(classJava_xeno_Light);
     JAVA_OBJECT_FIELD(java_character, field) = light_object;
     field = lookupClassField(classJava_xeno_Light,

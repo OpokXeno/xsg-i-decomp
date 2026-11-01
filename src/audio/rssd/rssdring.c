@@ -15,14 +15,13 @@ typedef struct RingSlot {
 extern void *AllocSysMemory(int mode, int size, void *address);
 extern int FreeSysMemory(void *address);
 extern int printf(const char *format, ...);
-extern char _fdata[];
 void CopyMemoryRingBuffer(void *destination, const void *source, int size);
 
 RingBuffer *InitRingBuffer(int blockSize, int capacity)
 {
     RingBuffer *ring = AllocSysMemory(0, capacity * (blockSize + 16) + 16, 0);
     if (!ring) {
-        printf(&_fdata[0x70]);
+        printf("Rssd lack of memory  ring buffer !\n");
         return 0;
     }
     ring->capacity = capacity;

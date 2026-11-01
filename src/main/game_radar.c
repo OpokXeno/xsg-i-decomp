@@ -34,7 +34,7 @@ static u8 *radarImage;
 
 static u8 radarRate;
 
-static const char D_004C0618[32] = "data\\yajima\\cf_rader00.xtx";
+static const char radarTexturePath[32] = "data\\yajima\\cf_rader00.xtx";
 
 extern u8 *image_004DC554;
 
@@ -42,19 +42,15 @@ extern u8 rate;
 
 static u8 ping;
 
-
-
-
-
 extern float xglSin(float);
 
 extern float xglCos(float);
 
-#define D_004D7C7C (6.2831854820251465f)
+#define TWO_PI (6.2831854820251465f)
 
-#define D_004D7C80 (6.2831854820251465f)
+#define ACTOR_ANGLE_MAX (6.2831854820251465f)
 
-#define D_004D7C84 (-6.2831854820251465f)
+#define ACTOR_ANGLE_MIN (-6.2831854820251465f)
 
 extern void nmlModelDirectSend(int, u8 *, int);
 
@@ -148,8 +144,6 @@ static inline void RadarSpritePacketInit(RadarSpritePacket **packet)
     *packet = (RadarSpritePacket *)0x70000000;
 }
 
-
-
 void GameRadarDraw(RadarOrigin *origin)
 {
     static u32 TestEnv[28] = { 0x00000000U, 0x00000000U, 0x00000000U, 0x51000006U, 0x00008001U, 0x50000000U, 0x000eeeeeU, 0x00000000U, 0x00000000U, 0x00000000U, 0x0000003fU, 0x00000000U, 0x00070000U, 0x00000000U, 0x00000047U, 0x00000000U, 0x00000000U, 0x00000000U, 0x00000014U, 0x00000000U, 0x00000044U, 0x00000000U, 0x00000042U, 0x00000000U, 0x003fc000U, 0x000003fcU, 0x00000008U, 0x00000000U };
@@ -231,8 +225,6 @@ void GameRadarDraw(RadarOrigin *origin)
     DrawRadarInfo(&origin->x);
 }
 
-
-
 static void DrawRadarPing(int *origin)
 {
     static u32 TestEnv[16] = { 0U, 0U, 0U, 1358954499U, 32769U, 536870912U, 238U, 0U, 458752U, 0U, 71U, 0U, 68U, 0U, 66U, 0U };
@@ -263,7 +255,7 @@ static void DrawRadarPing(int *origin)
     do {
         float innerRadius = I2F(ping) * 0.5f;
         float outerRadius = I2F(ping + 16) * 0.5f;
-        float angle = I2F(segment) * D_004D7C7C / 24.0f;
+        float angle = I2F(segment) * TWO_PI / 24.0f;
         float sine;
         float cosine;
         innerRadius *= 16.0f; outerRadius *= 16.0f; segment++;
@@ -296,7 +288,6 @@ static void DrawRadarPing(int *origin)
 static void DrawRadarInfo(int *origin)
 {
     static u32 cnt;
-
 
     RadarMarkerColor color;
     RadarPoint point;
@@ -376,10 +367,7 @@ static void DrawActorPoint(float angle, int *position, u32 *color)
     0, 0, 0, 0, 0, 0, 0, 0
 };
 
-
-
-
-    if (angle > D_004D7C80 || angle < D_004D7C84) {
+    if (angle > ACTOR_ANGLE_MAX || angle < ACTOR_ANGLE_MIN) {
         return;
     }
 
@@ -423,8 +411,7 @@ int CheckActorExist(RadarActor *actor)
 void GameRadarInit(void)
 {
     image_004DC554 = (u8 *) (((int) WorkEnd + 0xF) & ~0xF);
-    WorkEnd = image_004DC554 + xglCdReadFile(D_004C0618, image_004DC554, 0, 0);
+    WorkEnd = image_004DC554 + xglCdReadFile(radarTexturePath, image_004DC554, 0, 0);
     rate = 0;
 }
 
-static u8 ping;

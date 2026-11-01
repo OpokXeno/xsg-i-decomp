@@ -297,7 +297,7 @@ def configure_main(root, build, logs, tc, verbose):
     registry = effective_data_carves(root, build)
     check(run([sys.executable, "-B", TOOLS / "ninja_main.py", "--root", root,
                "--unit-dir", unit_dir, "--carve-registry", registry],
-              root, log, 120, env=tool_env(tc)),
+              root, log, 900, env=tool_env(tc)),  # 2026-10-31: data carve ~250 s
           "ninja_main.py", log)
     stage_headers(root, unit_dir)          # ninja_main writes its own copies too
     stage_shared_headers(root, unit_dir)   # include/shared.h, include/<unit>/<tu>.h

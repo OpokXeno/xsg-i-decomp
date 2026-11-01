@@ -67,9 +67,9 @@ typedef struct XglMenuParams {
 #define MENU_LIST_INDENT 8
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char D_004DC2B8[];
-extern const char D_004DC2C0[];
-extern const char D_004DC2C8[];
+extern const char darkRedTextFormat[];
+extern const char dimTextFormat[];
+extern const char plainTextFormat[];
 
 /*
  * Partial view of one entry of the menutbl array (main 0x0021ce18/0x0021ce7c,
@@ -103,7 +103,6 @@ typedef struct {
 
 extern XglMenuEntry menutbl[MENU_TABLE_COUNT];
 
-
 /* Port records retain the original 0x68-byte stride. */
 typedef struct MenuPadRecord {
     unsigned char unmodeled_00[0x32];
@@ -115,17 +114,20 @@ extern MenuPadRecord PadData[2];
 
 XglMenuEntry menutbl[MENU_TABLE_COUNT] = { 0 };
 
-const char D_004DC2B8[8] = "\f\x80\0\0%s";
+/* Text: {color #800000}%s */
+const char darkRedTextFormat[8] = "\f\x80\0\0%s";
 
-const char D_004DC2C0[8] = "\f000%s";
+/* Text: {color #303030}%s */
+const char dimTextFormat[8] = "\f000%s";
 
-const char D_004DC2C8[4] = "\v%s";
+/* Text: {reset}%s */
+const char plainTextFormat[4] = "\v%s";
 
-const char D_004DC2D0[8] = "pfs0:";
+const char xglMenuPfs0Path[8] = "pfs0:";
 
-const char D_004DC2D8[8] = "pfs1:";
+const char xglMenuPfs1Path[8] = "pfs1:";
 
-const char D_004DC2E0[8] = "hdd:";
+const char xglMenuHddPath[8] = "hdd:";
 
 extern float I2F(int value);
 
@@ -210,13 +212,13 @@ static void xglMenuDrawType1Sub(XglMenuEntry *entry,
         row = &node->rows[row_index];
         if (row_index == node->selected_item) {
             xglFontDebugPrintf(context->x, context->y,
-                               D_004DC2B8, row->text);
+                               darkRedTextFormat, row->text);
         } else if (row->next.node == (XglMenuNode *)-1) {
             xglFontDebugPrintf(context->x, context->y,
-                               D_004DC2C0, row->text);
+                               dimTextFormat, row->text);
         } else {
             xglFontDebugPrintf(context->x, context->y,
-                               D_004DC2C8, row->text);
+                               plainTextFormat, row->text);
         }
 
         context->y += list->row_offsets[level];
@@ -386,8 +388,6 @@ void xglMenuInitial(void)
         menutbl[i].active = 0;
     }
 }
-
-
 
 /* Original four-byte object; its element type is unresolved. */
 unsigned char ActiveMenuNo[4] = { 0 };

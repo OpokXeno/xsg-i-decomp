@@ -18,7 +18,6 @@ extern unsigned char *SkillDataBuf;
 
 #define SKILL_NEXT_LV_TABLE_OFFSET 0x17e
 
-
 int SkillSetLvGet(int skill_id)
 {
     int skill_index = (unsigned short)skill_id;
@@ -105,7 +104,7 @@ int SkillCharPointPlus(int character_id, int point_delta)
     return 0;
 }
 
-const char D_004C9590[9]  = "/Extract";
+const char skillExtractCommandText[9] = "/Extract";
 
 void MenuSkillPasMain(void)
 {
@@ -202,6 +201,7 @@ void MenuSkillInfoMain(void)
     char *skillHelp[] = {
         "Skill: ",
         "\nEffect: ",
+        /* Text:  has been extracted. \x1F */
         " has been extracted. \x1F"
     };
     char *learnHelp[] = {
@@ -264,7 +264,7 @@ void MenuSkillInfoMain(void)
         if (MenuWork.flags & MENU_FLAG_ENTER)
             work->selected = -1;
         if (MenuWork.list_select < 0) {
-            eMessageCpy(work->message, D_004DB600);
+            eMessageCpy(work->message, skillEmptyText);
         } else if ((short)MenuSortGet(0, MenuWork.list_select) != 0) {
             SkillRecord *skill = func_A1A548((short)MenuSortGet(0, MenuWork.list_select));
 
@@ -297,7 +297,7 @@ void MenuSkillInfoMain(void)
         if (MenuWork.list_select >= 0)
             eMessageCpy(work->message, MenuTextGet(MenuSortGet(0, MenuWork.list_select))->description);
         else
-            eMessageCpy(work->message, D_004DB600);
+            eMessageCpy(work->message, skillEmptyText);
         break;
     default:
         target = 512;
@@ -457,9 +457,9 @@ void MenuSkillStatusMain(void)
     }
 }
 
-const char D_004C9918[19]  = "Extract\nSet\nCancel";
+const char skillExtractSetCancelText[19] = "Extract\nSet\nCancel";
 
-const char D_004C9930[16]  = " Extract skill\?";
+const char skillExtractQuestionText[16] = " Extract skill\?";
 
 void MenuSkillMenuMain(void)
 {
@@ -476,7 +476,7 @@ void MenuSkillMenuMain(void)
             self->window[i].width = 129;
             self->window[i].height = 78;
             self->window[i].color = self->color;
-            self->window[i].title = D_004DB610;
+            self->window[i].title = skillMenuText;
             self->window[i].select = MenuSelectWindow;
             self->window[i].selectArg = &self->list[i];
             self->list[i].cursor = 0;
@@ -521,7 +521,8 @@ void MenuSkillMenuMain(void)
     }
 }
 
-char D_004C9940[19] __attribute__((section(".rodata"))) = "\014\200\200\200\036\000: Set Search";
+/* Text: {color #808080}\x1E\x00: Set Search */
+const char skillSetSearchText[19] = "\014\200\200\200\036\000: Set Search";
 
 void MenuSkillExMain(void)
 {
@@ -619,7 +620,7 @@ void MenuSkillL1R1Main(void)
 
     switch (self->state) {
     case 0: {
-        SkillL1R1SpriteIdPair spriteIds = D_004DB628[0];
+        SkillL1R1SpriteIdPair spriteIds = skillL1R1SpriteTable[0];
 
         self->spriteWork = 0x00FFFFFF;
         for (side_index = 0; side_index < 2; side_index++) {
@@ -661,7 +662,7 @@ void MenuSkillL1R1Main(void)
         }
 
         {
-            SkillL1R1SlideStep step = D_004DB630[0];
+            SkillL1R1SlideStep step = skillL1R1SlideStep[0];
 
             for (side_index = 0; side_index < 2; side_index++) {
                 if (self->slideOffset[side_index] != 0) {
@@ -678,9 +679,11 @@ void MenuSkillL1R1Main(void)
     }
 }
 
-const char D_004C99E8[15]  = " 1\241\246\n 2\241\246\n 3\241\246";
+/* JP: 1・ /  2・ /  3・
+ * EN: 1. / 2. / 3. */
+const char skillNumberedListText[15] = " 1\241\246\n 2\241\246\n 3\241\246";
 
-const char D_004C99F8[11]  = "Set Skills";
+const char skillSetListText[11] = "Set Skills";
 
 void MenuSkillSetListMain(void)
 {
@@ -698,7 +701,7 @@ void MenuSkillSetListMain(void)
         self->window.y = 280;
         self->window.width = 209;
         self->window.height = 78;
-        self->window.title = D_004C99F8;
+        self->window.title = skillSetListText;
         self->window.state = 1;
         WindowDXMain(&self->window);
         self->window.state = 3;
@@ -732,7 +735,7 @@ void MenuSkillSetListMain(void)
     }
 }
 
-const SkillCategoryIconIds D_004C9A08  = { .id = { 265, 266, 772, 773, 774 } };
+const SkillCategoryIconIds skillCategoryIconTable = { .id = { 265, 266, 772, 773, 774 } };
 
 void MenuSkillCategoryMain(void)
 {
@@ -743,7 +746,7 @@ void MenuSkillCategoryMain(void)
 
     switch (work->state) {
     case 0: {
-        SkillCategoryIconIds ids = D_004C9A08;
+        SkillCategoryIconIds ids = skillCategoryIconTable;
 
         work->iconResetWork = 0x00FFFFFE;
         for (icon_index = 0; icon_index < 5; icon_index++) {
@@ -811,7 +814,7 @@ void MenuSkillCategoryMain(void)
         }
 
         {
-            SkillCategoryEdgeStep step = D_004DB638[0];
+            SkillCategoryEdgeStep step = skillCategoryEdgeStep[0];
 
             for (icon_index = 0; icon_index < 2; icon_index++) {
                 if (work->edgeDelta[icon_index] != 0) {
@@ -876,7 +879,8 @@ void MenuSkillCategoryMain(void)
     }
 }
 
-const char D_004C9A18[18]  = "List\003\220S.Lv\003\007S.Pts";
+/* Text: List{x 656}S.Lv{x 519}S.Pts */
+const char skillListHeaderText[18] = "List\003\220S.Lv\003\007S.Pts";
 
 static int MenuSkillListChange00(void)
 {
@@ -908,7 +912,7 @@ static int MenuSkillListChange00(void)
         if (character->skill_points < cost)
             rows[i].locked = 1;
     }
-    window->title = D_004C9A18;
+    window->title = skillListHeaderText;
     window->rowCount = 7;
     window->columns = 1;
     window->rows = 8;
@@ -939,7 +943,7 @@ static int MenuSkillListChange01(void)
         else
             rows[i].level = 0;
     }
-    window->title = D_004DB640;
+    window->title = skillSetText;
     window->rowCount = 3;
     window->columns = 1;
     window->rows = 8;
@@ -966,7 +970,7 @@ void MenuSkillListMain(void)
         work->color = 0x00fffff8;
         work->window.color = 0x00fffff8;
         work->window.rowCount = 7;
-        work->window.title = D_004DB600;
+        work->window.title = skillEmptyText;
         work->window.rows = 11;
         work->window.height = 270;
         work->window.state = 0;
@@ -1082,25 +1086,27 @@ void MenuSkillListMain(void)
     }
 }
 
-const char D_004DB600[1] = "";
+const char skillEmptyText[1] = "";
 
-const char D_004DB608[7] = "Yes\nNo";
+const char skillYesNoText[7] = "Yes\nNo";
 
-const char D_004DB610[5] = "Menu";
+const char skillMenuText[5] = "Menu";
 
-char D_004DB618[7] = "\001S.Pts";
+/* Text: \x01S.Pts */
+char skillPointsText[7] = "\001S.Pts";
 
-char D_004DB620[6] = "\001S.Lv";
+/* Text: \x01S.Lv */
+char skillLevelText[6] = "\001S.Lv";
 
-const SkillL1R1SpriteIdPair D_004DB628[1] = { { .id = { 274, 272 } } };
+const SkillL1R1SpriteIdPair skillL1R1SpriteTable[1] = { { .id = { 274, 272 } } };
 
-const SkillL1R1SlideStep D_004DB630[1] = { { .side = { 1, -1 } } };
+const SkillL1R1SlideStep skillL1R1SlideStep[1] = { { .side = { 1, -1 } } };
 
-const SkillCategoryEdgeStep D_004DB638[1] = { { .side = { 1, -1 } } };
+const SkillCategoryEdgeStep skillCategoryEdgeStep[1] = { { .side = { 1, -1 } } };
 
-const char D_004DB640[4] = "Set";
+const char skillSetText[4] = "Set";
 
-const char D_004C9A88[30]  = "data\\endou\\skill\\skilldat.bin";
+const char skillDataPath[30] = "data\\endou\\skill\\skilldat.bin";
 
 void MenuSkill(void)
 {
@@ -1112,7 +1118,7 @@ void MenuSkill(void)
 
         heap = MainMenuWorkEnd;
         SkillDataBuf = (unsigned char *)(((int)heap + 0x7FF) & ~0x7FF);
-        xglCdReadFile(D_004C9A88, SkillDataBuf, 0, 1);
+        xglCdReadFile(skillDataPath, SkillDataBuf, 0, 1);
         heap = SkillDataBuf + SKILL_DATA_SIZE;
         MenuSkillPas = (SkillPasWork *)heap;
         heap = (unsigned char *)MenuSkillPas + SKILL_PAS_SIZE;
@@ -1469,6 +1475,7 @@ void MenuSkill(void)
     MenuSkillSetListMain();
     MenuSkillCategoryMain();
     MenuSkillListMain();
+    /* Text: {reset}skill */
     xglFontDebugPrintf(0, 64, "\x0bskill");
 }
 
@@ -1476,26 +1483,18 @@ void MenuSkill(void)
  * MenuSkill's "\x0bskill" literal at 0x004DB650. */
 unsigned char *SkillDataBuf = 0;
 
-extern const char D_004C9590[9];
-extern const char D_004DB5D0[8];
-extern const char D_004DB5D8[8];
-extern const char D_004C9918[19];
-extern const char D_004DB608[7];
-extern const char D_004C9930[16];
-extern char D_004DB618[7];
-extern char D_004DB620[6];
-extern char D_004C9940[19];
-extern const char D_004C99E8[15];
+extern const char MenuSkillSetSuffixText[8];
+extern const char MenuSkillTitleText[8];
 
-static const char * msg_0_0036DD58[3]  = { D_004DB5D8, D_004C9590, D_004DB5D0 };
+static const char * msg_0_0036DD58[3] = { MenuSkillTitleText, skillExtractCommandText, MenuSkillSetSuffixText };
 
-static const char * msg00_1_0036DD68[1] __attribute__((section(".data"))) = { D_004C9918 };
+static const char * msg00_1_0036DD68[] = { skillExtractSetCancelText };
 
-static const char * msg01_2_0036DD70[2] __attribute__((section(".data"))) = { D_004DB608, D_004C9930 };
+static const char * msg01_2_0036DD70[] = { skillYesNoText, skillExtractQuestionText };
 
-static char * msg00_3_0036DD78[3]  = { D_004DB620, D_004DB618, D_004C9940 };
+static char * msg00_3_0036DD78[3] = { skillLevelText, skillPointsText, skillSetSearchText };
 
-static const char * msg00_4_0036DD88[1] __attribute__((section(".data"))) = { D_004C99E8 };
+static const char * msg00_4_0036DD88[] = { skillNumberedListText };
 
 SkillPasWork * MenuSkillPas = 0;
 

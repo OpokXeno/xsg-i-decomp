@@ -8,14 +8,14 @@ struct ArrivalAttributeTable {
     int attributes[4];
 };
 
-const struct LadderAttributeTable D_004CAC20 = {{
+const struct LadderAttributeTable ladderAttributeTable = {{
     0x00100000, 0x00110000, 0x00120000, 0x00130000,
     0x00140000, 0x00150000, 0x00160000, 0x00170000,
     0x00180000, 0x00190000, 0x001A0000, 0x001B0000,
     0x001C0000, 0x001D0000, 0x001E0000, 0x001F0000
 }};
 
-const struct ArrivalAttributeTable D_004CAC60 = {{
+const struct ArrivalAttributeTable arrivalAttributeTable = {{
     0x00200000, 0x00210000, 0x00220000, 0x00230000
 }};
 
@@ -145,11 +145,11 @@ extern float *MotTransXYZ(float *xyz);
 
 extern void ACT_updateMotion(LadderActor *actor);
 
-#define D_004D8068 (0.033333335071802139f)
+#define FLY_TO_LADDER_SPEED (0.033333335071802139f)
 
-#define D_004D806C (0.69999998807907104f)
+#define FLY_TO_LADDER_RISE_STEP (0.69999998807907104f)
 
-#define D_004D8070 (0.033333335071802139f)
+#define GET_OFF_LADDER_SPEED (0.033333335071802139f)
 
 extern LadderPad PadData[2];
 
@@ -165,7 +165,7 @@ extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 extern void *memset(void *destination, int value, unsigned int count);
 
-extern const char D_004CAD30[16];
+extern const char hashigoBottomName[16];
 
 /* The original copies these 16-byte points with aligned doubleword loads and stores. */
 
@@ -175,7 +175,7 @@ extern void On_Ladder(LadderActor *actor);
 
 short Get_Ladder(int attribute)
 {
-    struct LadderAttributeTable table = D_004CAC20;
+    struct LadderAttributeTable table = ladderAttributeTable;
     short index = 0;
 
     do {
@@ -191,7 +191,7 @@ short Get_Ladder(int attribute)
 
 short Get_Arrival(int attribute)
 {
-    struct ArrivalAttributeTable table = D_004CAC60;
+    struct ArrivalAttributeTable table = arrivalAttributeTable;
     short index = 0;
 
     do {
@@ -322,7 +322,7 @@ void Fly_to_Ladder(LadderActor *actor)
     work->state = 4;
     work->step_wait = 20;
     ACT_setMotion2(actor, 20, 8);
-    actor->speed = D_004D8068;
+    actor->speed = FLY_TO_LADDER_SPEED;
 
     point = actor->position;
     point.coordinates.x -= AdjTable_X[GameLoopState.ladder_direction[work->ladder_id]];
@@ -336,7 +336,7 @@ void Fly_to_Ladder(LadderActor *actor)
     LadderStep[63] = actor->position.coordinates.y;
 
     for (i = 1; i < 63; i++) {
-        float rise = i * D_004D806C;
+        float rise = i * FLY_TO_LADDER_RISE_STEP;
         float base = actor->position.coordinates.y;
 
         LadderStep[63 + i] = base + rise;
@@ -361,7 +361,7 @@ void Get_Off_Ladder(LadderActor *actor)
         GameLoopState.map_flags |= 0x20;
     }
 
-    actor->speed = D_004D8070;
+    actor->speed = GET_OFF_LADDER_SPEED;
 }
 
 short Ready_Ladder(LadderActor *actor)
@@ -689,7 +689,7 @@ void On_Ladder(register LadderActor * const actor)
 
     if (actor->position.coordinates.y + move_y < ground &&
         GameLoopState.ladder_bottom_exit[ladder_id] == 1) {
-        CallMethod_I(D_004CAD30, work->ladder_id);
+        CallMethod_I(hashigoBottomName, work->ladder_id);
         if (GameLoopState.ladder_flags & 0x20) {
             work->state = 8;
             return;
@@ -813,7 +813,7 @@ void On_Ladder(register LadderActor * const actor)
     }
 }
 
-const char D_004CAD30[16] = "HashigoBottom";
+const char hashigoBottomName[16] = "HashigoBottom";
 
 int Ladder_Main(LadderActor *actor)
 {
@@ -847,8 +847,6 @@ int Ladder_Main(LadderActor *actor)
     ACT_updateMotion(actor);
     return 1;
 }
-
-extern short NowLadderStep;
 
 extern short SelNum;
 

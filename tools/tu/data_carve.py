@@ -24,7 +24,7 @@ The declaration (`config/objects/data-carves.json`, schema `tu-data-carves/1`):
          {"range": ["0x004c67d0", "0x004c6bc0"],          # padded run: item boundaries
           "generated": ["0x004c67d0", "0x004c6bc0"],      # what the C object emits
           "generated_by": ["MenuCharactor"],             # the C functions that emit it
-          "c_owned_symbols": ["D_004C67D0", "D_004C67F0", "jtbl_004C6800"],
+          "c_owned_symbols": ["paraUpBinPath", "charactorText", "jtbl_004C6800"],
           "also_referenced_by_c": [],                    # items the C names, left scaffold
           "basis": {...}}]}}}                            # who proved it, with which gate
 
@@ -385,6 +385,16 @@ def piece_items(path, start, end):
         items.append(dict(name=b['labels'][0] if b['labels'] else f'D_{b["start"]:08X}',
                           labels=b['labels'], start=b['start'], end=e, block=b))
     return header, items
+
+
+def _unreferenced_nobits_pad(item):
+    """A splat NOBITS item that splat itself generated as an unreferenced pad."""
+    lines = [line.strip() for line in item['block']['lines']]
+    return ('/* Automatically generated and unreferenced pad */' in lines
+            and len(item['labels']) == 1 and item['labels'][0] == f'D_{item["start"]:08X}'
+            and all(not line or line.startswith(('nonmatching ', 'dlabel ', '/*'))
+                    or re.fullmatch(r'/\* [0-9A-F]{8} \*/ \.space 0x[0-9A-Fa-f]+', line)
+                    for line in lines))
 
 
 def _piece_text(header, items):
@@ -847,7 +857,33 @@ def _anonymous_span_names_are_scaffold(items, names, lo, hi):
     if not names:
         return False
     labels = {label for item in items if lo <= item['start'] < hi for label in item.get('labels', [])}
+    # an item split off an earlier splat label (tu182 `paths` literals) is
+    # named by its canonical address label
+    labels |= {f'D_{item["start"]:08X}' for item in items if lo <= item['start'] < hi}
+    # recovered source names stand for the splat placeholders they replace
+    # (config/symbols/<unit>.renames.json, user 2026-11-01)
+    renames = _placeholder_renames()
+    labels |= {renames[label] for label in labels if label in renames}
     return set(names) <= labels
+
+
+_PLACEHOLDER_RENAMES = None
+
+
+def _scaffold_label_names(item):
+    """A scaffold item's splat labels plus the recovered source names standing for them."""
+    renames = _placeholder_renames()
+    return set(item['labels']) | {renames[label] for label in item['labels'] if label in renames}
+
+
+def _placeholder_renames():
+    """{splat placeholder: recovered source name} over every unit's renames map."""
+    global _PLACEHOLDER_RENAMES
+    if _PLACEHOLDER_RENAMES is None:
+        _PLACEHOLDER_RENAMES = {}
+        for path in sorted((Path(__file__).resolve().parents[2] / 'config' / 'symbols').glob('*.renames.json')):
+            _PLACEHOLDER_RENAMES.update(json.loads(path.read_text()).get('renames', {}))
+    return _PLACEHOLDER_RENAMES
 
 # ---------------------------------------------------------------------------
 # re-piecing a section of one TU
@@ -1767,6 +1803,80 @@ def main_section_items(unit_dir, t, sec):
     return items
 
 
+def _owner_prefix_correction(unit_dir, m, by_id, target, sec, runs, write):
+    """Move the exact suffix of the previous TU's last `sec` piece into `target`.
+
+    A provisional TU boundary can cut one compiler object: its leading
+    literals then sit at the end of the preceding TU's scaffold (main/tu182
+    InitUwamonoSys's `paths` strings before tu181's cut).  Each run names
+    `basis.owner_correction = {kind: target_prefix, from_tu, reason}`; the
+    runs together must exactly cover [lo, target section start) and lo must be
+    an item boundary of the owner's last piece.  The owner keeps the prefix."""
+    corrections = {(r['basis']['owner_correction'] or {}).get('from_tu') for r in runs}
+    if len(corrections) != 1 or None in corrections:
+        raise CarveError(f'{target["id"]} {sec}: target-prefix runs must name one from_tu')
+    declared_owner = corrections.pop()
+    if sec not in target.get('sections', {}):
+        raise CarveError(f'{target["id"]} {sec}: target-prefix correction needs an existing target section')
+    spans = sorted((hx(r['range'][0]), hx(r['range'][1])) for r in runs)
+    lo, hi = spans[0][0], hx(target['sections'][sec]['start'])
+    cursor = lo
+    for a, b in spans:
+        if a != cursor or b <= a:
+            raise CarveError(f'{target["id"]} {sec}: target-prefix runs are not contiguous')
+        cursor = b
+    if cursor != hi:
+        raise CarveError(f'{target["id"]} {sec}: target-prefix runs end at {h8(cursor)}, target starts at {h8(hi)}')
+    sec_order = m.get('sections', {}).get(sec, {}).get('order') or []
+    matches = [i for i, piece in enumerate(sec_order)
+               if piece['tu'] == declared_owner and hx(piece['start']) < lo < hi == hx(piece['end'])]
+    if len(matches) != 1:
+        raise CarveError(f'{target["id"]} {sec}: target-prefix correction does not identify one owner suffix')
+    index = matches[0]
+    if index + 1 >= len(sec_order) or sec_order[index + 1]['tu'] != target['name']:
+        raise CarveError(f'{target["id"]} {sec}: target-prefix owner piece is not adjacent to the target')
+    old_order_piece = sec_order[index]
+    owner_tu = next((x for x in m['tus'] if x['name'] == declared_owner), None)
+    if owner_tu is None or sec not in owner_tu.get('sections', {}):
+        raise CarveError(f'{target["id"]} {sec}: target-prefix owner TU is absent from the manifest')
+    owner_section = owner_tu['sections'][sec]
+    owner_pieces = owner_section.get('pieces') or []
+    piece_matches = [i for i, p in enumerate(owner_pieces)
+                     if p['name'] == old_order_piece['piece'] and hx(p['start']) < lo < hi == hx(p['end'])]
+    if len(piece_matches) != 1:
+        raise CarveError(f'{target["id"]} {sec}: target-prefix suffix has no unique owner piece')
+    piece_index = piece_matches[0]
+    source_piece = owner_pieces[piece_index]
+    source_file = main_piece_file(unit_dir, source_piece, sec)
+    header, source_items = piece_items(source_file, hx(source_piece['start']), hx(source_piece['end']))
+    if lo not in {item['start'] for item in source_items}:
+        # one splat label can span the cut (tu181 texDataNotFoundFormat runs on into
+        # tu182's strings): split it at the directive boundary
+        source_items = split_initialized_items(source_items, [lo], set(), declared_owner)
+    if lo not in {item['start'] for item in source_items}:
+        raise CarveError(f'{target["id"]} {sec}: target-prefix start {h8(lo)} is not an owner item boundary')
+    prefix_items = [item for item in source_items if item['start'] < lo]
+    suffix_items = [item for item in source_items if item['start'] >= lo]
+    rel = f'{CARVE_DIR}/main/{declared_owner}__{hx(source_piece["start"]):08X}.{sec[1:]}.s'
+    moved_rel = f'{CARVE_DIR}/main/{target["name"]}__{lo:08X}.{sec[1:]}.s'
+    if write:
+        write_piece_file(Path(unit_dir) / rel, header, prefix_items)
+        write_piece_file(Path(unit_dir) / moved_rel, header, suffix_items)
+    prefix_name = f'{CARVE_DIR}/{declared_owner}__{hx(source_piece["start"]):08X}'
+    owner_pieces[piece_index] = dict(source_piece, name=prefix_name, end=h8(lo), file=rel, c_split=False)
+    owner_section['pieces'] = owner_pieces
+    owner_section['end'] = h8(lo)
+    sec_order[index:index + 1] = [dict(old_order_piece, piece=prefix_name, end=h8(lo), file=rel, c_split=False)]
+    moved_name = f'{CARVE_DIR}/{target["name"]}__{lo:08X}'
+    moved = dict(source_piece, name=moved_name, start=h8(lo), end=h8(hi), file=moved_rel, c_split=False)
+    tsec = target['sections'][sec]
+    tpieces = tsec.get('pieces') or [dict(name=target['name'], start=tsec['start'], end=tsec['end'])]
+    tsec['pieces'] = [moved] + tpieces
+    tsec['start'] = h8(lo)
+    sec_order.insert(index + 1, dict(c_split=False, end=h8(hi), ordinal=target['ordinal'],
+                                     piece=moved_name, start=h8(lo), tu=target['name'], file=moved_rel))
+
+
 def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_character_inputs=None):
     """(effective manifest, report) with every declared MAIN run carved.
 
@@ -1792,6 +1902,11 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
         if target is None:
             continue
         for sec, runs in tu_secs.items():
+            prefix_runs = [r for r in runs if ((r.get('basis') or {}).get('owner_correction') or {}).get(
+                'kind') == 'target_prefix']
+            if prefix_runs:
+                _owner_prefix_correction(unit_dir, m, by_id, target, sec, prefix_runs, write)
+                continue
             if sec in target.get('sections', {}):
                 continue
             if sec != '.data' or len(runs) != 1:
@@ -1902,9 +2017,17 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
                         base = base_section_name(part['section'])
                         ordered_inputs.setdefault(base, []).append(
                             (int(part['object_range'][0]), ri, pi))
+                # COMMON-tail owners of this TU share the raw input section
+                # (main/tu149 keyData + cursor): one ordinal order by offset.
+                for crow in (row for rows_ in (registry.get('common_tail') or {}).values() for row in rows_
+                             if row['tu'] == tu_id):
+                    cbase = base_section_name(crow['c_input_span'].get('section', ''))
+                    if cbase in ordered_inputs:
+                        ordered_inputs[cbase].append((int(crow['c_input_span']['object_range'][0]), None, None))
                 for base, inputs in ordered_inputs.items():
-                    for index, (_, ri, pi) in enumerate(sorted(inputs)):
-                        nobits_input_names[(ri, pi)] = split_section_name(base, index)
+                    for index, (_, ri, pi) in enumerate(sorted(inputs, key=lambda x: x[0])):
+                        if ri is not None:
+                            nobits_input_names[(ri, pi)] = split_section_name(base, index)
             if sec not in t['sections']:
                 raise CarveError(f'{tu_id} has no {sec} piece')
             ts = t['sections'][sec]
@@ -2023,9 +2146,13 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
                         for pi, part in enumerate(in_spans):
                             part_lo, part_hi = hx(part['range'][0]), hx(part['range'][1])
                             base_input_section = base_section_name(part['section'])
-                            if base_input_section not in allowed or part_lo != cursor or part_hi <= part_lo:
+                            # NOBITS bytes between two pinned C inputs (or after
+                            # the last one) are zero by definition; each input is
+                            # pinned at its VA, so a gap is linker fill (user
+                            # 2026-10-31: 100% MAIN DATA in C, 0% scaffolding).
+                            if base_input_section not in allowed or part_lo < cursor or part_hi <= part_lo:
                                 raise CarveError(
-                                    f'{tu_id} {sec}: c_input_spans must be ordered, nonempty, and cover the run')
+                                    f'{tu_id} {sec}: c_input_spans must be ordered, nonempty, and inside the run')
                             part_symbols = sorted(set(part.get('symbols') or []))
                             if not part_symbols or not set(part_symbols) <= set(run.get('c_owned_symbols') or []):
                                 raise CarveError(f'{tu_id} {sec}: each c_input_spans entry needs named C owners')
@@ -2035,8 +2162,8 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
                                 cpart['object_range'] = [int(v) for v in part['object_range']]
                             normalized.append(cpart)
                             cursor = part_hi
-                        if cursor != hi:
-                            raise CarveError(f'{tu_id} {sec}: c_input_spans end at {h8(cursor)}, expected {h8(hi)}')
+                        if cursor > hi:
+                            raise CarveError(f'{tu_id} {sec}: c_input_spans end at {h8(cursor)}, past {h8(hi)}')
                         entry['c_input_spans'] = normalized
                         entry['c_owned_symbols'] = sorted(run.get('c_owned_symbols') or [])
                         if aliases:
@@ -2173,8 +2300,15 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
                 (int(part['object_range'][0]), row))
         common_output_sections = {}
         for (owner_tu, input_section), ordered in common_input_parts.items():
-            for ordinal, (offset, row) in enumerate(sorted(ordered, key=lambda item: item[0])):
-                common_output_sections[(owner_tu, input_section, offset)] = split_section_name(input_section, ordinal)
+            # the TU's own NOBITS spans of the same raw input take ordinals too
+            own = [(int(part['object_range'][0]), None)
+                   for run in (declared.get(owner_tu) or {}).get(sec, [])
+                   for part in run.get('c_input_spans') or []
+                   if part.get('object_range') is not None
+                   and base_section_name(part.get('section', '')) == input_section]
+            for ordinal, (offset, row) in enumerate(sorted(ordered + own, key=lambda item: item[0])):
+                if row is not None:
+                    common_output_sections[(owner_tu, input_section, offset)] = split_section_name(input_section, ordinal)
             tu = by_id[owner_tu]
             tu['c_link_object'] = f'build/c/{tu["name"]}{SPLIT_OBJECT}'
             tu['c_common_tail_splits'] = True
@@ -2201,6 +2335,13 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
                     if (not item_slice or item_slice[0]['start'] != a
                             or (item_slice[-1]['end'] != b and b != hx(tail['end']))):
                         raise CarveError(f'{sec}: common-tail scaffold split {h8(a)}-{h8(b)} is not on item boundaries')
+                    if all(_unreferenced_nobits_pad(item) for item in item_slice):
+                        # splat's own "unreferenced pad" between two COMMON
+                        # owners: zero NOBITS bytes with no symbol and no
+                        # reference. The next pinned owner (". = start")
+                        # leaves them as linker fill (user 2026-10-31: 100%
+                        # MAIN DATA in C, 0% scaffolding).
+                        continue
                     stem = f'{linker_name.replace("/", "_")}__{a:08X}'
                     rel = f'{CARVE_DIR}/main/{stem}.{sec[1:]}.s'
                     if write:
@@ -2231,8 +2372,13 @@ def apply_main(root, unit_dir, manifest, registry=None, write=True, typed_charac
     for tu in m['tus']:
         for section, detail in tu.get('sections',{}).items():
             for piece in detail.get('pieces',[]):
+                # unreferenced_original_alignment already proves zero bytes, no
+                # original symbol and no original reference inside the range;
+                # an item tail splat folded into the previous item is the same
+                # linker alignment fill (user 2026-10-31: 100% MAIN DATA in C).
                 if piece.get('linker_padding',{}).get('kind') in (
-                        'compiler_alignment_fill', 'external_input_alignment_fill'):
+                        'compiler_alignment_fill', 'external_input_alignment_fill',
+                        'unreferenced_original_alignment'):
                     continue
                 for suffix in piece.get('uncredited_scaffold_suffixes',[]):
                     key = (tu['id'],section,*suffix['range'])
@@ -3838,8 +3984,11 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                         credited_by_run.setdefault(run_key, set()).update(p['symbols'])
                     else:
                         items = scaffold_items.get(p['target_section'], [])
+                        target_prefix = ((secs[p['target_section']][p['run_index']].get('basis') or {})
+                                         .get('owner_correction') or {}).get('kind') == 'target_prefix'
                         if not (p['anonymous_emission'] and
-                                _anonymous_span_names_are_scaffold(items, c_owned, p['lo'], p['hi'])):
+                                (target_prefix or
+                                 _anonymous_span_names_are_scaffold(items, c_owned, p['lo'], p['hi']))):
                             raise CarveError(f'{tu_id} {input_sec}: anonymous credited span lacks exact scaffold identity evidence')
                         credited_by_run.setdefault(run_key, set()).update(c_owned)
                 if p['credit'] == 'uncredited_dependency' and not p.get('support_only'):
@@ -3909,6 +4058,23 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                                           and orig_names.intersection(it['labels'])
                                           and it['end'] - it['start'] == sym.size]
                         if not exact_item:
+                            # splat can cut one original object at a false
+                            # label (__ps2_klibinfo__ + D_004AA2AC): accept
+                            # consecutive items from the original label that
+                            # exactly cover the C object.
+                            orig_names = {s.name for s in identities} | {name}
+                            run_items = sorted((it for it in items if target_va <= it['start'] < target_va + sym.size),
+                                               key=lambda it: it['start'])
+                            item_cursor = target_va
+                            for it in run_items:
+                                if it['start'] != item_cursor:
+                                    break
+                                item_cursor = it['end']
+                            if (run_items and run_items[0]['start'] == target_va
+                                    and orig_names.intersection(run_items[0]['labels'])
+                                    and item_cursor == target_va + sym.size):
+                                exact_item = run_items
+                        if not exact_item:
                             raise CarveError(
                                 f'{tu_id} {input_sec}: zero-size original OBJECT lacks an exact scaffold extent '
                                 f'for {name} at {h8(target_va)}')
@@ -3956,6 +4122,36 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                                             and proof.get('unresolved_relocations') == 0):
                                         exact_item = [dict(start=p['lo'], end=p['hi'], labels=[name])]
                         if not exact_item:
+                            # user 2026-10-31 (100% MAIN DATA): a typed object
+                            # may end before its splat item's tail when that
+                            # tail is zero original bytes with no original
+                            # symbol; the tail stays alignment fill and the
+                            # span bytes are still compared below.
+                            tail_items = [it for it in items if it['start'] == target_va
+                                          and name in it['labels'] and it['end'] > target_va + sym.size
+                                          and it['end'] - (target_va + sym.size) <= 15]
+                            for it in tail_items:
+                                tail = va_bytes(orig, target_va + sym.size, it['end'] - target_va - sym.size)
+                                if (tail is not None and not any(tail) and not any(
+                                        s.type in (1, 2) and s.shndx not in (0, 0xfff1)
+                                        and target_va + sym.size <= s.value < it['end'] for s in orig.symbols)):
+                                    exact_item = [dict(start=target_va, end=target_va + sym.size, labels=[name])]
+                                    break
+                        if not exact_item:
+                            # A typed object at a splat-unlabelled address (a
+                            # string split out of a pointer block): it lies in
+                            # contiguous scaffold items, no original OBJECT
+                            # starts inside it, and its bytes are compared below.
+                            lo_va, hi_va = target_va, target_va + sym.size
+                            inside = sorted((it for it in items if it['start'] < hi_va and lo_va < it['end']),
+                                            key=lambda it: it['start'])
+                            contiguous = bool(inside) and inside[0]['start'] <= lo_va and inside[-1]['end'] >= hi_va and all(
+                                a['end'] == b['start'] for a, b in zip(inside, inside[1:]))
+                            if contiguous and not any(
+                                    s.type == 1 and s.size > 0 and s.shndx not in (0, 0xfff1)
+                                    and lo_va <= s.value < hi_va for s in orig.symbols):
+                                exact_item = [dict(start=lo_va, end=hi_va, labels=[name])]
+                        if not exact_item:
                             raise CarveError(
                                 f'{tu_id} {input_sec}: no original OBJECT or exact scaffold item proves '
                                 f'{name} at {h8(target_va)} size 0x{sym.size:x}')
@@ -3965,7 +4161,7 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                     target_items = scaffold_items.get(p['target_section'], [])
                     exact_item = [it for it in target_items if it['start'] == p['lo']
                                   and it['end'] == p['hi'] and
-                                  set(p['symbols']).intersection(it['labels'])]
+                                  set(p['symbols']).intersection(_scaffold_label_names(it))]
                     data = obj_elf.section_bytes(csec)
                     pad_lo = p['end'] - padding
                     pad_relocs = [off for off, _, _ in read_relocations(obj_elf).get(csec.index, [])
@@ -3976,7 +4172,8 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                             or any(data[pad_lo:p['end']]) or pad_relocs or pad_symbols):
                         raise CarveError(f'{tu_id} {input_sec}: trailing zero padding lacks exact scaffold-item proof')
                 elif cursor != p['end']:
-                    raise CarveError(f'{tu_id} {input_sec}: raw object names do not cover mapped span')
+                    raise CarveError(f'{tu_id} {input_sec}: raw object names do not cover mapped span '
+                                     f'(span {p.get("offset")}-{p.get("end")} {p.get("symbols")}, names end at {cursor})')
                 byte_piece = dict(offset=p['offset'], length=p['length'], end=p['end'], lo=p['lo'], hi=p['hi'])
                 equal = compare_bytes(obj_elf, csec, [byte_piece], ctx,
                                       target_pieces=explicit_inputs, original_elf=orig)
@@ -4154,6 +4351,11 @@ def split_plans(root, unit, unit_dir, tu_id, obj_elf, registry=None):
                 if len(pieces) == 1:
                     piece = pieces[0]
                     if piece['end'] != csec.size or piece['length'] != csec.size:
+                        # A TU-local NOBITS owner sharing its raw section with
+                        # COMMON-tail owners (main/tu149 keyData + cursor):
+                        # keep the span so the common-tail split merges it.
+                        if any(row['c_input_span'].get('section') == base for row in common_rows):
+                            plans[base] = dict(pieces=pieces, notes=[])
                         continue
                     if piece['hi'] - piece['lo'] != csec.size or not piece['symbols']:
                         raise CarveError(f'{tu_id}: identity NOBITS input {base} lacks an exact full-section owner span')
@@ -4708,7 +4910,7 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                             and _anonymous_span_names_are_scaffold(items.get(sec, []),
                                                                    set(run.get('c_owned_symbols') or []), lo, hi)):
                         # Every named owner of this span is gone from the C
-                        # object (main/tu191: `const float D_004D8034` became a
+                        # object (main/tu191: `const float ESCAPE_RESET_DISTANCE` became a
                         # #define, so only cc1's anonymous literal remains). The
                         # span keeps its original items and is re-proved as an
                         # anonymous emission of the target family's own compiler
@@ -4760,7 +4962,7 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                               for n in set(names) & current_named.keys())):
                     # A legacy run whose owners are partly named C OBJECTs and
                     # partly anonymous compiler emissions (main/tu168: the
-                    # named tables D_004C4F50/D_004C4F60 and the switch table
+                    # named tables listNumText/listNum3NumText and the switch table
                     # jtbl_004C4F80). The whole span cannot be one anonymous
                     # coordinate (it contains named OBJECTs), and the split
                     # planner credits an anonymous span only for the owners
@@ -6062,7 +6264,7 @@ def _derive_current(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
                     reason='the legacy initialized runs equal a derivation without any initialized request')
                 return fresh
         # A legacy run can mix named C OBJECTs with anonymous emissions
-        # (main/tu168 D_004C4F50/D_004C4F60 + jtbl_004C4F80). When the request
+        # (main/tu168 listNumText/listNum3NumText + jtbl_004C4F80). When the request
         # cannot be kept as it is, retry the refresh routing such a run item by
         # item; every coordinate, byte, relocation and cc1 provenance proof is
         # unchanged, and a second refusal is reported as before.

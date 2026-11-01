@@ -12,7 +12,6 @@ extern SceneString *loadConstString(const char *bytes, int length);
 
 #endif
 
-
 #include "init_class_db.h"
 
 int classDB[8];
@@ -45,7 +44,7 @@ typedef struct ClassFile {
     int length;
 } ClassFile;
 
-const char D_004DBFD0[];
+const char classFileExtension[];
 
 ConstString **constStringTable;
 
@@ -101,7 +100,7 @@ ClassDescriptor *findClass(ClassFileEntry *entry)
 
     strncpy(filename, entry->path->name, entry->path->length);
     filename[entry->path->length] = '\0';
-    strcat(filename, D_004DBFD0);
+    strcat(filename, classFileExtension);
 
     for (index = 0; index < 8; index++) {
         volume = classDB[index];
@@ -497,5 +496,5 @@ void setupClass(ClassDescriptor *class_info, u32 this_class_index,
     }
 }
 
-const char D_004DBFD0[] = ".class";
+const char classFileExtension[] = ".class";
 ConstString **constStringTable = 0;

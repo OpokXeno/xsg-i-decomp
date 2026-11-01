@@ -48,7 +48,7 @@ typedef struct {
     SamplingProcess process;
 } SamplingWork;
 
-extern SamplingWork SsdSampleWork;
+SamplingWork SsdSampleWork;
 extern void SsdCalcDirectVoiceVolume(short *, int, int);
 extern void SsdUnlinkProc(SamplingProcess *);
 extern void CpuDisableIntr(void);
@@ -67,8 +67,6 @@ extern void *AllocSysMemory(int, unsigned int, void *);
 extern int printf(const char *, ...);
 void SsdAllocSamplingVoice(int count);
 void SsdInitSamplingVoice(void);
-extern const char _fdata[];
-enum { SAMPLING_MEMORY_ERROR_TEXT = 0xb0 };
 extern struct {
     unsigned char unmodeled_000[0x230];
     unsigned int key_on[2], key_off[2], cutoff[2], noise[2];
@@ -106,7 +104,7 @@ void SsdInitSampling(int voice_count, unsigned int spu_address,
         SsdSampleWork.buffer = AllocSysMemory(0, buffer_size, 0);
         CpuEnableIntr();
         if (SsdSampleWork.buffer == 0) {
-            printf(&_fdata[SAMPLING_MEMORY_ERROR_TEXT]);
+            printf("Ssd lock of sampling memory\n");
             return;
         }
         SsdAllocSamplingVoice(voice_count);

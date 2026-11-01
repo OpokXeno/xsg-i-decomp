@@ -74,6 +74,6 @@ typedef struct CallJavaEnemyWork {
 extern short EventID;
 extern signed char FlagExEvent;
 extern signed char FLAG_FRAME_60;
-extern const char D_004CBAD0[];
+extern const char callJavaMethodStringBase[];
 
 #endif /* SRC_MAIN_CALL_JAVA_METHOD_H */

@@ -2,8 +2,7 @@
 
 #include "stage_2.h"
 
-const char D_004DC208[8] = "peer";
-
+const char stagePeerFieldName[8] = "peer";
 
 void nmlModelSetMapLastInit(void);
 
@@ -29,7 +28,7 @@ void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
     }
 
     peer_field = lookupClassField(scene_class,
-                                  loadConstString(D_004DC208, -1), 0);
+                                  loadConstString(stagePeerFieldName, -1), 0);
     peer = (StagePeer *)*(SceneObject *)(object + peer_field->offset);
     if (arguments[1].integer != 0) {
         if (arguments[1].integer == 1) {
@@ -66,7 +65,7 @@ void Java_xeno_Stage_stop__(StageThread *thread, StageObjectCall *arguments,
         return;
     }
     peer_field = lookupClassField(classJava_xeno_Stage,
-                                  loadConstString(D_004DC208, -1), 0);
+                                  loadConstString(stagePeerFieldName, -1), 0);
     peer = *(SceneObject *)(object + peer_field->offset);
     peer_thread = JTHREAD_get(peer);
     if (peer_thread != 0) {

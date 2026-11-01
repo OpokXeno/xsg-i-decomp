@@ -71,10 +71,13 @@ extern MovieAlpha GameMovieAlpha;
 
 extern short GameMovieFrame;
 
-const char D_004C0290[] =
+const char movieCaptionControl[] =
+    /* Text: {effect 3}{style 3}{line height 13}{char width 8}{spacing 0,0} */
     "\015\003\031\003\025\002\001\015\025\002\002\010\025\003\003\000\000";
 
-const char D_004C02A8[] =
+const char movieSeekErrorText[] =
+    /* JP: ○ Button: Replay △ Button: Skip
+     * EN: Circle Button: Replay Triangle Button: Skip */
     "\013\015\003A seek error has occured.\n\n\n"
     "\014\200  \241\373\014\200\200\200Button: Replay\n\n"
     "\014 \200 \242\244\014\200\200\200Button: Skip";
@@ -288,7 +291,7 @@ static void caption_convert(char *text)
     int time;
 
     src = text;
-    xglFontGetStringWidth(D_004C0290);
+    xglFontGetStringWidth(movieCaptionControl);
     if (*text == ';') {
         src = caption_nextline(text);
     }
@@ -374,13 +377,13 @@ void GameMpeg2Play(char *name, int mode)
                         if (time >= 0 && mpeg.frame >= time) {
                             text = (char *)(cursor + 2);
                         }
-                        xglFontPrint(64, 317, 0xFFFFFF, D_004C0290);
+                        xglFontPrint(64, 317, 0xFFFFFF, movieCaptionControl);
                         xglFontPrintDirect(text);
                     }
                     if (status < 0) {
                         xglRenderCopyDisp2Draw();
                         for (pass = 0; pass < 2; pass++) {
-                            xglFontPrint(96, 200, 0xFFFFFF, D_004C02A8);
+                            xglFontPrint(96, 200, 0xFFFFFF, movieSeekErrorText);
                             GamePauseDispBG();
                             xglSleep();
                         }

@@ -136,13 +136,13 @@ typedef struct FCV2CurveData {
     FCV2AttributeStream attributes;
 } FCV2CurveData;
 
-#define D_004D8518 (1.5259021893143654e-05f)
+#define FCV2_CURSOR_COUNT_SCALE (1.5259021893143654e-05f)
 
-#define D_004D851C (0.033333335071802139f)
+#define FCV2_PACK_OFFSET_FRAME_TIME (0.033333335071802139f)
 
-#define D_004D8520 (1.5259021893143654e-05f)
+#define FCV2_RANGE_COUNT_SCALE (1.5259021893143654e-05f)
 
-#define D_004D8524 (0.033333335071802139f)
+#define FCV2_PACK_SCALE_FRAME_TIME (0.033333335071802139f)
 
 typedef struct FCV2Attribute {
     u16 size;
@@ -160,7 +160,7 @@ typedef struct FCV2KeyHeader {
 
 static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 frame);
 
-#define D_004D8528 (0.033333335071802139f)
+#define FCV2_KEY_FRAME_SCALE (0.033333335071802139f)
 
 f32 FCV_getValue(FCVCurve *curve, f32 frame)
 {
@@ -844,8 +844,8 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
     }
 }
 
-#define D_004D850C (0.033333335071802139f)
-#define D_004D8514 (0.033333335071802139f)
+#define FCV2_KEY_FRAME_TIME (0.033333335071802139f)
+#define FCV2_SEGMENT_FRAME_TIME (0.033333335071802139f)
 
 static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
 {
@@ -879,9 +879,9 @@ static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
     if (output != 0) {
         *key_output = 0;
     }
-    key_frame = (f32)previous->frame * D_004D850C;
+    key_frame = (f32)previous->frame * FCV2_KEY_FRAME_TIME;
     if (frame <= key_frame) {
-        if (__builtin_fabsf(frame - key_frame) < D_004D850C && output != 0) {
+        if (__builtin_fabsf(frame - key_frame) < FCV2_KEY_FRAME_TIME && output != 0) {
             *key_output = previous;
         }
         return previous->values.value;
@@ -920,8 +920,8 @@ static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
         return previous->values.value;
     }
 
-    previous_frame = (f32)previous->frame * D_004D8514;
-    next_frame = (f32)next->frame * D_004D8514;
+    previous_frame = (f32)previous->frame * FCV2_SEGMENT_FRAME_TIME;
+    next_frame = (f32)next->frame * FCV2_SEGMENT_FRAME_TIME;
     values = &next->values;
     switch (next->type) {
     case 0:
@@ -1109,12 +1109,12 @@ void FCV2_resetPack(FCV2Pack *pack, FCV2CurveData *curve)
     if (curve->format >= 2) {
         f32 normalized_count;
         frame_cursor = &curve->frame_count;
-        normalized_count = (f32)*frame_cursor * D_004D8518;
-        frame_offset = (f32)curve->frame_offset * D_004D851C;
-        frame_scale = normalized_count * D_004D851C;
+        normalized_count = (f32)*frame_cursor * FCV2_CURSOR_COUNT_SCALE;
+        frame_offset = (f32)curve->frame_offset * FCV2_PACK_OFFSET_FRAME_TIME;
+        frame_scale = normalized_count * FCV2_PACK_OFFSET_FRAME_TIME;
     } else {
-        f32 normalized_count = (f32)((s32)curve->last_frame - curve->first_frame) * D_004D8520;
-        frame_scale = normalized_count * D_004D8524;
+        f32 normalized_count = (f32)((s32)curve->last_frame - curve->first_frame) * FCV2_RANGE_COUNT_SCALE;
+        frame_scale = normalized_count * FCV2_PACK_SCALE_FRAME_TIME;
         frame_offset = 0.0f;
     }
 
@@ -1186,7 +1186,7 @@ u16 *FCV2_getKey(u16 *cursor, f32 frame)
         cursor += 2;
         index = 0;
         if (last_key > 0) {
-            f32 frame_scale = D_004D8528;
+            f32 frame_scale = FCV2_KEY_FRAME_SCALE;
 
             do {
                 if (frame <= (f32)cursor[1] * frame_scale) {

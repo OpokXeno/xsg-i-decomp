@@ -255,8 +255,8 @@ typedef struct ToolkitEnemyPeer {
     unsigned char light_peer; /* +0x510; only its address is passed to Java */
 } ToolkitEnemyPeer;
 
-extern const char D_004DC118[];
-extern const float D_004D83AC;
+extern const char lightPeerClassName[];
+extern const float toolkitEnemyConstant;
 extern ToolkitEnemyPeer *ACT_createEnemy(int identifier, int enemy_id);
 extern int ACT_initMotion(void *peer);
 

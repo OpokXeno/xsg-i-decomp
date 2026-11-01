@@ -4,11 +4,11 @@
 
 #include "game_debug_menu.h"
 
-static const char * tbl_0_00367A50[7] = { D_004C0390, D_004C0380, D_004C0368, D_004C0358, D_004C0340, D_004C0328, D_004C0310 };
+static const char * tbl_0_00367A50[7] = { cfCameraSwitchLabel, modelNumberTagLabel, snapCreditLabel, snapQualityLabel, modelNumberCheckLabel, alphaOnCaptureLabel, discCheckLabel };
 
-static const char * tbl_1_00367A70[10] = { D_004C04A0, D_004C0490, D_004C0480, D_004C0470, D_004C0460, D_004C0450, D_004C0440, D_004C0430, D_004C0420, D_004C0410 };
+static const char * tbl_1_00367A70[10] = { changeMapLabel, changeLeaderLabel, runBattleLabel, snapLabel, modelFolderLabel, mapFolderLabel, sceneFolderLabel, runCfLabel, runEventLabel, scanlineInterpolationLabel };
 
-char D_004D9EF8[];
+char hexIdFormat[];
 
 static void PauseMenuPage0(void)
 {
@@ -23,28 +23,44 @@ static void PauseMenuPage0(void)
 
     y = 64;
     for (i = 0; i < 16; i++) {
-        xglFontDebugPrintf(8, y, D_004D9EF8, actor[i].inUseId);
+        xglFontDebugPrintf(8, y, hexIdFormat, actor[i].inUseId);
         y += 8;
     }
 
     GameResourceDump(1);
 }
 
-const char D_004C0310[17] = "\245\307\245\243\245\271\245\257\245\301\245\247\245\303\245\257";
+/* JP: ディスクチェック
+ * EN: Disc check */
+const char discCheckLabel[17] = "\245\307\245\243\245\271\245\257\245\301\245\247\245\303\245\257";
 
-const char D_004C0328[17] = "\245\255\245\343\245\327\245\301\245\343\273\376\244\316\246\301";
+/* JP: キャプチャ時のα
+ * EN: Alpha on capture */
+const char alphaOnCaptureLabel[17] = "\245\255\245\343\245\327\245\301\245\343\273\376\244\316\246\301";
 
-const char D_004C0340[19] = "\245\342\245\307\245\353\310\326\271\346\245\301\245\247\245\303\245\257";
+/* JP: モデル番号チェック
+ * EN: Model number check */
+const char modelNumberCheckLabel[19] = "\245\342\245\307\245\353\310\326\271\346\245\301\245\247\245\303\245\257";
 
-const char D_004C0358[13] = "\245\271\245\312\245\303\245\327\311\312\274\301";
+/* JP: スナップ品質
+ * EN: Snap quality */
+const char snapQualityLabel[13] = "\245\271\245\312\245\303\245\327\311\312\274\301";
 
-const char D_004C0368[19] = "\245\271\245\312\245\303\245\327\245\257\245\354\245\270\245\303\245\310";
+/* JP: スナップクレジット
+ * EN: Snap credit */
+const char snapCreditLabel[19] = "\245\271\245\312\245\303\245\327\245\257\245\354\245\270\245\303\245\310";
 
-const char D_004C0380[15] = "\245\342\245\307\245\353\310\326\271\346\245\277\245\260";
+/* JP: モデル番号タグ
+ * EN: Model number tag */
+const char modelNumberTagLabel[15] = "\245\342\245\307\245\353\310\326\271\346\245\277\245\260";
 
-const char D_004C0390[19] = "\243\303\243\306\245\253\245\341\245\351\300\332\244\352\302\330\244\250";
+/* JP: ＣＦカメラ切り替え
+ * EN: CF camera switch */
+const char cfCameraSwitchLabel[19] = "\243\303\243\306\245\253\245\341\245\351\300\332\244\352\302\330\244\250";
 
-const char D_004C03A8[27] = "\241\341\241\341\241\241\245\307\245\320\245\303\245\260\245\325\245\351\245\260\241\241\241\341\241\341";
+/* JP: ＝＝　デバッグフラグ　＝＝
+ * EN: == Debug flags == */
+const char debugFlagsHeaderLabel[27] = "\241\341\241\341\241\241\245\307\245\320\245\303\245\260\245\325\245\351\245\260\241\241\241\341\241\341";
 
 static void PauseMenuPage2(void)
 {
@@ -205,98 +221,129 @@ static void PauseMenuPage2(void)
         break;
     }
 
-    xglFontDebugPrintf(8, 52, D_004C03A8);
+    xglFontDebugPrintf(8, 52, debugFlagsHeaderLabel);
     y = 64;
     for (i = 0; i < DEBUG_FLAG_COUNT; i++) {
         if (i == GameLoopState.debugCursor) {
-            xglFontDebugPrintf(16, y, D_004D9F00);
+            xglFontDebugPrintf(16, y, fullWidthCursorText);
         }
         xglFontDebugPrintf(32, y, tbl_0_00367A50[i]);
         switch (i) {
         case 0:
-            xglFontDebugPrintf(128, y + 3, D_004D9F08,
+            xglFontDebugPrintf(128, y + 3, hexDigitFormat,
                                (GameLoopState.cfCameraFlags >> 1) & 1);
             break;
         case 1:
-            xglFontDebugPrintf(128, y + 3, D_004D9F08,
+            xglFontDebugPrintf(128, y + 3, hexDigitFormat,
                                (GameLoopState.runtimeFlags >> 2) & 1);
             break;
         case 2:
-            xglFontDebugPrintf(128, y + 3, D_004D9F08, SnapDrawCreditFlag);
+            xglFontDebugPrintf(128, y + 3, hexDigitFormat, SnapDrawCreditFlag);
             break;
         case 3:
-            xglFontDebugPrintf(128, y + 3, D_004D9F10, GameLoopState.snapQuality);
+            xglFontDebugPrintf(128, y + 3, snapQualityFormat, GameLoopState.snapQuality);
             break;
         case 4:
-            xglFontDebugPrintf(128, y + 3, D_004D9EF8, GameLoopState.target.modelNumberCheck);
+            xglFontDebugPrintf(128, y + 3, hexIdFormat, GameLoopState.target.modelNumberCheck);
             break;
         case 5:
-            xglFontDebugPrintf(128, y + 3, D_004D9F08,
+            xglFontDebugPrintf(128, y + 3, hexDigitFormat,
                                (GameLoopState.runtimeFlags >> 25) & 1);
             break;
         case 6:
-            xglFontDebugPrintf(128, y + 3, D_004D9F08, GameDiskChangeT10K);
+            xglFontDebugPrintf(128, y + 3, hexDigitFormat, GameDiskChangeT10K);
             break;
         }
         y += 12;
     }
 }
 
-char D_004D9EF8[8] = "%4x";
+char hexIdFormat[8] = "%4x";
 
-const char D_004C0410[11] = "\301\366\272\272\300\376\312\344\264\260";
+/* JP: 走査線補完
+ * EN: Scanline interpolation */
+const char scanlineInterpolationLabel[11] = "\301\366\272\272\300\376\312\344\264\260";
 
-const char D_004C0420[13] = "\245\244\245\331\245\363\245\310\274\302\271\324";
+/* JP: イベント実行
+ * EN: Run event */
+const char runEventLabel[13] = "\245\244\245\331\245\363\245\310\274\302\271\324";
 
-const char D_004C0430[9] = "\243\303\243\306\274\302\271\324";
+/* JP: ＣＦ実行
+ * EN: Run CF */
+const char runCfLabel[9] = "\243\303\243\306\274\302\271\324";
 
-const char D_004C0440[15] = "\245\267\241\274\245\363\245\325\245\251\245\353\245\300";
+/* JP: シーンフォルダ
+ * EN: Scene folder */
+const char sceneFolderLabel[15] = "\245\267\241\274\245\363\245\325\245\251\245\353\245\300";
 
-const char D_004C0450[15] = "\245\336\245\303\245\327\245\325\245\251\245\353\245\300";
+/* JP: マップフォルダ
+ * EN: Map folder */
+const char mapFolderLabel[15] = "\245\336\245\303\245\327\245\325\245\251\245\353\245\300";
 
-const char D_004C0460[15] = "\245\342\245\307\245\353\245\325\245\251\245\353\245\300";
+/* JP: モデルフォルダ
+ * EN: Model folder */
+const char modelFolderLabel[15] = "\245\342\245\307\245\353\245\325\245\251\245\353\245\300";
 
-const char D_004C0470[9] = "\245\271\245\312\245\303\245\327";
+/* JP: スナップ
+ * EN: Snap */
+const char snapLabel[9] = "\245\271\245\312\245\303\245\327";
 
-const char D_004C0480[11] = "\245\320\245\310\245\353\274\302\271\324";
+/* JP: バトル実行
+ * EN: Run battle */
+const char runBattleLabel[11] = "\245\320\245\310\245\353\274\302\271\324";
 
-const char D_004C0490[13] = "\245\352\241\274\245\300\241\274\312\321\271\271";
+/* JP: リーダー変更
+ * EN: Change leader */
+const char changeLeaderLabel[13] = "\245\352\241\274\245\300\241\274\312\321\271\271";
 
-const char D_004C04A0[11] = "\245\336\245\303\245\327\312\321\271\271";
+/* JP: マップ変更
+ * EN: Change map */
+const char changeMapLabel[11] = "\245\336\245\303\245\327\312\321\271\271";
 
-const char D_004C04B0[25] = "\241\341\241\241\245\307\245\320\245\303\245\260\245\341\245\313\245\345\241\274\241\241\241\341";
+/* JP: ＝　デバッグメニュー　＝
+ * EN: = Debug menu = */
+const char debugMenuHeaderLabel[25] = "\241\341\241\241\245\307\245\320\245\303\245\260\245\341\245\313\245\345\241\274\241\241\241\341";
 
-const char D_004C04D0[16] = "USED  :%9d";
+const char memoryUsedFormat[16] = "USED  :%9d";
 
-const char D_004C04E0[16] = "REMAIN:%9d";
+const char memoryRemainFormat[16] = "REMAIN:%9d";
 
-const char D_004C04F0[16] = "game%c000";
+const char snapShotFileNameFormat[16] = "game%c000";
 
-const char D_004C0500[16] = "data\\[path]";
+const char dataDirectoryPath[16] = "data\\[path]";
 
-const char D_004C0510[24] = "data\\test\\[path]";
+const char dataTestDirectoryPath[24] = "data\\test\\[path]";
 
-const char D_004C0528[12] = "\244\242\244\352(DISP1)";
+/* JP: あり(DISP1)
+ * EN: Yes (DISP1) */
+const char yesDisp1Text[12] = "\244\242\244\352(DISP1)";
 
-const char D_004C0538[11] = "\244\242\244\352(SOFT)";
+/* JP: あり(SOFT)
+ * EN: Yes (SOFT) */
+const char yesSoftText[11] = "\244\242\244\352(SOFT)";
 
-const char D_004C0548[15] = "\245\327\245\354\245\244\245\344\241\274\260\314\303\326";
+/* JP: プレイヤー位置
+ * EN: Player position */
+const char playerPositionLabel[15] = "\245\327\245\354\245\244\245\344\241\274\260\314\303\326";
 
-char D_004D9F00[3] = "\241\344";
+/* JP: ＞
+ * EN: > */
+char fullWidthCursorText[3] = "\241\344";
 
-char D_004D9F08[4] = "%1x";
+char hexDigitFormat[4] = "%1x";
 
-char D_004D9F10[4] = "%3d";
+char snapQualityFormat[4] = "%3d";
 
-char D_004D9F18[3] = "\033\021";
+/* Text: {glyph 17} */
+char memoryUsedGlyph[3] = "\033\021";
 
-char D_004D9F20[2] = ">";
+char debugCursorText[2] = ">";
 
-char D_004D9F28[7] = "%4d.%s";
+char mapChangeIdNameFormat[7] = "%4d.%s";
 
-char D_004D9F30[3] = "%s";
+char debugPathFormat[3] = "%s";
 
-char D_004D9F38[4] = "%4d";
+char scriptJumpIdFormat[4] = "%4d";
 
 static void PauseMenuPage3(void)
 {
@@ -438,7 +485,7 @@ static void PauseMenuPage3(void)
         PadData.half_2a = 0;
     }
 
-    xglFontDebugPrintf(8, 52, D_004C04B0);
+    xglFontDebugPrintf(8, 52, debugMenuHeaderLabel);
     last = GAME_RESOURCE_COUNT - 1;
     while (GameResource[last].address == 0 && last != 0) {
         last--;
@@ -448,47 +495,47 @@ static void PauseMenuPage3(void)
     for (last--; last >= 0; last--) {
         used += GameResource[last].size;
     }
-    xglFontDebugPrintf(136, 48, D_004C04D0, used + DebugMenuResourceSizeAdd);
+    xglFontDebugPrintf(136, 48, memoryUsedFormat, used + DebugMenuResourceSizeAdd);
     if (DebugMenuResourceSizeAdd != 0) {
-        xglFontDebugPrintf(246, 48, D_004D9F18);
+        xglFontDebugPrintf(246, 48, memoryUsedGlyph);
     }
-    xglFontDebugPrintf(136, 56, D_004C04E0, remain);
+    xglFontDebugPrintf(136, 56, memoryRemainFormat, remain);
 
     y = 64;
     for (i = 0; i < DEBUG_ROW_COUNT; i++) {
         if (i == GameLoopState.debugCursor) {
-            xglFontDebugPrintf(8, y + 3, D_004D9F20);
+            xglFontDebugPrintf(8, y + 3, debugCursorText);
         }
         xglFontDebugPrintf(16, y, tbl_1_00367A70[i]);
         switch (i) {
         case 0:
-            xglFontDebugPrintf(80, y + 3, D_004D9F28, GameLoopState.target.mapChangeId,
+            xglFontDebugPrintf(80, y + 3, mapChangeIdNameFormat, GameLoopState.target.mapChangeId,
                                MapGetName(GameLoopState.target.mapChangeId));
             break;
         case 1:
-            xglFontDebugPrintf(80, y + 3, D_004D9EF8, GameLoopState.leaderBattleId);
+            xglFontDebugPrintf(80, y + 3, hexIdFormat, GameLoopState.leaderBattleId);
             break;
         case 3:
-            xglFontDebugPrintf(72, y + 3, D_004C04F0, GameSnapShotNumber(-1) + '0');
+            xglFontDebugPrintf(72, y + 3, snapShotFileNameFormat, GameSnapShotNumber(-1) + '0');
             break;
         case 4:
             if (ModelPath == 0) {
-                xglFontDebugPrintf(92, y + 3, D_004C0500);
+                xglFontDebugPrintf(92, y + 3, dataDirectoryPath);
             } else {
-                xglFontDebugPrintf(92, y + 3, D_004C0510);
+                xglFontDebugPrintf(92, y + 3, dataTestDirectoryPath);
             }
             break;
         case 5:
-            xglFontDebugPrintf(92, y + 3, D_004D9F30, MAP_getPath());
+            xglFontDebugPrintf(92, y + 3, debugPathFormat, MAP_getPath());
             break;
         case 6:
-            xglFontDebugPrintf(92, y + 3, D_004D9F30, RES_getPath());
+            xglFontDebugPrintf(92, y + 3, debugPathFormat, RES_getPath());
             break;
         case 7:
-            xglFontDebugPrintf(88, y + 3, D_004D9F38, GameLoopState.scratch.scriptJump.cfId);
+            xglFontDebugPrintf(88, y + 3, scriptJumpIdFormat, GameLoopState.scratch.scriptJump.cfId);
             break;
         case 8:
-            xglFontDebugPrintf(88, y + 3, D_004D9F38, GameLoopState.scratch.scriptJump.eventId);
+            xglFontDebugPrintf(88, y + 3, scriptJumpIdFormat, GameLoopState.scratch.scriptJump.eventId);
             {
                 char fileName[7] = "cf0000";
                 int scriptId = GameLoopState.scriptId;
@@ -515,13 +562,13 @@ static void PauseMenuPage3(void)
             switch (ScanLineInterpolate) {
             case 0:
             default:
-                text = D_004D9F48;
+                text = noText;
                 break;
             case 1:
-                text = D_004C0528;
+                text = yesDisp1Text;
                 break;
             case 2:
-                text = D_004C0538;
+                text = yesSoftText;
                 break;
             }
             xglFontDebugPrintf(80, y, text);
@@ -531,11 +578,13 @@ static void PauseMenuPage3(void)
     }
 
     player = GameLoopState.player;
-    xglFontDebugPrintf(176, 160, D_004C0548);
+    xglFontDebugPrintf(176, 160, playerPositionLabel);
     xglFontDebugPrintf(176, 172, "%f\n%f\n%f", player->x, player->y, player->z);
 }
 
-char D_004D9F48[5] = "\244\312\244\267";
+/* JP: なし
+ * EN: No */
+char noText[5] = "\244\312\244\267";
 
 int DebugMenuResourceSizeAdd = 0;
 

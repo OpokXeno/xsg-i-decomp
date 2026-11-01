@@ -139,9 +139,11 @@ def compiler_data_definitions(text):
         if app:
             continue
         change = re.match(r'\s*\.section\s+([^,\s]+)', line)
-        simple = re.match(r'\s*(\.(?:data|sdata|rodata|lit4|lit8|text|bss|sbss))\s*$', line)
+        simple = re.match(r'\s*(\.(?:data|sdata|rdata|rodata|lit4|lit8|text|bss|sbss))\s*$', line)
         if change or simple:
             section = (change or simple)[1]
+            if section == '.rdata':  # cc1's MIPS spelling of .rodata (no section attribute)
+                section = '.rodata'
         typed = re.match(r'\s*\.type\s+([^,\s]+)\s*,\s*@object\s*$', line)
         sized = re.match(r'\s*\.size\s+([^,\s]+)\s*,\s*(0x[0-9a-fA-F]+|\d+)\s*$', line)
         label = re.match(r'^\s*([A-Za-z_.$][\w.$]*):\s*$', line)

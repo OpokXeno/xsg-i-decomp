@@ -2,7 +2,6 @@
 
 extern unsigned int strlen(const char *string);
 
-
 #include "shared.h"
 
 static const float s_aCullingBase[9];
@@ -85,7 +84,7 @@ void setup_occlusion(CullingVolume *volume, s32 camera);
  * unknown size ineligible for that optimization.
  */
 
-extern s32 D_00969760[];
+extern s32 cullingExistFlag[];
 
 /* The map table stores pointers to separately scaffolded volume and index data. */
 
@@ -305,300 +304,299 @@ s32 xglStudioSelectGetActiveCamera(s32 cameraIndex);
 
 extern int g_aSubWindow[4];
 
-extern const char D_004D49D8[16];
-extern const char D_004D49C8[16];
-extern const char D_004D49B8[16];
-extern const char D_004D49A8[16];
-extern const char D_004D4998[16];
-extern const char D_004D4988[16];
-extern const char D_004D4978[16];
-extern const char D_004D4968[16];
-extern const char D_004D4958[16];
-extern const char D_004D4948[16];
-extern const char D_004D4938[16];
-extern const char D_004D4928[16];
-extern const char D_004D4918[16];
-extern const char D_004D4908[16];
-extern const char D_004D48F8[16];
-extern const char D_004D48E8[16];
-extern const char D_004D48D8[16];
-extern const char D_004D48C8[16];
-extern const char D_004D48B8[16];
-extern const char D_004D48A8[16];
-extern const char D_004D4898[16];
-extern const char D_004D4888[16];
-extern const char D_004D4878[16];
-extern const char D_004D4868[16];
-extern const char D_004D4858[16];
-extern const char D_004D4848[16];
-extern const char D_004D4838[16];
-extern const char D_004D4828[16];
-extern const char D_004D4818[16];
-extern const char D_004D4808[16];
-extern const char D_004D47F8[16];
-extern const char D_004D47E8[16];
-extern const char D_004D47D8[16];
-extern const char D_004D47C8[16];
-extern const char D_004D47B8[16];
-extern const char D_004D47A8[16];
-extern const char D_004D4798[16];
-extern const char D_004D4788[16];
-extern const char D_004D4778[16];
-extern const char D_004D4768[16];
-extern const char D_004D4758[16];
-extern const char D_004D4748[16];
-extern const char D_004D4738[16];
-extern const char D_004D4728[16];
-extern const char D_004D4718[16];
-extern const char D_004D4708[16];
-extern const char D_004D46F8[16];
-extern const char D_004D46E8[16];
-extern const char D_004D46D8[16];
-extern const char D_004D46C8[16];
-extern const char D_004D46B8[16];
-extern const char D_004D46A8[16];
-extern const char D_004D4698[16];
-extern const char D_004D4688[16];
-extern const char D_004D4678[16];
-extern const char D_004D4668[16];
-extern const char D_004D4658[16];
-extern const char D_004D4648[16];
-extern const char D_004D4638[16];
-extern const char D_004D4628[16];
-extern const char D_004D4618[16];
-extern const char D_004D4608[16];
-extern const char D_004D45F8[16];
-extern const char D_004D45E8[16];
-extern const char D_004D45D8[16];
-extern const char D_004D45C8[16];
-extern const char D_004D45B8[16];
-extern const char D_004D45A8[16];
-extern const char D_004D4598[16];
+extern const char cullingMapVok03Name[16];
+extern const char cullingMapVok04Name[16];
+extern const char cullingMapVok07Name[16];
+extern const char cullingMapVok10Name[16];
+extern const char cullingMapVok11Name[16];
+extern const char cullingMapVok12Name[16];
+extern const char cullingMapVok12bName[16];
+extern const char cullingMapPro02Name[16];
+extern const char cullingMapEls10Name[16];
+extern const char cullingMapEls09Name[16];
+extern const char cullingMapEls02Name[16];
+extern const char cullingMapEls02bName[16];
+extern const char cullingMapEls03Name[16];
+extern const char cullingMapEls04Name[16];
+extern const char cullingMapEls04bName[16];
+extern const char cullingMapEls01Name[16];
+extern const char cullingMapVok24Name[16];
+extern const char cullingMapDyu01Name[16];
+extern const char cullingMapKou01Name[16];
+extern const char cullingMapKou04Name[16];
+extern const char cullingMapKou05Name[16];
+extern const char cullingMapDyu16Name[16];
+extern const char cullingMapDyu15Name[16];
+extern const char cullingMapDyu13Name[16];
+extern const char cullingMapDyu12Name[16];
+extern const char cullingMapDyu10Name[16];
+extern const char cullingMapDyu07Name[16];
+extern const char cullingMapDyu04Name[16];
+extern const char cullingMapKuk02Name[16];
+extern const char cullingMapKuk11Name[16];
+extern const char cullingMapKuk12Name[16];
+extern const char cullingMapKuk16Name[16];
+extern const char cullingMapGnu06Name[16];
+extern const char cullingMapGnu05Name[16];
+extern const char cullingMapGnu04Name[16];
+extern const char cullingMapGnu03Name[16];
+extern const char cullingMapGnu02Name[16];
+extern const char cullingMapGnu01Name[16];
+extern const char cullingMapVok13bName[16];
+extern const char cullingMapVok13Name[16];
+extern const char cullingMapGnk02Name[16];
+extern const char cullingMapGnk21Name[16];
+extern const char cullingMapGnk20Name[16];
+extern const char cullingMapGnk18Name[16];
+extern const char cullingMapGnk15Name[16];
+extern const char cullingMapGnk14Name[16];
+extern const char cullingMapGnk13Name[16];
+extern const char cullingMapGnk12Name[16];
+extern const char cullingMapGnk11Name[16];
+extern const char cullingMapGnk10Name[16];
+extern const char cullingMapGnk09Name[16];
+extern const char cullingMapGnk04Name[16];
+extern const char cullingMapUta17Name[16];
+extern const char cullingMapUta13Name[16];
+extern const char cullingMapUta08Name[16];
+extern const char cullingMapUta07Name[16];
+extern const char cullingMapUta06Name[16];
+extern const char cullingMapUta05Name[16];
+extern const char cullingMapUta04Name[16];
+extern const char cullingMapUta03Name[16];
+extern const char cullingMapKas20Name[16];
+extern const char cullingMapKas19Name[16];
+extern const char cullingMapKas18Name[16];
+extern const char cullingMapKas13Name[16];
+extern const char cullingMapKas12Name[16];
+extern const char cullingMapKas04Name[16];
+extern const char cullingMapKas31Name[16];
+extern const char cullingMapUtk04Name[16];
+extern const char cullingMapUtk05Name[16];
 #include "main/nml_packet_add.h"
 
 static const CullingMapEntry s_aCullingMap[70] = {
-    { D_004D49D8, s_aMapCullingVok03, s_aMapLastVok03, {0, 0, 0, 0} },
-    { D_004D49C8, s_aMapCullingVok04, s_aMapLastVok04, {0, 0, 0, 0} },
-    { D_004D49B8, s_aMapCullingVok07, s_aMapLastVok07, {0, 0, 0, 0} },
-    { D_004D49A8, s_aMapCullingVok10, s_aMapLastVok10, {0, 0, 0, 0} },
-    { D_004D4998, s_aMapCullingVok11, 0, {0, 0, 0, 0} },
-    { D_004D4988, s_aMapCullingVok12, s_aMapLastVok12, {0, 0, 0, 0} },
-    { D_004D4978, s_aMapCullingVok12, s_aMapLastVok12b, {0, 0, 0, 0} },
-    { D_004D4968, s_aMapCullingPro02, 0, {0, 0, 0, 0} },
-    { D_004D4958, 0, s_aMapLastEls10, {0, 0, 0, 0} },
-    { D_004D4948, 0, s_aMapLastEls09, {0, 0, 0, 0} },
-    { D_004D4938, 0, s_aMapLastEls02, {0, 0, 0, 0} },
-    { D_004D4928, 0, s_aMapLastEls02b, {0, 0, 0, 0} },
-    { D_004D4918, 0, s_aMapLastEls03, {0, 0, 0, 0} },
-    { D_004D4908, 0, s_aMapLastEls04, {0, 0, 0, 0} },
-    { D_004D48F8, 0, s_aMapLastEls04b, {0, 0, 0, 0} },
-    { D_004D48E8, 0, s_aMapLastEls01, {0, 0, 0, 0} },
-    { D_004D48D8, 0, s_aMapLastVok24, {0, 0, 0, 0} },
-    { D_004D48C8, s_aMapCullingVok11, 0, {0, 0, 0, 0} },
-    { D_004D48B8, s_aMapCullingKou01, s_aMapLastKou01, {0, 0, 0, 0} },
-    { D_004D48A8, 0, s_aMapLastKou04, {0, 0, 0, 0} },
-    { D_004D4898, 0, s_aMapLastKou05, {0, 0, 0, 0} },
-    { D_004D4888, 0, s_aMapLastDyu16, {0, 0, 0, 0} },
-    { D_004D4878, 0, s_aMapLastDyu15, {0, 0, 0, 0} },
-    { D_004D4868, 0, s_aMapLastDyu13, {0, 0, 0, 0} },
-    { D_004D4858, 0, s_aMapLastDyu12, {0, 0, 0, 0} },
-    { D_004D4848, 0, s_aMapLastDyu10, {0, 0, 0, 0} },
-    { D_004D4838, 0, s_aMapLastDyu07, {0, 0, 0, 0} },
-    { D_004D4828, 0, s_aMapLastDyu04, {0, 0, 0, 0} },
-    { D_004D4818, 0, s_aMapLastKuk02, {0, 0, 0, 0} },
-    { D_004D4808, 0, s_aMapLastKuk11, {0, 0, 0, 0} },
-    { D_004D47F8, 0, s_aMapLastKuk12, {0, 0, 0, 0} },
-    { D_004D47E8, 0, s_aMapLastKuk16, {0, 0, 0, 0} },
-    { D_004D47D8, 0, s_aMapLastGnu06, {0, 0, 0, 0} },
-    { D_004D47C8, 0, s_aMapLastGnu05, {0, 0, 0, 0} },
-    { D_004D47B8, 0, s_aMapLastGnu04, {0, 0, 0, 0} },
-    { D_004D47A8, 0, s_aMapLastGnu03, {0, 0, 0, 0} },
-    { D_004D4798, 0, s_aMapLastGnu02, {0, 0, 0, 0} },
-    { D_004D4788, 0, s_aMapLastGnu01, {0, 0, 0, 0} },
-    { D_004D4778, 0, s_aMapLastVok13b, {0, 0, 0, 0} },
-    { D_004D4768, 0, s_aMapLastVok13, {0, 0, 0, 0} },
-    { D_004D4758, 0, s_aMapLastGnk02, {0, 0, 0, 0} },
-    { D_004D4748, 0, s_aMapLastGnk21, {0, 0, 0, 0} },
-    { D_004D4738, 0, s_aMapLastGnk20, {0, 0, 0, 0} },
-    { D_004D4728, 0, s_aMapLastGnk18, {0, 0, 0, 0} },
-    { D_004D4718, 0, s_aMapLastGnk15, {0, 0, 0, 0} },
-    { D_004D4708, 0, s_aMapLastGnk14, {0, 0, 0, 0} },
-    { D_004D46F8, 0, s_aMapLastGnk13, {0, 0, 0, 0} },
-    { D_004D46E8, 0, s_aMapLastGnk12, {0, 0, 0, 0} },
-    { D_004D46D8, 0, s_aMapLastGnk11, {0, 0, 0, 0} },
-    { D_004D46C8, 0, s_aMapLastGnk10, {0, 0, 0, 0} },
-    { D_004D46B8, 0, s_aMapLastGnk09, {0, 0, 0, 0} },
-    { D_004D46A8, 0, s_aMapLastGnk04, {0, 0, 0, 0} },
-    { D_004D4698, 0, s_aMapLastUta17, {0, 0, 0, 0} },
-    { D_004D4688, 0, s_aMapLastUta13, {0, 0, 0, 0} },
-    { D_004D4678, 0, s_aMapLastUta08, {0, 0, 0, 0} },
-    { D_004D4668, 0, s_aMapLastUta07, {0, 0, 0, 0} },
-    { D_004D4658, 0, s_aMapLastUta06, {0, 0, 0, 0} },
-    { D_004D4648, 0, s_aMapLastUta05, {0, 0, 0, 0} },
-    { D_004D4638, 0, s_aMapLastUta04, {0, 0, 0, 0} },
-    { D_004D4628, 0, s_aMapLastUta03, {0, 0, 0, 0} },
-    { D_004D4618, 0, s_aMapLastKas20, {0, 0, 0, 0} },
-    { D_004D4608, 0, s_aMapLastKas19, {0, 0, 0, 0} },
-    { D_004D45F8, 0, s_aMapLastKas18, {0, 0, 0, 0} },
-    { D_004D45E8, 0, s_aMapLastKas13, {0, 0, 0, 0} },
-    { D_004D45D8, 0, s_aMapLastKas12, {0, 0, 0, 0} },
-    { D_004D45C8, 0, s_aMapLastKas04, {0, 0, 0, 0} },
-    { D_004D45B8, 0, s_aMapLastKas31, {0, 0, 0, 0} },
-    { D_004D45A8, 0, s_aMapLastUtk04, {0, 0, 0, 0} },
-    { D_004D4598, 0, s_aMapLastUtk05, {0, 0, 0, 0} },
-    { D_004DC4D0, 0, 0, {0, 0, 0, 0} },
+    { cullingMapVok03Name, s_aMapCullingVok03, s_aMapLastVok03, {0, 0, 0, 0} },
+    { cullingMapVok04Name, s_aMapCullingVok04, s_aMapLastVok04, {0, 0, 0, 0} },
+    { cullingMapVok07Name, s_aMapCullingVok07, s_aMapLastVok07, {0, 0, 0, 0} },
+    { cullingMapVok10Name, s_aMapCullingVok10, s_aMapLastVok10, {0, 0, 0, 0} },
+    { cullingMapVok11Name, s_aMapCullingVok11, 0, {0, 0, 0, 0} },
+    { cullingMapVok12Name, s_aMapCullingVok12, s_aMapLastVok12, {0, 0, 0, 0} },
+    { cullingMapVok12bName, s_aMapCullingVok12, s_aMapLastVok12b, {0, 0, 0, 0} },
+    { cullingMapPro02Name, s_aMapCullingPro02, 0, {0, 0, 0, 0} },
+    { cullingMapEls10Name, 0, s_aMapLastEls10, {0, 0, 0, 0} },
+    { cullingMapEls09Name, 0, s_aMapLastEls09, {0, 0, 0, 0} },
+    { cullingMapEls02Name, 0, s_aMapLastEls02, {0, 0, 0, 0} },
+    { cullingMapEls02bName, 0, s_aMapLastEls02b, {0, 0, 0, 0} },
+    { cullingMapEls03Name, 0, s_aMapLastEls03, {0, 0, 0, 0} },
+    { cullingMapEls04Name, 0, s_aMapLastEls04, {0, 0, 0, 0} },
+    { cullingMapEls04bName, 0, s_aMapLastEls04b, {0, 0, 0, 0} },
+    { cullingMapEls01Name, 0, s_aMapLastEls01, {0, 0, 0, 0} },
+    { cullingMapVok24Name, 0, s_aMapLastVok24, {0, 0, 0, 0} },
+    { cullingMapDyu01Name, s_aMapCullingVok11, 0, {0, 0, 0, 0} },
+    { cullingMapKou01Name, s_aMapCullingKou01, s_aMapLastKou01, {0, 0, 0, 0} },
+    { cullingMapKou04Name, 0, s_aMapLastKou04, {0, 0, 0, 0} },
+    { cullingMapKou05Name, 0, s_aMapLastKou05, {0, 0, 0, 0} },
+    { cullingMapDyu16Name, 0, s_aMapLastDyu16, {0, 0, 0, 0} },
+    { cullingMapDyu15Name, 0, s_aMapLastDyu15, {0, 0, 0, 0} },
+    { cullingMapDyu13Name, 0, s_aMapLastDyu13, {0, 0, 0, 0} },
+    { cullingMapDyu12Name, 0, s_aMapLastDyu12, {0, 0, 0, 0} },
+    { cullingMapDyu10Name, 0, s_aMapLastDyu10, {0, 0, 0, 0} },
+    { cullingMapDyu07Name, 0, s_aMapLastDyu07, {0, 0, 0, 0} },
+    { cullingMapDyu04Name, 0, s_aMapLastDyu04, {0, 0, 0, 0} },
+    { cullingMapKuk02Name, 0, s_aMapLastKuk02, {0, 0, 0, 0} },
+    { cullingMapKuk11Name, 0, s_aMapLastKuk11, {0, 0, 0, 0} },
+    { cullingMapKuk12Name, 0, s_aMapLastKuk12, {0, 0, 0, 0} },
+    { cullingMapKuk16Name, 0, s_aMapLastKuk16, {0, 0, 0, 0} },
+    { cullingMapGnu06Name, 0, s_aMapLastGnu06, {0, 0, 0, 0} },
+    { cullingMapGnu05Name, 0, s_aMapLastGnu05, {0, 0, 0, 0} },
+    { cullingMapGnu04Name, 0, s_aMapLastGnu04, {0, 0, 0, 0} },
+    { cullingMapGnu03Name, 0, s_aMapLastGnu03, {0, 0, 0, 0} },
+    { cullingMapGnu02Name, 0, s_aMapLastGnu02, {0, 0, 0, 0} },
+    { cullingMapGnu01Name, 0, s_aMapLastGnu01, {0, 0, 0, 0} },
+    { cullingMapVok13bName, 0, s_aMapLastVok13b, {0, 0, 0, 0} },
+    { cullingMapVok13Name, 0, s_aMapLastVok13, {0, 0, 0, 0} },
+    { cullingMapGnk02Name, 0, s_aMapLastGnk02, {0, 0, 0, 0} },
+    { cullingMapGnk21Name, 0, s_aMapLastGnk21, {0, 0, 0, 0} },
+    { cullingMapGnk20Name, 0, s_aMapLastGnk20, {0, 0, 0, 0} },
+    { cullingMapGnk18Name, 0, s_aMapLastGnk18, {0, 0, 0, 0} },
+    { cullingMapGnk15Name, 0, s_aMapLastGnk15, {0, 0, 0, 0} },
+    { cullingMapGnk14Name, 0, s_aMapLastGnk14, {0, 0, 0, 0} },
+    { cullingMapGnk13Name, 0, s_aMapLastGnk13, {0, 0, 0, 0} },
+    { cullingMapGnk12Name, 0, s_aMapLastGnk12, {0, 0, 0, 0} },
+    { cullingMapGnk11Name, 0, s_aMapLastGnk11, {0, 0, 0, 0} },
+    { cullingMapGnk10Name, 0, s_aMapLastGnk10, {0, 0, 0, 0} },
+    { cullingMapGnk09Name, 0, s_aMapLastGnk09, {0, 0, 0, 0} },
+    { cullingMapGnk04Name, 0, s_aMapLastGnk04, {0, 0, 0, 0} },
+    { cullingMapUta17Name, 0, s_aMapLastUta17, {0, 0, 0, 0} },
+    { cullingMapUta13Name, 0, s_aMapLastUta13, {0, 0, 0, 0} },
+    { cullingMapUta08Name, 0, s_aMapLastUta08, {0, 0, 0, 0} },
+    { cullingMapUta07Name, 0, s_aMapLastUta07, {0, 0, 0, 0} },
+    { cullingMapUta06Name, 0, s_aMapLastUta06, {0, 0, 0, 0} },
+    { cullingMapUta05Name, 0, s_aMapLastUta05, {0, 0, 0, 0} },
+    { cullingMapUta04Name, 0, s_aMapLastUta04, {0, 0, 0, 0} },
+    { cullingMapUta03Name, 0, s_aMapLastUta03, {0, 0, 0, 0} },
+    { cullingMapKas20Name, 0, s_aMapLastKas20, {0, 0, 0, 0} },
+    { cullingMapKas19Name, 0, s_aMapLastKas19, {0, 0, 0, 0} },
+    { cullingMapKas18Name, 0, s_aMapLastKas18, {0, 0, 0, 0} },
+    { cullingMapKas13Name, 0, s_aMapLastKas13, {0, 0, 0, 0} },
+    { cullingMapKas12Name, 0, s_aMapLastKas12, {0, 0, 0, 0} },
+    { cullingMapKas04Name, 0, s_aMapLastKas04, {0, 0, 0, 0} },
+    { cullingMapKas31Name, 0, s_aMapLastKas31, {0, 0, 0, 0} },
+    { cullingMapUtk04Name, 0, s_aMapLastUtk04, {0, 0, 0, 0} },
+    { cullingMapUtk05Name, 0, s_aMapLastUtk05, {0, 0, 0, 0} },
+    { nmlEmptyName, 0, 0, {0, 0, 0, 0} },
 };
 
-const char D_004D4598[16] = "MC_UTK05";
+const char cullingMapUtk05Name[16] = "MC_UTK05";
 
-const char D_004D45A8[16] = "MC_UTK04";
+const char cullingMapUtk04Name[16] = "MC_UTK04";
 
-const char D_004D45B8[16] = "MC_KAS31";
+const char cullingMapKas31Name[16] = "MC_KAS31";
 
-const char D_004D45C8[16] = "MC_KAS04";
+const char cullingMapKas04Name[16] = "MC_KAS04";
 
-const char D_004D45D8[16] = "MC_KAS12";
+const char cullingMapKas12Name[16] = "MC_KAS12";
 
-const char D_004D45E8[16] = "MC_KAS13";
+const char cullingMapKas13Name[16] = "MC_KAS13";
 
-const char D_004D45F8[16] = "MC_KAS18";
+const char cullingMapKas18Name[16] = "MC_KAS18";
 
-const char D_004D4608[16] = "MC_KAS19";
+const char cullingMapKas19Name[16] = "MC_KAS19";
 
-const char D_004D4618[16] = "MC_KAS20";
+const char cullingMapKas20Name[16] = "MC_KAS20";
 
-const char D_004D4628[16] = "MC_UTA03";
+const char cullingMapUta03Name[16] = "MC_UTA03";
 
-const char D_004D4638[16] = "MC_UTA04";
+const char cullingMapUta04Name[16] = "MC_UTA04";
 
-const char D_004D4648[16] = "MC_UTA05";
+const char cullingMapUta05Name[16] = "MC_UTA05";
 
-const char D_004D4658[16] = "MC_UTA06";
+const char cullingMapUta06Name[16] = "MC_UTA06";
 
-const char D_004D4668[16] = "MC_UTA07";
+const char cullingMapUta07Name[16] = "MC_UTA07";
 
-const char D_004D4678[16] = "MC_UTA08";
+const char cullingMapUta08Name[16] = "MC_UTA08";
 
-const char D_004D4688[16] = "MC_UTA13";
+const char cullingMapUta13Name[16] = "MC_UTA13";
 
-const char D_004D4698[16] = "MC_UTA17";
+const char cullingMapUta17Name[16] = "MC_UTA17";
 
-const char D_004D46A8[16] = "MC_GNK04";
+const char cullingMapGnk04Name[16] = "MC_GNK04";
 
-const char D_004D46B8[16] = "MC_GNK09";
+const char cullingMapGnk09Name[16] = "MC_GNK09";
 
-const char D_004D46C8[16] = "MC_GNK10";
+const char cullingMapGnk10Name[16] = "MC_GNK10";
 
-const char D_004D46D8[16] = "MC_GNK11";
+const char cullingMapGnk11Name[16] = "MC_GNK11";
 
-const char D_004D46E8[16] = "MC_GNK12";
+const char cullingMapGnk12Name[16] = "MC_GNK12";
 
-const char D_004D46F8[16] = "MC_GNK13";
+const char cullingMapGnk13Name[16] = "MC_GNK13";
 
-const char D_004D4708[16] = "MC_GNK14";
+const char cullingMapGnk14Name[16] = "MC_GNK14";
 
-const char D_004D4718[16] = "MC_GNK15";
+const char cullingMapGnk15Name[16] = "MC_GNK15";
 
-const char D_004D4728[16] = "MC_GNK18";
+const char cullingMapGnk18Name[16] = "MC_GNK18";
 
-const char D_004D4738[16] = "MC_GNK20";
+const char cullingMapGnk20Name[16] = "MC_GNK20";
 
-const char D_004D4748[16] = "MC_GNK21";
+const char cullingMapGnk21Name[16] = "MC_GNK21";
 
-const char D_004D4758[16] = "MC_GNK02";
+const char cullingMapGnk02Name[16] = "MC_GNK02";
 
-const char D_004D4768[16] = "MC_VOK13";
+const char cullingMapVok13Name[16] = "MC_VOK13";
 
-const char D_004D4778[16] = "MC_VOK13B";
+const char cullingMapVok13bName[16] = "MC_VOK13B";
 
-const char D_004D4788[16] = "MC_GNU01";
+const char cullingMapGnu01Name[16] = "MC_GNU01";
 
-const char D_004D4798[16] = "MC_GNU02";
+const char cullingMapGnu02Name[16] = "MC_GNU02";
 
-const char D_004D47A8[16] = "MC_GNU03";
+const char cullingMapGnu03Name[16] = "MC_GNU03";
 
-const char D_004D47B8[16] = "MC_GNU04";
+const char cullingMapGnu04Name[16] = "MC_GNU04";
 
-const char D_004D47C8[16] = "MC_GNU05";
+const char cullingMapGnu05Name[16] = "MC_GNU05";
 
-const char D_004D47D8[16] = "MC_GNU06";
+const char cullingMapGnu06Name[16] = "MC_GNU06";
 
-const char D_004D47E8[16] = "MC_KUK16";
+const char cullingMapKuk16Name[16] = "MC_KUK16";
 
-const char D_004D47F8[16] = "MC_KUK12";
+const char cullingMapKuk12Name[16] = "MC_KUK12";
 
-const char D_004D4808[16] = "MC_KUK11";
+const char cullingMapKuk11Name[16] = "MC_KUK11";
 
-const char D_004D4818[16] = "MC_KUK02";
+const char cullingMapKuk02Name[16] = "MC_KUK02";
 
-const char D_004D4828[16] = "Mc_dyu04";
+const char cullingMapDyu04Name[16] = "Mc_dyu04";
 
-const char D_004D4838[16] = "MC_DYU07";
+const char cullingMapDyu07Name[16] = "MC_DYU07";
 
-const char D_004D4848[16] = "MC_DYU10";
+const char cullingMapDyu10Name[16] = "MC_DYU10";
 
-const char D_004D4858[16] = "MC_DYU12";
+const char cullingMapDyu12Name[16] = "MC_DYU12";
 
-const char D_004D4868[16] = "MC_DYU13";
+const char cullingMapDyu13Name[16] = "MC_DYU13";
 
-const char D_004D4878[16] = "MC_DYU15";
+const char cullingMapDyu15Name[16] = "MC_DYU15";
 
-const char D_004D4888[16] = "MC_DYU16";
+const char cullingMapDyu16Name[16] = "MC_DYU16";
 
-const char D_004D4898[16] = "MC_KOU05";
+const char cullingMapKou05Name[16] = "MC_KOU05";
 
-const char D_004D48A8[16] = "MC_KOU04";
+const char cullingMapKou04Name[16] = "MC_KOU04";
 
-const char D_004D48B8[16] = "MC_KOU01";
+const char cullingMapKou01Name[16] = "MC_KOU01";
 
-const char D_004D48C8[16] = "MC_DYU01";
+const char cullingMapDyu01Name[16] = "MC_DYU01";
 
-const char D_004D48D8[16] = "MC_VOK24";
+const char cullingMapVok24Name[16] = "MC_VOK24";
 
-const char D_004D48E8[16] = "MC_ELS01";
+const char cullingMapEls01Name[16] = "MC_ELS01";
 
-const char D_004D48F8[16] = "MC_ELS04B";
+const char cullingMapEls04bName[16] = "MC_ELS04B";
 
-const char D_004D4908[16] = "MC_ELS04";
+const char cullingMapEls04Name[16] = "MC_ELS04";
 
-const char D_004D4918[16] = "MC_ELS03";
+const char cullingMapEls03Name[16] = "MC_ELS03";
 
-const char D_004D4928[16] = "MC_ELS02B";
+const char cullingMapEls02bName[16] = "MC_ELS02B";
 
-const char D_004D4938[16] = "mc_els02";
+const char cullingMapEls02Name[16] = "mc_els02";
 
-const char D_004D4948[16] = "MC_ELS09";
+const char cullingMapEls09Name[16] = "MC_ELS09";
 
-const char D_004D4958[16] = "MC_ELS10";
+const char cullingMapEls10Name[16] = "MC_ELS10";
 
-const char D_004D4968[16] = "MC_PRO02";
+const char cullingMapPro02Name[16] = "MC_PRO02";
 
-const char D_004D4978[16] = "MC_VOK12b";
+const char cullingMapVok12bName[16] = "MC_VOK12b";
 
-const char D_004D4988[16] = "mc_vok12";
+const char cullingMapVok12Name[16] = "mc_vok12";
 
-const char D_004D4998[16] = "MC_VOK11";
+const char cullingMapVok11Name[16] = "MC_VOK11";
 
-const char D_004D49A8[16] = "MC_VOK10";
+const char cullingMapVok10Name[16] = "MC_VOK10";
 
-const char D_004D49B8[16] = "MC_VOK07";
+const char cullingMapVok07Name[16] = "MC_VOK07";
 
-const char D_004D49C8[16] = "mc_vok04";
-
+const char cullingMapVok04Name[16] = "mc_vok04";
 
 #include "main/xgl_2.h"
 
 void xglVectorOuter(Vector4 *out, const Vector4 *a, const Vector4 *b);
 
-extern const u64 D_004D4A10[2];
+extern const u64 cullingForwardAxisVector[2];
 
-extern const u64 D_004D4A20[2];
+extern const u64 cullingCornerLowerLeftVector[2];
 
-extern const u64 D_004D4A30[2];
+extern const u64 cullingCornerLowerRightVector[2];
 
-extern const u64 D_004D4A40[2];
+extern const u64 cullingCornerUpperRightVector[2];
 
-extern const u64 D_004D4A50[2];
+extern const u64 cullingCornerUpperLeftVector[2];
 
 extern void xglMatrixStackInverse(void);
 
@@ -632,8 +630,8 @@ static void culling_matrix(CullingVolume *volume)
     xglMatrixStackInverse();
     xglMatrixStackSave(volume->inverseTransform);
 
-    axis[0] = D_004D4A10[0];
-    axis[1] = D_004D4A10[1];
+    axis[0] = cullingForwardAxisVector[0];
+    axis[1] = cullingForwardAxisVector[1];
     __asm__ __volatile__(
         "lqc2 vf31, 0(%0)\n\t"
         "lqc2 vf27, 0(%1)\n\t"
@@ -649,14 +647,14 @@ static void culling_matrix(CullingVolume *volume)
         : "memory");
     xglVectorNormal(&volume->normalizedDirection, &volume->normalizedDirection);
 
-    corners[0][0] = D_004D4A20[0];
-    corners[0][1] = D_004D4A20[1];
-    corners[1][0] = D_004D4A30[0];
-    corners[1][1] = D_004D4A30[1];
-    corners[2][0] = D_004D4A40[0];
-    corners[2][1] = D_004D4A40[1];
-    corners[3][0] = D_004D4A50[0];
-    corners[3][1] = D_004D4A50[1];
+    corners[0][0] = cullingCornerLowerLeftVector[0];
+    corners[0][1] = cullingCornerLowerLeftVector[1];
+    corners[1][0] = cullingCornerLowerRightVector[0];
+    corners[1][1] = cullingCornerLowerRightVector[1];
+    corners[2][0] = cullingCornerUpperRightVector[0];
+    corners[2][1] = cullingCornerUpperRightVector[1];
+    corners[3][0] = cullingCornerUpperLeftVector[0];
+    corners[3][1] = cullingCornerUpperLeftVector[1];
 
     __asm__ __volatile__(
         "lqc2 vf31, 0(%1)\n\t"
@@ -1049,7 +1047,7 @@ s32 xglCullingCheckSeparate(s32 camera, s32 model)
 }
 
 s32 xglCullingExist(void) {
-    return D_00969760[0];
+    return cullingExistFlag[0];
 }
 
 void xglCullingMapLastCheck(void)
@@ -1710,22 +1708,16 @@ void _ApplyMatrix2Mat(Vector4 *destination, const Matrix4 matrix1, const Matrix4
     );
 }
 
-
-
-const char D_004D49D8[16] = "MC_VOK03";
+const char cullingMapVok03Name[16] = "MC_VOK03";
 
 static const float s_aCullingBase[9] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };
 
-const u64 D_004D4A10[2] = { 0ULL, 4575657222473777152ULL };
+const u64 cullingForwardAxisVector[2] = { 0ULL, 4575657222473777152ULL };
 
-const u64 D_004D4A20[2] = { 13799029261476036608ULL, 4575657221408423936ULL };
+const u64 cullingCornerLowerLeftVector[2] = { 13799029261476036608ULL, 4575657221408423936ULL };
 
-const u64 D_004D4A30[2] = { 13799029259328552960ULL, 4575657221408423936ULL };
+const u64 cullingCornerLowerRightVector[2] = { 13799029259328552960ULL, 4575657221408423936ULL };
 
+const u64 cullingCornerUpperRightVector[2] = { 4575657222473777152ULL, 4575657221408423936ULL };
 
-
-const u64 D_004D4A40[2] = { 4575657222473777152ULL, 4575657221408423936ULL };
-
-
-
-const u64 D_004D4A50[2] = { 4575657224621260800ULL, 4575657221408423936ULL };
+const u64 cullingCornerUpperLeftVector[2] = { 4575657224621260800ULL, 4575657221408423936ULL };

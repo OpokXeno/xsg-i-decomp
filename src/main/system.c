@@ -177,7 +177,7 @@ void Java_xeno_vm_System_println__Ljava_lang_String_(
 
                 __builtin_memcpy(&registerValue, &registerBits,
                                  sizeof(registerValue));
-                    sprintf(formattedValue, D_004DC090,
+                    sprintf(formattedValue, systemFloatFormat,
                             (double)registerValue);
                 }
                 ++text;
@@ -277,8 +277,6 @@ void Java_xeno_vm_System_methodSignal__I(JThread *thread, void *arguments,
     }
 }
 
-
-
-const char D_004DC090[6] = "%8.2f";
+const char systemFloatFormat[6] = "%8.2f";
 
 static char tmpString[512];

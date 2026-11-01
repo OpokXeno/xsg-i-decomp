@@ -12,11 +12,11 @@ ScriptRecord _scriptWork[];
 
 /* EUC-JP: "clear effect outside the valid range %d %d". */
 
-static const char D_004CC7B8[];
+static const char outOfRangeEffectDeleteFormat[];
 
-static const char D_004CC818[];
+static const char registerOverflowFormat[];
 
-static const char D_004CC850[];
+static const char effectStackUnderflowFormat[];
 
 static short _cmdPut;
 
@@ -115,7 +115,7 @@ extern int scGetNumScript(ScriptTask *task);
 
 extern unsigned int strlen(const char *s);
 
-const char D_004DBB38[];
+const char registerDumpFormat[];
 
 /* Preserve the earlier external reference above while owning its bytes here. */
 
@@ -238,17 +238,17 @@ static int (*_scFuncHandler[73])(ScriptTask *task);
 
 /* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
 
-static const char D_004CC790[];
+static const char noLoadEffectDataFormat[];
 
-static const char D_004CC7E8[];
+static const char taskOutOfRangeFormat[];
 
-static const char D_004CC800[];
+static const char taskWorkEmptyFormat[];
 
-static const char D_004CC830[];
+static const char effectStackOverflowFormat[];
 
-static const char D_004CC870[];
+static const char badExpressionFormat[];
 
-static const char D_004CC898[];
+static const char simajiriMoviePath[];
 
 static ScriptZeroPosition _zeroPos_0041E290;
 
@@ -272,7 +272,7 @@ static short _cmdPut = 0;
 
 int _scMslCate = 0;
 
-const char D_004DBB38[8] = " %04x";
+const char registerDumpFormat[8] = " %04x";
 
 void scInitScript(void)
 {
@@ -312,7 +312,7 @@ int scCreateScript(ScriptTaskParameters *info)
     effectNo = info->effect_no;
     dataIndex = scFindScriptData(effectNo);
     if (dataIndex < 0) {
-        tracePrint((unsigned char *)D_004CC790, effectNo);
+        tracePrint((unsigned char *)noLoadEffectDataFormat, effectNo);
         return dataIndex;
     }
     for (script = 0; script < 16; script++) {
@@ -372,7 +372,7 @@ void scDestroyScript2(int script_index, int task_index)
     extern int tracePrint(unsigned char *fmt, int script_index, int task_index);
 
     if ((unsigned int)script_index >= 16u) {
-        tracePrint((unsigned char *)D_004CC7B8, script_index, task_index);
+        tracePrint((unsigned char *)outOfRangeEffectDeleteFormat, script_index, task_index);
         return;
     }
     sefDestroyScriptScheduler2(script_index, task_index);
@@ -425,7 +425,7 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
     ScriptTask *task;
 
     if (task_index >= 8) {
-        tracePrint((unsigned char *)D_004CC7E8, task_index);
+        tracePrint((unsigned char *)taskOutOfRangeFormat, task_index);
         return -1;
     }
     if (task_index < 0) {
@@ -449,7 +449,7 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
         _scriptWork[script_index].activeTasks++;
         task->initial_position.words[1] = _zeroPos_0041E290.words[1];
     } else {
-        tracePrint((unsigned char *)D_004CC800, script_index);
+        tracePrint((unsigned char *)taskWorkEmptyFormat, script_index);
     }
     return task_index;
 }
@@ -511,7 +511,7 @@ int scGetReg(int reg)
         reg = scGetReg(reg & ~0x8000);
     }
     if ((unsigned int)reg >= 16u) {
-        tracePrint((unsigned char *)D_004CC818, reg);
+        tracePrint((unsigned char *)registerOverflowFormat, reg);
         address = (int *)0;
     } else {
         address = (int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x404 + reg * 4);
@@ -531,7 +531,7 @@ void scSetReg(int reg, int value)
         reg = scGetReg(reg & ~0x8000);
     }
     if ((unsigned int)reg >= 16u) {
-        tracePrint((unsigned char *)D_004CC818, reg);
+        tracePrint((unsigned char *)registerOverflowFormat, reg);
         address = (int *)0;
     } else {
         address = (int *)(SCRIPT_WORK_BYTES + _nowScript * 1104 + 0x404 + reg * 4);
@@ -733,7 +733,7 @@ static int scGOSUBScript(ScriptTask *task)
         task->branch_depth = next_depth;
         task->script_pc[(int)shifted_depth >> 16] = destination;
     } else {
-        ((int (*)(unsigned char *))tracePrint)((unsigned char *)D_004CC830);
+        ((int (*)(unsigned char *))tracePrint)((unsigned char *)effectStackOverflowFormat);
     }
     return 1;
 }
@@ -747,7 +747,7 @@ static int scRETURNScript(ScriptTask *task)
         task->branch_depth = depthU - 1;
         task->script_pc[depth] = 0;
     } else {
-        tracePrint((unsigned char *)D_004CC850, depthU);
+        tracePrint((unsigned char *)effectStackUnderflowFormat, depthU);
     }
     return 1;
 }
@@ -773,7 +773,7 @@ static int scBRAScript(ScriptTask *task)
     case 4: if (left < right) take_branch = 1; break;
     case 5: if (left <= right) take_branch = 1; break;
     default:
-        tracePrint((unsigned char *)D_004CC870, comparison);
+        tracePrint((unsigned char *)badExpressionFormat, comparison);
         break;
     }
     if (take_branch)
@@ -888,7 +888,7 @@ static int scRDUMPScript(ScriptTask *task)
     length = 0;
     for (i = 0; i < 2; i++) {
         for (j = 0; j < 8; j++) {
-            length += sprintf(line + length, D_004DBB38, scGetReg(i * 8 + j));
+            length += sprintf(line + length, registerDumpFormat, scGetReg(i * 8 + j));
         }
         line[0] = 0;
     }
@@ -1238,7 +1238,7 @@ static int scMOVIEScript(ScriptTask *task)
     length = (length & 1) ? length + 1 : length + 2;
     task->script_pc[task->branch_depth] += length / 2;
     if (_nowEvent == 0) {
-        sprintf(path, "%s%s", D_004CC898, name);
+        sprintf(path, "%s%s", simajiriMoviePath, name);
         func_A32FA8(path);
     }
     return 1;
@@ -1352,7 +1352,7 @@ short *scAnalyzeScriptCf(int effectNo, int *offset)
     index = scFindScriptData(effectNo);
     *offset = 0;
     if (index < 0) {
-        tracePrint((unsigned char *)D_004CC790, effectNo);
+        tracePrint((unsigned char *)noLoadEffectDataFormat, effectNo);
         return (short *)0;
     }
     entry = svGetScript(effectNo);
@@ -1396,7 +1396,7 @@ void *scGetRegAdr(unsigned int reg)
     unsigned char *register_address;
 
     if (reg >= 16u) {
-        tracePrint((unsigned char *)D_004CC818, reg);
+        tracePrint((unsigned char *)registerOverflowFormat, reg);
         return (void *)0;
     }
     register_address = SCRIPT_WORK_BYTES + (_nowScript * 276 + reg) * 4;
@@ -1436,26 +1436,6 @@ int scGetCmdAdrScript(ScriptTask *task)
 }
 
 ScriptRecord _scriptWork[16] = {{0}};
-static const char D_004CC7B8[48];
-static const char D_004CC818[24];
-static const char D_004CC850[32];
-static short _cmdPut;
-extern int _scMslCate;
-extern int _nowScript;
-extern int _nowEvent;
-extern const char D_004DBB38[8];
-static const char D_004CC790[40];
-static const char D_004CC7E8[24];
-static const char D_004CC800[24];
-static const char D_004CC830[32];
-static const char D_004CC870[16];
-static const char D_004CC898[24];
-static ScriptZeroPosition _zeroPos_0041E290;
-
-
-
-extern int _nowDataIdx;
-
 
 static ScriptZeroPosition _zeroPos_0041E290 = {{0, 0x3f80000000000000ULL}};
 
@@ -1481,34 +1461,28 @@ static int (*_scFuncHandler[73])(ScriptTask *task) = {
     scMISSILE3Script
 };
 
-static const char D_004CC790[40] = "--- error no load effect data %d";
+static const char noLoadEffectDataFormat[40] = "--- error no load effect data %d";
 
 /* JP: 範囲外のエフェクトを消去しようとしてます %d %d
  * EN: Attempting to delete an out-of-range effect %d %d */
-static const char D_004CC7B8[48] =
+static const char outOfRangeEffectDeleteFormat[48] =
     "\xC8\xCF\xB0\xCF\xB3\xB0\xA4\xCE\xA5\xA8\xA5\xD5\xA5\xA7\xA5\xAF\xA5\xC8\xA4\xF2\xBE\xC3\xB5\xEE\xA4\xB7\xA4\xE8\xA4\xA6\xA4\xC8\xA4\xB7\xA4\xC6\xA4\xDE\xA4\xB9\x20\x25\x64\x20\x25\x64";
 
 /* JP: 範囲外のTask(%d)です
  * EN: Task(%d) is out of range */
-static const char D_004CC7E8[24] = "\xC8\xCF\xB0\xCF\xB3\xB0\xA4\xCE" "Task(%d)" "\xA4\xC7\xA4\xB9";
+static const char taskOutOfRangeFormat[24] = "\xC8\xCF\xB0\xCF\xB3\xB0\xA4\xCE" "Task(%d)" "\xA4\xC7\xA4\xB9";
 
-static const char D_004CC800[24] = "task work is empty : %d";
+static const char taskWorkEmptyFormat[24] = "task work is empty : %d";
 
-static const char D_004CC818[24] = "register overflow : %d";
+static const char registerOverflowFormat[24] = "register overflow : %d";
 
-static const char D_004CC830[32] = "--- effect stack over flow";
+static const char effectStackOverflowFormat[32] = "--- effect stack over flow";
 
-static const char D_004CC850[32] = "--- effect stack under flow";
+static const char effectStackUnderflowFormat[32] = "--- effect stack under flow";
 
-static const char D_004CC870[16] = "--- bad exp(%d)";
+static const char badExpressionFormat[16] = "--- bad exp(%d)";
 
-static const char D_004CC898[24] = "data\\simajiri\\movie\\";
-
-static short _cmdPut;
-
-int _scMslCate;
-
-const char D_004DBB38[8];
+static const char simajiriMoviePath[24] = "data\\simajiri\\movie\\";
 
 int _nowScript = 0;
 

@@ -25,7 +25,7 @@ typedef struct EndPrintRenderState {
 extern EndPrintRenderState sRender;
 
 /* 511 callback entries plus the adjacent terminal/overflow entry. The
- * scaffold's D_00532A38 label is the interior address PrintFunc[511]. */
+ * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
 
 static PrintFuncEntry PrintFunc[512];
 
@@ -535,10 +535,8 @@ typedef struct EndDecodeJpegContext {
     int destination;               /* +0x34 */
 } EndDecodeJpegContext;
 
-
-
 /* 511 callback entries plus the adjacent terminal/overflow entry. The
- * scaffold's D_00532A38 label is the interior address PrintFunc[511]. */
+ * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
 
 extern void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count);
 
@@ -586,11 +584,8 @@ typedef struct PrintNumberInfo {
 /* PrintCircleCore (this TU, still asm) draws into the scratchpad buffer this
  * function points it at. */
 
-
-
-
 /* 511 callback entries plus the adjacent terminal/overflow entry. The
- * scaffold's D_00532A38 label is the interior address PrintFunc[511]. */
+ * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
 
 typedef struct WindowTexEntry {
     unsigned int bufferWidthAndFormat; /* +0x00 */
@@ -610,9 +605,7 @@ extern WindowTexDirectory *WindowTexAddrGet(int index);
 
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 
-extern u64 ePrintEnv_0[12];
-
-
+static u64 ePrintEnv_0[12];
 
 typedef struct PrintLinePoint {
     int x;                    /* +0x00 */
@@ -631,9 +624,9 @@ typedef struct PrintRect {
     short height; /* +0x0a */
 } PrintRect;
 
-extern u64 ThumImageEnv_1[12];
+static u64 ThumImageEnv_1[12];
 
-extern u64 ThumDrawEnv_2[24];
+static u64 ThumDrawEnv_2[24];
 
 typedef struct PrintThumbnailInfo {
     short x;                       /* +0x00 */
@@ -643,13 +636,11 @@ typedef struct PrintThumbnailInfo {
     const void *image;             /* +0x0c */
 } PrintThumbnailInfo;
 
-
-
 extern float xglSin(float angle);
 
 extern float xglCos(float angle);
 
-extern u64 Env_3[12];
+static u64 Env_3[12];
 
 typedef struct PrintBackQuadVertex {
     int x;            /* +0x00 */
@@ -674,13 +665,13 @@ typedef struct PrintBackSpriteInfo {
     short v;                /* +0x12 */
 } PrintBackSpriteInfo;
 
-extern u64 sJpegEnv00_7[16];
+static u64 sJpegEnv00_7[16];
 
-extern u64 JpegEnv01_8[20];
+static u64 JpegEnv01_8[20];
 
-extern u64 JpegEnv10_9[16];
+static u64 JpegEnv10_9[16];
 
-extern u64 JpegEnv11_10[20];
+static u64 JpegEnv11_10[20];
 
 typedef struct PrintJpegInfo {
     short x;                        /* +0x00 */
@@ -1424,7 +1415,6 @@ static void PrintNumber(EndPrintContext *context, PrintNumberInfo *number)
         }
     }
 }
-
 
 typedef struct PrintFrameInfo {
     short x, y;
@@ -2245,3 +2235,23 @@ void endPrintJpeg(PrintJpegInfo *jpeg)
     sceVif1PkAddDirectDataN(packet, JpegEnv11_10, 10);
     sceVif1PkCloseDirectHLCode(packet);
 }
+
+static u64 ThumImageEnv_1[12] = { 0ULL, 5836665138832211968ULL, 1152921504606879748ULL, 14ULL, 624522604576768ULL, 80ULL, 0ULL, 81ULL, 481036337280ULL, 82ULL, 0ULL, 83ULL };
+
+static u64 sJpegEnv00_7[16] = { 0ULL, 5836665138546999296ULL, 1152921504606846980ULL, 14ULL, 2313372464840704ULL, 80ULL, 0ULL, 81ULL, 962072674816ULL, 82ULL, 0ULL, 83ULL, 0ULL, 5836788266669441024ULL, 576460752303484928ULL, 0ULL };
+
+static u64 JpegEnv10_9[16] = { 0ULL, 5836665138546999296ULL, 1152921504606846980ULL, 14ULL, 2313372464840704ULL, 80ULL, 0ULL, 81ULL, 962072674816ULL, 82ULL, 0ULL, 83ULL, 0ULL, 5836788266669441024ULL, 576460752303452160ULL, 0ULL };
+
+static u64 ePrintEnv_0[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x1000000000000004ULL, 0x000000000000000eULL, 0x00083c0000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x0000000000000000ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
+
+static u64 ThumDrawEnv_2[24] = { 0x1000000000000005ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000000000000ULL, 0x0000000000000008ULL, 0x0000000000000000ULL, 0x0000000000000014ULL, 0x00000005dc00b800ULL, 0x0000000000000006ULL, 0x0000000000050003ULL, 0x0000000000000047ULL, 0x508b400000008001ULL, 0x0000000000053531ULL, 0x0000008000000080ULL, 0x0000008000000080ULL, 0x0000008000000000ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000066000000800ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000000000000000ULL };
+
+static u64 Env_3[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x1000000000000004ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x0000000000000000ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
+
+static void (*func_tbl_4[])(EndPrintContext *context, int param) = { PrintLine, (void (*)(EndPrintContext *, int))PrintWindow, (void (*)(EndPrintContext *, int))PrintSprite00, PrintRibbon, (void (*)(EndPrintContext *, int))PrintPoint, (void (*)(EndPrintContext *, int))ScissorSet, (void (*)(EndPrintContext *, int))ScissorReset, (void (*)(EndPrintContext *, int))PrintTagFont, (void (*)(EndPrintContext *, int))PrintSprite01, PrintFrame, (void (*)(EndPrintContext *, int))PrintNumber, (void (*)(EndPrintContext *, int))PrintLine2, (void (*)(EndPrintContext *, int))ZScissor, (void (*)(EndPrintContext *, int))PrintThumbnail, (void (*)(EndPrintContext *, int))FontTexChange, (void (*)(EndPrintContext *, int))FontTexReload, PrintEtherLine, PrintCircle, (void (*)(EndPrintContext *, int))DrawBackSet, (void (*)(EndPrintContext *, int))DrawBackReset, (void (*)(EndPrintContext *, int))ScreenClear, (void (*)(EndPrintContext *, int))PrintBackSprite, (void (*)(EndPrintContext *, int))PrintBackSprite2 };
+
+static void (*func_tbl2_5[])(EndPrintContext *context, int param) = { (void (*)(EndPrintContext *, int))PrintFlush, (void (*)(EndPrintContext *, int))ScissorSet, (void (*)(EndPrintContext *, int))ScissorReset, (void (*)(EndPrintContext *, int))FontTexChange, (void (*)(EndPrintContext *, int))FontTexReload, (void (*)(EndPrintContext *, int))ZScissor };
+
+static u64 JpegEnv01_8[20] = { 0x908b400000008001ULL, 0x000000053531eeeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000000000000ULL, 0x0000000000000014ULL, 0x0000000664023800ULL, 0x0000000000000006ULL, 0x0000000000000005ULL, 0x0000000000000008ULL, 0x0000008000000080ULL, 0x0000008000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x00007bf800007c00ULL, 0x0000000010000000ULL, 0x00000e0000002000ULL, 0x0000000000000000ULL, 0x000083f800008400ULL, 0x0000000010000000ULL };
+
+static u64 JpegEnv11_10[20] = { 0x908b400000008001ULL, 0x000000053531eeeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000000000000ULL, 0x0000000000000014ULL, 0x0000000664023800ULL, 0x0000000000000006ULL, 0x0000000000000005ULL, 0x0000000000000008ULL, 0x0000008000000080ULL, 0x0000008000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x00007bf800007c00ULL, 0x0000000010000000ULL, 0x00000e0000002000ULL, 0x0000000000000000ULL, 0x000083f800008400ULL, 0x0000000010000000ULL };

@@ -146,91 +146,91 @@ static ExCollisionPrimitive shitancol[4];
 
 static ExCollisionPrimitive tonnycol[4];
 
-extern const float D_004D8614;
+extern const float exmHairAnDSize;
 
-extern const float D_004D8618;
+extern const float exmHairAnDFootRadius;
 
-extern const float D_004D861C;
+extern const float exmHairAbFootRadius;
 
-extern const float D_004D8620;
+extern const float exmHairAsBackSize;
 
-extern const float D_004D8624;
+extern const float exmHairAsFootRadius;
 
-extern const float D_004D8628;
+extern const float exmHairBrDSkirtColliSize;
 
-extern const float D_004D862C;
+extern const float exmHairBrDSkirtColliFootRad;
 
-extern const float D_004D8630;
+extern const float exmHairBo2SkirtColliSize;
 
-extern const float D_004D8634;
+extern const float exmHairBo2SkirtColliFootRad;
 
-extern const float D_004D8638;
+extern const float exmHairClSize;
 
-extern const float D_004D863C;
+extern const float exmHairClFootRadius;
 
-extern const float D_004D8640;
+extern const float exmHairESize;
 
-extern const float D_004D8644;
+extern const float exmHairEFootRadius;
 
-extern const float D_004D8648;
+extern const float exmHairFrSkirtColliSize;
 
-extern const float D_004D864C;
+extern const float exmHairFrSkirtColliSizeB;
 
-extern const float D_004D8650;
+extern const float exmHairFrSkirtColliFootRad;
 
-extern const float D_004D8654;
+extern const float exmHairGiSkirtColliSize;
 
-extern const float D_004D8658;
+extern const float exmHairGiSkirtColliFootRad;
 
-extern const float D_004D865C;
+extern const float exmHairHeSkirtColliSize;
 
-extern const float D_004D8660;
+extern const float exmHairHeSkirtColliSizeB;
 
-extern const float D_004D8664;
+extern const float exmHairHeSkirtColliFootRad;
 
-extern const float D_004D8668;
+extern const float exmHairISkirtColliSize;
 
-extern const float D_004D866C;
+extern const float exmHairISkirtColliSizeB;
 
-extern const float D_004D8670;
+extern const float exmHairISkirtColliFootRad;
 
-extern const float D_004D8674;
+extern const float exmHairJr1SkirtColliSize;
 
-extern const float D_004D8678;
+extern const float exmHairJr1SkirtColliFootRad;
 
-extern const float D_004D867C;
+extern const float exmHairKeNSkirtColliSizeB;
 
-extern const float D_004D8680;
+extern const float exmHairKeNSkirtColliSizeS;
 
-extern const float D_004D8684;
+extern const float exmHairKeNSkirtColliFootRad;
 
-extern const float D_004D8688;
+extern const float exmHairMoHmSkirtColliSize;
 
-extern const float D_004D868C;
+extern const float exmHairMoHmSkirtColliFootRad;
 
-extern const float D_004D869C;
+extern const float exmHairObSkirtColliSize;
 
-extern const float D_004D86A0;
+extern const float exmHairObSkirtColliFootRad;
 
-extern const float D_004D86AC;
+extern const float exmHairShioCSkirtColliSize;
 
-extern const float D_004D86B0;
+extern const float exmHairShioCSkirtColliFootRad;
 
-extern const float D_004D86B4;
+extern const float exmHairSeSkirtColliSize;
 
-extern const float D_004D86B8;
+extern const float exmHairSeSkirtColliFootRad;
 
-extern const float D_004D86BC;
+extern const float exmHairVSkirtColliSizeB;
 
-extern const float D_004D86C0;
+extern const float exmHairVSkirtColliSizeS;
 
-extern const float D_004D86C4;
+extern const float exmHairVSkirtColliFootRad;
 
-extern const float D_004D86C8;
+extern const float exmHairWSkirtColliSizeB;
 
-extern const float D_004D86CC;
+extern const float exmHairWSkirtColliFootRad;
 
-extern const float D_004D86D0;
+extern const float exmHairYSkirtColliFootRad;
 
 void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
 

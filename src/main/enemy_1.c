@@ -4,45 +4,55 @@
 
 /* Per-actor work records are cleared before use. */
 
-#define D_004D8044 0.3f
+#define ENEMY_CONTACT_PADDING 0.3f
 
-#define D_004D8048 1.9f
+#define ENEMY_CONTACT_HEIGHT 1.9f
 
-#define D_004D804C -0.02f
+#define ENEMY_FALL_ACCEL -0.02f
 
-#define D_004D8050 3.1415927f
+#define INSIDE_FAN_WOOO_ANGLE_OFFSET 3.1415927f
 
-#define D_004D8054 3.1415927f
+#define INSIDE_FAN_ANGLE_OFFSET 3.1415927f
 
-#define D_004D8058 0.3f
+#define ENEMY_HIT_PADDING 0.3f
 
-#define D_004D805C 1.9f
+#define ENEMY_HIT_HEIGHT 1.9f
 
-#define D_004D8060 -0.02f
+#define ENEMY_AIR_FALL_ACCEL -0.02f
 
-#define D_004D8008 0.1f
+#define ENEMY_CHASE_MIN_DISTANCE 0.1f
 
-#define D_004D800C 0.01f
+#define ESCAPE_TARGET_POSITION_EPSILON 0.01f
 
-#define D_004D8010 0.01f
+#define ESCAPE_HEIGHT_FOLLOW_RATE 0.01f
 
-#define D_004D8014 0.01f
+#define CHASE_LOST_DISTANCE 0.01f
 
-#define D_004D8018 0.01f
+#define LAST_PLAYER_REACHED_DISTANCE 0.01f
 
 EnemyVector4 EnemyTarget = { .vector = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f } };
 
 EnemyWorkEntry enepc[16] = {{0}};
 
-const char D_004DB7F8[5] = "\314\334\267\342";
+/* JP: 目撃
+ * EN: Witnessed */
+const char witnessedText[5] = "\314\334\267\342";
 
-const char D_004DB800[5] = "\276\345\312\252";
+/* JP: 上物
+ * EN: Field object */
+const char fieldObjectText[5] = "\276\345\312\252";
 
-const char D_004DB808[5] = "\277\267\265\254";
+/* JP: 新規
+ * EN: New */
+const char newText[5] = "\277\267\265\254";
 
-const char D_004DB810[5] = "\304\276\277\312";
+/* JP: 直進
+ * EN: Go straight */
+const char goStraightText[5] = "\304\276\277\312";
 
-const char D_004DB818[5] = "\304\311\262\303";
+/* JP: 追加
+ * EN: Add */
+const char addText[5] = "\304\311\262\303";
 
 static unsigned short CoolDown_0 = 0;
 
@@ -70,36 +80,35 @@ u16 MostNearActor = 0;
  * remains unknown; no numeric, floating-point or pointer interpretation is claimed. */
 u32 MostNear = 0;
 
-
 /* Distance thresholds and retreat speeds used by the two look-back paths.
  * The original has no named objects for them: cc1 emits each use as an
  * anonymous .lit4 literal (0x004D8034..0x004D8040). */
 
-#define D_004D8034 0.012f
+#define ESCAPE_RESET_DISTANCE 0.012f
 
-#define D_004D8038 0.06666667f
+#define ESCAPE_SPEED 0.06666667f
 
-#define D_004D803C 0.012f
+#define ROUTE_CHASE_RESET_DISTANCE 0.012f
 
-#define D_004D8040 0.06666667f
+#define ROUTE_CHASE_SPEED 0.06666667f
 
 /* Per-actor work records are cleared before use. */
 
 /* Distance thresholds and retreat speeds used by the two look-back paths. */
 
-#define D_004D801C 0.01f
+#define ROUTE_NEAR_LOOKBACK_DISTANCE 0.01f
 
-#define D_004D8020 3.1415927f
+#define ROUTE_HALF_TURN_RADIANS 3.1415927f
 
-#define D_004D8024 6.2831855f
+#define ROUTE_DIRECTION_FULL_TURN 6.2831855f
 
-#define D_004D8028 0.12f
+#define ROUTE_FAR_LOOKBACK_DISTANCE 0.12f
 
-#define D_004D802C 3.1415927f
+#define ROUTE_RANDOM_HALF_TURN_RADIANS 3.1415927f
 
-#define D_004D8030 6.2831855f
+#define ROUTE_RETREAT_FULL_TURN 6.2831855f
 
-#define D_004D8064 0.9f
+#define ENEMY_DRIFT_DAMPING 0.9f
 
 int Get_EffectCode(int attr)
 {
@@ -118,7 +127,7 @@ int Get_EffectCode(int attr)
     return -1;
 }
 
-const char D_004CAB00[11] = "Final_init";
+const char finalInitMethodName[11] = "Final_init";
 
 void Enemy_Init(EnemyActor *self)
 {
@@ -234,9 +243,9 @@ void Enemy_Init(EnemyActor *self)
     Enemy_ActionReady(self, 16);
     work->hit_limit = 0;
     if (GameLoopState.player == self)
-        CallMethod_I(D_004CAB00, 100);
+        CallMethod_I(finalInitMethodName, 100);
     else
-        CallMethod_I(D_004CAB00, work->event_type);
+        CallMethod_I(finalInitMethodName, work->event_type);
     UnduParamInit(&self->undulation);
     self->undulation.attr_mask = 2;
     UnduCheck(&self->position, 0, &self->undulation);
@@ -402,7 +411,7 @@ void Enemy_Chase(EnemyActor *self)
     int crossed;
 
     distance = Get_Distance(&self->position, &work->escape_target.position);
-    if (D_004D8008 <= distance && !(work->stiff_flag & 2)) {
+    if (ENEMY_CHASE_MIN_DISTANCE <= distance && !(work->stiff_flag & 2)) {
         speed = params->chase_speed;
         Set_Motion(self, Get_DefaultMotion(self, 2), 9);
     } else {
@@ -416,20 +425,20 @@ void Enemy_Chase(EnemyActor *self)
     crossed = CrossPointUwamono(&self->position,
                                 &work->escape_target.position,
                                 self->body_radius, &cross_point);
-    if (__builtin_fabsf(hit.x - work->escape_target.position.x) < D_004D800C &&
-        __builtin_fabsf(hit.z - work->escape_target.position.z) < D_004D800C &&
+    if (__builtin_fabsf(hit.x - work->escape_target.position.x) < ESCAPE_TARGET_POSITION_EPSILON &&
+        __builtin_fabsf(hit.z - work->escape_target.position.z) < ESCAPE_TARGET_POSITION_EPSILON &&
         crossed == 0) {
         work->last_player_position = work->escape_target.position_pair;
-        xglFontDebugPrintf(8, 100, D_004DB7F8);
+        xglFontDebugPrintf(8, 100, witnessedText);
     } else if (crossed == 1) {
         work->last_player_position.vector = cross_point;
-        xglFontDebugPrintf(8, 112, D_004DB800);
+        xglFontDebugPrintf(8, 112, fieldObjectText);
     } else {
         if (Check_MoveSquare(self->body_radius, &work->escape_target.position,
                              &self->position, &square.vector,
                              work->map_index) == 1) {
             work->last_player_position = square;
-            xglFontDebugPrintf(8, 112, D_004DB808);
+            xglFontDebugPrintf(8, 112, newText);
         }
     }
 
@@ -440,17 +449,17 @@ void Enemy_Chase(EnemyActor *self)
     TM_Enemy_Move_Step(self->number, &work->last_player_position.vector, speed);
     if ((work->state_flags & 0x20) != 0) {
         self->position.y += (work->escape_target.position.y - self->position.y) *
-                            D_004D8010;
+                            ESCAPE_HEIGHT_FOLLOW_RATE;
     }
 
     if (work->move_result == 0x60) {
         if (Check_MoveSquare(self->body_radius, &cross_point, &self->position,
                              &square.vector, work->map_index) == 1) {
             work->last_player_position = square;
-            xglFontDebugPrintf(8, 124, D_004DB800);
+            xglFontDebugPrintf(8, 124, fieldObjectText);
         } else {
             work->last_player_position.vector = cross_point;
-            xglFontDebugPrintf(8, 124, D_004DB810);
+            xglFontDebugPrintf(8, 124, goStraightText);
         }
     }
 
@@ -459,18 +468,18 @@ void Enemy_Chase(EnemyActor *self)
              (work->chase_frame_limit < 0 ? -work->chase_frame_limit : work->chase_frame_limit) &&
          work->chase_frame_limit != 0) ||
         (Get_Distance(&self->position, &work->last_player_position.vector) <
-             D_004D8014 &&
+             CHASE_LOST_DISTANCE &&
          work->move_result != 0x60 && work->move_result != 99)) {
         work->state_40.alert_level = 0;
         Homing_Search(self);
         Enemy_ActionReady(self, 2);
     } else if (Get_Distance(&self->position,
-                            &work->last_player_position.vector) < D_004D8018) {
+                            &work->last_player_position.vector) < LAST_PLAYER_REACHED_DISTANCE) {
         if (Check_MoveSquare(self->body_radius, &work->escape_target.position,
                              &self->position, &square.vector,
                              work->map_index) == 1) {
             work->last_player_position = square;
-            xglFontDebugPrintf(8, 112, D_004DB818);
+            xglFontDebugPrintf(8, 112, addText);
             TM_Enemy_Move_Step(self->number, &work->last_player_position.vector,
                                speed);
         }
@@ -571,7 +580,7 @@ void Enemy_Route(EnemyActor *self)
     distance = Get_Distance(&self->position, &point);
     if (work->spline_point_count << 7 <= work->state_40.spline_parameter)
         work->state_40.spline_parameter = 0;
-    if (D_004D801C <= distance)
+    if (ROUTE_NEAR_LOOKBACK_DISTANCE <= distance)
         self->target_angle = Get_Angle(&self->position, &point);
 
     {
@@ -600,16 +609,16 @@ void Enemy_Route(EnemyActor *self)
                     directions[available++] = i;
             }
             if (available == 0)
-                angle = xglSRand() % 360 / 180.0f * D_004D8020;
+                angle = xglSRand() % 360 / 180.0f * ROUTE_HALF_TURN_RADIANS;
             else
-                angle = directions[xglSRand() % available] * D_004D8024 *
+                angle = directions[xglSRand() % available] * ROUTE_DIRECTION_FULL_TURN *
                         0.0625f;
             BSpline_Init(work->spline_points, &self->position, angle);
             work->state_40.spline_parameter = 0;
         }
         Set_Motion(self, Get_DefaultMotion(self, 0), 9);
     } else {
-        if (D_004D8028 <= distance)
+        if (ROUTE_FAR_LOOKBACK_DISTANCE <= distance)
             motion = Get_DefaultMotion(self, 2);
         else
             motion = Get_DefaultMotion(self, 1);
@@ -633,9 +642,9 @@ void Enemy_Route(EnemyActor *self)
                 directions[available++] = i;
         }
         if (available == 0)
-            angle = xglSRand() % 360 / 180.0f * D_004D802C;
+            angle = xglSRand() % 360 / 180.0f * ROUTE_RANDOM_HALF_TURN_RADIANS;
         else
-            angle = directions[xglSRand() % available] * D_004D8030 * 0.0625f;
+            angle = directions[xglSRand() % available] * ROUTE_RETREAT_FULL_TURN * 0.0625f;
         target.x = origin.x + sinf(angle) * params->route_step_length;
         target.y = self->position.y;
         target.z = origin.z + cosf(angle) * params->route_step_length;
@@ -692,7 +701,7 @@ void Enemy_Escape(EnemyActor *actor)
         actor->target_angle = Get_Angle(&actor->position, &point);
     }
 
-    if (D_004D8034 <= Get_Distance(&actor->position, &point) ||
+    if (ESCAPE_RESET_DISTANCE <= Get_Distance(&actor->position, &point) ||
         (short)CoolDown_0 > 0) {
         motion = Get_DefaultMotion(actor, 2);
     } else {
@@ -700,7 +709,7 @@ void Enemy_Escape(EnemyActor *actor)
     }
     Set_Motion(actor, motion, 9);
 
-    actor->speed = D_004D8038;
+    actor->speed = ESCAPE_SPEED;
     work->goback_x = point.x - actor->position.x;
     work->goback_z = point.z - actor->position.z;
     actor->position.x = point.x;
@@ -749,7 +758,7 @@ void Enemy_Route_Chase(EnemyActor *self)
         self->target_angle = Get_Angle(&self->position, &point);
     }
 
-    if (D_004D803C <= Get_Distance(&self->position, &point) ||
+    if (ROUTE_CHASE_RESET_DISTANCE <= Get_Distance(&self->position, &point) ||
         (short)CoolDown_1 > 0) {
         motion = Get_DefaultMotion(self, 2);
     } else {
@@ -757,7 +766,7 @@ void Enemy_Route_Chase(EnemyActor *self)
     }
     Set_Motion(self, motion, 9);
 
-    self->speed = D_004D8040;
+    self->speed = ROUTE_CHASE_SPEED;
     work->goback_x = point.x - self->position.x;
     work->goback_z = point.z - self->position.z;
     self->position.x = point.x;
@@ -853,17 +862,17 @@ void Enemy_Unique(EnemyActor *actor)
     }
 }
 
-const char D_004CAB48[20] = "%3d AnimTime  = %8f";
+const char animTimeFormat[20] = "%3d AnimTime  = %8f";
 
-const char D_004CAB60[20] = "%3d AnimStart = %8f";
+const char animStartFormat[20] = "%3d AnimStart = %8f";
 
-const char D_004CAB78[20] = "%3d AnimFinal = %8f";
+const char animFinalFormat[20] = "%3d AnimFinal = %8f";
 
-const char D_004CAB90[20] = "%3d AnimSped  = %8f";
+const char animSpeedFormat[20] = "%3d AnimSped  = %8f";
 
-const char D_004CABA8[20] = "%3d AnimNumb  = %3d";
+const char animNumberFormat[20] = "%3d AnimNumb  = %3d";
 
-const char D_004CABC0[20] = "%3d Hokan     = %8f";
+const char animBlendFormat[20] = "%3d Hokan     = %8f";
 
 void ACT_updateEnemy(EnemyActor *self)
 {
@@ -887,17 +896,17 @@ void ACT_updateEnemy(EnemyActor *self)
     marker.x = 0.0f;
     marker.z = 0.0f;
     if (self->number == DebugActor) {
-        xglFontDebugPrintf(8, 52, D_004CAB48, self->number, (double)self->anim_time);
+        xglFontDebugPrintf(8, 52, animTimeFormat, self->number, (double)self->anim_time);
         if (self->number == DebugActor) {
-            xglFontDebugPrintf(8, 62, D_004CAB60, self->number, (double)self->anim_start);
+            xglFontDebugPrintf(8, 62, animStartFormat, self->number, (double)self->anim_start);
             if (self->number == DebugActor) {
-                xglFontDebugPrintf(8, 72, D_004CAB78, self->number, (double)self->anim_final);
+                xglFontDebugPrintf(8, 72, animFinalFormat, self->number, (double)self->anim_final);
                 if (self->number == DebugActor) {
-                    xglFontDebugPrintf(8, 82, D_004CAB90, self->number, (double)self->speed);
+                    xglFontDebugPrintf(8, 82, animSpeedFormat, self->number, (double)self->speed);
                     if (self->number == DebugActor) {
-                        xglFontDebugPrintf(8, 92, D_004CABA8, self->number, self->anim_number);
+                        xglFontDebugPrintf(8, 92, animNumberFormat, self->number, self->anim_number);
                         if (self->number == DebugActor)
-                            xglFontDebugPrintf(8, 102, D_004CABC0, self->number, (double)self->anim_blend);
+                            xglFontDebugPrintf(8, 102, animBlendFormat, self->number, (double)self->anim_blend);
                     }
                 }
             }
@@ -1006,9 +1015,9 @@ void ACT_updateEnemy(EnemyActor *self)
         if (work->freeze_state < 2)
             Script_Action(self);
         if (Get_Distance(&self->position, &GameLoopState.player->position) <=
-                self->body_radius + GameLoopState.player->body_radius + D_004D8044 &&
+                self->body_radius + GameLoopState.player->body_radius + ENEMY_CONTACT_PADDING &&
             __builtin_fabsf(self->position.y - GameLoopState.player->position.y) <
-                D_004D8048 &&
+                ENEMY_CONTACT_HEIGHT &&
             GameLoopState.player->encount_lock == 0 &&
             enepc[GameLoopState.player->number].encount_lock == 0 &&
             FLAG_FRAME_60 == 0)
@@ -1026,7 +1035,7 @@ void ACT_updateEnemy(EnemyActor *self)
             self->undulation_header = UnduDataGetHeader(work->map_index, 0x8000);
             height = Get_Height(&self->position, work->map_index, 16);
             self->ground_height = height;
-            work->fall_speed += D_004D804C;
+            work->fall_speed += ENEMY_FALL_ACCEL;
             self->position.y += work->fall_speed;
             if (self->position.y < height) {
                 self->position.y = height;
@@ -1090,14 +1099,14 @@ void ACT_updateEnemy(EnemyActor *self)
             enepc[0].encount_lock == 0) {
             if (params->sight_angle < 0.0f) {
                 if (self->sound_effect_id == 8705 || self->sound_effect_id == 16646) {
-                    if (Check_InsideFan_Wooo(self->angle + D_004D8050,
+                    if (Check_InsideFan_Wooo(self->angle + INSIDE_FAN_WOOO_ANGLE_OFFSET,
                                              params->sight_distance,
                                              __builtin_fabsf(params->sight_angle),
                                              self->body_radius, &self->position,
                                              &work->escape_target.position,
                                              work->map_index) == 1)
                         Check_Discovery(self);
-                } else if (Check_InsideFan(self->angle + D_004D8054,
+                } else if (Check_InsideFan(self->angle + INSIDE_FAN_ANGLE_OFFSET,
                                            params->sight_distance,
                                            __builtin_fabsf(params->sight_angle),
                                            self->body_radius, &self->position,
@@ -1190,9 +1199,9 @@ void ACT_updateEnemy(EnemyActor *self)
             GameLoopState.player = &actor[0];
     }
     if (Get_Distance(&self->position, &GameLoopState.player->position) <=
-            self->body_radius + GameLoopState.player->body_radius + D_004D8058 &&
+            self->body_radius + GameLoopState.player->body_radius + ENEMY_HIT_PADDING &&
         __builtin_fabsf(self->position.y - GameLoopState.player->position.y) <
-            D_004D805C &&
+            ENEMY_HIT_HEIGHT &&
         GameLoopState.player->encount_lock == 0 &&
         enepc[GameLoopState.player->number].encount_lock == 0 &&
         FLAG_FRAME_60 == 0)
@@ -1221,7 +1230,7 @@ void ACT_updateEnemy(EnemyActor *self)
         float height = Get_Height(&self->position, work->map_index, 16);
 
         self->ground_height = height;
-        work->fall_speed += D_004D8060;
+        work->fall_speed += ENEMY_AIR_FALL_ACCEL;
         if (!(work->state_flags & ENEMY_AIRBORNE_FLAG))
             self->position.y += work->fall_speed;
         if (self->position.y < height) {
@@ -1253,8 +1262,8 @@ unsigned char TM_Enemy_Move_Step(int actor_number, Vector4 *step_limit,
             enepc[actor_number].goback[2] = step_limit->z - self->position.z;
     }
 
-    enepc[actor_number].drift[0] *= D_004D8064;
-    enepc[actor_number].drift[2] *= D_004D8064;
+    enepc[actor_number].drift[0] *= ENEMY_DRIFT_DAMPING;
+    enepc[actor_number].drift[2] *= ENEMY_DRIFT_DAMPING;
     actor[actor_number].position.x += enepc[actor_number].goback[0];
     actor[actor_number].position_f[2] += enepc[actor_number].goback[2];
     actor[actor_number].target_angle =

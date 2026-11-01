@@ -140,7 +140,7 @@ void Get_Height(const Point4 *position, int mapIndex, int attrMask);
 
 int Get_Rnd(int min, int max);
 
-extern const float D_004D81C8;
+extern const float getRandomFloat;
 
 int Check_InsideFan_Wooo(const Point4 *origin, const Point4 *target,
                          float facing, float radius, float fanWidthDegrees);

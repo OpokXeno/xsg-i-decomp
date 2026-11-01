@@ -655,7 +655,8 @@ def rebuild(root, folder, lease):
             argv = [sys.executable,'-B',root/'tools/tu/ninja_ovl.py',unit_dir,unit,'--root',root,
                     '--manifest',unit_dir/'compile-manifest.json',
                     '--bss-record',root/'config/objects/data-carves.json']
-        command(argv, root, folder/'configure.log', lease, timeout=120)
+        # 2026-10-31: compiler_suffix_alignments grows with recovered pieces (~250 s for MAIN)
+        command(argv, root, folder/'configure.log', lease, timeout=900)
         command(['ninja','-j',jobs,'build/'+unit+'.bin'], unit_dir,
                 folder/(unit+'.build.log'), lease, timeout=1200)
         print(json.dumps(dict(stage='linked_build', unit=unit)), flush=True)

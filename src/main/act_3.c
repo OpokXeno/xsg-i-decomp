@@ -398,10 +398,10 @@ typedef struct {
     u8 unmodeled_28[0x18];
 } ActFootstepCollision;
 
-extern u8 *D_00478CCC[];
+extern u8 *actNullPointerTable[];
 static u8 *foot_tbl[6];
 
-extern float D_004D85C8;
+extern float footstepFrameTime;
 
 extern int F2I(float value);
 
@@ -469,7 +469,6 @@ typedef struct {
     u8 unmodeled_12bc[4];
     ActDropShadowPacket packet;
 } ActDropShadowSubMatrixWorkspace;
-
 
 typedef struct {
     float temporary[4];
@@ -540,14 +539,9 @@ typedef struct {
     ActZeldaShadowPacket packet;
 } ActZeldaStorageScratchpad;
 
-
 /* Original aligned matrices at scratchpad +0x60 and +0xa0. */
 
-
-
-
-
-static const DrawDropCircleIndexTable D_004D1DA0 = {
+static const DrawDropCircleIndexTable dropShadowIndexTable = {
     {
     0x04, 0x00, 0x01, 0x06, 0x01, 0x06, 0x07, 0x02,
     0x07, 0x02, 0x03, 0x05, 0x0c, 0x09, 0x08, 0x0f,
@@ -574,7 +568,6 @@ typedef struct {
     u8 matrix_index;
     DropShadowContactPayload payload;
 } DropShadowContactRecord;
-
 
 static u8 *DrawDropShadowSub(ActShadowActor *actor,
                             ActDropShadowWorkspace *work, u8 *contacts);
@@ -644,7 +637,7 @@ static u32 Tail_2[12];
 
 static u8 rgbaw_0[16];
 
-extern const float D_004D85F8;
+extern const float contactCoordScale;
 
 extern void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
                             const float translation[4]);
@@ -695,24 +688,24 @@ static u32 TestEnv_7[12];
 
 static ActShadowEndPacket Tail_8;
 
-extern const DrawDropCircleIndexTable D_004D1DD8;
+extern const DrawDropCircleIndexTable dropCircleIndexTable;
 
-extern const float D_004D8604;
+extern const float dropCircleCornerScale;
 
-extern const float D_004D8608;
+extern const float dropCircleHeightOffset;
 
 /* Original DATA order; zero alignment is supplied by allocation metadata. */
-static u8 foot_sion[4] __attribute__((section(".data"))) = { 2, 16, 1, 12 };
+static u8 foot_sion[] = { 2, 16, 1, 12 };
 
-static u8 foot_kosmos[4] __attribute__((section(".data"))) = { 2, 16, 1, 12 };
+static u8 foot_kosmos[] = { 2, 16, 1, 12 };
 
-static u8 foot_chaos[4] __attribute__((section(".data"))) = { 2, 16, 1, 12 };
+static u8 foot_chaos[] = { 2, 16, 1, 12 };
 
-static u8 foot_momo[4] __attribute__((section(".data"))) = { 2, 15, 1, 12 };
+static u8 foot_momo[] = { 2, 15, 1, 12 };
 
-static u8 foot_ziggy[4] __attribute__((section(".data"))) = { 2, 16, 1, 12 };
+static u8 foot_ziggy[] = { 2, 16, 1, 12 };
 
-static u8 foot_jr[4] __attribute__((section(".data"))) = { 2, 16, 1, 12 };
+static u8 foot_jr[] = { 2, 16, 1, 12 };
 
 static u8 * foot_tbl[6] = { foot_sion, foot_kosmos, foot_chaos, foot_momo, foot_ziggy, foot_jr };
 
@@ -780,7 +773,7 @@ static ActShadowEndPacket Tail_10 = {
     .set_shadow_register = { { .value = 0x31000000 }, 0x4E, 0 },
 };
 
-const DrawDropCircleIndexTable D_004D1DD8 = { .quad_indices = { { 4, 0, 1, 6 }, { 1, 6, 7, 2 }, { 7, 2, 3, 5 }, { 12, 9, 8, 15 }, { 8, 15, 14, 11 }, { 14, 11, 10, 13 }, { 0, 4, 8, 12 }, { 4, 1, 12, 9 }, { 1, 7, 9, 15 }, { 7, 3, 15, 11 }, { 3, 5, 11, 13 }, { 5, 2, 13, 10 }, { 2, 6, 10, 14 }, { 6, 0, 14, 8 } } };
+const DrawDropCircleIndexTable dropCircleIndexTable = { .quad_indices = { { 4, 0, 1, 6 }, { 1, 6, 7, 2 }, { 7, 2, 3, 5 }, { 12, 9, 8, 15 }, { 8, 15, 14, 11 }, { 14, 11, 10, 13 }, { 0, 4, 8, 12 }, { 4, 1, 12, 9 }, { 1, 7, 9, 15 }, { 7, 3, 15, 11 }, { 3, 5, 11, 13 }, { 5, 2, 13, 10 }, { 2, 6, 10, 14 }, { 6, 0, 14, 8 } } };
 
 static void Footstep(ActShadowActor *actor)
 {
@@ -807,7 +800,7 @@ static void Footstep(ActShadowActor *actor)
             sound = 0;
             contacts = foot_tbl[((ActFootstepSaveData *)SaveData)->language - 1];
             if (motion == 3) contacts += 2;
-            frame = F2I(actor->motion_frame / D_004D85C8);
+            frame = F2I(actor->motion_frame / footstepFrameTime);
             contact_frame = contacts[0];
             before_first = previous < contact_frame;
             if ((before_first != 0 && frame >= contact_frame) ||
@@ -844,7 +837,6 @@ static void Footstep(ActShadowActor *actor)
         }
     }
 }
-
 
 typedef float ActShadowMatrixRow[4];
 
@@ -1077,7 +1069,7 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
 }
 
 extern float atan2f(float x, float z);
-extern float D_004D85F4;
+extern float zeldaShadowMinRadius;
 
 static void DrawZeldaShadow(void *actor_pointer)
 {
@@ -1115,8 +1107,8 @@ static void DrawZeldaShadow(void *actor_pointer)
     }
     direction = actor->direction;
     scratchpad->radius = __builtin_sqrtf(1.0f - direction[1] * direction[1]) * 0.5f;
-    if (scratchpad->radius < D_004D85F4) {
-        scratchpad->radius = D_004D85F4;
+    if (scratchpad->radius < zeldaShadowMinRadius) {
+        scratchpad->radius = zeldaShadowMinRadius;
     }
     scratchpad->angle = atan2f(-direction[0], -direction[2]);
     /* Preserve the helper's existing interface pending owner-header transport. */
@@ -1295,7 +1287,6 @@ static void DrawDropShadowSubFront(ActDropShadowFrontState *shadow, int count)
     }
 }
 
-
 static u8 *DrawDropShadowSub(ActShadowActor *actor,
                             ActDropShadowWorkspace *work, u8 *contacts)
 {
@@ -1349,7 +1340,7 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                 work->temporary[1] = 0.0f;
                 work->temporary[2] = 0.0f;
                 work->temporary[(signed char)next_contact[2]] =
-                    I2F((signed char)next_contact[1]) * D_004D85F8;
+                    I2F((signed char)next_contact[1]) * contactCoordScale;
                 work->temporary[3] = 1.0f;
                 xglMatrixTrans(ActShadowMatrixRows(translated_end),
                                 ActShadowMatrixConstRows(first), work->temporary);
@@ -1372,12 +1363,12 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
                              light_direction);
             xglVectorLength(&length, perpendicular);
             xglVectorScaleXYZ(&work->outer_offset, perpendicular,
-                                I2F((signed char)contact[1]) * D_004D85F8 / length);
+                                I2F((signed char)contact[1]) * contactCoordScale / length);
             xglVectorScaleXYZ(inner_offset, perpendicular,
-                                I2F((signed char)contact[2]) * D_004D85F8 / length);
+                                I2F((signed char)contact[2]) * contactCoordScale / length);
             xglVectorLength(&length, (const Vector4 *)(const void *)work->temporary);
             xglVectorScaleXYZ(axial_offset, (const Vector4 *)(const void *)work->temporary,
-                                I2F((signed char)contact[1]) * D_004D85F8 / length);
+                                I2F((signed char)contact[1]) * contactCoordScale / length);
 
             work->temporary[3] = ground_height;
             work->temporary[0] = first_position[0];
@@ -1507,7 +1498,7 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
     work->packet.dma_tag.words.high = 0;
     work->packet.vif_nop = 0;
     for (i = 0; i < segments; i++) {
-        DrawDropCircleIndexTable indices = D_004D1DA0;
+        DrawDropCircleIndexTable indices = dropShadowIndexTable;
         if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], i * 16, 14)) {
             DrawDropShadowSubBack((ActDropShadowState *)(void *)work, 14, 0);
             nmlModelDirectSend(2, TestEnv_3_00478D80, 3);
@@ -1517,7 +1508,6 @@ static u8 *DrawDropShadowSub(ActShadowActor *actor,
     }
     return contacts + segments * 3 + 3;
 }
-
 
 static void DrawDropShadow(void *actor_pointer)
 {
@@ -1600,7 +1590,6 @@ static void DrawDropShadow(void *actor_pointer)
     nmlModelDirectSend(1, (u8 *)&Tail_5, 3);
 }
 
-
 static void DrawDropCircle(ActShadowActor *actor)
 {
     ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)0x70000000;
@@ -1639,7 +1628,7 @@ static void DrawDropCircle(ActShadowActor *actor)
         work->temporary[1] = actor->height_override + 0.02f;
     }
     radius = actor->shadow_radius;
-    corner = radius * D_004D8604;
+    corner = radius * dropCircleCornerScale;
     vertices[4].x = vertices[5].x = center[0];
     vertices[0].x = vertices[2].x = center[0] + corner;
     vertices[1].x = vertices[3].x = center[0] - corner;
@@ -1647,7 +1636,7 @@ static void DrawDropCircle(ActShadowActor *actor)
     vertices[7].x = center[0] - radius;
     vertices[0].y = vertices[1].y = vertices[2].y =
         vertices[3].y = vertices[4].y = vertices[5].y =
-        vertices[6].y = vertices[7].y = work->temporary[1] + D_004D8608;
+        vertices[6].y = vertices[7].y = work->temporary[1] + dropCircleHeightOffset;
     vertices[6].z = vertices[7].z = center[2];
     vertices[0].z = vertices[1].z = center[2] + corner;
     vertices[2].z = vertices[3].z = center[2] - corner;
@@ -1697,7 +1686,7 @@ static void DrawDropCircle(ActShadowActor *actor)
         work->packet.test_environment_register = 71;
         work->packet.render_state_register = sRender.shadow_state | 0x80000;
         work->packet.shadow_context_register = 76;
-        indices = D_004D1DD8;
+        indices = dropCircleIndexTable;
         work->packet.dma_tag.words.low = 0;
         work->packet.dma_tag.words.high = 0;
         work->packet.vif_nop = 0;
@@ -1780,12 +1769,14 @@ void ACT_DrawShadowInit(void)
 }
 
 /* Explicit scalar literals retained at the original compiler-mapped locations. */
-float D_004D85C8 = 0.033333335071802139f;
+float footstepFrameTime = 0.033333335071802139f;
 
-float D_004D85F4 = 0.15000000596046448f;
+float zeldaShadowMinRadius = 0.15000000596046448f;
 
-const float D_004D85F8 = 0.0099999997764825821f;
+const float contactCoordScale = 0.0099999997764825821f;
 
-const float D_004D8604 = 0.69999998807907104f;
+const float dropCircleCornerScale = 0.69999998807907104f;
 
-const float D_004D8608 = 0.20000000298023224f;
+const float dropCircleHeightOffset = 0.20000000298023224f;
+
+u8 * actNullPointerTable[] = { 0 };

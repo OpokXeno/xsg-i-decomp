@@ -3,7 +3,7 @@
 
 #include "main/jni.h"
 
-const char D_004C2308[24] = "FRAME %6d (%6d, %6d)\n";
+const char playFrameFormat[24] = "FRAME %6d (%6d, %6d)\n";
 
 Play playControl;
 
@@ -164,7 +164,7 @@ void PLAY_ctrl(void)
                 start_frame = (int)(play->startTime / debug_frame_step);
                 end_frame = (int)(play->endTime / debug_frame_step);
                 DB_reset(4, 8);
-                DB_println(D_004C2308, current_frame, start_frame, end_frame);
+                DB_println(playFrameFormat, current_frame, start_frame, end_frame);
             }
         } else {
             play->currentTime = play->currentTime + play->frameStep;

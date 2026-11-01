@@ -6,8 +6,6 @@
 
 /* MenuWorkEndGet clears and returns this entire 64 KiB work region. */
 
-
-
 /* The external data witness covers these 0x9c bytes; the spans around the
  * two evidenced bit sets remain unmodelled (see UmnDataBase). */
 
@@ -23,7 +21,8 @@ typedef struct {
     Quadword reset_work[7];
 } MenuWorkState;
 
-extern MenuWorkState MenuWork;extern unsigned char MenuKeepSelect[0x64];
+extern MenuWorkState MenuWork;
+extern unsigned char MenuKeepSelect[0x64];
 
 typedef struct {
     unsigned char r;
@@ -109,8 +108,9 @@ typedef union {
     } light;
     unsigned long long words[14];
 } MenuLightConfig;
-extern const MenuLightConfig D_004C3240;
-extern const char D_004C32B0[];static unsigned char MenuWorkEndTop[0x10000];
+extern const MenuLightConfig mainMenuLighting;
+extern const char mainMenuLabel[];
+static unsigned char MenuWorkEndTop[0x10000];
 
 int WindowTexLoad(unsigned char *buffer, unsigned int request)
 {
@@ -452,9 +452,9 @@ unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
     MenuBgParam->initialization_values[1] = 0x1b;
     MenuBgParam->initialization_values[2] = 0x19;
     MenuBgParam->initialization_values[3] = 0x80;
-    camera_rotation_x = D_004D7D58;
-    camera_rotation_z = D_004D7D5C;
-    camera_position_z = D_004D7D60;
+    camera_rotation_x = MENU_BG_CAMERA_ROTATION_X;
+    camera_rotation_z = MENU_BG_CAMERA_ROTATION_Z;
+    camera_position_z = MENU_BG_CAMERA_POSITION_Z;
     MenuBgParam->rotation_x = camera_rotation_x;
     MenuBgParam->rotation_z = camera_rotation_z;
     MenuBgParam->camera_position_z = camera_position_z;
@@ -502,7 +502,7 @@ unsigned char *MenuTairetuLoad(unsigned char *buffer, int load_flags)
     (void)load_flags;
     MenuTairetuModelXtxAddr =
         (unsigned char *)(((unsigned int)buffer + 0x7f) & ~0x7f);
-    filename = D_004C3220;
+    filename = tairetuTexturePath;
     filename.path[20] = '0';
     filename.path[22] = 'x';
     filename.path[23] = 't';
@@ -551,7 +551,7 @@ void MainMenu(void)
     MenuBibrationInit();
     xglStudioChange(0);
     light = xglStudioGetLight2();
-    lighting = D_004C3240;
+    lighting = mainMenuLighting;
     xglLightIntensityAmbient(light, lighting.light.ambient);
     xglLightIntensityParallel(light, 0, lighting.light.parallel[0]);
     xglLightDirection(light, 0, lighting.light.direction[0]);
@@ -626,7 +626,7 @@ void MainMenu(void)
         xglTaskExecute(MenuTask);
         MenuModelMain();
         MenuBibrationMain();
-        xglFontDebugPrintf(0, 0, D_004C32B0);
+        xglFontDebugPrintf(0, 0, mainMenuLabel);
         xglFontDebugHex(0, 0x10, MenuWork.menu_state[1], 2);
         xglFontDebugHex(0, 0x18, MenuWork.item_selection, 2);
         xglFontDebugHex(0, 0x20, MenuWork.sub_selection, 2);
@@ -763,8 +763,8 @@ void UmnInterface(void)
     MenuModelMain();
     xglSleep();
 
-    text_pages = D_004C32F8;
-    default_character = D_004DA810[0];
+    text_pages = menuTextPageTable;
+    default_character = defaultCharacterBuffer[0];
     record = UmnGunoDataBaseTop;
 
     for (unit_id = 0x22; unit_id < 0x3f; ++unit_id, ++record) {
@@ -919,11 +919,7 @@ int hen(void)
     return MenuModelInit(0);
 }
 
-
-
-extern const char D_004C32B0[16];
-
-extern unsigned char D_004DA810[4];
+extern unsigned char defaultCharacterBuffer[4];
 
 extern int MenuDrillCall;
 
@@ -949,28 +945,26 @@ extern u64 * MenuBgKeepCamera;
 
 static int original_font_no_1;
 
+extern const MenuModelPath tairetuTexturePath;
 
-
-extern const MenuModelPath D_004C3220;
-
-extern const MenuLightConfig D_004C3240;
-
-extern UmnTextPageMap D_004C32F8;
+extern const UmnTextPageMap menuTextPageTable;
 
 extern int MenuHddCheck;
 
 extern int debug_flag;
 
-extern const char D_004C31E0[32];
-extern const char D_004C31C8[24];
-extern const char D_004C31B0[24];
+extern const char OpenCloseCfwinPath[32];
+extern const char OpenCloseMenu01Path[24];
+extern const char OpenCloseMenu02Path[24];
 
-static const char * file_name_0[3] __attribute__((section(".data")));
+static const char * file_name_0[3];
 
-extern XglRenderFadeCallback MenuCfTaiki[8];extern unsigned char MenuTask_BG[4];extern unsigned char model_work[4];extern unsigned char MenuBackRgba[4];
+extern XglRenderFadeCallback MenuCfTaiki[8];
+extern unsigned char MenuTask_BG[4];
+extern unsigned char model_work[4];
+extern unsigned char MenuBackRgba[4];
 
-
-static const char * file_name_0[3] __attribute__((section(".data"))) = { D_004C31E0, D_004C31C8, D_004C31B0 };
+static const char * file_name_0[3] = { OpenCloseCfwinPath, OpenCloseMenu01Path, OpenCloseMenu02Path };
 
 MenuWorkState MenuWork = { 0 };
 
@@ -980,17 +974,17 @@ unsigned char MenuKeepSelect[0x64] = { 0 };
 
 int MenuModelOut[4] = { 0 };
 
-XglRenderFadeCallback MenuCfTaiki[8] __attribute__((section(".data"))) = { 0, 0, 0, 0, 0, 0, 0, 0 };
+XglRenderFadeCallback MenuCfTaiki[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
-const MenuModelPath D_004C3220 = { .path = "data\\endou\\poly\\tai00.xtx" };
+const MenuModelPath tairetuTexturePath = { .path = "data\\endou\\poly\\tai00.xtx" };
 
-const MenuLightConfig D_004C3240 = { .light = { .ambient = { 0.30000001192092896f, 0.30000001192092896f, 0.30000001192092896f, 1.0f }, .parallel = { { 0.5f, 0.5f, 0.5f, 1.0f }, { 0.5f, 0.5f, 0.5f, 1.0f }, { 0.5f, 0.5f, 0.5f, 1.0f } }, .direction = { { 1.0f, 1.0f, 0.5f, 1.0f }, { -1.0f, 1.0f, 0.5f, 1.0f }, { 0.0f, 1.0f, 0.5f, 1.0f } } } };
+const MenuLightConfig mainMenuLighting = { .light = { .ambient = { 0.30000001192092896f, 0.30000001192092896f, 0.30000001192092896f, 1.0f }, .parallel = { { 0.5f, 0.5f, 0.5f, 1.0f }, { 0.5f, 0.5f, 0.5f, 1.0f }, { 0.5f, 0.5f, 0.5f, 1.0f } }, .direction = { { 1.0f, 1.0f, 0.5f, 1.0f }, { -1.0f, 1.0f, 0.5f, 1.0f }, { 0.0f, 1.0f, 0.5f, 1.0f } } } };
 
-const char D_004C32B0[16] = "mainmenu";
+const char mainMenuLabel[16] = "mainmenu";
 
-UmnTextPageMap D_004C32F8 __attribute__((section(".rodata"))) = { .menu_page = { 1, 3, 4, 5, 0, 0, 0, 0, 0, 0, 2 } };
+const UmnTextPageMap menuTextPageTable = { .menu_page = { 1, 3, 4, 5, 0, 0, 0, 0, 0, 0, 2 } };
 
-unsigned char D_004DA810[4] = "";
+unsigned char defaultCharacterBuffer[4] = "";
 
 int UmnSimulationNo = 0;
 

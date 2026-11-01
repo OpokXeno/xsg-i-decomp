@@ -13,30 +13,29 @@
  * tu172's original readers copy the first aligned halfword into a label.
  * The casts in msg_number express that existing reader view; these declarations
  * do not recover or allocate storage belonging to tu171. */
-extern const char D_004DB068[8];
-extern const char D_004DB060[8];
-extern const char D_004DB058[8];
-extern const char D_004DB050[8];
-extern const char D_004DB048[8];
-extern const char D_004DB040[8];
-extern const char D_004DB038[8];
-extern const char D_004DB030[8];
-extern const char D_004DB028[8];
-extern const char D_004DB020[8];
-extern const char D_004DB078[8];
-extern const char D_004C72E0[16];
-extern const char D_004DB070[8];
-extern const char D_004DB088[8];
-extern const char D_004DB080[8];
-extern const char D_004C7300[16];
-extern const char D_004C72F0[16];
-extern const char D_004C7310[16];
-extern const char D_004C7330[16];
-extern const char D_004C7320[16];
-extern const char D_004DB0A0[7];
-extern const char D_004DB0A8[7];
-extern const char D_004DB0B0[7];
-
+extern const char SeisanDigit0Text[8];
+extern const char SeisanDigit1Text[8];
+extern const char SeisanDigit2Text[8];
+extern const char SeisanDigit3Text[8];
+extern const char SeisanDigit4Text[8];
+extern const char SeisanDigit5Text[8];
+extern const char SeisanDigit6Text[8];
+extern const char SeisanDigit7Text[8];
+extern const char SeisanDigit8Text[8];
+extern const char SeisanDigit9Text[8];
+extern const char SeisanPartyText[8];
+extern const char SeisanClearTimeText[16];
+extern const char SeisanMoneyText[8];
+extern const char SeisanNextHintText[8];
+extern const char SeisanEndHintText[8];
+extern const char SeisanItemAcquiredText[16];
+extern const char SeisanNoItemsText[16];
+extern const char SeisanLevelUpText[16];
+extern const char SeisanNewAttackText[16];
+extern const char SeisanNewEtherText[16];
+extern const char seisanStartPointsText[7];
+extern const char seisanEndPointsText[7];
+extern const char seisanTotalPointsText[7];
 
 typedef struct SeisanLabelBytes {
     unsigned char bytes[5];
@@ -504,13 +503,13 @@ static void tskSeisanItem(TskObject *task, void *data)
                     printY = panel->windows[1].y + i * 24 + 2;
                     printX = panel->windows[1].x + 3;
                     ordinalGlyph = ordinalSource[0];
-                    __builtin_memcpy(ordinalText, D_004DB090, 5);
+                    __builtin_memcpy(ordinalText, seisanOrdinalPrefixText, 5);
                     ordinalText[0] = ordinalGlyph;
                     xglFontPrint(printX, printY, 0xffffff, (const char *)ordinalText);
                     quantitySource = msg_number[SeisanItemBox[i].count];
                     printY = panel->windows[1].y + i * 24 + 2;
                     printX = panel->windows[1].x + 221;
-                    *(SeisanLabelBytes *)quantityText = *(const SeisanLabelBytes *)D_004DB098;
+                    *(SeisanLabelBytes *)quantityText = *(const SeisanLabelBytes *)seisanQuantityMarkText;
                     quantityGlyph = quantitySource[0];
                     quantityText[1] = quantityGlyph;
                     xglFontPrint(printX, printY, 0xffffff, (const char *)quantityText);
@@ -550,7 +549,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
         panel->window.width = 480;
         panel->window.height = 99;
         panel->window.y = panel->partySlot * 116 + 88;
-        panel->window.title = D_004C7340;
+        panel->window.title = combatantTitleText;
         panel->window.callback = MenuStatusDisp;
         panel->window.callbackArgument = &panel->profile;
         panel->profile.mode = -1;
@@ -900,7 +899,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                         const unsigned short *ordinalSource = msg_number[i + 1];
                         int printX = panel->learned[i].x - 40;
                         int printY = panel->learned[i].y - 2;
-                        *(SeisanLabelBytes *)firstLabels = *(const SeisanLabelBytes *)D_004DB090;
+                        *(SeisanLabelBytes *)firstLabels = *(const SeisanLabelBytes *)seisanOrdinalPrefixText;
                         firstLabels[0] = ordinalSource[0];
                         xglFontPrint(printX, printY, 0xffffff, (const char *)firstLabels);
                     }
@@ -914,7 +913,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                         const unsigned short *ordinalSource = msg_number[i + 5];
                         int printX = panel->learned[i + 4].x - 40;
                         int printY = panel->learned[i + 4].y - 2;
-                        *(SeisanLabelBytes *)lastLabels = *(const SeisanLabelBytes *)D_004DB090;
+                        *(SeisanLabelBytes *)lastLabels = *(const SeisanLabelBytes *)seisanOrdinalPrefixText;
                         lastLabels[0] = ordinalSource[0];
                         xglFontPrint(printX, printY, 0xffffff, (const char *)lastLabels);
                     }
@@ -1126,7 +1125,7 @@ void SeisanDisp(void)
 {
     SeisanRibbonData ribbon;
 
-    ribbon = D_004C7350;
+    ribbon = seisanRibbonTable;
     endPrintDirectRibbon(&ribbon);
     endPrintExtFunc(0, 100, 0);
     if (MenuLoadSync())
@@ -1264,7 +1263,7 @@ void SeisanInit(void)
     if (rewardTotal > 999999999)
         SeisanMg->money = SeisanMg->money - rewardTotal + 999999999;
     SeisanCountInit2();
-    itemGroups = D_004DB0B8[0];
+    itemGroups = seisanItemCategoryTable[0];
     {
     int itemIndex;
     for (itemIndex = 0; itemIndex < SeisanMg->itemCount; itemIndex++) {
@@ -1319,53 +1318,56 @@ void SeisanInit(void)
     MenuWorkEndCheck(work);
 }
 
-
-
-static const unsigned short *msg_number[10]  = {
-    (const unsigned short *)D_004DB068,
-    (const unsigned short *)D_004DB060,
-    (const unsigned short *)D_004DB058,
-    (const unsigned short *)D_004DB050,
-    (const unsigned short *)D_004DB048,
-    (const unsigned short *)D_004DB040,
-    (const unsigned short *)D_004DB038,
-    (const unsigned short *)D_004DB030,
-    (const unsigned short *)D_004DB028,
-    (const unsigned short *)D_004DB020
+static const unsigned short *msg_number[10] = {
+    (const unsigned short *)SeisanDigit0Text,
+    (const unsigned short *)SeisanDigit1Text,
+    (const unsigned short *)SeisanDigit2Text,
+    (const unsigned short *)SeisanDigit3Text,
+    (const unsigned short *)SeisanDigit4Text,
+    (const unsigned short *)SeisanDigit5Text,
+    (const unsigned short *)SeisanDigit6Text,
+    (const unsigned short *)SeisanDigit7Text,
+    (const unsigned short *)SeisanDigit8Text,
+    (const unsigned short *)SeisanDigit9Text
 };
-static const char *msg00_0_0036DAB8[3]  = {
-    D_004DB078, D_004C72E0, D_004DB070
+static const char *msg00_0_0036DAB8[3] = {
+    SeisanPartyText, SeisanClearTimeText, SeisanMoneyText
 };
-static const char *msg00_1_0036DAC8[2] __attribute__((section(".data"))) = {
-    D_004DB088, D_004DB080
+static const char *msg00_1_0036DAC8[] = {
+    SeisanNextHintText, SeisanEndHintText
 };
-static const char *msg00_2_0036DAD0[2] __attribute__((section(".data"))) = {
-    D_004C7300, D_004C72F0
+static const char *msg00_2_0036DAD0[] = {
+    SeisanItemAcquiredText, SeisanNoItemsText
 };
-static const char *msg00_3_0036DAD8[4]  = {
-    D_004DB0B0, D_004DB0A8, D_004DB0A0, D_004C7310
+static const char *msg00_3_0036DAD8[4] = {
+    seisanTotalPointsText, seisanEndPointsText, seisanStartPointsText, SeisanLevelUpText
 };
-static const char *msg01_4_0036DAE8[2] __attribute__((section(".data"))) = {
-    D_004C7330, D_004C7320
+static const char *msg01_4_0036DAE8[] = {
+    SeisanNewAttackText, SeisanNewEtherText
 };
 
+const char combatantTitleText[10] = "Combatant";
 
-const char D_004C7340[10] = "Combatant";
-
-const SeisanRibbonData D_004C7350 = {
+const SeisanRibbonData seisanRibbonTable = {
     { 0x00000000, 0x0000FFFF, 0x80000000, 0x01C00000,
       0x0000FFFF, 0x80000000, 0x00000200, 0x0000FFFF,
       0x80000000, 0x01C00200, 0x0000FFFF, 0x80000000,
       0x00000000, 0x00000000, 0x00000000 }
 };
 
-
-const char D_004DB090[5] = "\241\241\241\246";
-const char D_004DB098[5] = "\241\337\241\241";
-const char D_004DB0A0[7] = "\001S.Pts";
-const char D_004DB0A8[7] = "\001E.Pts";
-const char D_004DB0B0[7] = "\001T.Pts";
-const SeisanItemCategoryTable D_004DB0B8[1] = { { .entries = { 1, 3, 4, 5 } } };
+/* JP: ・
+ * EN: . */
+const char seisanOrdinalPrefixText[5] = "\241\241\241\246";
+/* JP: ×
+ * EN: X */
+const char seisanQuantityMarkText[5] = "\241\337\241\241";
+/* Text: \x01S.Pts */
+const char seisanStartPointsText[7] = "\001S.Pts";
+/* Text: \x01E.Pts */
+const char seisanEndPointsText[7] = "\001E.Pts";
+/* Text: \x01T.Pts */
+const char seisanTotalPointsText[7] = "\001T.Pts";
+const SeisanItemCategoryTable seisanItemCategoryTable[1] = { { .entries = { 1, 3, 4, 5 } } };
 
 unsigned char *SeisanWork = 0;
 
@@ -1379,15 +1381,16 @@ SeisanResultData *SeisanResult = 0;
 SeisanMoneyData *SeisanMg = 0;
 SeisanItemEntry *SeisanItemBox = 0;
 SeisanFadeData *SeisanFade = 0;
-const char D_004DB0E0[6] = "Cards";
-const char D_004DB0E8[6] = "Items";
-const char D_004DB0F0[5] = "Sell";
-const char D_004DB0F8[4] = "Buy";
-const char D_004DB100[5] = "Shop";
-const char D_004DB108[6] = "Quit.";
-const char D_004DB110[8] = "Select ";
-const char D_004DB118[5] = " is ";
-const char D_004DB120[3] = "G.";
-const char D_004DB128[8] = " sold.\037";
-const char D_004DB130[3] = ".\n";
+const char MenuShopCardsText[6] = "Cards";
+const char MenuShopItemsText[6] = "Items";
+const char MenuShopSellText[5] = "Sell";
+const char MenuShopBuyText[4] = "Buy";
+const char MenuShopStoreText[5] = "Shop";
+const char MenuShopQuitText[6] = "Quit.";
+const char MenuShopSelectText[8] = "Select ";
+const char MenuShopIsText[5] = " is ";
+const char MenuShopGoldUnitText[3] = "G.";
+/* Text:  sold.\x1F */
+const char MenuShopSoldText[8] = " sold.\037";
+const char MenuShopPeriodText[3] = ".\n";
 

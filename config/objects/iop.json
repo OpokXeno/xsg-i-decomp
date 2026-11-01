@@ -2,18 +2,19 @@
  "schema": "iop-objects/1",
  "note": [
   "The IOP modules have source-driven builds under config/iop-build.json.",
-  "These 20 SSD and 4 RSSD groups retain their original FDR identities, function",
+  "These 21 SSD and 4 RSSD groups retain their original FDR identities, function",
   "extents and debug-file source attestations; each points to its original-named",
-  "published C translation unit. Whole IRX comparison is recorded in the IOP",
-  "publication ledger; data recovery remains uncredited."
+  "published C translation unit (ssd_data.c is the original data-only FDR 20).",
+  "Whole IRX comparison is recorded in the IOP publication ledger; all .rodata,",
+  ".data and .bss is compiler-emitted from that C (2026-11-01)."
  ],
  "units": {
   "iop_ssd": {
    "file": "IOP/SSD.IRX",
    "sha256": "53393010609ac23b107d3ab93d67f0c07a7db5170e10081e76425daf17940363",
-   "groups": 20,
+   "groups": 21,
    "functions": 442,
-   "build": "config/iop-build.json (20 original FDR C translation units)"
+   "build": "config/iop-build.json (21 original FDR C translation units)"
   },
   "iop_rssd": {
    "file": "IOP/RSSD.IRX",
@@ -302,6 +303,17 @@
    },
    "attested_source_files": [
     "ssd_vag.c"
+   ]
+  },
+  {
+   "id": "iop_ssd/debug-file-020",
+   "fdr_index": 20,
+   "source": "src/audio/ssd/ssd_data.c",
+   "unit": "iop_ssd",
+   "function_count": 0,
+   "code": null,
+   "attested_source_files": [
+    "ssd_data.c"
    ]
   },
   {

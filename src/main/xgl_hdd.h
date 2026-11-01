@@ -55,7 +55,7 @@ typedef struct HddErrorPacket {
 } HddErrorPacket;
 
 extern HddErrorPacket TestEnv_0_004A8A80[];
-extern const unsigned char D_004D2628[];
+extern const unsigned char hddLoadErrorText[];
 extern void xglDmaDirectNormal(int channel, const void *packet, int qwords);
 extern void xglSoundEffectNormalDirect(int sound_id);
 

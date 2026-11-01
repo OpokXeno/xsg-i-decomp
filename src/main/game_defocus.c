@@ -243,7 +243,7 @@ static DefocusCopyPacket TestPrim_1;
 
 static DefocusTintPacket TestPrim_2;
 
-static u64 TestPrim_3[6] __attribute__((section(".data")));
+static u64 TestPrim_3[6];
 
 static DefocusTexturedHeader Head_0;
 
@@ -275,9 +275,9 @@ static DefocusCopyTemplate Copy_10;
 
 static DefocusTexturedHeader Head_11;
 
-static u64 Head_13[10] __attribute__((section(".data")));
+static u64 Head_13[10];
 
-static u64 Tail_15[8] __attribute__((section(".data")));
+static u64 Tail_15[8];
 
 extern float I2F(int value);
 
@@ -350,7 +350,7 @@ typedef struct {
 
 extern float xglFRand(void);
 
-static DefocusSolidPacketHeader Head_8 __attribute__((section(".data")));
+static DefocusSolidPacketHeader Head_8;
 
 static u8 rate_9[37];
 
@@ -1362,28 +1362,6 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
     GameDefocusCheck();
 }
 
-
-
-static DefocusTexturedHeader Head_0;
-
-static DefocusCopyPacket TestPrim_1;
-
-static DefocusTintPacket TestPrim_2;
-
-static DefocusTexturedHeader Head_4_00367170;
-
-static DefocusType05Header Head_5;
-
-static DefocusTexturedHeader Head_7;
-
-static u8 rate_9[37];
-
-static DefocusCopyTemplate Copy_10;
-
-static DefocusTexturedHeader Head_11;
-
-static DefocusTexturedHeader Head_12;
-
 extern void DefocusMainType01(DefocusLayer *layer, XglPacket *packet);
 extern void DefocusMainType06(DefocusLayer *layer, XglPacket *packet);
 extern void DefocusMainType02(DefocusLayer *layer, XglPacket *packet);
@@ -1395,16 +1373,7 @@ extern void DefocusMainType05(DefocusLayer *layer, XglPacket *packet);
 extern void DefocusMainType08(DefocusLayer *layer, XglPacket *packet);
 extern void DefocusMainType10(DefocusLayer *layer, XglPacket *packet);
 
-static u64 TestPrim_3[6] __attribute__((section(".data")));
-
-static DefocusSolidPacketHeader Head_8 __attribute__((section(".data")));
-
-static u64 Head_13[10] __attribute__((section(".data")));
-
-static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet) __attribute__((section(".data")));
-
-static u64 Tail_15[8] __attribute__((section(".data")));
-
+static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet);
 
 static DefocusTexturedHeader Head_0 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
 
@@ -1412,7 +1381,7 @@ static DefocusCopyPacket TestPrim_1 = { .unmodeled_00 = { 0ULL, 5836665177201704
 
 static DefocusTintPacket TestPrim_2 = { .unmodeled_00 = { 0ULL, 5836665151431901184ULL, 8071365325922271233ULL, 249909742ULL, 458752ULL, 71ULL }, .source_frame = 0ULL, .frame_register = 76ULL, .color = { 0ULL, 0ULL }, .top_left = 125305670889464ULL, .first_color = 49152, .first_flags = 0U, .bottom_right = 156091996475384ULL, .second_color = 49152, .second_flags = 0U, .unmodeled_70 = { 0ULL, 63ULL }, .destination_frame = 0ULL, .destination_register = 76ULL };
 
-static u64 TestPrim_3[6] __attribute__((section(".data"))) = { 0x0000000000000000ULL, 0x5100000200000000ULL, 0x1000000000008001ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000004cULL };
+static u64 TestPrim_3[6] = { 0x0000000000000000ULL, 0x5100000200000000ULL, 0x1000000000008001ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000004cULL };
 
 static DefocusTexturedHeader Head_4_00367170 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 13, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 64, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
 
@@ -1425,7 +1394,7 @@ static DefocusSolidPacketHeader Head_6_00367240 = {
 
 static DefocusTexturedHeader Head_7 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
 
-static DefocusSolidPacketHeader Head_8 __attribute__((section(".data"))) = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .packet_tag_0c = 1358954499U, .vu_memory_address_10 = 32769U, .packet_header_14 = 536870912U, .packet_header_18 = 238U, .unmodeled_1c = 0U, .packet_header_20 = 462849U, .unmodeled_24 = 0U, .packet_header_28 = 71U, .unmodeled_2c = 0U, .packet_header_30 = 68U, .unmodeled_34 = 0U, .packet_header_38 = 66U, .unmodeled_3c = 0U };
+static DefocusSolidPacketHeader Head_8 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .packet_tag_0c = 1358954499U, .vu_memory_address_10 = 32769U, .packet_header_14 = 536870912U, .packet_header_18 = 238U, .unmodeled_1c = 0U, .packet_header_20 = 462849U, .unmodeled_24 = 0U, .packet_header_28 = 71U, .unmodeled_2c = 0U, .packet_header_30 = 68U, .unmodeled_34 = 0U, .packet_header_38 = 66U, .unmodeled_3c = 0U };
 
 static u8 rate_9[37] = { 17, 9, 1, 0, 0, 0, 0, 8, 16, 24, 32, 48, 48, 48, 32, 24, 16, 8, 0, 0, 0, 0, 1, 9, 17, 25, 33, 49, 49, 49, 33, 25, 17, 9, 1, 0, 0 };
 
@@ -1435,10 +1404,10 @@ static DefocusTexturedHeader Head_11 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 
 
 static DefocusTexturedHeader Head_12 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 0, 0, 64, 238, 238, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .texture = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0 } };
 
-static u64 Head_13[10] __attribute__((section(".data"))) = { 0x0000000000000000ULL, 0x5100000400000000ULL, 0x3000000000008001ULL, 0x0000000000000eeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000131000000ULL, 0x000000000000004eULL, 0x000006fc007fc005ULL, 0x0000000000000008ULL };
+static u64 Head_13[10] = { 0x0000000000000000ULL, 0x5100000400000000ULL, 0x3000000000008001ULL, 0x0000000000000eeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000131000000ULL, 0x000000000000004eULL, 0x000006fc007fc005ULL, 0x0000000000000008ULL };
 
-static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet) __attribute__((section(".data"))) = { DefocusMainType01, DefocusMainType02, DefocusMainType03, DefocusMainType01, DefocusMainType05, DefocusMainType06, DefocusMainType07, DefocusMainType08, DefocusMainType09, DefocusMainType10, DefocusMainType11 };
+static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet) = { DefocusMainType01, DefocusMainType02, DefocusMainType03, DefocusMainType01, DefocusMainType05, DefocusMainType06, DefocusMainType07, DefocusMainType08, DefocusMainType09, DefocusMainType10, DefocusMainType11 };
 
-static u64 Tail_15[8] __attribute__((section(".data"))) = { 0x0000000000000000ULL, 0x5100000300000000ULL, 0x2000000000008001ULL, 0x00000000000000eeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000031000000ULL, 0x000000000000004eULL };
+static u64 Tail_15[8] = { 0x0000000000000000ULL, 0x5100000300000000ULL, 0x2000000000008001ULL, 0x00000000000000eeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000031000000ULL, 0x000000000000004eULL };
 
 DefocusLayer GameDefocusParam[16] = { 0 };

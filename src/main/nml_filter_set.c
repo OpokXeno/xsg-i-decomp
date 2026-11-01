@@ -48,11 +48,7 @@ struct NmlFilterCubeFaces {
     int vertices[6][4];
 };
 
-extern const struct NmlFilterCubeFaces D_004D30E0;
-
-
 /* Six original cube faces, each containing four corner indices. */
-
 
 /* The projection helper's VFT0I/SQC2 output is integer GS coordinates. */
 
@@ -150,8 +146,6 @@ static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
     __asm__ __volatile__("" : : "r"(destinationOrFlags), "r"(clipFlags));
     return destinationOrFlags;
 }
-
-
 
 #define NML_FILTER_EMIT(id, payload) do { \
     packet[entryCount * 2].value = (payload); \
@@ -294,15 +288,12 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
 #undef NML_FILTER_EMIT
 #undef NML_FILTER_VERTEX
 
-
-
 /* Base tint of the stealth outline (red, green, blue, unused). */
 struct NmlStealthTint {
     float channels[4];
 } __attribute__((aligned(16)));
 
 /* Original read-only data remains scaffolding, with no recovery credit. */
-extern const struct NmlStealthTint D_004D30D0;
 
 /* One strip vertex: its UV entry, then its XYZ entry whose register slot holds
  * the clip flags of the vertex and of the two before it in the strip. */
@@ -325,7 +316,7 @@ extern const struct NmlStealthTint D_004D30D0;
 
 static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
 {
-    struct NmlStealthTint baseTint = D_004D30D0;
+    struct NmlStealthTint baseTint = { { 0.5f, 1.0f, 0.8f, 1.0f } };
     float outlineColor[3];
     struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)0x70000000;
     struct NmlFilterGsPair *entry;
@@ -1417,7 +1408,7 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     memset(facingCamera, 0, sizeof(facingCamera));
     cameraPosition = (NmlFilterPositionView *)&camera->position;
     memset(faceClip, 0, sizeof(faceClip));
-    faces = D_004D30E0;
+    faces = (struct NmlFilterCubeFaces){ .vertices = { { 1, 0, 5, 4 }, { 3, 2, 7, 6 }, { 0, 3, 4, 7 }, { 2, 1, 6, 5 }, { 0, 1, 3, 2 }, { 6, 5, 7, 4 } } };
 
     corners[0].z = corners[3].z = corners[4].z = corners[7].z = minimum->z;
     corners[1].z = corners[2].z = corners[5].z = corners[6].z = maximum->z;
@@ -1567,3 +1558,4 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
 #undef NML_CUBE_CORNER
     return needsClipping;
 }
+

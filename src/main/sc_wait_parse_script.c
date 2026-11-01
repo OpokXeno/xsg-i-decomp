@@ -14,8 +14,6 @@ static int scWaitParseMovieScript(ScriptObject *script);
 static int scWaitParseMovScript(ScriptObject *script);
 static int scWaitMissileScript(ScriptObject *script);
 
-
-
 extern int sefSearchMapperIndex(int effect_no);
 
 extern MissileImage *svGetImageListItem(int mapper_index, int image_index);
@@ -101,7 +99,6 @@ int scWaitParseScript(ScriptObject *script)
 /* WAITMOVIE: the wait is over once the movie player reports it stopped. */
 
 /* WAITMOV: the wait is over while `flags` bit 5 is clear. */
-
 
 static int (*waitHandlerTbl[6])(ScriptObject *) = {
     scWaitParseNopScript,

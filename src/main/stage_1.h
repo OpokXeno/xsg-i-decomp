@@ -13,10 +13,10 @@ extern SceneString *NAME_Constructor;
 extern SceneType *TYPE_Void;
 extern unsigned char tcamera[];
 
-extern const char D_004C2420[];
-extern const char D_004DA628[];
-extern const char D_004DA630[];
-extern const char D_004DA638[];
+extern const char cameraClassName[];
+extern const char cameraInstanceName[];
+extern const char initMethodName[];
+extern const char initMethodSignature[];
 
 extern SceneMethod *findMethod(SceneClass *scene_class, SceneString *name,
                                void *signature_or_type);

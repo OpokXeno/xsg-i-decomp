@@ -4,12 +4,11 @@
 #include "msg_init.h"
 static void _copyCTRLCode(unsigned char **destination, unsigned char **source);
 
+extern const char tokenDelimiters[];
 
-extern const char D_004DA418[];
+static int cnvCW;
 
-extern int cnvCW;
-
-extern unsigned int cnvCH;
+static unsigned int cnvCH;
 
 typedef struct Mif2Argument {
     int type;
@@ -63,43 +62,43 @@ char *MIF2_dummy(char *out, int argc, const Mif2Argument *args);
 char *MIF2_gaiji(char *out, int argc, const Mif2Argument *args);
 char *MIF2_code(char *out, int argc, const Mif2Argument *args);
 
-const char D_004DA410[8] = "clear";
+const char clearTagName[8] = "clear";
 
-const char D_004DA408[8] = "waitkey";
+const char waitkeyTagName[8] = "waitkey";
 
-const char D_004DA400[8] = "signal";
+const char signalTagName[8] = "signal";
 
-const char D_004DA3F8[8] = "wait";
+const char waitTagName[8] = "wait";
 
-const char D_004DA3F0[8] = "color";
+const char colorTagName[8] = "color";
 
-const char D_004DA3E8[8] = "close";
+const char closeTagName[8] = "close";
 
-const char D_004DA3E0[8] = "tips";
+const char tipsTagName[8] = "tips";
 
-const char D_004DA3D8[8] = "ruby";
+const char rubyTagName[8] = "ruby";
 
-const char D_004DA3D0[8] = "font";
+const char fontTagName[8] = "font";
 
-const char D_004DA3C8[8] = "label";
+const char labelTagName[8] = "label";
 
-const char D_004DA3C0[8] = "gaiji";
+const char gaijiTagName[8] = "gaiji";
 
-const char D_004DA3B8[8] = "code";
+const char codeTagName[8] = "code";
 
 static MsgFuncEntry mfunc[] = {
-    {MIF2_clear, D_004DA410},
-    {MIF2_waitkey, D_004DA408},
-    {MIF2_dummy, D_004DA400},
-    {MIF2_wait, D_004DA3F8},
-    {MIF2_color, D_004DA3F0},
-    {MIF2_close, D_004DA3E8},
-    {MIF2_dummy, D_004DA3E0},
-    {MIF2_ruby, D_004DA3D8},
-    {MIF2_font, D_004DA3D0},
-    {MIF2_label, D_004DA3C8},
-    {MIF2_gaiji, D_004DA3C0},
-    {MIF2_code, D_004DA3B8},
+    {MIF2_clear, clearTagName},
+    {MIF2_waitkey, waitkeyTagName},
+    {MIF2_dummy, signalTagName},
+    {MIF2_wait, waitTagName},
+    {MIF2_color, colorTagName},
+    {MIF2_close, closeTagName},
+    {MIF2_dummy, tipsTagName},
+    {MIF2_ruby, rubyTagName},
+    {MIF2_font, fontTagName},
+    {MIF2_label, labelTagName},
+    {MIF2_gaiji, gaijiTagName},
+    {MIF2_code, codeTagName},
     {0, 0},
 };
 
@@ -114,7 +113,6 @@ static MsgFuncEntry mfunc[] = {
  * cursor at the workspace. MBUF_create also uses the header's table pointer
  * for the per-entry pointers stored inside that workspace.
  */
-
 
 MsgBuffer msg_buffer[8];
 
@@ -131,7 +129,6 @@ extern int PARSE_int(const char *str, int len, int base);
  * handed out so far.
  */
 
-
 struct MsgPrintContext {
     unsigned char unmodeled_00[0x16];
     unsigned short render_mode;
@@ -142,7 +139,6 @@ struct MsgPrintContext {
 unsigned int MSG_convert(unsigned char *destination, int capacity, const char *text, int length);
 
 int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int length);
-
 
 typedef struct RubyFontContext {
     unsigned char unmodeled_00[8];
@@ -196,12 +192,11 @@ extern int xglFontCheckProportional(unsigned int high, unsigned int low);
 
 extern unsigned int xglFontGetProportionalSize(int code);
 
-
 extern int xglFontGetStringWidth(const char *text);
 
 extern int xglFontGetStringWidth2(const char *text, int mode);
 
-extern const char D_004DA3B0[];
+extern char msgWidthProbeControl[];
 
 static void _skipCTRLCode(unsigned char **source);
 
@@ -516,7 +511,7 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
     input.bytes = start;
     *end = 0;
     output = destination;
-    xglFontGetStringWidth(D_004DA3B0);
+    xglFontGetStringWidth(msgWidthProbeControl);
     queue->last = 0;
 
     while (active && input.bytes < end) {
@@ -1207,19 +1202,19 @@ unsigned int MSG_convert(unsigned char *destination, int capacity, const char *t
                     strncpy(bracket, (const char *)input, span);
                     input = (unsigned char *)closing + 1;
                     bracket[span] = 0;
-                    token = STR_tokenGetNext(bracket, D_004DA418);
+                    token = STR_tokenGetNext(bracket, tokenDelimiters);
                     while (token) {
                         int argc = 0;
                         MsgFuncEntry *entry = findMsgFunc(token);
                         if (entry) {
                             int type;
-                            token = STR_tokenGetNext(0, D_004DA418);
+                            token = STR_tokenGetNext(0, tokenDelimiters);
                             type = STR_tokenGetType();
                             if (token) {
                                 tokens[argc++] = token;
                                 if (type != ')') {
                                     do {
-                                        token = STR_tokenGetNext(0, D_004DA418);
+                                        token = STR_tokenGetNext(0, tokenDelimiters);
                                         type = STR_tokenGetType();
                                         if (!token)
                                             break;
@@ -1242,7 +1237,7 @@ unsigned int MSG_convert(unsigned char *destination, int capacity, const char *t
                             } while (*output++);
                             output--;
                         }
-                        token = STR_tokenGetNext(0, D_004DA418);
+                        token = STR_tokenGetNext(0, tokenDelimiters);
                     }
                 }
             } else {
@@ -1458,3 +1453,18 @@ static void _skipCTRLCode(unsigned char **source)
     }
     *source = cursor;
 }
+
+const char tokenDelimiters[8] = ",();";
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+extern char digits[16];
+extern char radixTenTenths[100];
+extern char radixTenUnits[100];
+
+char digits[16] = "0123456789abcdef";
+
+char radixTenTenths[100] = "0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999";
+
+char radixTenUnits[100] = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+
+char msgWidthProbeControl[8] = { 25, 3, 0, 0, 0, 0, 0, 0 };

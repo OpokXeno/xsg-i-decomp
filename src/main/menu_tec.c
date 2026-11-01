@@ -5,20 +5,19 @@ void WindowSPSet(WindowSPCursor *cursor);
 void WindowSPMain(WindowSPCursor *cursor);
 void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
 
-
 #include "main/menu_top_command_check.h"
 
-extern signed char D_004DB4E8[];
+extern signed char nextMenuTable[];
 
-extern char D_004DB4F0[];
+extern char tecLabel[];
 
-extern char D_004DB4F8[];
+extern char msFormat[];
 
-extern char D_004DB500[];
+extern char sliFormat[];
 
-extern char D_004DB508[];
+extern char lstFormat[];
 
-extern char D_004DB510[];
+extern char sctFormat[];
 
 typedef struct MenuTecInfoDetail {
     short x;
@@ -61,7 +60,7 @@ extern MenuTecInfoWork *MenuTecInfo;
 
 extern unsigned char *MainMenuWorkEnd;
 
-extern char D_004C9308[];
+extern const char tecDataPath[];
 
 typedef struct MenuTecData {
     unsigned char unmodeled_00[8];
@@ -225,10 +224,6 @@ int MenuSortCheck(int list);
 
 void MoveSlide(short *current, short *target, float rate);
 
-
-
-
-
 void eSpriteSet(void *sprite, short spriteId);
 
 void eSpriteMain(void *sprite);
@@ -314,7 +309,7 @@ struct MenuTecPasWork {
     unsigned char callbackWork[0x10];   /* +0x340 */
 };
 
-extern const char *msg_0_0036DC68[];
+static const char * msg_0_0036DC68[3];
 
 int MenuPasLengthGet(const char *text);
 
@@ -383,10 +378,9 @@ struct MenuTecMenuWork {
     MenuTecSelectList list[2];          /* +0x330 */
 };
 
-extern const char *msg00_1_0036DC78[];
+static const char * msg00_1_0036DC78[] ;
 
-extern const char *msg01_2_0036DC80[];
-
+static const char * msg01_2_0036DC80[] ;
 
 typedef struct MenuTecL1R1Sprite {
     unsigned char unmodeled_00[0x04];
@@ -432,13 +426,13 @@ struct MenuTecListWork {
     MenuTecSPWindow window;             /* +0x08 */
 };
 
-extern const char *msg00_7[];
+static const char * msg00_7[3];
 
-extern const char *msg01_8_0036DCB8[];
+static const char * msg01_8_0036DCB8[3];
 
-extern const char *msg02_9[];
+static const char * msg02_9[] ;
 
-extern const char *msg03_10[];
+static const char * msg03_10[10];
 
 void eCursolSet(void *cursor, signed char width);
 
@@ -468,11 +462,9 @@ int func_A197E8(int chrNo, int tecNo);
 
 void *MenuSortAddrGet(int list);
 
-extern const unsigned char D_004C92E8[28];
+static unsigned char MenuTecTrgTbl00[] ;
 
-extern const unsigned char MenuTecTrgTbl00[];
-
-extern const unsigned char MenuTecTrgTbl01[];
+static unsigned char MenuTecTrgTbl01[] ;
 
 MenuTecSaveRecord *MenuTecSaveDataGet(int chrNo)
 {
@@ -747,8 +739,8 @@ void MenuTecPasMain(void)
     }
 }
 
-extern char D_004DB418[];
-extern char D_004DB420[];
+extern char infoPeriodText[];
+extern char infoSentenceEndText[];
 
 typedef struct MenuTextEntry {
     const char *name;
@@ -781,6 +773,7 @@ void MenuTecInfoMain(void)
         "SPEED",
         "WAIT",
         "XX's level",
+        /* Text: is now XX.\x1F */
         "is now XX.\037"
     };
     const char *limitHelp[] = {
@@ -799,16 +792,38 @@ void MenuTecInfoMain(void)
         " is now "
     };
     const char *waitHelp[] = {
+        /* JP: ０
+         * EN: 0 */
         "\243\260",
+        /* JP: １
+         * EN: 1 */
         "\243\261",
+        /* JP: ２
+         * EN: 2 */
         "\243\262",
+        /* JP: ３
+         * EN: 3 */
         "\243\263",
+        /* JP: ４
+         * EN: 4 */
         "\243\264",
+        /* JP: ５
+         * EN: 5 */
         "\243\265",
+        /* JP: ６
+         * EN: 6 */
         "\243\266",
+        /* JP: ７
+         * EN: 7 */
         "\243\267",
+        /* JP: ８
+         * EN: 8 */
         "\243\270",
+        /* JP: ９
+         * EN: 9 */
         "\243\271",
+        /* JP: Ａ
+         * EN: A */
         "\243\301"
     };
     const char *listHelp[] = {
@@ -991,9 +1006,9 @@ void MenuTecInfoMain(void)
                     break;
                 }
                 if (MenuWork.state == 0x54)
-                    eMessageCat(D_004DB418);
+                    eMessageCat(infoPeriodText);
                 else
-                    eMessageCat(D_004DB420);
+                    eMessageCat(infoSentenceEndText);
             }
             break;
         default:
@@ -1101,7 +1116,7 @@ typedef struct MenuTecExWork {
 } MenuTecExWork;
 
 extern MenuTecExWork *MenuTecEx;
-extern const char *msg00_3_0036DC88[];
+static const char * msg00_3_0036DC88[] ;
 
 void eRibbonSet(MenuTecExRibbon *ribbon, int mode);
 void eRibbonMain(MenuTecExRibbon *ribbon);
@@ -1242,7 +1257,6 @@ void MenuTecL1R1Main(void)
     }
 }
 
-
 struct MenuStatusPanelWindow;
 struct MenuStatusPanel;
 
@@ -1314,7 +1328,7 @@ typedef struct MenuTecStatusWork {
 } MenuTecStatusWork;
 
 extern MenuTecStatusWork *MenuTecStatus;
-extern short MenuTecParty[];
+static short MenuTecParty[8];
 int PartyAttackerCheck(int characterNo);
 const char *MenuTagTextGet(int tag);
 
@@ -1466,13 +1480,9 @@ void MenuTecStatusMain(void)
     }
 }
 
-
-
-
-
 extern unsigned char MenuKeepSelect[];
-extern const char D_004C90F0[];
-extern const char D_004DB458[];
+extern const char techListTitleText[];
+extern const char listTitleText[];
 
 void MenuTecListMain(void)
 {
@@ -1513,7 +1523,7 @@ void MenuTecListMain(void)
                     work->window.rows = 5;
                     work->window.drawFlags = 7;
                     work->window.x = 528;
-                    work->window.title = D_004C90F0;
+                    work->window.title = techListTitleText;
                     work->window.columns = 1;
                     work->window.items = MenuListGet(0);
                     WindowSPItemChange((WindowSPCursor *)(void *)(window));
@@ -1544,7 +1554,7 @@ void MenuTecListMain(void)
                     work->window.rows = 8;
                     work->window.x = -224;
                     work->window.drawFlags = 3;
-                    work->window.title = D_004DB458;
+                    work->window.title = listTitleText;
                     work->window.columns = 1;
                     work->window.items = MenuListGet(0);
                     WindowSPItemChange((WindowSPCursor *)(void *)(window));
@@ -1604,21 +1614,21 @@ typedef struct MenuTecList2MessageIds {
     int id[6];
 } MenuTecList2MessageIds;
 
-extern const MenuTecList2MessageIds D_004C91D8;
-extern const MenuTecList2SpriteIds D_004C9210;
+extern const MenuTecList2MessageIds list2MessageIdTable;
+extern const MenuTecList2SpriteIds list2SpriteIdTable;
 
 extern MenuTecList2Work *MenuTecList2;
-extern const char D_004C91F0[];
-extern const char D_004C9200[];
-extern const char *msg00_4_0036DC90[];
-extern const char *msg01_5[];
+extern const char setListHiTitleText[];
+extern const char setListLwTitleText[];
+static const char * msg00_4_0036DC90[3];
+static const char * msg01_5[] ;
 
 void MenuTecListMain2(void)
 {
     int i;
     int j;
     MenuTecList2Work *work = MenuTecList2;
-    
+
     void subMenuTecListChange(void)
     {
         MenuTecEquipRecord *equipment = func_A191C0(MenuWork.characterNo);
@@ -1630,7 +1640,7 @@ void MenuTecListMain2(void)
                 }
             }
         } else {
-            MenuTecList2MessageIds messageIds = D_004C91D8;
+            MenuTecList2MessageIds messageIds = list2MessageIdTable;
 
             for (i = 0; i < 2; i++) {
                 for (j = 0; j < i * 2 + 2; j++) {
@@ -1674,9 +1684,9 @@ void MenuTecListMain2(void)
             work->row[i].window.width = 285;
             work->row[i].window.height = rowHeight;
             if (i == 0)
-                work->row[i].window.title = D_004C91F0;
+                work->row[i].window.title = setListHiTitleText;
             else
-                work->row[i].window.title = D_004C9200;
+                work->row[i].window.title = setListLwTitleText;
             work->row[i].window.state = 1;
             WindowDXMain((WindowDX *)(void *)(&work->row[i].window));
             work->row[i].window.state = 3;
@@ -1689,7 +1699,7 @@ void MenuTecListMain2(void)
                 work->row[i].equipmentName[j].color = work->color + 2;
             }
             {
-                spriteIds = D_004C9210;
+                spriteIds = list2SpriteIdTable;
 
                 for (j = 0; j < i * 6 + 2; j++) {
                     eSpriteSet(&work->row[i].icon[j], spriteIds.id[j + i * 2]);
@@ -1914,6 +1924,7 @@ void MenuTecSetWinMain(void)
         work->window.color = work->color;
         work->window.width = 240;
         work->window.height = 64;
+        /* Text: Set\x03,Lv{x 530}T.Pts */
         work->window.title = "Set\003,Lv\003\022T.Pts";
         work->window.state = 1;
         WindowDXMain((WindowDX *)(void *)(&work->window));
@@ -2000,13 +2011,15 @@ void MenuTecSetWinMain(void)
 void MenuTecSortSet00(void)
 {
     int *sortRow = MenuSortAddrGet(0);
+    int tecNo;
     struct {
         short first;
         short last;
-    } range[7];
-    int tecNo;
+    } range[7] = {
+        { 0x2D, 0x34 }, { 0x35, 0x3B }, { 0x3C, 0x43 }, { 0x44, 0x4B },
+        { 0x4C, 0x52 }, { 0x53, 0x5A }, { 0x5B, 0x62 },
+    };
 
-    __builtin_memcpy(range, D_004C92E8, sizeof(range));
     for (tecNo = range[MenuWork.characterNo - 1].first; tecNo <= range[MenuWork.characterNo - 1].last; tecNo++) {
         if (func_A197E8(MenuWork.characterNo, tecNo) != 0)
             *sortRow++ = 0xA0000 + (tecNo & 0xFFFF);
@@ -2147,7 +2160,7 @@ void MenuTec(void)
         MenuTecL1R1Work *shoulder;
         heap = MainMenuWorkEnd;
         MenuTecDataBuf = (void *)heap;
-        dataSize = xglCdReadFile(D_004C9308, heap, 0, 1);
+        dataSize = xglCdReadFile(tecDataPath, heap, 0, 1);
         heap = (unsigned char *)MenuTecDataBuf + dataSize;
         pas = (void *)heap;
         MenuTecPas = pas;
@@ -2286,7 +2299,7 @@ void MenuTec(void)
         MenuWork.listCursor = MenuSelectMove(MenuWork.listCursor, 3, 0);
         if (MenuWork.listCursor == oldCursor) {
             if (PadData.half_2a == 0x20) {
-                __builtin_memcpy(nextMenu, D_004DB4E8, sizeof(nextMenu));
+                __builtin_memcpy(nextMenu, nextMenuTable, sizeof(nextMenu));
                 MenuWork.inputDelay = 8;
                 MenuWork.nextState = nextMenu[MenuWork.listCursor];
                 if (!MenuCursorKeepCheck()) {
@@ -2499,13 +2512,196 @@ void MenuTec(void)
     MenuTecExMain();
     MenuTecL1R1Main();
     MenuWork.resetFlags |= 2;
-    xglFontDebugPrintf(0, 64, D_004DB4F0);
-    xglFontDebugPrintf(0, 80, D_004DB4F8, MenuWork.listCursor);
-    xglFontDebugPrintf(0, 88, D_004DB500, MenuWork.mode);
-    xglFontDebugPrintf(0, 96, D_004DB508, MenuWork.selectedTechnique);
-    xglFontDebugPrintf(0, 104, D_004DB510, MenuWork.rowCursor);
+    xglFontDebugPrintf(0, 64, tecLabel);
+    xglFontDebugPrintf(0, 80, msFormat, MenuWork.listCursor);
+    xglFontDebugPrintf(0, 88, sliFormat, MenuWork.mode);
+    xglFontDebugPrintf(0, 96, lstFormat, MenuWork.selectedTechnique);
+    xglFontDebugPrintf(0, 104, sctFormat, MenuWork.rowCursor);
 }
 
 /* Defined after MenuTec: the original .sdata holds it at 0x004DB518, after
  * every string literal of the TU's functions (MenuTec's ends at 0x004DB517). */
 MenuTecData *MenuTecDataBuf = 0;
+
+extern const char MenuTecAttacksText[13];
+extern const char MenuTecUseTpText[11];
+extern const char MenuTecSetText[5];
+extern const char techSetMenuText[24];
+extern const char confirmYesNoText[8];
+extern const char techConfirmQuestionText[24];
+extern const char techPointsText[8];
+extern const char timesUsedText[16];
+extern const char spiritsAbsorbedText[24];
+extern const char numberDefeatedText[16];
+extern const char nearText[8];
+extern const char farText[8];
+extern const char waitText[8];
+extern const char techText[8];
+extern const char speedText[8];
+extern const char upOkText[8];
+extern const char completeText[16];
+extern const char dashLineText[8];
+extern const char waitLevelA8Text[8];
+extern const char waitLevelA4Text[8];
+extern const char waitLevelA6Text[8];
+extern const char waitLevelA9Text[8];
+extern const char waitLevelA7Text[8];
+extern const char waitLevelA0Text[8];
+extern const char waitLevelA3Text[8];
+extern const char waitLevelA5Text[8];
+extern const char waitLevelA1Text[8];
+extern const char waitLevelA2Text[8];
+
+static const char * msg_0_0036DC68[3] = { MenuTecAttacksText, MenuTecSetText, MenuTecUseTpText };
+
+static const char * msg00_1_0036DC78[] = { techSetMenuText };
+
+static const char * msg01_2_0036DC80[] = { confirmYesNoText, techConfirmQuestionText };
+
+static const char * msg00_3_0036DC88[] = { techPointsText };
+
+static const char * msg00_4_0036DC90[3] = { timesUsedText, numberDefeatedText, spiritsAbsorbedText };
+
+static const char * msg01_5[] = { nearText, farText };
+
+static const char * msg00_7[3] = { techText, speedText, waitText };
+
+static const char * msg01_8_0036DCB8[3] = { upOkText, completeText, dashLineText };
+
+static const char * msg03_10[10] = { waitLevelA0Text, waitLevelA1Text, waitLevelA2Text, waitLevelA3Text, waitLevelA4Text, waitLevelA5Text, waitLevelA6Text, waitLevelA7Text, waitLevelA8Text, waitLevelA9Text };
+
+const char techSetMenuText[24] = "Set\nUse T.Pts\nCancel";
+
+const char techConfirmQuestionText[24] = " Is this okay\?";
+
+/* Text: List\x03P\x03>Eqp */
+const char techListTitleText[16] = "List\003P\003>Eqp";
+
+const char spiritsAbsorbedText[24] = "Spirits Absorbed";
+
+const char numberDefeatedText[16] = "Number Defeated";
+
+const char timesUsedText[16] = "Times Used";
+
+const MenuTecList2MessageIds list2MessageIdTable = { .id = { 0, 1, 0, 0, 1, 0 } };
+
+const char setListHiTitleText[16] = "SetList/HI";
+
+const char setListLwTitleText[16] = "SetList/LW";
+
+const MenuTecList2SpriteIds list2SpriteIdTable = { .id = { 513, 514, 513, 513, 513, 514, 514, 514, 514, 513 } };
+
+const char completeText[16] = "Complete";
+
+const char tecDataPath[32] = "data\\endou\\tec\\tecdata.bin";
+
+/* Text: Game Options | Set all sound output during game to stereo or mono. \nDefault: Stereo | Remember cursor location.\nDefault: On | Set vibration On/Off.\nDefault: On | Set radar display On/Off.\nDefault: On | Adjust game display position on TV monitor. | Set data location.\nOn: Hard Disk Drive\nOff: DVD-ROM | Return to default settings. */
+const char MenuSystemOptionHelpText[344] = "Game Options\000\000\000\000Set all sound output during game to stereo or mono. \nDefault: Stereo\000\000\000\000Remember cursor location.\nDefault: On\000\000\000Set vibration On/Off.\nDefault: On\000\000\000\000\000\000\000Set radar display On/Off.\nDefault: On\000\000\000Adjust game display position on TV monitor.\000\000\000\000\000Set data location.\nOn: Hard Disk Drive\nOff: DVD-ROM\000\000\000\000\000Return to default settings.";
+
+char infoPeriodText[8] = ".";
+
+const char confirmYesNoText[8] = "Yes\nNo";
+
+/* Text: \x01T.Pts */
+const char techPointsText[8] = "\001T.Pts";
+
+const char listTitleText[8] = "List";
+
+const char farText[8] = "Far";
+
+const char nearText[8] = "Near";
+
+/* Text: \x01Wait */
+const char waitText[8] = "\001Wait";
+
+/* Text: \x01Speed */
+const char speedText[8] = "\001Speed";
+
+/* Text: \x01Tech */
+const char techText[8] = "\001Tech";
+
+const char dashLineText[8] = "-----";
+
+const char upOkText[8] = "UpOK";
+
+const char waitLevelA9Text[8] = "A9";
+
+const char waitLevelA8Text[8] = "A8";
+
+const char waitLevelA7Text[8] = "A7";
+
+const char waitLevelA6Text[8] = "A6";
+
+const char waitLevelA5Text[8] = "A5";
+
+const char waitLevelA4Text[8] = "A4";
+
+const char waitLevelA3Text[8] = "A3";
+
+const char waitLevelA2Text[8] = "A2";
+
+const char waitLevelA1Text[8] = "A1";
+
+const char waitLevelA0Text[8] = "A0";
+
+/* Text: {reset}tec */
+char tecLabel[8] = "\013tec";
+
+/* Text: {reset}ms %2d */
+char msFormat[8] = "\013ms %2d";
+
+/* Text: {reset}sli%2d */
+char sliFormat[8] = "\013sli%2d";
+
+/* Text: {reset}lst%2d */
+char lstFormat[8] = "\013lst%2d";
+
+/* Text: {reset}sct%2d */
+char sctFormat[8] = "\013sct%2d";
+
+MenuTecPasWork * MenuTecPas = 0;
+
+MenuTecInfoWork * MenuTecInfo = 0;
+
+MenuTecMenuWork * MenuTecMenu = 0;
+
+MenuTecExWork * MenuTecEx = 0;
+
+MenuTecL1R1Work * MenuTecL1R1 = 0;
+
+MenuTecStatusWork * MenuTecStatus = 0;
+
+MenuTecListWork * MenuTecList = 0;
+
+MenuTecList2Work * MenuTecList2 = 0;
+
+MenuTecSetWinWork * MenuTecSetWin = 0;
+
+const char MenuSystemDefaultText[8] = "Default";
+
+const char MenuSystemHddText[8] = "HDD";
+
+const char MenuSystemMonoText[8] = "Mono";
+
+const char MenuSystemStereoText[8] = "Stereo";
+
+const char MenuSystemOffText[8] = "Off";
+
+const char MenuSystemOnText[8] = "On";
+
+const char MenuSystemYesNoText[8] = "Yes\nNo";
+
+/* Original objects referenced by this TU's initialized DATA. */
+extern const char speedLimitedValue[];
+extern const char speedUnlimitedValue[];
+
+static const char * msg02_9[] = { speedLimitedValue, speedUnlimitedValue };
+
+static unsigned char MenuTecTrgTbl00[] = { 0, 1, 0, 0, 1, 0 };
+
+static unsigned char MenuTecTrgTbl01[] = { 1, 1, 1, 1, 1, 1 };
+
+/* Text: . \x1F */
+char infoSentenceEndText[8] = ". \037";
+
+signed char nextMenuTable[8] = { 48, 80, 16, 0, 0, 0, 0, 0 };

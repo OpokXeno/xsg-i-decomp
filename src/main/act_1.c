@@ -122,40 +122,41 @@ extern void DB_params(const char *params);
 extern void DB_println(const char *format, ...);
 
 /*
- * ACT_info's text. D_004D1708 is the 16-byte control string ACT_info hands to
+ * ACT_info's text. actorEffectControl is the 16-byte control string ACT_info hands to
  * DB_params before any line (its first five bytes are 13, 2, 14, 2, 2, the
  * rest zero); the others are the format strings of its DB_println calls,
  * in order of first use (the three shortest, "%8.3f", "ANIM" and "MDL",
  * stay string literals in the code because they live in .sdata).
  */
 
-const char D_004D1708[16] = "\r\002\016\002\002";
+/* Text: {effect 2}{effect params} */
+const char actorEffectControl[16] = "\r\002\016\002\002";
 
-const char D_004D1718[] = "ACT[%02x] %04x";
+const char actorIndexFormat[] = "ACT[%02x] %04x";
 
-const char D_004D1728[] = "FLAGS %08x";
+const char actorFlagsFormat[] = "FLAGS %08x";
 
-const char D_004D1738[] = "     POS      ROT";
+const char actorPosRotLabel[] = "     POS      ROT";
 
-const char D_004D1750[] = "%8.3f %8.3f";
+const char actorPositionValueFormat[] = "%8.3f %8.3f";
 
-const char D_004D1760[] = "     SCL";
+const char actorSclLabel[] = "     SCL";
 
-const char D_004D1770[] = "NO    %4d";
+const char actorMotionNumberFormat[] = "NO    %4d";
 
-const char D_004D1780[] = "SPEED %8.3f";
+const char actorSpeedFormat[] = "SPEED %8.3f";
 
-const char D_004D1790[] = "RSRC[%d] %p";
+const char actorResourceFormat[] = "RSRC[%d] %p";
 
-const char D_004D17A0[] = "numParts %d";
+const char modelPartCountFormat[] = "numParts %d";
 
-const char D_004D17B0[] = "     MIN      MAX";
+const char actorMinMaxLabel[] = "     MIN      MAX";
 
-const char D_004D17C8[] = "  CENTER";
+const char actorCenterLabel[] = "  CENTER";
 
-const char D_004D17D8[] = "PARENT %d";
+const char actorParentFormat[] = "PARENT %d";
 
-const char D_004D17E8[] = "CHILD[%d] %d";
+const char actorChildFormat[] = "CHILD[%d] %d";
 
 /*
  * The debug actor printer, shown while bit 0 of actInfo.visible is set
@@ -493,42 +494,42 @@ static void ACT_info(void)
     }
     self = &actor[info->actorIndex];
     DB_reset(112, 32);
-    DB_params(D_004D1708);
-    DB_println(D_004D1718, info->actorIndex, self->inUseId);
+    DB_params(actorEffectControl);
+    DB_println(actorIndexFormat, info->actorIndex, self->inUseId);
     switch (info->page) {
     case 0:
-        DB_println(D_004D1728, self->flags);
-        DB_println(D_004D1738);
-        DB_println(D_004D1750, (double)self->position.x,
+        DB_println(actorFlagsFormat, self->flags);
+        DB_println(actorPosRotLabel);
+        DB_println(actorPositionValueFormat, (double)self->position.x,
                    (double)(self->rotation.x / 3.1415927f * 180.0f));
-        DB_println(D_004D1750, (double)self->position.y,
+        DB_println(actorPositionValueFormat, (double)self->position.y,
                    (double)(self->rotation.y / 3.1415927f * 180.0f));
-        DB_println(D_004D1750, (double)self->position.z,
+        DB_println(actorPositionValueFormat, (double)self->position.z,
                    (double)(self->rotation.z / 3.1415927f * 180.0f));
-        DB_println(D_004D1760);
+        DB_println(actorSclLabel);
         DB_println("%8.3f", (double)self->scale.x);
         DB_println("%8.3f", (double)self->scale.y);
         DB_println("%8.3f", (double)self->scale.z);
         DB_println("ANIM");
-        DB_println(D_004D1770, self->motionNumber);
-        DB_println(D_004D1728, self->runtimeFlags);
-        DB_println(D_004D1780, (double)(self->speed / (1.0f / 30.0f)));
+        DB_println(actorMotionNumberFormat, self->motionNumber);
+        DB_println(actorFlagsFormat, self->runtimeFlags);
+        DB_println(actorSpeedFormat, (double)(self->speed / (1.0f / 30.0f)));
         break;
     case 1:
         for (index = 0; index < 11; index++) {
             if (self->resource[index] != 0) {
-                DB_println(D_004D1790, index, self->resource[index]);
+                DB_println(actorResourceFormat, index, self->resource[index]);
             }
         }
         model = self->resource[0];
         if (model != 0) {
             DB_println("MDL");
-            DB_println(D_004D17A0, model->numParts);
-            DB_println(D_004D17B0);
-            DB_println(D_004D1750, (double)model->boxMin[0], (double)model->boxMax[0]);
-            DB_println(D_004D1750, (double)model->boxMin[1], (double)model->boxMax[1]);
-            DB_println(D_004D1750, (double)model->boxMin[2], (double)model->boxMax[2]);
-            DB_println(D_004D17C8);
+            DB_println(modelPartCountFormat, model->numParts);
+            DB_println(actorMinMaxLabel);
+            DB_println(actorPositionValueFormat, (double)model->boxMin[0], (double)model->boxMax[0]);
+            DB_println(actorPositionValueFormat, (double)model->boxMin[1], (double)model->boxMax[1]);
+            DB_println(actorPositionValueFormat, (double)model->boxMin[2], (double)model->boxMax[2]);
+            DB_println(actorCenterLabel);
             DB_println("%8.3f", (double)model->center[0]);
             DB_println("%8.3f", (double)model->center[1]);
             DB_println("%8.3f", (double)model->center[2]);
@@ -538,17 +539,14 @@ static void ACT_info(void)
     case 2:
         parent = self->parent;
         if (parent != 0) {
-            DB_println(D_004D17D8, parent->number);
+            DB_println(actorParentFormat, parent->number);
         }
         if (self->childCount > 0) {
             for (index = 0; index < self->childCount; index++) {
-                DB_println(D_004D17E8, index, self->children[index]->number);
+                DB_println(actorChildFormat, index, self->children[index]->number);
             }
         }
         break;
     }
 }
 
-
-
-static ActInfoState actInfo;

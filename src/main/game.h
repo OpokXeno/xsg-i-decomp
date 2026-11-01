@@ -45,7 +45,7 @@ static char str_0[12];
 static char str_1[12];
 /* The eight-byte format prefix is evidenced. Its complete source-object
  * extent is unknown; the following EOB string is not an invented tail. */
-extern const char D_004D8A60[];
+extern const char dispTagFormat[];
 
 /* Actor record tag defined by main/tu121; only its pointer is used here. */
 struct LookAtPlayerActor;
@@ -94,7 +94,7 @@ int xglSoundSendSmd2(void *smd, int bank);
 int SsdResetSegmentAllocMode(int segment);
 int SsdSetSegmentAllocMode(int segment, int mode);
 void xglSoundLoadEffect(const char *name, void *segment, int bank);
-extern const char D_004BE2B0[9];
+extern const char cfRegistSoundName[9];
 extern struct SoundWork SoundWork;
 int SsdGetSeqPlayStatus(int sequence);
 int SsdGetResultValue(int *value);

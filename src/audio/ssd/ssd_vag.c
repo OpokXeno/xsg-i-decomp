@@ -90,20 +90,8 @@ typedef struct SsdVagPacket {
     unsigned char samples[14];
 } SsdVagPacket;
 
-enum { SSD_MONO_CHANNEL_ERROR_TEXT = 0x270 };
+SsdVagWork SsdVagStrWork;
 
-enum { SSD_VAG_BUFFER_ERROR_TEXT = 0x29c };
-
-enum {
-    SSD_DMA_STATUS_ERROR_TEXT = 0x2c8,
-    SSD_DMA_TRANSFER_ERROR_TEXT = 0x2e8
-};
-
-enum { SSD_VAG_FADE_MESSAGE = 0x304 };
-
-extern SsdVagWork SsdVagStrWork;
-
-extern const char _fdata[];
 
 extern int printf(const char *format, ...);
 
@@ -251,7 +239,7 @@ void SsdInitVagStreamMono(int bytes, int channels, void (*callback)(void *), voi
     int channel;
 
     if (channels > 4) {
-        printf((const char *)&_fdata[SSD_MONO_CHANNEL_ERROR_TEXT], channels);
+        printf("Ssd init vag stream  Error NumChannel=%d\n", channels);
         return;
     }
     SsdInitVagStream(bytes, channels, callback, arg);
@@ -280,7 +268,7 @@ void SsdInitVagStream(int bytes_per_channel, int channels,
     SsdVagStrWork.buffers[0] = SsdNewPtr(total_bytes);
     CpuEnableIntr();
     if (!SsdVagStrWork.buffers[0]) {
-        printf((const char *)&_fdata[SSD_VAG_BUFFER_ERROR_TEXT]);
+        printf("Ssd lack of memory  vag stream dma buffer!\n");
         return;
     }
     SsdVagStrWork.buffers[1] = SsdVagStrWork.buffers[0] + half_bytes;
@@ -572,10 +560,10 @@ void SsdVagStreamDmaTransfer(int first)
         last_packet->flags = 2;
     status = sceSdVoiceTransStatus(SsdVagStrWork.dma_channel, 0);
     if (status < 0)
-        Kprintf(&_fdata[SSD_DMA_STATUS_ERROR_TEXT], status);
+        Kprintf("sceSdVoiceTransStatus Error=%d", status);
     status = sceSdVoiceTrans(SsdVagStrWork.dma_channel, 0, packet, destination, 1024);
     if (status < 0)
-        Kprintf(&_fdata[SSD_DMA_TRANSFER_ERROR_TEXT], status);
+        Kprintf("sceSdVoiceTrans Error=%d", status);
 }
 
 int SsdVagStreamTransferStatus(int channel, int wait)
@@ -746,7 +734,7 @@ void SsdVagStreamVolumeFadeProc(SsdProc *proc, void *context)
         if (work->master_volume.current.value == 0) {
             SsdVagStreamBlockTrans(work->dma_channel, 0, 0, 0);
             work->status = 0;
-            Kprintf((const char *)&_fdata[SSD_VAG_FADE_MESSAGE]);
+            Kprintf("Stream stop !\n");
         }
         changed[0] = changed[1] = changed[2] = changed[3] = 1;
     } else {

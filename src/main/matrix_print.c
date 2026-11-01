@@ -6,7 +6,7 @@
 
 extern int printf(const char *format, ...);
 
-const char D_004C23D8[] = "\t%8.3f %8.3f %8.3f %8.3f\n";
+const char matrixPrintMatrixRowFormat[] = "\t%8.3f %8.3f %8.3f %8.3f\n";
 
 void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ);
 
@@ -24,7 +24,7 @@ int MATRIX_print(const float matrix[4][4])
     rowValues = &matrix[0][0];
     do {
         rowsRemaining--;
-        result = printf(D_004C23D8, rowValues[0], rowValues[1],
+        result = printf(matrixPrintMatrixRowFormat, rowValues[0], rowValues[1],
                         rowValues[2], rowValues[3]);
         rowValues += 4;
     } while (rowsRemaining >= 0);
@@ -452,7 +452,7 @@ void MATRIX_scale4s(Matrix4 matrix, float x, float y, float z)
 void MATRIX_toQuat4(const float matrix[16], float quaternion[4])
 {
     float components[4];
-    int D_004C23F8[3] = { 1, 2, 0 };
+    int quatNextAxisTable[3] = { 1, 2, 0 };
     float trace = matrix[0 * 5] + matrix[1 * 5] + matrix[2 * 5];
     float root;
     int dominantAxis;
@@ -475,8 +475,8 @@ void MATRIX_toQuat4(const float matrix[16], float quaternion[4])
     if (matrix[dominantAxis * 5] < matrix[2 * 5]) {
         dominantAxis = 2;
     }
-    nextAxis = D_004C23F8[dominantAxis];
-    lastAxis = D_004C23F8[nextAxis];
+    nextAxis = quatNextAxisTable[dominantAxis];
+    lastAxis = quatNextAxisTable[nextAxis];
     root = __builtin_sqrtf(matrix[dominantAxis * 5] -
                            (matrix[nextAxis * 5] + matrix[lastAxis * 5]) + 1.0f);
     components[dominantAxis] = root * 0.5f;
@@ -497,7 +497,7 @@ void QUAT_toAxis(const float quaternion[4], float axisAngle[4])
     extern unsigned long long acos(double value);
     extern double fptodp(float value);
     extern float dptofp(unsigned long long value);
-    const float D_004D7D28 = 0.000001f;
+    const float quatAxisEpsilon = 0.000001f;
     double cosine = fptodp(quaternion[3]);
     unsigned long long angleDouble = acos(cosine);
     float angle = dptofp(angleDouble);
@@ -505,7 +505,7 @@ void QUAT_toAxis(const float quaternion[4], float axisAngle[4])
 
     axisAngle[3] = angle * -2.0f;
     sine = sinf(angle);
-    if (D_004D7D28 < __builtin_fabsf(sine)) {
+    if (quatAxisEpsilon < __builtin_fabsf(sine)) {
         axisAngle[0] = quaternion[0] / sine;
         axisAngle[1] = quaternion[1] / sine;
         axisAngle[2] = quaternion[2] / sine;
@@ -577,7 +577,7 @@ void QUAT_interpS(float firstWeight, float secondWeight,
     extern unsigned long long acos(unsigned long long value);
     extern unsigned long long fptodp(float value);
     extern float dptofp(unsigned long long value);
-    const float D_004D7D2C = 0.000001f;
+    const float quatInterpThreshold = 0.000001f;
     float firstX = first->x;
     float dot = firstX * second->x + first->y * second->y
               + first->z * second->z + first->w * second->w;
@@ -596,7 +596,7 @@ void QUAT_interpS(float firstWeight, float secondWeight,
         adjusted.w = second->w;
     }
     interpolationThreshold = 1.0f - dot;
-    if (D_004D7D2C < interpolationThreshold) {
+    if (quatInterpThreshold < interpolationThreshold) {
         double promotedDot = dot;
         unsigned long long encodedDot;
         float angle;

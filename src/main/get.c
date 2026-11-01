@@ -56,13 +56,12 @@ extern float UnduCheck(const Point4 *position, void *exclude, UnduParam *param);
 extern LayoutHeader *UnduDataGetHeader(int map_index, int unit_index);
 extern UnduParam UnduTest;
 extern UnduParam UnduTemp;
-extern const float D_004D81F0;
+extern const float unduDistanceTolerance;
 extern unsigned short *DataSpline;
 extern float cosf(float angle);
 extern float atan2f(float y, float x);
 float Get_Distance(const Point4 *first, const Point4 *second);
 float Get_Decimal_Surplus_for_Radius(float angle);
-
 
 /* MARK: provisional extern block. The four words are _gp-relative .sdata
    witnesses at 0x004d81a8..0x004d81b4, not proven original declarations.
@@ -75,13 +74,13 @@ extern int CheckPointLine(const Vector4 *first, const Vector4 *second,
 
 int Check_Angle(float angle, float rangeStart, float rangeEnd);
 
-extern const float D_004D81B8;
+extern const float getPi;
 
-extern const float D_004D81BC;
+extern const float fanMinDistance;
 
-extern const float D_004D81C0;
+extern const float fanHeightTolerance;
 
-extern const float D_004D81C4;
+extern const float fanMaxHeightDelta;
 
 int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
                 Point4 *destination, int query_mode, int excluded_units,
@@ -96,7 +95,8 @@ int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
 
 #include "get.h"
 
-extern const char D_004DB9A8[], D_004DB9B0[];
+extern const char moveSquarePlaceholderText[];
+extern const char moveSquareForecastText[];
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
@@ -115,9 +115,9 @@ int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
 
 int Get_Attr(const Point4 *position, int mapIndex, int attrMask);
 
-extern const float D_004D81A0;
+extern const float wallFullTurnRadians;
 
-extern const float D_004D81A4;
+extern const float wallAngleStep;
 
 float Get_Decimal_Surplus_for_Radius(float angle)
 {
@@ -210,7 +210,7 @@ int Check_MoveSquare(const Point4 *first, const Point4 *second,
     third_intersection = third_crossing;
     fourth_intersection = fourth_crossing;
 
-    xglFontDebugPrintf(8, 0x64, D_004DB9A8);
+    xglFontDebugPrintf(8, 0x64, moveSquarePlaceholderText);
     if (Check_CrossingOver((const Vector4 *)second,
                            (const Vector4 *)&first_intersection,
                            (const Vector4 *)first,
@@ -218,7 +218,7 @@ int Check_MoveSquare(const Point4 *first, const Point4 *second,
         *destination = first_intersection;
         destination->z = second->z;
         crossed = 1;
-        xglFontDebugPrintf(8, 0x64, D_004DB9B0);
+        xglFontDebugPrintf(8, 0x64, moveSquareForecastText);
     }
     if (Check_CrossingOver((const Vector4 *)second,
                            (const Vector4 *)&second_intersection,
@@ -227,7 +227,7 @@ int Check_MoveSquare(const Point4 *first, const Point4 *second,
         *destination = second_intersection;
         destination->x = second->x;
         crossed = 1;
-        xglFontDebugPrintf(8, 0x64, D_004DB9B0);
+        xglFontDebugPrintf(8, 0x64, moveSquareForecastText);
     }
     return crossed;
 }
@@ -398,7 +398,7 @@ float Get_WallSpace(int unused, const signed char *wall_flags,
     int half_count = count / 2;
     short checked = 0;
     short selected = 0;
-    short start = (short)(angle / (D_004D81A0 / count_as_float)
+    short start = (short)(angle / (wallFullTurnRadians / count_as_float)
                           + (float)half_count);
 
     if (half_count > 0) {
@@ -419,7 +419,7 @@ float Get_WallSpace(int unused, const signed char *wall_flags,
             checked++;
         } while (checked < steps);
     }
-    return (float)selected * (D_004D81A4 / count_as_float);
+    return (float)selected * (wallAngleStep / count_as_float);
 }
 
 void Get_One_Step(float length, const Point4 *source,
@@ -594,7 +594,7 @@ int Check_InsideFan(float facing, float radius, float fan_width_degrees,
         return 0;
     }
     angle = Get_Angle(origin, target);
-    half_width = fan_width_degrees / 180.0f * D_004D81B8 * 0.5f;
+    half_width = fan_width_degrees / 180.0f * getPi * 0.5f;
     if (Check_Angle(angle, facing - half_width, facing + half_width) == 0) {
         return 0;
     }
@@ -604,13 +604,13 @@ int Check_InsideFan(float facing, float radius, float fan_width_degrees,
     if (Check_Undu(origin, target, map_index, &intersection, 1, 0, 0x400) == 0) {
         return 0;
     }
-    if (D_004D81BC <= Get_Distance(target, &intersection)) {
+    if (fanMinDistance <= Get_Distance(target, &intersection)) {
         return 0;
     }
-    if (D_004D81C0 <= __builtin_fabsf(target->y - intersection.y)) {
+    if (fanHeightTolerance <= __builtin_fabsf(target->y - intersection.y)) {
         return 0;
     }
-    if (D_004D81C4 < __builtin_fabsf(origin->y - target->y)) {
+    if (fanMaxHeightDelta < __builtin_fabsf(origin->y - target->y)) {
         return 0;
     }
     return CrossPointUwamono(origin, target, crossing_radius, &intersection) != 1;
@@ -790,7 +790,7 @@ int Check_Undu(const Point4 *start, const Point4 *end, int map_index,
     UnduTest.query_mode = query_mode;
     UnduTest.excluded_units = excluded_units;
     UnduCheck(destination, &delta, &UnduTest);
-    return Get_Distance3D(end, destination) <= D_004D81F0;
+    return Get_Distance3D(end, destination) <= unduDistanceTolerance;
 }
 
 int Get_Rnd(int min, int max)
@@ -894,3 +894,27 @@ void GetBSplineLoopDummy(short frame, short count, short period,
     }
     destination->w = 1.0f;
 }
+
+const float wallFullTurnRadians = 6.2831854820251465f;
+
+const float wallAngleStep = 6.2831854820251465f;
+
+const float getPi = 3.1415927410125732f;
+
+const float fanMinDistance = 0.0099999997764825821f;
+
+const float fanHeightTolerance = 0.10000000149011612f;
+
+const float fanMaxHeightDelta = 3.2000000476837158f;
+
+const float unduDistanceTolerance = 0.05000000074505806f;
+
+/* JP: ××
+ * EN: XX */
+const char moveSquarePlaceholderText[8] = "\241\337\241\337";
+
+/* JP: 予想
+ * EN: Forecast */
+const char moveSquareForecastText[8] = "\315\275\301\333";
+
+unsigned short * DataSpline = 0;

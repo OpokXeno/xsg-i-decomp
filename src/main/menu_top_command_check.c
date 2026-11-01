@@ -24,15 +24,15 @@ static inline MenuStatusValuePair MenuStatusEncodeValue(short current, short max
     return value;
 }
 
-extern const MenuFormationPositions D_004C36C0;
+extern const MenuFormationPositions menuFormationPositionTable;
 
-extern const MenuLightingSources D_004C3720;
+extern const MenuLightingSources pointerLightingSources;
 
 extern unsigned char *MenuTairetuModelPointerXtxAddr;
 
 extern unsigned char *MenuTairetuModelPointerLexAddr;
 
-extern const float D_004D7D98;
+extern const float pointerScaleRate;
 
 extern void xglMatrixStackLoad(float matrix[4][4]);
 
@@ -67,7 +67,7 @@ static void tskMenuTaiPointa(MenuPointaTask *task);
 
 extern MenuModelTransform *MenuVecMat;
 
-extern const float D_004D7D9C;
+extern const float menuBackModelFov;
 
 extern XglTaskScheduler *MenuTask_XMX;
 
@@ -189,7 +189,7 @@ void TopInfoMain(void)
         if (MenuWork.topCursor < 9) {
             info->panel.text = text[MenuWork.topCursor];
         } else {
-            info->panel.text = D_004DA890;
+            info->panel.text = topMenuEmptyText;
         }
         MoveSlide(&info->window.y, &slideTarget, 5.0f);
         WindowDXMain((WindowDX *)&info->window);
@@ -222,7 +222,7 @@ void TopMenuWinMain(void)
         menu->window.height = 0xDE;
         menu->window.draw = (void (*)(WindowDX *, void *))MenuSelectWindow;
         menu->window.panel = &menu->panel;
-        menu->window.title = D_004DA8B8;
+        menu->window.title = topMenuTitleText;
         menu->panel.commands = command_0;
         menu->panel.cursor = 0;
         menu->panel.rows = 2;
@@ -441,7 +441,7 @@ void TopMenu(void)
     TopMenuWinMain();
     TopFaceExWinMain();
     if (debug_flag != 0) {
-        xglFontDebugPrintf(0, 0x38, D_004DA8D0);
+        xglFontDebugPrintf(0, 0x38, topMenuDebugLabel);
         xglFontDebugHex(0, 0x40, MenuWork.topCursor, 2);
     }
 }
@@ -459,8 +459,8 @@ void nmlModelSetTexture(const char *texture);
 void nmlModelSetPlace(float matrix[4][4]);
 void nmlModelEntry(int model);
 void nmlModelFlush(void);
-static const float D_004C3640[4] = {1.57079637f, 0.0f, 0.0f, 1.0f};
-static const MenuLightingSources D_004C3650 = {
+static const float pointerTargetRotationVector[4] = {1.57079637f, 0.0f, 0.0f, 1.0f};
+static const MenuLightingSources menuLightingDefaults = {
     .value = {
         .ambient = {0.5f, 0.5f, 0.5f, 1.0f},
         .intensity = {
@@ -475,9 +475,6 @@ static const MenuLightingSources D_004C3650 = {
         }
     }
 };
-
-
-
 
 void xglRotTransPersN(void *destination, Matrix4 *matrix,
                      const Vector4 *points, int count, int cameraId);
@@ -547,7 +544,7 @@ static void tskMenuTai(MenuTaiTask *task)
                 task->initialized = task->enabled = 1;
             }
             model = task->model;
-            __builtin_memcpy(&targetRotation, D_004C3640, sizeof(targetRotation));
+            __builtin_memcpy(&targetRotation, pointerTargetRotationVector, sizeof(targetRotation));
             targetScale = 0.0f;
             if (MenuWork.state == 33) {
                 targetRotation.x = 0.785398185f;
@@ -575,7 +572,7 @@ static void tskMenuTai(MenuTaiTask *task)
         xglMatrixStackRotY(task->model->rotation.y);
         xglMatrixStackRotX(task->model->rotation.x);
         xglMatrixStackSave(task->model->place);
-        __builtin_memcpy(sources.words, D_004C3650.words, sizeof(sources.words));
+        __builtin_memcpy(sources.words, menuLightingDefaults.words, sizeof(sources.words));
         xglLightIntensityAmbient(&light, sources.value.ambient);
         xglLightIntensityParallel(&light, 0, sources.value.intensity[0]);
         xglLightDirection(&light, 0, sources.value.direction[0]);
@@ -677,7 +674,7 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
     MenuModelLighting light;
     MenuLightingSources sources;
 
-    __builtin_memcpy(positions.words, D_004C36C0.words, sizeof(positions.words));
+    __builtin_memcpy(positions.words, menuFormationPositionTable.words, sizeof(positions.words));
 
     if (MenuWork.command == 12 ||
         MenuPointaGuardWord(task) == 0 ||
@@ -746,9 +743,9 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
             }
             targetScale.x = targetScale.y = targetScale.z = targetScale.w = 1.0f;
             scalePointer = task->pointer;
-            scalePointer->scale.x += (targetScale.x - scalePointer->scale.x) * D_004D7D98;
-            scalePointer->scale.y += (targetScale.y - scalePointer->scale.y) * D_004D7D98;
-            scalePointer->scale.z += (targetScale.z - scalePointer->scale.z) * D_004D7D98;
+            scalePointer->scale.x += (targetScale.x - scalePointer->scale.x) * pointerScaleRate;
+            scalePointer->scale.y += (targetScale.y - scalePointer->scale.y) * pointerScaleRate;
+            scalePointer->scale.z += (targetScale.z - scalePointer->scale.z) * pointerScaleRate;
         } else {
             task->enabled = 0;
         }
@@ -761,7 +758,7 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
             xglMatrixStackTrans(&task->pointer->position.vector.x);
             xglMatrixStackScale(&task->pointer->scale.x);
             xglMatrixStackSave(task->pointer->place);
-            sources = D_004C3720;
+            sources = pointerLightingSources;
             {
                 MenuModelVector ambient[3] = {
                     {.vector = {0.40499997f, 0.27f, 0.179999992f, 1.0f}},
@@ -805,7 +802,7 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
     camera->rotation.y = 0.0f;
     camera->rotation.z = 0.0f;
     camera->rotation.w = 1.0f;
-    camera->fov = D_004D7D9C;
+    camera->fov = menuBackModelFov;
     camera->state = 1;
     camera->active = 1;
 
@@ -1081,6 +1078,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             }
             work->label[0].color = window->color + 15;
             work->label[0].y = top + 29;
+            /* Text: \x01Hp */
             work->label[0].text = "\001Hp";
             work->label[0].r = 112;
             work->label[0].g = 128;
@@ -1129,6 +1127,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             }
             work->label[1].color = window->color + 15;
             work->label[1].y = top + 45;
+            /* Text: \x01Ep */
             work->label[1].text = "\001Ep";
             work->label[1].r = 112;
             work->label[1].g = 128;
@@ -1173,6 +1172,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         work->label[2].color = window->color + 15;
         work->label[2].x = left + 205;
         work->label[2].y = top + 7;
+        /* Text: \x01Lv */
         work->label[2].text = "\001Lv";
         work->label[2].r = work->label[2].g = work->label[2].b = work->label[2].a = 128;
         endPrintExtFunc(work->label[2].color, 7, &work->label[2]);
@@ -1195,6 +1195,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
             }
             work->label[3].color = window->color + 15;
             work->label[3].y = top + 63;
+            /* Text: \x01Nextlv */
             work->label[3].text = "\001Nextlv";
             work->label[3].r = 112;
             work->label[3].g = 128;
@@ -1230,6 +1231,7 @@ void MenuStatusDisp(MenuStatusPanelWindow *window, MenuStatusPanel *work)
         }
         if (showStats) {
             work->label[5].y = top + 79;
+            /* Text: \x01Exp */
             work->label[5].text = "\001Exp";
             work->label[5].color = window->color + 15;
             work->label[5].r = 112;
@@ -1379,7 +1381,7 @@ int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel)
         scan = panel->text;
         panel->lineCount = 1;
         if (scan == 0) {
-            scan = D_004DA890;
+            scan = topMenuEmptyText;
         }
         while (*scan != 0) {
             if (*scan == '\n') {
@@ -1694,3 +1696,69 @@ int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel)
 void MenuPasWindow(void) {
 
 }
+
+extern const char TopMenuFormationDescriptionText[48];
+extern const char TopMenuItemsDescriptionText[80];
+extern const char TopMenuUmnDescriptionText[48];
+extern const char TopMenuGameOptionsDescriptionText[32];
+extern const char TopMenuCommandListText[88];
+extern const char TopMenuEtherDescriptionText[64];
+extern const char TopMenuSkillsDescriptionText[56];
+extern const char TopMenuCharactersDescriptionText[72];
+extern const char TopMenuTechDescriptionText[32];
+extern const char TopMenuAgwsDescriptionText[56];
+extern const char TopMenuSaveLoadDescriptionText[16];
+
+static const char * text[12] = { TopMenuItemsDescriptionText, TopMenuEtherDescriptionText, TopMenuTechDescriptionText, TopMenuSkillsDescriptionText, TopMenuCharactersDescriptionText, TopMenuAgwsDescriptionText, TopMenuFormationDescriptionText, TopMenuUmnDescriptionText, TopMenuGameOptionsDescriptionText, TopMenuSaveLoadDescriptionText, TopMenuCommandListText, TopMenuCommandListText };
+
+const MenuFormationPositions menuFormationPositionTable = { .vector = { { .x = -0.10000000149011612f, .y = 0.0f, .z = 0.21000000834465027f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.0f, .z = 0.019999999552965164f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.0f, .z = -0.17000000178813934f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = 0.21000000834465027f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = 0.019999999552965164f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = -0.17000000178813934f, .w = 1.0f } } };
+
+const MenuLightingSources pointerLightingSources = { .value = { .ambient = { 1.0f, 1.0f, 1.0f, 1.0f }, .intensity = { { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f, 1.0f }, { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f, 1.0f }, { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f, 1.0f } }, .direction = { { 1.0f, 1.0f, 0.5f, 1.0f }, { -1.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, -1.0f, 1.0f } } } };
+
+const float pointerScaleRate = 0.20000000298023224f;
+
+const float menuBackModelFov = 0.078000001609325409f;
+
+char topMenuEmptyText[8] = "";
+
+const char topMenuUmnText[8] = "U.M.N.";
+
+const char topMenuSkillsText[8] = "Skills";
+
+const char topMenuEtherText[8] = "Ether";
+
+const char topMenuItemsText[8] = "Items";
+
+char topMenuTitleText[8] = "Menu";
+
+/* Text: \x01Money */
+const char topMenuMoneyText[8] = "\001Money";
+
+/* Text: \x01Time */
+const char topMenuTimeText[8] = "\001Time";
+
+char topMenuDebugLabel[8] = "topmemu";
+
+MenuModelTransform * MenuVecMat = 0;
+
+MenuTopStatusWin * TopStatusWin = 0;
+
+MenuTopInfo * TopInfo = 0;
+
+MenuTopMenuWin * TopMenuWin = 0;
+
+MenuTopFaceEx * TopFaceExWin = 0;
+
+/* Original objects of other TUs referenced by this TU's initialized DATA. */
+extern const char TopMenuTechAttacksText[16];
+extern const char TopMenuCharactersText[16];
+extern const char TopMenuAgwsText[16];
+extern const char TopMenuBattleFormationText[24];
+extern const char TopMenuGameOptionsText[16];
+extern const char TopMenuReserveText[24];
+
+static const char * msg_1_0036C360[3] = { TopMenuReserveText, topMenuTimeText, topMenuMoneyText };
+
+static MenuTopCommandEntry command_0[11] = { { .name = topMenuItemsText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = topMenuEtherText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = TopMenuTechAttacksText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = topMenuSkillsText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = TopMenuCharactersText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = TopMenuAgwsText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = TopMenuBattleFormationText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = topMenuUmnText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = TopMenuGameOptionsText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = topMenuEmptyText, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } }, { .name = 0, .unmodeled_04 = 0, .locked = 0, .unmodeled_09 = { 0, 0, 0 } } };
+
+static unsigned char MenuTopCommand[10] = { 1, 2, 9, 10, 3, 4, 5, 6, 7, 12 };

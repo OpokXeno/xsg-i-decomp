@@ -11,7 +11,6 @@ void *func_A1C910(void *packed_file);
 #include "main/xgl_pad.h"
 typedef struct Actor Actor;
 
-
 void ACT_modelDraw(Actor *actor);
 
 /* The two controller records are 0x68 bytes; the menu controls read +0x30. */
@@ -19,22 +18,16 @@ typedef struct MenuModelScaleLimits {
     float value[2];
 } MenuModelScaleLimits;
 
-
-
-
 typedef struct MenuModelPadRecord {
     unsigned char unmodeled_00[0x30];
     unsigned short buttons;
     unsigned char unmodeled_32[0x36];
 } MenuModelPadRecord;
 
-
-
 extern MenuModelPadRecord PadData[2];
-extern const unsigned short guno_eid_tbl[29];
-extern const MenuModelScaleLimits D_004DA938[];
-extern const MenuModelScaleLimits D_004DA940[];
-
+static unsigned short guno_eid_tbl[29];
+extern const MenuModelScaleLimits minimumScaleTable[];
+extern const MenuModelScaleLimits maximumScaleTable[];
 
 /*
  * The model actor MenuModelDrawTypeSet (0x00280dd0) configures: it takes the
@@ -44,8 +37,6 @@ extern const MenuModelScaleLimits D_004DA940[];
 
 typedef struct MenuModelActor MenuModelActor;
 
-
-
 void ACT_updateDefault(MenuModelActor *actor);
 
 typedef struct MenuModelDrawTypeState {
@@ -53,8 +44,6 @@ typedef struct MenuModelDrawTypeState {
     float progress; /* actor +0x120; MenuModelAlphaDraw reads this as transparency */
     void (*drawTypeFunction)(MenuModelActor *actor); /* actor +0x124 */
 } MenuModelDrawTypeState;
-
-
 
 /*
  * Partial layout of the menu model "unit" object (main/tu165), recovered from
@@ -129,8 +118,6 @@ typedef struct MenuModelWeapon {
     unsigned char unmodeled_4C[4];        /* task allocation initialized by CreateInit */
 } MenuModelWeapon;
 
-
-
 /*
  * +0x1: MenuModelSubWindowBreak forces this to -1 immediately before tail-
  * calling MenuModelSubWindowMainSub (0x0027fc88), which loads the same
@@ -138,11 +125,7 @@ typedef struct MenuModelWeapon {
  * tear the subwindow down.
  */
 
-
-
 /* The external unit-resource record fields consulted while naming a weapon motion. */
-
-
 
 /*
  * +0x24/+0x2C: a second (actor, resource) pair, recovered from
@@ -155,8 +138,6 @@ typedef struct MenuModelWeapon {
  * in this allocation reads or writes them.
  */
 
-
-
 typedef struct MenuModelWeaponLoadTask {
     unsigned char unmodeled_00[0x18];
     unsigned short resourceId;            /* +0x18 */
@@ -167,8 +148,6 @@ typedef struct MenuModelWeaponLoadTask {
     unsigned char unmodeled_1F[0x11];
     struct MenuModelUnit *unit;                  /* +0x30 */
 } MenuModelWeaponLoadTask;
-
-
 
 /*
  * The object bound to a menu model draw task, recovered from
@@ -185,14 +164,10 @@ typedef struct MenuModelDrawContext {
     struct MenuModelDrawable *drawable; /* +0x20 */
 } MenuModelDrawContext;
 
-
-
 /*
  * The object MenuModelDrawTypeMain calls through, recovered from that
  * function's own access. Only +0x124 is evidenced.
  */
-
-
 
 /*
  * Body for the actor tag this TU's own prelude only forward-declares above.
@@ -218,8 +193,6 @@ typedef union MenuModelTransformVector {
     unsigned long long words[2];
 } MenuModelTransformVector;
 
-
-
 typedef struct MenuModelTransformControl {
     MenuModelTransformVector offset;
     MenuModelTransformVector rotation;
@@ -233,8 +206,6 @@ typedef struct MenuModelTransformControl {
     int initialMotionId; /* +0x68: selected before opening the unit actor */
     unsigned char unmodeled_6C[4];
 } MenuModelTransformControl;
-
-
 
 typedef unsigned int XglLightQuadword __attribute__((mode(TI)));
 typedef struct {
@@ -282,16 +253,12 @@ struct MenuModelActor {
     float distanceClipThreshold; /* +0x9D0: ACT_modelDrawSub camera-distance test */
 };
 
-
-
 /* A partial actor view used only to form the recovered draw-state address. */
 
 typedef struct MenuModelActorDrawTypeView {
     unsigned char unmodeled_00[0xC0];
     MenuModelDrawTypeState drawTypeState;
 } MenuModelActorDrawTypeView;
-
-
 
 typedef struct MenuModelSubWindowAccess {
     unsigned char unmodeled_00[1];
@@ -305,25 +272,17 @@ typedef struct MenuModelSubWindowAccess {
     StudioCamera *camera;      /* +0xC */
 } MenuModelSubWindowAccess;
 
-
-
 typedef struct MenuModelActorSubWindowAccess {
     unsigned char unmodeled_00[0x676];
     short subWindowId;
 } MenuModelActorSubWindowAccess;
 
-
-
 typedef MenuModelActor MenuModelMotionActor;
-
-
 
 typedef struct MenuModelMotionTarget {
     unsigned char unmodeled_00[0x20];
     MenuModelMotionActor *actor;
 } MenuModelMotionTarget;
-
-
 
 void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loadParam);
 void MenuModelUnitActorSet(MenuModelUnit *unit);
@@ -396,8 +355,6 @@ typedef struct MenuModelResourceAccess {
     void *file[6];                        /* +0x4 */
 } MenuModelResourceAccess;
 
-
-
 /*
  * Partial layout of the menu-model "memory" state buffer (main/tu165).
  * MenuModelMenuMotionCheck reads state; MenuModelMemoryInit sets base and
@@ -412,7 +369,14 @@ typedef struct MenuModelMemoryStateBuffer {
     MenuModelResourceAccess regions[16]; /* +0xC */
 } MenuModelMemoryStateBuffer;
 
-
+/* First .data object of the original TU (0x0036D2F0): MenuModelCreate reads
+   it through a folded base 34 entries before its start. */
+static unsigned short guno_eid_tbl[29] = {
+    0x4001, 0x4002, 0x4003, 0x4004, 0x4005, 0x4006, 0x4007, 0x4008,
+    0x4009, 0x400A, 0x400B, 0x400C, 0x400D, 0x400E, 0x400F, 0x4010,
+    0x4011, 0x4012, 0x4013, 0x4014, 0x4015, 0x4016, 0x4017, 0x4018,
+    0x4019, 0x4001, 0x4002, 0x4003, 0x4037
+};
 
 MenuModelMemoryStateBuffer MenuModelMemoryState = {0};
 
@@ -425,8 +389,6 @@ typedef struct MenuModelResourceRequestRecord {
     void *loadParam;
 } MenuModelResourceRequestRecord;
 
-
-
 typedef struct MenuModelResourceStateBuffer {
     unsigned int resetWord;
     struct MenuModelResourceAccess *resource;
@@ -434,13 +396,11 @@ typedef struct MenuModelResourceStateBuffer {
     int motionHandle;
 } MenuModelResourceStateBuffer;
 
-
-
 MenuModelResourceStateBuffer MenuModelResourceState = {0};
 
 MenuModelSubWindowAccess MenuModelSubWindow[3] = {{0}};
 
-const char D_004C3828[0x18] = "data\\motion\\wp_meqp.fpk";
+const char wpMeqpMotionPath[0x18] = "data\\motion\\wp_meqp.fpk";
 
 typedef struct MenuModelResource {
     unsigned char status; /* +0x0 */
@@ -448,21 +408,16 @@ typedef struct MenuModelResource {
     short handle; /* +0x2 */
 } MenuModelResource;
 
-
-
 void ACT_dispose(MenuModelActor *actor);
 
 #define MENU_MODEL_ACTOR_DRAW_STATE_OFFSET 0xc0
-
 
 #define MENU_MODEL_ACTOR_DRAW_STATE(actor) \
     ((unsigned char *)(actor) + MENU_MODEL_ACTOR_DRAW_STATE_OFFSET)
 
 #define MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET 0x60
 
-
 #define MENU_MODEL_DRAW_STATE_FUNC_OFFSET     0x64
-
 
 #define MENU_MODEL_DRAW_STATE_PROGRESS(state) \
     ((float *)((state) + MENU_MODEL_DRAW_STATE_PROGRESS_OFFSET))
@@ -472,16 +427,16 @@ void ACT_dispose(MenuModelActor *actor);
 
 /* Shared fade-step values used by the draw-type routines below. */
 
-float D_004D7DF8
+float modelDrawOpen01Step
     = 0.1f;
 
-float D_004D7DFC
+float modelDrawClose01Step
     = 0.1f;
 
-float D_004D7E00
+float modelDrawClose02Step
     = 0.1f;
 
-float D_004D7E04
+float modelDrawClose02MinProgress
     = 0.2f;
 
 extern int MenuRWeaponCheck(int weaponId, long equipType);
@@ -510,8 +465,6 @@ typedef struct MenuModelTaskWork {
     struct MenuModelSubWindowState *subWindow;
 } MenuModelTaskWork;
 
-
-
 typedef struct MenuModelZClearVertex {
     unsigned int x;
     unsigned int y;
@@ -519,21 +472,12 @@ typedef struct MenuModelZClearVertex {
     unsigned int fog;
 } MenuModelZClearVertex;
 
-
-
 extern void nmlModelDirectSend(int mode, unsigned char *data, int count);
-
 
 typedef union {
     XglLightQuadword quadword;
     Vector4 value;
 } XglLightVector;
-
-
-
-
-
-
 
 void ACT_setModelWrapper(MenuModelActor *actor, int mode);
 
@@ -542,8 +486,6 @@ void ACT_initMotion(MenuModelActor *actor);
 int ACT_setFace(MenuModelActor *face, MenuModelActor *parent, int mode);
 
 void ACT_setHand(MenuModelActor *actor, int mask);
-
-
 
 void xglLightIntensityAmbient(XglPackedLightSet *lightSet, const XglLightQuadword *intensity);
 
@@ -560,21 +502,6 @@ typedef struct {
 } XglLightSet;
 
 void xglLightDirection(XglLightSet *lightSet, unsigned int index, const Vector4 *source);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 void MenuModelMemorySet(int state)
 {
@@ -886,7 +813,7 @@ void MenuModelResourceLoad(int resourceId, MenuModelResourceAccess *buffers,
 
     motionPackageOffset = (unsigned int)resourceId - 0x3007U;
     if (motionPackageOffset < 4U) {
-        MenuLoadFile(D_004C3828, buffers->file[3]);
+        MenuLoadFile(wpMeqpMotionPath, buffers->file[3]);
     }
 
     {
@@ -1464,14 +1391,14 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
         } else if ((PadData[0].buttons & 1) || (PadData[1].buttons & 1)) {
             if ((PadData[0].buttons & 0x1000) ||
                 (PadData[1].buttons & 0x1000)) {
-                minimum = D_004DA938[0];
+                minimum = minimumScaleTable[0];
                 scale->value.x -= 0.02f;
                 if (actor->scale.value.x <= minimum.value[preset])
                     scale->value.x = minimum.value[preset];
             }
             if ((PadData[0].buttons & 0x4000) ||
                 (PadData[1].buttons & 0x4000)) {
-                maximum = D_004DA940[0];
+                maximum = maximumScaleTable[0];
                 scale->value.x += 0.02f;
                 if (actor->scale.value.x >= maximum.value[preset])
                     scale->value.x = maximum.value[preset];
@@ -1482,10 +1409,10 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
 }
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char D_004C38F0[16];
-extern const char D_004C3900[16];
-extern const char D_004C3910[16];
-extern const char D_004C3920[16];
+extern const char navelRotationXFormat[16];
+extern const char navelRotationYFormat[16];
+extern const char navelRotationZFormat[16];
+extern const char navelScaleXFormat[16];
 
 void MenuModelNavelMove(MenuModelUnit *unit)
 {
@@ -1512,10 +1439,10 @@ void MenuModelNavelMove(MenuModelUnit *unit)
         "vadd.xyz vf2,vf2,vf3\n\t"
         "sqc2 vf2,0(%1)\n\t"
         : : "r"(&control->offset), "r"(&actor->position) : "memory");
-    xglFontDebugPrintf(98, 32, D_004C38F0, (double)actor->rotation.value.x);
-    xglFontDebugPrintf(98, 40, D_004C3900, (double)actor->rotation.value.y);
-    xglFontDebugPrintf(98, 48, D_004C3910, (double)actor->rotation.value.z);
-    xglFontDebugPrintf(98, 56, D_004C3920, (double)actor->scale.value.x);
+    xglFontDebugPrintf(98, 32, navelRotationXFormat, (double)actor->rotation.value.x);
+    xglFontDebugPrintf(98, 40, navelRotationYFormat, (double)actor->rotation.value.y);
+    xglFontDebugPrintf(98, 48, navelRotationZFormat, (double)actor->rotation.value.z);
+    xglFontDebugPrintf(98, 56, navelScaleXFormat, (double)actor->scale.value.x);
 }
 
 void MenuModelMotionSet(MenuModelMotionTarget *target, unsigned int dataId)
@@ -1533,7 +1460,7 @@ void ModelDrawTypeOpen01(MenuModelActor *actor)
     float progress;
 
     state = MENU_MODEL_ACTOR_DRAW_STATE(actor);
-    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) + D_004D7DF8;
+    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) + modelDrawOpen01Step;
     *MENU_MODEL_DRAW_STATE_PROGRESS(state) = progress;
     if (progress >= 1.0f) {
         *MENU_MODEL_DRAW_STATE_PROGRESS(state) = 1.0f;
@@ -1547,7 +1474,7 @@ void ModelDrawTypeClose01(MenuModelActor *actor)
     float progress;
 
     state = MENU_MODEL_ACTOR_DRAW_STATE(actor);
-    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) - D_004D7DFC;
+    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) - modelDrawClose01Step;
     *MENU_MODEL_DRAW_STATE_PROGRESS(state) = progress;
     if (progress <= 0.0f) {
         *MENU_MODEL_DRAW_STATE_PROGRESS(state) = 0.0f;
@@ -1562,8 +1489,8 @@ void ModelDrawTypeClose02(MenuModelActor *actor)
     float progress;
 
     state = MENU_MODEL_ACTOR_DRAW_STATE(actor);
-    minProgress = D_004D7E04;
-    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) - D_004D7E00;
+    minProgress = modelDrawClose02MinProgress;
+    progress = *MENU_MODEL_DRAW_STATE_PROGRESS(state) - modelDrawClose02Step;
     *MENU_MODEL_DRAW_STATE_PROGRESS(state) = progress;
     if (progress <= minProgress) {
         *MENU_MODEL_DRAW_STATE_PROGRESS(state) = minProgress;
@@ -1830,7 +1757,6 @@ static void CreateInit(MenuModelUnit *unit)
     }
 }
 
-
 XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
                                      XglTaskPrefix **result,
                                      int weaponIndex)
@@ -2020,8 +1946,6 @@ void *MenuModelInit(void *pool)
 
 /* VIF DIRECT header followed by a packed GIF TEST_2 and two XYZF vertices. */
 
-
-
 void MenuModelDirectSendZClear(void)
 {
     typedef union MenuModelZClearRecord {
@@ -2067,3 +1991,15 @@ void MenuModelDirectSendZClear(void)
     vertices[1].z = 0;
     nmlModelDirectSend(1, (unsigned char *)0x70000000, 5);
 }
+
+const char navelRotationXFormat[16] = "rot : x=%f";
+
+const char navelRotationYFormat[16] = "    : y=%f";
+
+const char navelRotationZFormat[16] = "    : z=%f";
+
+const char navelScaleXFormat[16] = "scl :   %f";
+
+const MenuModelScaleLimits minimumScaleTable[1] = { { .value = { 0.80000001192092896f, 0.72500002384185791f } } };
+
+const MenuModelScaleLimits maximumScaleTable[1] = { { .value = { 2.0f, 1.0f } } };

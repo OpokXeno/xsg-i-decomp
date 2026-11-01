@@ -23,6 +23,10 @@ def run(command, root):
                           check=True, capture_output=True).stdout.decode()
 
 
+# 20 SSD code FDRs + the data-only ssd_data.c FDR, and 4 RSSD FDRs.
+ORIGINAL_OBJECTS = 25
+
+
 def load_evidence(root, report_path, *, reporting=False):
     sys.path.insert(0, str(root))
     from tools import iop_module
@@ -33,10 +37,13 @@ def load_evidence(root, report_path, *, reporting=False):
     report = verification.read(report_path)
     verification.require(report.get('mode', 'exact') == ('reporting' if reporting else 'exact'),
                          'IOP evidence reporting mode differs')
+    groups_expected = sum(len(entries) for entries in manifest['units'].values())
+    verification.require(groups_expected == len(registry['groups']) == ORIGINAL_OBJECTS,
+                         'IOP manifest/registry object count differs from the original FDRs')
     verification.require(report.get('ok' if reporting else 'gate_passed') is True and report.get('functions_expected') == 495 and
-                         report.get('unique_source_groups') == 24 and
+                         report.get('unique_source_groups') == groups_expected and
                          report.get('manifest_sha256') == verification.digest(root / 'config/iop-build.json'),
-                         'IOP report is not a current complete 24-object build')
+                         'IOP report is not a current complete original-object build')
     contract, tools, pins = iop_module.load_contract(root)
     verification.require(report.get('compiler_profile_sha256') ==
                          verification.digest(root / manifest['compiler_profile']), 'IOP report profile changed')
@@ -68,10 +75,12 @@ def load_evidence(root, report_path, *, reporting=False):
         for group in entries:
             scope = tuple((f['name'], f['offset'], f['size']) for f in group['functions'])
             record = registered[(unit, group['fdr_index'])]
+            # A data-only original FDR (ssd_data.c) has no procedures or code extent.
             verification.require(group['fdr_filename'] in record['attested_source_files'] and
                                  len(scope) == record['function_count'] and
-                                 min(f[1] for f in scope) == int(record['code']['start'], 16) and
-                                 max(f[1]+f[2] for f in scope) == int(record['code']['end'], 16) and
+                                 (min(f[1] for f in scope) == int(record['code']['start'], 16) and
+                                  max(f[1]+f[2] for f in scope) == int(record['code']['end'], 16)
+                                  if scope else record.get('code') is None and group.get('generated_data')) and
                                  record.get('source', group['source']) == group['source'],
                                  'IOP build group differs from the original FDR registry')
             emitted = emissions[(unit, group['source'])]
@@ -111,7 +120,7 @@ def load_evidence(root, report_path, *, reporting=False):
                                          audits[0].get('exact') == proof['exact'],
                                          'IOP actual function bytes differ from fresh module-link evidence')
             groups.append((unit, group, candidate, original))
-    verification.require(len(groups) == 24 and len(identities) == 495, 'IOP original-object scope drift')
+    verification.require(len(groups) == ORIGINAL_OBJECTS and len(identities) == 495, 'IOP original-object scope drift')
     return groups, contract, tools, report
 
 
@@ -159,9 +168,13 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
     from tools import iop_module
     destination.mkdir(parents=True, exist_ok=True)
     funcs = group['functions']
-    start = min(f['offset'] for f in funcs)
-    end = max(f['offset'] + f['size'] for f in funcs)
-    pools = group.get('generated_data', [])
+    start = min((f['offset'] for f in funcs), default=0)
+    end = max((f['offset'] + f['size'] for f in funcs), default=0)
+    pools = [p for p in group.get('generated_data', []) if p['section'] != '.bss']
+    # Source-mapped BSS supersedes the EXTR owner rows it contains.
+    mapped_bss = [p for p in group.get('generated_data', []) if p['section'] == '.bss']
+    bss = [b for b in bss if not any(m['offset'] <= b['offset'] < m['offset'] + m['size'] for m in mapped_bss)]
+    bss = bss + [dict(section='.bss', offset=m['offset'], size=m['size'], name=None) for m in mapped_bss]
     original_globals = [s for s in original.symbols if s['name'] and s['binding'] in (1, 2) and
                         0 < s['section_index'] < len(original.sections) and
                         re.fullmatch(r'[A-Za-z_.$][A-Za-z_0-9.$]*', s['name'])]
@@ -188,6 +201,8 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
     labels = {f['offset']: f for f in funcs}
     source = ['/* Original IOP instructions; reference only, no recovered-source credit. */',
               '.text', '.set noreorder', '.set noat', '.align 4']
+    if not funcs:
+        source = source[:1]
     for address in range(start, end, 4):
         function = labels.get(address)
         if function:
@@ -217,7 +232,7 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
             operands = re.sub(r'(?:0x)?([0-9a-f]+)\s+<[^>]+>', branch, operands)
         source.append(opcode + (' ' + operands if operands else ''))
     spans = list(pools) + bss
-    section_origins = {'.text': start}
+    section_origins = {'.text': start} if funcs else {}
     for index, pool in enumerate(pools):
         section = original.by_name[pool['section']]
         section_origins[pool['section']] = pool['offset']
@@ -228,14 +243,15 @@ def assemble_reference(root, destination, group, original, rows, contract, tools
             source.append('.byte ' + ','.join(map(str, payload[at:at+32])))
     for span in sorted(bss, key=lambda s: s['offset']):
         section_origins.setdefault('.bss', span['offset'])
+        named = ['.globl ' + span['name'], '.type ' + span['name'] + ',@object', span['name'] + ':'] if span['name'] else []
         source.extend(['.section .bss.iop_original,"aw",@nobits', f'.org {span["offset"]-section_origins[".bss"]}',
-                       '.globl ' + span['name'], '.type ' + span['name'] + ',@object',
-                       span['name'] + ':', f'.space {span["size"]}', f'.size {span["name"]},{span["size"]}'])
+                       *named, f'.space {span["size"]}',
+                       *([f'.size {span["name"]},{span["size"]}'] if span['name'] else [])])
     asm = destination / 'target.s'
     asm.write_text('\n'.join(source) + '\n')
     obj = destination / 'target.o'
     run([tools['assembler'], *contract['assembler_flags'], '-o', obj, asm], root)
-    owned_names = {f['name'] for f in funcs} | {s['name'] for s in bss}
+    owned_names = {f['name'] for f in funcs} | {s['name'] for s in bss if s['name']}
     script = ['OUTPUT_FORMAT("elf32-littlemips")', 'OUTPUT_ARCH(mips:3000)', 'SECTIONS {']
     script += [f'{name} 0x{address:x} : {{ *({name if name == ".text" else name + ".iop_original"}) }}'
                for name, address in section_origins.items()]
@@ -336,5 +352,5 @@ def prepare(root, project, report_path, *, reporting=False):
         accounting[unit] = dict(totals=totals, residual_spans=residual)
         (destination / 'reference-proof.json').write_text(json.dumps(accounting[unit], indent=2)+'\n')
     return units, expected, dict(build_report=str(report_path), build_report_sha256=verification.digest(report_path),
-                                 assigned_data=assigned, original_objects=24, functions=495,
+                                 assigned_data=assigned, original_objects=ORIGINAL_OBJECTS, functions=495,
                                  data_accounting=accounting, data_ownership_complete=False)

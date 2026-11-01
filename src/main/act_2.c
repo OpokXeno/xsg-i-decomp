@@ -165,14 +165,9 @@ struct JntProducer;
 
 extern void JNT_initProducer(struct JntProducer *producer);
 
-
-
 extern void JC_setParent(void *work, void *parameter, int flags);
 
-
-
 struct JntMoveResource;
-
 
 extern void *JNT_getAccessories(struct JntMoveResource *move);
 
@@ -180,7 +175,6 @@ extern void JC_face(void *work, void *parameter, int flags);
 
 Actor *ACT_setParent2(Actor *actor, int type, Actor *parent, int joint, int flags,
                       void (*filter)(void *work, void *parameter, int flags));
-
 
 extern void nmlModelSetZwrite(int enabled);
 
@@ -998,7 +992,6 @@ static void ACT_modelDrawSub(Actor *actor)
     (void)scaleVector;
 }
 
-
 void ACT_setModelWrapper(Actor *actor, int unused)
 {
     ActorModelState *modelState = actor->model;
@@ -1279,7 +1272,7 @@ void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
                 ANM_reset(slot, actor->animPackTables[bank]);
                 return;
             }
-        
+
 common:
         animation->previousDataId = slot->currentDataId;
         slot->nextDataId = 0xffff;
@@ -1424,3 +1417,5 @@ void ACT_setHumanHand(Actor *actor, int hand)
         }
     }
 }
+
+float newsToDirection[16] = { 0.0f, 3.1415927410125732f, 1.5707963705062866f, 2.3561944961547852f, -1.5707963705062866f, -2.3561944961547852f, 0.0f, 0.0f, 0.0f, 0.0f, 0.78539818525314331f, 0.0f, -0.78539818525314331f, 0.0f, 0.0f, 0.0f };

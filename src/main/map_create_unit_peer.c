@@ -58,7 +58,6 @@ MapUnitGroupEntry *MAP_createUnitPeer(int slot, int serial)
     return unit;
 }
 
-
 /* One component of `goal` carried through a bone matrix: the three
  * rotation/scale rows, then the translation row. */
 #define MAP_BONE_TRANSFORM(bone, column) \

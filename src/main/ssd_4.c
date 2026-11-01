@@ -129,7 +129,6 @@ typedef struct RssdWorkFlags {
 /* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
 #define RSSD_FLAG_SUCCESS 0x20
 
-
 extern RssdWorkFlags RssdWork;
 
 /*
@@ -184,8 +183,6 @@ typedef struct RssdRequest {
  * orders every earlier load/store, including the iSignalSema effects, before
  * `ei` re-enables interrupts on the way out.
  */
-
-
 
 /*
  * libkernel syscall stubs (main:0x00208fe0 / main:0x00209028).

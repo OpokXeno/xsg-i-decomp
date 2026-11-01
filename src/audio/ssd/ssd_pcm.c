@@ -38,7 +38,7 @@ typedef struct SsdDriverState {
 
 extern SsdDriverState SsdWork;
 
-extern SsdPcmStreamState SsdPcmStrWork;
+SsdPcmStreamState SsdPcmStrWork;
 
 extern int CpuDisableIntr(void);
 

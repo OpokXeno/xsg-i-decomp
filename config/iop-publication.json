@@ -1,8 +1,8 @@
 {
   "accepted_c_functions": 0,
   "build_report": {
-    "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/iop-original-names-20261024/outside-verify/build-report.json",
-    "sha256": "7a2059f6ff1cd64d2f6f8ef556e69e48103965e79e5cc3199e771e7b42432a19"
+    "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/iop-data-20261101/outside-verify2-build-report.json",
+    "sha256": "a85a40302ce42fe31edf167aeeb14f609c60a68df86703db46743b25094784a4"
   },
   "native_objdiff_report": {
     "path": ".work/iop-original-names-20261024/objdiff/native-report.json",
@@ -2994,7 +2994,7 @@
   "independent_review": "not_performed_per_user_instruction",
   "manifest": {
     "path": "config/iop-build.json",
-    "sha256": "895b67543cedc9e1e5a2231a7b5180c4fe740a129d65e4df707181885a73ed53"
+    "sha256": "0da5d12a8ade6278a9566af134fb18c4a4d7730d37807c4054c328be10011b84"
   },
   "plan_submission_resolution": [
     {
@@ -3041,7 +3041,7 @@
       "float_mode": "soft",
       "functions": 11,
       "source": "src/audio/rssd/rssdinit.c",
-      "source_sha256": "093ce91cc4b64e838fa86c03802d7db70da681e8d0c2ad5f3fbbc9c8b4dae3a1",
+      "source_sha256": "df8ea6a5c4e4db6539d1ecc39e2a64a962794ff849aa9f3831ec741e0683d6ae",
       "unit": "iop_rssd"
     },
     {
@@ -3059,7 +3059,7 @@
       "float_mode": "soft",
       "functions": 18,
       "source": "src/audio/rssd/rssdstrm.c",
-      "source_sha256": "36a62e96f3570fe13e121daf357bfd4025e393feaf1cb9d59a1abf4d55fa0e07",
+      "source_sha256": "a455cdf37d4a1e861b536d314e3e08e9bbf335827d7b49a0510728baa155a3d2",
       "unit": "iop_rssd"
     },
     {
@@ -3068,7 +3068,7 @@
       "float_mode": "soft",
       "functions": 8,
       "source": "src/audio/rssd/rssdring.c",
-      "source_sha256": "358deaab59319c5d4b314f44aa87c755177150ce2677f98880a9899e0d76a4ad",
+      "source_sha256": "2be801ff7551ed8a65d8bb29eccbd8a0f0b48dc81839b9260e99f4792779a1e3",
       "unit": "iop_rssd"
     },
     {
@@ -3077,7 +3077,7 @@
       "float_mode": "soft",
       "functions": 16,
       "source": "src/audio/ssd/ssd_init.c",
-      "source_sha256": "aff1300f19c240af7745225ab9d422ebc7c4c116ab11d5e2f634b0b2a0d22d77",
+      "source_sha256": "8b9b204644e317dd2e034a8b1f26792e04d43ab393b6007b42ee702dc7785551",
       "unit": "iop_ssd"
     },
     {
@@ -3086,7 +3086,7 @@
       "float_mode": "soft",
       "functions": 22,
       "source": "src/audio/ssd/ssd_mem.c",
-      "source_sha256": "bb6d174123b39b922b9d2dd1dc6c73bcddc18a9f1ee16a42bfc078506c79cde7",
+      "source_sha256": "09e4aed37fa5429362c0a5747ee5402c545b24cc083bdd170854056158c21d9c",
       "unit": "iop_ssd"
     },
     {
@@ -3104,7 +3104,7 @@
       "float_mode": "soft",
       "functions": 16,
       "source": "src/audio/ssd/ssd_out.c",
-      "source_sha256": "264a4403dc5d1da8a856da77cb1fcda9e3bf87307b72c1c1c612a32a06a87917",
+      "source_sha256": "08b082dcf964429a61059d1df01eac0722ec2e0bf45313fe7f0d32c432c63495",
       "unit": "iop_ssd"
     },
     {
@@ -3113,7 +3113,7 @@
       "float_mode": "soft",
       "functions": 10,
       "source": "src/audio/ssd/ssd_wave.c",
-      "source_sha256": "bcd01b5eabb76d447be40029471c71fb9d04cc29fb000056a10fba4a1e6e0269",
+      "source_sha256": "066eeda23702742b261ac802fc9fdb43ca4d8745b4da37003e42312bc0eee575",
       "unit": "iop_ssd"
     },
     {
@@ -3149,7 +3149,7 @@
       "float_mode": "soft",
       "functions": 13,
       "source": "src/audio/ssd/ssd_smpl.c",
-      "source_sha256": "b1063929633f5114952563c02c67c3b0f84d4a1bf3759b945c120745d363b155",
+      "source_sha256": "ba6bae24171fc2dd18c3ee3937f7d2601fa71fa07b63b9291369537161894aa2",
       "unit": "iop_ssd"
     },
     {
@@ -3158,7 +3158,7 @@
       "float_mode": "soft",
       "functions": 12,
       "source": "src/audio/ssd/ssd_main.c",
-      "source_sha256": "1ed86a901791d492d6844010d977bc5c08bbcf4f9e335c004fc1b16f05a9ebbc",
+      "source_sha256": "ed9937afb6e449a9e24ab4618ee28be3c283d4900e0e646ade775714e964fd48",
       "unit": "iop_ssd"
     },
     {
@@ -3167,7 +3167,7 @@
       "float_mode": "soft",
       "functions": 101,
       "source": "src/audio/ssd/ssd_trap.c",
-      "source_sha256": "f98f5aae6fe005dc16932964baffc036ee0721dcc40793fbdafd606d6d6a7d65",
+      "source_sha256": "b14455c7727e85bbb0699487eb39b7f8476bbe787733f5244fb71ed4e7553bde",
       "unit": "iop_ssd"
     },
     {
@@ -3185,7 +3185,7 @@
       "float_mode": "soft",
       "functions": 14,
       "source": "src/audio/ssd/ssd_lfo.c",
-      "source_sha256": "6c43c16fa327b83caa34757229b0860b0b65c75d6cfd4db3250fba4101ed6b75",
+      "source_sha256": "4fb1bcaa1205f462e1cc0333d7e9db7a34242fcc8d211fcce3071d65968436d8",
       "unit": "iop_ssd"
     },
     {
@@ -3212,7 +3212,7 @@
       "float_mode": "soft",
       "functions": 8,
       "source": "src/audio/ssd/ssd_err.c",
-      "source_sha256": "a3a9aa10c4f43dc7f1799b1286c62d868d6411ae5bdaad879672c299e2783e0f",
+      "source_sha256": "c9eccadc4e1d2c16ef822315b7030649c497dead7a73733cf20e750f1393c3a5",
       "unit": "iop_ssd"
     },
     {
@@ -3221,7 +3221,7 @@
       "float_mode": "soft",
       "functions": 18,
       "source": "src/audio/ssd/ssd_midi.c",
-      "source_sha256": "5b4e450b86bb4fc63fb4c9820ad0d7b6bb52001be2ad7c225855cb76e0b18e31",
+      "source_sha256": "f6a1bc8ff5fe5df16062fb6d1d27c0fd98d244cec06d1e805eb714609e4410ae",
       "unit": "iop_ssd"
     },
     {
@@ -3230,7 +3230,7 @@
       "float_mode": "soft",
       "functions": 11,
       "source": "src/audio/ssd/ssd_dbg.c",
-      "source_sha256": "76e97757b696daf064b908662d27b8dd3b8195c13ec22cb8b6ef00b683437253",
+      "source_sha256": "0d8257cbd28827fb58448c7024e93edc24734512c76e3d1cbaaf561403f29560",
       "unit": "iop_ssd"
     },
     {
@@ -3239,7 +3239,7 @@
       "float_mode": "soft",
       "functions": 14,
       "source": "src/audio/ssd/ssd_pcm.c",
-      "source_sha256": "dcd4c9bd8902ab2817b9505b85c8f42382800f9daa25901f0bd17da298d7005a",
+      "source_sha256": "63ab31c63d5522af7b64ef13be4d21582795f8df069121a4a44bc77c46d9a78f",
       "unit": "iop_ssd"
     },
     {
@@ -3248,7 +3248,16 @@
       "float_mode": "hard",
       "functions": 31,
       "source": "src/audio/ssd/ssd_vag.c",
-      "source_sha256": "21a18b2578aa986e15ccf4ede5f226ef2e349c36550be7aa90502456abbaa9ce",
+      "source_sha256": "58bf95404582a8ea579bb6c394bd5ede1527e2c647890df2625230303a29ffc0",
+      "unit": "iop_ssd"
+    },
+    {
+      "fdr_filename": "ssd_data.c",
+      "fdr_index": 20,
+      "float_mode": "soft",
+      "functions": 0,
+      "source": "src/audio/ssd/ssd_data.c",
+      "source_sha256": "8d88b0efe0695cae910b3ade4dac0331b2fc88206c789d4095c2cb05843f8170",
       "unit": "iop_ssd"
     }
   ],
@@ -3269,5 +3278,34 @@
       "published_functions": 442,
       "raw_irx_identical": true
     }
+  },
+  "data_recovery": {
+    "date": "2026-11-01",
+    "user_request": "100% of SSD/RSSD data recovered as C, 0% data scaffolding",
+    "ownership_evidence": "ECOFF EXTR ifd per original data symbol; FDR link order for file-local strings and alignment fill",
+    "build_report": {
+      "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/iop-data-20261101/outside-verify2-build-report.json",
+      "sha256": "a85a40302ce42fe31edf167aeeb14f609c60a68df86703db46743b25094784a4"
+    },
+    "units": {
+      "iop_rssd": {
+        "compiler_emitted_bytes": {
+          ".rodata": 160,
+          ".data": 16,
+          ".bss": 364
+        },
+        "data_scaffold_bytes": 0
+      },
+      "iop_ssd": {
+        "compiler_emitted_bytes": {
+          ".rodata": 800,
+          ".data": 8560,
+          ".bss": 15140
+        },
+        "data_scaffold_bytes": 0
+      }
+    },
+    "data_only_fdr": "src/audio/ssd/ssd_data.c (iop_ssd FDR 20)",
+    "remaining_scaffolding": ".text loader tables (ssdentry.s export table, ILB import stubs) and container metadata; not C data"
   }
 }

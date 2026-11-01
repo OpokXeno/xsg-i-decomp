@@ -112,28 +112,28 @@ typedef struct JThread {
 extern int classDB[8];
 
 /* The fully-qualified class names JNI_loadNativeClass resolves. */
-extern const u8 D_004CCA70[16]; /* "xeno/vm/System" */
-extern const u8 D_004CCA80[24]; /* "xeno/util/Format" */
-extern const u8 D_004CCA98[16]; /* "xeno/util/Menu" */
-extern const u8 D_004CCAA8[24]; /* "xeno/util/Window" */
-extern const u8 D_004CCAC0[16]; /* "xeno/util/Input" */
-extern const u8 D_004CCAD0[24]; /* "xeno/util/Layout" */
-extern const u8 D_004CCAE8[24]; /* "xeno/util/Runtime" */
-extern const u8 D_004CCB00[24]; /* "xeno/util/Toolkit" */
-extern const u8 D_004CCB18[24]; /* "xeno/util/TCHParams" */
-extern const u8 D_004CCB30[24]; /* "xeno/util/Spline" */
-extern const u8 D_004CCB48[24]; /* "xeno/util/Vector4f" */
-extern const u8 D_004CCB60[16]; /* "xeno/Camera" */
-extern const u8 D_004CCB70[16]; /* "xeno/Effect" */
-extern const u8 D_004CCB80[16]; /* "xeno/Light" */
-extern const u8 D_004CCB90[16]; /* "xeno/Chr" */
-extern const u8 D_004CCBA0[16]; /* "xeno/Enepc" */
-extern const u8 D_004CCBB0[16]; /* "xeno/Unit" */
-extern const u8 D_004CCBC0[16]; /* "xeno/Uwamono" */
-extern const u8 D_004CCBD0[16]; /* "xeno/Stage" */
-extern const u8 D_004CCBE0[16]; /* "xeno/Scene" */
-extern const u8 D_004CCBF0[24]; /* "xeno/PlayControl" */
-extern const u8 D_004CCC08[24]; /* "xeno/Movie" */
+extern const u8 xenoVmSystemClassName[16]; /* "xeno/vm/System" */
+extern const u8 xenoUtilFormatClassName[24]; /* "xeno/util/Format" */
+extern const u8 xenoUtilMenuClassName[16]; /* "xeno/util/Menu" */
+extern const u8 xenoUtilWindowClassName[24]; /* "xeno/util/Window" */
+extern const u8 xenoUtilInputClassName[16]; /* "xeno/util/Input" */
+extern const u8 xenoUtilLayoutClassName[24]; /* "xeno/util/Layout" */
+extern const u8 xenoUtilRuntimeClassName[24]; /* "xeno/util/Runtime" */
+extern const u8 xenoUtilToolkitClassName[24]; /* "xeno/util/Toolkit" */
+extern const u8 xenoUtilTchParamsClassName[24]; /* "xeno/util/TCHParams" */
+extern const u8 xenoUtilSplineClassName[24]; /* "xeno/util/Spline" */
+extern const u8 xenoUtilVector4fClassName[24]; /* "xeno/util/Vector4f" */
+extern const u8 xenoCameraClassName[16]; /* "xeno/Camera" */
+extern const u8 xenoEffectClassName[16]; /* "xeno/Effect" */
+extern const u8 xenoLightClassName[16]; /* "xeno/Light" */
+extern const u8 xenoChrClassName[16]; /* "xeno/Chr" */
+extern const u8 xenoEnepcClassName[16]; /* "xeno/Enepc" */
+extern const u8 xenoUnitClassName[16]; /* "xeno/Unit" */
+extern const u8 xenoUwamonoClassName[16]; /* "xeno/Uwamono" */
+extern const u8 xenoStageClassName[16]; /* "xeno/Stage" */
+extern const u8 xenoSceneClassName[16]; /* "xeno/Scene" */
+extern const u8 xenoPlayControlClassName[24]; /* "xeno/PlayControl" */
+extern const u8 xenoMovieClassName[24]; /* "xeno/Movie" */
 
 /*
  * A loaded PDB class-search group: entry_count many PdbClassEntry records

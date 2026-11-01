@@ -179,7 +179,7 @@ typedef struct ActSequenceEntry {
  *                     unrecovered) does beyond it stays in the following gap.
  *   +0x6f4 motion_time
  *                     the current motion's playback time in seconds:
- *                     Sound_FootStep divides it by 1/30 (D_004D8100) and
+ *                     Sound_FootStep divides it by 1/30 (motionFrameTime) and
  *                     compares the F2I frame with the FootStep frame table
  *                     for the motion at +0x704 (0x002d05c0..0x002d05f0), and
  *                     ov12's XrgActor names the same offset motionFrame.

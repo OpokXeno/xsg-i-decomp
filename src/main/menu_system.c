@@ -107,12 +107,10 @@ extern MenuSystemInfoBlock *MenuSystemInfo;
 
 extern XglClock _CountTime;
 
-const MenuSystemMessageStorage D_004C9480 = {
+const MenuSystemMessageStorage messageTexts = {
     .words = {0x004C9338, 0x004C9380, 0x004C93A8, 0x004C93D0,
               0x004C93F8, 0x004C9428, 0x004C9460, 0}
 };
-
-
 
 extern void eMessageCpy(char *message, char *text);
 
@@ -178,9 +176,9 @@ typedef struct MenuSystemPasBlock {
 
 extern MenuSystemPasBlock *MenuSystemPas;
 
-extern const char D_004C9328[];
+extern const char MenuSystemOptionHelpText[];
 
-static const char *msg00_0_0036DCF8[] = {D_004C9328};
+static const char *msg00_0_0036DCF8[] = {MenuSystemOptionHelpText};
 
 extern void eMessageSet(void *message, const char *text);
 
@@ -322,7 +320,7 @@ void MenuSystemPasMain(void)
 void MenuSystemInfoMain(void)
 {
     MenuSystemInfoBlock *info = MenuSystemInfo;
-    MenuSystemMessageTable messageTable = D_004C9480.table;
+    MenuSystemMessageTable messageTable = messageTexts.table;
     short targetY;
 
     if (info->state != 0) {
@@ -370,17 +368,16 @@ void MenuSystemInfoMain(void)
     WindowDXMain((WindowDX *)&info->x);
 }
 
-
 extern void eCursolSet(void *cursor, signed char width);
 extern void eCursolMain(void *cursor);
-extern const char D_004C9510[];
-extern const char D_004C9520[];
-static const char * msg00_1_0036DD00[7] __attribute__((section(".data")));
-static const char * msg01_2_0036DD20[2] __attribute__((section(".data")));
-static const char * msg02_3_0036DD28[2] __attribute__((section(".data")));
-static const char * msg03_4_0036DD30[2] __attribute__((section(".data")));
+extern const char configurationText[];
+extern const char selectionText[];
+static const char * msg00_1_0036DD00[7];
+static const char * msg01_2_0036DD20[] ;
+static const char * msg02_3_0036DD28[] ;
+static const char * msg03_4_0036DD30[] ;
 typedef const char *MenuSystemOptionNames[2];
-extern MenuSystemOptionNames *const D_004C9530[];
+extern MenuSystemOptionNames *const settingLabelNames[];
 
 void MenuSystemMenuMain(void)
 {
@@ -403,7 +400,7 @@ void MenuSystemMenuMain(void)
         menu->titleWindow.style = menu->color;
         menu->titleWindow.width = 397;
         menu->titleWindow.height = 174;
-        menu->titleWindow.tag_id = D_004C9510;
+        menu->titleWindow.tag_id = configurationText;
         menu->titleWindow.state = 1;
         WindowDXMain(&menu->titleWindow);
         menu->titleWindow.state = 3;
@@ -434,7 +431,7 @@ void MenuSystemMenuMain(void)
         menu->choiceWindow.style = menu->color;
         menu->choiceWindow.width = 113;
         menu->choiceWindow.height = 70;
-        menu->choiceWindow.tag_id = D_004C9520;
+        menu->choiceWindow.tag_id = selectionText;
         menu->choiceWindow.state = 1;
         WindowDXMain(choiceWindow);
         menu->choiceWindow.state = 3;
@@ -454,7 +451,7 @@ void MenuSystemMenuMain(void)
         menu->confirmWindow.style = menu->color;
         menu->confirmWindow.width = 169;
         menu->confirmWindow.height = 102;
-        menu->confirmWindow.tag_id = D_004C9520;
+        menu->confirmWindow.tag_id = selectionText;
         menu->confirm.choices = msg03_4_0036DD30[1];
         menu->confirmWindow.close_callback = (void (*)(WindowDX *, void *))MenuSelectWindow;
         menu->confirmWindow.close_callback_arg = &menu->confirm;
@@ -517,7 +514,7 @@ void MenuSystemMenuMain(void)
     }
     {
         MenuSystemOptionNames *settingLabels[7];
-        __builtin_memcpy(settingLabels, D_004C9530, sizeof(settingLabels));
+        __builtin_memcpy(settingLabels, settingLabelNames, sizeof(settingLabels));
         for (row = 0; row < 7; row++) {
             if (row == 5)
                 continue;
@@ -588,14 +585,14 @@ extern void xglSoundEffectNormalID(int id, int mode);
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 #include "main/xgl_thread.h"
 
-extern unsigned char D_004DB578[];
-extern int D_004DB580[];
-extern int D_004DB588[];
-extern int D_004DB590[];
-extern int D_004DB598[];
-extern int D_004DB5A0[];
-extern char D_004DB5A8[];
-extern char D_004DB5B0[];
+extern unsigned char optionStateTable[];
+extern int outputModeTable[];
+extern int displayModeTable[];
+extern int vibrationModeTable[];
+extern int padModeTable[];
+extern int hddModeTable[];
+extern char systemText[];
+extern char messageDelayFormat[];
 
 void subMenuSystemMain(void)
 {
@@ -624,7 +621,7 @@ void subMenuSystemMain(void)
             if (MenuWork.messageIndex == 5)
                 MenuWork.messageIndex = selection + (selection - previousSelection);
             if (PadData.pressed & 0x20) {
-                __builtin_memcpy(optionStates, D_004DB578, sizeof(optionStates));
+                __builtin_memcpy(optionStates, optionStateTable, sizeof(optionStates));
                 if (MenuWork.messageIndex == 4) {
                     xglSoundEffectNormalID(1, 0);
                     MenuModelMemorySet(0);
@@ -652,7 +649,7 @@ void subMenuSystemMain(void)
         {
             MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
             if (PadData.pressed & 0x20) {
-                __builtin_memcpy(outputModes, D_004DB580, sizeof(outputModes));
+                __builtin_memcpy(outputModes, outputModeTable, sizeof(outputModes));
                 SsdSetOutputMode(outputModes[MenuWork.choiceIndex]);
                 SaveData[0x28] = outputModes[MenuWork.choiceIndex];
                 MenuWork.nextState = 0x10;
@@ -676,7 +673,7 @@ void subMenuSystemMain(void)
             MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
             if (PadData.pressed & 0x20) {
                 MenuSystemPartyDataPrefix *party;
-                __builtin_memcpy(displayModes, D_004DB588, sizeof(displayModes));
+                __builtin_memcpy(displayModes, displayModeTable, sizeof(displayModes));
                 PartyRadarDispSet(displayModes[MenuWork.choiceIndex]);
                 party = (MenuSystemPartyDataPrefix *)PartyDataGet();
                 MenuWork.displayMode = party->radar_disp ^ 1;
@@ -699,7 +696,7 @@ void subMenuSystemMain(void)
         {
             MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
             if (PadData.pressed & 0x20) {
-                __builtin_memcpy(vibrationModes, D_004DB590, sizeof(vibrationModes));
+                __builtin_memcpy(vibrationModes, vibrationModeTable, sizeof(vibrationModes));
                 PadData.vibrationReset = vibrationModes[MenuWork.choiceIndex];
                 SaveData[0x3c] = vibrationModes[MenuWork.choiceIndex];
                 PadData.vibrationStatus = vibrationModes[MenuWork.choiceIndex];
@@ -725,7 +722,7 @@ void subMenuSystemMain(void)
         {
             MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
             if (PadData.pressed & 0x20) {
-                __builtin_memcpy(padModes, D_004DB598, sizeof(padModes));
+                __builtin_memcpy(padModes, padModeTable, sizeof(padModes));
                 SaveData[0x44] = padModes[MenuWork.choiceIndex];
                 MenuWork.padMode = padModes[MenuWork.choiceIndex];
                 MenuWork.nextState = 0x10;
@@ -773,7 +770,7 @@ void subMenuSystemMain(void)
         {
             MenuWork.choiceIndex = MenuSelectMove(MenuWork.choiceIndex, 2, 0);
             if (PadData.pressed & 0x20) {
-                __builtin_memcpy(hddModes, D_004DB5A0, sizeof(hddModes));
+                __builtin_memcpy(hddModes, hddModeTable, sizeof(hddModes));
                 SaveData[0x40] = hddModes[MenuWork.choiceIndex] ^ 1;
                 xglHddActivate(hddModes[MenuWork.choiceIndex]);
                 MenuWork.hddActive = SaveData[0x40];
@@ -798,8 +795,8 @@ void subMenuSystemMain(void)
     MenuSystemPasMain();
     MenuSystemInfoMain();
     MenuSystemMenuMain();
-    xglFontDebugPrintf(0, 64, D_004DB5A8);
-    xglFontDebugPrintf(0, 80, D_004DB5B0, MenuWork.messageIndex);
+    xglFontDebugPrintf(0, 64, systemText);
+    xglFontDebugPrintf(0, 80, messageDelayFormat, MenuWork.messageIndex);
 }
 
 void subMenuSystemInit(int workEnd)
@@ -868,86 +865,61 @@ int MenuSystem2(void)
     return MenuWork.state != 0xFF;
 }
 
+const char monitorSettingsText[24] = "Monitor Settings";
 
+const char radarDisplayText[16] = "Radar Display";
 
-const char D_004C94A0[24] = "Monitor Settings";
+const char vibrationText[16] = "Vibration";
 
-const char D_004C94B8[16] = "Radar Display";
+const char cursorLocationMemoryText[24] = "Cursor Location Memory";
 
-const char D_004C94C8[16] = "Vibration";
+const char soundOutputText[16] = "Sound Output";
 
-const char D_004C94D8[24] = "Cursor Location Memory";
+const char proceedQuestionText[16] = " Proceed\?";
 
-const char D_004C94F0[16] = "Sound Output";
+const char configurationText[16] = "Configuration";
 
-const char D_004C9500[16] = " Proceed\?";
+const char selectionText[16] = "Selection";
 
-const char D_004C9510[16] = "Configuration";
+extern const char MenuSkillTitleText[8];
 
-const char D_004C9520[16] = "Selection";
+extern const char MenuSystemDefaultText[8];
+extern const char MenuSystemHddText[8];
+extern const char MenuSystemStereoText[8];
+extern const char MenuSystemMonoText[8];
+extern const char MenuSystemOffText[8];
+extern const char MenuSystemOnText[8];
+extern const char MenuSystemYesNoText[8];
 
-extern unsigned char D_004DB578[8];
+static const char * msg00_1_0036DD00[7] = { soundOutputText, cursorLocationMemoryText, vibrationText, radarDisplayText, monitorSettingsText, MenuSystemHddText, MenuSystemDefaultText };
 
-extern int D_004DB580[2];
+static const char * msg01_2_0036DD20[] = { MenuSystemStereoText, MenuSystemMonoText };
 
-extern int D_004DB588[2];
+static const char * msg02_3_0036DD28[] = { MenuSystemOnText, MenuSystemOffText };
 
-extern int D_004DB590[2];
+static const char * msg03_4_0036DD30[] = { proceedQuestionText, MenuSystemYesNoText };
 
-extern int D_004DB598[2];
+MenuSystemOptionNames *const settingLabelNames[7] = { &msg01_2_0036DD20, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28 };
 
-extern int D_004DB5A0[2];
+extern const char MenuSkillSetSuffixText[8];
 
-extern char D_004DB5A8[8];
+unsigned char optionStateTable[8] = { 0x20, 0x50, 0x40, 0x30, 0x00, 0x70, 0x60, 0x00 };
 
-extern char D_004DB5B0[8];
+int outputModeTable[2] = { 1, 0 };
 
-extern const char D_004DB5D8[8];
+int displayModeTable[2] = { 1, 0 };
 
-extern const char D_004C94D8[24];
-extern const char D_004C94F0[16];
-extern const char D_004C94C8[16];
-extern const char D_004DB540[8];
-extern const char D_004DB548[8];
-extern const char D_004C94A0[24];
-extern const char D_004C94B8[16];
-extern const char D_004DB558[8];
-extern const char D_004DB550[8];
-extern const char D_004DB560[8];
-extern const char D_004DB568[8];
-extern const char D_004C9500[16];
-extern const char D_004DB570[8];
-static const char *msg01_2_0036DD20[2];
-static const char *msg02_3_0036DD28[2];
+int vibrationModeTable[2] = { 0, 1 };
 
-static const char * msg00_1_0036DD00[7] __attribute__((section(".data"))) = { D_004C94F0, D_004C94D8, D_004C94C8, D_004C94B8, D_004C94A0, D_004DB548, D_004DB540 };
+int padModeTable[2] = { 0, 1 };
 
-static const char * msg01_2_0036DD20[2] __attribute__((section(".data"))) = { D_004DB558, D_004DB550 };
+int hddModeTable[2] = { 1, 0 };
 
-static const char * msg02_3_0036DD28[2] __attribute__((section(".data"))) = { D_004DB568, D_004DB560 };
+/* Text: {reset}system */
+char systemText[8] = "\013system";
 
-static const char * msg03_4_0036DD30[2] __attribute__((section(".data"))) = { D_004C9500, D_004DB570 };
-
-MenuSystemOptionNames *const D_004C9530[7] __attribute__((section(".rodata"))) = { &msg01_2_0036DD20, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28, &msg02_3_0036DD28 };
-
-extern const char D_004DB5D0[8];
-
-
-unsigned char D_004DB578[8] = { 0x20, 0x50, 0x40, 0x30, 0x00, 0x70, 0x60, 0x00 };
-
-int D_004DB580[2] = { 1, 0 };
-
-int D_004DB588[2] = { 1, 0 };
-
-int D_004DB590[2] = { 0, 1 };
-
-int D_004DB598[2] = { 0, 1 };
-
-int D_004DB5A0[2] = { 1, 0 };
-
-char D_004DB5A8[8] = "\013system";
-
-char D_004DB5B0[8] = "\013ms %2d";
+/* Text: {reset}ms %2d */
+char messageDelayFormat[8] = "\013ms %2d";
 
 MenuSystemPasBlock *MenuSystemPas = 0;
 
@@ -957,6 +929,6 @@ MenuSystemMenuBlock *MenuSystemMenu = 0;
 
 XglClock _CountTime = {0};
 
-const char D_004DB5D0[8] = "/Set";
+const char MenuSkillSetSuffixText[8] = "/Set";
 
-const char D_004DB5D8[8] = "Skills";
+const char MenuSkillTitleText[8] = "Skills";

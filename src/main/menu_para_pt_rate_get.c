@@ -8,47 +8,45 @@
 #include "main/xgl_studio.h"
 #include "main/xgl_2.h"
 
-
 /* This TU defines these menu labels below; their pointer tables precede
  * the storage definitions. Declare their array type before use; the definitions retain each extent. */
-extern const char D_004C5550[];
-extern const char D_004C5560[];
-extern const char D_004C5570[];
-extern const char D_004C5580[];
-extern const char D_004C5590[];
-extern const char D_004C55A0[];
-extern const char D_004C6058[];
-extern const char D_004C6068[];
-extern const char D_004C6088[];
-extern const char D_004C60A8[];
-extern const char D_004C6550[];
-extern const char D_004C6568[];
-extern const char D_004DAD20[];
-extern const char D_004DAD28[];
-extern const char D_004DAD30[];
-extern const char D_004DAD38[];
-extern const char D_004DAD40[];
-extern const char D_004DAD48[];
-extern const char D_004DAD50[];
-extern const char D_004DAD58[];
-extern const char D_004DAD60[];
-extern const char D_004DADC0[];
-extern const char D_004DADD8[];
-extern const char D_004DADE0[];
-extern const char D_004DADE8[];
-extern const char D_004DAE00[];
-extern const char D_004DAE08[];
-extern const char D_004DAE10[];
-extern const char D_004DAE18[];
-extern const char D_004DAE20[];
-extern const char D_004DAE28[];
-extern const char D_004DAE30[];
-extern const char D_004DAE38[];
-extern const char D_004DAE60[];
+extern const char accessoryCommandLabel[];
+extern const char unequipCommandLabel[];
+extern const char charactersLabel[];
+extern const char replaceCommandLabel[];
+extern const char formationCommandLabel[];
+extern const char battleFormationLabel[];
+extern const char drawSetCancelText[];
+extern const char formationReplaceCancelText[];
+extern const char equipUnequipUsePtsText[];
+extern const char confirmPromptText[];
+extern const char setLeadCharacterText[];
+extern const char currentText[];
+extern const char setCommandLabel[];
+extern const char drawCommandLabel[];
+extern const char otherCommandLabel[];
+extern const char bodyCommandLabel[];
+extern const char ammoCommandLabel[];
+extern const char weaponCommandLabel[];
+extern const char listCommandLabel[];
+extern const char skillCommandLabel[];
+extern const char equipCommandLabel[];
+extern const char yesNoChoicesText[];
+extern const char menuParaPtRateGetSPtsText[];
+extern const char menuParaPtRateGetEPtsText[];
+extern const char menuParaPtRateGetTPtsText[];
+extern const char weightText[];
+extern const char agilityText[];
+extern const char menuParaPtRateGetEvasionText[];
+extern const char menuParaPtRateGetDexterityText[];
+extern const char menuParaPtRateGetEdefText[];
+extern const char menuParaPtRateGetEatkText[];
+extern const char menuParaPtRateGetVitalityText[];
+extern const char menuParaPtRateGetStrengthText[];
+extern const char totalText[];
 
 /* The callback prototype precedes this TU's complete model definition. */
 typedef struct MenuCharacterModel MenuCharacterModel;
-
 
 /*
  * The menu work block (window_tex_load's MenuWork data, 0x80 bytes). Only the
@@ -141,12 +139,10 @@ typedef struct CharacterMenuWorkData {
     unsigned short paraCost;        /* +0x7E */
 } CharacterMenuWorkData;
 
-
 /* The 0x80-byte MenuWork storage as the character screens view it. */
 typedef union MenuWorkData {
     CharacterMenuWorkData character;
 } MenuWorkData;
-
 
 /*
  * CharPasMain reads two more bytes of the same trailing span: menuCursor
@@ -182,7 +178,6 @@ typedef struct CharSpotLightTask {
     float pulseStep;                /* +0x38: added to pulse every frame */
 } CharSpotLightTask;
 
-
 #define SPOTLIGHT_START    0
 
 #define SPOTLIGHT_HIDDEN   2
@@ -208,11 +203,6 @@ typedef struct DirectCircle {
     unsigned char outerColor[4];    /* +0x14 */
 } DirectCircle;
 
-
-
-
-
-
 /* Screen-centre origin of the 12.4 fixed-point coordinates
  * xglRotTransPersN returns. */
 
@@ -233,15 +223,14 @@ typedef union SpotLightTable {
     u64 doublewords[12];
 } SpotLightTable;
 
-
-extern const SpotLightTable D_004C6770;
+extern const SpotLightTable spotLightPositionTable;
 
 /* Scaffold .lit4 constants: the pulse step (1/24) and the easing factor
  * (0.4) tskCharSpotLight loads gp-relative. */
 
-#define D_004D7E50 (1.0f / 24.0f)
+#define SPOT_LIGHT_PULSE_STEP (1.0f / 24.0f)
 
-#define D_004D7E54 (0.4f)
+#define SPOT_LIGHT_EASE_RATE (0.4f)
 
 /* xglRotTransPersN (VA 0x00229ab0): projects count points through the
  * optional matrix and the camera, writing four words per point. */
@@ -297,7 +286,6 @@ typedef struct CharParaData {
     unsigned char unmodeled_70[0x180 - 0x70];
 } CharParaData;
 
-
 /* Accessory ids after which MenuCharParaSet restores an hp/ep that was above
  * the recalculated maximum. */
 
@@ -311,7 +299,6 @@ typedef struct CharParaData {
 static unsigned short UpPara[8];
 static unsigned short MenuCharParty[8];
 static CharParaData paraUnit[2];
-
 
 static signed char ParaPointTbl[];
 
@@ -363,7 +350,6 @@ typedef struct CharPointData {
     int skillPoints;
 } CharPointData;
 
-
 CharPointData *func_A19210(int chrNo);
 
 int MenuParaNextPointGet(int chrNo, int statIndex, int count);
@@ -378,7 +364,7 @@ void eMessageCpy(char *destination, char *source);
 
 void eMessageCat(char *source);
 
-#define D_004DADB0 ((unsigned char *)"")
+#define CHAR_LIST_EMPTY_FLAGS ((unsigned char *)"")
 
 /*
  * Spends one point raising statIndex by one step: the plain fields just
@@ -431,7 +417,6 @@ typedef struct CharPasWindow {
     void *callbackArg;                 /* +0x18 */
 } CharPasWindow;
 
-
 /*
  * One category-tab caption. eMessageSet/eMessageMain read/write the rest of
  * this record; only the members CharPasMain itself sets are modeled.
@@ -447,7 +432,6 @@ typedef struct CharPasMessage {
     unsigned char unmodeled_0c[0x44 - 0x0C];
 } CharPasMessage;
 
-
 /* The inset frame endPrintExtFunc draws behind the tab strip. */
 
 typedef struct CharPasBox {
@@ -457,7 +441,6 @@ typedef struct CharPasBox {
     short width;                       /* +0x08 */
     short height;                      /* +0x0A */
 } CharPasBox;
-
 
 /*
  * The character-pass screen's own work block: MenuCharactor carves it as a
@@ -479,16 +462,15 @@ typedef struct CharPasWork {
     unsigned char callbackWork[0x550 - 0x4E0];  /* +0x4E0 */
 } CharPasWork;
 
-
 extern CharPasWork *CharPas;
 
 /* The twelve normal-menu category captions ("Characters", "/Equip", ...). */
 
-static const char *const msg_0_0036D8A8[12];
+static const char *msg_0_0036D8A8[12];
 
 /* The three battle-formation category captions. */
 
-static const char *const msg01_1[3];
+static const char *msg01_1[3];
 
 /* MenuPasLengthGet (this TU, still assembler): the caption's pixel width. */
 
@@ -588,7 +570,6 @@ typedef struct MenuPadData {
     unsigned char unmodeled_36[0xD0 - 0x36];
 } MenuPadData;
 
-
 extern MenuPadData PadData;
 
 #define PAD_L2       0x0001
@@ -625,7 +606,6 @@ extern MenuPadData PadData;
 
 typedef struct CharInfoWindow CharInfoWindow;
 
-
 /*
  * The record MenuInfoWindow draws one line from. Only the two coordinates the
  * setup clears and the text pointer are modelled; from +0x10 on it is the
@@ -640,7 +620,6 @@ typedef struct CharInfoText {
     unsigned char unmodeled_10[0x1B0 - 0x10];
 } CharInfoText;
 
-
 struct CharInfoWindow {
     short x;                        /* +0x00 */
     short y;                        /* +0x02 */
@@ -654,7 +633,6 @@ struct CharInfoWindow {
     struct CharInfoText *callbackArg;      /* +0x18 */
     unsigned char unmodeled_1c[0x198 - 0x1C];
 };
-
 
 /*
  * The help window's work block, the 0x450 bytes MenuCharactor carves out of
@@ -675,7 +653,6 @@ typedef struct CharInfoWork {
     char message[0x100];            /* +0x350 */
 } CharInfoWork;
 
-
 #define CHAR_INFO_SETUP 0
 
 #define CHAR_INFO_MAIN  2
@@ -693,7 +670,6 @@ typedef struct MenuTextRecord {
     char *name;                     /* +0x00 */
     char *description;              /* +0x04 */
 } MenuTextRecord;
-
 
 #define MENU_TEXT_WEAPON    0x30000
 
@@ -753,7 +729,6 @@ typedef struct CharCategoryIcon {
     unsigned char unmodeled_10[0x28 - 0x10]; /* eSpriteMain's own fields */
 } CharCategoryIcon;
 
-
 /*
  * The 0x244-byte block MenuCharactor carves for the category screen.
  * edgeDelta[0]/[1] nudge icons[0]/icons[1] left/right for a few frames after
@@ -776,7 +751,6 @@ typedef struct CharCategoryWork {
     unsigned char unmodeled_b4[0x244 - 0xB4];
 } CharCategoryWork;
 
-
 extern CharCategoryWork *CharCategory;
 
 /* Scaffold .rodata: the five icon sprite ids CharCategoryMain assigns at init. */
@@ -785,8 +759,7 @@ typedef struct CharCategoryIconIdTable {
     short id[5];
 } CharCategoryIconIdTable;
 
-
-extern const CharCategoryIconIdTable D_004C6048;
+extern const CharCategoryIconIdTable charCategoryIconTable;
 
 float xglCos(float radians);
 
@@ -804,9 +777,7 @@ float xglCos(float radians);
 
 typedef struct CharMenuWindowDX CharMenuWindowDX;
 
-
 typedef struct CharMenuList CharMenuList;
-
 
 struct CharMenuWindowDX {
     short x;                            /* +0x00 */
@@ -821,7 +792,6 @@ struct CharMenuWindowDX {
     void *selectArg;                    /* +0x18 */
     unsigned char unmodeled_1c[0x194 - 0x1C];
 };
-
 
 /*
  * One selection list MenuSelectWindow (main/menu_top_command_check.c) draws
@@ -839,7 +809,6 @@ struct CharMenuList {
     const char *prompt;                 /* +0x0C */
     unsigned char unmodeled_10[0x5F8 - 0x10];
 };
-
 
 /*
  * The character screen's work block. state 0 builds the windows and turns
@@ -859,15 +828,14 @@ typedef struct CharMenuWork {
     CharMenuList list[3];               /* +0x658 */
 } CharMenuWork;
 
-
 extern CharMenuWork *CharMenu;
 
 /* The window titles, the small .sdata string constants "Menu" (0x004DADC8)
  * and "Select" (0x004DADD0) the scaffold still owns. */
 
-extern const char D_004DADC8[];
+extern const char menuTitleLabel[];
 
-extern const char D_004DADD0[];
+extern const char selectTitleLabel[];
 
 /*
  * The command lists, one entry per party mode and window: "Equip\nUnequip\nUse
@@ -924,7 +892,6 @@ typedef struct CharExRibbon {
     u8 unmodeled_00d[0x70 - 0x0D];
 } CharExRibbon;
 
-
 typedef struct CharExLabel {
     signed char state;              /* +0x00 */
     signed char subState;           /* +0x01 */
@@ -936,7 +903,6 @@ typedef struct CharExLabel {
     u8 unmodeled_010[0xc];          /* +0x10..0x1b */
     int value;                      /* +0x1c */
 } CharExLabel;
-
 
 /*
  * digits (+0x0F) is the number of digit cells eNumberMain lays out, twelve
@@ -959,7 +925,6 @@ typedef struct CharExNumber {
     u8 unmodeled_018[0x90 - 0x18];
 } CharExNumber;
 
-
 /*
  * The character screen's point bar: three rows, each one ribbon with its
  * label and its value.
@@ -974,7 +939,6 @@ typedef struct CharExWork {
     CharExLabel label[3];              /* +0x168 */
     CharExNumber number[3];              /* +0x1C8 */
 } CharExWork;
-
 
 extern CharExWork *CharEx;
 
@@ -1012,7 +976,6 @@ typedef struct L1R1Sprite {
     unsigned char unmodeled_0c[0x28 - 0x0c];
 } L1R1Sprite;
 
-
 /*
  * CharL1R1's 0x58-byte work block: MenuCharactor carves it from the menu
  * heap with state left at 0. CharL1R1Main runs the one-time setup while
@@ -1029,7 +992,6 @@ typedef struct CharL1R1Work {
     L1R1Sprite sprite[2];        /* +0x08: L1, then R1 */
 } CharL1R1Work;
 
-
 extern CharL1R1Work *CharL1R1;
 
 /*
@@ -1043,15 +1005,13 @@ typedef struct L1R1SpriteIdPair {
     short id[2];
 } L1R1SpriteIdPair;
 
-
-extern const L1R1SpriteIdPair D_004DADF0[];
+extern const L1R1SpriteIdPair l1r1SpriteIdTable[];
 
 typedef struct L1R1SlideStep {
     signed char side[2];
 } L1R1SlideStep;
 
-
-extern const L1R1SlideStep D_004DADF8[];
+extern const L1R1SlideStep l1r1SlideStepTable[];
 
 /*
  * One entry of the CharStatus block: a twelve-byte entry header followed by
@@ -1074,7 +1034,6 @@ typedef struct CharStatusHeader {
     int color;                          /* +0x08 */
 } CharStatusHeader;
 
-
 /*
  * The 0x834-byte record MenuStatusDisp (main/menu_status.c, VA 0x00279098)
  * draws one character's status panel from. Only the fields this menu writes
@@ -1094,7 +1053,6 @@ typedef struct MenuStatusWork {
     signed char epMark;                 /* +0x12 */
     unsigned char unmodeled_13[0x834 - 0x13];
 } MenuStatusWork;
-
 
 void MenuStatusDisp(MenuStatusWork *work);
 
@@ -1121,7 +1079,6 @@ typedef struct MenuStatusWindow {
     unsigned char unmodeled_1c[0x188 - 0x1C];
 } MenuStatusWindow;
 
-
 /* The window's content colours: the party slot under the cursor is brighter. */
 
 #define CHAR_STATUS_COLOR_SELECTED 0x00F07F00
@@ -1144,7 +1101,6 @@ typedef struct MenuStatusCursor {
     unsigned char unmodeled_0c[0x10 - 0x0C];
 } MenuStatusCursor;
 
-
 /* The state the swap menu's reserve cursor runs with, and the work word both
  * status cursors are given after eCursolSet has cleared the record. */
 
@@ -1157,19 +1113,16 @@ typedef struct CharStatusWindowEntry {
     MenuStatusWindow window;           /* +0x000C */
 } CharStatusWindowEntry;
 
-
 typedef struct CharStatusDispEntry {
     CharStatusHeader header;            /* +0x0000 */
     MenuStatusWork work;               /* +0x000C */
 } CharStatusDispEntry;
-
 
 typedef struct CharStatusCursorEntry {
     CharStatusHeader header;            /* +0x0000 */
     MenuStatusCursor cursor;           /* +0x000C */
     unsigned char unmodeled_1c[0x24 - 0x1C];
 } CharStatusCursorEntry;
-
 
 /*
  * The character-status work block MenuCharactor carves from the menu heap
@@ -1186,7 +1139,6 @@ typedef struct CharStatusWork {
     CharStatusCursorEntry cursor[2];   /* +0x4EA0 */
     CharStatusHeader endHeader;        /* +0x4EE8 */
 } CharStatusWork;
-
 
 #define CHAR_STATUS_BUILD 0
 
@@ -1235,7 +1187,6 @@ typedef struct CharListIcon {
     unsigned char unmodeled_0c[0x28 - 0x0C];
 } CharListIcon;
 
-
 /*
  * The per-character stat rows of the equip-list screen (CharListWork below
  * holds eight of them). Only the colour word CharListMain writes right after
@@ -1248,7 +1199,6 @@ typedef struct CharListStatRow {
     int color;                      /* +0x04 */
     unsigned char unmodeled_08[0x90 - 0x08];
 } CharListStatRow;
-
 
 /*
  * The list rows MenuListMake builds and MenuListGet returns, twelve bytes
@@ -1263,7 +1213,6 @@ typedef struct CharListRow {
     unsigned char flag;             /* +0x08 */
     unsigned char unmodeled_09[0x0C - 0x09];
 } CharListRow;
-
 
 CharListRow *MenuListMake(int listIndex, int mode);
 
@@ -1308,7 +1257,6 @@ typedef struct CharListSPWindow {
     struct CharListRow *items;         /* +0x1C */
 } CharListSPWindow;
 
-
 void WindowSPItemChange(CharListSPWindow *window);
 
 void WindowSPSetSelect(CharListSPWindow *window, unsigned char *savedSelection);
@@ -1339,7 +1287,6 @@ typedef struct CharListWork {
     unsigned char paraItems[12 * 12];
 } CharListWork;
 
-
 extern CharListWork *CharList;
 
 /* Saved WindowSP selections, one 5-byte snapshot per list; index 15 = the
@@ -1360,7 +1307,6 @@ typedef struct MenuBulletData {
     unsigned char unmodeled_00[0x0C];
     short weapon;                   /* +0x0C */
 } MenuBulletData;
-
 
 MenuBulletData *func_A1A428(int ammoId);
 
@@ -1398,7 +1344,6 @@ typedef struct ParaWindow {
     unsigned char unmodeled_11[0x194 - 0x11];
 } ParaWindow;
 
-
 /*
  * One of the eight numbers. eNumberSet clears the render colour, the mode at
  * +0x0C and the four bytes at +0x10..+0x13; eNumberMain formats the word at
@@ -1424,7 +1369,6 @@ typedef struct ParaNumber {
     unsigned char unmodeled_18[0x90 - 0x18];
 } ParaNumber;
 
-
 /*
  * One of the eight stat labels. eTagFontSet clears the state pair at +0x00 and
  * the render colour at +0x0C and stores the text pointer; this screen only
@@ -1440,7 +1384,6 @@ typedef struct ParaTagFont {
     unsigned char unmodeled_10[0x20 - 0x10];
 } ParaTagFont;
 
-
 /*
  * The ribbon that marks the selected parameter row: the same x/y/colour/size
  * head the sub-window uses, then the eight corner records eRibbonMain walks,
@@ -1452,7 +1395,6 @@ typedef struct ParaRibbonPoint {
     unsigned char rgba[4];      /* +0x08 */
 } ParaRibbonPoint;
 
-
 typedef struct ParaRibbon {
     short x;                    /* +0x00 */
     short y;                    /* +0x02 */
@@ -1462,7 +1404,6 @@ typedef struct ParaRibbon {
     unsigned char unmodeled_0c[4];
     ParaRibbonPoint point[8];   /* +0x10 */
 } ParaRibbon;
-
 
 typedef struct CharParameterWork {
     unsigned char state;        /* +0x00 */
@@ -1481,7 +1422,6 @@ typedef struct CharParameterWork {
     ParaRibbon ribbon;          /* +0x860 */
 } CharParameterWork;
 
-
 extern CharParameterWork *CharParameter;
 
 /* The text pointer of each of the eight stat labels, in the order the window
@@ -1496,8 +1436,7 @@ typedef struct ParaDigitCounts {
     unsigned char count[8];
 } ParaDigitCounts;
 
-
-extern ParaDigitCounts D_004DAE40[];
+extern ParaDigitCounts paraDigitCountTable[];
 
 /* The window slides in from x = -512 and rests at x = 16. */
 
@@ -1527,7 +1466,6 @@ typedef struct CharWeaponWindow {
     unsigned char unmodeled_011[0x194 - 0x11];
 } CharWeaponWindow;
 
-
 typedef struct CharWeaponMessage {
     unsigned char unmodeled_000[0x01];
     unsigned char mode;                 /* +0x001 */
@@ -1540,7 +1478,6 @@ typedef struct CharWeaponMessage {
     unsigned char unmodeled_01c[0x44 - 0x1C];
 } CharWeaponMessage;
 
-
 typedef struct CharWeaponSprite {
     unsigned char unmodeled_000[0x04];
     short x;                            /* +0x004 */
@@ -1548,7 +1485,6 @@ typedef struct CharWeaponSprite {
     int color;                          /* +0x008 */
     unsigned char unmodeled_00c[0x28 - 0x0C];
 } CharWeaponSprite;
-
 
 typedef struct CharWeaponCursor {
     signed char state;                  /* +0x000 */
@@ -1558,7 +1494,6 @@ typedef struct CharWeaponCursor {
     int color;                          /* +0x008 */
     unsigned char unmodeled_00c[0x24 - 0x0C];
 } CharWeaponCursor;
-
 
 /* Whether the weapon takes the bullet row of the weapon window as well. */
 
@@ -1574,8 +1509,7 @@ typedef struct WeaponIconTable {
     short icon[7];
 } WeaponIconTable;
 
-
-extern const WeaponIconTable D_004C6398;
+extern const WeaponIconTable charWeaponIconTable;
 
 /*
  * The accessory icon of every icon group, as the scaffold's small-data piece
@@ -1587,8 +1521,7 @@ typedef struct AccessoryIconTable {
     short icon[3];
 } AccessoryIconTable;
 
-
-extern const AccessoryIconTable D_004DAE48[];
+extern const AccessoryIconTable charAccessoryIconTable[];
 
 /*
  * The accessory record, as far as the equipment display needs it: the icon
@@ -1601,7 +1534,6 @@ typedef struct MenuAccessoryData {
     unsigned char unmodeled_00[0x0A];
     unsigned short iconKind;            /* +0x0A */
 } MenuAccessoryData;
-
 
 /* dataAccGet (ov01 VA 0x00a1a548), linked by the scaffold's
  * undefined_funcs_auto.txt placeholder name. */
@@ -1628,7 +1560,6 @@ typedef struct CharWeaponWork {
     CharWeaponMessage message[6];             /* +0x4E8 */
     CharWeaponSprite sprite[6];               /* +0x680 */
 } CharWeaponWork;
-
 
 extern CharWeaponWork *CharWeapon;
 
@@ -1664,17 +1595,16 @@ typedef struct CharParaRow {
     unsigned char unmodeled_09[0x0C - 0x09];
 } CharParaRow;
 
-
 char *MenuParaNameGet2(int statIndex);
 
-extern unsigned char D_004DAE50[];
+extern unsigned char listWindowTag[];
 
 /* The parameter-up list: one row per improvable parameter, flagged while the
  * shown character can still raise it, then the cost row and a terminating
  * empty row. Its rows live in CharList itself, so the window takes them
  * directly instead of through MenuListMake. */
 
-/* D_004DADB0: scaffold data CharListMain and CharListMake_Para store as the
+/* CHAR_LIST_EMPTY_FLAGS: scaffold data CharListMain and CharListMake_Para store as the
  * list window's flags; no further evidence of its own layout. */
 
 /* WindowSPSet and WindowSPMain are not yet recovered
@@ -1714,7 +1644,6 @@ typedef struct CharSwitchArrow {
     int work;                       /* +0x08 */
 } CharSwitchArrow;
 
-
 /*
  * Partial view of the message object eMessageSet/eMessageMain (main/e_message.c,
  * still assembler at this TU's boundary) receive, at the same x/y/color
@@ -1731,7 +1660,6 @@ typedef struct CharSwitchMessage {
     int color;                      /* +0x08 */
 } CharSwitchMessage;
 
-
 /*
  * The switch-character arrow indicator MenuCharactor carves from the menu
  * heap (still assembler there); only the members CharSwitchMain touches are
@@ -1746,7 +1674,6 @@ typedef struct CharSwitchWork {
     unsigned char unmodeled_14[0x30 - 0x14];
     CharSwitchMessage message;      /* +0x30 */
 } CharSwitchWork;
-
 
 extern CharSwitchWork *CharSwitch;
 
@@ -1765,11 +1692,11 @@ static char * msg_6[];
 
 /* The "T.Pts" panel title window_tex_load's string table holds. */
 
-extern const char D_004DAE58[];
+extern const char tPtsTitleLabel[];
 
 /* The two eTagFontSet values CharPointMain's title-row loop passes. */
 
-static const char *const msg_7_0036D938[];
+static const char *msg_7_0036D938[];
 
 /*
  * One title-row slot (eTagFontSet/eTagFontMain object): x/y (+0x04/+0x06)
@@ -1784,7 +1711,6 @@ typedef struct CharPointTagSlot {
     int id;                         /* +0x08 */
     unsigned char unmodeled_0c[0x20 - 0x0C];
 } CharPointTagSlot;
-
 
 /*
  * One point-value slot (eNumberSet/eNumberMain object): x/y position it,
@@ -1806,7 +1732,6 @@ typedef struct CharPointNumberSlot {
     unsigned char unmodeled_18[0x90 - 0x18];
 } CharPointNumberSlot;
 
-
 /*
  * The panel's background quad (eSpriteSet/eSpriteMain object): x/y position
  * it, id is the same kind of per-row handle, and printX/printY are the
@@ -1822,7 +1747,6 @@ typedef struct CharPointSprite {
     short printX;                   /* +0x28 */
     short printY;                   /* +0x2A */
 } CharPointSprite;
-
 
 /*
  * A tint record: id is the same per-row handle, r/g/b/a are the colour
@@ -1840,7 +1764,6 @@ typedef struct CharPointColorSlot {
     short extraX;                   /* +0x08 */
     short extraY;                   /* +0x0A */
 } CharPointColorSlot;
-
 
 /*
  * CharPointMain's own work block: window_tex_load carves it from the menu
@@ -1869,14 +1792,12 @@ typedef struct CharPointPanel {
     unsigned char unmodeled_3cc[0x3D0 - 0x3CC];
 } CharPointPanel;
 
-
 typedef struct CharPointWork {
     unsigned char state;                            /* +0x000 */
     unsigned char unmodeled_001[3];
     int tagBase;                                    /* +0x004 */
     CharPointPanel panel;                           /* +0x008 */
 } CharPointWork;
-
 
 extern CharPointWork *CharPoint;
 
@@ -1918,11 +1839,11 @@ extern XglTaskScheduler *MenuTask_XMX;
 
 /* The parameter table file read into ParaDataBuf (2 KB aligned). */
 
-extern const char D_004C67D0[32];
+extern const char paraUpBinPath[32];
 
 /* The debug caption printed above the state dump. */
 
-extern const char D_004C67F0[16];
+extern const char charactorText[16];
 
 /* Sound effect ids. */
 
@@ -1975,7 +1896,6 @@ typedef struct MenuWeaponData {
     short bullet;                   /* +0x1A */
 } MenuWeaponData;
 
-
 /* dataWpnGet (ov01 VA 0x00a1a3d8), linked by the scaffold's
  * undefined_funcs_auto.txt placeholder name. */
 
@@ -1985,7 +1905,6 @@ typedef struct PartyAttackPosition {
     unsigned short party_id;
     signed char attack_position;
 } PartyAttackPosition;
-
 
 typedef struct PartyDataPrefix {
     u8 _unmodeled_00[0x24];
@@ -1997,7 +1916,6 @@ typedef struct PartyDataPrefix {
     u8 radar_disp;
     PartyAttackPosition attack_slots[3];
 } PartyDataPrefix;
-
 
 int PartyLeaderSet(int leader);
 
@@ -2096,45 +2014,44 @@ static int tskCharLineField(XglTaskPrefix *task);
 
 /* Tables consumed through the existing partial views. */
 
-extern const char D_004C6BC0[16];
+extern const char MenuAgwsAssignPilotCommandLabel[16];
 
-extern const char D_004C6BD0[16];
+extern const char MenuAgwsEngineUnitCommandLabel[16];
 
-extern const char D_004C6BE0[16];
+extern const char MenuAgwsAccessoryCommandLabel[16];
 
-extern const char D_004C6BF0[16];
+extern const char MenuAgwsLeftShoulderCommandLabel[16];
 
-extern const char D_004C6C00[16];
+extern const char MenuAgwsRightShoulderCommandLabel[16];
 
-extern const char D_004C6C10[16];
+extern const char MenuAgwsUnequipCommandLabel[16];
 
-extern const char D_004C6C20[16];
+extern const char MenuAgwsNameLabel[16];
 
-extern const char D_004DAEB0[8];
+extern const char MenuAgwsRemoveCommandLabel[8];
 
-extern const char D_004DAEB8[8];
+extern const char MenuAgwsAssignCommandLabel[8];
 
-extern const char D_004DAEC0[8];
+extern const char MenuAgwsAmmoCommandLabel[8];
 
-extern const char D_004DAEC8[8];
+extern const char MenuAgwsLeftAltCommandLabel[8];
 
-extern const char D_004DAED0[8];
+extern const char MenuAgwsRightAltCommandLabel[8];
 
-extern const char D_004DAED8[8];
+extern const char MenuAgwsLeftArmCommandLabel[8];
 
-extern const char D_004DAEE0[8];
+extern const char MenuAgwsRightArmCommandLabel[8];
 
-extern const char D_004DAEE8[8];
+extern const char MenuAgwsListCommandLabel[8];
 
-extern const char D_004DAEF0[8];
+extern const char MenuAgwsPilotCommandLabel[8];
 
-extern const char D_004DAEF8[8];
+extern const char MenuAgwsEquipCommandLabel[8];
 
 typedef union MenuCharacterVector {
     Vector4 vector;
     unsigned long long words[2];
 } MenuCharacterVector;
-
 
 typedef struct MenuCharacterTransform {
     MenuCharacterVector position;
@@ -2146,12 +2063,10 @@ typedef struct MenuCharacterTransform {
     float fade;
 } MenuCharacterTransform;
 
-
 typedef struct MenuCharacterActor {
     unsigned char unmodeled_00[0xC0];
     MenuCharacterTransform transform;
 } MenuCharacterActor;
-
 
 typedef struct MenuCharacterModel {
     unsigned char unmodeled_00[0x10];
@@ -2165,7 +2080,6 @@ typedef struct MenuCharacterModel {
     struct MenuCharacterActor *actor;
 } MenuCharacterModel;
 
-
 void MenuModelUnitBreak(void *unit);
 
 void MenuModelUnitOpen(void *unit, int drawType);
@@ -2178,11 +2092,9 @@ int MenuEquipStealMaskCheck(void);
 
 int MenuShionMwsCheck(void);
 
-extern MenuCharacterVector D_004C6670;
+#define CHAR_MODEL_DEFAULT_MOVE_RATE (0.20000000298023224f)
 
-#define D_004D7E2C (0.20000000298023224f)
-
-#define D_004D7E30 (0.20000000298023224f)
+#define CHAR_MODEL_RESET_MOVE_RATE (0.20000000298023224f)
 
 static inline int MenuCharCameraViewGet(int state)
 {
@@ -2200,10 +2112,6 @@ static inline int MenuCharCameraViewGet(int state)
     }
     return view;
 }
-
-
-
-
 
 typedef union MenuCameraPair {
     Vector4 vector[2];
@@ -2223,27 +2131,26 @@ typedef union MenuCharacterPositions {
     unsigned long long words[12];
 } MenuCharacterPositions;
 
-extern const MenuCameraPair D_004C65F0;
+extern const MenuCameraPair singleCameraPositionTable;
 
-extern const MenuCameraPair D_004C6610;
+extern const MenuCameraPair singleCameraRotationTable;
 
-extern const MenuCameraPair D_004C6630;
+extern const MenuCameraPair formationCameraRotationTable;
 
-extern const MenuCameraPair D_004C6650;
+extern const MenuCameraPair formationCameraPositionTable;
 
-#define D_004D7E20 (0.10000000149011612f)
+#define CHAR_CAMERA_POSITION_RATE (0.10000000149011612f)
 
-#define D_004D7E24 (0.05000000074505806f)
+#define CHAR_CAMERA_ROTATION_RATE (0.05000000074505806f)
 
-#define D_004D7E28 (0.10000000149011612f)
+#define CHAR_CAMERA_TARGET_X_SCALE (0.10000000149011612f)
 
 void xglCameraInit(StudioCamera *camera);
 
 static MenuCameraVector TairetuRot;
 static MenuCameraVector TairetuPos;
 
-
-#define D_004D7E1C (-0.78539818525314331f)
+#define NEG_QUARTER_PI (-0.78539818525314331f)
 
 typedef struct MenuCameraSetPositionVectors {
     Vector4 vector[2];
@@ -2271,33 +2178,25 @@ typedef struct MenuCameraSetVector {
     MenuCameraVector storage;
 } MenuCameraSetVector;
 
-extern MenuCameraSetPair D_004C6580;
+extern const MenuCharacterPositions battleModelPositionTable;
 
-extern MenuCameraSetRotationPair D_004C65A0;
-
-extern MenuCameraSetPair D_004C65C0;
-
-extern MenuCameraSetVector D_004C65E0;
-
-extern const MenuCharacterPositions D_004C6680;
-
-#define D_004D7E34 (0.20000000298023224f)
+#define BATTLE_MODEL_MOVE_RATE (0.20000000298023224f)
 
 int PartyAttackPosGet(int partyId);
 
-extern const MenuCharacterVector D_004C6760;
+extern const MenuCharacterVector lineFieldInitialScaleVector;
 
-#define D_004D7E38 (0.20000000298023224f)
+#define LINE_FIELD_GROW_STEP (0.20000000298023224f)
 
-#define D_004D7E3C (0.019999999552965164f)
+#define LINE_FIELD_FADE_IN_STEP (0.019999999552965164f)
 
-#define D_004D7E40 (0.20000000298023224f)
+#define LINE_FIELD_SHRINK_STEP (0.20000000298023224f)
 
-#define D_004D7E44 (0.019999999552965164f)
+#define LINE_FIELD_FADE_OUT_STEP (0.019999999552965164f)
 
-extern const unsigned char D_004DAE68[];
+extern const unsigned char rowOpacityTable[];
 
-extern const unsigned char D_004DAE70[];
+extern const unsigned char columnOpacityTable[];
 
 typedef struct CharLineFieldTask {
     XglTaskPrefix task;
@@ -2309,11 +2208,9 @@ typedef struct CharLineFieldTask {
     float alpha;
 } CharLineFieldTask;
 
-
 typedef struct LineProjection {
     int component[4];
 } LineProjection;
-
 
 typedef struct DirectLineColor {
     unsigned char red;
@@ -2327,10 +2224,7 @@ typedef struct DirectLineVertex {
     unsigned char unmodeled_14[12];
 } DirectLineVertex;
 
-
 void endPrintDirectLine(DirectLineVertex *vertices);
-
-
 
 unsigned short MenuParaPtRateGet(int chrNo, int statIndex)
 {
@@ -2514,6 +2408,7 @@ int MenuCharLeaderMask(unsigned short chrNo)
 int MenuPasLengthGet(const char *text)
 {
     char message[64];
+    /* Text: {style 3} */
     char label[3] = "\x19\x03";
 
     eMessageCpy(message, label);
@@ -2521,35 +2416,35 @@ int MenuPasLengthGet(const char *text)
     return xglFontGetStringWidth(message);
 }
 
-const char D_004C5550[16] = "/Accessory";
+const char accessoryCommandLabel[16] = "/Accessory";
 
-const char D_004C5560[16] = "/Unequip";
+const char unequipCommandLabel[16] = "/Unequip";
 
-const char D_004C5570[16] = "Characters";
+const char charactersLabel[16] = "Characters";
 
-const char D_004C5580[16] = "/Replace";
+const char replaceCommandLabel[16] = "/Replace";
 
-const char D_004C5590[16] = "/Formation";
+const char formationCommandLabel[16] = "/Formation";
 
-const char D_004C55A0[32] = "Battle Formation";
+const char battleFormationLabel[32] = "Battle Formation";
 
-const char D_004DAD20[8] = "/Set";
+const char setCommandLabel[8] = "/Set";
 
-const char D_004DAD28[8] = "/Draw";
+const char drawCommandLabel[8] = "/Draw";
 
-const char D_004DAD30[8] = "/Other";
+const char otherCommandLabel[8] = "/Other";
 
-const char D_004DAD38[8] = "/Body";
+const char bodyCommandLabel[8] = "/Body";
 
-const char D_004DAD40[8] = "/Ammo";
+const char ammoCommandLabel[8] = "/Ammo";
 
-const char D_004DAD48[8] = "/Weapon";
+const char weaponCommandLabel[8] = "/Weapon";
 
-const char D_004DAD50[8] = "/List";
+const char listCommandLabel[8] = "/List";
 
-const char D_004DAD58[8] = "/Skill";
+const char skillCommandLabel[8] = "/Skill";
 
-const char D_004DAD60[8] = "/Equip";
+const char equipCommandLabel[8] = "/Equip";
 
 void CharPasMain(void)
 {
@@ -2758,11 +2653,15 @@ void CharInfoMain(void)
         "Cancel."
     };
     char *formationHelp[6] = {
+        /* Text: Select a new location for your character and press \x1E\x01. */
         "Select a new location for your character and press \x1E\x01.",
         "Change places with ",
+        /* Text: Select a character to replace and press \x1E\x01. */
         "Select a character to replace and press \x1E\x01.",
         "Move ",
+        /* Text: ?\nPress \x1E\x01 to accept. */
         "?\nPress \x1E\x01 to accept.",
+        /* Text:  here?\nPress \x1E\x01 to accept. */
         " here?\nPress \x1E\x01 to accept."
     };
     /*
@@ -2776,7 +2675,9 @@ void CharInfoMain(void)
         char *secondName;           /* the piece printed with the second name */
         char *accept;               /* the line that asks for the button */
     } reserveHelp[2] = {
+        /* Text: .\nPress \x1E\x01 to accept. */
         { "Remove ", "and replace with ", ".\nPress \x1E\x01 to accept." },
+        /* Text: \nPress \x1E\x01 to accept. */
         { " ",       ".",                 "\nPress \x1E\x01 to accept." }
     };
     char *improveHelp[10] = {
@@ -2787,6 +2688,7 @@ void CharInfoMain(void)
         " will be increased from ",
         " to ",
         "",
+        /* Text:  has been increased. \x1F */
         " has been increased. \x1F",
         "You do not have enough T.Pts for further improvements.",
         "This is the maximum for "
@@ -3031,15 +2933,16 @@ void CharInfoMain(void)
     }
 }
 
-const CharCategoryIconIdTable D_004C6048 = {{0x0109, 0x010A, 0x0304, 0x0305, 0x0306}};
+const CharCategoryIconIdTable charCategoryIconTable = {{0x0109, 0x010A, 0x0304, 0x0305, 0x0306}};
 
-const char D_004C6058[16] = "Draw\nSet\nCancel";
+const char drawSetCancelText[16] = "Draw\nSet\nCancel";
 
-const char D_004C6068[32] = "Formation\nReplace\nCancel";
+const char formationReplaceCancelText[32] = "Formation\nReplace\nCancel";
 
-const char D_004C6088[32] = "\014\200\200\200Equip\nUnequip\nUse T.Pts";
+/* Text: {color #808080}Equip\nUnequip\nUse T.Pts */
+const char equipUnequipUsePtsText[32] = "\014\200\200\200Equip\nUnequip\nUse T.Pts";
 
-const char D_004C60A8[24] = " Is this okay\?";
+const char confirmPromptText[24] = " Is this okay\?";
 
 void CharCategoryMain(void)
 {
@@ -3048,7 +2951,7 @@ void CharCategoryMain(void)
 
     switch (work->state) {
     case 0: {
-        CharCategoryIconIdTable ids = D_004C6048;
+        CharCategoryIconIdTable ids = charCategoryIconTable;
 
         work->iconResetWork = 0x00FFFFFE;
         for (i = 0; i < 5; i++) {
@@ -3201,7 +3104,7 @@ static void CharMenuMain(void)
             work->window[i].width = 126;
             work->window[i].height = 78;
             work->window[i].color = work->color;
-            work->window[i].title = D_004DADC8;
+            work->window[i].title = menuTitleLabel;
             work->window[i].select = (void *)MenuSelectWindow;
             work->window[i].selectArg = &work->list[i];
             work->list[i].cursor = 0;
@@ -3212,7 +3115,7 @@ static void CharMenuMain(void)
                 work->window[i].x = 528;
                 work->window[i].width = 166;
                 work->window[i].height = 102;
-                work->window[i].title = D_004DADD0;
+                work->window[i].title = selectTitleLabel;
                 work->list[i].hasPrompt = 1;
                 work->list[i].items = msg01_3[0];
                 work->list[i].prompt = msg01_3[1];
@@ -3348,7 +3251,7 @@ void CharL1R1Main(void)
 
     switch (self->state) {
     case 0: {
-        L1R1SpriteIdPair spriteIds = D_004DADF0[0];
+        L1R1SpriteIdPair spriteIds = l1r1SpriteIdTable[0];
 
         self->spriteWork = 0x00FFFFFF;
         for (i = 0; i < 2; i++) {
@@ -3393,7 +3296,7 @@ void CharL1R1Main(void)
         }
 
         {
-            L1R1SlideStep step = D_004DADF8[0];
+            L1R1SlideStep step = l1r1SlideStepTable[0];
 
             for (i = 0; i < 2; i++) {
                 if (self->slideOffset[i] != 0) {
@@ -3794,7 +3697,7 @@ void CharParameterMain(void)
             work->window.state = 1;
             WindowDXMain(&work->window);
             work->window.state = 3;
-            digits = D_004DAE40[0];
+            digits = paraDigitCountTable[0];
             for (i = 0; i < 8; i++) {
                 eNumberSet(&work->number[i], 0);
                 work->number[i].color = work->color + 2;
@@ -3976,7 +3879,7 @@ void CharParameterMain(void)
     }
 }
 
-const WeaponIconTable D_004C6398 = {{0x0307, 0x0308, 0x032C, 0, 0x0308, 0x0309, 0x030A}};
+const WeaponIconTable charWeaponIconTable = {{0x0307, 0x0308, 0x032C, 0, 0x0308, 0x0309, 0x030A}};
 
 void CharWeaponMain(void)
 {
@@ -4068,7 +3971,7 @@ void CharWeaponMain(void)
             work->message[0].y = work->window[0].y + (bulletFits ^ 1) * MENU_WEAPON_LINE_DROP + 3;
             eMessageMain(&work->message[0]);
             {
-                WeaponIconTable weaponIcon = D_004C6398;
+                WeaponIconTable weaponIcon = charWeaponIconTable;
 
                 eSpriteSet(&work->sprite[0], weaponIcon.icon[MenuWork.character.chrNo - 1]);
             }
@@ -4103,7 +4006,7 @@ void CharWeaponMain(void)
                 eMessageMain(&work->message[i + 2]);
                 spriteId = SPRITE_NO_ACCESSORY;
                 if (total->accessory[i] != 0) {
-                    AccessoryIconTable accessoryIcon = D_004DAE48[0];
+                    AccessoryIconTable accessoryIcon = charAccessoryIconTable[0];
 
                     spriteId = accessoryIcon.icon[func_A1A548(total->accessory[i])->iconKind];
                 }
@@ -4218,12 +4121,12 @@ void CharListMake_Para(void)
         }
         row++;
     }
-    row->name = (char *)D_004DADB0;
+    row->name = (char *)CHAR_LIST_EMPTY_FLAGS;
     row[1].name = 0;
     window->columns = 1;
     window->rows = 8;
     window->rowCount = 3;
-    window->flags = (int)D_004DAE50;
+    window->flags = (int)listWindowTag;
     window->width = 105;
     window->height = 198;
     window->items = (CharListRow *)CharList->paraItems;
@@ -4243,7 +4146,7 @@ void CharListMain(void)
         list->color = 0x00FFFFF8;
         list->weapon.color = 0x00FFFFF8;
         list->weapon.rowCount = 7;
-        list->weapon.flags = (int)D_004DADB0;
+        list->weapon.flags = (int)CHAR_LIST_EMPTY_FLAGS;
         list->weapon.rows = 11;
         list->weapon.height = 270;
         list->weapon.state = 0;
@@ -4404,7 +4307,7 @@ void CharPointMain(void)
         work->panel.width = 0x210;
         work->panel.height = 0xA0;
         work->panel.windowTagId = work->tagBase;
-        work->panel.title = D_004DAE58;
+        work->panel.title = tPtsTitleLabel;
         work->panel.windowField3 = 0x80;
         work->panel.windowField4 = 0x50;
         work->panel.windowState = 1;
@@ -4498,35 +4401,17 @@ void CharPointMain(void)
     }
 }
 
+/* JP: ：Set lead character
+ * EN: : Set lead character */
+const char setLeadCharacterText[24] = "\241\247Set lead character";
 
-const char D_004C6550[24] = "\241\247Set lead character";
-
-const char D_004C6568[24] = "\001Current";
-
-MenuCameraSetPair D_004C6580 __attribute__((section(".rodata"))) = { .storage = { .representation = { .vector = { { .x = 0.44999998807907104f, .y = 0.89999997615814209f, .z = 2.2999999523162842f, .w = 1.0f }, { .x = -1.5f, .y = 0.80000001192092896f, .z = 6.5f, .w = 1.0f } } } } };
-
-MenuCameraSetRotationPair D_004C65A0 __attribute__((section(".rodata"))) = { .storage = { .representation = { .vector = { { .x = -0.40000000596046448f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } } } };
-
-MenuCameraSetPair D_004C65C0 __attribute__((section(".rodata"))) = { .storage = { .representation = { .vector = { { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.52359879016876221f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } } } };
-
-MenuCameraSetVector D_004C65E0 __attribute__((section(".rodata"))) = { .storage = { .vector = { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f } } };
-
-const MenuCameraPair D_004C65F0 = { .vector = { { .x = 0.44999998807907104f, .y = 0.89999997615814209f, .z = 2.2999999523162842f, .w = 1.0f }, { .x = -0.80000001192092896f, .y = 0.69999998807907104f, .z = 3.5999999046325684f, .w = 1.0f } } };
-
-const MenuCameraPair D_004C6610 = { .vector = { { .x = -0.40000000596046448f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
-
-const MenuCameraPair D_004C6630 = { .vector = { { .x = -0.78539818525314331f, .y = 0.0f, .z = 0.0f, .w = 0.0f }, { .x = -1.5707963705062866f, .y = 0.0f, .z = 1.5707963705062866f, .w = 0.0f } } };
-
-const MenuCameraPair D_004C6650 = { .vector = { { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f }, { .x = -1.7999999523162842f, .y = -0.30000001192092896f, .z = 1.0f, .w = 0.0f } } };
-
-MenuCharacterVector D_004C6670 __attribute__((section(".rodata"))) = { .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 1.0f } };
-
-const MenuCharacterPositions D_004C6680 = { .vector = { { .x = 1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f } } };
+/* Text: \x01Current */
+const char currentText[24] = "\001Current";
 
 void MenuCharCameraSet(void)
 {
-    MenuCameraSetPair position = D_004C6580;
-    MenuCameraSetRotationPair rotation = D_004C65A0;
+    MenuCameraSetPair position = { .storage = { .representation = { .vector = { { .x = 0.44999998807907104f, .y = 0.89999997615814209f, .z = 2.2999999523162842f, .w = 1.0f }, { .x = -1.5f, .y = 0.80000001192092896f, .z = 6.5f, .w = 1.0f } } } } };
+    MenuCameraSetRotationPair rotation = { .storage = { .representation = { .vector = { { .x = -0.40000000596046448f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } } } };
     MenuCameraSetPair formationRotation;
     MenuCameraSetVector formationPosition;
     MenuCameraSetVector zeroRotation;
@@ -4540,16 +4425,22 @@ void MenuCharCameraSet(void)
     camera->rotation = rotationValues->vector[MenuWork.character.partyMode];
     camera->position = positionValues->vector[MenuWork.character.partyMode];
     camera->state = 1;
-    __builtin_memcpy(&formationRotation, &D_004C65C0, sizeof(formationRotation));
+    formationRotation.storage.representation = (MenuCameraPair){ .vector = { { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.52359879016876221f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
     TairetuRot.vector = formationRotation.storage.representation.vector[MenuWork.character.partyMode];
-    formationPosition = D_004C65E0;
+    formationPosition = (MenuCameraSetVector){ .storage = { .vector = { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f } } };
     memset(&zeroRotation, 0, sizeof(zeroRotation));
-    zeroRotation.storage.vector.x = D_004D7E1C;
+    zeroRotation.storage.vector.x = NEG_QUARTER_PI;
     TairetuPos = formationPosition.storage;
     TairetuRot = zeroRotation.storage;
 }
 
+const MenuCameraPair singleCameraPositionTable = { .vector = { { .x = 0.44999998807907104f, .y = 0.89999997615814209f, .z = 2.2999999523162842f, .w = 1.0f }, { .x = -0.80000001192092896f, .y = 0.69999998807907104f, .z = 3.5999999046325684f, .w = 1.0f } } };
 
+const MenuCameraPair singleCameraRotationTable = { .vector = { { .x = -0.40000000596046448f, .y = 0.0f, .z = 0.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f } } };
+
+const MenuCameraPair formationCameraRotationTable = { .vector = { { .x = -0.78539818525314331f, .y = 0.0f, .z = 0.0f, .w = 0.0f }, { .x = -1.5707963705062866f, .y = 0.0f, .z = 1.5707963705062866f, .w = 0.0f } } };
+
+const MenuCameraPair formationCameraPositionTable = { .vector = { { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f }, { .x = -1.7999999523162842f, .y = -0.30000001192092896f, .z = 1.0f, .w = 0.0f } } };
 
 void MenuCharCameraMove(void)
 {
@@ -4571,16 +4462,16 @@ void MenuCharCameraMove(void)
         float y;
         float z;
 
-        __builtin_memcpy(singlePositions.words, D_004C65F0.words, sizeof(singlePositions.words));
-        __builtin_memcpy(singleRotations.words, D_004C6610.words, sizeof(singleRotations.words));
+        __builtin_memcpy(singlePositions.words, singleCameraPositionTable.words, sizeof(singlePositions.words));
+        __builtin_memcpy(singleRotations.words, singleCameraRotationTable.words, sizeof(singleRotations.words));
         view = MenuCharCameraViewGet(state);
         x = position->x;
         y = position->y;
         z = position->z;
-        position->x = x + (singlePositions.component[view][0] - x) * D_004D7E20;
-        position->y = y + (singlePositions.component[view][1] - y) * D_004D7E20;
-        position->z = z + (singlePositions.component[view][2] - z) * D_004D7E20;
-        rotation->x += (singleRotations.component[view][0] - rotation->x) * D_004D7E24;
+        position->x = x + (singlePositions.component[view][0] - x) * CHAR_CAMERA_POSITION_RATE;
+        position->y = y + (singlePositions.component[view][1] - y) * CHAR_CAMERA_POSITION_RATE;
+        position->z = z + (singlePositions.component[view][2] - z) * CHAR_CAMERA_POSITION_RATE;
+        rotation->x += (singleRotations.component[view][0] - rotation->x) * CHAR_CAMERA_ROTATION_RATE;
     } else {
         Vector4 *cameraRotation = &camera->rotation;
         Vector4 *cameraPosition = &camera->position;
@@ -4594,8 +4485,8 @@ void MenuCharCameraMove(void)
         float targetY;
         float targetZ;
 
-        __builtin_memcpy(formationRotations.words, D_004C6630.words, sizeof(formationRotations.words));
-        __builtin_memcpy(formationPositions.words, D_004C6650.words, sizeof(formationPositions.words));
+        __builtin_memcpy(formationRotations.words, formationCameraRotationTable.words, sizeof(formationRotations.words));
+        __builtin_memcpy(formationPositions.words, formationCameraPositionTable.words, sizeof(formationPositions.words));
         targetX = formationRotations.component[view][0];
         targetY = formationRotations.component[view][1];
         targetZ = formationRotations.component[view][2];
@@ -4606,9 +4497,9 @@ void MenuCharCameraMove(void)
         targetX -= x;
         targetY -= y;
         targetZ -= z;
-        targetX *= D_004D7E28;
-        targetY *= D_004D7E28;
-        targetZ *= D_004D7E28;
+        targetX *= CHAR_CAMERA_TARGET_X_SCALE;
+        targetY *= CHAR_CAMERA_TARGET_X_SCALE;
+        targetZ *= CHAR_CAMERA_TARGET_X_SCALE;
         x += targetX;
         y += targetY;
         z += targetZ;
@@ -4640,9 +4531,9 @@ void MenuCharCameraMove(void)
             targetPositionX -= positionX;
             targetPositionY -= positionY;
             targetPositionZ -= positionZ;
-            targetPositionX *= D_004D7E28;
-            targetPositionY *= D_004D7E28;
-            targetPositionZ *= D_004D7E28;
+            targetPositionX *= CHAR_CAMERA_TARGET_X_SCALE;
+            targetPositionY *= CHAR_CAMERA_TARGET_X_SCALE;
+            targetPositionZ *= CHAR_CAMERA_TARGET_X_SCALE;
             positionX += targetPositionX;
             positionY += targetPositionY;
             positionZ += targetPositionZ;
@@ -4726,9 +4617,9 @@ void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (position.vector.x - x) * D_004D7E2C;
-            current->y = y + (position.vector.y - y) * D_004D7E2C;
-            current->z = z + (position.vector.z - z) * D_004D7E2C;
+            current->x = x + (position.vector.x - x) * CHAR_MODEL_DEFAULT_MOVE_RATE;
+            current->y = y + (position.vector.y - y) * CHAR_MODEL_DEFAULT_MOVE_RATE;
+            current->z = z + (position.vector.z - z) * CHAR_MODEL_DEFAULT_MOVE_RATE;
         }
         if (MenuWork.character.state == 33) {
             MenuModelControl2(unit, 0);
@@ -4738,36 +4629,38 @@ void MenuCharModelMain(MenuCharacterModel *unit, void *argument)
         position.vector.w = 1.0f;
         memset(&rotation, 0, 16);
         rotation.w = 1.0f;
-        scale = D_004C6670;
+        scale = (MenuCharacterVector){ .vector = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 1.0f } };
         {
             Vector4 *current = &transform->position.vector;
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (position.vector.x - x) * D_004D7E30;
-            current->y = y + (position.vector.y - y) * D_004D7E30;
-            current->z = z + (position.vector.z - z) * D_004D7E30;
+            current->x = x + (position.vector.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->y = y + (position.vector.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->z = z + (position.vector.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
         }
         {
             Vector4 *current = &transform->rotation.vector;
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (rotation.x - x) * D_004D7E30;
-            current->y = y + (rotation.y - y) * D_004D7E30;
-            current->z = z + (rotation.z - z) * D_004D7E30;
+            current->x = x + (rotation.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->y = y + (rotation.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->z = z + (rotation.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
         }
         {
             Vector4 *current = &transform->scale.vector;
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (scale.vector.x - x) * D_004D7E30;
-            current->y = y + (scale.vector.y - y) * D_004D7E30;
-            current->z = z + (scale.vector.z - z) * D_004D7E30;
+            current->x = x + (scale.vector.x - x) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->y = y + (scale.vector.y - y) * CHAR_MODEL_RESET_MOVE_RATE;
+            current->z = z + (scale.vector.z - z) * CHAR_MODEL_RESET_MOVE_RATE;
         }
     }
 }
+
+const MenuCharacterPositions battleModelPositionTable = { .vector = { { .x = 1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f } } };
 
 void MenuBattleModelMain(MenuCharacterModel *unit, void *argument)
 {
@@ -4784,7 +4677,7 @@ void MenuBattleModelMain(MenuCharacterModel *unit, void *argument)
         int i;
         Vector4 *target;
 
-        __builtin_memcpy(positions.words, D_004C6680.words, sizeof(positions.words));
+        __builtin_memcpy(positions.words, battleModelPositionTable.words, sizeof(positions.words));
         transform = &actor->transform;
         party = (PartyDataPrefix *)PartyDataGet();
         formationSlot = 1;
@@ -4860,16 +4753,16 @@ void MenuBattleModelMain(MenuCharacterModel *unit, void *argument)
             float x = current->x;
             float y = current->y;
             float z = current->z;
-            current->x = x + (target->x - x) * D_004D7E34;
-            current->y = y + (target->y - y) * D_004D7E34;
-            current->z = z + (target->z - z) * D_004D7E34;
+            current->x = x + (target->x - x) * BATTLE_MODEL_MOVE_RATE;
+            current->y = y + (target->y - y) * BATTLE_MODEL_MOVE_RATE;
+            current->z = z + (target->z - z) * BATTLE_MODEL_MOVE_RATE;
         }
     }
 }
 
-const MenuCharacterVector D_004C6760 = { .vector = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f } };
+const MenuCharacterVector lineFieldInitialScaleVector = { .vector = { .x = 0.0f, .y = 1.0f, .z = 0.0f, .w = 1.0f } };
 
-const SpotLightTable D_004C6770 = {{
+const SpotLightTable spotLightPositionTable = {{
     {1.0f, 0.0f, 0.6f, 1.0f},
     {0.0f, 0.0f, 0.6f, 1.0f},
     {-1.0f, 0.0f, 0.6f, 1.0f},
@@ -4878,9 +4771,10 @@ const SpotLightTable D_004C6770 = {{
     {-1.0f, 0.0f, -0.6f, 1.0f},
 }};
 
-const char D_004C67D0[32] = "data\\endou\\para\\paraup.bin";
+const char paraUpBinPath[32] = "data\\endou\\para\\paraup.bin";
 
-const char D_004C67F0[16] = "\013charactor";
+/* Text: {reset}charactor */
+const char charactorText[16] = "\013charactor";
 
 static int tskCharLineField(XglTaskPrefix *task)
 {
@@ -4903,7 +4797,7 @@ static int tskCharLineField(XglTaskPrefix *task)
     }
     switch (line->state) {
     case 0:
-        __builtin_memcpy(initialScale.words, D_004C6760.words, sizeof(initialScale.words));
+        __builtin_memcpy(initialScale.words, lineFieldInitialScaleVector.words, sizeof(initialScale.words));
         line->wait = 8;
         __builtin_memcpy(line->scale.words, initialScale.words, sizeof(line->scale.words));
         line->state = 2;
@@ -4918,14 +4812,14 @@ static int tskCharLineField(XglTaskPrefix *task)
         break;
     case 10:
         {
-            float step = D_004D7E38;
+            float step = LINE_FIELD_GROW_STEP;
             float x = line->scale.vector.x;
             float deltaX = 1.0f - x;
             float z = line->scale.vector.z;
             float deltaZ = 1.0f - z;
             float alpha = line->alpha;
             deltaX *= step;
-            alpha += D_004D7E3C;
+            alpha += LINE_FIELD_FADE_IN_STEP;
             deltaZ *= step;
             x += deltaX;
             z += deltaZ;
@@ -4949,14 +4843,14 @@ static int tskCharLineField(XglTaskPrefix *task)
             line->state = 10;
         }
         {
-            float step = D_004D7E40;
+            float step = LINE_FIELD_SHRINK_STEP;
             float x = line->scale.vector.x;
             float deltaX = 0.0f - x;
             float z = line->scale.vector.z;
             float deltaZ = 0.0f - z;
             float alpha = line->alpha;
             deltaX *= step;
-            alpha -= D_004D7E44;
+            alpha -= LINE_FIELD_FADE_OUT_STEP;
             deltaZ *= step;
             x += deltaX;
             z += deltaZ;
@@ -4998,8 +4892,8 @@ static int tskCharLineField(XglTaskPrefix *task)
         xglMatrixStackScale(&line->scale.vector.x);
         xglMatrixStackSave(matrix);
         xglRotTransPersN(screen[0][0].component, &matrix, vertices[0], 30, 0);
-        __builtin_memcpy(rowOpacity, D_004DAE68, sizeof(rowOpacity));
-        __builtin_memcpy(columnOpacity, D_004DAE70, sizeof(columnOpacity));
+        __builtin_memcpy(rowOpacity, rowOpacityTable, sizeof(rowOpacity));
+        __builtin_memcpy(columnOpacity, columnOpacityTable, sizeof(columnOpacity));
         lineIndex = 0;
         do {
             float lineAlpha = line->alpha;
@@ -5037,7 +4931,7 @@ static int tskCharLineField(XglTaskPrefix *task)
 
 static void tskCharSpotLight(CharSpotLightTask *light)
 {
-    SpotLightTable positions = D_004C6770;
+    SpotLightTable positions = spotLightPositionTable;
     DirectCircle circle;
     int screen[4];
 
@@ -5055,7 +4949,7 @@ static void tskCharSpotLight(CharSpotLightTask *light)
         if ((MenuWork.character.state >> 4) == MENU_STATE_GROUP_FORMATION) {
             light->mode = SPOTLIGHT_SHOWN;
             light->pulse = 1.0f;
-            light->pulseStep = D_004D7E50;
+            light->pulseStep = SPOT_LIGHT_PULSE_STEP;
             light->size = 0.0f;
             light->position = positions.position[MenuWork.character.formationSlot - 1];
             light->visible = 1;
@@ -5089,9 +4983,9 @@ static void tskCharSpotLight(CharSpotLightTask *light)
         light->pulseStep = -light->pulseStep;
     }
     if (light->visible) {
-        light->position.x += (positions.position[MenuWork.character.formationSlot - 1].x - light->position.x) * D_004D7E54;
-        light->position.y += (positions.position[MenuWork.character.formationSlot - 1].y - light->position.y) * D_004D7E54;
-        light->position.z += (positions.position[MenuWork.character.formationSlot - 1].z - light->position.z) * D_004D7E54;
+        light->position.x += (positions.position[MenuWork.character.formationSlot - 1].x - light->position.x) * SPOT_LIGHT_EASE_RATE;
+        light->position.y += (positions.position[MenuWork.character.formationSlot - 1].y - light->position.y) * SPOT_LIGHT_EASE_RATE;
+        light->position.z += (positions.position[MenuWork.character.formationSlot - 1].z - light->position.z) * SPOT_LIGHT_EASE_RATE;
         xglRotTransPersN(screen, 0, &light->position, 1, 0);
         screen[0] = screen[0] / 16 - CIRCLE_ORIGIN_X;
         screen[1] = screen[1] / 16 - CIRCLE_ORIGIN_Y;
@@ -5173,7 +5067,7 @@ void MenuCharactor(int partyMode)
         if (partyMode == 0) {
             ParaDataBuf = (unsigned short *)(((int)heap + 0x7FF) & ~0x7FF);
             heap = (unsigned char *)ParaDataBuf + 0x800;
-            xglCdReadFile(D_004C67D0, ParaDataBuf, 0, 1);
+            xglCdReadFile(paraUpBinPath, ParaDataBuf, 0, 1);
         }
         CharPas = (CharPasWork *)heap;
         heap += CHAR_PAS_SIZE;
@@ -6158,7 +6052,7 @@ void MenuCharactor(int partyMode)
     CharSwitchMain();
     CharCategoryMain();
     CharL1R1Main();
-    xglFontDebugPrintf(0, 0x40, D_004C67F0);
+    xglFontDebugPrintf(0, 0x40, charactorText);
     xglFontDebugHex(0, 0x48, MenuWork.character.state, 2);
     xglFontDebugHex(0x10, 0x48, MenuWork.character.partyMode, 2);
     xglFontDebugHex(0, 0x38, MenuWork.character.accessoryList, 2);
@@ -6183,281 +6077,171 @@ void MenuCharactor(int partyMode)
     xglFontDebugHex(0x20, 0xB0, MenuWork.character.weaponChanged, 8);
 }
 
-static const char * msg01_3[2];
-
-static const char *const msg_7_0036D938[2];
-
 /* Initialized data, in the original section order of each object (git HEAD 9cb54bc placement). */
-static unsigned char setSlotTbl[8] __attribute__((section(".data"))) = {
+static unsigned char setSlotTbl[] = {
     0, 1, 0, 0, 1, 0, 0, 0
 };
-static signed char ParaPointTbl[8] __attribute__((section(".data"))) = {
+static signed char ParaPointTbl[] = {
     10, 2, 1, 1, 1, 1, 1, 1
 };
-static const char *const msg_0_0036D8A8[12] __attribute__((section(".data"))) = {
-    D_004C5570, D_004DAD60, D_004C5560, D_004DAD58, D_004DAD50, D_004DAD48, D_004C5550, D_004DAD40, D_004DAD38, D_004DAD30, D_004DAD28, D_004DAD20
+static const char *msg_0_0036D8A8[12] = {
+    charactersLabel, equipCommandLabel, unequipCommandLabel, skillCommandLabel, listCommandLabel, weaponCommandLabel, accessoryCommandLabel, ammoCommandLabel, bodyCommandLabel, otherCommandLabel, drawCommandLabel, setCommandLabel
 };
-static const char *const msg01_1[3] __attribute__((section(".data"))) = {
-    D_004C55A0, D_004C5590, D_004C5580
+static const char *msg01_1[3] = {
+    battleFormationLabel, formationCommandLabel, replaceCommandLabel
 };
-static char * msg00_2_0036D8E8[3]  = {
-    (char *)D_004C6088, (char *)D_004C6068, (char *)D_004C6058
+static char * msg00_2_0036D8E8[3] = {
+    (char *)equipUnequipUsePtsText, (char *)formationReplaceCancelText, (char *)drawSetCancelText
 };
-static const char * msg01_3[2] __attribute__((section(".data"))) = {
-    D_004DADC0, D_004C60A8
+static const char * msg01_3[] = {
+    yesNoChoicesText, confirmPromptText
 };
-static const char *msg00_4_0036D900[3]  = {
-    D_004DADE8, D_004DADE0, D_004DADD8
+static const char *msg00_4_0036D900[3] = {
+    menuParaPtRateGetTPtsText, menuParaPtRateGetEPtsText, menuParaPtRateGetSPtsText
 };
-static const char *msg_5[8]  = {
-    D_004DAE38, D_004DAE30, D_004DAE28, D_004DAE20, D_004DAE18, D_004DAE10, D_004DAE08, D_004DAE00
+static const char *msg_5[8] = {
+    menuParaPtRateGetStrengthText, menuParaPtRateGetVitalityText, menuParaPtRateGetEatkText, menuParaPtRateGetEdefText, menuParaPtRateGetDexterityText, menuParaPtRateGetEvasionText, agilityText, weightText
 };
-static char * msg_6[1] __attribute__((section(".data"))) = {
-    (char *)D_004C6550
+static char * msg_6[] = {
+    (char *)setLeadCharacterText
 };
-static const char *const msg_7_0036D938[2] __attribute__((section(".data"))) = {
-    D_004C6568, D_004DAE60
+static const char *msg_7_0036D938[] = {
+    currentText, totalText
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* Original LOCAL NOBITS storage, 16 bytes each; the existing union keeps
  * the named Vector4 view and the compiler's aggregate-copy view together. */
-static MenuCameraVector TairetuRot;
-static MenuCameraVector TairetuPos;
 
-const char D_004C6BC0[16] = "/Assign Pilot";
+const char MenuAgwsAssignPilotCommandLabel[16] = "/Assign Pilot";
 
-const char D_004C6BD0[16] = "/Engine Unit";
+const char MenuAgwsEngineUnitCommandLabel[16] = "/Engine Unit";
 
-const char D_004C6BE0[16] = "/Accessory";
+const char MenuAgwsAccessoryCommandLabel[16] = "/Accessory";
 
-const char D_004C6BF0[16] = "/L. Shoulder";
+const char MenuAgwsLeftShoulderCommandLabel[16] = "/L. Shoulder";
 
-const char D_004C6C00[16] = "/R. Shoulder";
+const char MenuAgwsRightShoulderCommandLabel[16] = "/R. Shoulder";
 
-const char D_004C6C10[16] = "/Unequip";
+const char MenuAgwsUnequipCommandLabel[16] = "/Unequip";
 
-const char D_004C6C20[16] = "A.G.W.S.";
+const char MenuAgwsNameLabel[16] = "A.G.W.S.";
 
-const char D_004C6C30[19] = "Select an A.G.W.S.";
+const char MenuAgwsSelectPromptText[19] = "Select an A.G.W.S.";
 
-const char D_004C6C48[42] = "View weapons and accessories for A.G.W.S.";
+const char MenuAgwsViewHelpText[42] = "View weapons and accessories for A.G.W.S.";
 
-const char D_004C6C78[26] = "Assign pilots to A.G.W.S.";
+const char MenuAgwsAssignHelpText[26] = "Assign pilots to A.G.W.S.";
 
-const char D_004C6C98[41] = "Unequip current weapons and accessories.";
+const char MenuAgwsUnequipHelpText[41] = "Unequip current weapons and accessories.";
 
-const char D_004C6CC8[31] = "Equip weapons and accessories.";
+const char MenuAgwsEquipHelpText[31] = "Equip weapons and accessories.";
 
-const char D_004C6CE8[12] = "L. Shoulder";
+const char MenuAgwsLeftShoulderLabel[12] = "L. Shoulder";
 
-const char D_004C6CF8[12] = "R. Shoulder";
+const char MenuAgwsRightShoulderLabel[12] = "R. Shoulder";
 
-const char D_004C6D08[31] = "Available for accessory equip.";
+const char MenuAgwsAccessoryAvailableText[31] = "Available for accessory equip.";
 
-const char D_004C6D28[30] = "Ammo alone cannot be removed.";
+const char MenuAgwsAmmoRemoveBlockedText[30] = "Ammo alone cannot be removed.";
 
-const char D_004C6D48[18] = "Nothing equipped.";
+const char MenuAgwsNothingEquippedText[18] = "Nothing equipped.";
 
-const char D_004C6D60[28] = "Available for weapon equip.";
+const char MenuAgwsWeaponAvailableText[28] = "Available for weapon equip.";
 
-const char D_004C6D80[17] = "Equip weapon on ";
+const char MenuAgwsEquipWeaponOnText[17] = "Equip weapon on ";
 
-const char D_004C6D98[15] = " and equip on ";
+const char MenuAgwsAndEquipOnText[15] = " and equip on ";
 
-const char D_004C6DA8[20] = "Remove weapon from ";
+const char MenuAgwsRemoveWeaponFromText[20] = "Remove weapon from ";
 
-const char D_004C6DC0[27] = " and equip another weapon.";
+const char MenuAgwsAndEquipAnotherText[27] = " and equip another weapon.";
 
-const char D_004C6DE0[31] = " as the pilot of this A.G.W.S.";
+const char MenuAgwsAsPilotOfThisText[31] = " as the pilot of this A.G.W.S.";
 
-const char D_004C6E00[17] = " is assigned to ";
+const char MenuAgwsIsAssignedToText[17] = " is assigned to ";
 
-const char D_004C6E18[13] = "L. Shoulder\n";
+const char MenuAgwsLeftShoulderSlotText[13] = "L. Shoulder\n";
 
-const char D_004C6E28[13] = "R. Shoulder\n";
+const char MenuAgwsRightShoulderSlotText[13] = "R. Shoulder\n";
 
-const char D_004C6E38[16] = "R. Alt\nLft. Alt";
+const char MenuAgwsAltSlotChoicesText[16] = "R. Alt\nLft. Alt";
 
-const char D_004C6E48[24] = "R. Shoulder\nL. Shoulder";
+const char MenuAgwsShoulderSlotChoicesText[24] = "R. Shoulder\nL. Shoulder";
 
-const char D_004C6E60[16] = "R. Arm\nLft. Arm";
+const char MenuAgwsArmSlotChoicesText[16] = "R. Arm\nLft. Arm";
 
-const char D_004C6E70[76] = "\014\200\200\200R. Arm\n\014\200\200\200L. Arm\n\014\200\200\200R. Shoulder\n\014\200\200\200L. Shoulder\n\014\200\200\200R. Alt\n\014\200\200\200L. Alt";
+/* Text: {color #808080}R. Arm\n{color #808080}L. Arm\n{color #808080}R. Shoulder\n{color #808080}L. Shoulder\n{color #808080}R. Alt\n{color #808080}L. Alt */
+const char MenuAgwsGrayedSlotChoicesText[76] = "\014\200\200\200R. Arm\n\014\200\200\200L. Arm\n\014\200\200\200R. Shoulder\n\014\200\200\200L. Shoulder\n\014\200\200\200R. Alt\n\014\200\200\200L. Alt";
 
-const char D_004C6EC0[15] = " Is this okay\?";
+const char MenuAgwsConfirmPromptText[15] = " Is this okay\?";
 
-const char D_004C6ED0[26] = "Assign pilot\nRemove pilot";
+const char MenuAgwsPilotChoicesText[26] = "Assign pilot\nRemove pilot";
 
-const char D_004C6EF0[21] = "Equip\nUnequip\nCancel";
+const char MenuAgwsEquipUnequipCancelText[21] = "Equip\nUnequip\nCancel";
 
-const char D_004C6F08[20] = "Equip\nUnequip\nPilot";
+const char MenuAgwsEquipUnequipPilotText[20] = "Equip\nUnequip\nPilot";
 
-const char D_004C6F20[21] = "Assign\nRemove\nCancel";
+const char MenuAgwsAssignRemoveCancelText[21] = "Assign\nRemove\nCancel";
 
+const char yesNoChoicesText[8] = "Yes\nNo";
 
+const char menuTitleLabel[8] = "Menu";
 
+const char selectTitleLabel[8] = "Select";
 
+/* Text: \x01S.Pts */
+const char menuParaPtRateGetSPtsText[8] = "\001S.Pts";
 
+/* Text: \x01E.Pts */
+const char menuParaPtRateGetEPtsText[8] = "\001E.Pts";
 
+/* Text: \x01T.Pts */
+const char menuParaPtRateGetTPtsText[8] = "\001T.Pts";
 
+const L1R1SpriteIdPair l1r1SpriteIdTable[2] = {{0x0112, 0x0110}, {0, 0}};
 
+const L1R1SlideStep l1r1SlideStepTable[4] = {{1, -1}, {0, 0}, {0, 0}, {0, 0}};
 
+/* Text: \x01Weight */
+const char weightText[8] = "\001Weight";
 
+/* Text: \x01Agl */
+const char agilityText[8] = "\001Agl";
 
+/* Text: \x01Eva */
+const char menuParaPtRateGetEvasionText[8] = "\001Eva";
 
+/* Text: \x01Dex */
+const char menuParaPtRateGetDexterityText[8] = "\001Dex";
 
+/* Text: \x01Edef */
+const char menuParaPtRateGetEdefText[8] = "\001Edef";
 
+/* Text: \x01Eatk */
+const char menuParaPtRateGetEatkText[8] = "\001Eatk";
 
+/* Text: \x01Vit */
+const char menuParaPtRateGetVitalityText[8] = "\001Vit";
 
+/* Text: \x01Str */
+const char menuParaPtRateGetStrengthText[8] = "\001Str";
 
+ParaDigitCounts paraDigitCountTable[1] = {{{3, 3, 3, 3, 2, 2, 2, 3}}};
 
+const AccessoryIconTable charAccessoryIconTable[1] = {{{0x032E, 0x032D, 0x030D}}};
 
+unsigned char listWindowTag[8] = "List";
 
+const char tPtsTitleLabel[8] = "T.Pts";
 
+/* Text: \x01Total */
+const char totalText[8] = "\001Total";
 
+/* Text:  | @x@ */
+const unsigned char rowOpacityTable[5] = "\000@x@";
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const char D_004DADC0[8] = "Yes\nNo";
-
-const char D_004DADC8[8] = "Menu";
-
-const char D_004DADD0[8] = "Select";
-
-const char D_004DADD8[8] = "\001S.Pts";
-
-const char D_004DADE0[8] = "\001E.Pts";
-
-const char D_004DADE8[8] = "\001T.Pts";
-
-const L1R1SpriteIdPair D_004DADF0[2] = {{0x0112, 0x0110}, {0, 0}};
-
-const L1R1SlideStep D_004DADF8[4] = {{1, -1}, {0, 0}, {0, 0}, {0, 0}};
-
-const char D_004DAE00[8] = "\001Weight";
-
-const char D_004DAE08[8] = "\001Agl";
-
-const char D_004DAE10[8] = "\001Eva";
-
-const char D_004DAE18[8] = "\001Dex";
-
-const char D_004DAE20[8] = "\001Edef";
-
-const char D_004DAE28[8] = "\001Eatk";
-
-const char D_004DAE30[8] = "\001Vit";
-
-const char D_004DAE38[8] = "\001Str";
-
-ParaDigitCounts D_004DAE40[1] = {{{3, 3, 3, 3, 2, 2, 2, 3}}};
-
-const AccessoryIconTable D_004DAE48[1] = {{{0x032E, 0x032D, 0x030D}}};
-
-unsigned char D_004DAE50[8] = "List";
-
-const char D_004DAE58[8] = "T.Pts";
-
-const char D_004DAE60[8] = "\001Total";
-
-const unsigned char D_004DAE68[5] = "\000@x@";
-
-const unsigned char D_004DAE70[6] = "\000@xx@";
+/* Text:  | @xx@ */
+const unsigned char columnOpacityTable[6] = "\000@xx@";
 
 unsigned short *ParaDataBuf = 0;
 
@@ -6485,32 +6269,32 @@ CharSwitchWork *CharSwitch = 0;
 
 CharPointWork *CharPoint = 0;
 
-const char D_004DAEB0[8] = "/Remove";
+const char MenuAgwsRemoveCommandLabel[8] = "/Remove";
 
-const char D_004DAEB8[8] = "/Assign";
+const char MenuAgwsAssignCommandLabel[8] = "/Assign";
 
-const char D_004DAEC0[8] = "/Ammo";
+const char MenuAgwsAmmoCommandLabel[8] = "/Ammo";
 
-const char D_004DAEC8[8] = "/L. Alt";
+const char MenuAgwsLeftAltCommandLabel[8] = "/L. Alt";
 
-const char D_004DAED0[8] = "/R. Alt";
+const char MenuAgwsRightAltCommandLabel[8] = "/R. Alt";
 
-const char D_004DAED8[8] = "/L. Arm";
+const char MenuAgwsLeftArmCommandLabel[8] = "/L. Arm";
 
-const char D_004DAEE0[8] = "/R. Arm";
+const char MenuAgwsRightArmCommandLabel[8] = "/R. Arm";
 
-const char D_004DAEE8[8] = "/List";
+const char MenuAgwsListCommandLabel[8] = "/List";
 
-const char D_004DAEF0[8] = "/Pilot";
+const char MenuAgwsPilotCommandLabel[8] = "/Pilot";
 
-const char D_004DAEF8[8] = "/Equip";
+const char MenuAgwsEquipCommandLabel[8] = "/Equip";
 
-const char D_004DAF00[7] = "L. Alt";
+const char MenuAgwsLeftAltLabel[7] = "L. Alt";
 
-const char D_004DAF08[7] = "R. Alt";
+const char MenuAgwsRightAltLabel[7] = "R. Alt";
 
-const char D_004DAF10[7] = "L. Arm";
+const char MenuAgwsLeftArmLabel[7] = "L. Arm";
 
-const char D_004DAF18[7] = "R. Arm";
+const char MenuAgwsRightArmLabel[7] = "R. Arm";
 
-const char D_004DAF20[3] = ": ";
+const char MenuAgwsSeparatorText[3] = ": ";

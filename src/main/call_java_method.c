@@ -74,12 +74,10 @@ void EventCheck_Line_Button(void *actor, LayoutHeader *first, LayoutHeader *seco
  * the enepc-table index and takes the method id in $a1 ($a2, reused there as
  * a local constant, is never supplied by any caller in this TU). */
 
-
 /* Check_InsideID (0x002d67e8, still assembler in this TU) takes actor plus
  * the two UnduDataGetHeader results, as Check_Locater passes them. The touch
  * handlers receive those same three arguments and forward them untouched
  * (whole-program argument liveness: all three are read on entry). */
-
 
 void EventCheck_Line_Touch(void *actor, LayoutHeader *first, LayoutHeader *second) {
     if (Check_InsideID(actor, first, second) != 0) {
@@ -395,7 +393,10 @@ int Check_InsideID(void *actor_ptr, LayoutHeader *first, LayoutHeader *second)
 /* Font-script labels for the locator debug modes. */
 /* JP: 芳川テスト
  * EN: Yoshikawa test */
-const char D_004CBB18[16] = "\013\xCB\xA7\xC0\xEE\xA5\xC6\xA5\xB9\xA5\xC8";
-const char D_004CBB28[16] = "\013HairTest";
-const char D_004CBB38[16] = "\013WindTest";
-const char D_004CBB48[16] = "\013ColliTest";
+const char CallJavaMethodYosikawaTestText[16] = "\013\xCB\xA7\xC0\xEE\xA5\xC6\xA5\xB9\xA5\xC8";
+/* Text: {reset}HairTest */
+const char CallJavaMethodHairTestLabel[16] = "\013HairTest";
+/* Text: {reset}WindTest */
+const char CallJavaMethodWindTestLabel[16] = "\013WindTest";
+/* Text: {reset}ColliTest */
+const char CallJavaMethodColliTestLabel[16] = "\013ColliTest";

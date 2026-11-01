@@ -25,4 +25,6 @@ typedef struct DrillContainerDef {
 
 extern DrillContainerDef container[31];
 
+extern short Times;
+
 #endif /* INCLUDE_MAIN_INIT_DRILL_H */

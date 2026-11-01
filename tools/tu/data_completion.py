@@ -151,7 +151,19 @@ def _check_pins(pins):
     _require(_pins([p['path'] for p in pins]) == pins, 'compiler inputs changed')
 
 
+_PP_FACTS_CACHE = {}
+
+
 def _pp_facts(text, unit_dir, audit, edit):
+    # one parse per preprocessed text and unit (each context used to parse it twice)
+    key = (hashlib.sha256(text.encode('utf-8', 'surrogateescape')).digest(), str(unit_dir))
+    if key not in _PP_FACTS_CACHE:
+        _PP_FACTS_CACHE[key] = _pp_facts_uncached(text, unit_dir, audit, edit)
+    pp, files, tokens = _PP_FACTS_CACHE[key]
+    return pp, _pins([Path(row['path']) for row in files]), tokens
+
+
+def _pp_facts_uncached(text, unit_dir, audit, edit):
     pp = audit.Preprocessed(text)
     files = []
     for name in pp.files():
@@ -788,18 +800,32 @@ def _layout(assembly, preprocessed, unit_dir, section, apis, context=None):
                     for item in immediates.values()]} if immediates else {}))
 
 
-def _definition(context, name, apis):
-    carve, gate, native, audit, edit, Elf, Toolchain = apis
-    def find(text):
-        tu = edit.TU(text)
-        found = []
-        for item in tu.free_items():
+_DECL_CACHE = {}
+
+
+def _initialized_decls(text, edit):
+    """[(item, tokens, declarator head tokens)] of a source text's initialized
+    file-scope declarations, parsed once per text (2026-10-31: the alignment
+    proofs looked up every name by re-tokenizing the whole TU, ~100 s/configure)."""
+    key = hashlib.sha256(text.encode('utf-8', 'surrogateescape')).digest()
+    rows = _DECL_CACHE.get(key)
+    if rows is None:
+        rows = []
+        for item in edit.TU(text).free_items():
             if item.kind != 'decl' or item.conditional:
                 continue
             tokens = edit.c_tokens(item.text(text))
-            if '=' not in tokens or name not in tokens[:tokens.index('=')]:
-                continue
-            found.append((item, tokens))
+            if '=' in tokens:
+                rows.append((item, tokens, frozenset(tokens[:tokens.index('=')])))
+        _DECL_CACHE[key] = rows
+    return rows
+
+
+def _definition(context, name, apis):
+    carve, gate, native, audit, edit, Elf, Toolchain = apis
+    def find(text):
+        found = [(item, tokens) for item, tokens, head in _initialized_decls(text, edit)
+                 if name in head]
         _require(len(found) == 1, name + ': missing/ambiguous initialized source declaration')
         return found[0]
     try:
@@ -2034,7 +2060,28 @@ def compiler_suffix_alignments(root, unit_dir, manifest):
             _require(tu['id'].startswith('main/') and tu.get('mode') == 'c' and tu.get('in_scope'),
                      'not a MAIN C input TU')
             context_cache[key] = _source_context(root, unit_dir, tu, apis, complete)
-        return context_cache[key]
+        value = context_cache[key]
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+    # 2026-11-01: the per-TU cpp/cc1 context compiles are independent; run the
+    # ones the loop below needs in parallel (results and refusals unchanged).
+    wanted = [tu for tu in manifest['tus']
+              if tu['id'].startswith('main/') and tu.get('mode') == 'c' and tu.get('in_scope')
+              and any((piece.get('uncredited_scaffold_suffixes') or
+                       _original_item_candidate(original, sec, piece, apis[2]))
+                      for sec, entry in tu.get('sections', {}).items()
+                      for piece in entry.get('pieces', []))]
+    def prefetch(tu):
+        try:
+            return _source_context(root, unit_dir, tu, apis, True)
+        except AlignmentUnproved as error:
+            return error
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        for tu, value in zip(wanted, pool.map(prefetch, wanted)):
+            context_cache[(tu['id'], True)] = value
 
     def layouts(tu, section, context):
         key = (tu['id'], section)

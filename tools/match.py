@@ -1821,9 +1821,9 @@ def _sef_particle_scale_block(lines, outputs, inputs, input_section, clobber_sec
     require(outputs == [] and inputs == ['r', 'm'],
             'sefCreateParticle scale exception has no outputs and exactly r(pointer), m(scale) inputs')
     items = [item for item in _split_top(input_section, ',') if item.strip()]
-    require(len(items) == 2 and re.fullmatch(r'\(\s*D_004D8338\s*\)',
+    require(len(items) == 2 and re.fullmatch(r'\(\s*randomRotationDegToRad\s*\)',
             _literal_prefix(items[1])[1].strip()),
-            'sefCreateParticle scale exception loads only D_004D8338')
+            'sefCreateParticle scale exception loads only randomRotationDegToRad')
     clobbers = []
     for item in _split_top(clobber_section, ','):
         stripped = item.strip(' \t\r\n')

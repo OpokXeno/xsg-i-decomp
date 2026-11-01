@@ -711,6 +711,9 @@ def main(argv=None):
     # neighbour); resolve them as <piece start> + original offset (PROVIDE: never overrides
     # a definition of the C object)
     c_alias = ["/* scaffold labels of C-owned pieces, relative to the linked C object (generated) */"]
+    renames_path = ROOT / "config" / "symbols" / "main.renames.json"
+    placeholder_renames = (json.loads(renames_path.read_text()).get("renames", {})
+                           if renames_path.is_file() else {})
     emitted_c_aliases = set()
     for t in tus:
         if t["mode"] != "c":
@@ -764,6 +767,12 @@ def main(argv=None):
                         if cur not in emitted_c_aliases:
                             c_alias.append(f'PROVIDE("{cur}" = 0x{int(am[1], 16):X});')
                             emitted_c_aliases.add(cur)
+                        # the recovered source name of a splat placeholder
+                        # (config/symbols/main.renames.json) is the same address
+                        renamed = placeholder_renames.get(cur)
+                        if renamed and renamed not in emitted_c_aliases:
+                            c_alias.append(f'PROVIDE("{renamed}" = 0x{int(am[1], 16):X});')
+                            emitted_c_aliases.add(renamed)
                         cur = None
     write_if_changed(unit_dir / "c_aliases.ld", "\n".join(c_alias) + "\n")
     # scaffold references to functions that INCLUDE_ASM now defines under their original

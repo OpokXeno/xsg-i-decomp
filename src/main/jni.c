@@ -4,49 +4,49 @@
 
 #include "jni.h"
 
-const u8 D_004CCA70[16] = "xeno/vm/System";
+const u8 xenoVmSystemClassName[16] = "xeno/vm/System";
 
-const u8 D_004CCA80[24] = "xeno/util/Format";
+const u8 xenoUtilFormatClassName[24] = "xeno/util/Format";
 
-const u8 D_004CCA98[16] = "xeno/util/Menu";
+const u8 xenoUtilMenuClassName[16] = "xeno/util/Menu";
 
-const u8 D_004CCAA8[24] = "xeno/util/Window";
+const u8 xenoUtilWindowClassName[24] = "xeno/util/Window";
 
-const u8 D_004CCAC0[16] = "xeno/util/Input";
+const u8 xenoUtilInputClassName[16] = "xeno/util/Input";
 
-const u8 D_004CCAD0[24] = "xeno/util/Layout";
+const u8 xenoUtilLayoutClassName[24] = "xeno/util/Layout";
 
-const u8 D_004CCAE8[24] = "xeno/util/Runtime";
+const u8 xenoUtilRuntimeClassName[24] = "xeno/util/Runtime";
 
-const u8 D_004CCB00[24] = "xeno/util/Toolkit";
+const u8 xenoUtilToolkitClassName[24] = "xeno/util/Toolkit";
 
-const u8 D_004CCB18[24] = "xeno/util/TCHParams";
+const u8 xenoUtilTchParamsClassName[24] = "xeno/util/TCHParams";
 
-const u8 D_004CCB30[24] = "xeno/util/Spline";
+const u8 xenoUtilSplineClassName[24] = "xeno/util/Spline";
 
-const u8 D_004CCB48[24] = "xeno/util/Vector4f";
+const u8 xenoUtilVector4fClassName[24] = "xeno/util/Vector4f";
 
-const u8 D_004CCB60[16] = "xeno/Camera";
+const u8 xenoCameraClassName[16] = "xeno/Camera";
 
-const u8 D_004CCB70[16] = "xeno/Effect";
+const u8 xenoEffectClassName[16] = "xeno/Effect";
 
-const u8 D_004CCB80[16] = "xeno/Light";
+const u8 xenoLightClassName[16] = "xeno/Light";
 
-const u8 D_004CCB90[16] = "xeno/Chr";
+const u8 xenoChrClassName[16] = "xeno/Chr";
 
-const u8 D_004CCBA0[16] = "xeno/Enepc";
+const u8 xenoEnepcClassName[16] = "xeno/Enepc";
 
-const u8 D_004CCBB0[16] = "xeno/Unit";
+const u8 xenoUnitClassName[16] = "xeno/Unit";
 
-const u8 D_004CCBC0[16] = "xeno/Uwamono";
+const u8 xenoUwamonoClassName[16] = "xeno/Uwamono";
 
-const u8 D_004CCBD0[16] = "xeno/Stage";
+const u8 xenoStageClassName[16] = "xeno/Stage";
 
-const u8 D_004CCBE0[16] = "xeno/Scene";
+const u8 xenoSceneClassName[16] = "xeno/Scene";
 
-const u8 D_004CCBF0[24] = "xeno/PlayControl";
+const u8 xenoPlayControlClassName[24] = "xeno/PlayControl";
 
-const u8 D_004CCC08[24] = "xeno/Movie";
+const u8 xenoMovieClassName[24] = "xeno/Movie";
 
 extern DataBufferByte DataBuffer_getUByteAt(DataBuffer *buffer);
 
@@ -122,28 +122,28 @@ void JNI_initSystem(xheap_block *heap, int size)
 
 void JNI_loadNativeClass(void)
 {
-    loadStaticClass(&classJava_xeno_vm_System, D_004CCA70);
-    loadStaticClass(&classJava_xeno_util_Format, D_004CCA80);
-    loadStaticClass(&classJava_xeno_util_Menu, D_004CCA98);
-    loadStaticClass(&classJava_xeno_util_Window, D_004CCAA8);
-    loadStaticClass(&classJava_xeno_util_Input, D_004CCAC0);
-    loadStaticClass(&classJava_xeno_util_Layout, D_004CCAD0);
-    loadStaticClass(&classJava_xeno_util_Runtime, D_004CCAE8);
-    loadStaticClass(&classJava_xeno_util_Toolkit, D_004CCB00);
-    loadStaticClass(&classJava_xeno_util_TCHParams, D_004CCB18);
-    loadStaticClass(&classJava_xeno_util_Spline, D_004CCB30);
-    loadStaticClass(&classJava_xeno_util_Vector4f, D_004CCB48);
-    loadStaticClass(&classJava_xeno_Camera, D_004CCB60);
-    loadStaticClass(&classJava_xeno_Effect, D_004CCB70);
-    loadStaticClass(&classJava_xeno_Light, D_004CCB80);
-    loadStaticClass(&classJava_xeno_Chr, D_004CCB90);
-    loadStaticClass(&classJava_xeno_Enepc, D_004CCBA0);
-    loadStaticClass(&classJava_xeno_Unit, D_004CCBB0);
-    loadStaticClass(&classJava_xeno_Uwamono, D_004CCBC0);
-    loadStaticClass(&classJava_xeno_Stage, D_004CCBD0);
-    loadStaticClass(&classJava_xeno_Scene, D_004CCBE0);
-    loadStaticClass(&classJava_xeno_PlayControl, D_004CCBF0);
-    loadStaticClass(&classJava_xeno_Movie, D_004CCC08);
+    loadStaticClass(&classJava_xeno_vm_System, xenoVmSystemClassName);
+    loadStaticClass(&classJava_xeno_util_Format, xenoUtilFormatClassName);
+    loadStaticClass(&classJava_xeno_util_Menu, xenoUtilMenuClassName);
+    loadStaticClass(&classJava_xeno_util_Window, xenoUtilWindowClassName);
+    loadStaticClass(&classJava_xeno_util_Input, xenoUtilInputClassName);
+    loadStaticClass(&classJava_xeno_util_Layout, xenoUtilLayoutClassName);
+    loadStaticClass(&classJava_xeno_util_Runtime, xenoUtilRuntimeClassName);
+    loadStaticClass(&classJava_xeno_util_Toolkit, xenoUtilToolkitClassName);
+    loadStaticClass(&classJava_xeno_util_TCHParams, xenoUtilTchParamsClassName);
+    loadStaticClass(&classJava_xeno_util_Spline, xenoUtilSplineClassName);
+    loadStaticClass(&classJava_xeno_util_Vector4f, xenoUtilVector4fClassName);
+    loadStaticClass(&classJava_xeno_Camera, xenoCameraClassName);
+    loadStaticClass(&classJava_xeno_Effect, xenoEffectClassName);
+    loadStaticClass(&classJava_xeno_Light, xenoLightClassName);
+    loadStaticClass(&classJava_xeno_Chr, xenoChrClassName);
+    loadStaticClass(&classJava_xeno_Enepc, xenoEnepcClassName);
+    loadStaticClass(&classJava_xeno_Unit, xenoUnitClassName);
+    loadStaticClass(&classJava_xeno_Uwamono, xenoUwamonoClassName);
+    loadStaticClass(&classJava_xeno_Stage, xenoStageClassName);
+    loadStaticClass(&classJava_xeno_Scene, xenoSceneClassName);
+    loadStaticClass(&classJava_xeno_PlayControl, xenoPlayControlClassName);
+    loadStaticClass(&classJava_xeno_Movie, xenoMovieClassName);
 }
 
 void JNI_pushFrame(void)
@@ -492,140 +492,138 @@ int JNI_getRegister(int register_index)
     return VMRegister[register_index & 0x1f];
 }
 
+const char SdvOpcodeNameInstanceofFast[16] = "instanceof_fast";
 
+const char SdvOpcodeNameCheckcastFast[16] = "checkcast_fast";
 
-const char D_004CCC50[16] = "instanceof_fast";
+const char SdvOpcodeNameBreakpoint[16] = "breakpoint";
 
-const char D_004CCC60[16] = "checkcast_fast";
+const char SdvOpcodeNameIfnonnull[16] = "ifnonnull";
 
-const char D_004CCC70[16] = "breakpoint";
+const char SdvOpcodeNameMultianewarray[16] = "multianewarray";
 
-const char D_004CCC80[16] = "ifnonnull";
+const char SdvOpcodeNameMonitorexit[16] = "monitorexit";
 
-const char D_004CCC90[16] = "multianewarray";
+const char SdvOpcodeNameMonitorenter[16] = "monitorenter";
 
-const char D_004CCCA0[16] = "monitorexit";
+const char SdvOpcodeNameInstanceof[16] = "instanceof";
 
-const char D_004CCCB0[16] = "monitorenter";
+const char SdvOpcodeNameCheckcast[16] = "checkcast";
 
-const char D_004CCCC0[16] = "instanceof";
+const char SdvOpcodeNameArraylength[16] = "arraylength";
 
-const char D_004CCCD0[16] = "checkcast";
+const char SdvOpcodeNameAnewarray[16] = "anewarray";
 
-const char D_004CCCE0[16] = "arraylength";
+const char SdvOpcodeNameNewarray[16] = "newarray";
 
-const char D_004CCCF0[16] = "anewarray";
+const char SdvOpcodeNameInvokeinterface[16] = "invokeinterface";
 
-const char D_004CCD00[16] = "newarray";
+const char SdvOpcodeNameInvokestatic[16] = "invokestatic";
 
-const char D_004CCD10[16] = "invokeinterface";
+const char SdvOpcodeNameInvokespecial[16] = "invokespecial";
 
-const char D_004CCD20[16] = "invokestatic";
+const char SdvOpcodeNameInvokevirtual[16] = "invokevirtual";
 
-const char D_004CCD30[16] = "invokespecial";
+const char SdvOpcodeNamePutfield[16] = "putfield";
 
-const char D_004CCD40[16] = "invokevirtual";
+const char SdvOpcodeNameGetfield[16] = "getfield";
 
-const char D_004CCD50[16] = "putfield";
+const char SdvOpcodeNamePutstatic[16] = "putstatic";
 
-const char D_004CCD60[16] = "getfield";
+const char SdvOpcodeNameGetstatic[16] = "getstatic";
 
-const char D_004CCD70[16] = "putstatic";
+const char SdvOpcodeNameLookupswitch[16] = "lookupswitch";
 
-const char D_004CCD80[16] = "getstatic";
+const char SdvOpcodeNameTableswitch[16] = "tableswitch";
 
-const char D_004CCD90[16] = "lookupswitch";
+const char SdvOpcodeNameIfAcmpne[16] = "if_acmpne";
 
-const char D_004CCDA0[16] = "tableswitch";
+const char SdvOpcodeNameIfAcmpeq[16] = "if_acmpeq";
 
-const char D_004CCDB0[16] = "if_acmpne";
+const char SdvOpcodeNameIfIcmple[16] = "if_icmple";
 
-const char D_004CCDC0[16] = "if_acmpeq";
+const char SdvOpcodeNameIfIcmpgt[16] = "if_icmpgt";
 
-const char D_004CCDD0[16] = "if_icmple";
+const char SdvOpcodeNameIfIcmpge[16] = "if_icmpge";
 
-const char D_004CCDE0[16] = "if_icmpgt";
+const char SdvOpcodeNameIfIcmplt[16] = "if_icmplt";
 
-const char D_004CCDF0[16] = "if_icmpge";
+const char SdvOpcodeNameIfIcmpne[16] = "if_icmpne";
 
-const char D_004CCE00[16] = "if_icmplt";
+const char SdvOpcodeNameIfIcmpeq[16] = "if_icmpeq";
 
-const char D_004CCE10[16] = "if_icmpne";
+const char SdvOpcodeNameInt2short[16] = "int2short";
 
-const char D_004CCE20[16] = "if_icmpeq";
+const char SdvOpcodeNameInt2char[16] = "int2char";
 
-const char D_004CCE30[16] = "int2short";
+const char SdvOpcodeNameInt2byte[16] = "int2byte";
 
-const char D_004CCE40[16] = "int2char";
+const char SdvOpcodeNameAstore3[16] = "astore_3";
 
-const char D_004CCE50[16] = "int2byte";
+const char SdvOpcodeNameAstore2[16] = "astore_2";
 
-const char D_004CCE60[16] = "astore_3";
+const char SdvOpcodeNameAstore1[16] = "astore_1";
 
-const char D_004CCE70[16] = "astore_2";
+const char SdvOpcodeNameAstore0[16] = "astore_0";
 
-const char D_004CCE80[16] = "astore_1";
+const char SdvOpcodeNameDstore3[16] = "dstore_3";
 
-const char D_004CCE90[16] = "astore_0";
+const char SdvOpcodeNameDstore2[16] = "dstore_2";
 
-const char D_004CCEA0[16] = "dstore_3";
+const char SdvOpcodeNameDstore1[16] = "dstore_1";
 
-const char D_004CCEB0[16] = "dstore_2";
+const char SdvOpcodeNameDstore0[16] = "dstore_0";
 
-const char D_004CCEC0[16] = "dstore_1";
+const char SdvOpcodeNameFstore3[16] = "fstore_3";
 
-const char D_004CCED0[16] = "dstore_0";
+const char SdvOpcodeNameFstore2[16] = "fstore_2";
 
-const char D_004CCEE0[16] = "fstore_3";
+const char SdvOpcodeNameFstore1[16] = "fstore_1";
 
-const char D_004CCEF0[16] = "fstore_2";
+const char SdvOpcodeNameFstore0[16] = "fstore_0";
 
-const char D_004CCF00[16] = "fstore_1";
+const char SdvOpcodeNameLstore3[16] = "lstore_3";
 
-const char D_004CCF10[16] = "fstore_0";
+const char SdvOpcodeNameLstore2[16] = "lstore_2";
 
-const char D_004CCF20[16] = "lstore_3";
+const char SdvOpcodeNameLstore1[16] = "lstore_1";
 
-const char D_004CCF30[16] = "lstore_2";
+const char SdvOpcodeNameLstore0[16] = "lstore_0";
 
-const char D_004CCF40[16] = "lstore_1";
+const char SdvOpcodeNameIstore3[16] = "istore_3";
 
-const char D_004CCF50[16] = "lstore_0";
+const char SdvOpcodeNameIstore2[16] = "istore_2";
 
-const char D_004CCF60[16] = "istore_3";
+const char SdvOpcodeNameIstore1[16] = "istore_1";
 
-const char D_004CCF70[16] = "istore_2";
+const char SdvOpcodeNameIstore0[16] = "istore_0";
 
-const char D_004CCF80[16] = "istore_1";
+const char SdvOpcodeNameDconst1[16] = "dconst_1";
 
-const char D_004CCF90[16] = "istore_0";
+const char SdvOpcodeNameDconst0[16] = "dconst_0";
 
-const char D_004CCFA0[16] = "dconst_1";
+const char SdvOpcodeNameFconst2[16] = "fconst_2";
 
-const char D_004CCFB0[16] = "dconst_0";
+const char SdvOpcodeNameFconst1[16] = "fconst_1";
 
-const char D_004CCFC0[16] = "fconst_2";
+const char SdvOpcodeNameFconst0[16] = "fconst_0";
 
-const char D_004CCFD0[16] = "fconst_1";
+const char SdvOpcodeNameLconst1[16] = "lconst_1";
 
-const char D_004CCFE0[16] = "fconst_0";
+const char SdvOpcodeNameLconst0[16] = "lconst_0";
 
-const char D_004CCFF0[16] = "lconst_1";
+const char SdvOpcodeNameIconst5[16] = "iconst_5";
 
-const char D_004CD000[16] = "lconst_0";
+const char SdvOpcodeNameIconst4[16] = "iconst_4";
 
-const char D_004CD010[16] = "iconst_5";
+const char SdvOpcodeNameIconst3[16] = "iconst_3";
 
-const char D_004CD020[16] = "iconst_4";
+const char SdvOpcodeNameIconst2[16] = "iconst_2";
 
-const char D_004CD030[16] = "iconst_3";
+const char SdvOpcodeNameIconst1[16] = "iconst_1";
 
-const char D_004CD040[16] = "iconst_2";
+const char SdvOpcodeNameIconst0[16] = "iconst_0";
 
-const char D_004CD050[16] = "iconst_1";
+const char SdvOpcodeNameIconstM1[16] = "iconst_m1";
 
-const char D_004CD060[16] = "iconst_0";
-
-const char D_004CD070[16] = "iconst_m1";
-
-const char D_004CD080[16] = "aconst_null";
+const char SdvOpcodeNameAconstNull[16] = "aconst_null";

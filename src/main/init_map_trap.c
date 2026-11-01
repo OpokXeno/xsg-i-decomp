@@ -63,15 +63,15 @@ extern signed char collflg;
 
 extern signed char printflg;
 
-extern const char D_004CA470[24];
+extern const char actElectricFormat[24];
 
-extern const char D_004CA488[24];
+extern const char actExplosionFormat[24];
 
-extern const char D_004CA4A0[16];
+extern const char actFallFormat[16];
 
-extern const char D_004CA4B0[16];
+extern const char actSlotFormat[16];
 
-extern const char D_004CA4C0[16];
+extern const char actSealFormat[16];
 
 extern float CheckDist3D(const TrapPosition *, const TrapPosition *);
 
@@ -85,7 +85,6 @@ struct SchedulerState;
 extern struct SchedulerState *sefCreateEffectCf(int effectNo,
                                               const Vector4 *position,
                                               const Vector4 *orientation);
-
 
 typedef struct {
     unsigned char unmodeled_00[0xa9a];
@@ -124,9 +123,9 @@ typedef unsigned int TrapGameLoopStateWords[0xa80c];
 
 extern TrapGameLoopStateWords GameLoopState;
 
-extern const char D_004CA448[0x28];
+extern const char unitTrapDeleteFormat[0x28];
 
-extern char D_004DB728[];
+extern char trapBrokenMethodName[];
 
 extern void DrawActiveCursol(TrapMapUnit *unit);
 
@@ -163,13 +162,12 @@ typedef struct {
     unsigned char unmodeled_21[0x0f];
 } KowareKindEntry;
 
-
 extern KowareKindEntry KowareKind_t[127];
 extern int uwares_tbl[14];
 extern int xtxres_tbl[14];
-extern const char D_004CA3F8[16];
-extern const char D_004CA408[16];
-extern const char D_004CA418[0x30];
+extern const char setTrapSizeFormat[16];
+extern const char trapSizeXyzFormat[16];
+extern const char createTrapPosFormat[0x30];
 
 extern void CreateUwamonoCommon(TrapMapUnit *unit);
 extern void SetContainerParam(TrapMapUnit *unit);
@@ -261,8 +259,8 @@ void InitMapTrap(TrapMapUnit *unit)
         view->dimensions.y = trap->sizeY;
         view->dimensions.z = trap->sizeZ * 0.5f;
         if (printflg) {
-            printf(D_004CA3F8);
-            printf(D_004CA408, trap->sizeX, trap->sizeY, trap->sizeZ);
+            printf(setTrapSizeFormat);
+            printf(trapSizeXyzFormat, trap->sizeX, trap->sizeY, trap->sizeZ);
         }
     }
     view->dimensions.x += trap->offsetX * 0.5f;
@@ -290,7 +288,7 @@ void InitMapTrap(TrapMapUnit *unit)
     unit->matrixRef = unit->matrix;
     SetHideObject(unit);
     if (printflg) {
-        printf(D_004CA418, view->position.x, view->position.y, view->position.z,
+        printf(createTrapPosFormat, view->position.x, view->position.y, view->position.z,
                view->rotation.y / 3.1415927f * 180.0f);
     }
 }
@@ -351,7 +349,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
             ClearUwamonoEffect(unit);
             SetUwaWind(unit);
             if (trap->methodId != -1) {
-                CallMethod_I(D_004DB728, trap->methodId);
+                CallMethod_I(trapBrokenMethodName, trap->methodId);
             }
         }
         if (trap->state == 2) {
@@ -371,7 +369,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
             SetUwaWind(unit);
             if (trap->methodId != -1) {
                 GameLoopState[7] = 0;
-                CallMethod_I(D_004DB728, trap->methodId);
+                CallMethod_I(trapBrokenMethodName, trap->methodId);
             }
             Vibration_Set_Strong(0xff, 0x20, 0x1e);
         }
@@ -388,7 +386,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
             GivesEnemyDamage(unit);
         } else if (unit->trapTimer > trap->activeDuration) {
             if (printflg != 0) {
-                printf(D_004CA448, unit->trapId, unit->trapSerial);
+                printf(unitTrapDeleteFormat, unit->trapId, unit->trapSerial);
             }
             unit->update = 0;
             unit->trapId = -1;
@@ -404,7 +402,7 @@ void MAP_updateUnitTrap(TrapMapUnit *unit)
         if (elapsed >= 5) {
             trap->windState = 0;
             if (printflg != 0) {
-                printf(D_004CA448, unit->trapId, unit->trapSerial);
+                printf(unitTrapDeleteFormat, unit->trapId, unit->trapSerial);
             }
             unit->update = 0;
             unit->trapId = -1;
@@ -454,79 +452,68 @@ int GivesEnemyDamage(TrapMapUnit *unit)
         if (unit->flags & 0x00400000u) {
             target->flags |= 0x02000000u;
             if (printflg) {
-                printf(D_004CA470, actorIndex);
+                printf(actElectricFormat, actorIndex);
             }
         } else if (unit->flags & 0x00800000u) {
             target->flags |= 0x01000000u;
             if (printflg) {
-                printf(D_004CA488, actorIndex);
+                printf(actExplosionFormat, actorIndex);
             }
         } else if (unit->flags & 0x01000000u) {
             target->flags |= 0x04000000u;
             if (printflg) {
-                printf(D_004CA4A0, actorIndex);
+                printf(actFallFormat, actorIndex);
             }
         } else if (unit->flags & 0x02000000u) {
             if (printflg) {
-                printf(D_004CA4B0, actorIndex);
+                printf(actSlotFormat, actorIndex);
             }
         } else if (unit->flags & 0x04000000u) {
             target->flags |= 0x08000000u;
             if (printflg) {
-                printf(D_004CA4C0, actorIndex);
+                printf(actSealFormat, actorIndex);
             }
         }
     }
     return 0;
 }
 
+char trapBrokenMethodName[8] = "broken";
 
+const char CreateEvtItemGetDigit9Text[8] = "9";
 
-extern const char D_004CA3F8[16];
+const char CreateEvtItemGetDigit8Text[8] = "8";
 
-extern const char D_004CA408[16];
+const char CreateEvtItemGetDigit7Text[8] = "7";
 
-extern const char D_004CA418[48];
+const char CreateEvtItemGetDigit6Text[8] = "6";
 
-extern const char D_004CA448[40];
+const char CreateEvtItemGetDigit5Text[8] = "5";
 
-char D_004DB728[8] = "broken";
+const char CreateEvtItemGetDigit4Text[8] = "4";
 
-const char D_004DB730[8] = "9";
+const char CreateEvtItemGetDigit3Text[8] = "3";
 
-const char D_004DB738[8] = "8";
+const char CreateEvtItemGetDigit2Text[8] = "2";
 
-const char D_004DB740[8] = "7";
+const char CreateEvtItemGetDigit1Text[8] = "1";
 
-const char D_004DB748[8] = "6";
+const char CreateEvtItemGetDigit0Text[8] = "0";
 
-const char D_004DB750[8] = "5";
+const char setTrapSizeFormat[16] = "SetTrapSize\n";
 
-const char D_004DB758[8] = "4";
+const char trapSizeXyzFormat[16] = "x=%f y=%f z=%f\n";
 
-const char D_004DB760[8] = "3";
+const char createTrapPosFormat[48] = "Create Trap pos=x=%f, y=%f, z=%f, rotY=%f\n";
 
-const char D_004DB768[8] = "2";
+const char unitTrapDeleteFormat[40] = "unit trap delete id=0x%x serial=%d\n";
 
-const char D_004DB770[8] = "1";
+const char actElectricFormat[24] = "act[%d] Electric\n";
 
-const char D_004DB778[8] = "0";
+const char actExplosionFormat[24] = "act[%d] Explosion\n";
 
+const char actFallFormat[16] = "act[%d] Fall\n";
 
-const char D_004CA3F8[16] = "SetTrapSize\n";
+const char actSlotFormat[16] = "act[%d] Slot\n";
 
-const char D_004CA408[16] = "x=%f y=%f z=%f\n";
-
-const char D_004CA418[48] = "Create Trap pos=x=%f, y=%f, z=%f, rotY=%f\n";
-
-const char D_004CA448[40] = "unit trap delete id=0x%x serial=%d\n";
-
-const char D_004CA470[24] = "act[%d] Electric\n";
-
-const char D_004CA488[24] = "act[%d] Explosion\n";
-
-const char D_004CA4A0[16] = "act[%d] Fall\n";
-
-const char D_004CA4B0[16] = "act[%d] Slot\n";
-
-const char D_004CA4C0[16] = "act[%d] Seal\n";
+const char actSealFormat[16] = "act[%d] Seal\n";

@@ -180,7 +180,7 @@ void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
         float weight = actor->lookWeight;
         LookJointElement *element = &work->elements[work->jointIndex];
 
-        if (!(__builtin_fabsf(weight) < D_004D8568)) {
+        if (!(__builtin_fabsf(weight) < LOOK_SEBO_MIN_WEIGHT)) {
 
             do {
             if (weight <= 0.0f)
@@ -209,14 +209,14 @@ void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
                         xglVectorMulMat(&localPlace, matrix, &place.v);
                         angle = &actor->lookAngles[0].y;
                         targetAngle.y = xglAtan2(localPlace.x, localPlace.z);
-                        look_limit_add(angle, targetAngle.y, weight * D_004D8570);
+                        look_limit_add(angle, targetAngle.y, weight * LOOK_SEBO_STEP);
                     }
-                    element->rotation[2] += *angle * D_004D8574;
+                    element->rotation[2] += *angle * LOOK_SEBO_ROTATION_SCALE;
                 } else {
                     float *angle = &actor->lookAngles[0].y;
 
-                    look_limit(angle, weight * D_004D856C);
-                    element->rotation[2] += *angle * D_004D8574;
+                    look_limit(angle, weight * LOOK_SEBO_LIMIT);
+                    element->rotation[2] += *angle * LOOK_SEBO_ROTATION_SCALE;
                 }
             }
             } while (0);
@@ -224,8 +224,6 @@ void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
     }
     return channels;
 }
-
-
 
 int look_get_place(LookCharacter *actor, LookAlignedVector4 *place);
 
@@ -245,7 +243,7 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
         weight = actor->lookWeight;
         actor->headFlags &= ~0x80U;
         element = &work->elements[work->jointIndex];
-        if (!(__builtin_fabsf(weight) < D_004D8578)) {
+        if (!(__builtin_fabsf(weight) < LOOK_HEAD_MIN_WEIGHT)) {
             if (weight <= 0.0f)
                 weight = 1.0f;
             CUR_MATRIX_Set(work->matrixBuffer[work->jointIndex - 1]);
@@ -261,7 +259,7 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
                                  : : "r" (&actor->headPosition), "r" (matrix[3])
                                  : "$2", "memory");
             actor->headPositionValid = 1;
-            actor->headPosition.y += D_004D857C;
+            actor->headPosition.y += LOOK_HEAD_POSITION_Y_OFFSET;
             if (look_get_place(actor, &place) == 0) {
                 place.v.w = 1.0f;
                 __asm__ __volatile__("sq $0, 0(%0)\n"
@@ -273,24 +271,24 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
                                                      localPlace.x * localPlace.x);
                 rotation.z = xglAtan2(localPlace.y, horizontalDistance);
                 if (rotation.z > 0.0f) {
-                    if (rotation.z > D_004D8580)
-                        rotation.z = D_004D8580;
-                } else if (rotation.z < D_004D8584) {
-                    rotation.z = D_004D8584;
+                    if (rotation.z > LOOK_HEAD_Z_MAX_ANGLE)
+                        rotation.z = LOOK_HEAD_Z_MAX_ANGLE;
+                } else if (rotation.z < LOOK_HEAD_Z_MIN_ANGLE) {
+                    rotation.z = LOOK_HEAD_Z_MIN_ANGLE;
                 }
                 if (rotation.y > 0.0f) {
-                    if (rotation.y > D_004D8588)
-                        rotation.y = D_004D8588;
-                } else if (rotation.y < D_004D858C) {
-                    rotation.y = D_004D858C;
+                    if (rotation.y > LOOK_HEAD_Y_MAX_ANGLE)
+                        rotation.y = LOOK_HEAD_Y_MAX_ANGLE;
+                } else if (rotation.y < LOOK_HEAD_Y_MIN_ANGLE) {
+                    rotation.y = LOOK_HEAD_Y_MIN_ANGLE;
                 }
-                rotation.y *= D_004D8590;
-                rotation.z *= D_004D8594;
-                look_limit_add(&actor->lookAngles[1].y, rotation.y, weight * D_004D8598);
-                look_limit_add(&actor->lookAngles[1].z, rotation.z, weight * D_004D859C);
+                rotation.y *= LOOK_HEAD_Y_SCALE;
+                rotation.z *= LOOK_HEAD_Z_SCALE;
+                look_limit_add(&actor->lookAngles[1].y, rotation.y, weight * LOOK_HEAD_Y_STEP);
+                look_limit_add(&actor->lookAngles[1].z, rotation.z, weight * LOOK_HEAD_Z_STEP);
             } else {
-                look_limit(&actor->lookAngles[1].y, weight * D_004D85A0);
-                look_limit(&actor->lookAngles[1].z, weight * D_004D85A4);
+                look_limit(&actor->lookAngles[1].y, weight * LOOK_HEAD_Y_LIMIT);
+                look_limit(&actor->lookAngles[1].z, weight * LOOK_HEAD_Z_LIMIT);
             }
             xglMatrixUnit(matrix);
             xglMatrixRotX(matrix, matrix, actor->lookAngles[1].z);
@@ -303,30 +301,29 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
     return channels;
 }
 
-
 void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side);
 static float s_fEyeOffset = 0.0f;
 
 void LOOK_eyeL_cont(int model, int target, int step)
 {
-    s_fEyeOffset = D_004D85A8;
+    s_fEyeOffset = LOOK_EYE_L_OFFSET;
     LOOK_eye_cont(model, target, step, 0);
 }
 
 void LOOK_eyeR_cont(int model, int target, int step)
 {
-    s_fEyeOffset = D_004D85AC;
+    s_fEyeOffset = LOOK_EYE_R_OFFSET;
     LOOK_eye_cont(model, target, step, 1);
 }
 
 enum LookEyeComponent { EYE_YAW, EYE_PITCH, EYE_DURATION, EYE_STEP };
 
-extern float s_aEyeIdling[22][4];
-extern float s_aEyeControl[15][4];
-extern float s_aEyeDefault[1][4];
-extern const char D_004DC258[];
-extern const char D_004DC260[];
-extern const char D_004DC268[];
+static const float s_aEyeIdling[22][4];
+static const float s_aEyeControl[15][4] ;
+static const float s_aEyeDefault[1][4];
+extern const char eyeTargetShionName[];
+extern const char eyeTargetKosmosName[];
+extern const char eyeTargetMomoName[];
 extern char *strstr(const char *haystack, const char *needle);
 
 void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side)
@@ -365,11 +362,11 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
     model = actor->model;
     if (model != 0) {
         const char *name = model->name;
-        if (strstr(name, D_004DC258) ||
-            strstr(name, D_004DC260) ||
-            strstr(name, D_004DC268)) {
-            pitchScale *= D_004D85B0;
-            yawScale *= D_004D85B0;
+        if (strstr(name, eyeTargetShionName) ||
+            strstr(name, eyeTargetKosmosName) ||
+            strstr(name, eyeTargetMomoName)) {
+            pitchScale *= LOOK_EYE_IDLE_SCALE;
+            yawScale *= LOOK_EYE_IDLE_SCALE;
         }
     }
     mode = actor->eyeMode;
@@ -383,13 +380,17 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
         if (eyes[side].timer >= (int)s_aEyeIdling[eyes[side].frame][EYE_DURATION]) {
             eyes[side].timer = 0;
             eyes[side].frame++;
-            if (s_aEyeIdling[eyes[side].frame][EYE_DURATION] < 0.0f)
-                eyes[side].frame = 0;
+            {
+                const float *next = s_aEyeIdling[eyes[side].frame];
+
+                if (next[EYE_DURATION] < 0.0f)
+                    eyes[side].frame = 0;
+            }
         }
         controlled = 1;
         break;
     case 14:
-        yawScale = D_004D85B4;
+        yawScale = LOOK_EYE_TRACK_STEP;
         yawScale = eyeWeight * yawScale;
         look_limit_add(&eyes[side].yaw, actor->eyeYaw, yawScale);
         look_limit_add(&eyes[side].pitch, actor->eyePitch, yawScale);
@@ -424,8 +425,10 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
         break;
     }
     if (!controlled) {
-        look_limit_add(&eyes[side].yaw, s_aEyeDefault[0][EYE_YAW], s_aEyeDefault[0][EYE_STEP]);
-        look_limit_add(&eyes[side].pitch, s_aEyeDefault[0][EYE_PITCH], s_aEyeDefault[0][EYE_STEP]);
+        const float *rest = s_aEyeDefault[0];
+
+        look_limit_add(&eyes[side].yaw, rest[EYE_YAW], rest[EYE_STEP]);
+        look_limit_add(&eyes[side].pitch, rest[EYE_PITCH], rest[EYE_STEP]);
     }
     if (look_get_place(actor, &targetPlace) == 0) {
         targetPlace.v.w = 1.0f;
@@ -444,23 +447,35 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
         angles.y = xglAtan2(localPlace.z, localPlace.x);
         horizontalDistance = __builtin_sqrtf(localPlace.z * localPlace.z +
                                              localPlace.x * localPlace.x);
-        step = D_004D85B8;
+        step = LOOK_EYE_STEP;
         step = eyeWeight * step;
         angles.z = xglAtan2(localPlace.y, horizontalDistance);
         look_limit_add(&view->lookAngles[side][0], angles.y, step);
         look_limit_add(&view->lookAngles[side][3], angles.z, step);
-        element->rotation[1] -= view->lookAngles[side][0] * D_004D85C0 * D_004D85C4;
-        element->rotation[0] += view->lookAngles[side][3] * D_004D85C0 * D_004D85C0;
+        element->rotation[1] -= view->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
+        element->rotation[0] += view->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
     } else {
-        step = D_004D85BC;
+        step = LOOK_EYE_LIMIT;
         step = eyeWeight * step;
         look_limit(&view->lookAngles[side][0], step);
         look_limit(&view->lookAngles[side][3], step);
-        element->rotation[1] -= view->lookAngles[side][0] * D_004D85C0 * D_004D85C4;
-        element->rotation[0] += view->lookAngles[side][3] * D_004D85C0 * D_004D85C0;
+        element->rotation[1] -= view->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
+        element->rotation[0] += view->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
     }
     element->rotation[1] += view->eyeAngles[side][2];
     element->rotation[0] += view->eyeAngles[side][3];
     }
     return channels;
 }
+
+static const float s_aEyeIdling[22][4] = { { 0.0f, 0.01745329424738884f, 30.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 45.0f, 0.0052359881810843945f }, { 0.0f, 0.0087266471236944199f, 50.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 40.0f, 0.0052359881810843945f }, { 0.0087266471236944199f, 0.0f, 20.0f, 0.0052359881810843945f }, { 0.0f, 0.0017453293548896909f, 10.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 10.0f, 0.0052359881810843945f }, { 0.0017453293548896909f, 0.0017453293548896909f, 25.0f, 0.0052359881810843945f }, { 0.0f, 0.0017453293548896909f, 10.0f, 0.0052359881810843945f }, { 0.0017453293548896909f, 0.0f, 15.0f, 0.0052359881810843945f }, { 0.0f, 0.0034906587097793818f, 20.0f, 0.0052359881810843945f }, { 0.0017453293548896909f, 0.0017453293548896909f, 10.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 10.0f, 0.0052359881810843945f }, { 0.0f, 0.034906588494777679f, 100.0f, 0.0052359881810843945f }, { 0.0f, 0.0087266471236944199f, 50.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 40.0f, 0.0052359881810843945f }, { 0.0087266471236944199f, 0.0f, 20.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 100.0f, 0.0052359881810843945f }, { 0.0f, 0.034906588494777679f, 15.0f, 0.0069813174195587635f }, { 0.0f, 0.0f, 8.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, 150.0f, 0.0052359881810843945f }, { 0.0f, 0.0f, -1.0f, 0.00087266467744484544f } };
+
+static const float s_aEyeControl[15][4] = { { 0.0f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { -0.13962635397911072f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0f, 0.0f, 0.010471976362168789f }, { -0.13962635397911072f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, 0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.0f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.13962635397911072f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { -0.13962635397911072f, -0.0872664675116539f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.0f, 0.0f, 0.010471976362168789f }, { 0.0f, 0.01745329424738884f, 0.0f, 0.010471976362168789f } };
+
+static const float s_aEyeDefault[1][4] = { { 0.0f, 0.0f, 0.0f, 0.0034906587097793818f } };
+
+const char eyeTargetShionName[8] = "shion";
+
+const char eyeTargetKosmosName[8] = "kosmos";
+
+const char eyeTargetMomoName[8] = "momo";

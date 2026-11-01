@@ -536,7 +536,7 @@ typedef struct MenuTopStatusWin {
 } MenuTopStatusWin;
 
 extern MenuTopWork MenuWork;
-extern char D_004DA890[];
+extern char topMenuEmptyText[];
 extern const char *msg_1_0036C360[3];
 extern MenuTopStatusWin *TopStatusWin;
 extern MenuTopInfo *TopInfo;
@@ -546,7 +546,7 @@ extern unsigned char *MainMenuWorkEnd;
 extern int MenuScenarioNo;
 extern int debug_flag;
 extern int MenuModelOut[];
-extern char D_004DA8D0[];
+extern char topMenuDebugLabel[];
 extern PadPrefix PadData;
 extern void MenuModelMemorySet(int size);
 extern void MenuModelMenuMotionLoad(void);
@@ -566,7 +566,7 @@ extern void eSpriteSet(MenuTopESprite *sprite, short image);
 extern void eSpriteMain(MenuTopESprite *sprite);
 extern void eTagFontSet(MenuTopETagFont *tag, const char *text);
 extern void eTagFontMain(MenuTopETagFont *tag);
-extern char D_004DA8B8[];
+extern char topMenuTitleText[];
 int MenuSelectWindow(MenuStatusPanelWindow *window, MenuTopMenuPanel *panel);
 int MenuInfoWindow(MenuStatusPanelWindow *window, MenuTopInfoPanel *panel);
 void MenuPasWindow(void);

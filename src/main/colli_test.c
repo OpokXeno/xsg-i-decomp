@@ -137,7 +137,7 @@ static int CheckInBox(const CollisionPoint *point, const CollisionPoint *lower,
 #include "shared.h"
 #include "main/xgl_studio.h"
 /* Original TU-local pointer storage remains in the unchanged scaffold. */
-extern StudioCamera *pCamera_004DC65C;
+static StudioCamera * pCamera_004DC65C;
 typedef struct ParticleState {
     CollisionPoint position;
     CollisionPoint previous_position;
@@ -373,8 +373,9 @@ static int CheckBallBoxCollision(CollisionPoint *hit_position,
 
 /* The debug payload begins with four in-band control bytes, including a
  * separator, followed by the CollisionHit!! label text. */
-static const char D_004CBC58[24] = "\013\014\200\000\000CollisionHit!!";
-static const char D_004CBC70[16] = "\013CollisionTest";
+static const char collisionHitLabel[24] = "\013\014\200\000\000CollisionHit!!";
+/* Text: {reset}CollisionTest */
+static const char collisionTestLabel[16] = "\013CollisionTest";
 extern void xglRenderClearFrame(void);
 extern void xglSleep(void);
 extern void xglFontDebugPrintf(int x, int y, const char *text, ...);
@@ -526,8 +527,34 @@ void ColliTest(void)
             pos2.position.w = radius;
         pos1.position.w = radius;
         if (hit)
-            xglFontDebugPrintf(0, 8, D_004CBC58);
-        xglFontDebugPrintf(0, 0, D_004CBC70);
+            xglFontDebugPrintf(0, 8, collisionHitLabel);
+        xglFontDebugPrintf(0, 0, collisionTestLabel);
         xglSleep();
     } while ((PadData.state.bits & 0x08000100ULL) != 0x08000100ULL);
 }
+
+/* JP: ＴＩＴＬＥ
+ * EN: TITLE */
+const char ColliTestTitleLabel[16] = "\n\243\324\243\311\243\324\243\314\243\305";
+
+/* JP: ＤＥＢＵＧ
+ * EN: DEBUG */
+const char ColliTestDebugLabel[16] = "\n\243\304\243\305\243\302\243\325\243\307";
+
+/* JP: ＣＦＤＥＢＵＧ
+ * EN: CFDEBUG */
+const char ColliTestCfDebugLabel[16] = "\n\243\303\243\306\243\304\243\305\243\302\243\325\243\307";
+
+/* JP: ＢＡＴＴＬＥＤＥＢＵＧ
+ * EN: BATTLEDEBUG */
+const char ColliTestBattleDebugLabel[24] = "\n\243\302\243\301\243\324\243\324\243\314\243\305\243\304\243\305\243\302\243\325\243\307";
+
+/* JP: ＢＡＴＴＬＥ
+ * EN: BATTLE */
+const char ColliTestBattleLabel[16] = "\n\243\302\243\301\243\324\243\324\243\314\243\305";
+
+static unsigned int col1[4] = { 0x80, 0x80, 0x80, 0xff };
+
+static unsigned int col2[4] = { 0xa0, 0x00, 0x00, 0xff };
+
+static unsigned int col3[4] = { 0x00, 0x90, 0x90, 0xff };

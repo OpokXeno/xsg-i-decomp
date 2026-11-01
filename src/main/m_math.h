@@ -17,7 +17,7 @@ float MMathMakeRandom2PI(void);
  * value 1/32767, the same convention as random_two_pi_factor below but
  * scaling xglSRand() to a 0..1 range instead of 0..2*pi).
  */
-extern const float D_004D8374;
+extern const float srandUnitScale;
 
 void MMathCalcDir(const Vector4 *from, const Vector4 *to);
 

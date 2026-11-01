@@ -6,16 +6,14 @@
 
 #include "shared.h"
 
-extern u8 arcno;
+static u8 arcno;
 
 typedef struct {
     const char *name;
     u16 ids[14];
 } MotionEntry;
 
-
-
-extern MotionEntry cfMtnList[];
+extern MotionEntry cfMtnList[31];
 
 typedef struct {
     u16 *table;
@@ -23,9 +21,7 @@ typedef struct {
     u16 group;
 } FaceEntry;
 
-
-
-extern FaceEntry faceTbl[];
+extern FaceEntry faceTbl[7];
 
 static char *command_enenpcse(int command, char *cursor, int mode);
 
@@ -54,8 +50,6 @@ typedef struct {
     char name[16];
 } EnemySeEntry;
 
-
-
 static u32 *arcfileaddr;
 
 static int arcfilepreload;
@@ -74,45 +68,45 @@ static u8 GameResourceWorkReloadTable[0x80];
 
 u8 ScenePath = 0;
 
-extern const char D_004C0098[];
+extern const char ResDataScenePath[];
 
-extern const char D_004C0080[];
+extern const char ResDataSceneTestPath[];
 
-extern const char D_004C0068[];
+extern const char ResDataSceneCheckPath[];
 
-extern const char D_004C0058[];
+extern const char ResDataSceneCfPath[];
 
-extern const char D_004C0040[];
+extern const char ResDataSceneEventPath[];
 
-extern const char D_004C0028[];
+extern const char ResDataSceneGashPath[];
 
-extern const char D_004C0010[];
+extern const char ResDataSceneFujiPath[];
 
-extern const char D_004BFFF8[];
+extern const char ResDataSceneKojimaPath[];
 
-extern const char D_004BFFE0[];
+extern const char ResDataSceneSakisakoPath[];
 
-extern const char D_004BFFC8[];
+extern const char ResDataSceneKonishiPath[];
 
-extern const char D_004BFFB0[];
+extern const char ResDataSceneKojiPath[];
 
-extern const char D_004BFF98[];
+extern const char ResDataSceneNvYonePath[];
 
-extern const char D_004BFF80[];
+extern const char ResDataSceneNakaharaPath[];
 
-extern const char D_004BFF68[];
+extern const char ResDataSceneYajimaPath[];
 
-extern const char D_004BFF50[];
+extern const char ResDataSceneKuramotoPath[];
 
-extern const char D_004BFF38[];
+extern const char ResDataSceneKeiichiPath[];
 
-extern const char D_004BFF20[];
+extern const char ResDataSceneSatoPath[];
 
-extern const char D_004BFF08[];
+extern const char ResDataSceneSugisawaPath[];
 
-extern const char D_004BFEF0[];
+extern const char ResDataSceneYagiPath[];
 
-extern const char D_004BFED8[];
+extern const char ResDataSceneItaiPath[];
 
 /* search_key walks this object in 12-byte records: it compares the first
  * string with the requested key and walks the string-pointer list at +4.
@@ -125,31 +119,29 @@ typedef struct ResourceKeyEntry {
     const char *path_prefix;
 } ResourceKeyEntry;
 
+extern const char ResCidName[];
 
+extern const char ResCharPath[];
 
-extern const char D_004D9DD0[];
+extern const char ResRidName[];
 
-extern const char D_004D9DC8[];
+extern const char ResRoboPath[];
 
-extern const char D_004D9DC0[];
+extern const char ResEnemyPath[];
 
-extern const char D_004D9CA0[];
+extern const char ResWidName[];
 
-extern const char D_004D9C98[];
+extern const char ResWeaponPath[];
 
-extern const char D_004D9DB8[];
+extern const char ResEidName[];
 
-extern const char D_004D9DB0[];
+extern const char ResObjPath[];
 
-extern const char D_004D9DA8[];
+extern const char ResAidName[];
 
-extern const char D_004D9D98[];
+extern const char ResMidName[];
 
-extern const char D_004D9D90[];
-
-extern const char D_004D9DA0[];
-
-extern const char D_004D95D0[];
+extern const char ResEmptyName[];
 
 extern const char *AID0[];
 extern const char *CID0[];
@@ -159,64 +151,64 @@ extern const char *CID3[];
 extern const char *CID4[];
 extern const char *CID5[];
 extern const char *CID6[];
-extern const char D_004BFC48[];
-extern const char D_004BFC58[];
-extern const char D_004BFC68[];
-extern const char D_004BFC78[];
-extern const char D_004BFC88[];
-extern const char D_004BFC98[];
-extern const char D_004BFCA8[];
-extern const char D_004BFCB8[];
-extern const char D_004BFCC8[];
-extern const char D_004BFCD8[];
-extern const char D_004BFCE8[];
-extern const char D_004BFCF8[];
-extern const char D_004BFD08[];
-extern const char D_004BFD18[];
-extern const char D_004BFD28[];
-extern const char D_004BFD38[];
-extern const char D_004BFD48[];
-extern const char D_004BFD58[];
-extern const char D_004D9C40[];
-extern const char D_004D9C48[];
-extern const char D_004D9C50[];
-extern const char D_004D9C58[];
-extern const char D_004D9C60[];
-extern const char D_004D9C68[];
-extern const char D_004D9C70[];
-extern const char D_004D9C78[];
-extern const char D_004D9C80[];
-extern const char D_004D9C88[];
-extern const char D_004D9C90[];
-extern const char D_004D9CA8[];
-extern const char D_004D9CB0[];
-extern const char D_004D9CB8[];
-extern const char D_004D9CC0[];
-extern const char D_004D9CC8[];
-extern const char D_004D9CD0[];
-extern const char D_004D9CD8[];
-extern const char D_004D9CE0[];
-extern const char D_004D9CE8[];
-extern const char D_004D9CF0[];
-extern const char D_004D9CF8[];
-extern const char D_004D9D00[];
-extern const char D_004D9D08[];
-extern const char D_004D9D10[];
-extern const char D_004D9D18[];
-extern const char D_004D9D20[];
-extern const char D_004D9D28[];
-extern const char D_004D9D30[];
-extern const char D_004D9D38[];
-extern const char D_004D9D40[];
-extern const char D_004D9D48[];
-extern const char D_004D9D50[];
-extern const char D_004D9D58[];
-extern const char D_004D9D60[];
-extern const char D_004D9D68[];
-extern const char D_004D9D70[];
-extern const char D_004D9D78[];
-extern const char D_004D9D80[];
-extern const char D_004D9D88[];
+extern const char ResBossBossPath[];
+extern const char ResFereFerePath[];
+extern const char ResFesoFesoPath[];
+extern const char ResFeroFeroPath[];
+extern const char ResFemaFemaPath[];
+extern const char ResUtroUtroPath[];
+extern const char ResUtsoUtsoPath[];
+extern const char ResUtreUtrePath[];
+extern const char ResUtmaUtmaPath[];
+extern const char ResGunoGunoPath[];
+extern const char ResMobj000MobjPath[];
+extern const char ResAobj000AccPath[];
+extern const char ResMusobjMusPath[];
+extern const char ResMufobjMufPath[];
+extern const char ResMuxobjMuxPath[];
+extern const char ResTreobjTrePath[];
+extern const char ResMuwobjMuwPath[];
+extern const char ResMuobjMUPath[];
+extern const char ResCitiPath[];
+extern const char ResPplPath[];
+extern const char ResNpcPath[];
+extern const char ResPcPath[];
+extern const char ResEtcPath[];
+extern const char ResAgAgPath[];
+extern const char ResAgName[];
+extern const char ResVxVxPath[];
+extern const char ResVxName[];
+extern const char ResPcChoPath[];
+extern const char ResChoName[];
+extern const char ResPcSonPath[];
+extern const char ResSonName[];
+extern const char ResPcStnPath[];
+extern const char ResStnName[];
+extern const char ResPcJrPath[];
+extern const char ResJrPrefixName[];
+extern const char ResPcZigPath[];
+extern const char ResZigName[];
+extern const char ResPcMmoPath[];
+extern const char ResMmoName[];
+extern const char ResPcKosPath[];
+extern const char ResKosName[];
+extern const char ResBossName[];
+extern const char ResSeparatorName[];
+extern const char ResFereName[];
+extern const char ResFesoName[];
+extern const char ResFeroName[];
+extern const char ResFemaName[];
+extern const char ResUtroName[];
+extern const char ResUtsoName[];
+extern const char ResUtreName[];
+extern const char ResUtmaName[];
+extern const char ResGunoName[];
+extern const char ResMusName[];
+extern const char ResMufName[];
+extern const char ResMuxName[];
+extern const char ResTreName[];
+extern const char ResMuwName[];
+extern const char ResMuName[];
 extern const char *EID0[];
 extern const char *EID1[];
 extern const char *EID2[];
@@ -248,96 +240,96 @@ extern const char *WID7[];
 extern const char *WID8[];
 
 static ResourceKeyEntry CID[8] = {
-    { D_004D95D0, CID0, D_004D9C58 },
-    { D_004D95D0, CID1, D_004D9C50 },
-    { D_004D95D0, CID2, D_004D9C48 },
-    { D_004D95D0, CID3, D_004D9C48 },
-    { D_004D95D0, CID4, D_004D9C48 },
-    { D_004D95D0, CID5, D_004D9C48 },
-    { D_004D95D0, CID6, D_004D9C40 },
+    { ResEmptyName, CID0, ResPcPath },
+    { ResEmptyName, CID1, ResNpcPath },
+    { ResEmptyName, CID2, ResPplPath },
+    { ResEmptyName, CID3, ResPplPath },
+    { ResEmptyName, CID4, ResPplPath },
+    { ResEmptyName, CID5, ResPplPath },
+    { ResEmptyName, CID6, ResCitiPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry RID[4] = {
-    { D_004D9C80, RID0, D_004D9C78 },
-    { D_004D9C70, RID1, D_004D9C68 },
-    { D_004D95D0, RID2, D_004D9C60 },
+    { ResVxName, RID0, ResVxVxPath },
+    { ResAgName, RID1, ResAgAgPath },
+    { ResEmptyName, RID2, ResEtcPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry WID[10] = {
-    { D_004D9D00, WID0, D_004D9CF8 },
-    { D_004D9CF0, WID1, D_004D9CE8 },
-    { D_004D9CE0, WID2, D_004D9CD8 },
-    { D_004D9CD0, WID3, D_004D9CC8 },
-    { D_004D9CC0, WID4, D_004D9CB8 },
-    { D_004D9CB0, WID5, D_004D9CA8 },
-    { D_004D95D0, WID6, D_004D9CA0 },
-    { D_004D95D0, WID7, D_004D9C98 },
-    { D_004D9C90, WID8, D_004D9C88 },
+    { ResKosName, WID0, ResPcKosPath },
+    { ResMmoName, WID1, ResPcMmoPath },
+    { ResZigName, WID2, ResPcZigPath },
+    { ResJrPrefixName, WID3, ResPcJrPath },
+    { ResStnName, WID4, ResPcStnPath },
+    { ResSonName, WID5, ResPcSonPath },
+    { ResEmptyName, WID6, ResRoboPath },
+    { ResEmptyName, WID7, ResEnemyPath },
+    { ResChoName, WID8, ResPcChoPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry EID[17] = {
-    { D_004D9D58, EID0, D_004BFCD8 },
-    { D_004D9D50, EID1, D_004BFCC8 },
-    { D_004D9D48, EID2, D_004BFCB8 },
-    { D_004D9D40, EID3, D_004BFCA8 },
-    { D_004D9D38, EID4, D_004BFC98 },
-    { D_004D9D30, EID5, D_004BFC88 },
-    { D_004D9D28, EID6, D_004BFC78 },
-    { D_004D9D20, EID7, D_004BFC68 },
-    { D_004D9D18, EID8, D_004BFC58 },
-    { D_004D9D10, EID8, D_004BFCD8 },
-    { D_004D9D10, EID8, D_004BFCD8 },
-    { D_004D9D10, EID8, D_004BFCD8 },
-    { D_004D9D10, EID8, D_004BFCD8 },
-    { D_004D9D10, EID8, D_004BFCD8 },
-    { D_004D9D10, EID8, D_004BFCD8 },
-    { D_004D9D08, EIDf, D_004BFC48 },
+    { ResGunoName, EID0, ResGunoGunoPath },
+    { ResUtmaName, EID1, ResUtmaUtmaPath },
+    { ResUtreName, EID2, ResUtreUtrePath },
+    { ResUtsoName, EID3, ResUtsoUtsoPath },
+    { ResUtroName, EID4, ResUtroUtroPath },
+    { ResFemaName, EID5, ResFemaFemaPath },
+    { ResFeroName, EID6, ResFeroFeroPath },
+    { ResFesoName, EID7, ResFesoFesoPath },
+    { ResFereName, EID8, ResFereFerePath },
+    { ResSeparatorName, EID8, ResGunoGunoPath },
+    { ResSeparatorName, EID8, ResGunoGunoPath },
+    { ResSeparatorName, EID8, ResGunoGunoPath },
+    { ResSeparatorName, EID8, ResGunoGunoPath },
+    { ResSeparatorName, EID8, ResGunoGunoPath },
+    { ResSeparatorName, EID8, ResGunoGunoPath },
+    { ResBossName, EIDf, ResBossBossPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry MID[2] = {
-    { D_004D95D0, MID0, D_004BFCE8 },
+    { ResEmptyName, MID0, ResMobj000MobjPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry AID[2] = {
-    { D_004D95D0, AID0, D_004BFCF8 },
+    { ResEmptyName, AID0, ResAobj000AccPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry MOBJ[10] = {
-    { D_004D9D88, MU, D_004BFD58 },
-    { D_004D9D80, MUW, D_004BFD48 },
-    { D_004D9D78, TRE, D_004BFD38 },
-    { D_004D9D78, TRE, D_004BFD38 },
-    { D_004D9D70, MUX, D_004BFD28 },
-    { D_004D9D70, MUX, D_004BFD28 },
-    { D_004D9D68, MUF, D_004BFD18 },
-    { D_004D9D68, MUF, D_004BFD18 },
-    { D_004D9D60, MUS, D_004BFD08 },
+    { ResMuName, MU, ResMuobjMUPath },
+    { ResMuwName, MUW, ResMuwobjMuwPath },
+    { ResTreName, TRE, ResTreobjTrePath },
+    { ResTreName, TRE, ResTreobjTrePath },
+    { ResMuxName, MUX, ResMuxobjMuxPath },
+    { ResMuxName, MUX, ResMuxobjMuxPath },
+    { ResMufName, MUF, ResMufobjMufPath },
+    { ResMufName, MUF, ResMufobjMufPath },
+    { ResMusName, MUS, ResMusobjMusPath },
     { 0, 0, 0 }
 };
 
 static ResourceKeyEntry model[9] = {
-    {D_004D9DD0, CID, D_004D9DC8},
-    {D_004D9DD0, CID, D_004D9DC8},
-    {D_004D9DC0, RID, D_004D9CA0},
-    {D_004D9DB8, WID, D_004D9DB0},
-    {D_004D9DA8, EID, D_004D9C98},
-    {D_004D9DA0, MID, D_004D9D98},
-    {D_004D9D90, AID, D_004D9D98},
-    {D_004D95D0, MOBJ, D_004D9D98},
+    {ResCidName, CID, ResCharPath},
+    {ResCidName, CID, ResCharPath},
+    {ResRidName, RID, ResRoboPath},
+    {ResWidName, WID, ResWeaponPath},
+    {ResEidName, EID, ResEnemyPath},
+    {ResMidName, MID, ResObjPath},
+    {ResAidName, AID, ResObjPath},
+    {ResEmptyName, MOBJ, ResObjPath},
     {0, 0, 0},
 };
 
 static const char *tbl_0_00366420[20] = {
-    D_004C0098, D_004C0080, D_004C0068, D_004C0058, D_004C0040,
-    D_004C0028, D_004C0010, D_004BFFF8, D_004BFFE0, D_004BFFC8,
-    D_004BFFB0, D_004BFF98, D_004BFF80, D_004BFF68, D_004BFF50,
-    D_004BFF38, D_004BFF20, D_004BFF08, D_004BFEF0, D_004BFED8
+    ResDataScenePath, ResDataSceneTestPath, ResDataSceneCheckPath, ResDataSceneCfPath, ResDataSceneEventPath,
+    ResDataSceneGashPath, ResDataSceneFujiPath, ResDataSceneKojimaPath, ResDataSceneSakisakoPath, ResDataSceneKonishiPath,
+    ResDataSceneKojiPath, ResDataSceneNvYonePath, ResDataSceneNakaharaPath, ResDataSceneYajimaPath, ResDataSceneKuramotoPath,
+    ResDataSceneKeiichiPath, ResDataSceneSatoPath, ResDataSceneSugisawaPath, ResDataSceneYagiPath, ResDataSceneItaiPath
 };
 
 /*
@@ -356,8 +348,6 @@ typedef struct {
     int handle;     /* +0x8 */
     int state;      /* +0xC, -1 = free */
 } GameResourceEntry;
-
-
 
 GameResourceEntry GameResource[128] = {0};
 
@@ -379,8 +369,6 @@ typedef struct {
     u16 unmodeled_52;
     int map_load_result;
 } GameLoopStatePrefix;
-
-
 
 extern GameLoopStatePrefix GameLoopState;
 
@@ -421,16 +409,10 @@ struct Actor;
  * footstep number byte at +6; the bytes before it are an unread span here.
  */
 
-
-
 /*
  * +0x8dc: the actor's resource pointer, past the extent src/main/enemy_2.h
  * completes; RES_GetFootStepNo is the only reader of it in this TU.
  */
-
-
-
-
 
 extern int sefLoadEffectCfName(int cf_id, char *effect_name);
 
@@ -442,1455 +424,1339 @@ extern void GameCfPlayerLoadResource(int resource_set);
 
 extern void SCRIPT_frameLock2Battle(void);
 
-extern const char D_004D8B88[];
+extern const char ResShitanName[];
 
-extern const char D_004BF888[];
+extern const char ResKosmosHName[];
 
-extern const char D_004D8AC8[];
+extern const char ResJr1HName[];
 
-extern const char D_004D8AA8[];
+extern const char ResMomo6Name[];
 
-extern const char D_004BF7A0[];
+extern const char ResShion6HName[];
 
-extern const char D_004BF8C0[];
+extern const char ResShion1Shion5Name[];
 
-extern const char D_004D8B30[];
+extern const char ResMomo2Name[];
 
-extern const char D_004D8AE8[];
+extern const char ResChaosHName[];
 
-extern const char D_004BF838[];
+extern const char ResKosmosH4Name[];
 
-extern const char D_004D8B08[];
+extern const char ResJr3Name[];
 
-extern const char D_004D8B58[];
+extern const char ResKosmos3Name[];
 
-extern const char D_004D8B40[];
+extern const char ResChaos2Name[];
 
-extern const char D_004D8AC0[];
+extern const char ResJr4Name[];
 
-extern const char D_004D8B20[];
+extern const char ResMomo4Name[];
 
-extern const char D_004D8B70[];
+extern const char ResShionName[];
 
-extern const char D_004D8BB0[];
+extern const char ResKosmosName[];
 
-extern const char D_004D8B28[];
+extern const char ResMomo3Name[];
 
-extern const char D_004D8B18[];
+extern const char ResJr1Name[];
 
-extern const char D_004BF8D0[];
+extern const char ResShionChName[];
 
-extern const char D_004D8AF0[];
+extern const char ResShitan2Name[];
 
-extern const char D_004BF7F0[];
+extern const char ResShion2HName[];
 
-extern const char D_004BF7E0[];
+extern const char ResShion3HName[];
 
-extern const char D_004D8AF8[];
+extern const char ResShitan1Name[];
 
-extern const char D_004BF858[];
+extern const char ResKosmosH2Name[];
 
-extern const char D_004D8B10[];
+extern const char ResJr2Name[];
 
-extern const char D_004D8B80[];
+extern const char ResShion2Name[];
 
-extern const char D_004BF848[];
+extern const char ResKosmosH3Name[];
 
-extern const char D_004BF818[];
+extern const char ResKosmosH6Name[];
 
-extern const char D_004D8AB8[];
+extern const char ResMomo5Name[];
 
-extern const char D_004D8AD8[];
+extern const char ResJrHName[];
 
-extern const char D_004D8B00[];
+extern const char ResZiggy1Name[];
 
-extern const char D_004BF7C8[];
+extern const char ResShion4HShionHName[];
 
-extern const char D_004BF8B0[];
+extern const char ResShion5Shion1Name[];
 
-extern const char D_004D8B60[];
+extern const char ResKosmos2Name[];
 
-extern const char D_004D8BA8[];
+extern const char ResChaosName[];
 
-extern const char D_004D8B48[];
+extern const char ResChaos1Name[];
 
-extern const char D_004D8AB0[];
+extern const char ResMomo5HName[];
 
-extern const char D_004BF800[];
+extern const char ResShion1HShion5HName[];
 
-extern const char D_004BF8E0[];
+extern const char ResShionShion4Name[];
 
-extern const char D_004BF828[];
+extern const char ResKosmosH5Name[];
 
-extern const char D_004D8B50[];
+extern const char ResKosmos5Name[];
 
-extern const char D_004D8B98[];
+extern const char ResJrName[];
 
-extern const char D_004BF898[];
+extern const char ResShionHShion4HName[];
 
-extern const char D_004BF7B0[];
+extern const char ResShion5HShion1HName[];
 
-extern const char D_004D8B38[];
+extern const char ResMomo1Name[];
 
-extern const char D_004D8AE0[];
+extern const char ResMomoHName[];
 
-extern const char D_004BF868[];
+extern const char ResKosmosH1Name[];
 
-extern const char D_004BF878[];
+extern const char ResShitanHName[];
 
-extern const char D_004D8AD0[];
+extern const char ResZiggyHName[];
 
-extern const char D_004D8B90[];
+extern const char ResZiggyName[];
 
-extern const char D_004D8B68[];
+extern const char ResKosmos1Name[];
 
-extern const char D_004D8BA0[];
+extern const char ResMomoName[];
 
-extern const char D_004D8B78[];
+extern const char ResShion3Name[];
 
-extern const char D_004D8C78[];
+extern const char ResMiyukiName[];
 
-extern const char D_004D8D08[];
+extern const char ResEllyName[];
 
-extern const char D_004D8CF8[];
+extern const char ResTonnyName[];
 
-extern const char D_004D8C70[];
+extern const char ResLapisName[];
 
-extern const char D_004BFA68[];
+extern const char ResAlbeltHName[];
 
-extern const char D_004BFB08[];
+extern const char ResMarglis1Name[];
 
-extern const char D_004D8D20[];
+extern const char ResVirgil3Name[];
 
-extern const char D_004D8CB0[];
+extern const char ResJoachimName[];
 
-extern const char D_004D8D30[];
+extern const char ResVirgil1Name[];
 
-extern const char D_004BFAF8[];
+extern const char ResGaignun1Name[];
 
-extern const char D_004D8D48[];
+extern const char ResKebin1Name[];
 
-extern const char D_004D8D38[];
+extern const char ResVirgilName[];
 
-extern const char D_004D8CD8[];
+extern const char ResAndrew2Name[];
 
-extern const char D_004D8BD0[];
+extern const char ResAndrew7Name[];
 
-extern const char D_004BFA40[];
+extern const char ResMatehwsHMatehwsName[];
 
-extern const char D_004BF900[];
+extern const char ResHammerHHammerName[];
 
-extern const char D_004BFA30[];
+extern const char ResKebin1HName[];
 
-extern const char D_004BFA20[];
+extern const char ResVirgil2HName[];
 
-extern const char D_004BFAA8[];
+extern const char ResAndDaugName[];
 
-extern const char D_004BF928[];
+extern const char ResGaignunHName[];
 
-extern const char D_004BFAB8[];
+extern const char ResAndWifeName[];
 
-extern const char D_004D8BC8[];
+extern const char ResAndrew8Name[];
 
-extern const char D_004BF938[];
+extern const char ResAndrewHAndrew6Name[];
 
-extern const char D_004D8CF0[];
+extern const char ResHammerName[];
 
-extern const char D_004D8C90[];
+extern const char ResAbelName[];
 
-extern const char D_004D8C10[];
+extern const char ResChiefName[];
 
-extern const char D_004D8CC8[];
+extern const char ResAndrew4Name[];
 
-extern const char D_004BF9B0[];
+extern const char ResAndrewHAndrew1Name[];
 
-extern const char D_004BF980[];
+extern const char ResAndrewHAndrew3Name[];
 
-extern const char D_004D8C28[];
+extern const char ResKJoachName[];
 
-extern const char D_004D8C30[];
+extern const char ResShalronName[];
 
-extern const char D_004BFA10[];
+extern const char ResVirgil4HName[];
 
-extern const char D_004D8C98[];
+extern const char ResShelleyName[];
 
-extern const char D_004BF9E0[];
+extern const char ResVirgil3HName[];
 
-extern const char D_004BFA88[];
+extern const char ResJoachim1Name[];
 
-extern const char D_004D8C80[];
+extern const char ResVoyagerName[];
 
-extern const char D_004D8D80[];
+extern const char ResMarglisName[];
 
-extern const char D_004D8C00[];
+extern const char ResAllenHName[];
 
-extern const char D_004BFA00[];
+extern const char ResAlbelt2HName[];
 
-extern const char D_004D8D50[];
+extern const char ResKebinName[];
 
-extern const char D_004D8CE8[];
+extern const char ResAndrewName[];
 
-extern const char D_004D8C58[];
+extern const char ResShiDadName[];
 
-extern const char D_004D8BD8[];
+extern const char ResAndrew6Name[];
 
-extern const char D_004D8C20[];
+extern const char ResElly2Name[];
 
-extern const char D_004D8BC0[];
+extern const char ResFeb1Name[];
 
-extern const char D_004BF918[];
+extern const char ResTonnyHTonnyName[];
 
-extern const char D_004D8C38[];
+extern const char ResHynlinName[];
 
-extern const char D_004BF9C8[];
+extern const char ResAndrewHAndrewName[];
 
-extern const char D_004D8C40[];
+extern const char ResTogashiName[];
 
-extern const char D_004BF968[];
+extern const char ResAndrewHAndrew4Name[];
 
-extern const char D_004D8BE0[];
+extern const char ResAndrew5Name[];
 
-extern const char D_004BF8F0[];
+extern const char ResAlbelt3HName[];
 
-extern const char D_004BFA98[];
+extern const char ResCecilia1Name[];
 
-extern const char D_004D8CA8[];
+extern const char ResSellersName[];
 
-extern const char D_004D8C48[];
+extern const char ResPelegriName[];
 
-extern const char D_004D8D10[];
+extern const char ResFriedName[];
 
-extern const char D_004D8D70[];
+extern const char ResAlbeltName[];
 
-extern const char D_004D8CB8[];
+extern const char ResYuriName[];
 
-extern const char D_004BF9F0[];
+extern const char ResVirgil1HName[];
 
-extern const char D_004D8C68[];
+extern const char ResCeciliaName[];
 
-extern const char D_004BFAD8[];
+extern const char ResStepMamName[];
 
-extern const char D_004BF998[];
+extern const char ResAndrewHAndrew2Name[];
 
-extern const char D_004BF950[];
+extern const char ResAndrewHAndrew5Name[];
 
-extern const char D_004D8CD0[];
+extern const char ResAndrew3Name[];
 
-extern const char D_004D8D28[];
+extern const char ResVirgil2Name[];
 
-extern const char D_004D8C50[];
+extern const char ResShiMamName[];
 
-extern const char D_004BFA78[];
+extern const char ResMarglisHName[];
 
-extern const char D_004D8BF0[];
+extern const char ResFriedHName[];
 
-extern const char D_004D8BE8[];
+extern const char ResEllyHName[];
 
-extern const char D_004D8D78[];
+extern const char ResGaignunName[];
 
-extern const char D_004D8C60[];
+extern const char ResCathName[];
 
-extern const char D_004D8C18[];
+extern const char ResVanName[];
 
-extern const char D_004D8D18[];
+extern const char ResVirgil4Name[];
 
-extern const char D_004D8D40[];
+extern const char ResKebin2Name[];
 
-extern const char D_004D8C08[];
+extern const char ResCath1Name[];
 
-extern const char D_004BFA58[];
+extern const char ResVirgilHName[];
 
-extern const char D_004D8D00[];
+extern const char ResMatehwsName[];
 
-extern const char D_004D8CA0[];
+extern const char ResMaryName[];
 
-extern const char D_004BFAC8[];
+extern const char ResMoriyamaName[];
 
-extern const char D_004BFAE8[];
+extern const char ResMatehws1Name[];
 
-extern const char D_004D8CE0[];
+extern const char ResAndrew1Name[];
 
-extern const char D_004D8D58[];
+extern const char ResAllen1Name[];
 
-extern const char D_004D8BB8[];
+extern const char ResAndrew9Name[];
 
-extern const char D_004D8C88[];
+extern const char ResHelmerName[];
 
-extern const char D_004D8D68[];
+extern const char ResAlbelt1Name[];
 
-extern const char D_004D8BF8[];
+extern const char ResKebinHName[];
 
-extern const char D_004D8CC0[];
+extern const char ResFebName[];
 
-extern const char D_004D8D60[];
+extern const char ResAllenName[];
 
-extern const char D_004D8DE0[];
+extern const char ResEngName[];
 
-extern const char D_004BFB18[];
+extern const char ResBrealW1Name[];
 
-extern const char D_004D8E48[];
+extern const char ResVecMName[];
 
-extern const char D_004D8DF0[];
+extern const char ResPilotName[];
 
-extern const char D_004D8DA8[];
+extern const char ResRwW1Name[];
 
-extern const char D_004D8E38[];
+extern const char ResVecM2Name[];
 
-extern const char D_004BFB28[];
+extern const char ResBrealM4Name[];
 
-extern const char D_004D8E08[];
+extern const char ResOffM3Name[];
 
-extern const char D_004D8D98[];
+extern const char ResEsoldName[];
 
-extern const char D_004BFB58[];
+extern const char ResBrealM1Name[];
 
-extern const char D_004D8DD0[];
+extern const char ResSuukiName[];
 
-extern const char D_004D8DB0[];
+extern const char ResRwWName[];
 
-extern const char D_004D8DD8[];
+extern const char ResEngOffName[];
 
-extern const char D_004D8D90[];
+extern const char ResBrealMName[];
 
-extern const char D_004D8E00[];
+extern const char ResOffWName[];
 
-extern const char D_004D8D88[];
+extern const char ResBrealWName[];
 
-extern const char D_004D8DF8[];
+extern const char ResOffW1Name[];
 
-extern const char D_004D8DC0[];
+extern const char ResRwM1Name[];
 
-extern const char D_004D8DC8[];
+extern const char ResRwMName[];
 
-extern const char D_004D8E50[];
+extern const char ResSpaceName[];
 
-extern const char D_004D8E20[];
+extern const char ResOffMName[];
 
-extern const char D_004D8E18[];
+extern const char ResOffM1Name[];
 
-extern const char D_004BFB38[];
+extern const char ResBrealM3Name[];
 
-extern const char D_004D8E28[];
+extern const char ResVecW1Name[];
 
-extern const char D_004D8DA0[];
+extern const char ResRwW2Name[];
 
-extern const char D_004D8E10[];
+extern const char ResOffM2Name[];
 
-extern const char D_004D8DB8[];
+extern const char ResRwM2Name[];
 
-extern const char D_004D8E30[];
+extern const char ResVecWName[];
 
-extern const char D_004BFB48[];
+extern const char ResBrealM2Name[];
 
-extern const char D_004D8DE8[];
+extern const char ResSoldName[];
 
-extern const char D_004D8E40[];
+extern const char ResVecM1Name[];
 
-extern const char D_004D8EE0[];
+extern const char ResCommiName[];
 
-extern const char D_004D8ED8[];
+extern const char ResCommi1Name[];
 
-extern const char D_004D8EA0[];
+extern const char ResGoveW2Name[];
 
-extern const char D_004D8E78[];
+extern const char ResRealM2Name[];
 
-extern const char D_004D8E80[];
+extern const char ResRealM1Name[];
 
-extern const char D_004D8EC0[];
+extern const char ResCommi4Name[];
 
-extern const char D_004D8E70[];
+extern const char ResRealWName[];
 
-extern const char D_004D8E58[];
+extern const char ResUSoldsName[];
 
-extern const char D_004D8EC8[];
+extern const char ResCommi3Name[];
 
-extern const char D_004D8EB0[];
+extern const char ResGoveWName[];
 
-extern const char D_004D8EB8[];
+extern const char ResCommi5Name[];
 
-extern const char D_004D8E60[];
+extern const char ResRealW2Name[];
 
-extern const char D_004D8EA8[];
+extern const char ResGoveW1Name[];
 
-extern const char D_004D8ED0[];
+extern const char ResCommi2Name[];
 
-extern const char D_004D8E88[];
+extern const char ResRealMName[];
 
-extern const char D_004D8E98[];
+extern const char ResUSoldName[];
 
-extern const char D_004D8E68[];
+extern const char ResRealW1Name[];
 
-extern const char D_004D8E90[];
+extern const char ResUSpaceName[];
 
-extern const char D_004D8F18[];
+extern const char ResAssWName[];
 
-extern const char D_004D8F38[];
+extern const char ResHyakuName[];
 
-extern const char D_004D8F50[];
+extern const char ResDuName[];
 
-extern const char D_004D8EE8[];
+extern const char ResAssM4Name[];
 
-extern const char D_004D8EF0[];
+extern const char ResAssM3Name[];
 
-extern const char D_004D8F30[];
+extern const char ResAssMName[];
 
-extern const char D_004D8F28[];
+extern const char ResAssM1Name[];
 
-extern const char D_004D8F48[];
+extern const char ResDu1Name[];
 
-extern const char D_004D8F00[];
+extern const char ResGoveM2Name[];
 
-extern const char D_004D8EF8[];
+extern const char ResKanchoName[];
 
-extern const char D_004D8F20[];
+extern const char ResAssM2Name[];
 
-extern const char D_004D8F10[];
+extern const char ResGoveMName[];
 
-extern const char D_004D8F40[];
+extern const char ResDu2Name[];
 
-extern const char D_004D8F08[];
+extern const char ResGoveM1Name[];
 
-extern const char D_004D8F70[];
+extern const char ResUticW1Name[];
 
-extern const char D_004D8F80[];
+extern const char ResUticM2Name[];
 
-extern const char D_004D8F78[];
+extern const char ResUticWName[];
 
-extern const char D_004D8F68[];
+extern const char ResUticW2Name[];
 
-extern const char D_004D8F98[];
+extern const char ResContName[];
 
-extern const char D_004D8F58[];
+extern const char ResPolWName[];
 
-extern const char D_004D8F88[];
+extern const char ResUticM1Name[];
 
-extern const char D_004D8F60[];
+extern const char ResPolMName[];
 
-extern const char D_004D8F90[];
+extern const char ResUticMName[];
 
-extern const char D_004D9048[];
+extern const char ResGirlAName[];
 
-extern const char D_004D8FC8[];
+extern const char ResGoroName[];
 
-extern const char D_004D8FE0[];
+extern const char ResKingName[];
 
-extern const char D_004D9068[];
+extern const char ResBabaB1Name[];
 
-extern const char D_004D8FE8[];
+extern const char ResRobotName[];
 
-extern const char D_004D91A8[];
+extern const char ResManA2Name[];
 
-extern const char D_004D8FA0[];
+extern const char ResEngOjiName[];
 
-extern const char D_004D9190[];
+extern const char ResManB2Name[];
 
-extern const char D_004D9040[];
+extern const char ResGirlA1Name[];
 
-extern const char D_004BFB88[];
+extern const char ResInnGirlName[];
 
-extern const char D_004BFBC8[];
+extern const char ResKidswA2Name[];
 
-extern const char D_004D9148[];
+extern const char ResJijiA2Name[];
 
-extern const char D_004D90E8[];
+extern const char ResWmanAName[];
 
-extern const char D_004D8FA8[];
+extern const char ResScotName[];
 
-extern const char D_004D9050[];
+extern const char ResKidswBName[];
 
-extern const char D_004BFBD8[];
+extern const char ResKidswA1Name[];
 
-extern const char D_004D9098[];
+extern const char ResObaB1Name[];
 
-extern const char D_004D90D8[];
+extern const char ResWmanA2Name[];
 
-extern const char D_004D8FD0[];
+extern const char ResMouthName[];
 
-extern const char D_004D9118[];
+extern const char ResBoyAName[];
 
-extern const char D_004D8FB0[];
+extern const char ResInnOjiName[];
 
-extern const char D_004D9198[];
+extern const char ResManB1Name[];
 
-extern const char D_004D90B0[];
+extern const char ResObaA1Name[];
 
-extern const char D_004D9080[];
+extern const char ResBabaA1Name[];
 
-extern const char D_004D9020[];
+extern const char ResGirlB2Name[];
 
-extern const char D_004D9000[];
+extern const char ResDoctorName[];
 
-extern const char D_004D9128[];
+extern const char ResKidsmAName[];
 
-extern const char D_004D9058[];
+extern const char ResKidswAName[];
 
-extern const char D_004D8FC0[];
+extern const char ResBartenName[];
 
-extern const char D_004D90C0[];
+extern const char ResWmanB2Name[];
 
-extern const char D_004D8FB8[];
+extern const char ResSpyName[];
 
-extern const char D_004D9070[];
+extern const char ResBabaBName[];
 
-extern const char D_004D90F0[];
+extern const char ResBoyB2Name[];
 
-extern const char D_004D9018[];
+extern const char ResBreadName[];
 
-extern const char D_004D9120[];
+extern const char ResKidsmBName[];
 
-extern const char D_004D9010[];
+extern const char ResBarOjiName[];
 
-extern const char D_004D8FF8[];
+extern const char ResNurseName[];
 
-extern const char D_004D9188[];
+extern const char ResOjiAName[];
 
-extern const char D_004D9030[];
+extern const char ResGirlBName[];
 
-extern const char D_004D9158[];
+extern const char ResJijiAName[];
 
-extern const char D_004BFBF8[];
+extern const char ResKidsmB1Name[];
 
-extern const char D_004D91A0[];
+extern const char ResManBName[];
 
-extern const char D_004D9060[];
+extern const char ResBabaB2Name[];
 
-extern const char D_004D8FF0[];
+extern const char ResCleChName[];
 
-extern const char D_004D9100[];
+extern const char ResBoyBName[];
 
-extern const char D_004D9078[];
+extern const char ResBabaA2Name[];
 
-extern const char D_004D9130[];
+extern const char ResJijiB2Name[];
 
-extern const char D_004D90B8[];
+extern const char ResObaAName[];
 
-extern const char D_004BFB98[];
+extern const char ResBreadChName[];
 
-extern const char D_004D91B0[];
+extern const char ResManA1Name[];
 
-extern const char D_004D9090[];
+extern const char ResObaB2Name[];
 
-extern const char D_004D90A0[];
+extern const char ResObaBName[];
 
-extern const char D_004D90F8[];
+extern const char ResBoyB1Name[];
 
-extern const char D_004BFB78[];
+extern const char ResPilotNoName[];
 
-extern const char D_004D90C8[];
+extern const char ResWmanB1Name[];
 
-extern const char D_004D90E0[];
+extern const char ResWmanA1Name[];
 
-extern const char D_004BFBB8[];
+extern const char ResKidswB1Name[];
 
-extern const char D_004D9008[];
+extern const char ResBarMName[];
 
-extern const char D_004D9138[];
+extern const char ResJijiB1Name[];
 
-extern const char D_004D9028[];
+extern const char ResGirlB1Name[];
 
-extern const char D_004D91B8[];
+extern const char ResManAName[];
 
-extern const char D_004D9180[];
+extern const char ResOjiA1Name[];
 
-extern const char D_004D90D0[];
+extern const char ResWmanBName[];
 
-extern const char D_004BFB68[];
+extern const char ResKingCatName[];
 
-extern const char D_004BFBE8[];
+extern const char ResKidsmB2Name[];
 
-extern const char D_004D9178[];
+extern const char ResOjiA2Name[];
 
-extern const char D_004BFBA8[];
+extern const char ResKidswB2Name[];
 
-extern const char D_004D9108[];
+extern const char ResBoyA2Name[];
 
-extern const char D_004BFC18[];
+extern const char ResKidsmA1Name[];
 
-extern const char D_004D8FD8[];
+extern const char ResCleObaName[];
 
-extern const char D_004D9038[];
+extern const char ResGirlA2Name[];
 
-extern const char D_004D9088[];
+extern const char ResBabaAName[];
 
-extern const char D_004D9168[];
+extern const char ResOjiB1Name[];
 
-extern const char D_004D9140[];
+extern const char ResJijiBName[];
 
-extern const char D_004D9150[];
+extern const char ResJijiA1Name[];
 
-extern const char D_004BFC08[];
+extern const char ResKidsmA2Name[];
 
-extern const char D_004D9110[];
+extern const char ResBoyA1Name[];
 
-extern const char D_004D90A8[];
+extern const char ResObaA2Name[];
 
-extern const char D_004D9160[];
+extern const char ResOjiB2Name[];
 
-extern const char D_004D9170[];
+extern const char ResOjiBName[];
 
-extern const char D_004D91C8[];
+extern const char ResFile05Name[];
 
-extern const char D_004D91E8[];
+extern const char ResFile01Name[];
 
-extern const char D_004D91D0[];
+extern const char ResFile04Name[];
 
-extern const char D_004D91C0[];
+extern const char ResFile06Name[];
 
-extern const char D_004D91D8[];
+extern const char ResFile03Name[];
 
-extern const char D_004D91E0[];
+extern const char ResFile02Name[];
 
-extern const char D_004D9208[];
+extern const char ResSuffix06Name[];
 
-extern const char D_004D9230[];
+extern const char ResSuffix05Name[];
 
-extern const char D_004D9228[];
+extern const char ResFile01CvName[];
 
-extern const char D_004D9238[];
+extern const char ResSuffix04Name[];
 
-extern const char D_004D9220[];
+extern const char ResFile01HoName[];
 
-extern const char D_004D9248[];
+extern const char ResSuffix02Name[];
 
-extern const char D_004D9218[];
+extern const char ResFile01Ho2Name[];
 
-extern const char D_004D9250[];
+extern const char ResSuffix01Name[];
 
-extern const char D_004D91F8[];
+extern const char ResFile08Name[];
 
-extern const char D_004D9240[];
+extern const char ResSuffix03Name[];
 
-extern const char D_004D9200[];
+extern const char ResFile07Name[];
 
-extern const char D_004D91F0[];
+extern const char ResFile09Name[];
 
-extern const char D_004D9210[];
+extern const char ResFile02HoName[];
 
-extern const char D_004D9290[];
+extern const char ResVx1MName[];
 
-extern const char D_004D9278[];
+extern const char ResUkunSName[];
 
-extern const char D_004D9280[];
+extern const char ResUkunBName[];
 
-extern const char D_004D9298[];
+extern const char ResUknGName[];
 
-extern const char D_004D9270[];
+extern const char ResGrHeadName[];
 
-extern const char D_004D9268[];
+extern const char ResGrHandName[];
 
-extern const char D_004D9260[];
+extern const char ResGrBodyName[];
 
-extern const char D_004BFC28[];
+extern const char ResGrFinalName[];
 
-extern const char D_004D9258[];
+extern const char ResGrLegName[];
 
-extern const char D_004D9288[];
+extern const char ResTs01Name[];
 
-extern const char D_004D92C8[];
+extern const char ResHw05Name[];
 
-extern const char D_004D92B8[];
+extern const char ResBw01Name[];
 
-extern const char D_004D92B0[];
+extern const char ResBw02Name[];
 
-extern const char D_004D92A8[];
+extern const char ResBw03Name[];
 
-extern const char D_004D92D0[];
+extern const char ResHw04Name[];
 
-extern const char D_004D92E0[];
+extern const char ResHw02Name[];
 
-extern const char D_004D92D8[];
+extern const char ResHw03Name[];
 
-extern const char D_004D92C0[];
+extern const char ResHw06Name[];
 
-extern const char D_004D92E8[];
+extern const char ResHw01Name[];
 
-extern const char D_004D92A0[];
+extern const char ResBw04Name[];
 
-extern const char D_004D9368[];
+extern const char ResRd02Name[];
 
-extern const char D_004D92F8[];
+extern const char ResRd16Name[];
 
-extern const char D_004D92F0[];
+extern const char ResRd17Name[];
 
-extern const char D_004D9348[];
+extern const char ResRd06Name[];
 
-extern const char D_004D9330[];
+extern const char ResRd09Name[];
 
-extern const char D_004D9308[];
+extern const char ResRd14Name[];
 
-extern const char D_004D9300[];
+extern const char ResRd15Name[];
 
-extern const char D_004D9370[];
+extern const char ResRd01Name[];
 
-extern const char D_004D9318[];
+extern const char ResRd12Name[];
 
-extern const char D_004D9340[];
+extern const char ResRd07Name[];
 
-extern const char D_004D9338[];
+extern const char ResRd08Name[];
 
-extern const char D_004D9350[];
+extern const char ResRd05Name[];
 
-extern const char D_004D9328[];
+extern const char ResRd10Name[];
 
-extern const char D_004D9310[];
+extern const char ResRd13Name[];
 
-extern const char D_004D9358[];
+extern const char ResRd04Name[];
 
-extern const char D_004D9320[];
+extern const char ResRd11Name[];
 
-extern const char D_004D9360[];
+extern const char ResRd03Name[];
 
-extern const char D_004D9378[];
+extern const char ResSw01Name[];
 
-extern const char D_004D9398[];
+extern const char ResGun05Name[];
 
-extern const char D_004D9388[];
+extern const char ResJrHg07Name[];
 
-extern const char D_004D9390[];
+extern const char ResJrHg06Name[];
 
-extern const char D_004D93B8[];
+extern const char ResGun01Name[];
 
-extern const char D_004D9380[];
+extern const char ResJrHg08Name[];
 
-extern const char D_004D93A8[];
+extern const char ResGun03Name[];
 
-extern const char D_004D93A0[];
+extern const char ResGun04Name[];
 
-extern const char D_004D93B0[];
+extern const char ResGun02Name[];
 
-extern const char D_004D93C0[];
+extern const char ResSw05Name[];
 
-extern const char D_004D93C8[];
+extern const char ResSw04Name[];
 
-extern const char D_004D93D8[];
+extern const char ResSw02Name[];
 
-extern const char D_004D93D0[];
+extern const char ResSw03Name[];
 
-extern const char D_004D93E0[];
+extern const char ResMboxName[];
 
-extern const char D_004D93F0[];
+extern const char ResHb00RName[];
 
-extern const char D_004D9518[];
+extern const char ResMg01Name[];
 
-extern const char D_004D94D0[];
+extern const char ResPbk00Name[];
 
-extern const char D_004D9530[];
+extern const char ResDlc00Name[];
 
-extern const char D_004D9468[];
+extern const char ResMsp01Name[];
 
-extern const char D_004D9400[];
+extern const char ResDeff00Name[];
 
-extern const char D_004D94C8[];
+extern const char ResFl00Name[];
 
-extern const char D_004D9418[];
+extern const char ResSmp01Name[];
 
-extern const char D_004D9500[];
+extern const char ResRf02Name[];
 
-extern const char D_004D9428[];
+extern const char ResEcm01Name[];
 
-extern const char D_004D9450[];
+extern const char ResFsd00Name[];
 
-extern const char D_004D9460[];
+extern const char ResMsp03Name[];
 
-extern const char D_004D94E8[];
+extern const char ResDrl00Name[];
 
-extern const char D_004D9540[];
+extern const char ResHg01Name[];
 
-extern const char D_004D9490[];
+extern const char ResCb00Name[];
 
-extern const char D_004D94D8[];
+extern const char ResLsr00Name[];
 
-extern const char D_004D9510[];
+extern const char ResRf00Name[];
 
-extern const char D_004D9410[];
+extern const char ResWire00Name[];
 
-extern const char D_004D9478[];
+extern const char ResLgc00Name[];
 
-extern const char D_004D94F8[];
+extern const char ResBam00Name[];
 
-extern const char D_004D9498[];
+extern const char ResBl00Name[];
 
-extern const char D_004D9458[];
+extern const char ResShb00Name[];
 
-extern const char D_004D9420[];
+extern const char ResEcm02Name[];
 
-extern const char D_004D9520[];
+extern const char ResMg00Name[];
 
-extern const char D_004D9550[];
+extern const char ResWct00Name[];
 
-extern const char D_004D94A8[];
+extern const char ResMsp00Name[];
 
-extern const char D_004D94B8[];
+extern const char ResGlg00Name[];
 
-extern const char D_004D9440[];
+extern const char ResBbc00Name[];
 
-extern const char D_004D9438[];
+extern const char ResBw00Name[];
 
-extern const char D_004D9560[];
+extern const char ResBd00Name[];
 
-extern const char D_004D94C0[];
+extern const char ResGnd00Name[];
 
-extern const char D_004D9480[];
+extern const char ResBp00Name[];
 
-extern const char D_004D9568[];
+extern const char ResAx00Name[];
 
-extern const char D_004D93F8[];
+extern const char ResGlg00RName[];
 
-extern const char D_004D9528[];
+extern const char ResHmr02Name[];
 
-extern const char D_004D93E8[];
+extern const char ResMsp02RName[];
 
-extern const char D_004D94F0[];
+extern const char ResBs00Name[];
 
-extern const char D_004D9430[];
+extern const char ResEad00Name[];
 
-extern const char D_004D9508[];
+extern const char ResRf01Name[];
 
-extern const char D_004D9408[];
+extern const char ResSol00Name[];
 
-extern const char D_004D9488[];
+extern const char ResEac00Name[];
 
-extern const char D_004D9538[];
+extern const char ResHmr00Name[];
 
-extern const char D_004D9558[];
+extern const char ResBd01Name[];
 
-extern const char D_004D9448[];
+extern const char ResVsd00Name[];
 
-extern const char D_004D94B0[];
+extern const char ResHb00Name[];
 
-extern const char D_004D9470[];
+extern const char ResAmp02Name[];
 
-extern const char D_004D94A0[];
+extern const char ResMsp02Name[];
 
-extern const char D_004D94E0[];
+extern const char ResDrl01Name[];
 
-extern const char D_004D9548[];
+extern const char ResHg00Name[];
 
-extern const char D_004D95A0[];
+extern const char ResAcc030Name[];
 
-extern const char D_004D9598[];
+extern const char ResAcc031Name[];
 
-extern const char D_004D95B0[];
+extern const char ResAcc028Name[];
 
-extern const char D_004D9588[];
+extern const char ResAcc033Name[];
 
-extern const char D_004D95A8[];
+extern const char ResAcc029Name[];
 
-extern const char D_004D95B8[];
+extern const char ResAcc018Name[];
 
-extern const char D_004D9570[];
+extern const char ResAcc036Name[];
 
-extern const char D_004BFC38[];
+extern const char ResEwpHg01Name[];
 
-extern const char D_004D9590[];
+extern const char ResAcc032Name[];
 
-extern const char D_004D9580[];
+extern const char ResAcc034Name[];
 
-extern const char D_004D9578[];
+extern const char ResAcc035Name[];
 
-extern const char D_004D95C0[];
+extern const char ResWingName[];
 
-extern const char D_004D9700[];
+extern const char ResFile013Name[];
 
-extern const char D_004D9730[];
+extern const char ResFile007Name[];
 
-extern const char D_004D95E0[];
+extern const char ResFile324Name[];
 
-extern const char D_004D95D8[];
+extern const char ResFile325Name[];
 
-extern const char D_004D9750[];
+extern const char ResFile003Name[];
 
-extern const char D_004D9738[];
+extern const char ResFile006Name[];
 
-extern const char D_004D95C8[];
+extern const char ResFile114Name[];
 
-extern const char D_004D9648[];
+extern const char ResFile311Name[];
 
-extern const char D_004D9650[];
+extern const char ResFile310Name[];
 
-extern const char D_004D96F0[];
+extern const char ResFile015Name[];
 
-extern const char D_004D96A0[];
+extern const char ResFile025Name[];
 
-extern const char D_004D9600[];
+extern const char ResFile320Name[];
 
-extern const char D_004D96D8[];
+extern const char ResFile018Name[];
 
-extern const char D_004D9610[];
+extern const char ResFile318Name[];
 
-extern const char D_004D9638[];
+extern const char ResFile313Name[];
 
-extern const char D_004D96E8[];
+extern const char ResFile016Name[];
 
-extern const char D_004D9748[];
+extern const char ResFile004Name[];
 
-extern const char D_004D96F8[];
+extern const char ResFile014Name[];
 
-extern const char D_004D9668[];
+extern const char ResFile307Name[];
 
-extern const char D_004D96C8[];
+extern const char ResFile020Name[];
 
-extern const char D_004D9640[];
+extern const char ResFile312Name[];
 
-extern const char D_004D9720[];
+extern const char ResFile009Name[];
 
-extern const char D_004D9758[];
+extern const char ResFile002Name[];
 
-extern const char D_004D9618[];
+extern const char ResFile317Name[];
 
-extern const char D_004D96B0[];
+extern const char ResFile023Name[];
 
-extern const char D_004D9658[];
+extern const char ResFile309Name[];
 
-extern const char D_004D95E8[];
+extern const char ResFile323Name[];
 
-extern const char D_004D96C0[];
+extern const char ResFile021Name[];
 
-extern const char D_004D96B8[];
+extern const char ResFile022Name[];
 
-extern const char D_004D9678[];
+extern const char ResFile305Name[];
 
-extern const char D_004D9760[];
+extern const char ResFile001Name[];
 
-extern const char D_004D96E0[];
+extern const char ResFile017Name[];
 
-extern const char D_004D9690[];
+extern const char ResFile302Name[];
 
-extern const char D_004D9660[];
+extern const char ResFile308Name[];
 
-extern const char D_004D9608[];
+extern const char ResFile319Name[];
 
-extern const char D_004D9688[];
+extern const char ResFile303Name[];
 
-extern const char D_004D9718[];
+extern const char ResFile010Name[];
 
-extern const char D_004D96D0[];
+extern const char ResFile019Name[];
 
-extern const char D_004D96A8[];
+extern const char ResFile024Name[];
 
-extern const char D_004D9680[];
+extern const char ResFile304Name[];
 
-extern const char D_004D9628[];
+extern const char ResFile315Name[];
 
-extern const char D_004D9728[];
+extern const char ResFile008Name[];
 
-extern const char D_004D9740[];
+extern const char ResFile005Name[];
 
-extern const char D_004D9630[];
+extern const char ResFile314Name[];
 
-extern const char D_004D9698[];
+extern const char ResFile301Name[];
 
-extern const char D_004D9620[];
+extern const char ResFile316Name[];
 
-extern const char D_004D9710[];
+extern const char ResFile011Name[];
 
-extern const char D_004D9708[];
+extern const char ResFile012Name[];
 
-extern const char D_004D95F8[];
+extern const char ResFile321Name[];
 
-extern const char D_004D9670[];
+extern const char ResFile306Name[];
 
-extern const char D_004D95F0[];
+extern const char ResFile322Name[];
 
-extern const char D_004D9790[];
+extern const char ResFile028Name[];
 
-extern const char D_004D9780[];
+extern const char ResFile030Name[];
 
-extern const char D_004D97A0[];
+extern const char ResFile026Name[];
 
-extern const char D_004D9798[];
+extern const char ResFile027Name[];
 
-extern const char D_004D9788[];
+extern const char ResFile029Name[];
 
-extern const char D_004D9770[];
+extern const char ResFile032Name[];
 
-extern const char D_004D9768[];
+extern const char ResFile033Name[];
 
-extern const char D_004D9778[];
+extern const char ResFile031Name[];
 
-extern const char D_004D99B0[];
+extern const char ResFile115Name[];
 
-extern const char D_004D9AD0[];
+extern const char ResFile078Name[];
 
-extern const char D_004D9A08[];
+extern const char ResFile103Name[];
 
-extern const char D_004D9958[];
+extern const char ResFile126Name[];
 
-extern const char D_004D9AB8[];
+extern const char ResFile081Name[];
 
-extern const char D_004D9B78[];
+extern const char ResFile057Name[];
 
-extern const char D_004D9800[];
+extern const char ResFile169Name[];
 
-extern const char D_004D9940[];
+extern const char ResFile129Name[];
 
-extern const char D_004D98F8[];
+extern const char ResFile138Name[];
 
-extern const char D_004D9B28[];
+extern const char ResFile067Name[];
 
-extern const char D_004D9818[];
+extern const char ResFile166Name[];
 
-extern const char D_004D9B90[];
+extern const char ResFile054Name[];
 
-extern const char D_004D9B18[];
+extern const char ResFile069Name[];
 
-extern const char D_004D9C18[];
+extern const char ResFile037Name[];
 
-extern const char D_004D9AA0[];
+extern const char ResFile084Name[];
 
-extern const char D_004D9A90[];
+extern const char ResFile086Name[];
 
-extern const char D_004D9A88[];
+extern const char ResFile087Name[];
 
-extern const char D_004D9A70[];
+extern const char ResFile090Name[];
 
-extern const char D_004D9A58[];
+extern const char ResFile093Name[];
 
-extern const char D_004D9BF0[];
+extern const char ResFile042Name[];
 
-extern const char D_004D9AF0[];
+extern const char ResFile074Name[];
 
-extern const char D_004D9938[];
+extern const char ResFile130Name[];
 
-extern const char D_004D9928[];
+extern const char ResFile132Name[];
 
-extern const char D_004D9918[];
+extern const char ResFile134Name[];
 
-extern const char D_004D98B8[];
+extern const char ResFile146Name[];
 
-extern const char D_004D99B8[];
+extern const char ResFile113Name[];
 
-extern const char D_004D9978[];
+extern const char ResFile122Name[];
 
-extern const char D_004D97C8[];
+extern const char ResFile176Name[];
 
-extern const char D_004D9AE8[];
+extern const char ResFile075Name[];
 
-extern const char D_004D9930[];
+extern const char ResFile131Name[];
 
-extern const char D_004D9B20[];
+extern const char ResFile068Name[];
 
-extern const char D_004D9898[];
+extern const char ResFile150Name[];
 
-extern const char D_004D97B8[];
+extern const char ResFile178Name[];
 
-extern const char D_004D97A8[];
+extern const char ResFile180Name[];
 
-extern const char D_004D9BF8[];
+extern const char ResFile041Name[];
 
-extern const char D_004D98E8[];
+extern const char ResFile140Name[];
 
-extern const char D_004D9BC8[];
+extern const char ResFile047Name[];
 
-extern const char D_004D97F8[];
+extern const char ResFile170Name[];
 
-extern const char D_004D9AE0[];
+extern const char ResFile076Name[];
 
-extern const char D_004D9A40[];
+extern const char ResFile096Name[];
 
-extern const char D_004D9970[];
+extern const char ResFile123Name[];
 
-extern const char D_004D9A38[];
+extern const char ResFile097Name[];
 
-extern const char D_004D99E0[];
+extern const char ResFile108Name[];
 
-extern const char D_004D9AB0[];
+extern const char ResFile082Name[];
 
-extern const char D_004D9888[];
+extern const char ResFile152Name[];
 
-extern const char D_004D99D0[];
+extern const char ResFile110Name[];
 
-extern const char D_004D9BD0[];
+extern const char ResFile046Name[];
 
-extern const char D_004D98C0[];
+extern const char ResFile145Name[];
 
-extern const char D_004D9C00[];
+extern const char ResFile040Name[];
 
-extern const char D_004D97C0[];
+extern const char ResFile177Name[];
 
-extern const char D_004D9AF8[];
+extern const char ResFile073Name[];
 
-extern const char D_004D9A60[];
+extern const char ResFile092Name[];
 
-extern const char D_004D9848[];
+extern const char ResFile160Name[];
 
-extern const char D_004D9808[];
+extern const char ResFile168Name[];
 
-extern const char D_004D9B88[];
+extern const char ResFile055Name[];
 
-extern const char D_004D9A30[];
+extern const char ResFile098Name[];
 
-extern const char D_004D99A8[];
+extern const char ResFile116Name[];
 
-extern const char D_004D9B40[];
+extern const char ResFile064Name[];
 
-extern const char D_004D9B60[];
+extern const char ResFile060Name[];
 
-extern const char D_004D9C38[];
+extern const char ResFile000Name[];
 
-extern const char D_004D9A78[];
+extern const char ResFile089Name[];
 
-extern const char D_004D98D8[];
+extern const char ResFile142Name[];
 
-extern const char D_004D99E8[];
+extern const char ResFile107Name[];
 
-extern const char D_004D9C08[];
+extern const char ResFile039Name[];
 
-extern const char D_004D9A68[];
+extern const char ResFile091Name[];
 
-extern const char D_004D9BC0[];
+extern const char ResFile048Name[];
 
-extern const char D_004D9878[];
+extern const char ResFile154Name[];
 
-extern const char D_004D9870[];
+extern const char ResFile155Name[];
 
-extern const char D_004D97D0[];
+extern const char ResFile175Name[];
 
-extern const char D_004D9920[];
+extern const char ResFile133Name[];
 
-extern const char D_004D99F8[];
+extern const char ResFile105Name[];
 
-extern const char D_004D9838[];
+extern const char ResFile162Name[];
 
-extern const char D_004D97B0[];
+extern const char ResFile179Name[];
 
-extern const char D_004D9828[];
+extern const char ResFile164Name[];
 
-extern const char D_004D97E8[];
+extern const char ResFile172Name[];
 
-extern const char D_004D9C30[];
+extern const char ResFile034Name[];
 
-extern const char D_004D9820[];
+extern const char ResFile165Name[];
 
-extern const char D_004D9A80[];
+extern const char ResFile088Name[];
 
-extern const char D_004D9960[];
+extern const char ResFile125Name[];
 
-extern const char D_004D9868[];
+extern const char ResFile156Name[];
 
-extern const char D_004D9BB8[];
+extern const char ResFile049Name[];
 
-extern const char D_004D9B50[];
+extern const char ResFile062Name[];
 
-extern const char D_004D9AC0[];
+extern const char ResFile080Name[];
 
-extern const char D_004D9B48[];
+extern const char ResFile063Name[];
 
-extern const char D_004D9890[];
+extern const char ResFile151Name[];
 
-extern const char D_004D9810[];
+extern const char ResFile167Name[];
 
-extern const char D_004D9B38[];
+extern const char ResFile065Name[];
 
-extern const char D_004D9A20[];
+extern const char ResFile100Name[];
 
-extern const char D_004D9B58[];
+extern const char ResFile061Name[];
 
-extern const char D_004D98F0[];
+extern const char ResFile139Name[];
 
-extern const char D_004D9A50[];
+extern const char ResFile094Name[];
 
-extern const char D_004D9C10[];
+extern const char ResFile038Name[];
 
-extern const char D_004D9A10[];
+extern const char ResFile102Name[];
 
-extern const char D_004D9B68[];
+extern const char ResFile059Name[];
 
-extern const char D_004D9B80[];
+extern const char ResFile056Name[];
 
-extern const char D_004D99A0[];
+extern const char ResFile117Name[];
 
-extern const char D_004D98A0[];
+extern const char ResFile149Name[];
 
-extern const char D_004D97D8[];
+extern const char ResFile174Name[];
 
-extern const char D_004D9B00[];
+extern const char ResFile072Name[];
 
-extern const char D_004D9840[];
+extern const char ResFile161Name[];
 
-extern const char D_004D99D8[];
+extern const char ResFile109Name[];
 
-extern const char D_004D9910[];
+extern const char ResFile135Name[];
 
-extern const char D_004D9850[];
+extern const char ResFile159Name[];
 
-extern const char D_004D9BA0[];
+extern const char ResFile052Name[];
 
-extern const char D_004D99C8[];
+extern const char ResFile111Name[];
 
-extern const char D_004D9A98[];
+extern const char ResFile085Name[];
 
-extern const char D_004D9880[];
+extern const char ResFile153Name[];
 
-extern const char D_004D9BA8[];
+extern const char ResFile051Name[];
 
-extern const char D_004D9998[];
+extern const char ResFile118Name[];
 
-extern const char D_004D99F0[];
+extern const char ResFile106Name[];
 
-extern const char D_004D9C28[];
+extern const char ResFile035Name[];
 
-extern const char D_004D9908[];
+extern const char ResFile136Name[];
 
-extern const char D_004D98D0[];
+extern const char ResFile143Name[];
 
-extern const char D_004D97E0[];
+extern const char ResFile173Name[];
 
-extern const char D_004D9B70[];
+extern const char ResFile058Name[];
 
-extern const char D_004D9858[];
+extern const char ResFile158Name[];
 
-extern const char D_004D9860[];
+extern const char ResFile157Name[];
 
-extern const char D_004D9BE8[];
+extern const char ResFile043Name[];
 
-extern const char D_004D9988[];
+extern const char ResFile120Name[];
 
-extern const char D_004D9980[];
+extern const char ResFile121Name[];
 
-extern const char D_004D9BD8[];
+extern const char ResFile045Name[];
 
-extern const char D_004D9C20[];
+extern const char ResFile036Name[];
 
-extern const char D_004D9AC8[];
+extern const char ResFile079Name[];
 
-extern const char D_004D9968[];
+extern const char ResFile124Name[];
 
-extern const char D_004D9B98[];
+extern const char ResFile053Name[];
 
-extern const char D_004D9B30[];
+extern const char ResFile066Name[];
 
-extern const char D_004D98B0[];
+extern const char ResFile147Name[];
 
-extern const char D_004D9A18[];
+extern const char ResFile101Name[];
 
-extern const char D_004D9A28[];
+extern const char ResFile099Name[];
 
-extern const char D_004D9B08[];
+extern const char ResFile071Name[];
 
-extern const char D_004D9900[];
+extern const char ResFile137Name[];
 
-extern const char D_004D98C8[];
+extern const char ResFile144Name[];
 
-extern const char D_004D9830[];
+extern const char ResFile163Name[];
 
-extern const char D_004D9BB0[];
+extern const char ResFile050Name[];
 
-extern const char D_004D9AD8[];
+extern const char ResFile077Name[];
 
-extern const char D_004D9A00[];
+extern const char ResFile104Name[];
 
-extern const char D_004D9950[];
+extern const char ResFile127Name[];
 
-extern const char D_004D9BE0[];
+extern const char ResFile044Name[];
 
-extern const char D_004D99C0[];
+extern const char ResFile112Name[];
 
-extern const char D_004D9B10[];
+extern const char ResFile070Name[];
 
-extern const char D_004D9948[];
+extern const char ResFile128Name[];
 
-extern const char D_004D98E0[];
+extern const char ResFile141Name[];
 
-extern const char D_004D9AA8[];
+extern const char ResFile083Name[];
 
-extern const char D_004D9A48[];
+extern const char ResFile095Name[];
 
-extern const char D_004D9990[];
+extern const char ResFile119Name[];
 
-extern const char D_004D97F0[];
+extern const char ResFile171Name[];
 
-extern const char D_004D98A8[];
+extern const char ResFile148Name[];
 
-static const char * CID0[54] = { D_004BF8E0, D_004D8BB0, D_004D8BA8, D_004D8BA0, D_004D8B98, D_004D8B90, D_004D8B88, D_004BF8D0, D_004BF8C0, D_004D8B80, D_004D8B78, D_004D8B70, D_004BF8B0, D_004D8B68, D_004D8B60, D_004D8B58, D_004D8B50, D_004D8B48, D_004D8B40, D_004D8B38, D_004D8B30, D_004D8B28, D_004D8B20, D_004D8B18, D_004D8B10, D_004D8B08, D_004D8B00, D_004D8AF8, D_004D8AF0, D_004BF898, D_004BF888, D_004D8AE8, D_004D8AE0, D_004D8AD8, D_004D8AD0, D_004BF878, D_004BF868, D_004BF858, D_004BF848, D_004BF838, D_004BF828, D_004BF818, D_004BF800, D_004D8AC8, D_004BF7F0, D_004BF7E0, D_004D8AC0, D_004BF7C8, D_004BF7B0, D_004D8AB8, D_004D8AB0, D_004D8AA8, D_004BF7A0, 0 };
+static const char * CID0[54] = { ResShionShion4Name, ResKosmosName, ResChaosName, ResMomoName, ResJrName, ResZiggyName, ResShitanName, ResShionChName, ResShion1Shion5Name, ResShion2Name, ResShion3Name, ResShionName, ResShion5Shion1Name, ResKosmos1Name, ResKosmos2Name, ResKosmos3Name, ResKosmos5Name, ResChaos1Name, ResChaos2Name, ResMomo1Name, ResMomo2Name, ResMomo3Name, ResMomo4Name, ResJr1Name, ResJr2Name, ResJr3Name, ResZiggy1Name, ResShitan1Name, ResShitan2Name, ResShionHShion4HName, ResKosmosHName, ResChaosHName, ResMomoHName, ResJrHName, ResZiggyHName, ResShitanHName, ResKosmosH1Name, ResKosmosH2Name, ResKosmosH3Name, ResKosmosH4Name, ResKosmosH5Name, ResKosmosH6Name, ResShion1HShion5HName, ResJr1HName, ResShion2HName, ResShion3HName, ResJr4Name, ResShion4HShionHName, ResShion5HShion1HName, ResMomo5Name, ResMomo5HName, ResMomo6Name, ResShion6HName, 0 };
 
-extern const char D_004D9C58[];
+static const char * CID1[89] = { ResMarglisName, ResMarglis1Name, ResGaignunName, ResGaignun1Name, ResAlbeltName, ResAlbelt1Name, ResAllenName, ResAllen1Name, ResKebinName, ResKebin1Name, ResKebin2Name, ResVirgilName, ResVirgil1Name, ResVirgil2Name, ResVirgil3Name, ResVirgil4Name, ResFriedName, ResEllyName, ResMatehwsName, ResMatehws1Name, ResTonnyName, ResHammerName, ResAndrewName, ResAndrew1Name, ResAndrew2Name, ResAndrew3Name, ResAndrew4Name, ResFebName, ResYuriName, ResJoachimName, ResSellersName, ResMaryName, ResShelleyName, ResAbelName, ResHelmerName, ResVoyagerName, ResMiyukiName, ResLapisName, ResCeciliaName, ResCathName, ResShiDadName, ResShiMamName, ResStepMamName, ResPelegriName, ResTogashiName, ResMoriyamaName, ResHynlinName, ResShalronName, ResKJoachName, ResAndWifeName, ResAndDaugName, ResElly2Name, ResVanName, ResChiefName, ResCecilia1Name, ResCath1Name, ResJoachim1Name, ResMarglisHName, ResAlbeltHName, ResAllenHName, ResKebinHName, ResVirgilHName, ResFriedHName, ResMatehwsHMatehwsName, ResEllyHName, ResKebin1HName, ResVirgil2HName, ResVirgil4HName, ResAndrew5Name, ResAndrew6Name, ResAndrew7Name, ResAndrew8Name, ResAlbelt2HName, ResVirgil1HName, ResVirgil3HName, ResAndrewHAndrewName, ResAndrewHAndrew1Name, ResAndrewHAndrew2Name, ResAndrewHAndrew3Name, ResAndrewHAndrew4Name, ResAndrewHAndrew5Name, ResAndrewHAndrew6Name, ResGaignunHName, ResTonnyHTonnyName, ResHammerHHammerName, ResFeb1Name, ResAlbelt3HName, ResAndrew9Name, 0 };
 
-static const char * CID1[89] = { D_004D8D80, D_004BFB08, D_004D8D78, D_004BFAF8, D_004D8D70, D_004D8D68, D_004D8D60, D_004D8D58, D_004D8D50, D_004D8D48, D_004D8D40, D_004D8D38, D_004D8D30, D_004D8D28, D_004D8D20, D_004D8D18, D_004D8D10, D_004D8D08, D_004D8D00, D_004BFAE8, D_004D8CF8, D_004D8CF0, D_004D8CE8, D_004D8CE0, D_004D8CD8, D_004D8CD0, D_004D8CC8, D_004D8CC0, D_004D8CB8, D_004D8CB0, D_004D8CA8, D_004D8CA0, D_004D8C98, D_004D8C90, D_004D8C88, D_004D8C80, D_004D8C78, D_004D8C70, D_004D8C68, D_004D8C60, D_004D8C58, D_004D8C50, D_004BFAD8, D_004D8C48, D_004D8C40, D_004BFAC8, D_004D8C38, D_004D8C30, D_004D8C28, D_004BFAB8, D_004BFAA8, D_004D8C20, D_004D8C18, D_004D8C10, D_004BFA98, D_004D8C08, D_004BFA88, D_004BFA78, D_004BFA68, D_004D8C00, D_004D8BF8, D_004BFA58, D_004D8BF0, D_004BFA40, D_004D8BE8, D_004BFA30, D_004BFA20, D_004BFA10, D_004D8BE0, D_004D8BD8, D_004D8BD0, D_004D8BC8, D_004BFA00, D_004BF9F0, D_004BF9E0, D_004BF9C8, D_004BF9B0, D_004BF998, D_004BF980, D_004BF968, D_004BF950, D_004BF938, D_004BF928, D_004BF918, D_004BF900, D_004D8BC0, D_004BF8F0, D_004D8BB8, 0 };
+static const char * CID2[32] = { ResSpaceName, ResVecMName, ResVecM1Name, ResVecM2Name, ResVecWName, ResVecW1Name, ResOffMName, ResOffM1Name, ResOffM2Name, ResOffM3Name, ResOffWName, ResOffW1Name, ResPilotName, ResSoldName, ResEngName, ResEngOffName, ResSuukiName, ResRwMName, ResRwM1Name, ResRwM2Name, ResRwWName, ResRwW1Name, ResRwW2Name, ResEsoldName, ResBrealMName, ResBrealM1Name, ResBrealM2Name, ResBrealM3Name, ResBrealM4Name, ResBrealWName, ResBrealW1Name, 0 };
 
-extern const char D_004D9C50[];
+static const char * CID3[29] = { ResCommiName, ResCommi1Name, ResCommi2Name, ResCommi3Name, ResCommi4Name, ResCommi5Name, ResGoveWName, ResGoveW1Name, ResGoveW2Name, ResUSoldName, ResUSpaceName, ResRealMName, ResRealM1Name, ResRealM2Name, ResRealWName, ResRealW1Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResRealW2Name, ResUSoldsName, 0 };
 
-static const char * CID2[32] = { D_004D8E50, D_004D8E48, D_004D8E40, D_004D8E38, D_004D8E30, D_004D8E28, D_004D8E20, D_004D8E18, D_004D8E10, D_004D8E08, D_004D8E00, D_004D8DF8, D_004D8DF0, D_004D8DE8, D_004D8DE0, D_004D8DD8, D_004D8DD0, D_004D8DC8, D_004D8DC0, D_004D8DB8, D_004D8DB0, D_004D8DA8, D_004D8DA0, D_004D8D98, D_004D8D90, D_004BFB58, D_004BFB48, D_004BFB38, D_004BFB28, D_004D8D88, D_004BFB18, 0 };
+static const char * CID4[17] = { ResDuName, ResDu1Name, ResDu2Name, ResHyakuName, ResAssMName, ResAssM1Name, ResAssM2Name, ResAssWName, ResGoveMName, ResGoveM1Name, ResGoveM2Name, ResGoveM2Name, ResGoveM2Name, ResKanchoName, ResAssM3Name, ResAssM4Name, 0 };
 
-extern const char D_004D9C48[];
+static const char * CID5[10] = { ResContName, ResUticMName, ResUticM1Name, ResUticM2Name, ResUticWName, ResUticW1Name, ResUticW2Name, ResPolMName, ResPolWName, 0 };
 
-static const char * CID3[29] = { D_004D8EE0, D_004D8ED8, D_004D8ED0, D_004D8EC8, D_004D8EC0, D_004D8EB8, D_004D8EB0, D_004D8EA8, D_004D8EA0, D_004D8E98, D_004D8E90, D_004D8E88, D_004D8E80, D_004D8E78, D_004D8E70, D_004D8E68, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E60, D_004D8E58, 0 };
+static const char * CID6[81] = { ResManAName, ResManA1Name, ResManA2Name, ResManBName, ResManB1Name, ResManB2Name, ResOjiAName, ResOjiA1Name, ResOjiA2Name, ResOjiBName, ResOjiB1Name, ResOjiB2Name, ResJijiAName, ResJijiA1Name, ResJijiA2Name, ResJijiBName, ResJijiB1Name, ResJijiB2Name, ResKidsmAName, ResKidsmA1Name, ResKidsmA2Name, ResKidsmBName, ResKidsmB1Name, ResKidsmB2Name, ResBoyAName, ResBoyA1Name, ResBoyA2Name, ResBoyBName, ResBoyB1Name, ResBoyB2Name, ResWmanAName, ResWmanA1Name, ResWmanA2Name, ResWmanBName, ResWmanB1Name, ResWmanB2Name, ResObaAName, ResObaA1Name, ResObaA2Name, ResObaBName, ResObaB1Name, ResObaB2Name, ResBabaAName, ResBabaA1Name, ResBabaA2Name, ResBabaBName, ResBabaB1Name, ResBabaB2Name, ResKidswAName, ResKidswA1Name, ResKidswA2Name, ResKidswBName, ResKidswB1Name, ResKidswB2Name, ResGirlAName, ResGirlA1Name, ResGirlA2Name, ResGirlBName, ResGirlB1Name, ResGirlB2Name, ResBreadName, ResBarOjiName, ResBarMName, ResDoctorName, ResNurseName, ResCleChName, ResRobotName, ResKingName, ResCleObaName, ResBreadChName, ResInnGirlName, ResMouthName, ResGoroName, ResPilotNoName, ResKingCatName, ResBartenName, ResSpyName, ResInnOjiName, ResScotName, ResEngOjiName, 0 };
 
-static const char * CID4[17] = { D_004D8F50, D_004D8F48, D_004D8F40, D_004D8F38, D_004D8F30, D_004D8F28, D_004D8F20, D_004D8F18, D_004D8F10, D_004D8F08, D_004D8F00, D_004D8F00, D_004D8F00, D_004D8EF8, D_004D8EF0, D_004D8EE8, 0 };
+static const char * RID0[7] = { ResFile01Name, ResFile02Name, ResFile03Name, ResFile04Name, ResFile05Name, ResFile06Name, 0 };
 
-static const char * CID5[10] = { D_004D8F98, D_004D8F90, D_004D8F88, D_004D8F80, D_004D8F78, D_004D8F70, D_004D8F68, D_004D8F60, D_004D8F58, 0 };
+static const char * RID1[14] = { ResSuffix01Name, ResSuffix02Name, ResSuffix03Name, ResSuffix04Name, ResSuffix05Name, ResFile01CvName, ResFile01HoName, ResFile01Ho2Name, ResFile02HoName, ResSuffix06Name, ResFile07Name, ResFile08Name, ResFile09Name, 0 };
 
-static const char * CID6[81] = { D_004D91B8, D_004D91B0, D_004D91A8, D_004D91A0, D_004D9198, D_004D9190, D_004D9188, D_004D9180, D_004D9178, D_004D9170, D_004D9168, D_004D9160, D_004D9158, D_004D9150, D_004D9148, D_004D9140, D_004D9138, D_004D9130, D_004D9128, D_004BFC18, D_004BFC08, D_004D9120, D_004BFBF8, D_004BFBE8, D_004D9118, D_004D9110, D_004D9108, D_004D9100, D_004D90F8, D_004D90F0, D_004D90E8, D_004D90E0, D_004D90D8, D_004D90D0, D_004D90C8, D_004D90C0, D_004D90B8, D_004D90B0, D_004D90A8, D_004D90A0, D_004D9098, D_004D9090, D_004D9088, D_004D9080, D_004D9078, D_004D9070, D_004D9068, D_004D9060, D_004D9058, D_004BFBD8, D_004BFBC8, D_004D9050, D_004BFBB8, D_004BFBA8, D_004D9048, D_004D9040, D_004D9038, D_004D9030, D_004D9028, D_004D9020, D_004D9018, D_004D9010, D_004D9008, D_004D9000, D_004D8FF8, D_004D8FF0, D_004D8FE8, D_004D8FE0, D_004D8FD8, D_004BFB98, D_004BFB88, D_004D8FD0, D_004D8FC8, D_004BFB78, D_004BFB68, D_004D8FC0, D_004D8FB8, D_004D8FB0, D_004D8FA8, D_004D8FA0, 0 };
+static const char * RID2[11] = { ResUknGName, ResVx1MName, ResTs01Name, ResUkunBName, ResUkunSName, ResGrFinalName, ResGrHeadName, ResGrHandName, ResGrBodyName, ResGrLegName, 0 };
 
-extern const char D_004D9C40[];
+static const char * WID0[11] = { ResHw01Name, ResHw02Name, ResHw03Name, ResHw04Name, ResHw05Name, ResHw06Name, ResBw01Name, ResBw02Name, ResBw03Name, ResBw04Name, 0 };
 
-extern const char D_004D9C80[];
+static const char * WID1[18] = { ResRd01Name, ResRd02Name, ResRd03Name, ResRd04Name, ResRd05Name, ResRd06Name, ResRd07Name, ResRd08Name, ResRd09Name, ResRd10Name, ResRd11Name, ResRd12Name, ResRd13Name, ResRd14Name, ResRd15Name, ResRd16Name, ResRd17Name, 0 };
 
-static const char * RID0[7] = { D_004D91E8, D_004D91E0, D_004D91D8, D_004D91D0, D_004D91C8, D_004D91C0, 0 };
+static const char * WID2[6] = { ResSw01Name, ResBw01Name, ResBw02Name, ResBw03Name, ResBw04Name, 0 };
 
-extern const char D_004D9C78[];
+static const char * WID3[9] = { ResGun01Name, ResGun02Name, ResGun03Name, ResGun04Name, ResGun05Name, ResJrHg06Name, ResJrHg07Name, ResJrHg08Name, 0 };
 
-extern const char D_004D9C70[];
+static const char * WID4[6] = { ResSw01Name, ResSw02Name, ResSw03Name, ResSw04Name, ResSw05Name, 0 };
 
-static const char * RID1[14] = { D_004D9250, D_004D9248, D_004D9240, D_004D9238, D_004D9230, D_004D9228, D_004D9220, D_004D9218, D_004D9210, D_004D9208, D_004D9200, D_004D91F8, D_004D91F0, 0 };
+static const char * WID5[2] = { ResMboxName, 0 };
 
-extern const char D_004D9C68[];
+static const char * WID6[50] = { ResAx00Name, ResBd00Name, ResBd01Name, ResWct00Name, ResHg00Name, ResHg01Name, ResHmr00Name, ResDlc00Name, ResHmr02Name, ResMg00Name, ResMg01Name, ResRf00Name, ResRf01Name, ResRf02Name, ResBam00Name, ResBs00Name, ResDrl00Name, ResDrl01Name, ResLsr00Name, ResPbk00Name, ResFl00Name, ResGnd00Name, ResGlg00Name, ResHb00Name, ResMsp00Name, ResMsp02Name, ResBl00Name, ResCb00Name, ResEac00Name, ResBp00Name, ResLgc00Name, ResAmp02Name, ResMsp01Name, ResMsp03Name, ResShb00Name, ResFsd00Name, ResVsd00Name, ResBbc00Name, ResBw00Name, ResEad00Name, ResEcm01Name, ResEcm02Name, ResSmp01Name, ResWire00Name, ResSol00Name, ResDeff00Name, ResGlg00RName, ResHb00RName, ResMsp02RName, 0 };
 
-static const char * RID2[11] = { D_004D9298, D_004D9290, D_004D9288, D_004D9280, D_004D9278, D_004BFC28, D_004D9270, D_004D9268, D_004D9260, D_004D9258, 0 };
+static const char * WID7[12] = { ResAcc018Name, ResAcc028Name, ResAcc029Name, ResAcc030Name, ResAcc031Name, ResAcc032Name, ResAcc033Name, ResAcc034Name, ResAcc035Name, ResAcc036Name, ResEwpHg01Name, 0 };
 
-extern const char D_004D9C60[];
+static const char * WID8[2] = { ResWingName, 0 };
 
-extern const char D_004D9D00[];
+static const char * EID0[56] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, ResFile015Name, ResFile016Name, ResFile017Name, ResFile018Name, ResFile019Name, ResFile020Name, ResFile021Name, ResFile022Name, ResFile023Name, ResFile024Name, ResFile025Name, ResFile301Name, ResFile302Name, ResFile303Name, ResFile304Name, ResFile305Name, ResFile306Name, ResFile307Name, ResFile308Name, ResFile309Name, ResFile310Name, ResFile311Name, ResFile312Name, ResFile313Name, ResFile314Name, ResFile315Name, ResFile316Name, ResFile317Name, ResFile318Name, ResFile319Name, ResFile320Name, ResFile321Name, ResFile322Name, ResFile323Name, ResFile324Name, ResFile325Name, ResEmptyName, ResEmptyName, ResEmptyName, ResEmptyName, ResFile114Name, 0 };
 
-static const char * WID0[11] = { D_004D92E8, D_004D92E0, D_004D92D8, D_004D92D0, D_004D92C8, D_004D92C0, D_004D92B8, D_004D92B0, D_004D92A8, D_004D92A0, 0 };
+static const char * EID1[15] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, 0 };
 
-extern const char D_004D9CF8[];
+static const char * EID2[7] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, 0 };
 
-extern const char D_004D9CF0[];
+static const char * EID3[8] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, 0 };
 
-static const char * WID1[18] = { D_004D9370, D_004D9368, D_004D9360, D_004D9358, D_004D9350, D_004D9348, D_004D9340, D_004D9338, D_004D9330, D_004D9328, D_004D9320, D_004D9318, D_004D9310, D_004D9308, D_004D9300, D_004D92F8, D_004D92F0, 0 };
+static const char * EID4[8] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, 0 };
 
-extern const char D_004D9CE8[];
+static const char * EID5[7] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, 0 };
 
-extern const char D_004D9CE0[];
+static const char * EID6[2] = { ResFile001Name, 0 };
 
-static const char * WID2[6] = { D_004D9378, D_004D92B8, D_004D92B0, D_004D92A8, D_004D92A0, 0 };
+static const char * EID7[5] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, 0 };
 
-extern const char D_004D9CD8[];
+static const char * EID8[4] = { ResFile001Name, ResFile002Name, ResFile003Name, 0 };
 
-extern const char D_004D9CD0[];
+static const char * EIDf[34] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, ResFile015Name, ResFile016Name, ResFile017Name, ResFile018Name, ResFile019Name, ResFile020Name, ResFile021Name, ResFile022Name, ResFile023Name, ResFile024Name, ResFile025Name, ResFile026Name, ResFile027Name, ResFile028Name, ResFile029Name, ResFile030Name, ResFile031Name, ResFile032Name, ResFile033Name, 0 };
 
-static const char * WID3[9] = { D_004D93B8, D_004D93B0, D_004D93A8, D_004D93A0, D_004D9398, D_004D9390, D_004D9388, D_004D9380, 0 };
+static const char * MID0[182] = { ResFile000Name, ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, ResFile015Name, ResFile016Name, ResFile017Name, ResFile018Name, ResFile019Name, ResFile020Name, ResFile021Name, ResFile022Name, ResFile023Name, ResFile024Name, ResFile025Name, ResFile026Name, ResFile027Name, ResFile028Name, ResFile029Name, ResFile030Name, ResFile031Name, ResFile032Name, ResFile033Name, ResFile034Name, ResFile035Name, ResFile036Name, ResFile037Name, ResFile038Name, ResFile039Name, ResFile040Name, ResFile041Name, ResFile042Name, ResFile043Name, ResFile044Name, ResFile045Name, ResFile046Name, ResFile047Name, ResFile048Name, ResFile049Name, ResFile050Name, ResFile051Name, ResFile052Name, ResFile053Name, ResFile054Name, ResFile055Name, ResFile056Name, ResFile057Name, ResFile058Name, ResFile059Name, ResFile060Name, ResFile061Name, ResFile062Name, ResFile063Name, ResFile064Name, ResFile065Name, ResFile066Name, ResFile067Name, ResFile068Name, ResFile069Name, ResFile070Name, ResFile071Name, ResFile072Name, ResFile073Name, ResFile074Name, ResFile075Name, ResFile076Name, ResFile077Name, ResFile078Name, ResFile079Name, ResFile080Name, ResFile081Name, ResFile082Name, ResFile083Name, ResFile084Name, ResFile085Name, ResFile086Name, ResFile087Name, ResFile088Name, ResFile089Name, ResFile090Name, ResFile091Name, ResFile092Name, ResFile093Name, ResFile094Name, ResFile095Name, ResFile096Name, ResFile097Name, ResFile098Name, ResFile099Name, ResFile100Name, ResFile101Name, ResFile102Name, ResFile103Name, ResFile104Name, ResFile105Name, ResFile106Name, ResFile107Name, ResFile108Name, ResFile109Name, ResFile110Name, ResFile111Name, ResFile112Name, ResFile113Name, ResFile114Name, ResFile115Name, ResFile116Name, ResFile117Name, ResFile118Name, ResFile119Name, ResFile120Name, ResFile121Name, ResFile122Name, ResFile123Name, ResFile124Name, ResFile125Name, ResFile126Name, ResFile127Name, ResFile128Name, ResFile129Name, ResFile130Name, ResFile131Name, ResFile132Name, ResFile133Name, ResFile134Name, ResFile135Name, ResFile136Name, ResFile137Name, ResFile138Name, ResFile139Name, ResFile140Name, ResFile141Name, ResFile142Name, ResFile143Name, ResFile144Name, ResFile145Name, ResFile146Name, ResFile147Name, ResFile148Name, ResFile149Name, ResFile150Name, ResFile151Name, ResFile152Name, ResFile153Name, ResFile154Name, ResFile155Name, ResFile156Name, ResFile157Name, ResFile158Name, ResFile159Name, ResFile160Name, ResFile161Name, ResFile162Name, ResFile163Name, ResFile164Name, ResFile165Name, ResFile166Name, ResFile167Name, ResFile168Name, ResFile169Name, ResFile170Name, ResFile171Name, ResFile172Name, ResFile173Name, ResFile174Name, ResFile175Name, ResFile176Name, ResFile177Name, ResFile178Name, ResFile179Name, ResFile180Name, 0 };
 
-extern const char D_004D9CC8[];
+static const char * AID0[128] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, ResFile015Name, ResFile016Name, ResFile017Name, ResFile018Name, ResFile019Name, ResFile020Name, ResFile021Name, ResFile022Name, ResFile023Name, ResFile024Name, ResFile025Name, ResFile026Name, ResFile027Name, ResFile028Name, ResFile029Name, ResFile030Name, ResFile031Name, ResFile032Name, ResFile033Name, ResFile034Name, ResFile035Name, ResFile036Name, ResFile037Name, ResFile038Name, ResFile039Name, ResFile040Name, ResFile041Name, ResFile042Name, ResFile043Name, ResFile044Name, ResFile045Name, ResFile046Name, ResFile047Name, ResFile048Name, ResFile049Name, ResFile050Name, ResFile051Name, ResFile052Name, ResFile053Name, ResFile054Name, ResFile055Name, ResFile056Name, ResFile057Name, ResFile058Name, ResFile059Name, ResFile060Name, ResFile061Name, ResFile062Name, ResFile063Name, ResFile064Name, ResFile065Name, ResFile066Name, ResFile067Name, ResFile068Name, ResFile069Name, ResFile070Name, ResFile071Name, ResFile072Name, ResFile073Name, ResFile074Name, ResFile075Name, ResFile076Name, ResFile077Name, ResFile078Name, ResFile079Name, ResFile080Name, ResFile081Name, ResFile082Name, ResFile083Name, ResFile084Name, ResFile085Name, ResFile086Name, ResFile087Name, ResFile088Name, ResFile089Name, ResFile090Name, ResFile091Name, ResFile092Name, ResFile093Name, ResFile094Name, ResFile095Name, ResFile096Name, ResFile097Name, ResFile098Name, ResFile099Name, ResFile100Name, ResFile101Name, ResFile102Name, ResFile103Name, ResFile104Name, ResFile105Name, ResFile106Name, ResFile107Name, ResFile108Name, ResFile109Name, ResFile110Name, ResFile111Name, ResFile112Name, ResFile113Name, ResFile114Name, ResFile115Name, ResFile116Name, ResFile117Name, ResFile118Name, ResFile119Name, ResFile120Name, ResFile121Name, ResFile122Name, ResFile123Name, ResFile124Name, ResFile125Name, ResFile126Name, ResFile127Name, 0 };
 
-extern const char D_004D9CC0[];
+static const char * MU[131] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, ResFile015Name, ResFile016Name, ResFile017Name, ResFile018Name, ResFile019Name, ResFile020Name, ResFile021Name, ResFile022Name, ResFile023Name, ResFile024Name, ResFile025Name, ResFile026Name, ResFile027Name, ResFile028Name, ResFile029Name, ResFile030Name, ResFile031Name, ResFile032Name, ResFile033Name, ResFile034Name, ResFile035Name, ResFile036Name, ResFile037Name, ResFile038Name, ResFile039Name, ResFile040Name, ResFile041Name, ResFile042Name, ResFile043Name, ResFile044Name, ResFile045Name, ResFile046Name, ResFile047Name, ResFile048Name, ResFile049Name, ResFile050Name, ResFile051Name, ResFile052Name, ResFile053Name, ResFile054Name, ResFile055Name, ResFile056Name, ResFile057Name, ResFile058Name, ResFile059Name, ResFile060Name, ResFile061Name, ResFile062Name, ResFile063Name, ResFile064Name, ResFile065Name, ResFile066Name, ResFile067Name, ResFile068Name, ResFile069Name, ResFile070Name, ResFile071Name, ResFile072Name, ResFile073Name, ResFile074Name, ResFile075Name, ResFile076Name, ResFile077Name, ResFile078Name, ResFile079Name, ResFile080Name, ResFile081Name, ResFile082Name, ResFile083Name, ResFile084Name, ResFile085Name, ResFile086Name, ResFile087Name, ResFile088Name, ResFile089Name, ResFile090Name, ResFile091Name, ResFile092Name, ResFile093Name, ResFile094Name, ResFile095Name, ResFile096Name, ResFile097Name, ResFile098Name, ResFile099Name, ResFile100Name, ResFile101Name, ResFile102Name, ResFile103Name, ResFile104Name, ResFile105Name, ResFile106Name, ResFile107Name, ResFile108Name, ResFile109Name, ResFile110Name, ResFile111Name, ResFile112Name, ResFile113Name, ResFile114Name, ResFile115Name, ResFile116Name, ResFile117Name, ResFile118Name, ResFile119Name, ResFile120Name, ResFile121Name, ResFile122Name, ResFile123Name, ResFile124Name, ResFile125Name, ResFile126Name, ResFile127Name, ResFile128Name, ResFile129Name, ResFile130Name, 0 };
 
-static const char * WID4[6] = { D_004D9378, D_004D93D8, D_004D93D0, D_004D93C8, D_004D93C0, 0 };
+static const char * MUW[21] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, ResFile011Name, ResFile012Name, ResFile013Name, ResFile014Name, ResFile015Name, ResFile016Name, ResFile017Name, ResFile018Name, ResFile019Name, ResFile020Name, 0 };
 
-extern const char D_004D9CB8[];
+static const char * TRE[11] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, 0 };
 
-extern const char D_004D9CB0[];
+static const char * MUX[11] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, 0 };
 
-static const char * WID5[2] = { D_004D93E0, 0 };
+static const char * MUF[11] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, 0 };
 
-extern const char D_004D9CA8[];
-
-static const char * WID6[50] = { D_004D9568, D_004D9560, D_004D9558, D_004D9550, D_004D9548, D_004D9540, D_004D9538, D_004D9530, D_004D9528, D_004D9520, D_004D9518, D_004D9510, D_004D9508, D_004D9500, D_004D94F8, D_004D94F0, D_004D94E8, D_004D94E0, D_004D94D8, D_004D94D0, D_004D94C8, D_004D94C0, D_004D94B8, D_004D94B0, D_004D94A8, D_004D94A0, D_004D9498, D_004D9490, D_004D9488, D_004D9480, D_004D9478, D_004D9470, D_004D9468, D_004D9460, D_004D9458, D_004D9450, D_004D9448, D_004D9440, D_004D9438, D_004D9430, D_004D9428, D_004D9420, D_004D9418, D_004D9410, D_004D9408, D_004D9400, D_004D93F8, D_004D93F0, D_004D93E8, 0 };
-
-static const char * WID7[12] = { D_004D95B8, D_004D95B0, D_004D95A8, D_004D95A0, D_004D9598, D_004D9590, D_004D9588, D_004D9580, D_004D9578, D_004D9570, D_004BFC38, 0 };
-
-extern const char D_004D9C90[];
-
-static const char * WID8[2] = { D_004D95C0, 0 };
-
-extern const char D_004D9C88[];
-
-extern const char D_004D9D58[];
-
-static const char * EID0[56] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, D_004D96F0, D_004D96E8, D_004D96E0, D_004D96D8, D_004D96D0, D_004D96C8, D_004D96C0, D_004D96B8, D_004D96B0, D_004D96A8, D_004D96A0, D_004D9698, D_004D9690, D_004D9688, D_004D9680, D_004D9678, D_004D9670, D_004D9668, D_004D9660, D_004D9658, D_004D9650, D_004D9648, D_004D9640, D_004D9638, D_004D9630, D_004D9628, D_004D9620, D_004D9618, D_004D9610, D_004D9608, D_004D9600, D_004D95F8, D_004D95F0, D_004D95E8, D_004D95E0, D_004D95D8, D_004D95D0, D_004D95D0, D_004D95D0, D_004D95D0, D_004D95C8, 0 };
-
-extern const char D_004BFCD8[];
-
-extern const char D_004D9D50[];
-
-static const char * EID1[15] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, 0 };
-
-extern const char D_004BFCC8[];
-
-extern const char D_004D9D48[];
-
-static const char * EID2[7] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, 0 };
-
-extern const char D_004BFCB8[];
-
-extern const char D_004D9D40[];
-
-static const char * EID3[8] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, 0 };
-
-extern const char D_004BFCA8[];
-
-extern const char D_004D9D38[];
-
-static const char * EID4[8] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, 0 };
-
-extern const char D_004BFC98[];
-
-extern const char D_004D9D30[];
-
-static const char * EID5[7] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, 0 };
-
-extern const char D_004BFC88[];
-
-extern const char D_004D9D28[];
-
-static const char * EID6[2] = { D_004D9760, 0 };
-
-extern const char D_004BFC78[];
-
-extern const char D_004D9D20[];
-
-static const char * EID7[5] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, 0 };
-
-extern const char D_004BFC68[];
-
-extern const char D_004D9D18[];
-
-static const char * EID8[4] = { D_004D9760, D_004D9758, D_004D9750, 0 };
-
-extern const char D_004BFC58[];
-
-extern const char D_004D9D10[];
-
-extern const char D_004D9D08[];
-
-static const char * EIDf[34] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, D_004D96F0, D_004D96E8, D_004D96E0, D_004D96D8, D_004D96D0, D_004D96C8, D_004D96C0, D_004D96B8, D_004D96B0, D_004D96A8, D_004D96A0, D_004D97A0, D_004D9798, D_004D9790, D_004D9788, D_004D9780, D_004D9778, D_004D9770, D_004D9768, 0 };
-
-extern const char D_004BFC48[];
-
-static const char * MID0[182] = { D_004D9C38, D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, D_004D96F0, D_004D96E8, D_004D96E0, D_004D96D8, D_004D96D0, D_004D96C8, D_004D96C0, D_004D96B8, D_004D96B0, D_004D96A8, D_004D96A0, D_004D97A0, D_004D9798, D_004D9790, D_004D9788, D_004D9780, D_004D9778, D_004D9770, D_004D9768, D_004D9C30, D_004D9C28, D_004D9C20, D_004D9C18, D_004D9C10, D_004D9C08, D_004D9C00, D_004D9BF8, D_004D9BF0, D_004D9BE8, D_004D9BE0, D_004D9BD8, D_004D9BD0, D_004D9BC8, D_004D9BC0, D_004D9BB8, D_004D9BB0, D_004D9BA8, D_004D9BA0, D_004D9B98, D_004D9B90, D_004D9B88, D_004D9B80, D_004D9B78, D_004D9B70, D_004D9B68, D_004D9B60, D_004D9B58, D_004D9B50, D_004D9B48, D_004D9B40, D_004D9B38, D_004D9B30, D_004D9B28, D_004D9B20, D_004D9B18, D_004D9B10, D_004D9B08, D_004D9B00, D_004D9AF8, D_004D9AF0, D_004D9AE8, D_004D9AE0, D_004D9AD8, D_004D9AD0, D_004D9AC8, D_004D9AC0, D_004D9AB8, D_004D9AB0, D_004D9AA8, D_004D9AA0, D_004D9A98, D_004D9A90, D_004D9A88, D_004D9A80, D_004D9A78, D_004D9A70, D_004D9A68, D_004D9A60, D_004D9A58, D_004D9A50, D_004D9A48, D_004D9A40, D_004D9A38, D_004D9A30, D_004D9A28, D_004D9A20, D_004D9A18, D_004D9A10, D_004D9A08, D_004D9A00, D_004D99F8, D_004D99F0, D_004D99E8, D_004D99E0, D_004D99D8, D_004D99D0, D_004D99C8, D_004D99C0, D_004D99B8, D_004D95C8, D_004D99B0, D_004D99A8, D_004D99A0, D_004D9998, D_004D9990, D_004D9988, D_004D9980, D_004D9978, D_004D9970, D_004D9968, D_004D9960, D_004D9958, D_004D9950, D_004D9948, D_004D9940, D_004D9938, D_004D9930, D_004D9928, D_004D9920, D_004D9918, D_004D9910, D_004D9908, D_004D9900, D_004D98F8, D_004D98F0, D_004D98E8, D_004D98E0, D_004D98D8, D_004D98D0, D_004D98C8, D_004D98C0, D_004D98B8, D_004D98B0, D_004D98A8, D_004D98A0, D_004D9898, D_004D9890, D_004D9888, D_004D9880, D_004D9878, D_004D9870, D_004D9868, D_004D9860, D_004D9858, D_004D9850, D_004D9848, D_004D9840, D_004D9838, D_004D9830, D_004D9828, D_004D9820, D_004D9818, D_004D9810, D_004D9808, D_004D9800, D_004D97F8, D_004D97F0, D_004D97E8, D_004D97E0, D_004D97D8, D_004D97D0, D_004D97C8, D_004D97C0, D_004D97B8, D_004D97B0, D_004D97A8, 0 };
-
-extern const char D_004BFCE8[];
-
-static const char * AID0[128] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, D_004D96F0, D_004D96E8, D_004D96E0, D_004D96D8, D_004D96D0, D_004D96C8, D_004D96C0, D_004D96B8, D_004D96B0, D_004D96A8, D_004D96A0, D_004D97A0, D_004D9798, D_004D9790, D_004D9788, D_004D9780, D_004D9778, D_004D9770, D_004D9768, D_004D9C30, D_004D9C28, D_004D9C20, D_004D9C18, D_004D9C10, D_004D9C08, D_004D9C00, D_004D9BF8, D_004D9BF0, D_004D9BE8, D_004D9BE0, D_004D9BD8, D_004D9BD0, D_004D9BC8, D_004D9BC0, D_004D9BB8, D_004D9BB0, D_004D9BA8, D_004D9BA0, D_004D9B98, D_004D9B90, D_004D9B88, D_004D9B80, D_004D9B78, D_004D9B70, D_004D9B68, D_004D9B60, D_004D9B58, D_004D9B50, D_004D9B48, D_004D9B40, D_004D9B38, D_004D9B30, D_004D9B28, D_004D9B20, D_004D9B18, D_004D9B10, D_004D9B08, D_004D9B00, D_004D9AF8, D_004D9AF0, D_004D9AE8, D_004D9AE0, D_004D9AD8, D_004D9AD0, D_004D9AC8, D_004D9AC0, D_004D9AB8, D_004D9AB0, D_004D9AA8, D_004D9AA0, D_004D9A98, D_004D9A90, D_004D9A88, D_004D9A80, D_004D9A78, D_004D9A70, D_004D9A68, D_004D9A60, D_004D9A58, D_004D9A50, D_004D9A48, D_004D9A40, D_004D9A38, D_004D9A30, D_004D9A28, D_004D9A20, D_004D9A18, D_004D9A10, D_004D9A08, D_004D9A00, D_004D99F8, D_004D99F0, D_004D99E8, D_004D99E0, D_004D99D8, D_004D99D0, D_004D99C8, D_004D99C0, D_004D99B8, D_004D95C8, D_004D99B0, D_004D99A8, D_004D99A0, D_004D9998, D_004D9990, D_004D9988, D_004D9980, D_004D9978, D_004D9970, D_004D9968, D_004D9960, D_004D9958, D_004D9950, 0 };
-
-extern const char D_004BFCF8[];
-
-extern const char D_004D9D88[];
-
-static const char * MU[131] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, D_004D96F0, D_004D96E8, D_004D96E0, D_004D96D8, D_004D96D0, D_004D96C8, D_004D96C0, D_004D96B8, D_004D96B0, D_004D96A8, D_004D96A0, D_004D97A0, D_004D9798, D_004D9790, D_004D9788, D_004D9780, D_004D9778, D_004D9770, D_004D9768, D_004D9C30, D_004D9C28, D_004D9C20, D_004D9C18, D_004D9C10, D_004D9C08, D_004D9C00, D_004D9BF8, D_004D9BF0, D_004D9BE8, D_004D9BE0, D_004D9BD8, D_004D9BD0, D_004D9BC8, D_004D9BC0, D_004D9BB8, D_004D9BB0, D_004D9BA8, D_004D9BA0, D_004D9B98, D_004D9B90, D_004D9B88, D_004D9B80, D_004D9B78, D_004D9B70, D_004D9B68, D_004D9B60, D_004D9B58, D_004D9B50, D_004D9B48, D_004D9B40, D_004D9B38, D_004D9B30, D_004D9B28, D_004D9B20, D_004D9B18, D_004D9B10, D_004D9B08, D_004D9B00, D_004D9AF8, D_004D9AF0, D_004D9AE8, D_004D9AE0, D_004D9AD8, D_004D9AD0, D_004D9AC8, D_004D9AC0, D_004D9AB8, D_004D9AB0, D_004D9AA8, D_004D9AA0, D_004D9A98, D_004D9A90, D_004D9A88, D_004D9A80, D_004D9A78, D_004D9A70, D_004D9A68, D_004D9A60, D_004D9A58, D_004D9A50, D_004D9A48, D_004D9A40, D_004D9A38, D_004D9A30, D_004D9A28, D_004D9A20, D_004D9A18, D_004D9A10, D_004D9A08, D_004D9A00, D_004D99F8, D_004D99F0, D_004D99E8, D_004D99E0, D_004D99D8, D_004D99D0, D_004D99C8, D_004D99C0, D_004D99B8, D_004D95C8, D_004D99B0, D_004D99A8, D_004D99A0, D_004D9998, D_004D9990, D_004D9988, D_004D9980, D_004D9978, D_004D9970, D_004D9968, D_004D9960, D_004D9958, D_004D9950, D_004D9948, D_004D9940, D_004D9938, 0 };
-
-extern const char D_004BFD58[];
-
-extern const char D_004D9D80[];
-
-static const char * MUW[21] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, D_004D9710, D_004D9708, D_004D9700, D_004D96F8, D_004D96F0, D_004D96E8, D_004D96E0, D_004D96D8, D_004D96D0, D_004D96C8, 0 };
-
-extern const char D_004BFD48[];
-
-extern const char D_004D9D78[];
-
-static const char * TRE[11] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, 0 };
-
-extern const char D_004BFD38[];
-
-extern const char D_004D9D70[];
-
-static const char * MUX[11] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, 0 };
-
-extern const char D_004BFD28[];
-
-extern const char D_004D9D68[];
-
-static const char * MUF[11] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, 0 };
-
-extern const char D_004BFD18[];
-
-extern const char D_004D9D60[];
-
-static const char * MUS[11] = { D_004D9760, D_004D9758, D_004D9750, D_004D9748, D_004D9740, D_004D9738, D_004D9730, D_004D9728, D_004D9720, D_004D9718, 0 };
-
-extern const char D_004BFD08[];
+static const char * MUS[11] = { ResFile001Name, ResFile002Name, ResFile003Name, ResFile004Name, ResFile005Name, ResFile006Name, ResFile007Name, ResFile008Name, ResFile009Name, ResFile010Name, 0 };
 
 void GameResourceReset(int slot);
 
@@ -1910,26 +1776,22 @@ typedef struct {
     void *unmodeled_08;
 } GameResourceCommand;
 
-
-
-extern GameResourceCommand command[];
+static GameResourceCommand command[24];
 
 struct SaveDataLeaderSeIndex {
     u8 unmodeled_00[0x100A4];
     u16 leader_se_index;
 };
 
-
-
-extern const char *tbl_1_00366470[7];
+static const char * tbl_1_00366470[7];
 
 extern struct SoundWork SoundWork;
 
-extern const char D_004C00A8[];
+extern const char soundSwdPathFormat[];
 
-extern const char D_004C00C0[];
+extern const char soundSedPathFormat[];
 
-extern const char D_004C00D8[];
+extern const char soundSmdPathFormat[];
 
 extern void xglSoundLoadEffect(const char *name, void *address, int bank);
 
@@ -1948,11 +1810,9 @@ typedef struct {
     u16 sequence_id;
 } SoundLoadBuffer;
 
-
-
 extern char *MAP_getPath(char *name);
 
-extern const char dummy_3[];
+static char dummy_3[15] ;
 
 typedef struct {
     float (*matrix)[4];
@@ -1964,25 +1824,23 @@ typedef struct {
     float matrix_storage[4][4];
 } SubMapLoadState;
 
-
-
 extern void xglMatrixUnit(float matrix[4][4]);
 
 extern char *MapGetName(int scene_id);
 
 extern int func_A1CF18(char *path, int scene_id);
 
-extern const u8 D_004D9EA8[];
+extern const u8 lexSuffix[];
 
-extern const u8 D_004D9EB0[];
+extern const u8 xtxSuffix[];
 
-extern const u8 D_004D9EB8[];
+extern const u8 idSuffix[];
 
-extern const char D_004D9ED0[];
+extern const char faceSuffix[];
 
-extern const char root_4[6];
+static const char root_4[6];
 
-extern const char dummy_5[6];
+static const char dummy_5[6];
 
 typedef struct {
     void *first_file;
@@ -1991,23 +1849,21 @@ typedef struct {
     u8 unmodeled_0c[4];
 } ResourceFileSet;
 
-
-
-extern const char D_004C01B0[];
+extern const char resourceDumpRowFormat[];
 
 void RES_GetMdlFileName(char *destination, int selector);
 
-extern const char D_004D9ED8[];
+extern const char jntSuffix[];
 
-extern const char D_004C0160[];
+extern const char motionFpkPathFormat[];
 
-extern const char base_6[];
+static char base_6[13] ;
 
-extern const char base_7[];
+static char base_7[29] ;
 
-extern const char base_8[];
+static char base_8[24] ;
 
-extern const char base_9[6];
+static const char base_9[6];
 
 int GameResourceGetIndex(int address);
 
@@ -2889,10 +2745,10 @@ environment_name_done:
             second_address = (void *)(address + first_size);
             second_size = next_arc_size(second_address);
         } else {
-            sprintf(path, D_004C00A8, env_name);
+            sprintf(path, soundSwdPathFormat, env_name);
             first_size = xglCdReadFile(path, (void *)address, 0, 0);
             second_address = (void *)(address + first_size);
-            sprintf(path, D_004C00C0, env_name);
+            sprintf(path, soundSedPathFormat, env_name);
             second_size = xglCdReadFile(path, second_address, 0, 0);
         }
         if (file_id != ((SoundLoadBuffer *)address)->sequence_id) {
@@ -2922,7 +2778,7 @@ environment_name_done:
             if (arcfileaddr != 0) {
                 size = next_arc_size((void *)address);
             } else {
-                sprintf(path, D_004C00D8, sequence_name);
+                sprintf(path, soundSmdPathFormat, sequence_name);
                 size = xglCdReadFile(path, (void *)address, 0, 0);
             }
             if (size != 0) {
@@ -2991,7 +2847,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
             if (arcfileaddr != 0) {
                 file_size = next_arc_size((void *)address);
             } else {
-                const char *sequence_format = D_004C00D8;
+                const char *sequence_format = soundSmdPathFormat;
 
                 sprintf(path, sequence_format, name);
                 file_size = xglCdReadFile(path, (void *)address, 0, 0);
@@ -3029,7 +2885,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
     return cursor;
 }
 
-extern const char base_2[];
+static char base_2[18] ;
 
 extern void GameMpeg2Play(const char *name, int mode);
 
@@ -3391,14 +3247,14 @@ static int RES_loadFileSubMap(u8 *end_address, int scene_id)
     if (arcfileaddr != 0)
         file_size = next_arc_size(end_address);
     else
-        file_size = RES_loadFileSubMapSub(map_name, (char *)D_004D9EA8, end_address);
+        file_size = RES_loadFileSubMapSub(map_name, (char *)lexSuffix, end_address);
     end_address = (u8 *)(((u32)end_address + file_size + 0xF) & ~0xF);
     state->texture_file = end_address;
 
     if (arcfileaddr != 0)
         file_size = next_arc_size(end_address);
     else
-        file_size = RES_loadFileSubMapSub(map_name, (char *)D_004D9EB0,
+        file_size = RES_loadFileSubMapSub(map_name, (char *)xtxSuffix,
                                            end_address);
     if (file_size <= 0) {
         state->texture_file = 0;
@@ -3410,7 +3266,7 @@ static int RES_loadFileSubMap(u8 *end_address, int scene_id)
     if (arcfileaddr != 0)
         file_size = next_arc_size(end_address);
     else
-        file_size = RES_loadFileSubMapSub(map_name, (char *)D_004D9EB8,
+        file_size = RES_loadFileSubMapSub(map_name, (char *)idSuffix,
                                             end_address);
     if (file_size <= 0) {
         state->id_file = 0;
@@ -3468,7 +3324,7 @@ static int RES_GetMdlFileNameSub(char *dst, int selector)
 
     selector = (u16)selector;
     if (face_mode) {
-        face_suffix = D_004D9ED0;
+        face_suffix = faceSuffix;
         selector = convert_face(selector);
     }
     model_index = (selector & 0x7000) >> 12;
@@ -3629,7 +3485,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             size = next_arc_size(address);
             break;
         }
-        __builtin_memcpy(single_end, D_004D9ED8, 5);
+        __builtin_memcpy(single_end, jntSuffix, 5);
         size = xglCdGetFileSize(single_path);
         if (size > 0)
             readreq(single_path, (void *)address);
@@ -3655,7 +3511,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             if (size <= 0)
                 break;
         } else {
-            __builtin_memcpy(model_end, D_004D9EA8, 5);
+            __builtin_memcpy(model_end, lexSuffix, 5);
             size = xglCdGetFileSize(model_path);
             if (size <= 0)
                 break;
@@ -3667,7 +3523,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             if (arcfileaddr != 0) {
                 size = next_arc_size(next);
             } else {
-                __builtin_memcpy(model_end, D_004D9EB0, 5);
+                __builtin_memcpy(model_end, xtxSuffix, 5);
                 size = xglCdGetFileSize(model_path);
                 if (size > 0)
                     readreq(model_path, next);
@@ -3681,7 +3537,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             if (arcfileaddr != 0) {
                 size = next_arc_size(next);
             } else {
-                __builtin_memcpy(model_end, D_004D9ED8, 5);
+                __builtin_memcpy(model_end, jntSuffix, 5);
                 size = xglCdGetFileSize(model_path);
                 if (size > 0)
                     readreq(model_path, next);
@@ -3702,7 +3558,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             size = next_arc_size(address);
             break;
         }
-        sprintf(motion_path, D_004C0160, RES_GetMotBaseName(resource_id));
+        sprintf(motion_path, motionFpkPathFormat, RES_GetMotBaseName(resource_id));
         size = xglCdGetFileSize(motion_path);
         if (size > 0) {
             size = xglCdGetFileSize(motion_path);
@@ -3917,7 +3773,7 @@ void GameResourceDump(int dump)
         index -= 14;
         index = index < 0 ? 0 : index;
         for (row = 0; row < 16; row++) {
-            xglFontDebugPrintf(64, 64 + row * 8, D_004C01B0, index, GameResource[index].address,
+            xglFontDebugPrintf(64, 64 + row * 8, resourceDumpRowFormat, index, GameResource[index].address,
                                GameResource[index].size, GameResource[index].state,
                                (u32)GameResource[index].handle);
             index++;
@@ -3992,3 +3848,169 @@ void GameResourceInit(u32 address, int size)
     resource_buffer = (void *)0x010E7000;
     resource_buffer[0] = 0;
 }
+
+extern const char ResZ8Name[8];
+extern const char ResCSName[8];
+extern const char ResMOName[8];
+extern const char ResKMName[8];
+extern const char ResSOName[8];
+extern const char ResJRName[8];
+
+static const char * tbl_1_00366470[7] = { ResEmptyName, ResSOName, ResKMName, ResCSName, ResMOName, ResJRName, ResZ8Name };
+
+static char base_2[18] = "data\\movie\\mpeg2\\";
+
+static char dummy_3[15] = "data\\map\\dummy";
+
+static char base_6[13] = "data\\motion\\";
+
+static char base_7[29] = "data\\movie\\small\\mvs0000.ipu";
+
+static char base_8[24] = "data\\texture\\fm0000.xtx";
+
+const char soundSwdPathFormat[24] = "data\\sound\\sed\\%s.SWD";
+
+const char soundSedPathFormat[24] = "data\\sound\\sed\\%s.SED";
+
+const char soundSmdPathFormat[24] = "data\\sound\\smd\\%s.SMD";
+
+const char playerLockCommandName[16] = "player_lock";
+
+const char eventBattleCommandName[16] = "event_btl";
+
+const char mpeg2NoFadeCommandName[16] = "mpeg2_nofade";
+
+const char mpeg2BattleCommandName[16] = "mpeg2_btl";
+
+const char loadEffectCommandName[16] = "loadeffect";
+
+const char loadMovieCommandName[16] = "loadmovie";
+
+const char loadFaceCommandName[16] = "loadface";
+
+const char motionFpkPathFormat[32] = "data\\motion\\%s.fpk";
+
+const char resourceDumpRowFormat[24] = "%2d:%8x,%9d,%2d,%4x";
+
+const u8 lexSuffix[8] = ".lex";
+
+const u8 xtxSuffix[8] = ".xtx";
+
+const u8 idSuffix[8] = ".id";
+
+static const char root_4[6] = "data\\";
+
+static const char dummy_5[6] = "dummy";
+
+const char faceSuffix[8] = "_face";
+
+const char jntSuffix[8] = ".jnt";
+
+static const char base_9[6] = "data\\";
+
+unsigned char ModelPath = 0;
+
+/* Original storage of this TU without a C reader; typed from its original bytes. */
+static u16 facePC[54];
+static u16 faceNPC[89];
+static u16 facePPL1[32];
+static u16 facePPL2[29];
+static u16 facePPL3[17];
+static u16 facePPL4[10];
+
+static u16 faceNPC[89] = { 0, 0, 258, 0, 5, 0, 5, 0, 263, 266, 0, 266, 269, 269, 269, 269, 269, 0, 0, 0, 275, 0, 0, 0, 279, 279, 279, 279, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 311, 286, 0, 0, 0, 0, 324, 0, 0, 0, 0, 0, 324, 279, 279, 279, 279, 315, 324, 324, 332, 333, 334, 335, 336, 337, 338, 0, 0, 0, 0, 0, 332 };
+
+static u16 facePPL1[32] = { 0, 0, 0, 0, 0, 0, 517, 0, 0, 0, 0, 0, 0, 0, 0, 0, 769, 0, 0, 0, 0, 0, 0, 0, 0, 537, 537, 537, 537, 537, 542, 542 };
+
+static u16 facePPL2[29] = { 0, 0, 0, 0, 0, 0, 0, 783, 783, 783, 0, 0, 0, 780, 780, 0, 783, 783, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+static u16 facePPL3[17] = { 0, 0, 0, 514, 0, 772, 773, 0, 0, 0, 1033, 1033, 1033, 1033, 309, 1031, 772 };
+
+static u16 facePPL4[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+/* Original objects of other TUs referenced by this TU's initialized DATA. */
+extern const char ResShionCfName[16];
+extern const char ResKosmosCfName[16];
+extern const char ResChaosCfName[16];
+extern const char ResMomoCfName[8];
+extern const char ResJrCfName[8];
+extern const char ResZiggyCfName[16];
+extern const char ResShitanCfName[16];
+extern const char ResAllenCfName[16];
+extern const char ResOldwCfName[8];
+extern const char ResOldmCfName[8];
+extern const char ResMiddlemCfName[16];
+extern const char ResMiddlewCfName[16];
+extern const char ResSoldierwCfName[16];
+extern const char ResSoldiermCfName[16];
+extern const char ResWomanCfName[16];
+extern const char ResYoungmCfName[16];
+extern const char ResYoungwCfName[16];
+extern const char ResGuno001CfName[16];
+extern const char ResGuno301Name[16];
+extern const char ResGuno302Name[16];
+extern const char ResGuno303Name[16];
+extern const char ResGuno304Name[16];
+extern const char ResGuno305Name[16];
+extern const char ResGuno323Name[16];
+extern const char ResGuno324Name[16];
+extern const char ResGuno325Name[16];
+extern const char ResGuno307Name[16];
+
+MotionEntry cfMtnList[31] = { { .name = ResShionCfName, .ids = { 1, 9, 10, 11, 12, 13, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResKosmosCfName, .ids = { 2, 14, 15, 16, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResChaosCfName, .ids = { 3, 18, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResMomoCfName, .ids = { 4, 20, 21, 22, 23, 50, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResJrCfName, .ids = { 5, 24, 25, 26, 47, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResZiggyCfName, .ids = { 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResShitanCfName, .ids = { 7, 28, 29, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResAllenCfName, .ids = { 263, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResOldwCfName, .ids = { 1579, 1582, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResOldmCfName, .ids = { 1549, 1552, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResMiddlemCfName, .ids = { 1543, 1546, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResMiddlewCfName, .ids = { 1573, 1576, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResSoldierwCfName, .ids = { 1289, 542, 523, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResSoldiermCfName, .ids = { 526, 536, 525, 513, 527, 1288, 537, 519, 0, 0, 0, 0, 0, 0 } }, { .name = ResWomanCfName, .ids = { 1567, 1570, 783, 533, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResYoungmCfName, .ids = { 1537, 1540, 780, 530, 529, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResYoungwCfName, .ids = { 1591, 1594, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno001CfName, .ids = { 16385, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno301Name, .ids = { 16410, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno302Name, .ids = { 16411, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno303Name, .ids = { 16412, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno304Name, .ids = { 16413, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno305Name, .ids = { 16414, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno323Name, .ids = { 16432, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno324Name, .ids = { 16433, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno325Name, .ids = { 16434, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno301Name, .ids = { 16410, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno302Name, .ids = { 16411, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno303Name, .ids = { 16412, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = ResGuno307Name, .ids = { 16416, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .name = 0, .ids = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } };
+
+FaceEntry faceTbl[7] = { { .table = facePC, .count = 54, .group = 0 }, { .table = faceNPC, .count = 89, .group = 256 }, { .table = facePPL1, .count = 32, .group = 512 }, { .table = facePPL2, .count = 29, .group = 768 }, { .table = facePPL3, .count = 17, .group = 1024 }, { .table = facePPL4, .count = 10, .group = 1280 }, { .table = 0, .count = 0, .group = 0 } };
+
+extern const char ResResetName[];
+extern const char ResLoadmapName[];
+extern const char ResLoadactName[];
+extern const char ResLoadmotName[];
+extern const char ResLoadtexName[];
+extern const char ResLoadeneName[];
+extern const char ResScriptName[];
+extern const char ResPlayerName[];
+extern const char ResDummyName[];
+extern const char ResLoadseName[];
+extern const char ResLoadsmdName[];
+extern const char ResMpeg2Name[];
+extern const char ResEneseName[];
+extern const char ResNpcseName[];
+extern const char ResDiskName[];
+extern const char ResSaveName[];
+
+static u16 facePC[54] = {
+    0x0000, 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+    0x0000, 0x0001, 0x0001, 0x0001, 0x0001, 0x0001, 0x0002, 0x0002,
+    0x0002, 0x0002, 0x0003, 0x0003, 0x0004, 0x0004, 0x0004, 0x0004,
+    0x0005, 0x0005, 0x0005, 0x0006, 0x0000, 0x0000, 0x001E, 0x0000,
+    0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x001F, 0x001F, 0x001F,
+    0x001F, 0x0025, 0x001F, 0x001E, 0x0022, 0x001E, 0x001E, 0x0005,
+    0x001E, 0x001E, 0x0004, 0x0021, 0x0004, 0x001E
+};
+
+static GameResourceCommand command[24] = {
+    { ResResetName, command_reset, 0 },
+    { ResLoadmapName, command_loadmap, 0 },
+    { ResLoadactName, (char *(*)(int, char *))command_loadact, 0 },
+    { loadFaceCommandName, (char *(*)(int, char *))command_loadface, 0 },
+    { ResLoadmotName, command_loadmot, 0 },
+    { ResLoadtexName, (char *(*)(int, char *))command_loadtex, 0 },
+    { loadMovieCommandName, (char *(*)(int, char *))command_loadmovie, 0 },
+    { loadEffectCommandName, (char *(*)(int, char *))command_loadeffect, 0 },
+    { ResLoadeneName, (char *(*)(int, char *))command_loadene, 0 },
+    { ResScriptName, (char *(*)(int, char *))command_script, 0 },
+    { ResPlayerName, (char *(*)(int, char *))command_player, 0 },
+    { ResDummyName, (char *(*)(int, char *))command_dummy, 0 },
+    { ResLoadseName, (char *(*)(int, char *))command_loadse, 0 },
+    { ResLoadsmdName, (char *(*)(int, char *))command_loadsmd, 0 },
+    { ResMpeg2Name, command_mpeg2, 0 },
+    { mpeg2BattleCommandName, (char *(*)(int, char *))command_mpeg2battle, 0 },
+    { mpeg2NoFadeCommandName, command_mpeg2nofade, 0 },
+    { ResEneseName, (char *(*)(int, char *))command_enese, 0 },
+    { ResNpcseName, (char *(*)(int, char *))command_npcse, 0 },
+    { eventBattleCommandName, (char *(*)(int, char *))command_event2battle, 0 },
+    { ResDiskName, (char *(*)(int, char *))command_disk, 0 },
+    { ResSaveName, (char *(*)(int, char *))command_save, 0 },
+    { playerLockCommandName, (char *(*)(int, char *))command_player_lock, 0 },
+    { 0, 0, 0 }
+};

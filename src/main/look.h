@@ -92,22 +92,22 @@ void xglMatrixInverse(Matrix4 destination, Matrix4 source);
 void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *source);
 float xglAtan2(float x, float y);
 /* Head bounds, position adjustment and smoothing steps. */
-#define D_004D8578 0.0001f
-#define D_004D857C 0.15f
-#define D_004D8580 1.0471975803375244f
-#define D_004D8584 (-1.0471975803375244f)
-#define D_004D8588 1.483529806137085f
-#define D_004D858C (-1.483529806137085f)
-#define D_004D8590 (-0.7f)
-#define D_004D8594 0.7f
-#define D_004D8598 0.1745329350233078f
-#define D_004D859C 0.0872664675116539f
-#define D_004D85A0 0.1745329350233078f
-#define D_004D85A4 0.0872664675116539f
-#define D_004D8568 0.0001f
-#define D_004D856C 0.13962633907794952f
-#define D_004D8570 0.13962633907794952f
-#define D_004D8574 0.2f
+#define LOOK_HEAD_MIN_WEIGHT 0.0001f
+#define LOOK_HEAD_POSITION_Y_OFFSET 0.15f
+#define LOOK_HEAD_Z_MAX_ANGLE 1.0471975803375244f
+#define LOOK_HEAD_Z_MIN_ANGLE (-1.0471975803375244f)
+#define LOOK_HEAD_Y_MAX_ANGLE 1.483529806137085f
+#define LOOK_HEAD_Y_MIN_ANGLE (-1.483529806137085f)
+#define LOOK_HEAD_Y_SCALE (-0.7f)
+#define LOOK_HEAD_Z_SCALE 0.7f
+#define LOOK_HEAD_Y_STEP 0.1745329350233078f
+#define LOOK_HEAD_Z_STEP 0.0872664675116539f
+#define LOOK_HEAD_Y_LIMIT 0.1745329350233078f
+#define LOOK_HEAD_Z_LIMIT 0.0872664675116539f
+#define LOOK_SEBO_MIN_WEIGHT 0.0001f
+#define LOOK_SEBO_LIMIT 0.13962633907794952f
+#define LOOK_SEBO_STEP 0.13962633907794952f
+#define LOOK_SEBO_ROTATION_SCALE 0.2f
 
 void CUR_MATRIX_Set(Matrix4 matrix);
 void CUR_MATRIX_Txyz4s(const float *displacement);
@@ -142,19 +142,19 @@ void look_limit_add(float *angle, float target, float step);
 void LOOK_eyeL_cont(int model, int target, int step);
 
 /* MARK provisional: .lit4 0x004d85a8 */
-#define D_004D85A8 0.03999999911f
+#define LOOK_EYE_L_OFFSET 0.03999999911f
 
 void LOOK_eyeR_cont(int model, int target, int step);
 
 /* MARK provisional: .lit4 0x004d85ac */
-#define D_004D85AC (-0.03999999911f)
+#define LOOK_EYE_R_OFFSET (-0.03999999911f)
 
 /* Eye scale, step and rotation constants. */
-#define D_004D85B0 0.4f
-#define D_004D85B4 0.005235988f
-#define D_004D85B8 0.13962634f
-#define D_004D85BC 0.13962634f
-#define D_004D85C0 0.3f
-#define D_004D85C4 0.6f
+#define LOOK_EYE_IDLE_SCALE 0.4f
+#define LOOK_EYE_TRACK_STEP 0.005235988f
+#define LOOK_EYE_STEP 0.13962634f
+#define LOOK_EYE_LIMIT 0.13962634f
+#define LOOK_EYE_ROTATION_SCALE 0.3f
+#define LOOK_EYE_YAW_ROTATION_SCALE 0.6f
 
 #endif /* SRC_MAIN_LOOK_H */

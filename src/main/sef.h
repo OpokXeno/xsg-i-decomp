@@ -137,11 +137,11 @@ extern const float lit4_004d8354;
  * the same degrees-to-radians factor as lit4_004d8354 above, at its own
  * address 0x004d8318. Unlike lit4_004d8354, no accepted record has renamed
  * this word yet, so it still keeps the scaffold's own splat label
- * (build/main/asm/main/data/sef.lit4.s: `dlabel D_004D8318`), and this extern
+ * (build/main/asm/main/data/sef.lit4.s: `dlabel DEG_TO_RAD`), and this extern
  * names it verbatim rather than inventing a new symbol the scaffold does not
  * define
  */
-extern const float D_004D8318;
+extern const float DEG_TO_RAD;
 
 /* sefGetLineAdr (main:0x002e7ea0): the line-effect table, scaffold-owned like
  * _scheduler/_ptAlloc/_battleData above; only its pointer accessor is C. */
@@ -164,7 +164,7 @@ static unsigned char _lineData[0x41000];
  * symbol with a zero immediate (`lh v1,0(v0)`) -- byte-identical once linked,
  * but relocations_equal only holds for the latter.
  */
-extern short D_0079411C[];
+extern short sefDmgNullCount[];
 
 #define offsetof(type, member) ((__SIZE_TYPE__) &(((type *)0)->member))
 

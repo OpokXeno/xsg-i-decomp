@@ -102,7 +102,13 @@ typedef struct SsdGlobalWork {
     int intervalTotal;
 } SsdGlobalWork;
 
-extern char _fdata[];
+/* IRX module identity read by the loader: name and version 2.5. */
+typedef struct ModuleInfo {
+    const char *name;
+    unsigned short version;
+} ModuleInfo;
+
+ModuleInfo Module = { "PS2_SSDRemote", 0x0205 };
 
 extern int printf(const char *format, ...);
 
@@ -354,7 +360,7 @@ extern void sceSifRpcLoop(SifRpcQueueData *queue);
 
 extern SsdGlobalWork *SsdGetGlobalWorkPtr(void);
 
-extern RssdGlobalWork RssdWork;
+RssdGlobalWork RssdWork;
 void RssdExecFunc(RssdRpcPacket *packet);
 void *RssdSifRpcServer(int command, void *buffer, int size);
 int RssdSifServerThread(void *argument);
@@ -731,7 +737,7 @@ void RssdExecFunc(RssdRpcPacket *packet)
         SsdCompellingKeyoff();
         break;
     default:
-        printf(&_fdata[0x10], packet->command);
+        printf("Rssd illegal function No.0x%04x\n", packet->command);
         packet->error = -1;
         break;
     }

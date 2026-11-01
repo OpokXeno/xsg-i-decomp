@@ -54,25 +54,25 @@ extern unsigned char tcamera[];
 
 extern StudioCamera *xglStudioGetActiveCamera(void);
 
-const char D_004D1838[] = "TX %7.3f";
+const char translationXFormat[] = "TX %7.3f";
 
-const char D_004D1848[] = "TY %7.3f";
+const char translationYFormat[] = "TY %7.3f";
 
-const char D_004D1858[] = "TZ %7.3f";
+const char translationZFormat[] = "TZ %7.3f";
 
-const char D_004D1868[] = "IX %7.3f";
+const char interestXFormat[] = "IX %7.3f";
 
-const char D_004D1878[] = "IY %7.3f";
+const char interestYFormat[] = "IY %7.3f";
 
-const char D_004D1888[] = "IZ %7.3f";
+const char interestZFormat[] = "IZ %7.3f";
 
-const char D_004D1898[] = "RX %7.3f";
+const char rotationXFormat[] = "RX %7.3f";
 
-const char D_004D18A8[] = "RY %7.3f";
+const char rotationYFormat[] = "RY %7.3f";
 
-const char D_004D18B8[] = "RZ %7.3f";
+const char rotationZFormat[] = "RZ %7.3f";
 
-const char D_004D18C8[] = "FOV%7.3f";
+const char fovValueFormat[] = "FOV%7.3f";
 
 extern void DB_incPos(int x, int y);
 
@@ -126,13 +126,13 @@ extern void FCV2_resetPack(void *pack, void *source);
 
 extern float FCV2_getPackValue(void *pack, float frame);
 
-const char D_004D18D8[24] = "trans (%f %f %f)";
+const char translationVectorFormat[24] = "trans (%f %f %f)";
 
-const char D_004D18F0[24] = "rotate(%f %f %f)";
+const char rotationVectorFormat[24] = "rotate(%f %f %f)";
 
-const char D_004D1908[24] = "fov (%f)";
+const char fovFormat[24] = "fov (%f)";
 
-static int camDisp __attribute__((section(".sdata"))) = 0;
+static int camDisp = 0;
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
@@ -153,22 +153,22 @@ void TCAMERA_info(void)
     Vector4 *rotation = TCAMERA_ROTATION(camera);
     Vector4 *interest = &mpack_interest.vector;
 
-    DB_println(D_004D1838, (double)translation->x);
-    DB_println(D_004D1848, (double)translation->y);
-    DB_println(D_004D1858, (double)translation->z);
+    DB_println(translationXFormat, (double)translation->x);
+    DB_println(translationYFormat, (double)translation->y);
+    DB_println(translationZFormat, (double)translation->z);
     DB_incPos(0, 6);
     if (interest->w > 0.0f) {
-        DB_println(D_004D1868, (double)interest->x);
-        DB_println(D_004D1878, (double)interest->y);
-        DB_println(D_004D1888, (double)interest->z);
+        DB_println(interestXFormat, (double)interest->x);
+        DB_println(interestYFormat, (double)interest->y);
+        DB_println(interestZFormat, (double)interest->z);
         interest->w = 0.0f;
     } else {
-        DB_println(D_004D1898, (double)(rotation->x / 3.1415927f * 180.0f));
-        DB_println(D_004D18A8, (double)(rotation->y / 3.1415927f * 180.0f));
-        DB_println(D_004D18B8, (double)(rotation->z / 3.1415927f * 180.0f));
+        DB_println(rotationXFormat, (double)(rotation->x / 3.1415927f * 180.0f));
+        DB_println(rotationYFormat, (double)(rotation->y / 3.1415927f * 180.0f));
+        DB_println(rotationZFormat, (double)(rotation->z / 3.1415927f * 180.0f));
     }
     DB_incPos(0, 6);
-    DB_println(D_004D18C8, (double)(TCAMERA_FOV(camera) / 3.1415927f * 180.0f));
+    DB_println(fovValueFormat, (double)(TCAMERA_FOV(camera) / 3.1415927f * 180.0f));
 }
 
 void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
@@ -516,13 +516,13 @@ void TCAMERA_update(void)
         Vector4 *rotation = &studioCamera->rotation;
 
         if (camDisp != 0 && studioCamera->active != 0) {
-            xglFontDebugPrintf(0, 0x10, D_004D18D8, (double)position->x,
+            xglFontDebugPrintf(0, 0x10, translationVectorFormat, (double)position->x,
                                (double)position->y, (double)position->z);
-            xglFontDebugPrintf(0, 0x18, D_004D18F0,
+            xglFontDebugPrintf(0, 0x18, rotationVectorFormat,
                                (double)(rotation->x / radiansPerHalfTurn * 180.0f),
                                (double)(rotation->y / radiansPerHalfTurn * 180.0f),
                                (double)(rotation->z / radiansPerHalfTurn * 180.0f));
-            xglFontDebugPrintf(0, 0x20, D_004D1908,
+            xglFontDebugPrintf(0, 0x20, fovFormat,
                                (double)(TCAMERA_FOV(studioCamera) /
                                         radiansPerHalfTurn * 180.0f));
         }

@@ -359,8 +359,6 @@ extern void xglRenderClearColor(unsigned int color);
 
 extern unsigned int xglLRand(void);
 
-
-
 extern void xglRotTransPersN(GameBgProjectedPoint *destination, Matrix4 *matrix,
                            const Vector4 *source, int count, int mode);
 
@@ -504,13 +502,6 @@ struct GameBgBandTexture {
     unsigned int header[8];
     unsigned int pixels[2048];
 };
-
-
-
-
-
-
-
 
 void GameBgDrawType2(void)
 {

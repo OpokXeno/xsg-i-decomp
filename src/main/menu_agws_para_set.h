@@ -531,12 +531,12 @@ extern AgwsSwitchWork *AgwsSwitch;
 extern AgwsStatusWork *AgwsStatus;
 extern AgwsPasWork *AgwsPas;
 extern PadPrefix PadData;
-extern const unsigned char D_004C6F38[];
-extern const AgwsCameraPreset D_004C7190;
-extern const AgwsCameraTargets D_004C71B0;
-extern const AgwsModelPositions D_004C71D0;
-extern const AgwsModelVector D_004C7240;
-extern AgwsSwitchSlideStep D_004DAFE8[];
+extern const unsigned char pilotListTitleText[];
+extern const AgwsCameraPreset cameraSetPreset;
+extern const AgwsCameraTargets cameraMoveTargets;
+extern const AgwsModelPositions modelPositionTable;
+extern const AgwsModelVector modelUnitScaleVector;
+extern AgwsSwitchSlideStep switchSlideStepTable[];
 
 extern WeaponWaglData *func_A1A3D8(int weaponId);
 extern int MenuRWeaponCheck2(int weaponId);

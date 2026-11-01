@@ -20,16 +20,12 @@ typedef union UwamonoAlignedVector {
     long long words[2];
 } UwamonoAlignedVector;
 
-
-
 typedef struct UwamonoNyuruAlignedActor {
     unsigned char unmodeled_00[0x10];
     UwamonoAlignedVector position;
     unsigned char unmodeled_20[0x10];
     UwamonoAlignedVector displacement;
 } UwamonoNyuruAlignedActor;
-
-
 
 typedef struct UwamonoScreenPoint {
     int x;
@@ -38,15 +34,11 @@ typedef struct UwamonoScreenPoint {
     int w;
 } UwamonoScreenPoint;
 
-
-
 typedef union UwamonoAlignedScreenPoint {
     UwamonoScreenPoint value;
     int coordinates[4];
     long long words[2];
 } UwamonoAlignedScreenPoint;
-
-
 
 typedef struct UwamonoSpritePacket {
     unsigned char unmodeled_00[0x30];
@@ -56,8 +48,6 @@ typedef struct UwamonoSpritePacket {
     UwamonoScreenPoint position1;
 } UwamonoSpritePacket;
 
-
-
 typedef struct UwamonoLinePacket {
     unsigned char unmodeled_00[0x20];
     UwamonoScreenPoint color0;
@@ -66,11 +56,9 @@ typedef struct UwamonoLinePacket {
     UwamonoScreenPoint position1;
 } UwamonoLinePacket;
 
+static UwamonoSpritePacket sPoint_0;
 
-
-extern UwamonoSpritePacket sPoint_0;
-
-extern UwamonoLinePacket sSortLine_1;
+static UwamonoLinePacket sSortLine_1;
 
 extern signed char lineflg;
 
@@ -93,7 +81,7 @@ typedef struct UwamonoMapUnit {
     unsigned char unmodeled_20[4];
     /*
      * MAP_updateUnitSymbol (VA 0x002bfbe0) adds the scaffold-owned .lit4
-     * constant D_004D7EBC (value 0.05) to this field unconditionally
+     * constant symbolPhaseStep (value 0.05) to this field unconditionally
      * (`lwc1`/`add.s`/`swc1`, no branch in the original); no other role is
      * evidenced here.
      */
@@ -118,12 +106,10 @@ typedef struct UwamonoMapUnit {
     signed char crossType;            /* +0x1CD */
 } UwamonoMapUnit;
 
-
-
 /* Runtime-loaded object message with a hexadecimal unit identifier. */
 
 /* Loading resident field objects, followed by their hexadecimal identifier. */
-const char D_004CA028[24] = "\xBE\xEF\xC3\xF3\xBE\xE5\xCA\xAA\xA5\xED\xA1\xBC\xA5\xC9 %x\n";
+const char loadResidentObjectFormat[24] = "\xBE\xEF\xC3\xF3\xBE\xE5\xCA\xAA\xA5\xED\xA1\xBC\xA5\xC9 %x\n";
 
 int uwares_tbl[14] = { 0 };
 
@@ -145,8 +131,6 @@ typedef struct UwamonoResourceUnit {
     int xtxresId;                     /* +0xE4 */
 } UwamonoResourceUnit;
 
-
-
 /*
  * Valid resourceId values run 0x7001..0x700E (14 entries, the size of
  * uwares_tbl and xtxres_tbl); 0x7012 is excluded explicitly ahead of the
@@ -166,14 +150,10 @@ typedef struct MapPartsResource {
     int arrayOffset;              /* +0x50, added to this pointer to form the entry array base */
 } MapPartsResource;
 
-
-
 typedef struct MapPartsRoot {
     unsigned char unmodeled_00[4];
     struct MapPartsResource *resource;   /* +0x04 */
 } MapPartsRoot;
-
-
 
 typedef struct UwamonoSoundActor {
     unsigned char unmodeled_00[0x10];
@@ -184,11 +164,7 @@ typedef struct UwamonoSoundActor {
     unsigned short flags;
 } UwamonoSoundActor;
 
-
-
 typedef UwamonoSoundActor AimHeightReference;
-
-
 
 typedef struct UwamonoGameLoopState {
     unsigned char unmodeled_00[4];
@@ -207,8 +183,6 @@ typedef struct UwamonoGameLoopState {
     unsigned char unmodeled_29f42[2];
     float selectionDistance;      /* +0x29F41 */
 } UwamonoGameLoopState;
-
-
 
 extern UwamonoGameLoopState GameLoopState;
 
@@ -234,8 +208,6 @@ typedef struct GetPartsPosEntry {
     unsigned char unmodeled_3c[4];
 } GetPartsPosEntry;
 
-
-
 typedef struct GetPartsPosUnit {
     unsigned char unmodeled_00[0x10];
     Vector4 position;      /* +0x10, w set to 1.0f */
@@ -247,8 +219,6 @@ typedef struct GetPartsPosUnit {
     unsigned char unmodeled_84[0x20];
     short serial;                  /* +0xA4 */
 } GetPartsPosUnit;
-
-
 
 extern float atan2f(float y, float x);
 
@@ -284,8 +254,6 @@ typedef struct UwamonoEffectUnit {
     } timers;                           /* +0x1A0 */
 } UwamonoEffectUnit;
 
-
-
 typedef struct InitMapPartsUnit {
     unsigned int flags;
     void (*update)(struct InitMapPartsUnit *);
@@ -299,15 +267,13 @@ typedef struct InitMapPartsUnit {
     short mapType;
 } InitMapPartsUnit;
 
-
-
 extern void InitMapDoor(InitMapPartsUnit *unit);
 
 void InitMapKoware(InitMapPartsUnit *mapUnit);
 
 extern void InitDrill(InitMapPartsUnit *unit);
 
-const char D_004CA0D0[24] = "Illegal Parts Type %d\n";
+const char illegalPartsTypeFormat[24] = "Illegal Parts Type %d\n";
 
 #define UWAMONO_SYMBOL_PHASE_STEP 0.05f
 
@@ -332,8 +298,6 @@ typedef struct UwamonoLinkedUnit {
     Vector4 position; /* +0x30, set from the owning unit's position */
 } UwamonoLinkedUnit;
 
-
-
 typedef struct UwamonoTimers {
     unsigned char unmodeled_00[0xa];
     signed char projectSound;         /* +0x0A (record +0x1AA) */
@@ -343,9 +307,6 @@ typedef struct UwamonoTimers {
     unsigned char unmodeled_30[0x18];
     int bgmTimer;                /* +0x48 (record +0x1E8) */
 } UwamonoTimers;
-
-
-
 
 typedef struct UwamonoCommonUnit {
     unsigned int flags;
@@ -365,8 +326,6 @@ typedef struct UwamonoCommonUnit {
     unsigned char unmodeled_1ec[0x38];
     float heightVelocity; /* +0x224 */
 } UwamonoCommonUnit;
-
-
 
 /* Defined in src/main/map_create_unit_peer.c (main/tu270), still in asm. */
 
@@ -403,12 +362,7 @@ typedef struct UwamonoBgmFadeOutUnit {
     unsigned char unmodeled_1ec[0x114];
 } UwamonoBgmFadeOutUnit;
 
-
-
 typedef struct UwamonoMapSlot UwamonoMapSlot;
-
-
-
 
 typedef struct UwamonoBoxBasis {
     float x;
@@ -449,8 +403,6 @@ struct UwamonoMapSlot {
     } state;
 };
 
-
-
 extern UwamonoMapSlot MapUnit[];
 
 typedef struct UwamonoSoundWorkView {
@@ -461,14 +413,11 @@ typedef struct UwamonoSoundWorkView {
     } effectBanks[16];
 } UwamonoSoundWorkView;
 
-
-
 extern UwamonoSoundWorkView SoundWork;
 
 /* Defined in src/main/ssd_1.c (main/tu ssd_1), already C. */
 
 extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
-
 
 typedef struct UwamonoInitSymbolState {
     unsigned char unmodeled_00[0x2d];
@@ -476,8 +425,6 @@ typedef struct UwamonoInitSymbolState {
     unsigned char unmodeled_2e[0x16];
     int timer;                         /* +0x44 */
 } UwamonoInitSymbolState;
-
-
 
 typedef struct UwamonoInitSymbolUnit {
     int flags;                         /* +0x00 */
@@ -497,19 +444,15 @@ typedef struct UwamonoInitSymbolUnit {
     UwamonoInitSymbolState timerState; /* +0x1a0 */
 } UwamonoInitSymbolUnit;
 
+const char createSaveSymbolFormat[32] = "Create Save Symbol %f %f %f\n";
 
-
-const char D_004CA170[32] = "Create Save Symbol %f %f %f\n";
-
-const char D_004CA190[32] = "Create Shop Symbol %f %f %f\n";
+const char createShopSymbolFormat[32] = "Create Shop Symbol %f %f %f\n";
 
 void MAP_updateUnitSaveSymbol(UwamonoMapUnit *unit);
 
 void MAP_updateUnitShopSymbol(UwamonoMapUnit *unit);
 
 void MAP_updateUnitSymbol(UwamonoMapUnit *unit);
-
-
 
 typedef struct UwamonoCreatedState {
     short mapType;                    /* +0x00 */
@@ -535,8 +478,6 @@ typedef struct UwamonoCreatedState {
     unsigned char unmodeled_4c[0x34];
 } UwamonoCreatedState;
 
-
-
 typedef struct UwamonoCreatedUnit {
     unsigned int flags;
     void (*initialize)(struct UwamonoCreatedUnit *);
@@ -561,11 +502,7 @@ typedef struct UwamonoCreatedUnit {
     UwamonoCreatedState state;
 } UwamonoCreatedUnit;
 
-
-
-extern const char D_004CA1B0[32];
-
-
+extern const char createUwamonoUnitOverflowFormat[32];
 
 extern int MAP_loadUnitResource(UwamonoCreatedUnit *unit, int resourceId);
 
@@ -597,15 +534,11 @@ typedef struct UwamonoMapUnitState {
     int timer;                         /* +0x44 */
 } UwamonoMapUnitState;
 
-
-
 typedef union UwamonoKowareDimensions {
     unsigned long long lanes[2];
     unsigned long long words[2];
     Vector4 vector;
 } UwamonoKowareDimensions;
-
-
 
 typedef struct UwamonoKowareKind {
     signed char shape;
@@ -616,8 +549,6 @@ typedef struct UwamonoKowareKind {
     int kindParameter;                 /* +0x24 */
     unsigned long long unmodeled_28;
 } UwamonoKowareKind;
-
-
 
 typedef struct UwamonoKowareUnit {
     unsigned int flags;
@@ -639,11 +570,9 @@ typedef struct UwamonoKowareUnit {
     UwamonoMapUnitState state;         /* +0x1a0 */
 } UwamonoKowareUnit;
 
-
-
 extern UwamonoKowareKind KowareKind_t[];
 
-extern const char D_004CA1D0[];
+extern const char createKowaremonoUnitOverflowFormat[];
 
 void MAP_updateUnitKoware(void *argument);
 
@@ -670,8 +599,6 @@ typedef struct UwamonoCollisionUnit {
     unsigned char unmodeled_1e8[0x118];
 } UwamonoCollisionUnit;
 
-
-
 typedef struct UwamonoAimQuery {
     unsigned char unmodeled_00[8];
     unsigned short attributeMask;
@@ -691,8 +618,6 @@ typedef struct UwamonoCollisionActor {
     unsigned char unmodeled_9ec[0x84];
 } UwamonoCollisionActor;
 
-
-
 extern float CheckDist2D(const Vector4 *first, const Vector4 *second);
 
 int HitCheckBoxCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
@@ -707,8 +632,6 @@ typedef struct UwamonoScanFields {
     UwamonoMapUnitState state;         /* +0x100; state byte at +0x12D */
 } UwamonoScanFields;
 
-
-
 typedef struct UwamonoScanUnit {
     unsigned int flags;
     unsigned char unmodeled_04[0x0c];
@@ -717,8 +640,6 @@ typedef struct UwamonoScanUnit {
     UwamonoScanFields scan;            /* +0xA0 */
     unsigned char unmodeled_1e8[0x118];
 } UwamonoScanUnit;
-
-
 
 typedef struct UwamonoBoxCollisionState {
     unsigned char unmodeled_00[0x2d];
@@ -740,19 +661,13 @@ struct UwamonoBoxUnit;
 
 int HitCheckBox(UwamonoCollisionActor *actor, struct UwamonoBoxUnit *boxUnit);
 
-extern const float D_004D7ED0;
+extern const float mapUnitHitHeightScale;
 
-extern const float D_004D7ED4;
+extern const float mapUnitHitBelowMargin;
 
-extern const float D_004D7ED8;
+extern const float mapUnitPosHitHeightScale;
 
-extern const float D_004D7EDC;
-
-
-
-
-
-
+extern const float mapUnitPosHitBelowMargin;
 
 int HitCheckCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 
@@ -760,8 +675,6 @@ typedef struct UwamonoCrossState {
     unsigned char unmodeled_00[0x2d];
     signed char crossType;
 } UwamonoCrossState;
-
-
 
 typedef struct UwamonoCrossUnit {
     unsigned char unmodeled_00[0x10];
@@ -777,15 +690,9 @@ typedef struct UwamonoCrossUnit {
     UwamonoCrossState state;
 } UwamonoCrossUnit;
 
-
-
 typedef Vector4 UwamonoNyuruVector;
 
-
-
 typedef Vector4 UwamonoBoxVector;
-
-
 
 typedef struct UwamonoNyuruActor {
     unsigned char unmodeled_00[0x10];
@@ -797,8 +704,6 @@ typedef struct UwamonoNyuruActor {
     unsigned char unmodeled_508[0x4e0];
     float radius; /* +0x9e8 */
 } UwamonoNyuruActor;
-
-
 
 static int NyuruCircle(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit);
 
@@ -814,7 +719,6 @@ int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
                             UwamonoCollisionUnit *unit);
 
 extern void xglVectorNormal(Vector4 *destination, const Vector4 *source);
-
 
 int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius);
 
@@ -843,13 +747,9 @@ typedef struct UwamonoCrossActor {
     unsigned char unmodeled_9ec[0x84];
 } UwamonoCrossActor;
 
-
-
 extern UwamonoCrossActor actor[64];
 
-extern const float D_004D7F18;
-
-
+extern const float crossActorHeightLimit;
 
 extern int CheckCrossCircle(float radius, const Vector4 *from, const Vector4 *to, const Vector4 *center);
 
@@ -862,8 +762,6 @@ typedef struct BrokenMapUnitState {
     int brokenId;
 } BrokenMapUnitState;
 
-
-
 typedef struct BrokenMapUnit {
     unsigned int flags;
     unsigned char unmodeled_04[0xa0];
@@ -871,8 +769,6 @@ typedef struct BrokenMapUnit {
     unsigned char unmodeled_a6[0xfa];
     BrokenMapUnitState brokenState;
 } BrokenMapUnit;
-
-
 
 int CheckBrokenMapUnit(BrokenMapUnit *unit);
 
@@ -882,15 +778,10 @@ extern void xglSoundEffectPosID(int soundId, const float *position, int enabled,
 
 int HitCheckUwamonoAt(UwamonoBoxUnit *actor, UwamonoBoxUnit *unit);
 
-
-
-
 typedef struct UwamonoVectorWords {
     long long lower;
     long long upper;
 } UwamonoVectorWords;
-
-
 
 typedef struct UwamonoEnemyLink {
     unsigned char unmodeled_00[0x40];
@@ -905,11 +796,7 @@ typedef struct UwamonoEnemyLink {
     unsigned char unmodeled_4c[0x3864];
 } UwamonoEnemyLink;
 
-
-
 typedef struct UwamonoEnemyUnit UwamonoEnemyUnit;
-
-
 
 struct UwamonoEnemyUnit {
     unsigned int flags;
@@ -923,8 +810,6 @@ struct UwamonoEnemyUnit {
     unsigned char unmodeled_81[0x963];
     float actorHeading;
 };
-
-
 
 extern UwamonoEnemyLink enepc[16];
 
@@ -941,8 +826,6 @@ typedef struct UwamonoWind {
     unsigned char unmodeled_2c[4];
 } UwamonoWind;
 
-
-
 typedef struct UwamonoWindUnit {
     long long unmodeled_00[2];
     Vector4 position;
@@ -950,15 +833,13 @@ typedef struct UwamonoWindUnit {
     float height;
 } UwamonoWindUnit;
 
-
-
 UwamonoWind uwaWind = { 0 };
 
 extern void EXM_SetWindStruct(UwamonoWind *wind);
 
-#define D_004D7EC0 0.3f
+#define WIND_POSITION_W 0.3f
 
-#define D_004D7EC4 0.1f
+#define WIND_DECAY 0.1f
 
 typedef struct UwamonoBrokenSoundState {
     unsigned char unmodeled_00[0x32];
@@ -967,8 +848,6 @@ typedef struct UwamonoBrokenSoundState {
     int soundId;
 } UwamonoBrokenSoundState;
 
-
-
 typedef struct UwamonoBrokenSoundUnit {
     unsigned char unmodeled_00[0xa0];
     unsigned char seChannel;
@@ -976,15 +855,13 @@ typedef struct UwamonoBrokenSoundUnit {
     UwamonoBrokenSoundState state;
 } UwamonoBrokenSoundUnit;
 
-
-
 extern void xglSoundEffectNormalID(int soundId, int channel);
 
-#define D_004D7F44 0.1f
+#define UWAMONO_HIT_RADIUS_PADDING 0.1f
 
 int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit);
 
-#define D_004D7F1C 0.6f
+#define CROSS_CHECK_MAP_UNIT_HEIGHT 0.6f
 
 extern void nmlModelSetPartsVisible(void *resource, int partsId, int visible);
 
@@ -992,9 +869,9 @@ extern float Get_Angle(const Vector4 *first, const Vector4 *second);
 
 extern float CheckDist3D(const Vector4 *first, const Vector4 *second);
 
-#define D_004D7EB4 0.05f
+#define SAVE_SYMBOL_PHASE_STEP 0.05f
 
-#define D_004D7EB8 0.05f
+#define SHOP_SYMBOL_PHASE_STEP 0.05f
 
 void UnlockMapUnit(void);
 
@@ -1015,21 +892,19 @@ void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
 int CrossCheckMapUnitBox(Vector4 *first, Vector4 *second,
                          UwamonoCrossUnit *unit);
 
-extern const char *D_004C9F20[14];
+extern const char fieldResidentOverflowFormat[];
 
-extern const char D_004C9F58[];
+extern const char uwamonoDatUsageFormat[];
 
-extern const char D_004C9F88[];
+extern const char karakamaItemboxPath[];
 
-extern const char D_004C9FB0[];
+extern const char karakamaEvtItemPath[];
 
-extern const char D_004C9FD0[];
+extern const char lexFileExtension[];
 
-extern const char D_004DB6D8[];
+extern const char xtxFileExtension[];
 
-extern const char D_004DB6E0[];
-
-extern unsigned char uwamono_dat[];
+static unsigned char uwamono_dat[327680];
 
 extern unsigned char ItemBoxTbl[0x12C8];
 
@@ -1051,13 +926,11 @@ typedef struct UwamonoSequenceRecord {
     float scaleZ;
 } UwamonoSequenceRecord;
 
-
-
 extern signed char printflg;
 
-extern const char D_004C9FF0[];
+extern const char alreadyMapUnitFormat[];
 
-extern const char D_004CA008[];
+extern const char createUwamonoOverflowFormat[];
 
 extern UwamonoSequenceRecord unitSequence[];
 
@@ -1079,17 +952,15 @@ typedef struct UwamonoKowareSizeUnit {
     UwamonoMapUnitState state;
 } UwamonoKowareSizeUnit;
 
+extern const char setSizeFormat[];
 
-
-extern const char D_004CA040[];
-
-extern const char D_004CA050[];
+extern const char xyzVectorFormat[];
 
 extern double fptodp(float value);
 
-extern const char D_004CA060[];
+extern const char illegalUwaNullFormat[];
 
-extern const char D_004CA088[];
+extern const char illegalUwamonoTypeFormat[];
 
 typedef struct UwamonoProbeParameters {
     unsigned char unmodeled_00[8];
@@ -1098,8 +969,6 @@ typedef struct UwamonoProbeParameters {
     void *dataHeader;                   /* +0x18 */
     unsigned char unmodeled_1c[0x24];
 } UwamonoProbeParameters;
-
-
 
 extern void *UnduDataGetHeader(int dataId, int flags);
 
@@ -1121,31 +990,31 @@ void InitRetSymbol(UwamonoInitSymbolUnit *unit);
 
 extern void InitSpecialSymbol(UwamonoCreatedUnit *unit);
 
-extern const char D_004CA220[];
+extern const char hitCheckMatrixFormat[];
 
-extern const char D_004CA230[];
+extern const char hitCheckPosFormat[];
 
-extern const char D_004CA240[];
+extern const char hitCheckLenRadiusFormat[];
 
-extern const char D_004CA250[];
+extern const char matrixHitLabel[];
 
-extern const float D_004D7EE0;
+extern const float uwamonoUnusedFloat;
 
-extern const float D_004D7EE4;
+extern const float uwamonoUnusedFloatNext;
 
-extern const char D_004DB6F0[];
+extern const char hitCheckLenFormat[];
 
-extern const char D_004DB6F8[];
+extern const char hitCheckXFormat[];
 
-extern const char D_004DB700[];
+extern const char hitCheckYFormat[];
 
-extern const char D_004DB708[];
+extern const char hitCheckZFormat[];
 
-extern const char D_004DB710[];
+extern const char hitCheckUFormat[];
 
-extern const char D_004DB718[];
+extern const char hitCheckVFormat[];
 
-extern const char D_004DB720[];
+extern const char hitCheckWFormat[];
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
@@ -1169,14 +1038,10 @@ typedef struct KowarePartsSizeState {
     int timer;
 } KowarePartsSizeState;
 
-
-
 typedef union KowarePartsSizeUnitDimensions {
     UwamonoKowareDimensions raw;
     Vector4 vector;
 } KowarePartsSizeUnitDimensions;
-
-
 
 typedef struct KowarePartsSizeUnit {
     unsigned char unmodeled_00[0xb0];
@@ -1184,8 +1049,6 @@ typedef struct KowarePartsSizeUnit {
     unsigned char unmodeled_c0[0xe0];
     KowarePartsSizeState state;
 } KowarePartsSizeUnit;
-
-
 
 typedef struct KowareInitState {
     unsigned char unmodeled_00[2];
@@ -1198,8 +1061,6 @@ typedef struct KowareInitState {
     unsigned char unmodeled_33[0x11];
     int timer;
 } KowareInitState;
-
-
 
 typedef struct KowareInitUnit {
     unsigned int flags;
@@ -1216,20 +1077,16 @@ typedef struct KowareInitUnit {
     KowareInitState state;
 } KowareInitUnit;
 
-
-
 typedef struct KowareInitResourceCount {
     unsigned char unmodeled_00[0x40];
     int partCount;
 } KowareInitResourceCount;
 
+extern const char illegalKowareKindFormat[];
 
+extern const char breakableCreateErrorFormat[];
 
-extern const char D_004CA0E8[];
-
-extern const char D_004CA108[];
-
-extern const char D_004CA138[];
+extern const char createKowaremonoFormat[];
 
 void SetHideObject(void *argument);
 
@@ -1238,20 +1095,16 @@ typedef struct UwamonoHideEffect {
     signed char enabled;
 } UwamonoHideEffect;
 
-
-
 typedef struct UwamonoCreatedPosition {
     unsigned char unmodeled_00[0x10];
     UwamonoAlignedVector position;
 } UwamonoCreatedPosition;
 
-
-
 void MAP_updateUnitHide(void *argument);
 
-extern const char D_004DB6E8[];
+extern const char brokenMethodName[];
 
-extern const char D_004CA1F8[];
+extern const char kowareDeleteFormat[];
 
 void DrawActiveCursol(UwamonoMapUnit *argument);
 
@@ -1277,8 +1130,6 @@ typedef struct DrawActiveCursorUnit {
     signed char signal;
 } DrawActiveCursorUnit;
 
-
-
 typedef struct DrawActiveCursorEffect {
     unsigned char unmodeled_00[0xa0];
     Vector4 scale;
@@ -1288,13 +1139,9 @@ typedef struct DrawActiveCursorEffect {
     unsigned int flags;
 } DrawActiveCursorEffect;
 
+extern float activeCursolMinScale;
 
-
-extern float D_004D7EC8;
-
-extern float D_004D7ECC;
-
-
+extern float activeCursolScaleFloor;
 
 static inline float UwamonoProjectBoxBasisXZ(float x, float z,
                                            const struct UwamonoBoxBasis *basis)
@@ -1311,15 +1158,11 @@ typedef struct UwamonoCornerCollisionUnit {
     UwamonoAlignedVector halfSize;
 } UwamonoCornerCollisionUnit;
 
-
-
-extern float D_004D7EE8;
+extern float nyuruCircleRadiusMargin;
 
 extern float xglSin(float angle);
 
 extern float xglCos(float angle);
-
-
 
 typedef struct UwamonoBoxDimensions {
     float radius;
@@ -1328,18 +1171,14 @@ typedef struct UwamonoBoxDimensions {
     unsigned char unmodeled_0c[4];
 } UwamonoBoxDimensions;
 
+extern float nyuruMatrixStillThreshold;
 
-
-extern float D_004D7EEC;
-
-extern float D_004D7EF0;
+extern float nyuruMatrixStillEpsilon;
 
 typedef union UwamonoAlignedBoxDims {
     UwamonoBoxDimensions value;
     long long words[2];
 } UwamonoAlignedBoxDims;
-
-
 
 typedef struct UwamonoAimActor {
     unsigned char unmodeled_00[0x10];
@@ -1360,8 +1199,6 @@ typedef struct UwamonoAimActor {
     float targetAngle;                    /* +0x9e4 */
 } UwamonoAimActor;
 
-
-
 typedef struct UwamonoShotEffect {
     unsigned char unmodeled_000[0x6bc];
     struct UwamonoAimActor *owner;
@@ -1369,19 +1206,15 @@ typedef struct UwamonoShotEffect {
     unsigned int flags;
 } UwamonoShotEffect;
 
-
-
 extern signed char dispflg;
 
 extern signed char collflg;
 
+extern const char shootMapUnitFormat[];
 
+extern float shootMotionSpeed;
 
-extern const char D_004CA260[];
-
-extern float D_004D7EF8;
-
-extern float D_004D7EFC;
+extern float shootProgressThreshold;
 
 int AimMapUnit(void);
 
@@ -1406,37 +1239,32 @@ extern int CheckCrossLine(const Vector4 *first, const Vector4 *second,
 extern void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
                            const Vector4 *edgeStart, const Vector4 *edgeEnd, Vector4 *out);
 
-extern const float D_004D7F10;
+extern const float uwamonoAreaHeightScale;
 
-extern const float D_004D7F14;
+extern const float uwamonoAreaLowerMargin;
 
-extern float D_004D7F20;
+extern float crossCheckMapUnitPadding;
 
+extern float uwamonoMaxFallVelocity;
 
+extern float uwamonoGravity;
 
+extern float uwamonoFloorOffset;
 
-extern float D_004D7F2C;
+extern float uwamonoLandStopVelocity;
 
-extern float D_004D7F30;
+extern float uwamonoBounceStopVelocity;
 
-extern float D_004D7F34;
-
-extern float D_004D7F38;
-
-extern float D_004D7F3C;
-
-extern float D_004D7F40;
+extern float uwamonoHitHeightPadding;
 
 typedef union UwamonoCollisionCopy {
     UwamonoCollisionUnit value;
     unsigned long long words[0x300 / 8];
 } UwamonoCollisionCopy;
 
+extern float aimMapUnitLookEpsilon;
 
-
-extern float D_004D7F28;
-
-extern float D_004D7EF4;
+extern float nyuruCornerRadius;
 
 typedef struct UwamonoAimCandidate {
     int unitIndex;
@@ -1445,8 +1273,6 @@ typedef struct UwamonoAimCandidate {
     float distance;
     unsigned char unmodeled_24[0x0c];
 } UwamonoAimCandidate;
-
-
 
 float xglRotTransPers(Vector4 *out, const Matrix4 matrix,
                       Vector4 *point, int camera_id);
@@ -1460,7 +1286,6 @@ void MAP_updateUnitEnemy(UwamonoEnemyUnit *unit);
 void UwamonoBrokenSe(UwamonoBrokenSoundUnit *unit);
 
 typedef struct NativeUnitPeer NativeUnitPeer;
-
 
 void DrawSprite(const UwamonoAlignedScreenPoint *position,
                 const UwamonoScreenPoint *color, int width, int height);
@@ -1486,23 +1311,37 @@ int HitCheckUwamono(UwamonoScanUnit *actor);
 void InitUwamonoSys(void)
 {
     char path[128];
-    const char *paths[14];
+    const char *paths[14] = {
+        "data\\obj\\muobj\\MU_001",
+        "data\\obj\\muobj\\MU_002",
+        "data\\obj\\muobj\\MU_003",
+        "data\\obj\\muobj\\MU_004",
+        "data\\obj\\muobj\\Tre_001",
+        "data\\obj\\muobj\\Save_P",
+        "data\\obj\\muobj\\Shop_P",
+        "data\\obj\\muobj\\Tre_002",
+        "data\\obj\\muobj\\MU_009",
+        "data\\obj\\muobj\\MU_010",
+        "data\\obj\\muobj\\MU_011",
+        "data\\obj\\muobj\\MU_012",
+        "data\\obj\\muobj\\MU_013",
+        "data\\obj\\muobj\\MU_014"
+    };
     unsigned char *dataEnd = uwamono_dat;
     int index;
     int size;
 
-    __builtin_memcpy(paths, D_004C9F20, sizeof(paths));
     for (index = 0; index < 14; index++) {
         memset(path, 0, sizeof(path));
         strcpy(path, paths[index]);
-        strcat(path, D_004DB6D8);
+        strcat(path, lexFileExtension);
         uwares_tbl[index] = (int)dataEnd;
         dataEnd += xglCdReadFile(path, dataEnd, 0, 1);
         dataEnd = (unsigned char *) (((unsigned int) dataEnd + 15) & ~15);
 
         memset(path, 0, sizeof(path));
         strcpy(path, paths[index]);
-        strcat(path, D_004DB6E0);
+        strcat(path, xtxFileExtension);
         xtxres_tbl[index] = (int)dataEnd;
         dataEnd += xglCdReadFile(path, dataEnd, 0, 1);
         dataEnd = (unsigned char *) (((unsigned int) dataEnd + 15) & ~15);
@@ -1510,9 +1349,9 @@ void InitUwamonoSys(void)
 
     size = (int) (dataEnd - uwamono_dat);
     if (size > 0x50000) {
-        printf(D_004C9F58, size / 1024);
+        printf(fieldResidentOverflowFormat, size / 1024);
     } else {
-        printf(D_004C9F88, size / 1024, index);
+        printf(uwamonoDatUsageFormat, size / 1024, index);
     }
 
     memset(ItemBoxTbl, 0, sizeof(ItemBoxTbl));
@@ -1520,9 +1359,9 @@ void InitUwamonoSys(void)
     {
         unsigned char *workEnd = WorkEnd;
 
-        xglCdReadFile(D_004C9FB0, workEnd, 0, 1);
+        xglCdReadFile(karakamaItemboxPath, workEnd, 0, 1);
         __builtin_memcpy(ItemBoxTbl, workEnd, 0x12C8);
-        xglCdReadFile(D_004C9FD0, workEnd, 0, 1);
+        xglCdReadFile(karakamaEvtItemPath, workEnd, 0, 1);
         __builtin_memcpy(EvtItemTbl, workEnd, 0x7F80);
     }
 
@@ -1546,7 +1385,7 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
                 continue;
             }
             if (printflg != 0) {
-                printf(D_004C9FF0, resourceId);
+                printf(alreadyMapUnitFormat, resourceId);
             }
             unit = (UwamonoCreatedUnit *)&MapUnit[slot];
             break;
@@ -1556,7 +1395,7 @@ UwamonoCreatedUnit *Unit_CreateUwamono(int index, int resourceId)
     if (unit == 0) {
         unit = (UwamonoCreatedUnit *)MAP_createUnit(index, resourceId);
         if (unit == 0) {
-            printf(D_004CA008);
+            printf(createUwamonoOverflowFormat);
             return 0;
         }
     }
@@ -1628,7 +1467,7 @@ void MAP_LoadUwamonoResource(UwamonoResourceUnit *unit, int resourceId)
     int uwaresId;
     int xtxresId;
 
-    printf((const char *) D_004CA028);
+    printf((const char *) loadResidentObjectFormat);
     if (resourceId != 0x7012 && resourceId >= 0x1000) {
         index = resourceId - 0x7001;
         uwaresId = uwares_tbl[index];
@@ -1680,8 +1519,8 @@ void GetPartsSize(UwamonoKowareSizeUnit *unit)
         unit->dimensions.vector.y = state->baseSizeY;
         unit->dimensions.vector.z = state->baseSizeZ * 0.5f;
         if (printflg != 0) {
-            const char *format = D_004CA050;
-            printf(D_004CA040);
+            const char *format = xyzVectorFormat;
+            printf(setSizeFormat);
             printf(format, fptodp(state->baseSizeX),
                    fptodp(state->baseSizeY), fptodp(state->baseSizeZ));
         }
@@ -1730,7 +1569,7 @@ void InitUwamono(UwamonoCreatedUnit *unit)
 
     unit->flags &= ~4;
     if (map->mapType == 0) {
-        printf(D_004CA060, unit->serial, unit->sequenceIndex);
+        printf(illegalUwaNullFormat, unit->serial, unit->sequenceIndex);
         unit->serial = -1;
         unit->initialize = 0;
         return;
@@ -1779,7 +1618,7 @@ void InitUwamono(UwamonoCreatedUnit *unit)
         InitSpecialSymbol(unit);
         return;
     default:
-        printf(D_004CA088, map->mapType);
+        printf(illegalUwamonoTypeFormat, map->mapType);
         unit->initialize = 0;
         return;
     }
@@ -1799,7 +1638,7 @@ void InitMapParts(InitMapPartsUnit *unit)
         InitDrill(unit);
         break;
     default:
-        printf(D_004CA0D0, unit->mapType);
+        printf(illegalPartsTypeFormat, unit->mapType);
         unit->update = 0;
         break;
     }
@@ -1813,7 +1652,7 @@ void InitMapKoware(InitMapPartsUnit *mapUnit)
     KowareInitState *state = &unit->state;
     short kindIndex = state->kindIndex;
     if (kindIndex < 0) {
-        printf(D_004CA0E8, kindIndex);
+        printf(illegalKowareKindFormat, kindIndex);
     }
     GetPartsPos((GetPartsPosUnit *)unit);
     GetPartsSize((UwamonoKowareSizeUnit *)(void *)unit);
@@ -1827,12 +1666,12 @@ void InitMapKoware(InitMapPartsUnit *mapUnit)
     if (unit->serial >= 0 && unit->serial < resourceCount->partCount) {
         nmlModelSetPartsVisible(resource, unit->serial, 1);
     } else {
-        printf(D_004CA108, unit->serial);
+        printf(breakableCreateErrorFormat, unit->serial);
         unit->serial = -1;
         unit->updateFunction = 0;
     }
     if (printflg != 0) {
-        printf(D_004CA138, unit->serial, kindIndex,
+        printf(createKowaremonoFormat, unit->serial, kindIndex,
                fptodp(unit->position.x), fptodp(unit->position.y),
                fptodp(unit->position.z));
     }
@@ -1865,7 +1704,7 @@ void InitSaveSymbol(UwamonoInitSymbolUnit *unit)
     unit->flags |= 0x20000000;
 
     if (printflg != 0) {
-        printf(D_004CA170,
+        printf(createSaveSymbolFormat,
                       fptodp(position->x),
                       fptodp(unit->position.y),
                       fptodp(unit->position.z));
@@ -1899,7 +1738,7 @@ void InitShopSymbol(UwamonoInitSymbolUnit *unit)
     unit->flags |= 0x40000000;
 
     if (printflg != 0) {
-        printf(D_004CA190,
+        printf(createShopSymbolFormat,
                       fptodp(position->x),
                       fptodp(unit->position.y),
                       fptodp(unit->position.z));
@@ -1927,7 +1766,7 @@ void InitEvsSymbol(UwamonoInitSymbolUnit *unit)
     unit->updateFunction = MAP_updateUnitSymbol;
     unit->flags = unit->flags | 0x10000;
     if (printflgReadOnly == 0) return;
-    printf(D_004CA190,
+    printf(createShopSymbolFormat,
            fptodp(unit->position.x),
            fptodp(unit->position.y),
            fptodp(unit->position.z));
@@ -1955,7 +1794,7 @@ void InitRetSymbol(UwamonoInitSymbolUnit *unit)
     unit->flags |= 0x10000;
 
     if (printflgReadOnly != 0) {
-        printf(D_004CA190,
+        printf(createShopSymbolFormat,
                fptodp(position->x),
                fptodp(unit->position.y),
                fptodp(unit->position.z));
@@ -2006,7 +1845,7 @@ void SetHideObject(void *argument)
                 nmlModelSetPartsVisible(resource, unit->serial, 0);
                 return;
             }
-            printf(D_004CA108, unit->serial, effect, resource);
+            printf(breakableCreateErrorFormat, unit->serial, effect, resource);
             unit->serial = -1;
             unit->update = 0;
         }
@@ -2068,7 +1907,7 @@ UwamonoCreatedUnit *CreateUwamono(float x, float y, float z, float rotationY, in
     int inactiveValue;
 
     if (unit == 0) {
-        printf(D_004CA1B0);
+        printf(createUwamonoUnitOverflowFormat);
         return 0;
     }
     MAP_loadUnitResource(unit, resourceId);
@@ -2097,7 +1936,7 @@ UwamonoKowareUnit *CreateKowaremono(short resourceId, short kindIndex)
     UwamonoKowareUnit *unit = (UwamonoKowareUnit *)MAP_createUnit(-1, resourceId);
     UwamonoMapUnitState *state;
     if (unit == 0) {
-        printf(D_004CA1D0);
+        printf(createKowaremonoUnitOverflowFormat);
         return 0;
     }
     GetPartsPos((GetPartsPosUnit *)unit);
@@ -2158,7 +1997,7 @@ void MAP_updateUnitKoware(void *argument)
         SetUwaWind((UwamonoWindUnit *)unit);
         if (state->initialPartId != -1) {
             GameLoopState.enemyUpdateState = 0;
-            CallMethod_I(D_004DB6E8, state->initialPartId);
+            CallMethod_I(brokenMethodName, state->initialPartId);
         }
         return;
     case 1:
@@ -2173,7 +2012,7 @@ void MAP_updateUnitKoware(void *argument)
     }
     if (state->frameLimit < unit->breakCount) {
         if (printflg != 0) {
-            printf(D_004CA1F8, unit->serial, unit->sequenceIndex);
+            printf(kowareDeleteFormat, unit->serial, unit->sequenceIndex);
         }
         unit->updateFunction = 0;
         unit->flags = 0;
@@ -2243,7 +2082,7 @@ void MAP_updateUnitHide(void *argument)
         unit->update = MAP_updateUnitKoware;
         resource = GameLoopState.partsRoot->resource;
         if (unit->serial < 0 || unit->serial >= resource->partCount) {
-            printf(D_004CA108, unit->serial);
+            printf(breakableCreateErrorFormat, unit->serial);
             unit->serial = -1;
             unit->update = 0;
         } else {
@@ -2261,14 +2100,14 @@ void MAP_updateUnitHide(void *argument)
 
 void MAP_updateUnitSaveSymbol(UwamonoMapUnit *unit)
 {
-    unit->symbolPhase += D_004D7EB4;
+    unit->symbolPhase += SAVE_SYMBOL_PHASE_STEP;
     if (CheckDist3D(&GameLoopState.actor->position, &unit->position) < 0.0f)
         return;
 }
 
 void MAP_updateUnitShopSymbol(UwamonoMapUnit *unit)
 {
-    unit->symbolPhase += D_004D7EB8;
+    unit->symbolPhase += SHOP_SYMBOL_PHASE_STEP;
     if (CheckDist3D(&GameLoopState.actor->position, &unit->position) < 0.0f)
         return;
 }
@@ -2287,8 +2126,8 @@ void SetUwaWind(UwamonoWindUnit *unit)
     __builtin_memcpy((UwamonoVectorWords *) &wind->position,
                      (const UwamonoVectorWords *) &unit->position, sizeof(Vector4));
     heightDelta = unit->height * 0.5f;
-    wind->position.w = D_004D7EC0;
-    wind->decay = D_004D7EC4;
+    wind->position.w = WIND_POSITION_W;
+    wind->decay = WIND_DECAY;
     wind->strength = 1.0f;
     wind->timer = 0;
     wind->position.y += heightDelta;
@@ -2347,12 +2186,12 @@ void DrawActiveCursol(UwamonoMapUnit *argument)
             if (effect != 0) {
                 scale = (unit->cursorScale[0] + unit->cursorScale[1] +
                                 unit->cursorScale[2]) / 3.0f;
-                scale = scale * D_004D7EC8;
+                scale = scale * activeCursolMinScale;
 
                 effect->casterUnit = argument;
                 effect->flags = (effect->flags & ~0x400u) | 4;
-                if (scale < D_004D7EC8)
-                    scale = D_004D7EC8;
+                if (scale < activeCursolMinScale)
+                    scale = activeCursolMinScale;
                 if (scale > 2.0f)
                     scale = 2.0f;
                 effects->effectCf[2] = (int)effect;
@@ -2372,12 +2211,12 @@ void DrawActiveCursol(UwamonoMapUnit *argument)
             if (effect != 0) {
                 scale = (unit->cursorScale[0] + unit->cursorScale[1] +
                                 unit->cursorScale[2]) / 3.0f;
-                scale = scale * D_004D7ECC;
+                scale = scale * activeCursolScaleFloor;
 
                 effect->casterUnit = argument;
                 effect->flags = (effect->flags & ~0x400u) | 4;
-                if (scale < D_004D7ECC)
-                    scale = D_004D7ECC;
+                if (scale < activeCursolScaleFloor)
+                    scale = activeCursolScaleFloor;
                 if (scale > 2.0f)
                     scale = 2.0f;
                 effects->effectCf[1] = (int)effect;
@@ -2548,12 +2387,12 @@ int HitCheckMapUnitAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapUnitState *state;
 
-    if (unit->position.value.y + unit->dimensions.value.y * D_004D7ED0 < actor->position.y) {
+    if (unit->position.value.y + unit->dimensions.value.y * mapUnitHitHeightScale < actor->position.y) {
         return 0;
     }
 
     state = &unit->state;
-    if (actor->position.y < unit->position.value.y - D_004D7ED4) {
+    if (actor->position.y < unit->position.value.y - mapUnitHitBelowMargin) {
         return 0;
     }
 
@@ -2579,10 +2418,10 @@ unsigned int HitCheckMapUnitPosAt(UwamonoCollisionActor *actor, UwamonoCollision
     float actorY = actor->position.y;
     signed char shape;
 
-    if (unitY + unit->dimensions.value.y * D_004D7ED8 < actorY) {
+    if (unitY + unit->dimensions.value.y * mapUnitPosHitHeightScale < actorY) {
         return 0;
     }
-    if (actorY < unitY - D_004D7EDC) {
+    if (actorY < unitY - mapUnitPosHitBelowMargin) {
         return 0;
     }
     shape = state->state;
@@ -2774,19 +2613,19 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
         xglMatrixStackSave(unit->matrix);
     }
 
-    xglFontDebugPrintf(8, 0x80, D_004CA220,
+    xglFontDebugPrintf(8, 0x80, hitCheckMatrixFormat,
                        basis[0][0],
                        basis[0][1],
                        basis[0][2]);
-    xglFontDebugPrintf(8, 0x88, D_004CA220,
+    xglFontDebugPrintf(8, 0x88, hitCheckMatrixFormat,
                        basis[1][0],
                        basis[1][1],
                        basis[1][2]);
-    xglFontDebugPrintf(8, 0x90, D_004CA220,
+    xglFontDebugPrintf(8, 0x90, hitCheckMatrixFormat,
                        basis[2][0],
                        basis[2][1],
                        basis[2][2]);
-    xglFontDebugPrintf(8, 0x98, D_004CA230,
+    xglFontDebugPrintf(8, 0x98, hitCheckPosFormat,
                        basis[3][0],
                        basis[3][1],
                        basis[3][2]);
@@ -2812,7 +2651,7 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     nearestY = actor->position.y - center.value.y;
     nearestZ = actor->position.z - center.value.z;
     distance = (nearestX * basis[0][0]) + (nearestY * basis[0][1]) + (nearestZ * basis[0][2]);
-    xglFontDebugPrintf(8, 0x3C, D_004DB6F0, distance);
+    xglFontDebugPrintf(8, 0x3C, hitCheckLenFormat, distance);
 
     if (distance < 0.0f) {
         return 0;
@@ -2823,22 +2662,22 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     nearestX = distance * basis[0][0] + center.value.x;
     nearestY = distance * basis[0][1] + center.value.y;
     nearestZ = distance * basis[0][2] + center.value.z;
-    xglFontDebugPrintf(8, 0x18, D_004DB6F8, nearestX);
-    xglFontDebugPrintf(8, 0x20, D_004DB700, nearestY);
-    xglFontDebugPrintf(8, 0x28, D_004DB708, nearestZ);
+    xglFontDebugPrintf(8, 0x18, hitCheckXFormat, nearestX);
+    xglFontDebugPrintf(8, 0x20, hitCheckYFormat, nearestY);
+    xglFontDebugPrintf(8, 0x28, hitCheckZFormat, nearestZ);
 
     dx = actor->position.x - nearestX;
     dy = actor->position.y - nearestY;
     dz = actor->position.z - nearestZ;
     radiusSquared = unit->dimensions.value.z * unit->dimensions.value.z;
     distance = (dx * dx) + (dy * dy) + (dz * dz);
-    xglFontDebugPrintf(8, 0x54, D_004DB710, dx);
-    xglFontDebugPrintf(8, 0x5C, D_004DB718, dy);
-    xglFontDebugPrintf(8, 0x64, D_004DB720, dz);
-    xglFontDebugPrintf(8, 0x6C, D_004CA240,
+    xglFontDebugPrintf(8, 0x54, hitCheckUFormat, dx);
+    xglFontDebugPrintf(8, 0x5C, hitCheckVFormat, dy);
+    xglFontDebugPrintf(8, 0x64, hitCheckWFormat, dz);
+    xglFontDebugPrintf(8, 0x6C, hitCheckLenRadiusFormat,
                        distance, radiusSquared);
     if (distance < radiusSquared) {
-        xglFontDebugPrintf(8, 8, D_004CA250);
+        xglFontDebugPrintf(8, 8, matrixHitLabel);
     }
 
     return 0;
@@ -2916,7 +2755,7 @@ static int NyuruCircle(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
         displacementAngle += angleCorrection;
     }
 
-    combinedRadius = actor->radius + unit->dimensions.value.x + D_004D7EE8;
+    combinedRadius = actor->radius + unit->dimensions.value.x + nyuruCircleRadiusMargin;
     target.x = unit->position.value.x - combinedRadius * xglSin(displacementAngle);
     target.z = unit->position.value.z - combinedRadius * xglCos(displacementAngle);
     actor->displacement.x = target.x - actor->position.x;
@@ -2969,8 +2808,8 @@ static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int
         projection = direction.x * basis->xAxisX + direction.z * basis->xAxisZ;
         actor->displacement.x = projection * basis->xAxisX * distance;
         actor->displacement.z = projection * basis->xAxisZ * distance;
-        if (__builtin_fabsf(actor->displacement.x) < D_004D7EEC &&
-            __builtin_fabsf(actor->displacement.z) < D_004D7EEC && mode == 0) {
+        if (__builtin_fabsf(actor->displacement.x) < nyuruMatrixStillThreshold &&
+            __builtin_fabsf(actor->displacement.z) < nyuruMatrixStillThreshold && mode == 0) {
             if (alongX > dims.value.x) {
                 actor->displacement.x = basis->xAxisX * distance * 0.5f;
                 actor->displacement.z = basis->xAxisZ * distance * 0.5f;
@@ -2983,8 +2822,8 @@ static int NyuruMatrix(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit, int
         projection = direction.x * basis->zAxisX + direction.z * basis->zAxisZ;
         actor->displacement.x = projection * basis->zAxisX * distance;
         actor->displacement.z = projection * basis->zAxisZ * distance;
-        if (__builtin_fabsf(actor->displacement.x) < D_004D7EF0 &&
-            __builtin_fabsf(actor->displacement.z) < D_004D7EF0 && mode == 0) {
+        if (__builtin_fabsf(actor->displacement.x) < nyuruMatrixStillEpsilon &&
+            __builtin_fabsf(actor->displacement.z) < nyuruMatrixStillEpsilon && mode == 0) {
             alongX = relativeX * basis->zAxisX + relativeZ * basis->zAxisZ;
             if (alongX > dims.value.z) {
                 actor->displacement.x = basis->zAxisX * distance * 0.5f;
@@ -3139,7 +2978,7 @@ static void NyuruCorner(UwamonoNyuruActor *actor, UwamonoCollisionUnit *unit)
     adjustedRadius = actorRadius * 1.5f;
     adjustedUnit.dimensions.value.z = adjustedRadius;
     adjustedUnit.dimensions.value.x = adjustedRadius;
-    actor->radius = D_004D7EF4;
+    actor->radius = nyuruCornerRadius;
     NyuruCircle(actor, &adjustedUnit);
     actor->radius = actorRadius;
 }
@@ -3182,7 +3021,7 @@ void ShootMapUnit(void)
                         effect->flags &= ~0x400u;
                     }
                 }
-                actor->motionSpeed = D_004D7EF8;
+                actor->motionSpeed = shootMotionSpeed;
                 state->systemFlags |= 0xC000;
                 ACT_setMotion(actor, 14);
                 actor->shootFlags = actor->shootFlags & ~8;
@@ -3196,7 +3035,7 @@ void ShootMapUnit(void)
 
     unitIndex = GameLoopState.aimMapUnitIndex;
     unitState = &MapUnit[unitIndex].state;
-    if (actor->shootProgress > D_004D7EFC &&
+    if (actor->shootProgress > shootProgressThreshold &&
         actor->shootProgress < 0.36f) {
             Vibration_Set_Weak(4);
     }
@@ -3204,7 +3043,7 @@ void ShootMapUnit(void)
     if (threshold < actor->shootProgress) {
         if (unitState->signal == 0) {
             if (printflg != 0) {
-                printf(D_004CA260, GameLoopState.aimMapUnitIndex);
+                printf(shootMapUnitFormat, GameLoopState.aimMapUnitIndex);
             }
             Enemy_FindByEar(actor, &MapUnit[unitIndex].position.value);
             unitState->signal = 1;
@@ -3468,9 +3307,9 @@ int UwamonoAreaCheck(const Vector4 *position, UwamonoMapSlot *unit, float radius
     float unitY = unit->position.value.y;
     float lowerHeight;
 
-    if (positionY > unitY + unit->dimensions.value.y * D_004D7F10)
+    if (positionY > unitY + unit->dimensions.value.y * uwamonoAreaHeightScale)
         return 0;
-    lowerHeight = unitY - D_004D7F14;
+    lowerHeight = unitY - uwamonoAreaLowerMargin;
     if (positionY < lowerHeight)
         return 0;
     switch (state->crossType) {
@@ -3591,7 +3430,7 @@ int CrossCheckActor(UwamonoCrossActor *source, const Vector4 *to)
 {
     int index;
     for (index = 0; index < 64; ++index) {
-        if (!(D_004D7F18 < __builtin_fabsf(source->position.y - actor[index].position.y)) &&
+        if (!(crossActorHeightLimit < __builtin_fabsf(source->position.y - actor[index].position.y)) &&
             actor[index].resourceId >= 0 && !(actor[index].flags & 8) &&
             actor[index].collisionObject != 0 && index != source->actorIndex &&
             CheckCrossCircle(actor[index].radius, &source->position, to, &actor[index].position)) {
@@ -3605,7 +3444,7 @@ int CrossCheckMapUnitAt(Vector4 *first, Vector4 *second, UwamonoCrossUnit *unit)
 {
     UwamonoCrossState *state = &unit->state;
 
-    if (D_004D7F1C < __builtin_fabsf(first->y - unit->position.y))
+    if (CROSS_CHECK_MAP_UNIT_HEIGHT < __builtin_fabsf(first->y - unit->position.y))
         return 0;
     switch (state->crossType) {
     case 1:
@@ -3669,8 +3508,8 @@ int CrossCheckMapUnitBox(Vector4 *first, Vector4 *second,
     extents.words[0] = unit->dimensions.words[0];
     center = unit->alignedPosition;
     basis = unit->basis;
-    extents.value.x += D_004D7F20;
-    extents.value.z += D_004D7F20;
+    extents.value.x += crossCheckMapUnitPadding;
+    extents.value.z += crossCheckMapUnitPadding;
     corners[0].x = center.value.x + (extents.value.x * basis->xAxisX + extents.value.z * basis->zAxisX);
     corners[0].y = center.value.y;
     corners[0].z = center.value.z + (extents.value.x * basis->xAxisZ + extents.value.z * basis->zAxisZ);
@@ -3943,10 +3782,10 @@ int AimMapUnitLookCheck(UwamonoScanUnit *target)
     if (result == -1000.0f) {
         return 0;
     }
-    if (!(__builtin_fabsf(position.value.x - target->position.x) < D_004D7F28)) {
+    if (!(__builtin_fabsf(position.value.x - target->position.x) < aimMapUnitLookEpsilon)) {
         return 0;
     }
-    return __builtin_fabsf(position.value.z - target->position.z) < D_004D7F28;
+    return __builtin_fabsf(position.value.z - target->position.z) < aimMapUnitLookEpsilon;
 }
 
 static float CheckCornerDist(const Vector4 *position, UwamonoCollisionUnit *unit)
@@ -4075,15 +3914,15 @@ void CheckUwamonoHeight(UwamonoCommonUnit *unit)
     }
 
     floorHeight = UnduCheck(&unit->position.value, 0, &query);
-    if (unit->heightVelocity > D_004D7F2C) {
-        unit->heightVelocity -= D_004D7F30;
+    if (unit->heightVelocity > uwamonoMaxFallVelocity) {
+        unit->heightVelocity -= uwamonoGravity;
     }
 
     unit->position.value.y += unit->heightVelocity;
     if (floorHeight > unit->position.value.y) {
         unit->heightVelocity = -unit->heightVelocity * 0.25f;
-        unit->position.value.y = floorHeight + D_004D7F34;
-        if (unit->heightVelocity < D_004D7F38) {
+        unit->position.value.y = floorHeight + uwamonoFloorOffset;
+        if (unit->heightVelocity < uwamonoLandStopVelocity) {
             unit->flags |= 0x80000;
             unit->heightVelocity = 0.0f;
         }
@@ -4095,11 +3934,11 @@ void CheckUwamonoHeight(UwamonoCommonUnit *unit)
             return;
         }
         hitHeight = MapUnit[hitIndex].position.value.y +
-                    MapUnit[hitIndex].dimensions.value.y + D_004D7F40;
+                    MapUnit[hitIndex].dimensions.value.y + uwamonoHitHeightPadding;
         reboundVelocity = -unit->heightVelocity;
         unit->heightVelocity = 0.25f * reboundVelocity;
         unit->position.value.y = hitHeight;
-        if (unit->heightVelocity < D_004D7F3C) {
+        if (unit->heightVelocity < uwamonoBounceStopVelocity) {
             unit->heightVelocity = 0.0f;
         }
     }
@@ -4143,7 +3982,7 @@ int HitCheckUwamonoAt(UwamonoBoxUnit *actor, UwamonoBoxUnit *unit)
     if (!(actorHeight < baseHeight) && !(baseHeight + unit->dimensions.y < actorHeight)) {
         switch (state->crossType) {
         case 1:
-            if (CheckDist2D(&actor->position, &unit->position) < unit->dimensions.x + D_004D7F44)
+            if (CheckDist2D(&actor->position, &unit->position) < unit->dimensions.x + UWAMONO_HIT_RADIUS_PADDING)
                 return 1;
             return 0;
         case 2:
@@ -4324,3 +4163,122 @@ void SortLine(const UwamonoAlignedScreenPoint *from,
         nmlModelDirectSend(5, (unsigned char *)&sSortLine_1, 6);
     }
 }
+
+static UwamonoSpritePacket sPoint_0 = { .unmodeled_00 = { 1, 128, 0, 0, 0, 64, 35, 96, 238, 81, 81, 0, 0, 0, 0, 0, 3, 16, 3, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0, 68, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0 }, .color0 = { .x = 0, .y = 0, .z = 255, .w = 0 }, .position0 = { .x = 0, .y = 0, .z = 0, .w = 0 }, .color1 = { .x = 0, .y = 0, .z = 255, .w = 0 }, .position1 = { .x = 0, .y = 0, .z = 0, .w = 0 } };
+
+static UwamonoLinePacket sSortLine_1 = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 81, 1, 128, 0, 0, 0, 64, 1, 64, 81, 81, 0, 0, 0, 0, 0, 0 }, .color0 = { .x = 0, .y = 0, .z = 255, .w = 0 }, .position0 = { .x = 0, .y = 0, .z = 0, .w = 0 }, .color1 = { .x = 0, .y = 0, .z = 255, .w = 0 }, .position1 = { .x = 0, .y = 0, .z = 0, .w = 0 } };
+
+UwamonoKowareKind KowareKind_t[127] = { { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 602, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 603, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 604, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 605, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 606, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 607, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 608, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418014806016ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 609, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 628, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 629, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 630, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 631, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 632, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 633, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 634, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 635, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 636, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019503226880ULL, 1075838976ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 637, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222456999936ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 658, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019475963904ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 659, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417985445888ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 660, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 661, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 662, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1065353216ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 663, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222469582848ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 664, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019488546816ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 665, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417998028800ULL, 1069547520ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 666, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019494838272ULL, 1073741824ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 667, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1048576000ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 688, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1048576000ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 689, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1048576000ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 690, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 691, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 692, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 693, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 694, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 695, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 696, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019501129728ULL, 1067450368ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 697, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619094945792ULL, 1061158912ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 718, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619115917312ULL, 1040187392ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 719, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4647714816503316480ULL, 1056964608ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4647714816509607936ULL, 1050253722ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619107528704ULL, 1040187392ULL } }, .target = 0, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 610, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 611, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 612, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 613, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 614, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 615, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 616, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 617, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418014806016ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 618, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 638, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 639, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 640, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 641, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 642, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 643, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 644, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 645, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 646, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019503226880ULL, 1075838976ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 647, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222456999936ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 668, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019475963904ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 669, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417985445888ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 670, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 671, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 672, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1065353216ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 673, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222469582848ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 674, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019488546816ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 675, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417998028800ULL, 1069547520ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 676, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019494838272ULL, 1073741824ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 677, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1048576000ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 698, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1048576000ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 699, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1048576000ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 700, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 701, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 702, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1056964608ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 703, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 704, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 705, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 706, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019501129728ULL, 1067450368ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 707, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 619, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 620, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 621, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 622, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 623, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 624, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 625, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 626, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418014806016ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 627, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 648, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 649, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 650, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 651, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 652, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 653, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 654, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 655, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 656, .unmodeled_28 = 0ULL }, { .shape = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019503226880ULL, 1075838976ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 657, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222456999936ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 678, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019475963904ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 679, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417985445888ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 680, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222465388544ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 681, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019484352512ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 682, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417993834496ULL, 1065353216ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 683, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222469582848ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 684, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019488546816ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 685, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700417998028800ULL, 1069547520ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 686, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019494838272ULL, 1073741824ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 687, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1048576000ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 708, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1048576000ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 709, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1048576000ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 710, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222473777152ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 711, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019492741120ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 712, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418002223104ULL, 1056964608ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 713, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4575657222477971456ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 714, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019496935424ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 715, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4629700418006417408ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 716, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4611686019501129728ULL, 1067450368ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 717, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619094945792ULL, 1061158912ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619115917312ULL, 1040187392ULL } }, .target = 1, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619094945792ULL, 1061158912ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4616189619115917312ULL, 1040187392ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL }, { .shape = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { .lanes = { 4627160387240291467ULL, 1020054733ULL } }, .target = 2, .unmodeled_21 = { 0, 0, 0 }, .kindParameter = 601, .unmodeled_28 = 0ULL } };
+
+/* JP: ■■■上物常駐物オーバーフロー %dK byte■■■
+ * EN: === Field object resident overflow %dK bytes === */
+const char fieldResidentOverflowFormat[48] = "\242\243\242\243\242\243\276\345\312\252\276\357\303\363\312\252\245\252\241\274\245\320\241\274\245\325\245\355\241\274 %dK byte\242\243\242\243\242\243\n";
+
+const char uwamonoDatUsageFormat[40] = "use uwamono dat=%dK byte obj count=%d\n";
+
+const char karakamaItemboxPath[32] = "data\\karakama\\itembox.dat";
+
+const char karakamaEvtItemPath[32] = "data\\karakama\\evtitem.dat";
+
+const char alreadyMapUnitFormat[24] = "ID=%d already MapUnit\n";
+
+const char createUwamonoOverflowFormat[32] = "Create Uwamono over flow!\n";
+
+const char setSizeFormat[16] = "SetSize\n";
+
+const char xyzVectorFormat[16] = "x=%f y=%f z=%f\n";
+
+const char illegalUwaNullFormat[40] = "Illegal UWA_NULL!  id=%d serial=%d\n";
+
+const char illegalUwamonoTypeFormat[40] = "Illegal Uwamono Type %d\n";
+
+const char illegalKowareKindFormat[32] = "Illegal Koware Kind = %d\n";
+
+/* JP: 壊れ物生成エラー パーツナンバーが不正です %d
+ * EN: Breakable creation error: invalid part number %d */
+const char breakableCreateErrorFormat[48] = "\262\365\244\354\312\252\300\270\300\256\245\250\245\351\241\274 \245\321\241\274\245\304\245\312\245\363\245\320\241\274\244\254\311\324\300\265\244\307\244\271 %d\n";
+
+const char createKowaremonoFormat[56] = "Create Kowaremono id=%d kind=%d pos x=%f y=%f z=%f\n";
+
+const char createUwamonoUnitOverflowFormat[32] = "Create Uwamono unit over flow!\n";
+
+const char createKowaremonoUnitOverflowFormat[40] = "Create Kowaremono unit over flow!\n";
+
+const char kowareDeleteFormat[40] = "unit koware delete id=0x%x serial=%d\n";
+
+const char hitCheckMatrixFormat[16] = "MAT %f %f %f";
+
+const char hitCheckPosFormat[16] = "POS %f %f %f";
+
+const char hitCheckLenRadiusFormat[16] = "len=%f r=%f";
+
+const char matrixHitLabel[16] = "MATRIX_HIT";
+
+const char shootMapUnitFormat[32] = "Act Shoot MapUnit=%d\n";
+
+float activeCursolMinScale = 0.55000001192092896f;
+
+float activeCursolScaleFloor = 0.55000001192092896f;
+
+const float mapUnitHitHeightScale = 0.89999997615814209f;
+
+const float mapUnitHitBelowMargin = 1.7999999523162842f;
+
+const float mapUnitPosHitHeightScale = 0.89999997615814209f;
+
+const float mapUnitPosHitBelowMargin = 1.7999999523162842f;
+
+float nyuruCircleRadiusMargin = 0.0099999997764825821f;
+
+float nyuruMatrixStillThreshold = 0.0010000000474974513f;
+
+float nyuruMatrixStillEpsilon = 0.0010000000474974513f;
+
+float nyuruCornerRadius = 0.0099999997764825821f;
+
+float shootMotionSpeed = 0.033333335071802139f;
+
+float shootProgressThreshold = 0.20000000298023224f;
+
+const float uwamonoAreaHeightScale = 0.89999997615814209f;
+
+const float uwamonoAreaLowerMargin = 1.7999999523162842f;
+
+const float crossActorHeightLimit = 0.30000001192092896f;
+
+float crossCheckMapUnitPadding = 0.10000000149011612f;
+
+float aimMapUnitLookEpsilon = 0.0099999997764825821f;
+
+float uwamonoMaxFallVelocity = -0.60000002384185791f;
+
+float uwamonoGravity = 0.05000000074505806f;
+
+float uwamonoFloorOffset = 0.0010000000474974513f;
+
+float uwamonoLandStopVelocity = 0.05000000074505806f;
+
+float uwamonoBounceStopVelocity = 0.10000000149011612f;
+
+float uwamonoHitHeightPadding = 0.0010000000474974513f;
+
+const char lexFileExtension[8] = ".lex";
+
+const char xtxFileExtension[8] = ".xtx";
+
+const char brokenMethodName[8] = "broken";
+
+const char hitCheckLenFormat[8] = "len=%f";
+
+const char hitCheckXFormat[8] = "x=%f";
+
+const char hitCheckYFormat[8] = "y=%f";
+
+const char hitCheckZFormat[8] = "z=%f";
+
+const char hitCheckUFormat[8] = "u=%f";
+
+const char hitCheckVFormat[8] = "v=%f";
+
+const char hitCheckWFormat[8] = "w=%f";
+

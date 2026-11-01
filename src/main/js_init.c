@@ -58,8 +58,8 @@ static JSPrimitive js_type_float = {4, {0}, {0}};
 
 static JSPrimitive js_type_string = {5, {0}, {0}};
 
-extern char D_004DA590[];
-char D_004DA590[8] = ".[](),";
+extern char jsTokenDelimiters[];
+char jsTokenDelimiters[8] = ".[](),";
 
 static char *tokenCurrent;
 
@@ -108,9 +108,9 @@ typedef struct JSClass {
     int method_count;        /* +0x8 */
 } JSClass;
 
-extern char D_004DA598[];
+extern char jsCallSeparators[];
 
-extern char D_004DA5A0[];
+extern char jsArgumentDelimiters[];
 
 extern double atof(const char *text);
 
@@ -225,7 +225,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
     int parsed_token_type;
 
     if (token_type == '[') {
-        token = STR_tokenGetNext(0, D_004DA590);
+        token = STR_tokenGetNext(0, jsTokenDelimiters);
         parsed_token_type = STR_tokenGetType();
         strcpy(object_name, token);
         token = STR_trim(object_name);
@@ -243,7 +243,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
         } else {
             return 0;
         }
-        STR_tokenGetNext(0, D_004DA590);
+        STR_tokenGetNext(0, jsTokenDelimiters);
         token_type = STR_tokenGetType();
     }
     if (token_type != '.') {
@@ -254,7 +254,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
     for (index = 7; index >= 0; index--) {
         argument_slots[index] = 0;
     }
-    token = STR_tokenGetNext(0, D_004DA590);
+    token = STR_tokenGetNext(0, jsTokenDelimiters);
     parsed_token_type = STR_tokenGetType();
     strcpy(object_name, token);
     token = STR_trim(object_name);
@@ -264,7 +264,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
     }
     if (parsed_token_type == '(') {
         do {
-            token = STR_tokenGetNext(0, D_004DA598);
+            token = STR_tokenGetNext(0, jsCallSeparators);
             parsed_token_type = STR_tokenGetType();
             if (token == 0) {
                 break;
@@ -337,7 +337,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                     break;
                 }
             } else {
-                argument = STR_tokenGetNext(argument, D_004DA5A0);
+                argument = STR_tokenGetNext(argument, jsArgumentDelimiters);
                 token_type = STR_tokenGetType();
                 entry = JS_findObject(argument, primitive, numPrimitive);
                 if (entry != 0) {
@@ -345,7 +345,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                         class_record = entry->data.class_record;
                         peer_index = -1;
                         if (token_type == '[') {
-                            argument = STR_tokenGetNext(0, D_004DA5A0);
+                            argument = STR_tokenGetNext(0, jsArgumentDelimiters);
                             token_type = STR_tokenGetType();
                             strcpy(object_name, argument);
                             argument = STR_trim(object_name);
@@ -395,7 +395,7 @@ void JS_exec(char *source, char *limit) {
             break;
         }
 
-        token = STR_tokenGetNext(line, D_004DA590);
+        token = STR_tokenGetNext(line, jsTokenDelimiters);
         token_type = STR_tokenGetType();
         while (token != 0) {
             strcpy(object_name, token);
@@ -406,7 +406,7 @@ void JS_exec(char *source, char *limit) {
                 JS_callMethod(entry->data.class_record, token_type);
             }
 
-            token = STR_tokenGetNext(0, D_004DA590);
+            token = STR_tokenGetNext(0, jsTokenDelimiters);
             token_type = STR_tokenGetType();
         }
     }
@@ -584,8 +584,6 @@ static char *STR_trim2(char *text, int delimiter) {
     return text;
 }
 
+char jsCallSeparators[8] = ",()";
 
-
-char D_004DA598[8] = ",()";
-
-char D_004DA5A0[8] = ".[]";
+char jsArgumentDelimiters[8] = ".[]";

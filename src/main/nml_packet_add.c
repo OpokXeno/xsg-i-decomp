@@ -22,17 +22,17 @@ extern const u32 D_004AE5A0[];
 
 extern const u8 D_004AE5B0[];
 
-extern int s_nPixelTestType;
+static int s_nPixelTestType;
 
-extern int s_nModelParts;
+static int s_nModelParts;
 
-extern NmlPacketData128 s_inLc0[4];
+static NmlPacketData128 s_inLc0[4];
 
 typedef unsigned int GameLoopStateWords[];
 
 extern GameLoopStateWords GameLoopState;
 
-extern const float D_004D8950;
+extern const float inReflRotYStep;
 
 typedef struct XglLoadImage {
     u64 giftag;
@@ -184,7 +184,6 @@ extern int g_aSubWindow[4];
 
 /* One VIF unpack value passed to sceVif1PkAddUpkData128 by value. */
 
-
 /* The allocation cursor addresses byte payloads and aligned quadword
  * payloads in the same packet buffer. Both views are used below. */
 typedef union NmlAttributeCursor {
@@ -198,15 +197,13 @@ struct NmlAttributePacket {
     NmlAttributeCursor cursor;
 };
 
-
 extern void sceVif1PkAddUpkData128(NmlPacket packet, Quadword data);
 
 extern void *memcpy(void *destination, const void *source, unsigned int count);
 
-
 extern int g_nGsEntry;
 
-const char D_004DC4D0[4] = "";
+const char nmlEmptyName[4] = "";
 
 typedef struct NmlPixelTestPacket {
     u32 loops;
@@ -282,7 +279,7 @@ extern const u8 D_004B0A50[];
 
 extern const u8 D_004BD4A0[];
 
-extern const u8 s_aNormalTbl[];
+static const float s_aNormalTbl[114][4];
 
 extern const u32 D_004B0A40[];
 
@@ -296,19 +293,19 @@ extern const u32 D_004B9700[];
 
 extern const u32 D_004BD490[];
 
-extern const float D_004D8958;
+extern const float alphaLimitHigh;
 
-extern const float D_004D895C;
+extern const float alphaLimitLow;
 
-extern const float D_004D8960;
+extern const float vectorLengthHigh;
 
-extern const float D_004D8964;
+extern const float vectorLengthLow;
 
-extern const float D_004D8968;
+extern const float previousVectorLengthHigh;
 
-extern const float D_004D896C;
+extern const float previousVectorLengthLow;
 
-extern int s_nLightPara;
+static int s_nLightPara;
 
 static inline void nmlPacketSelectLighting(NmlModelRenderState *model,
                                            const u32 *material_flags)
@@ -316,7 +313,6 @@ static inline void nmlPacketSelectLighting(NmlModelRenderState *model,
     s_pLightLayout = model;
     s_nLightPara = 0x20000 & *material_flags;
 }
-
 
 void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
                                u64 first_test, int second_address,
@@ -343,9 +339,9 @@ static inline void nmlPacketAppendGsFields(u32 address, u32 high,
     nmlPacketAppendGsWords(address, high, low_word);
 }
 
-extern float D_004D8970;
+extern float circleRadiusScale;
 
-extern const float D_004D8974;
+extern const float circleHeightOffset;
 
 typedef union NmlCircleVector {
     Vector4 vector;
@@ -370,9 +366,9 @@ typedef struct NmlCircleGsRecord {
     GsTag address;
 } NmlCircleGsRecord;
 
-extern const NmlCircleOffsetTable D_004D3090;
+extern const NmlCircleOffsetTable circleXOffsetTable;
 
-extern const NmlCircleOffsetTable D_004D30A0;
+extern const NmlCircleOffsetTable circleZOffsetTable;
 
 static inline NmlCircleGsRecord *nmlCircleGsRecord(unsigned int index)
 {
@@ -927,7 +923,7 @@ void nmlPacketAddTransMicrocodeInit(void)
     s_pLightLayout = 0;
     s_inReflRotX = xglSin(s_inReflRotY);
     if (!(GameLoopState[4] & 1))
-        s_inReflRotY += D_004D8950;
+        s_inReflRotY += inReflRotYStep;
     xglMatrixUnit(matrix);
     selected = s_pPacket;
     sceVif1PkCnt(selected.sdk, 0);
@@ -1184,13 +1180,13 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
     material_tag_data->words[0] = material->alpha_tag;
     material_tag.lanes[1] = material_alpha;
     material_tag_data->words[2] = 0;
-    if ((D_004D8958 < model->alpha_limit) ||
-        (model->alpha_limit < D_004D895C))
+    if ((alphaLimitHigh < model->alpha_limit) ||
+        (model->alpha_limit < alphaLimitLow))
         material_tag_data->words[2] = 1;
 
     xglVectorLength(&vector_length,
                     &model->geometry_blocks[material->geometry_block_index].vectors[0]);
-    if ((D_004D8960 < vector_length) || (vector_length < D_004D8964))
+    if ((vectorLengthHigh < vector_length) || (vector_length < vectorLengthLow))
         material_tag_data->words[2] = 1;
 
     if (material->render_flags & 1) {
@@ -1199,7 +1195,7 @@ void nmlPacketAddBlockMaterial(NmlMaterialRenderState *material,
                  .vectors[0];
 
         xglVectorLength(&vector_length, previous_block);
-        if ((D_004D8968 < vector_length) || (vector_length < D_004D896C))
+        if ((previousVectorLengthHigh < vector_length) || (vector_length < previousVectorLengthLow))
             material_tag_data->words[2] = 1;
     }
 
@@ -1277,8 +1273,8 @@ void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
     int second_clip_flags;
     int third_clip_flags;
 
-    x_offsets = D_004D3090;
-    z_offsets = D_004D30A0;
+    x_offsets = circleXOffsetTable;
+    z_offsets = circleZOffsetTable;
 
     matrix = (float *)transform;
 
@@ -1293,12 +1289,12 @@ void nmlPacketMakeCircleTexture(NmlModelRenderState *model,
     matrix[9] = 1.0f;
     matrix[10] = 1.0f;
     matrix[12] = 1.0f;
-    radius_scale = D_004D8970;
+    radius_scale = circleRadiusScale;
     matrix[13] = 1.0f;
 
     _CurSetViewScaleTrans(&camera->screenScale, &camera->screenOffset);
     _CurSetMatrix(camera->viewMatrix);
-    height_offset = D_004D8974;
+    height_offset = circleHeightOffset;
 
     for (i = 0; i < 4;) {
         int clip_flags;
@@ -2748,3 +2744,40 @@ void nmlPacketAddGsFba(u64 fba)
     g_aGsTag[g_nGsEntry * 2 + 3].value = 74;
     g_nGsEntry++;
 }
+
+struct NmlStealthDescriptor s_aStealthDat[10] = { { .firstJoint = 9, .secondJoint = 12, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.18000000715255737f, .secondWidth = 0.18000000715255737f, .firstExtension = 0.0f, .secondExtension = -0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.94999998807907104f, 0.89999997615814209f, 0.60000002384185791f } }, { .firstJoint = 1, .secondJoint = 2, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.14000000059604645f, .secondWidth = 0.14000000059604645f, .firstExtension = 0.10000000149011612f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 2, .secondJoint = 3, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.11999999731779099f, .secondWidth = 0.18000000715255737f, .firstExtension = -0.10000000149011612f, .secondExtension = 0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 5, .secondJoint = 6, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.14000000059604645f, .secondWidth = 0.14000000059604645f, .firstExtension = 0.10000000149011612f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 6, .secondJoint = 7, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.11999999731779099f, .secondWidth = 0.18000000715255737f, .firstExtension = -0.10000000149011612f, .secondExtension = 0.10000000149011612f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 12, .secondJoint = 13, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.17000000178813934f, .secondWidth = 0.17000000178813934f, .firstExtension = -0.25f, .secondExtension = 0.05000000074505806f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 15, .secondJoint = 17, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.079999998211860657f, .secondWidth = 0.079999998211860657f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 17, .secondJoint = 19, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.090000003576278687f, .secondWidth = 0.090000003576278687f, .firstExtension = -0.0f, .secondExtension = 0.15000000596046448f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 21, .secondJoint = 23, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.079999998211860657f, .secondWidth = 0.079999998211860657f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } }, { .firstJoint = 23, .secondJoint = 25, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.090000003576278687f, .secondWidth = 0.090000003576278687f, .firstExtension = -0.0f, .secondExtension = 0.15000000596046448f, .longitudinalStretch = { 1.0f, 0.89999997615814209f, 0.69999998807907104f, 0.0f } } };
+
+struct NmlStealthDescriptor s_inStealthUnitDat = { .firstJoint = 10000, .secondJoint = 10000, .unmodeled_08 = { 0, 0, 0, 0 }, .sortClass = 1, .firstWidth = 0.059999998658895493f, .secondWidth = 0.059999998658895493f, .firstExtension = 0.0f, .secondExtension = 0.0f, .longitudinalStretch = { 1.0f, 0.94999998807907104f, 0.89999997615814209f, 0.60000002384185791f } };
+
+const NmlCircleOffsetTable circleXOffsetTable = { .values = { -1.0f, 1.0f, -1.0f, 1.0f } };
+
+const NmlCircleOffsetTable circleZOffsetTable = { .values = { -1.0f, -1.0f, 1.0f, 1.0f } };
+
+const float inReflRotYStep = 0.0099999997764825821f;
+
+const float alphaLimitHigh = 1.0199999809265137f;
+
+const float alphaLimitLow = 0.98000001907348633f;
+
+const float vectorLengthHigh = 1.0199999809265137f;
+
+const float vectorLengthLow = 0.98000001907348633f;
+
+const float previousVectorLengthHigh = 1.0199999809265137f;
+
+const float previousVectorLengthLow = 0.98000001907348633f;
+
+float circleRadiusScale = 0.40000000596046448f;
+
+const float circleHeightOffset = 0.004999999888241291f;
+
+static int s_nModelParts = 0;
+
+static int s_nLightPara = 0;
+
+static int s_nPixelTestType = 0;
+
+static const float s_aNormalTbl[114][4] = { { 0.0f, -1.0f, 0.0f, 1.0f }, { 0.0f, -0.86599999666213989f, 0.5f, 1.0f }, { 0.19099999964237213f, -0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.35400000214576721f, -0.86599999666213989f, 0.35400000214576721f, 1.0f }, { 0.46200001239776611f, -0.86599999666213989f, 0.19099999964237213f, 1.0f }, { 0.5f, -0.86599999666213989f, 0.0f, 1.0f }, { 0.46200001239776611f, -0.86599999666213989f, -0.19099999964237213f, 1.0f }, { 0.35400000214576721f, -0.86599999666213989f, -0.35400000214576721f, 1.0f }, { 0.19099999964237213f, -0.86599999666213989f, -0.46200001239776611f, 1.0f }, { 0.0f, -0.86599999666213989f, -0.5f, 1.0f }, { -0.19099999964237213f, -0.86599999666213989f, -0.46200001239776611f, 1.0f }, { -0.35400000214576721f, -0.86599999666213989f, -0.35400000214576721f, 1.0f }, { -0.46200001239776611f, -0.86599999666213989f, -0.19099999964237213f, 1.0f }, { -0.5f, -0.86599999666213989f, -0.0f, 1.0f }, { -0.46200001239776611f, -0.86599999666213989f, 0.19099999964237213f, 1.0f }, { -0.35400000214576721f, -0.86599999666213989f, 0.35400000214576721f, 1.0f }, { -0.19099999964237213f, -0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.0f, -0.7070000171661377f, 0.7070000171661377f, 1.0f }, { 0.27099999785423279f, -0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.5f, -0.7070000171661377f, 0.5f, 1.0f }, { 0.65299999713897705f, -0.7070000171661377f, 0.27099999785423279f, 1.0f }, { 0.7070000171661377f, -0.7070000171661377f, 0.0f, 1.0f }, { 0.65299999713897705f, -0.7070000171661377f, -0.27099999785423279f, 1.0f }, { 0.5f, -0.7070000171661377f, -0.5f, 1.0f }, { 0.27099999785423279f, -0.7070000171661377f, -0.65299999713897705f, 1.0f }, { 0.0f, -0.7070000171661377f, -0.7070000171661377f, 1.0f }, { -0.27099999785423279f, -0.7070000171661377f, -0.65299999713897705f, 1.0f }, { -0.5f, -0.7070000171661377f, -0.5f, 1.0f }, { -0.65299999713897705f, -0.7070000171661377f, -0.27099999785423279f, 1.0f }, { -0.7070000171661377f, -0.7070000171661377f, -0.0f, 1.0f }, { -0.65299999713897705f, -0.7070000171661377f, 0.27099999785423279f, 1.0f }, { -0.5f, -0.7070000171661377f, 0.5f, 1.0f }, { -0.27099999785423279f, -0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.0f, -0.5f, 0.86599999666213989f, 1.0f }, { 0.33100000023841858f, -0.5f, 0.80000001192092896f, 1.0f }, { 0.6119999885559082f, -0.5f, 0.6119999885559082f, 1.0f }, { 0.80000001192092896f, -0.5f, 0.33100000023841858f, 1.0f }, { 0.86599999666213989f, -0.5f, 0.0f, 1.0f }, { 0.80000001192092896f, -0.5f, -0.33100000023841858f, 1.0f }, { 0.6119999885559082f, -0.5f, -0.6119999885559082f, 1.0f }, { 0.33100000023841858f, -0.5f, -0.80000001192092896f, 1.0f }, { 0.0f, -0.5f, -0.86599999666213989f, 1.0f }, { -0.33100000023841858f, -0.5f, -0.80000001192092896f, 1.0f }, { -0.6119999885559082f, -0.5f, -0.6119999885559082f, 1.0f }, { -0.80000001192092896f, -0.5f, -0.33100000023841858f, 1.0f }, { -0.86599999666213989f, -0.5f, -0.0f, 1.0f }, { -0.80000001192092896f, -0.5f, 0.33100000023841858f, 1.0f }, { -0.6119999885559082f, -0.5f, 0.6119999885559082f, 1.0f }, { -0.33100000023841858f, -0.5f, 0.80000001192092896f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.38299998641014099f, 0.0f, 0.92400002479553223f, 1.0f }, { 0.7070000171661377f, 0.0f, 0.7070000171661377f, 1.0f }, { 0.92400002479553223f, 0.0f, 0.38299998641014099f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 0.92400002479553223f, 0.0f, -0.38299998641014099f, 1.0f }, { 0.7070000171661377f, 0.0f, -0.7070000171661377f, 1.0f }, { 0.38299998641014099f, 0.0f, -0.92400002479553223f, 1.0f }, { 0.0f, 0.0f, -1.0f, 1.0f }, { -0.38299998641014099f, 0.0f, -0.92400002479553223f, 1.0f }, { -0.7070000171661377f, 0.0f, -0.7070000171661377f, 1.0f }, { -0.92400002479553223f, 0.0f, -0.38299998641014099f, 1.0f }, { -1.0f, 0.0f, -0.0f, 1.0f }, { -0.92400002479553223f, 0.0f, 0.38299998641014099f, 1.0f }, { -0.7070000171661377f, 0.0f, 0.7070000171661377f, 1.0f }, { -0.38299998641014099f, 0.0f, 0.92400002479553223f, 1.0f }, { 0.0f, 0.5f, 0.86599999666213989f, 1.0f }, { 0.33100000023841858f, 0.5f, 0.80000001192092896f, 1.0f }, { 0.6119999885559082f, 0.5f, 0.6119999885559082f, 1.0f }, { 0.80000001192092896f, 0.5f, 0.33100000023841858f, 1.0f }, { 0.86599999666213989f, 0.5f, 0.0f, 1.0f }, { 0.80000001192092896f, 0.5f, -0.33100000023841858f, 1.0f }, { 0.6119999885559082f, 0.5f, -0.6119999885559082f, 1.0f }, { 0.33100000023841858f, 0.5f, -0.80000001192092896f, 1.0f }, { 0.0f, 0.5f, -0.86599999666213989f, 1.0f }, { -0.33100000023841858f, 0.5f, -0.80000001192092896f, 1.0f }, { -0.6119999885559082f, 0.5f, -0.6119999885559082f, 1.0f }, { -0.80000001192092896f, 0.5f, -0.33100000023841858f, 1.0f }, { -0.86599999666213989f, 0.5f, -0.0f, 1.0f }, { -0.80000001192092896f, 0.5f, 0.33100000023841858f, 1.0f }, { -0.6119999885559082f, 0.5f, 0.6119999885559082f, 1.0f }, { -0.33100000023841858f, 0.5f, 0.80000001192092896f, 1.0f }, { 0.0f, 0.7070000171661377f, 0.7070000171661377f, 1.0f }, { 0.27099999785423279f, 0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.5f, 0.7070000171661377f, 0.5f, 1.0f }, { 0.65299999713897705f, 0.7070000171661377f, 0.27099999785423279f, 1.0f }, { 0.7070000171661377f, 0.7070000171661377f, 0.0f, 1.0f }, { 0.65299999713897705f, 0.7070000171661377f, -0.27099999785423279f, 1.0f }, { 0.5f, 0.7070000171661377f, -0.5f, 1.0f }, { 0.27099999785423279f, 0.7070000171661377f, -0.65299999713897705f, 1.0f }, { 0.0f, 0.7070000171661377f, -0.7070000171661377f, 1.0f }, { -0.27099999785423279f, 0.7070000171661377f, -0.65299999713897705f, 1.0f }, { -0.5f, 0.7070000171661377f, -0.5f, 1.0f }, { -0.65299999713897705f, 0.7070000171661377f, -0.27099999785423279f, 1.0f }, { -0.7070000171661377f, 0.7070000171661377f, -0.0f, 1.0f }, { -0.65299999713897705f, 0.7070000171661377f, 0.27099999785423279f, 1.0f }, { -0.5f, 0.7070000171661377f, 0.5f, 1.0f }, { -0.27099999785423279f, 0.7070000171661377f, 0.65299999713897705f, 1.0f }, { 0.0f, 0.86599999666213989f, 0.5f, 1.0f }, { 0.19099999964237213f, 0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.35400000214576721f, 0.86599999666213989f, 0.35400000214576721f, 1.0f }, { 0.46200001239776611f, 0.86599999666213989f, 0.19099999964237213f, 1.0f }, { 0.5f, 0.86599999666213989f, 0.0f, 1.0f }, { 0.46200001239776611f, 0.86599999666213989f, -0.19099999964237213f, 1.0f }, { 0.35400000214576721f, 0.86599999666213989f, -0.35400000214576721f, 1.0f }, { 0.19099999964237213f, 0.86599999666213989f, -0.46200001239776611f, 1.0f }, { 0.0f, 0.86599999666213989f, -0.5f, 1.0f }, { -0.19099999964237213f, 0.86599999666213989f, -0.46200001239776611f, 1.0f }, { -0.35400000214576721f, 0.86599999666213989f, -0.35400000214576721f, 1.0f }, { -0.46200001239776611f, 0.86599999666213989f, -0.19099999964237213f, 1.0f }, { -0.5f, 0.86599999666213989f, -0.0f, 1.0f }, { -0.46200001239776611f, 0.86599999666213989f, 0.19099999964237213f, 1.0f }, { -0.35400000214576721f, 0.86599999666213989f, 0.35400000214576721f, 1.0f }, { -0.19099999964237213f, 0.86599999666213989f, 0.46200001239776611f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } };
+
+char __ps2_klibinfo__[16] = "PsIIlibkernl2420";
+

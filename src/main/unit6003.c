@@ -191,7 +191,7 @@ extern void nmlModelDirectSendXtx(int mode, void *texture);
 extern float xglRotTransPers(int *result, float matrix[4][4],
                              float *position, int camera);
 
-#define D_004D2170 "frame_type error(%d)\n"
+#define UNIT6003_FRAME_TYPE_ERROR_FORMAT "frame_type error(%d)\n"
 
 static Unit6003DrawEnvironment TestEnv_0_00490520 = {
     {
@@ -248,7 +248,7 @@ static void unit6003_draw(void *object)
         break;
     }
     default:
-        printf(D_004D2170, unit->frame_type);
+        printf(UNIT6003_FRAME_TYPE_ERROR_FORMAT, unit->frame_type);
         break;
     }
 
@@ -357,17 +357,17 @@ static void unit6003_draw(void *object)
 
 /* JP: fm%04d を読み込みます\n
  * EN: Loading fm%04d\n */
-#define D_004D2188 \
+#define UNIT6003_LOADING_FM_FORMAT \
     "fm%04d \244\362\306\311\244\337\271\376\244\337\244\336\244\271\n"
 
 /* JP: mvs%04d を読み込みます\n
  * EN: Loading mvs%04d\n */
-#define D_004D21A0 \
+#define UNIT6003_LOADING_MVS_FORMAT \
     "mvs%04d \244\362\306\311\244\337\271\376\244\337\244\336\244\271\n"
 
-#define D_004D21B8 "movie work broken!\n"
+#define UNIT6003_MOVIE_WORK_BROKEN_MESSAGE "movie work broken!\n"
 
-#define D_004D21D0 "%08x->%08x\n"
+#define UNIT6003_MOVIE_WORK_ADDRESS_FORMAT "%08x->%08x\n"
 
 static MoviePlaybackWork *movie_work_setup(void *source_data, int source_size)
 {
@@ -401,12 +401,11 @@ void unit6003_update(Unit6003Work *unit)
         u32 resource_index = unit->resource_id;
         Unit6003ResourceHeader *resource;
 
-
         if (resource_index - UNIT6003_RESOURCE_GROUP_FM <
             UNIT6003_RESOURCE_GROUP_SIZE) {
             unsigned int resource_file_id =
                 resource_index % UNIT6003_RESOURCE_GROUP_SIZE;
-            printf(D_004D2188, resource_file_id);
+            printf(UNIT6003_LOADING_FM_FORMAT, resource_file_id);
             resource_index = GameResourceGetIndex(
                 RES_loadFile(-1, 11, resource_file_id, 0));
             unit->resource_id = resource_index;
@@ -414,7 +413,7 @@ void unit6003_update(Unit6003Work *unit)
                    UNIT6003_RESOURCE_GROUP_SIZE) {
             unsigned int resource_file_id =
                 resource_index % UNIT6003_RESOURCE_GROUP_SIZE;
-            printf(D_004D21A0, resource_file_id);
+            printf(UNIT6003_LOADING_MVS_FORMAT, resource_file_id);
             resource_index = GameResourceGetIndex(
                 RES_loadFile(-1, 10, resource_file_id, 0));
             unit->resource_id = resource_index;
@@ -513,11 +512,11 @@ void unit6003_update(Unit6003Work *unit)
                 UNIT6003_XTX_SIGNATURE) {
             MoviePlaybackWork *repaired_work;
 
-            printf(D_004D21B8);
+            printf(UNIT6003_MOVIE_WORK_BROKEN_MESSAGE);
             repaired_work = movie_work_setup(
                 (void *)GameResource[unit->resource_id].address,
                 GameResource[unit->resource_id].size);
-            printf(D_004D21D0, (u32)unit->movie_work,
+            printf(UNIT6003_MOVIE_WORK_ADDRESS_FORMAT, (u32)unit->movie_work,
                    (u32)repaired_work);
             unit->movie_work = repaired_work;
         }

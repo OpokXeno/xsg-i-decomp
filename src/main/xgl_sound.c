@@ -230,7 +230,7 @@ extern int F2I(float value);
 
 void xglSoundEffectStopID(int soundEffectId, int source);
 
-#define D_004D8800 3.1415927f
+#define SOUND_PAN_HALF_TURN 3.1415927f
 
 static unsigned char count_3;
 
@@ -246,8 +246,8 @@ void SsdSetVagStreamDataMono(int channel, int address, int size);
 
 void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
-extern const char D_004DC360[];
-const char D_004DC360[8] = "%c";
+extern const char animationCharFormat[];
+const char animationCharFormat[8] = "%c";
 
 void xglSoundWaitDma(void)
 {
@@ -695,7 +695,7 @@ void xglSoundEffectPosID(int soundEffectId, const float *position, int use_updat
     if (angle < 0.0f) {
         angle = -angle;
     }
-    pan = F2I(angle * 127.0f / D_004D8800);
+    pan = F2I(angle * 127.0f / SOUND_PAN_HALF_TURN);
     volume = 12700 / F2I(attenuation * 100.0f);
     if (use_update_packet == 0) {
         xglSoundEffectParamID(soundEffectId, volume, pan, source);
@@ -961,7 +961,7 @@ int xglSoundStreamMain(void)
 
     if (state->type != 0) {
         count_3++;
-        xglFontDebugPrintf(244, 8, D_004DC360, anim_4_004DC358[(count_3 >> 3) & 3]);
+        xglFontDebugPrintf(244, 8, animationCharFormat, anim_4_004DC358[(count_3 >> 3) & 3]);
     }
     status = -1;
     switch (state->type) {
@@ -1108,6 +1108,3 @@ void xglSoundInitial(void)
     xglSoundReset();
 }
 
-
-
-static unsigned char count_3;

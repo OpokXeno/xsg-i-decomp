@@ -236,18 +236,18 @@ typedef struct CameraBasis {
 
 extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *vector);
 
-extern float D_004D84AC;
+extern float invPi;
 
-extern float D_004D84B0;
+extern float nearDirPi;
 
-extern float D_004D84B4;
+extern float nearDirTwoPi;
 
-extern float D_004D84B8;
+extern float piForDoubledWhole;
 
 float nearDir(float from, float to)
 {
     float difference = to - from;
-    float scaled = difference * D_004D84AC;
+    float scaled = difference * invPi;
     float magnitude = __builtin_fabsf(scaled);
     int doubled_whole = (int)scaled * 2;
 
@@ -255,11 +255,11 @@ float nearDir(float from, float to)
         int direction = scaled < 0.0f ? -1 : 1;
         int whole = (int)scaled;
 
-        difference -= (float)whole * D_004D84B0;
+        difference -= (float)whole * nearDirPi;
         if (whole & 1)
-            difference += (float)direction * D_004D84B4;
+            difference += (float)direction * nearDirTwoPi;
     } else {
-        difference -= (float)doubled_whole * D_004D84B8;
+        difference -= (float)doubled_whole * piForDoubledWhole;
     }
 
     return difference;
@@ -1322,3 +1322,11 @@ void ACT_filterStealth(Actor *actor)
     nmlModelSetTransparency(actor->transparency);
     nmlModelSetReflTransparency(actor->refl_transparency);
 }
+
+float invPi = 0.31830987334251404f;
+
+float nearDirPi = 3.1415927410125732f;
+
+float nearDirTwoPi = 6.2831854820251465f;
+
+float piForDoubledWhole = 3.1415927410125732f;

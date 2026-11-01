@@ -30,7 +30,7 @@ typedef union FontStateStorage {
 
 static FontStateStorage FS;
 
-#define D_00881188 (FS.state.flags)
+#define FONT_STATE_FLAGS (FS.state.flags)
 
 static void set_xyz(int x, int y, int color);
 
@@ -45,7 +45,7 @@ void xglFontPrintDirectOT(int ot, const char *text);
 static void set_ot(int ot);
 
 /*
- * Each 4-byte slot of the font print-queue buffer at D_008811A0 (16 slots,
+ * Each 4-byte slot of the font print-queue buffer at fontPrintQueueBuffer (16 slots,
  * scaffold-owned splat name): link is the byte offset, from this array's
  * base, of the next queued record for this bucket (0 marks the bucket
  * empty -- xglFontFlush follows it as a chain), and selfOffset is the
@@ -63,9 +63,9 @@ typedef union FontPrintQueueStorage {
     unsigned char bytes[0x2860];
 } FontPrintQueueStorage;
 
-static FontPrintQueueStorage D_008811A0;
+static FontPrintQueueStorage fontPrintQueueBuffer;
 
-#define FONT_PRINT_QUEUE (D_008811A0.slots)
+#define FONT_PRINT_QUEUE (fontPrintQueueBuffer.slots)
 
 /*
  * buffer_reset also reaches two fields 0x20 bytes before the queue buffer:
@@ -247,18 +247,18 @@ struct FontSpritePacket {
     ((list) = (unsigned long long *)((char *)__builtin_next_arg(last) - \
               (8 - __builtin_args_info(2)) * 8))
 
-extern unsigned short ascii2euc[96];
+static unsigned short ascii2euc[96];
 
 struct KanjiClutEnvironment {
     unsigned char unmodeled_00[0xb0];
-    unsigned short code_by_character[128];
+    unsigned short code_by_character[32];
 };
 
-extern struct KanjiClutEnvironment KanjiClutEnv;
+static struct KanjiClutEnvironment KanjiClutEnv;
 
-static const char D_004D2448[16] = "data\\font0.tex";
+static const char fontTexture0Path[16] = "data\\font0.tex";
 
-static const char D_004D2458[16] = "data\\font1.tex";
+static const char fontTexture1Path[16] = "data\\font1.tex";
 
 void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags);
 
@@ -272,13 +272,13 @@ unsigned int xglFontAscii2Euc(signed char character, signed char **text);
 
 static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text);
 
-extern unsigned char WindowImage[];
+static unsigned char WindowImage[264192];
 
 extern int WindowTexLoad(unsigned char *buffer, unsigned int request);
 
-extern const unsigned char D_004DC2A0[];
+extern unsigned char spCodeParameterSizeTable[];
 
-extern unsigned char spcode_0[32];
+static unsigned char spcode_0[32];
 
 struct FontGsRegisterWrite {
     unsigned long long value;
@@ -292,7 +292,7 @@ struct FontModePacket {
     struct FontGsRegisterWrite state_registers[5];
 };
 
-extern struct FontModePacket ModeEnv[2];
+static struct FontModePacket ModeEnv[2];
 
 struct FontWindowTextureHeader {
     char signature[4];
@@ -318,17 +318,17 @@ struct FontWindowTransferPacket {
     struct FontGsRegisterWrite trxdir;
 };
 
-extern const unsigned char KanjiTex0Env_8[];
+static unsigned int KanjiTex0Env_8[28];
 
-extern const unsigned char KanjiTex1Env_9[];
+static unsigned int KanjiTex1Env_9[28];
 
-extern const unsigned char TestEnv_11_00490BC0[];
+static unsigned int TestEnv_11_00490BC0[24];
 
-extern const unsigned char TestEnv_12_00490C20[];
+static unsigned int TestEnv_12_00490C20[24];
 
-extern const unsigned char TestEnv_13[];
+static unsigned int TestEnv_13[24];
 
-extern struct FontWindowTransferPacket WinTexEnv_10;
+static struct FontWindowTransferPacket WinTexEnv_10;
 
 extern unsigned int LoopCount;
 
@@ -338,7 +338,7 @@ extern void sceVif1PkCnt(XglPacket *packet, int mode);
 
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 
-extern const signed char tbl_7[];
+static signed char tbl_7[] ;
 
 extern float dptofp(unsigned long long value);
 
@@ -389,9 +389,9 @@ int xglFontGetKanjiClutUV(int code, int *clut)
 
 static void set_ot(int ot)
 {
-    FontState *state = (FontState *)(D_008811A0.bytes - sizeof(FontState));
-    FontQueueSlot *slot = &D_008811A0.slots[((ot >> 22) & 0x3c) / 4];
-    unsigned char *queue_bytes = (unsigned char *)&D_008811A0;
+    FontState *state = (FontState *)(fontPrintQueueBuffer.bytes - sizeof(FontState));
+    FontQueueSlot *slot = &fontPrintQueueBuffer.slots[((ot >> 22) & 0x3c) / 4];
+    unsigned char *queue_bytes = (unsigned char *)&fontPrintQueueBuffer;
     unsigned short offset = state->queue_cursor - queue_bytes;
     unsigned char *previous = queue_bytes + slot->selfOffset;
 
@@ -448,7 +448,7 @@ int xglFontGetSPcodeSize(int code, const unsigned char *text)
             unsigned char flags = text[1];
             int bit;
 
-            __builtin_memcpy(parameter_sizes, D_004DC2A0,
+            __builtin_memcpy(parameter_sizes, spCodeParameterSizeTable,
                              sizeof(parameter_sizes));
             size = 1;
             for (bit = 0; bit < 8; bit++) {
@@ -598,7 +598,7 @@ static void xglFontPrintDirectCore(const char *text)
 
 void xglFontPrintf(int x, int y, unsigned int color, void *arg)
 {
-    if (D_00881188 & 1 & 0xFFFF) {
+    if (FONT_STATE_FLAGS & 1 & 0xFFFF) {
         set_xyz(x, y, color);
         xglFontPrintSub(arg);
     }
@@ -606,7 +606,7 @@ void xglFontPrintf(int x, int y, unsigned int color, void *arg)
 
 void xglFontPrint(int x, int y, int color, const char *text)
 {
-    if (D_00881188 & 1 & 0xFFFF) {
+    if (FONT_STATE_FLAGS & 1 & 0xFFFF) {
         set_xyz(x, y, color);
         xglFontPrintDirectCore(text);
     }
@@ -619,7 +619,7 @@ void xglFontPrintDirect(const char *text)
 
 void xglFontPrintDirectOT(int ot, const char *text)
 {
-    if (D_00881188 & 1 & 0xFFFF) {
+    if (FONT_STATE_FLAGS & 1 & 0xFFFF) {
         set_ot(ot);
         xglFontPrintDirectCore(text);
     }
@@ -652,7 +652,7 @@ void xglFontDebugPrintf(int x, int y, const char *format, ...)
     unsigned long long *output;
     unsigned long long *list;
 
-    if ((D_00881188 & 3) == 3) {
+    if ((FONT_STATE_FLAGS & 3) == 3) {
         arguments[0] = (unsigned int)format;
         {
         int count;
@@ -718,14 +718,14 @@ static void buffer_reset(void)
         slot++;
     } while (remaining >= 0);
 
-    state = (struct FontState *)(D_008811A0.bytes - sizeof(struct FontState));
+    state = (struct FontState *)(fontPrintQueueBuffer.bytes - sizeof(struct FontState));
     state->queue_cursor = (unsigned char *)slot;
     state->queue_reset_flag = 0;
 }
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int size);
 
-extern signed char tbl_1_004DC2A8[4][2];
+static signed char tbl_1_004DC2A8[4][2];
 
 static void xglFontFlushSub(int texture_u, int texture_v, int size, int flags)
 {
@@ -912,7 +912,6 @@ static void xglFontFlushSubCRLF(void)
     }
 }
 
-
 struct FontLiteralHexCommand {
     unsigned char opcode;
     unsigned char digit_index;
@@ -921,7 +920,6 @@ struct FontLiteralHexCommand {
     unsigned char value_mid_low;
     unsigned char value_low;
 };
-
 
 struct FontPrimitiveStatePacket {
     unsigned int tag_low, tag_high;
@@ -932,8 +930,12 @@ struct FontPrimitiveStatePacket {
 
 /* The native SDK returns the previous writer and advances it by words * 4. */
 extern void *sceVif1PkReserve(XglPacket *packet, int words);
-extern unsigned char normal_2[], back0_3[], back1_4[], biliner_6[], nearest_5[];
-static const unsigned char D_004D2350[96];
+static unsigned int normal_2[16];
+static unsigned int back0_3[8];
+static unsigned int back1_4[8];
+static unsigned int biliner_6[8];
+static unsigned int nearest_5[8];
+static const unsigned char kanaFontCodeTable[96];
 
 struct FontRealDigits {
     signed char value[16];
@@ -1309,7 +1311,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
                                 break;
                             case 0xa4:
                             case 0xa5: {
-                                __builtin_memcpy(kana, D_004D2350, sizeof(kana));
+                                __builtin_memcpy(kana, kanaFontCodeTable, sizeof(kana));
                                 low = kana[low - 0xa0];
                                 xglFontFlushSub((low & 63) << 7, (0x101 - high) << 7, 0x808, 3);
                                 if (low & 64) xglFontFlushSub((low & 128) + 0x1f00, 0x2e80, 0x808, 3);
@@ -1348,7 +1350,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
     }
 }
 
-static const unsigned char D_004D2350[96] = {
+static const unsigned char kanaFontCodeTable[96] = {
     0x00, 0x07, 0x11, 0x08, 0x12, 0x09, 0x13, 0x0A, 0x14, 0x0B, 0x15, 0x16,
     0x56, 0x17, 0x57, 0x18, 0x58, 0x19, 0x59, 0x1A, 0x5A, 0x1B, 0x5B, 0x1C,
     0x5C, 0x1D, 0x5D, 0x1E, 0x5E, 0x1F, 0x5F, 0x20, 0x60, 0x21, 0x61, 0x0F,
@@ -1541,8 +1543,8 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
     sceVif1PkOpenDirectHLCode(cursor->packet, 0);
 }
 
-extern unsigned char zbuf_14[];
-extern unsigned char test_15[];
+static unsigned int zbuf_14[24];
+static unsigned int test_15[8];
 
 struct FontQueueRecord {
     unsigned char next_low;
@@ -1584,13 +1586,13 @@ void xglFontFlush(void)
     cursor->packet = xglPacketGetCurrent();
     xglFontReloadTexture(cursor, 0x80000001);
 
-    slot = D_008811A0.slots;
+    slot = fontPrintQueueBuffer.slots;
     do {
         unsigned short offset = slot->link;
         if (offset) {
             do {
                 struct FontQueueRecord *record =
-                    (struct FontQueueRecord *)&D_008811A0.bytes[offset];
+                    (struct FontQueueRecord *)&fontPrintQueueBuffer.bytes[offset];
                 unsigned char *text = (unsigned char *)(record + 1);
                 offset = record->next_low + (record->next_high << 8);
                 xglFontFlushCore(cursor, text);
@@ -1698,12 +1700,12 @@ void *xglFontGetLoadAddress(void)
 
 unsigned short xglFontGetFlags(void)
 {
-    return D_00881188;
+    return FONT_STATE_FLAGS;
 }
 
 void xglFontSetFlags(int flags)
 {
-    D_00881188 = flags & 0xFFFD;
+    FONT_STATE_FLAGS = flags & 0xFFFD;
 }
 
 unsigned char xglFontLoad(int font_index, int load_flags)
@@ -1729,9 +1731,9 @@ unsigned char xglFontLoad(int font_index, int load_flags)
         }
     }
     if (font_index == 0) {
-        xglCdReadFile(D_004D2448, FS.state.font_image, read_mode, load_flags);
+        xglCdReadFile(fontTexture0Path, FS.state.font_image, read_mode, load_flags);
     } else {
-        xglCdReadFile(D_004D2458, FS.state.font_image, read_mode, load_flags);
+        xglCdReadFile(fontTexture1Path, FS.state.font_image, read_mode, load_flags);
     }
     return previous_font;
 }
@@ -1752,3 +1754,43 @@ void xglFontInitial(void)
     FS.state.horizontal_shift = 0;
     FS.state.character_spacing = 0;
 }
+
+static struct FontModePacket ModeEnv[2] = { { .vif_commands = { 0U, 0U, 0U, 1358954503U }, .gif_tag = { 1152921504606879750ULL, 14ULL }, .frame = { .value = 0ULL, .register_address = 76ULL }, .state_registers = { { .value = 0ULL, .register_address = 24ULL }, { .value = 62768919827382272ULL, .register_address = 64ULL }, { .value = 4294967296ULL, .register_address = 78ULL }, { .value = 196608ULL, .register_address = 71ULL }, { .value = 0ULL, .register_address = 34ULL } } }, { .vif_commands = { 0U, 0U, 0U, 1358954503U }, .gif_tag = { 1152921504606879750ULL, 14ULL }, .frame = { .value = 0ULL, .register_address = 76ULL }, .state_registers = { { .value = 0ULL, .register_address = 24ULL }, { .value = 62768919827382272ULL, .register_address = 64ULL }, { .value = 4294967296ULL, .register_address = 78ULL }, { .value = 196608ULL, .register_address = 71ULL }, { .value = 0ULL, .register_address = 34ULL } } } };
+
+static unsigned short ascii2euc[96] = { 41377, 53685, 53698, 53733, 53929, 53734, 53928, 53696, 53707, 53708, 53684, 53758, 53690, 53757, 53689, 53716, 41904, 41905, 41906, 41907, 41908, 41909, 41910, 41911, 41912, 41913, 53692, 53691, 53703, 53756, 53704, 53687, 53677, 41921, 41922, 41923, 41924, 41925, 41926, 41927, 41928, 41929, 41930, 41931, 41932, 41933, 41934, 41935, 41936, 41937, 41938, 41939, 41940, 41941, 41942, 41943, 41944, 41945, 41946, 53709, 53669, 53710, 53720, 53715, 53722, 41953, 41954, 41955, 41956, 41957, 41958, 41959, 41960, 41961, 41962, 41963, 41964, 41965, 41966, 41967, 41968, 41969, 41970, 41971, 41972, 41973, 41974, 41975, 41976, 41977, 41978, 53711, 53713, 53712, 53736, 41377 };
+
+static struct FontWindowTransferPacket WinTexEnv_10 = { .vif_commands = { 0U, 0U, 285212672U, 1358954501U }, .gif_tag = { 1152921504606846980ULL, 14ULL }, .bitbltbuf = { .value = 0ULL, .register_address = 80ULL }, .trxpos = { .value = 0ULL, .register_address = 81ULL }, .trxreg = { .value = 0ULL, .register_address = 82ULL }, .trxdir = { .value = 0ULL, .register_address = 83ULL } };
+
+static unsigned int normal_2[16] = { 32771U, 268435456U, 14U, 0U, 0U, 0U, 20U, 0U, 458752U, 0U, 71U, 0U, 0U, 0U, 66U, 0U };
+
+static unsigned int back0_3[8] = { 32769U, 268435456U, 14U, 0U, 458765U, 0U, 71U, 0U };
+
+static unsigned int back1_4[8] = { 32769U, 268435456U, 14U, 0U, 458752U, 0U, 71U, 0U };
+
+static unsigned int nearest_5[8] = { 32769U, 268435456U, 14U, 0U, 0U, 0U, 20U, 0U };
+
+static unsigned int biliner_6[8] = { 32769U, 268435456U, 14U, 0U, 96U, 0U, 20U, 0U };
+
+static unsigned int KanjiTex0Env_8[28] = { 0U, 0U, 285212672U, 1358954502U, 5U, 268435456U, 14U, 0U, 0U, 0U, 63U, 0U, 0U, 342048U, 80U, 0U, 0U, 0U, 81U, 0U, 320U, 192U, 82U, 0U, 0U, 0U, 83U, 0U };
+
+static unsigned int KanjiTex1Env_9[28] = { 0U, 0U, 285212672U, 1358954502U, 5U, 268435456U, 14U, 0U, 0U, 0U, 63U, 0U, 0U, 343040U, 80U, 0U, 0U, 0U, 81U, 0U, 320U, 192U, 82U, 0U, 0U, 0U, 83U, 0U };
+
+static unsigned int TestEnv_11_00490BC0[24] = { 0U, 0U, 0U, 1358954501U, 32772U, 268435456U, 14U, 0U, 0U, 0U, 63U, 0U, 0U, 0U, 66U, 0U, 0U, 0U, 20U, 0U, 5U, 0U, 8U, 0U };
+
+static unsigned int TestEnv_12_00490C20[24] = { 0U, 0U, 0U, 1358954501U, 32772U, 268435456U, 14U, 0U, 822083584U, 0U, 78U, 0U, 0U, 0U, 73U, 0U, 0U, 0U, 74U, 0U, 458765U, 0U, 71U, 0U };
+
+static unsigned int TestEnv_13[24] = { 0U, 0U, 0U, 1358954501U, 32772U, 268435456U, 14U, 0U, 822083584U, 0U, 78U, 0U, 0U, 0U, 73U, 0U, 0U, 0U, 74U, 0U, 458752U, 0U, 71U, 0U };
+
+static unsigned int zbuf_14[24] = { 32773U, 268435456U, 14U, 0U, 28672U, 29184U, 24U, 0U, 33488896U, 29294592U, 64U, 0U, 822083584U, 0U, 78U, 0U, 458752U, 0U, 71U, 0U, 524400U, 0U, 76U, 0U };
+
+static unsigned int test_15[8] = { 32769U, 268435456U, 14U, 0U, 0U, 0U, 63U, 0U };
+
+static struct KanjiClutEnvironment KanjiClutEnv = { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x51, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x05, 0x00, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x51, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x80, 0xaa, 0xaa, 0xaa, 0x80, 0xff, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x80, 0xaa, 0xaa, 0xaa, 0x80, 0xff, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x80, 0x55, 0x55, 0x55, 0x80, 0x55, 0x55, 0x55, 0x80, 0x55, 0x55, 0x55, 0x80 }, { 0x0000, 0x0000, 0x5555, 0x8055, 0xaaaa, 0x80aa, 0xffff, 0x80ff, 0x0000, 0x0000, 0x5555, 0x8055, 0xaaaa, 0x80aa, 0xffff, 0x80ff, 0xaaaa, 0x80aa, 0xaaaa, 0x80aa, 0xaaaa, 0x80aa, 0xaaaa, 0x80aa, 0xffff, 0x80ff, 0xffff, 0x80ff, 0xffff, 0x80ff, 0xffff, 0x80ff } };
+
+static unsigned char spcode_0[32] = { 0, 1, 1, 1, 1, 1, 3, 0, 255, 0, 0, 0, 3, 1, 5, 3, 5, 6, 2, 2, 0, 255, 0, 7, 1, 1, 0, 1, 0, 0, 0, 0 };
+
+static signed char tbl_7[] = { -16, 10, 37 };
+
+unsigned char spCodeParameterSizeTable[8] = { 2, 2, 3, 2, 2, 0, 0, 0 };
+
+static signed char tbl_1_004DC2A8[4][2] = { { 0, -1 }, { -1, 0 }, { 1, 0 }, { 0, 1 } };

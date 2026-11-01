@@ -277,10 +277,10 @@ typedef struct EnemyGameLoopState {
 extern EnemyGameLoopState GameLoopState;
 extern unsigned short CoolDown_0;
 extern unsigned short CoolDown_1;
-extern const float D_004D8034;
-extern const float D_004D8038;
-extern const float D_004D803C;
-extern const float D_004D8040;
+extern const float ESCAPE_RESET_DISTANCE;
+extern const float ESCAPE_SPEED;
+extern const float ROUTE_CHASE_RESET_DISTANCE;
+extern const float ROUTE_CHASE_SPEED;
 extern void *AdrsEnemyExclamation;
 extern void *AdrsEnemyQuestion;
 extern void *AdrsEnemySphere;
@@ -298,11 +298,11 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
 int Check_MoveSquare(float radius, const Vector4 *to, const Vector4 *from,
                      Vector4 *square, int map_index);
 void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char D_004DB7F8[];
-extern const char D_004DB800[];
-extern const char D_004DB808[];
-extern const char D_004DB810[];
-extern const char D_004DB818[];
+extern const char witnessedText[];
+extern const char fieldObjectText[];
+extern const char newText[];
+extern const char goStraightText[];
+extern const char addText[];
 void TM_Check_Move_at_GoBack(EnemyActor *actor);
 int Get_Attr(const Vector4 *position, int map_index, int attr_mask);
 int Check_Undu(Vector4 *start, Vector4 *end, int map_index, Vector4 *hit,
@@ -344,7 +344,7 @@ typedef struct EnemyResourceRecord {
 } EnemyResourceRecord;
 
 extern EnemyResourceRecord GameResource[128];
-extern const char D_004CAB00[];
+extern const char finalInitMethodName[];
 void Homing_Add(unsigned char number, float x, float y, float z, short value);
 void ACT_initExMotion(EnemyActor *target, unsigned int slot, void *motion);
 void CallMethod_I(const char *method, int value);
@@ -368,12 +368,12 @@ extern EnemyVector4 EnemyTarget;
 extern short EfTab_Code[];
 extern short EfTab_Intr[];
 extern float EfTab_Scal[];
-extern const char D_004CAB48[];
-extern const char D_004CAB60[];
-extern const char D_004CAB78[];
-extern const char D_004CAB90[];
-extern const char D_004CABA8[];
-extern const char D_004CABC0[];
+extern const char animTimeFormat[];
+extern const char animStartFormat[];
+extern const char animFinalFormat[];
+extern const char animSpeedFormat[];
+extern const char animNumberFormat[];
+extern const char animBlendFormat[];
 
 void DispPillar(const void *position, const void *size, const int *color);
 void GameIdLightSet(EnemyActor *actor, void *query);
@@ -420,17 +420,17 @@ void Enemy_Damage_Seal(EnemyActor *actor);
 void Enemy_Escape(EnemyActor *actor);
 void Enemy_Route_Chase(EnemyActor *self);
 
-extern float D_004D801C;
+extern float ROUTE_NEAR_LOOKBACK_DISTANCE;
 
-extern float D_004D8020;
+extern float ROUTE_HALF_TURN_RADIANS;
 
-extern float D_004D8024;
+extern float ROUTE_DIRECTION_FULL_TURN;
 
-extern const float D_004D8028;
+extern const float ROUTE_FAR_LOOKBACK_DISTANCE;
 
-extern float D_004D802C;
+extern float ROUTE_RANDOM_HALF_TURN_RADIANS;
 
-extern float D_004D8030;
+extern float ROUTE_RETREAT_FULL_TURN;
 
 void GetBSplineLoopDummy(short parameter, short point_count, int stride,
                          Vector4 *points, Vector4 *result, EnemyActor *actor);
@@ -446,7 +446,7 @@ short Check_Straight(float radius, const Vector4 *from, const Vector4 *to,
 void BSpline_Add(short parameter, short point_count, short stride,
                  Vector4 *points, const Vector4 *point, short offset);
 
-extern const float D_004D8064;
+extern const float ENEMY_DRIFT_DAMPING;
 
 void Get_One_Step(float length, const Vector4 *source,
                   const Vector4 *destination, float *output);

@@ -2,36 +2,89 @@
 
 #include "pause_menu_page_enemy.h"
 
-
 short DebugActor = 0;
 static short Page_0 = 0;
-const char D_004DB868[5] = "\310\257\270\253";
-const char D_004DB870[7] = "\304\311\300\327\303\346";
-const char D_004DB878[5] = "\271\305\304\276";
-const char D_004DB880[5] = "\265\242\301\343";
-const char D_004DB888[7] = "\277\250\274\352\303\346";
-const char D_004DB890[5] = "\244\314\244\353";
-const char D_004DB898[5] = "\277\250\274\352";
-const char D_004DB8A0[7] = "\267\331\310\367\260\367";
-const char D_004DB8A8[5] = "\314\347\310\326";
-const char D_004DB8B0[7] = "\245\353\241\274\245\310";
-const char D_004DB8B8[5] = "\261\375\311\374";
-const char D_004DB8C0[3] = "\312\311";
-const char D_004DB8C8[5] = "\311\342\315\267";
-const char D_004DB8D0[5] = "\306\250\313\264";
-const char D_004DB8D8[7] = "\244\314\244\353\241\241";
-const char D_004DB8E0[7] = "\241\277\243\302\241\241";
-const char D_004DB8E8[7] = "\241\277\243\324\241\241";
-const char D_004DB8F0[7] = "\241\374\243\302\241\241";
-const char D_004DB8F8[7] = "\242\243\243\302\303\346";
-const char D_004DB900[7] = "\242\243\243\302\241\241";
-const char D_004DB908[7] = "\242\243\243\324\241\241";
-const char D_004DB910[7] = "\245\314\245\353\241\241";
-const char D_004DB918[5] = "\313\314\242\254";
-const char D_004DB920[5] = "\305\354\242\252";
-const char D_004DB928[5] = "\306\356\242\255";
-const char D_004DB930[5] = "\300\276\242\253";
-const char D_004DB938[5] = "\304\314\276\357";
+/* JP: 発見
+ * EN: Discovered */
+const char discoveredText[5] = "\310\257\270\253";
+/* JP: 追跡中
+ * EN: Chasing */
+const char chasingText[7] = "\304\311\300\327\303\346";
+/* JP: 硬直
+ * EN: Stiffen */
+const char stiffenText[5] = "\271\305\304\276";
+/* JP: 帰巣
+ * EN: Return home */
+const char returnHomeText[5] = "\265\242\301\343";
+/* JP: 触手中
+ * EN: Tentacle active */
+const char tentacleActiveText[7] = "\277\250\274\352\303\346";
+/* JP: ぬる
+ * EN: Null */
+const char pauseMenuPageEnemyNullText[5] = "\244\314\244\353";
+/* JP: 触手
+ * EN: Tentacle */
+const char tentacleText[5] = "\277\250\274\352";
+/* JP: 警備員
+ * EN: Guard */
+const char guardText[7] = "\267\331\310\367\260\367";
+/* JP: 門番
+ * EN: Gatekeeper */
+const char gatekeeperText[5] = "\314\347\310\326";
+/* JP: ルート
+ * EN: Route */
+const char routeText[7] = "\245\353\241\274\245\310";
+/* JP: 往復
+ * EN: Round trip */
+const char roundTripText[5] = "\261\375\311\374";
+/* JP: 壁
+ * EN: Wall */
+const char wallText[3] = "\312\311";
+/* JP: 浮遊
+ * EN: Float */
+const char floatText[5] = "\311\342\315\267";
+/* JP: 逃亡
+ * EN: Flee */
+const char fleeText[5] = "\306\250\313\264";
+/* JP: ぬる
+ * EN: Null */
+const char locatorNullText[7] = "\244\314\244\353\241\241";
+/* JP: ／Ｂ
+ * EN: / B */
+const char locatorSlashBText[7] = "\241\277\243\302\241\241";
+/* JP: ／Ｔ
+ * EN: / T */
+const char locatorSlashTText[7] = "\241\277\243\324\241\241";
+/* JP: ●Ｂ
+ * EN: (B) */
+const char locatorParenBText[7] = "\241\374\243\302\241\241";
+/* JP: ■Ｂ中
+ * EN: [B] active */
+const char locatorBracketBActiveText[7] = "\242\243\243\302\303\346";
+/* JP: ■Ｂ
+ * EN: [B] */
+const char locatorBracketBText[7] = "\242\243\243\302\241\241";
+/* JP: ■Ｔ
+ * EN: [T] */
+const char locatorBracketTText[7] = "\242\243\243\324\241\241";
+/* JP: ヌル
+ * EN: Null */
+const char locatorNoneText[7] = "\245\314\245\353\241\241";
+/* JP: 北↑
+ * EN: North Up */
+const char directionNorthUpText[5] = "\313\314\242\254";
+/* JP: 東→
+ * EN: East Right */
+const char directionEastRightText[5] = "\305\354\242\252";
+/* JP: 南↓
+ * EN: South Down */
+const char directionSouthDownText[5] = "\306\356\242\255";
+/* JP: 西←
+ * EN: West Left */
+const char directionWestLeftText[5] = "\300\276\242\253";
+/* JP: 通常
+ * EN: Normal */
+const char freezeNormalText[5] = "\304\314\276\357";
 
 static inline int printEnemyCounters(int y, const char *format,
     int current, int limit)
@@ -55,25 +108,25 @@ static inline int printEnemyCounter(int y, const char *format, int count)
 static inline int printEnemyAction(int y, int action, const char *label,
     int hit_count, int hit_limit)
 {
-    xglFontDebugPrintf(8, y, D_004CB390, action, label, hit_count, hit_limit);
+    xglFontDebugPrintf(8, y, ENEMY_MODE_FORMAT, action, label, hit_count, hit_limit);
     return y + 12;
 }
 
 static inline int printEnemyPause(int y, int pause_kind, const char *label)
 {
-    xglFontDebugPrintf(8, y, D_004CB378, pause_kind, label);
+    xglFontDebugPrintf(8, y, ENEMY_TYPE_FORMAT, pause_kind, label);
     return y + 12;
 }
 
 static inline int printEnemyFreeze(int y, int freeze_state, const char *label)
 {
-    xglFontDebugPrintf(8, y, D_004CB3B0, freeze_state, label);
+    xglFontDebugPrintf(8, y, ENEMY_FREEZE_FORMAT, freeze_state, label);
     return y + 12;
 }
 
 static inline int printEnemyHiddenUnit(int y, int hidden_unit)
 {
-    xglFontDebugPrintf(8, y, D_004CB3E0, hidden_unit);
+    xglFontDebugPrintf(8, y, ENEMY_HIDDEN_UNIT_FORMAT, hidden_unit);
     return y + 12;
 }
 
@@ -86,7 +139,7 @@ static inline int printEnemyFlag(int y, const char *format, int value,
 
 static inline int printEnemyLookAt(int y, const EnemyWork *enemy, const Actor *selected)
 {
-    const char *height_format = D_004CB4C8;
+    const char *height_format = ENEMY_HEIGHT_LOOK_AT_FORMAT;
     double display_height = enemy->height;
     xglFontDebugPrintf(8, y, height_format, display_height,
         selected->look_at_state, selected->look_at_target);
@@ -95,13 +148,13 @@ static inline int printEnemyLookAt(int y, const EnemyWork *enemy, const Actor *s
 
 static inline int printEnemyTerritoryID(int y, int index, unsigned long long id)
 {
-    xglFontDebugPrintf(8, y, D_004CB338, index, id);
+    xglFontDebugPrintf(8, y, ENEMY_MOVE_ID_FORMAT, index, id);
     return y + 12;
 }
 
 static inline int printEnemyMark(int y, int mark, const char *label)
 {
-    xglFontDebugPrintf(8, y, D_004CB908, mark, label);
+    xglFontDebugPrintf(8, y, ENEMY_MARK_KIND_FORMAT, mark, label);
     return y + 12;
 }
 
@@ -109,7 +162,7 @@ static inline int printLocatorHeaderRow(int y, int index,
     const char *const *label, double first_component,
     double third_component, double fourth_component)
 {
-    xglFontDebugPrintf(0, y, D_004CB890, index, first_component,
+    xglFontDebugPrintf(0, y, ENEMY_LOCATOR_ROW_FORMAT, index, first_component,
         third_component, fourth_component, *label);
     return y + 12;
 }
@@ -117,14 +170,14 @@ static inline int printLocatorHeaderRow(int y, int index,
 static inline int printEnemyMotion(int y, int row, int slot,
     int motion, int motion_id)
 {
-    xglFontDebugPrintf(8, y, D_004CB9F0, row, slot, motion, motion_id);
+    xglFontDebugPrintf(8, y, ENEMY_MOTION_FRAME_FORMAT, row, slot, motion, motion_id);
     return y + 10;
 }
 
 static inline int printEnemyPointSummary(int y, int parameter,
     int spline_count, int point_count)
 {
-    xglFontDebugPrintf(8, y, D_004CB950, parameter, spline_count * 128, point_count);
+    xglFontDebugPrintf(8, y, ENEMY_SPLINE_SUMMARY_FORMAT, parameter, spline_count * 128, point_count);
     return y + 12;
 }
 
@@ -141,24 +194,24 @@ static inline int printEnemyHeading(int x, int y, const char *format)
 
 static inline int printEnemySound(int y, int slot, int sound_effect)
 {
-    xglFontDebugPrintf(8, y, D_004CB8E8, slot, sound_effect);
+    xglFontDebugPrintf(8, y, ENEMY_SOUND_SLOT_FORMAT, slot, sound_effect);
     return y + 12;
 }
 
 static inline int printEnemySplinePoint(int y, int row,
     double position_x, double position_y, double position_z)
 {
-    xglFontDebugPrintf(8, y, D_004CB990, row, position_x, position_y, position_z);
+    xglFontDebugPrintf(8, y, ENEMY_SPLINE_POINT_FORMAT, row, position_x, position_y, position_z);
     return y + 10;
 }
 
 static inline void printEnemyPageHeader(const EnemyWork *enemy)
 {
     if (FLAG_FRAME_60 == 1)
-        xglFontDebugPrintf(8, 0x18, D_004CB160);
+        xglFontDebugPrintf(8, 0x18, DEBUG_WELCOME_60FRAME_TEXT);
     if (FLAG_FRAME_60 == 2)
-        xglFontDebugPrintf(8, 0x18, D_004CB180);
-    xglFontDebugPrintf(0, 0, D_004CB1A0, Page_0, DebugActor, enemy->entry_id);
+        xglFontDebugPrintf(8, 0x18, DEBUG_MODE_30FRAME_TEXT);
+    xglFontDebugPrintf(0, 0, PAGE_HEADER_FORMAT, Page_0, DebugActor, enemy->entry_id);
 }
 
 static inline int wrappedEnemyDebugPage(int page, int increment)
@@ -177,32 +230,34 @@ void PauseMenuPageEnemy(void)
     short column;
     unsigned short id;
     const char *actor_labels[17] = {
-        D_004CAEF0, D_004CAF08, D_004CAF18, D_004CAF28,
-        D_004CAF38, D_004DB868, D_004DB870, D_004DB878,
-        D_004DB880, D_004CAF50, D_004DB888, D_004CAF60,
-        D_004CAF70, D_004CAF80, D_004CAF90, D_004CAFA0, 0
+        PauseMenuPageEnemyNotInitializedText, PauseMenuPageEnemyAlertPoseText, PauseMenuPageEnemyAlertIntimidationText, PauseMenuPageEnemyAlertTurningText,
+        PauseMenuPageEnemyAlertPatrolText, discoveredText, chasingText, stiffenText,
+        returnHomeText, PauseMenuPageEnemyUniqueActionText, tentacleActiveText, PauseMenuPageEnemyExplosionDamageText,
+        PauseMenuPageEnemyElectricDamageText, PauseMenuPageEnemySealDamageText, PauseMenuPageEnemyFleeRouteText, PauseMenuPageEnemyPursueRouteText, 0
     };
     const char *pause_labels[14] = {
-        D_004DB890, D_004CAFF8, D_004DB898, D_004CB008,
-        D_004CB018, D_004DB8A0, D_004DB8A8, D_004CB028,
-        D_004DB8B0, D_004DB8B8, D_004DB8C0, D_004DB8C8,
-        D_004DB8D0, D_004CB038
+        pauseMenuPageEnemyNullText, ENEMY_NORMAL_MODE_LABEL, tentacleText, ENEMY_ROUTE_TENTACLE_MODE_LABEL,
+        ENEMY_ROUND_TRIP_TENTACLE_MODE_LABEL, guardText, gatekeeperText, ENEMY_TENTACLE_GATE_MODE_LABEL,
+        routeText, roundTripText, wallText, floatText,
+        fleeText, ENEMY_ROUTE_CHASE_MODE_LABEL
     };
     const char *locator_labels[14] = {
-        D_004DB8D8, D_004DB8E0, D_004DB8E8, D_004DB8F0,
-        D_004DB8F8, D_004DB900, D_004DB908, D_004DB910,
+        locatorNullText, locatorSlashBText, locatorSlashTText, locatorParenBText,
+        locatorBracketBActiveText, locatorBracketBText, locatorBracketTText, locatorNoneText,
         0, 0, 0, 0, 0, 0
     };
     const char *direction_labels[4] = {
-        D_004DB918, D_004DB920, D_004DB928, D_004DB930
+        directionNorthUpText, directionEastRightText, directionSouthDownText, directionWestLeftText
     };
     const char *freeze_labels[4] = {
-        D_004DB938, D_004CB0C8, D_004CB0E0, D_004CB0F0
+        freezeNormalText, ENEMY_ALGORITHM_STOP_LABEL, ENEMY_FULL_STOP_LABEL, ENEMY_FULL_STOP_CHR_LABEL
     };
-    const char *mark_labels[3] = {D_004DB890, D_004CB120, D_004CB130};
-    const char *boolean_labels[2] = {D_004DB940, D_004DB948};
+    const char *mark_labels[3] = {pauseMenuPageEnemyNullText, ENEMY_SURPRISE_MARK_LABEL, ENEMY_QUESTION_MARK_LABEL};
+    const char *boolean_labels[2] = {BOOLEAN_NO_LABEL, BOOLEAN_YES_LABEL};
     const char *route_labels[2] = {
-        D_004DB958, "\245\271\245\327\245\351\245\244\245\363"
+        /* JP: スプライン
+         * EN: Spline */
+        ENEMY_STRAIGHT_LINE_LABEL, "\245\271\245\327\245\351\245\244\245\363"
     };
     EnemyVector4 final_target;
 
@@ -236,7 +291,7 @@ void PauseMenuPageEnemy(void)
     printEnemyPageHeader(enemy);
     y = line_spacing;
     if (actor[DebugActor].kind == 1) {
-        y = printEnemyHeading(0x60, y, D_004CB1C0);
+        y = printEnemyHeading(0x60, y, ENEMY_SUSPECTED_FACE_TEXT);
     } else {
         switch (Page_0) {
         case 0: {
@@ -245,8 +300,8 @@ void PauseMenuPageEnemy(void)
             UnduTemp.header = UnduDataGetHeader(enemy->map_index, 0x8000);
             UnduCheck(position, 0, &UnduTemp);
             {
-                const char *position_format = D_004CB1E0;
-                xglFontDebugPrintf(0x60, y, D_004CB1D0);
+                const char *position_format = ENEMY_CURRENT_POSITION_FORMAT;
+                xglFontDebugPrintf(0x60, y, ENEMY_MOVE_HEADING_TEXT);
                 y += 24;
                 {
                     double position_x = position->x;
@@ -254,40 +309,40 @@ void PauseMenuPageEnemy(void)
                         position_x, selected->position.y, selected->position.z);
                 }
                 y += 12;
-                xglFontDebugPrintf(8, y, D_004CB1F8,
+                xglFontDebugPrintf(8, y, ENEMY_PLANNED_OFFSET_FORMAT,
                     enemy->goback_position.x, enemy->goback_position.y,
                     enemy->goback_position.z);
             }
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB210,
+            xglFontDebugPrintf(8, y, ENEMY_TARGET_POINT_FORMAT,
                 enemy->step_limit.x, enemy->step_limit.y, enemy->step_limit.z);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB228,
+            xglFontDebugPrintf(8, y, ENEMY_INERTIA_FORMAT,
                 enemy->stop_cause.x, enemy->stop_cause.y, enemy->stop_cause.z);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB240, selected->rotation.y, selected->target_angle);
+            xglFontDebugPrintf(8, y, ENEMY_ROTATION_ANGLE_FORMAT, selected->rotation.y, selected->target_angle);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB258, parameters->move_speed, parameters->route_step_length);
+            xglFontDebugPrintf(8, y, ENEMY_MOVE_SPEED_DISTANCE_FORMAT, parameters->move_speed, parameters->route_step_length);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB278, parameters->sight_distance, parameters->sight_angle);
+            xglFontDebugPrintf(8, y, ENEMY_SIGHT_DISTANCE_ANGLE_FORMAT, parameters->sight_distance, parameters->sight_angle);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB298, parameters->chase_speed, parameters->hearing_distance);
+            xglFontDebugPrintf(8, y, ENEMY_CHASE_SPEED_HEARING_FORMAT, parameters->chase_speed, parameters->hearing_distance);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB2B8,
+            xglFontDebugPrintf(8, y, ENEMY_GIVE_UP_DISTANCE_TIME_FORMAT,
                 parameters->chase_distance, enemy->chase_frame_limit);
             {
                 y += line_spacing;
                 final_target = enemy->final_target;
-                xglFontDebugPrintf(8, y, D_004CB2D8,
+                xglFontDebugPrintf(8, y, ENEMY_FINAL_TARGET_SIZE_FORMAT,
                     &final_target, selected->body_radius);
             }
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB2F8, enemy->territory_index, enemy->map_index);
+            xglFontDebugPrintf(8, y, ENEMY_AREA_ID_FORMAT, enemy->territory_index, enemy->map_index);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB318, enemy->territory_index,
+            xglFontDebugPrintf(8, y, ENEMY_ATTRIBUTE_ID_FORMAT, enemy->territory_index,
                 Get_Attr(position, enemy->map_index, 0));
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB318, enemy->territory_index,
+            xglFontDebugPrintf(8, y, ENEMY_ATTRIBUTE_ID_FORMAT, enemy->territory_index,
                 Get_Attr(position, enemy->map_index, 0x10));
             y += line_spacing;
             {
@@ -297,13 +352,13 @@ void PauseMenuPageEnemy(void)
             }
             id = selected->in_use_id;
             if ((unsigned int)id - 0x4000u < 0x806u)
-                xglFontDebugPrintf(0xc0, 0xa4, D_004CB358);
+                xglFontDebugPrintf(0xc0, 0xa4, ENEMY_TITLE_TEXT);
             else
-                xglFontDebugPrintf(0xc0, 0xa4, D_004DB968);
+                xglFontDebugPrintf(0xc0, 0xa4, ENEMY_NPC_LABEL);
             break;
         }
         case 1:
-            y = printEnemyHeading(0x60, y, D_004CB368);
+            y = printEnemyHeading(0x60, y, ENEMY_STATE_HEADING_TEXT);
             if (selected->number != 0) {
                 int pause_kind = enemy->pause_kind;
                 const char *pause_label = pause_labels[pause_kind];
@@ -320,132 +375,132 @@ void PauseMenuPageEnemy(void)
                 int freeze_state = enemy->freeze_state;
                 y = printEnemyFreeze(y, freeze_state, freeze_labels[freeze_state]);
             }
-            xglFontDebugPrintf(8, y, D_004CB3C8, enemy->stop_cause.x, enemy->stop_cause.y, enemy->stop_cause.z);
+            xglFontDebugPrintf(8, y, ENEMY_STOP_CAUSE_FORMAT, enemy->stop_cause.x, enemy->stop_cause.y, enemy->stop_cause.z);
             y += line_spacing;
             y = printEnemyHiddenUnit(y, enemy->hidden_unit);
-            xglFontDebugPrintf(8, y, D_004CB400);
+            xglFontDebugPrintf(8, y, ENEMY_COUNTER_HEADER_TEXT);
             y += line_spacing;
-            y = printEnemyCounters(y, D_004CB420,
+            y = printEnemyCounters(y, ENEMY_RIGID_COUNTERS_FORMAT,
                 parameters->stiff_duration, parameters->pause_interval);
-            y = printEnemyCounters(y, D_004CB440,
+            y = printEnemyCounters(y, ENEMY_THREAT_COUNTERS_FORMAT,
                 parameters->threat_duration, parameters->threat_interval);
-            y = printEnemyCounter(y, D_004CB460, enemy->turn_count);
-            y = printEnemyCounter(y, D_004CB480, enemy->explosion_count);
-            y = printEnemyCounter(y, D_004CB498, enemy->electric_count);
-            y = printEnemyCounter(y, D_004CB4B0, enemy->fall_count);
+            y = printEnemyCounter(y, ENEMY_TURN_COUNT_FORMAT, enemy->turn_count);
+            y = printEnemyCounter(y, ENEMY_EXPLOSION_COUNT_FORMAT, enemy->explosion_count);
+            y = printEnemyCounter(y, ENEMY_ELECTRIC_COUNT_FORMAT, enemy->electric_count);
+            y = printEnemyCounter(y, ENEMY_FALL_COUNT_FORMAT, enemy->fall_count);
             y = printEnemyLookAt(y, enemy, selected);
-            xglFontDebugPrintf(8, y, D_004CB4F0, enemy->sight_position[0], enemy->sight_position[1], enemy->sight_position[2]);
+            xglFontDebugPrintf(8, y, ENEMY_SIGHT_POSITION_FORMAT, enemy->sight_position[0], enemy->sight_position[1], enemy->sight_position[2]);
             y += 12;
             break;
         case 2:
-            y = printEnemyHeading(0x60, y, D_004CB508);
+            y = printEnemyHeading(0x60, y, ENEMY_FLAGS_HEADING_TEXT);
             {
                 const char *locator_label = boolean_labels[
                     (unsigned short)parameters->locator_flags & 1];
-                y = printEnemyFlag(y, D_004CB518, parameters->locator_flags & 1,
+                y = printEnemyFlag(y, ENEMY_MOTION_FLAG_FORMAT, parameters->locator_flags & 1,
                     locator_label);
             }
             {
                 int flags = parameters->locator_flags;
-                y = printEnemyFlag(y, D_004CB538, (flags >> 1) & 1,
+                y = printEnemyFlag(y, ENEMY_TURN_FLAG_FORMAT, (flags >> 1) & 1,
                     boolean_labels[(flags & 2) != 0]);
             }
-            xglFontDebugPrintf(8, y, D_004CB558, (parameters->locator_flags >> 2) & 1,
+            xglFontDebugPrintf(8, y, ENEMY_HEAD_SWING_FLAG_FORMAT, (parameters->locator_flags >> 2) & 1,
                 boolean_labels[(parameters->locator_flags & 4) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB578, (parameters->locator_flags >> 3) & 1,
+            xglFontDebugPrintf(8, y, ENEMY_CANCELABLE_FLAG_FORMAT, (parameters->locator_flags >> 3) & 1,
                 boolean_labels[(parameters->locator_flags & 8) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB598, (parameters->locator_flags >> 4) & 1,
+            xglFontDebugPrintf(8, y, ENEMY_FREEZE_FLAG_FORMAT, (parameters->locator_flags >> 4) & 1,
                 boolean_labels[(parameters->locator_flags & 0x10) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB5B8, (parameters->locator_flags >> 16) & 1,
+            xglFontDebugPrintf(8, y, ENEMY_JAVA_TALK_FLAG_FORMAT, (parameters->locator_flags >> 16) & 1,
                 boolean_labels[(parameters->locator_flags & 0x10000) != 0]);
             y += line_spacing;
-            y = printEnemyFlag(y, D_004CB5D8, (parameters->locator_flags >> 17) & 1,
+            y = printEnemyFlag(y, ENEMY_TOUCH_FLAG_FORMAT, (parameters->locator_flags >> 17) & 1,
                 boolean_labels[(parameters->locator_flags & 0x20000) != 0]);
-            xglFontDebugPrintf(8, y, D_004CB5F8, (parameters->locator_flags >> 18) & 1,
+            xglFontDebugPrintf(8, y, ENEMY_LOCATOR_FLAG_FORMAT, (parameters->locator_flags >> 18) & 1,
                 boolean_labels[(parameters->locator_flags & 0x40000) != 0]);
             y += line_spacing;
             break;
         case 3:
-            y = printEnemyHeading(0x60, y, D_004CB618);
-            xglFontDebugPrintf(8, y, D_004CB628, enemy->tentacle_range);
+            y = printEnemyHeading(0x60, y, ENEMY_TENTACLE_HEADING_TEXT);
+            xglFontDebugPrintf(8, y, ENEMY_TENTACLE_RANGE_FORMAT, enemy->tentacle_range);
             y += 12;
-            y = printEnemyCounter(y, D_004CB640, enemy->tentacle_duration);
-            printEnemyFinalCounters(y, D_004CB658, enemy->locator_start_frame, enemy->locator_end_frame);
+            y = printEnemyCounter(y, ENEMY_TENTACLE_DURATION_FORMAT, enemy->tentacle_duration);
+            printEnemyFinalCounters(y, ENEMY_CHECK_START_END_FORMAT, enemy->locator_start_frame, enemy->locator_end_frame);
             y += line_spacing;
             break;
         case 4:
-            y = printEnemyHeading(0x60, y, D_004CB670);
-            xglFontDebugPrintf(8, y, D_004CB690, enemy->scale.current);
+            y = printEnemyHeading(0x60, y, ENEMY_SCALE_HEADING_TEXT);
+            xglFontDebugPrintf(8, y, ENEMY_CURRENT_SCALE_FORMAT, enemy->scale.current);
             y += 12;
-            y = printEnemyCounters(y, D_004CB6A8,
+            y = printEnemyCounters(y, ENEMY_COUNTER_FORMAT,
                 enemy->scale.frame, enemy->scale.duration);
             {
-                const char *scale_format = D_004CB6C8;
+                const char *scale_format = ENEMY_SCALE_TRANSITION_FORMAT;
                 xglFontDebugPrintf(8, y, scale_format,
                     enemy->scale.start, enemy->scale.target);
                 y += 12;
                 /* Leave a blank row after the scale range. */
                 y += line_spacing;
             }
-            printEnemyFinalCounters(y, D_004CB6E8, parameters->light_level, enemy->applied_light_level);
+            printEnemyFinalCounters(y, ENEMY_ALPHA_TRANSITION_FORMAT, parameters->light_level, enemy->applied_light_level);
             y += line_spacing;
             break;
         case 5:
-            y = printEnemyHeading(0x60, y, D_004CB708);
-            xglFontDebugPrintf(8, y, D_004CB718, enemy->state_flags & 1,
+            y = printEnemyHeading(0x60, y, ENEMY_TRAITS_HEADING_TEXT);
+            xglFontDebugPrintf(8, y, ENEMY_ENCOUNTER_FORMAT, enemy->state_flags & 1,
                 boolean_labels[(unsigned short)enemy->state_flags & 1]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB730, (enemy->state_flags >> 2) & 1, boolean_labels[(enemy->state_flags & 4) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_CONVEYOR_FORMAT, (enemy->state_flags >> 2) & 1, boolean_labels[(enemy->state_flags & 4) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB748, (enemy->state_flags >> 3) & 1, boolean_labels[(enemy->state_flags & 8) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_OUTING_FORMAT, (enemy->state_flags >> 3) & 1, boolean_labels[(enemy->state_flags & 8) != 0]);
             y += line_spacing;
             {
                 int state_flags = enemy->state_flags;
                 const char *route_label = route_labels[(state_flags & 0x10) != 0];
-                xglFontDebugPrintf(8, y, D_004CB760, (state_flags >> 4) & 1,
+                xglFontDebugPrintf(8, y, ENEMY_MOVE_TYPE_FORMAT, (state_flags >> 4) & 1,
                     route_label);
             }
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB778, (enemy->state_flags >> 5) & 1, boolean_labels[(enemy->state_flags & 0x20) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_FLIGHT_FORMAT, (enemy->state_flags >> 5) & 1, boolean_labels[(enemy->state_flags & 0x20) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB790, (enemy->state_flags >> 6) & 1, boolean_labels[(enemy->state_flags & 0x40) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_DESTROY_FORMAT, (enemy->state_flags >> 6) & 1, boolean_labels[(enemy->state_flags & 0x40) != 0]);
             y += line_spacing;
-            xglFontDebugPrintf(8, y, D_004CB7A8, (enemy->state_flags >> 7) & 1, boolean_labels[(enemy->state_flags & 0x80) != 0]);
+            xglFontDebugPrintf(8, y, ENEMY_DEFORM_FORMAT, (enemy->state_flags >> 7) & 1, boolean_labels[(enemy->state_flags & 0x80) != 0]);
             y += line_spacing;
             {
                 int freeze_flags = enemy->state_flags;
                 const char *freeze_label = boolean_labels[(freeze_flags & 0x100) != 0];
-                xglFontDebugPrintf(8, y, D_004CB7C0, (freeze_flags >> 8) & 1,
+                xglFontDebugPrintf(8, y, ENEMY_CLIPPING_FORMAT, (freeze_flags >> 8) & 1,
                     freeze_label, enemy->freeze_saved_speed);
             }
             y += 12;
             {
                 int gravity_mode = parameters->gravity_mode;
-                xglFontDebugPrintf(8, y, D_004CB7E0, gravity_mode,
+                xglFontDebugPrintf(8, y, ENEMY_ID_DISABLED_FORMAT, gravity_mode,
                     boolean_labels[gravity_mode == 1]);
             }
             y += 12;
             {
                 int turn_lock = enemy->turn_lock;
-                xglFontDebugPrintf(8, y, D_004CB7F8, turn_lock,
+                xglFontDebugPrintf(8, y, ENEMY_ROTATION_LOCK_FORMAT, turn_lock,
                     boolean_labels[turn_lock]);
             }
             y += 12;
-            xglFontDebugPrintf(8, y, D_004CB810,
+            xglFontDebugPrintf(8, y, ENEMY_MOTION_TRANSITION_FORMAT,
                 selected->motion_number, enemy->previous_motion);
             y += 12;
             {
-                xglFontDebugPrintf(8, y, D_004CB838, enemy->target_number,
+                xglFontDebugPrintf(8, y, ENEMY_CHASE_TARGET_FORMAT, enemy->target_number,
                     enemy->target_position.x, enemy->target_position.y,
                     enemy->target_position.z);
             }
             y += 12;
             {
                 const unsigned int *actor_flags = &selected->flags;
-                xglFontDebugPrintf(8, y, D_004CB858);
+                xglFontDebugPrintf(8, y, ENEMY_FLAGS_LABEL);
                 {
                     int x = 0xd0;
                     for (column = 0; column < 16; ++column, x -= 8) {
@@ -456,7 +511,7 @@ void PauseMenuPageEnemy(void)
                 y += line_spacing;
                 {
                     const char *high_flag_label = boolean_labels[(*actor_flags & 0x80000000u) != 0];
-                    xglFontDebugPrintf(8, y, D_004CB868, *actor_flags >> 31, high_flag_label);
+                    xglFontDebugPrintf(8, y, ENEMY_RETURN_HOME_FORMAT, *actor_flags >> 31, high_flag_label);
                 }
             }
             y += 12;
@@ -464,7 +519,7 @@ void PauseMenuPageEnemy(void)
             y += line_spacing;
             break;
         case 6: {
-            y = printEnemyHeading(0x60, y, D_004CB880);
+            y = printEnemyHeading(0x60, y, ENEMY_LOCATOR_HEADING_TEXT);
             for (column = 0; column < 16; ++column) {
                 LayoutHeader *entry = UnduDataGetHeader(0x207, column);
                 if (entry == 0)
@@ -479,13 +534,13 @@ void PauseMenuPageEnemy(void)
             break;
         }
         case 7: {
-            y = printEnemyHeading(0x60, y, D_004CB8A8);
+            y = printEnemyHeading(0x60, y, ENEMY_LADDER_HEADING_TEXT);
             {
                 const GameLoopStateRecord *runtime = &GameLoopState;
                 const float *values = runtime->debug_values;
                 for (column = 0; column < 16; ++column) {
                     const char *direction = direction_labels[runtime->debug_directions[column]];
-                    xglFontDebugPrintf(0, y, D_004CB8C0, column, direction,
+                    xglFontDebugPrintf(0, y, ENEMY_COLUMN_DIRECTION_FORMAT, column, direction,
                         values[column], boolean_labels[runtime->debug_enabled[column]]);
                     y += line_spacing;
                 }
@@ -494,7 +549,7 @@ void PauseMenuPageEnemy(void)
         }
         case 8: {
             const short *sound_effect;
-            y = printEnemyHeading(0x60, y, D_004CB8D8);
+            y = printEnemyHeading(0x60, y, ENEMY_CIRCLE_HEADING_TEXT);
             sound_effect = parameters->sound_effects;
             for (column = 0; column < 8; ++column, ++sound_effect) {
                 y = printEnemySound(y, column, *sound_effect);
@@ -503,18 +558,18 @@ void PauseMenuPageEnemy(void)
         }
         case 9: {
             int mark;
-            y = printEnemyHeading(0x60, y, D_004CB8F8);
+            y = printEnemyHeading(0x60, y, ENEMY_SATELLITE_HEADING_TEXT);
             mark = enemy->mark;
             y = printEnemyMark(y, mark, mark_labels[mark]);
-            printEnemyFinalCounters(y, D_004CB920, enemy->mark_timer, 0x40);
+            printEnemyFinalCounters(y, ENEMY_COUNTER_RANGE_FORMAT, enemy->mark_timer, 0x40);
             y += line_spacing;
             break;
         }
         case 10: {
-            y = printEnemyHeading(0x60, y, D_004CB938);
+            y = printEnemyHeading(0x60, y, ENEMY_SPLINE_FIRST_HEADING_TEXT);
             y = printEnemySplineSummary(y, enemy->spline_parameter,
                 enemy->spline_point_count);
-            y = printEnemyCounter(y, D_004CB978, enemy->fast_point_count);
+            y = printEnemyCounter(y, ENEMY_WINDUP_DURATION_FORMAT, enemy->fast_point_count);
             row = 0;
             if (enemy->spline_point_count > 0) {
                 do {
@@ -527,10 +582,10 @@ void PauseMenuPageEnemy(void)
             break;
         }
         case 11: {
-            y = printEnemyHeading(0x60, y, D_004CB9A8);
+            y = printEnemyHeading(0x60, y, ENEMY_SPLINE_PLAN_HEADING_TEXT);
             y = printEnemySplineSummary(y, enemy->spline_parameter,
                 enemy->spline_point_count);
-            xglFontDebugPrintf(8, y, D_004CB9C8, enemy->route_index,
+            xglFontDebugPrintf(8, y, ENEMY_ROUTE_ORDER_FORMAT, enemy->route_index,
                 enemy->action_index * 128, enemy->spline_point_count);
             y += line_spacing;
             for (row = 0; row < enemy->spline_point_count; ++row) {
@@ -548,43 +603,43 @@ void PauseMenuPageEnemy(void)
         case 13: {
             short count;
             if (Page_0 == 12) {
-                y = printEnemyHeading(0x60, y, D_004CBA18);
+                y = printEnemyHeading(0x60, y, ENEMY_PAUSE_EVENT_HEADING_TEXT);
                 count = parameters->pause_interval;
             } else {
-                y = printEnemyHeading(0x60, y, D_004CBA30);
+                y = printEnemyHeading(0x60, y, ENEMY_THREAT_EVENT_HEADING_TEXT);
                 count = parameters->threat_interval;
             }
             {
                 short page = Page_0 - 12;
-                y = printEnemyCounters(y, D_004CB920, enemy->page_count[page], count);
+                y = printEnemyCounters(y, ENEMY_COUNTER_RANGE_FORMAT, enemy->page_count[page], count);
                 for (row = 0; row < count; ++row) {
                     int status = enemy->page_status[page][row];
                     const char *status_label = boolean_labels[status == 1];
-                    xglFontDebugPrintf(8, y, D_004DB978, row, status_label);
+                    xglFontDebugPrintf(8, y, ENEMY_STATUS_ROW_FORMAT, row, status_label);
                     y += line_spacing;
                 }
             }
             break;
         }
         case 14: {
-            y = printEnemyHeading(8, y, D_004CBA48);
+            y = printEnemyHeading(8, y, DEBUG_RETURN_TOOL_TITLE_TEXT);
             {
                 short spline_count = enemy->spline_point_count;
                 short spline_parameter = enemy->spline_parameter;
                 short point_count = enemy->route_point_count;
-                xglFontDebugPrintf(8, y, D_004CB950, spline_parameter,
+                xglFontDebugPrintf(8, y, ENEMY_SPLINE_SUMMARY_FORMAT, spline_parameter,
                     spline_count * 128, point_count);
             }
             y += 12;
             for (row = 0; row < enemy->route_point_count; ++row) {
                     const float *point_z = &enemy->route_coordinates[row * 4 + 2];
-                    xglFontDebugPrintf(8, y, D_004CBA78, row,
+                    xglFontDebugPrintf(8, y, ENEMY_ROW_POINT_FORMAT, row,
                         point_z[-2], *point_z);
                     if (enemy->route_metadata[64 + row] != -1)
-                        xglFontDebugPrintf(0xb0, y, D_004DB980,
+                        xglFontDebugPrintf(0xb0, y, ENEMY_ROW_INDEX_FORMAT,
                             enemy->route_metadata[64 + row]);
                     else
-                        xglFontDebugPrintf(0xb0, y, D_004DB988);
+                        xglFontDebugPrintf(0xb0, y, ENEMY_NONE_LABEL);
                     for (column = 0; column < enemy->route_metadata[row]; ++column) {
                         xglFontDebugPrintf(0xc0 + column * 0x10, y, "%2d",
                             enemy->route_values[row][column]);
@@ -597,13 +652,13 @@ void PauseMenuPageEnemy(void)
                     SelNum = (SelNum + enemy->route_point_count - 1) % enemy->route_point_count;
                 if (route_buttons & 2)
                     SelNum = (SelNum + 1) % enemy->route_point_count;
-                xglFontDebugPrintf(0, SelNum * 10 + 48, D_004DB998);
+                xglFontDebugPrintf(0, SelNum * 10 + 48, selectCursorText);
             }
             break;
         }
         }
     }
-    xglFontDebugPrintf(8, y, D_004DB9A0);
+    xglFontDebugPrintf(8, y, downText);
 }
 
 void Debug_Mark(const Vector4 *position, int entry)
@@ -615,7 +670,7 @@ void Debug_Mark(const Vector4 *position, int entry)
     Matrix4 normalMatrix;
     StudioLight *light;
 
-    rotation.y = (float)Times * D_004D8160 * 0.015625f;
+    rotation.y = (float)Times * PAUSE_MENU_PAGE_ENEMY_TWO_PI * 0.015625f;
     translation.z = position->z;
     translation.x = position->x;
     translation.y = position->y + 1.0f;
@@ -655,145 +710,11 @@ void Debug_Mark(const Vector4 *position, int entry)
     nmlModelEntry(entry);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const char D_004DB998[2] = ">";
-
-const char D_004DB9A0[3] = "\242\255";
+const char selectCursorText[2] = ">";
+
+/* JP: ↓
+ * EN: Down */
+const char downText[3] = "\242\255";
 
 short EventID = 0;
 signed char FlagExEvent = 0;

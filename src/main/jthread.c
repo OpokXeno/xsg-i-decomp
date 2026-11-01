@@ -4,8 +4,8 @@
 
 #include "main/jni.h"
 
-const char D_004DC080[] = "peer";
-const char D_004DC088[8] = "%s.%s";
+const char jthreadPeerName[] = "peer";
+const char jthreadDottedNameFormat[8] = "%s.%s";
 
 /*
  * The Java runtime installs this as the thread's `entry` hook for a
@@ -24,7 +24,7 @@ void JTHREAD_defaultUnit(JThreadHandle *thread)
     unsigned int flags_after_call;
 
     object = thread->object;
-    field = lookupClassField(classJava_xeno_Unit, loadConstString(D_004DC080, -1), 0);
+    field = lookupClassField(classJava_xeno_Unit, loadConstString(jthreadPeerName, -1), 0);
     peer_slot = (JThreadUnitPeer **)(object + field->offset);
     peer = *peer_slot;
     if (!(peer->flags & 0x2) && object != 0) {
@@ -59,7 +59,7 @@ void JTHREAD_defaultChr(JThreadHandle *thread)
     unsigned int flags_after_call;
 
     object = thread->object;
-    field = lookupClassField(classJava_xeno_Chr, loadConstString(D_004DC080, -1), 0);
+    field = lookupClassField(classJava_xeno_Chr, loadConstString(jthreadPeerName, -1), 0);
     peer_slot = (JThreadChrPeer **)(object + field->offset);
     peer = *peer_slot;
     if (!(peer->flags & 0x2) && object != 0) {
@@ -164,7 +164,7 @@ void JTHREAD_defaultStage(JThreadHandle *thread)
         if (method != 0) {
             method_name_slot = (SceneClassName **)method;
             method_name = *method_name_slot;
-            xglFontDebugPrintf(0, 8, D_004DC088,
+            xglFontDebugPrintf(0, 8, jthreadDottedNameFormat,
                 scene_class->name->binary_name,
                 method_name->binary_name);
             arguments[0] = stage_object;
@@ -392,16 +392,14 @@ JThreadNode *JTHREAD_get(SceneObject object)
     return 0;
 }
 
+const char JTHREADAlgUnitName[24] = "JTHREAD_ALG_UNIT";
 
+const char JTHREADAlgDefaultName[24] = "JTHREAD_ALG_DEFAULT";
 
-const char D_004D15D0[24] = "JTHREAD_ALG_UNIT";
+const char JTHREADAlgSceneName[24] = "JTHREAD_ALG_SCENE";
 
-const char D_004D15E8[24] = "JTHREAD_ALG_DEFAULT";
+const char JTHREADAlgStageName[24] = "JTHREAD_ALG_STAGE";
 
-const char D_004D1600[24] = "JTHREAD_ALG_SCENE";
+const char JTHREADAlgChrName[16] = "JTHREAD_ALG_CHR";
 
-const char D_004D1618[24] = "JTHREAD_ALG_STAGE";
-
-const char D_004D1630[16] = "JTHREAD_ALG_CHR";
-
-const char D_004D1640[24] = "JTHREAD_ALG_SYSTEM";
+const char JTHREADAlgSystemName[24] = "JTHREAD_ALG_SYSTEM";

@@ -741,22 +741,22 @@ ClassCacheEntry *lookupClassEntry(ClassNameKey *name, void *classLoader)
 
 JavaClass *lookupArray(ElementType *elementType)
 {
-    extern const char D_004DC050[];
-    extern const char D_004DC058[];
-    extern const char D_004DC060[];
+    extern const char primitiveArrayDescriptorFormat[];
+    extern const char nestedArrayDescriptorFormat[];
+    extern const char objectArrayDescriptorFormat[];
     char name[1024];
     ClassCacheEntry *entry;
     ClassNameKey *key;
 
     if (elementType->flags & 0x100) {
-        sprintf(name, D_004DC050, elementType->typeCode);
+        sprintf(name, primitiveArrayDescriptorFormat, elementType->typeCode);
     } else {
         const char *typeName = elementType->name->bytes;
 
         if (typeName[0] == '[') {
-            sprintf(name, D_004DC058, typeName);
+            sprintf(name, nestedArrayDescriptorFormat, typeName);
         } else {
-            sprintf(name, D_004DC060, typeName);
+            sprintf(name, objectArrayDescriptorFormat, typeName);
         }
     }
     key = loadConstString2(name, -1);
@@ -1000,8 +1000,8 @@ static int sizeofDescripterType(u8 **cursor)
     return size;
 }
 
-const char D_004DC050[8] = "[%c";
+const char primitiveArrayDescriptorFormat[8] = "[%c";
 
-const char D_004DC058[8] = "[%s";
+const char nestedArrayDescriptorFormat[8] = "[%s";
 
-const char D_004DC060[8] = "[L%s;";
+const char objectArrayDescriptorFormat[8] = "[L%s;";

@@ -36,16 +36,12 @@ typedef struct EwSpriteState {
     unsigned short v;
 } EwSpriteState;
 
-
-
-
 /*
  * Shared 0x28-byte ewComponent table-slot header (top-of-file comment):
  * flags encodes both the widget type and its enabled bit. EW_sendPacket
  * and EW_draw test the type via (flags & 0xE000) == 0xC000; EW_drawContainer
  * tests only the enabled bit via flags & 0x4000.
  */
-
 
 void EW_drawComoponent(int context, EwWidget *widget);
 
@@ -88,8 +84,6 @@ typedef struct EwSpriteWidget {
     EwSpriteState sprite;
     unsigned char unmodeled_18[0x10];
 } EwSpriteWidget;
-
-
 
 static u64 sprt_base_register[4] = {
     0x2007EF0669343C00ULL, 0x2007EF0669343C00ULL,
@@ -151,7 +145,7 @@ typedef struct EwTextWidget {
 
 static void container_init(EwContainerState *container);
 
-const unsigned char D_004C2340[0x20] = {
+const unsigned char labelFontStyleTable[0x20] = {
     0x0D, 0x02, 0x0E, 0x02, 0x03, 0x18, 0x18, 0x18,
     0x0F, 0x00, 0x00, 0x80, 0x0C, 0x80, 0x80, 0x80,
     0x15, 0x02, 0x02, 0x04, 0x19, 0x03, 0x15, 0x03,
@@ -179,9 +173,9 @@ extern void xglFontPrint(int x, int y, int color, const char *text);
 
 /* Mutable font colour command. Opcode 0x0f consumes three parameter bytes,
  * including the embedded zero, before the terminal zero. */
-char D_004DA5B8[5] = "\017D\000\200";
+char mutableFontColorCommand[5] = "\017D\000\200";
 
-static char *tmp_0 = D_004DA5B8;
+static char *tmp_0 = mutableFontColorCommand;
 
 /* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
  * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
@@ -335,7 +329,7 @@ EwWidget *EW_create(int index, int type)
 
             label->text.lineCount = -1;
             label->text.lineHeight = 24;
-            label->text.fontStyle = D_004C2340;
+            label->text.fontStyle = labelFontStyleTable;
             label->text.colorScale = 128;
             label->text.lines = 0;
             label->text.firstLine = 0;
@@ -1249,4 +1243,4 @@ static void label_put(EwDrawContext *context, EwLabelWidget *widget)
 }
 
 /* The original default resource path is stored in this TU's read-only data. */
-char D_004C23C0[23] __attribute__((section(".rodata"))) = "host0:/home/xeno/work/";
+const char EWDefaultResourcePath[23] = "host0:/home/xeno/work/";

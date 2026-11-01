@@ -98,7 +98,6 @@ typedef struct EnemyDetectActor {
 } EnemyDetectActor;
 void Homing_Search(EnemyDetectActor *enemy);
 
-
 extern EnemyDetectActor actor[64];
 
 extern void EnemySound_Stop(Actor *actor, signed char which);
@@ -223,7 +222,8 @@ typedef struct BeltUndulation {
     unsigned char unmodeled_1c[4];
     unsigned long long surface_flags;
     unsigned char unmodeled_028[0x18];
-} BeltUndulation;extern BeltUndulation UnduTemp;
+} BeltUndulation;
+extern BeltUndulation UnduTemp;
 
 typedef struct UnduTestStorage {
     int queryFlags;
@@ -351,11 +351,9 @@ typedef struct ActorShadow {
 
 extern float Get_Distance(const Vector4 *source, const Vector4 *destination);
 
+extern const float SHADOW_NO_NEAREST_DISTANCE;
 
-
-extern const float D_004D8138;
-
-#define D_004D8138 5000.0f
+#define SHADOW_NO_NEAREST_DISTANCE 5000.0f
 
 typedef struct ActorFan {
     ActorHead head;
@@ -1035,8 +1033,6 @@ void Set_PlayerHistory(Actor *actor)
     }
 }
 
-
-
 typedef union HomingPositionRecord {
     Vector4 coordinates;
     float elements[4];
@@ -1393,7 +1389,7 @@ void Set_Shadow(Actor *reference_actor)
         }
     }
 
-    if (nearest_distance != D_004D8138) {
+    if (nearest_distance != SHADOW_NO_NEAREST_DISTANCE) {
         ActorShadow *shadow_actor = (ActorShadow *)reference_actor;
         shadow_actor->shadow_offset.x = nearest_position.coordinates.x - reference_actor->position.x;
         nearest_y = nearest_position.coordinates.y;
@@ -1500,8 +1496,6 @@ void Actor_LookAt_Init(Actor *actor)
     *ENEMY_LOOKAT_POINT(enepc[ACTOR_NUMBER(actor)]) = 0;
 }
 
-
-
 extern short EfTab_Code[15];
 
 extern short EfTab_Intr[15];
@@ -1510,12 +1504,9 @@ extern float EfTab_Scal[15];
 
 extern short EfTab_Loop[15];
 
-
-
 extern float TabEnemy_Ang[8];
 
 extern long EneTerritoryID[20];
-
 
 static unsigned char FootStep[0x180] = {
     0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x02, 0x10, 0x01, 0x0c, 0x0f, 0x02, 0x04, 0x10,
@@ -1558,14 +1549,14 @@ float PlayHis[64][4] = {{0.0f}};
 
 float BackPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-float TabEnemy_Ang[8] __attribute__((section(".data"))) = { 0.0f, 0.78539818525314331f, 1.5707963705062866f, 2.3561944961547852f, 3.1415927410125732f, 3.9269909858703613f, 4.7123889923095703f, 5.4977874755859375f };
+float TabEnemy_Ang[8] = { 0.0f, 0.78539818525314331f, 1.5707963705062866f, 2.3561944961547852f, 3.1415927410125732f, 3.9269909858703613f, 4.7123889923095703f, 5.4977874755859375f };
 
 float LocaterAngle[16] = {
     -3.2f, -3.0f, -2.4f, -2.2f, -1.6f, -1.4f, -0.8f, -0.6f,
     -0.1f, 0.1f, 0.6f, 0.8f, 1.4f, 1.6f, 2.2f, 2.3f,
 };
 
-long EneTerritoryID[20] __attribute__((section(".data"))) = { 0LL, 134217728LL, 150994944LL, 167772160LL, 184549376LL, 201326592LL, 218103808LL, 234881024LL, 251658240LL, 0LL, 0LL, 402653184LL, 419430400LL, 436207616LL, 452984832LL, 469762048LL, 486539264LL, 503316480LL, 520093696LL, 0LL };
+long EneTerritoryID[20] = { 0LL, 134217728LL, 150994944LL, 167772160LL, 184549376LL, 201326592LL, 218103808LL, 234881024LL, 251658240LL, 0LL, 0LL, 402653184LL, 419430400LL, 436207616LL, 452984832LL, 469762048LL, 486539264LL, 503316480LL, 520093696LL, 0LL };
 
 short EfTab_Code[15] = { 1492, 1493, 1494, 1555, 1416, 1554, 1627, 1724, 1746, 1658, 1726, 0, 0, 0, 0 };
 

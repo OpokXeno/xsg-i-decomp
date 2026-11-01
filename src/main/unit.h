@@ -20,7 +20,7 @@ extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 /*
  * The native peer record every Java xeno.Unit object's "peer" field points
  * to (looked up with lookupClassField(classJava_xeno_Unit, "peer", 0), the
- * D_004DC1D0 string every function below loads). It is not src/main/chr.h's
+ * unitPeerName string every function below loads). It is not src/main/chr.h's
  * Actor: the same "peer" lookup here reaches fields that do not match
  * Actor's recovered head, so this TU keeps its own partial view.
  *

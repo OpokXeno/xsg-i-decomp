@@ -373,7 +373,7 @@ extern MenuSkillMenuWork *MenuSkillMenu;
 
 void MenuSelectWindow(SkillSetWindow *window, SkillMenuList *list);
 
-extern const char D_004DB610[];
+extern const char skillMenuText[];
 
 extern const char *msg00_1_0036DD68[];
 
@@ -404,14 +404,14 @@ typedef struct SkillL1R1SpriteIdPair {
 } SkillL1R1SpriteIdPair;
 
 
-extern const SkillL1R1SpriteIdPair D_004DB628[];
+extern const SkillL1R1SpriteIdPair skillL1R1SpriteTable[];
 
 typedef struct SkillL1R1SlideStep {
     signed char side[2];
 } SkillL1R1SlideStep;
 
 
-extern const SkillL1R1SlideStep D_004DB630[];
+extern const SkillL1R1SlideStep skillL1R1SlideStep[];
 
 typedef struct MenuSkillSetListWork {
     unsigned char state;                /* +0x00 */
@@ -424,7 +424,7 @@ typedef struct MenuSkillSetListWork {
 
 extern MenuSkillSetListWork *MenuSkillSetList;
 
-extern const char D_004C99F8[];
+extern const char skillSetListText[];
 
 extern const char *msg00_4_0036DD88[];
 
@@ -466,14 +466,14 @@ typedef struct SkillCategoryIconIds {
 } SkillCategoryIconIds;
 
 
-extern const SkillCategoryIconIds D_004C9A08;
+extern const SkillCategoryIconIds skillCategoryIconTable;
 
 typedef struct SkillCategoryEdgeStep {
     signed char side[2];
 } SkillCategoryEdgeStep;
 
 
-extern const SkillCategoryEdgeStep D_004DB638[];
+extern const SkillCategoryEdgeStep skillCategoryEdgeStep[];
 
 float xglCos(float radians);
 
@@ -584,7 +584,7 @@ void WindowSPSet(SkillSPWindow *window);
 void WindowSPMain(SkillSPWindow *window);
 void eNumberSet(void *number, int value);
 void eNumberMain(void *number);
-extern const char D_004DB600[];
+extern const char skillEmptyText[];
 
 extern MenuSkillListWork *MenuSkillList;
 
@@ -606,9 +606,9 @@ void WindowSPSetSelect(SkillSPWindow *window, unsigned char *savedSelection);
 
 int WindowSPSelect(SkillSPWindow *window, int input);
 
-extern const char D_004DB640[];
+extern const char skillSetText[];
 
-extern const char D_004C9A18[];
+extern const char skillListHeaderText[];
 
 static int MenuSkillListChange00(void);
 static int MenuSkillListChange01(void);
@@ -631,7 +631,7 @@ typedef struct MenuSkillPartyData {
 typedef struct SkillScreenState { unsigned char state; } SkillScreenState;
 
 
-extern const char D_004C9A88[];
+extern const char skillDataPath[];
 
 extern unsigned char *MainMenuWorkEnd;
 

@@ -196,7 +196,6 @@ typedef struct UnduQuery {
 
 #endif /* SRC_MAIN_UNDULATE_H */
 
-
 static unsigned char *CurrentColiHead;
 
 int StudioEntrySkip = 0;
@@ -209,19 +208,17 @@ static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height);
 
 float UnduCheck(float *sample, void *output, UnduQuery *query);
 
-
 static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffset);
 
 extern float atan2f(float y, float x);
 extern float xglSin(float x);
 extern float xglCos(float x);
-extern const float D_004DC3B4[];
+extern const float unduInitialSlopeTable[];
 extern int printf(const char *format, ...);
-extern const char D_004D26F8[];
-extern const char D_004D2718[];
-extern const char D_004D2730[];
-extern const char D_004D2790[];
-extern const char D_004D27B0[];
+extern const char unduParamErrorMessage[];
+extern const char unduAssertFormat[];
+extern const char unduAssertExpression[];
+extern const char unduSourcePath[];
 
 extern float UnduGet2(int flag, float x, float z);
 
@@ -883,7 +880,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 if (moveDx > nearZeroMin && moveDx < nearZeroMax)
                     moveSlope = 0.0f;
                 else if (nearZeroMin < moveDz && moveDz < nearZeroMax)
-                    moveSlope = D_004DC3B4[0];
+                    moveSlope = unduInitialSlopeTable[0];
                 else
                     moveSlope = moveDz / moveDx;
                 edgeDx = edgeEnd->x - startX;
@@ -891,7 +888,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
                 if (nearZeroMin < edgeDx && edgeDx < nearZeroMax)
                     edgeSlope = 0.0f;
                 else if (nearZeroMin < edgeDz && edgeDz < nearZeroMax)
-                    edgeSlope = D_004DC3B4[0];
+                    edgeSlope = unduInitialSlopeTable[0];
                 else
                     edgeSlope = edgeDz / edgeDx;
                 if (unduSlopeBits(&moveSlope) == 0) {
@@ -1075,9 +1072,9 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
         attribute = query->prefix.parameters.previousAttribute;
     if ((unsigned int)attribute < (unsigned int)work->subListOffset
         && (unsigned int)attribute >= work->subListOffset + work->subCount * 0x18) {
-        printf(D_004D26F8, caller);
-        if (D_004D2718 != 0) {
-            printf(D_004D2730, D_004D2790, D_004D27B0, 1269);
+        printf("\nUnduCheck() call from %08x\n", caller);
+        if (unduParamErrorMessage != 0) {
+            printf(unduAssertFormat, unduAssertExpression, unduSourcePath, 1269);
             DEBUG_BREAK();
         }
     }
@@ -1103,8 +1100,6 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     height = UnduCheckResultCheck(work, &query->prefix.result, sample);
     return height;
 }
-
-
 
 float UnduGet2(int queryAddress, float x, float z)
 {
@@ -1140,3 +1135,13 @@ float UnduGet(float x, float z)
 {
     return UnduGet2(0, x, z);
 }
+
+const char unduParamErrorMessage[24] = "sUnduParam->undu error";
+
+const char unduAssertFormat[96] = "\n\n************************\n\nAssert(%s)\n    file = %s  line = %d\n\n************************\n\n\n";
+
+const char unduAssertExpression[32] = "!\"sUnduParam->undu error\"";
+
+const char unduSourcePath[24] = "../Undulate.euc.c";
+
+const float unduInitialSlopeTable[1] = { -0.0f };

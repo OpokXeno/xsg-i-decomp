@@ -64,7 +64,7 @@ typedef struct AnmDefaultState {
     u16 entry_index;
 } AnmDefaultState;
 
-#define D_004D852C 0.033333335f
+#define ANM_DEFAULT_FRAME_DURATION 0.033333335f
 
 typedef struct FcvPlaybackRange {
     u8 selector;
@@ -86,21 +86,21 @@ typedef struct FcvAttributeState {
 
 void FCV2_readAttribute(FcvAttributeState *attributes, void *data);
 
-#define D_004D8530 0.033333335f
+#define ANM_TIME_FRAME_DURATION 0.033333335f
 
-#define D_004D8534 0.033333335f
+#define ANM_TIME_SPEED 0.033333335f
 
-#define D_004D8538 0.033333335f
+#define ANM_PACK_FRAME_DURATION 0.033333335f
 
-#define D_004D853C 0.033333335f
+#define ANM_PACK_CLOCK_SPEED 0.033333335f
 
-#define D_004D8540 0.033333335f
+#define ANM_TIME_INTERP_FRAME_DURATION 0.033333335f
 
-#define D_004D8544 0.033333335f
+#define ANM_TIME_INTERP_CLOCK_SPEED 0.033333335f
 
-#define D_004D8548 0.033333335f
+#define ANM_RESET_FRAME_DURATION 0.033333335f
 
-#define D_004D854C 0.033333335f
+#define ANM_RESET_CLOCK_SPEED 0.033333335f
 
 #define ANM_ADVANCE_ENTRY 0x20000
 
@@ -385,7 +385,7 @@ FpkAnimationEntry *ANM_resetDefault(AnmDefaultState *state, FpkFcvPack *pack)
     FpkAnimationEntry *entry;
 
     entry = PACK_getEntry(pack, state->entry_index);
-    frame_duration = D_004D852C;
+    frame_duration = ANM_DEFAULT_FRAME_DURATION;
     state->flags &= ~ANM_FINISHED;
     if (entry != 0) {
         u16 first_frame = entry->first_frame;
@@ -409,7 +409,7 @@ FpkAnimationEntry *ANM_resetTime(AnmClock *clock)
     entry = clock->entry;
     clock->flags &= ~ANM_RESTART;
     if (entry != 0) {
-        frame_duration = D_004D8530;
+        frame_duration = ANM_TIME_FRAME_DURATION;
         clock->reverse_limit = entry->first_frame * frame_duration;
         clock->forward_limit = entry->last_frame * frame_duration;
         if (entry->format >= 2) {
@@ -433,7 +433,7 @@ FpkAnimationEntry *ANM_resetTime(AnmClock *clock)
         }
         speed = clock->speed;
         if (speed == 0.0f) {
-            speed = D_004D8534;
+            speed = ANM_TIME_SPEED;
             clock->speed = speed;
         }
         if (speed >= 0.0f) {
@@ -456,7 +456,7 @@ FpkAnimationEntry *ANM_resetPack(AnmClock *clock)
     clock->entry = entry;
     clock->flags &= ~ANM_FINISHED;
     if (entry != 0) {
-        frame_duration = D_004D8538;
+        frame_duration = ANM_PACK_FRAME_DURATION;
         clock->reverse_limit = entry->first_frame * frame_duration;
         clock->forward_limit = entry->last_frame * frame_duration;
         if (entry->format >= 2) {
@@ -480,7 +480,7 @@ FpkAnimationEntry *ANM_resetPack(AnmClock *clock)
         }
         speed = clock->speed;
         if (speed == 0.0f) {
-            clock->speed = D_004D853C;
+            clock->speed = ANM_PACK_CLOCK_SPEED;
             speed = clock->speed;
         }
         if (speed >= 0.0f) {
@@ -510,7 +510,7 @@ FpkAnimationEntry *ANM_resetTimeInterp(AnmClock *clock)
     entry = clock->entry;
     clock->flags &= ~ANM_RESTART;
     if (entry != 0) {
-        frame_duration = D_004D8540;
+        frame_duration = ANM_TIME_INTERP_FRAME_DURATION;
         clock->reverse_limit = entry->first_frame * frame_duration;
         clock->forward_limit = entry->last_frame * frame_duration;
         if (entry->format >= 2) {
@@ -534,7 +534,7 @@ FpkAnimationEntry *ANM_resetTimeInterp(AnmClock *clock)
         }
         speed = clock->speed;
         if (speed == 0.0f) {
-            clock->speed = D_004D8544;
+            clock->speed = ANM_TIME_INTERP_CLOCK_SPEED;
             speed = clock->speed;
         }
         if (speed >= 0.0f) {
@@ -566,7 +566,7 @@ FpkAnimationEntry *ANM_reset(AnmClock *clock, FpkFcvPack *pack)
     clock->entry = entry;
     clock->flags &= ~ANM_FINISHED;
     if (entry != 0) {
-        frame_duration = D_004D8548;
+        frame_duration = ANM_RESET_FRAME_DURATION;
         clock->reverse_limit = entry->first_frame * frame_duration;
         clock->forward_limit = entry->last_frame * frame_duration;
         if (entry->format >= 2) {
@@ -590,7 +590,7 @@ FpkAnimationEntry *ANM_reset(AnmClock *clock, FpkFcvPack *pack)
         }
         speed = clock->speed;
         if (speed == 0.0f) {
-            clock->speed = D_004D854C;
+            clock->speed = ANM_RESET_CLOCK_SPEED;
             speed = clock->speed;
         }
         if (speed >= 0.0f) {

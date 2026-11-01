@@ -173,16 +173,16 @@ extern u64 *MenuBgKeepCamera;
 extern void *xglTaskInitial(void *pool, int capacity, int flags);
 extern StudioCamera *xglStudioGetActiveCamera(void);
 extern void xglCameraInit(StudioCamera *camera);
-#define D_004D7D58 (-0.42479878664016724f)
-#define D_004D7D5C (2.784193754196167f)
-#define D_004D7D60 (7.0559511184692383f)
+#define MENU_BG_CAMERA_ROTATION_X (-0.42479878664016724f)
+#define MENU_BG_CAMERA_ROTATION_Z (2.784193754196167f)
+#define MENU_BG_CAMERA_POSITION_Z (7.0559511184692383f)
 extern void tyaMenuBgEntry(XglTaskScheduler *scheduler,
                            MenuBgTaskParameters *work);
 
 typedef struct {
     char path[26];
 } MenuModelPath;
-extern const MenuModelPath D_004C3220;
+extern const MenuModelPath tairetuTexturePath;
 extern unsigned char *MenuTairetuModelXtxAddr;
 extern unsigned char *MenuTairetuModelLexAddr;
 extern unsigned char *MenuTairetuModelPointerXtxAddr;
@@ -288,8 +288,8 @@ typedef struct {
     char name[0x12];
     char description[0x16];
 } UmnGunoRecord;
-extern UmnTextPageMap D_004C32F8;
-extern unsigned char D_004DA810[];
+extern UmnTextPageMap menuTextPageTable;
+extern unsigned char defaultCharacterBuffer[];
 extern UmnUnitInitRecord *func_A19270(int unit_id);
 extern UmnUnitTextRecord *func_A1A698(int unit_id);
 extern const char *const *func_A2C828(int unit_id);

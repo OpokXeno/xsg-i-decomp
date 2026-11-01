@@ -39,9 +39,9 @@ typedef struct EnemyCommandActor {
     unsigned char unmodeled_9f0[0xa70 - 0x9f0];
 } EnemyCommandActor;
 
-#define D_004D8140 0.03333333507f
+#define ENEMY_FREEZE_SPEED 0.03333333507f
 
-#define D_004D813C 0.03333333507f
+#define FRAME_TIME_30FPS 0.03333333507f
 
 #define sac_turn_pi 3.141592741f
 
@@ -83,11 +83,11 @@ void Enemy_Command_Motion(Actor *actor, int motion, signed char mode,
         actor->motion_progress = 0;
         actor->motion_state = 9;
     }
-    actor->motion_speed = ((float)speed_percent / 100.0f) * D_004D813C;
+    actor->motion_speed = ((float)speed_percent / 100.0f) * FRAME_TIME_30FPS;
     if (motion_start != -1)
-        actor->motion_start = (float)motion_start * D_004D813C;
+        actor->motion_start = (float)motion_start * FRAME_TIME_30FPS;
     if (motion_end != -1)
-        actor->motion_end = (float)motion_end * D_004D813C;
+        actor->motion_end = (float)motion_end * FRAME_TIME_30FPS;
     if (motion_start != -1)
         actor->motion_frame = actor->motion_start;
 }
@@ -120,7 +120,7 @@ void Enemy_Command_Freeze(Actor *actor, int command)
         return;
     case 3:
         ENEMY_FREEZE_SAVED_SPEED(work) = ACTOR_SPEED(actor);
-        ACTOR_SPEED(actor) = D_004D8140;
+        ACTOR_SPEED(actor) = ENEMY_FREEZE_SPEED;
         return;
     }
 }
@@ -507,5 +507,4 @@ void Start_Enemy_Command(Actor *actor)
     }
     queue->count = 0;
 }
-
 

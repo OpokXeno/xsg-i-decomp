@@ -3,7 +3,6 @@
 extern void sefLoadEffect(int effect, int variant);
 static void dummyMapLoad(void);
 
-
 #include "shared.h"
 
 #include "main/xgl_2.h"
@@ -27,9 +26,9 @@ extern void sefCreateEffect(SetPathEffectParams *params);
 
 extern s16 _sdrawFloor;
 
-extern const char D_004CBDB8[];
+extern const char nowLoadingText[];
 
-extern const char D_004CBD90[];
+extern const char pressConfirmToStartText[];
 
 static char * cfScript;
 
@@ -37,9 +36,9 @@ static char basepath[23];
 
 static int cur_6;
 
-extern const char D_004CBD28[];
+extern const char enemyZSelectFormat[];
 
-extern const char D_004CBD38[];
+extern const char comboEnemyEffectSelectText[];
 
 typedef struct SetPathDummyActor {
     unsigned char unmodeled_00[0x50];
@@ -67,9 +66,9 @@ static unsigned char name_1[0x40];
 
 static SetPathEffectPeer * handle_9;
 
-static Vector4 point_10 __attribute__((section(".data")));
+static Vector4 point_10;
 
-static Vector4 angle_11 __attribute__((section(".data")));
+static Vector4 angle_11;
 
 static SetPathEffectParams prm_8;
 
@@ -118,11 +117,11 @@ static s16 mapdisp;
 static s16 casdisp;
 static s16 tgtdisp;
 s16 _debugPause;
-char D_004DBA08[];
-char D_004DBA28[];
+char pauseText[];
+char enemySelectFormat[];
 static int cur_7;
-char D_004DBA38[];
-char D_004DBA40[];
+char senLexName[];
+char senXtxName[];
 static Vector4 pos_14;
 static Vector4 caspos_15;
 static Vector4 tgtpos_16;
@@ -159,7 +158,7 @@ extern PadDataMenuLayout PadData[2];
 
 extern int sprintf(char *destination, const char *format, ...);
 
-const char D_004CBD68[];
+const char cfEffectSelectText[];
 
 extern char *srsGetEsdData2(int index);
 
@@ -169,9 +168,9 @@ extern void func_A31920(int kind, float *params);
 
 extern void func_A318B8(void);
 
-#define D_004D8298 0.1f
+#define SCAM_TAKE_DEFAULT_RATE 0.1f
 
-#define D_004D829C 2.6f
+#define SCAM_TAKE_DEFAULT_RANGE 2.6f
 
 extern void *memset(void *destination, int value, unsigned int count);
 
@@ -191,9 +190,9 @@ extern void func_A2C3A0(int level);
 
 extern int srsFileLoad(void *buffer, const char *name, int mode);
 
-const char D_004CBDD8[];
+const char hamaLexName[];
 
-const char D_004CBDE8[];
+const char hamaXtxName[];
 
 extern int func_A1A760(void);
 
@@ -227,15 +226,15 @@ static int cur_2;
 
 static int menumax_4;
 
-static char * menu_3[5] __attribute__((section(".data")));
+static char * menu_3[5];
 
-extern const char D_004CBCD8[16];
+extern const char debugVersionFormat[16];
 
-extern const char D_004CBCE8[16];
+extern const char buildDateText[16];
 
-extern const char D_004CBCF8[16];
+extern const char buildTimeText[16];
 
-extern const char D_004DBA18[];
+extern const char setPathDebugCursorText[];
 
 typedef struct SetPathClearEnv {
     unsigned char unmodeled_00[0x20];
@@ -379,7 +378,7 @@ static void sdbExecEffect(void)
     if (debugPaused == 0 || (pad->buttons.halfwords.repeat & 0x100)) {
         sefExecEffect();
     } else {
-        xglFontDebugPrintf(0x10, 0x18, D_004DBA08);
+        xglFontDebugPrintf(0x10, 0x18, pauseText);
     }
 
     func_A31438();
@@ -426,9 +425,9 @@ static int debugEffectConfig(void)
 
     while (1) {
         xglRenderClearFrame();
-        sprintf(versionText, D_004CBCD8, D_004CBCE8, D_004CBCF8);
+        sprintf(versionText, debugVersionFormat, buildDateText, buildTimeText);
         xglFontDebugPrintf(0x10, 0x10, versionText);
-        xglFontDebugPrintf(0x10, cur_2 * lineSpacing + 0x1c, D_004DBA18);
+        xglFontDebugPrintf(0x10, cur_2 * lineSpacing + 0x1c, setPathDebugCursorText);
         sdebufPrintMenu(0x10, 0x10, 0x10, menu_3, menumax_4);
 
         if ((pad->buttons.packed & 0x08000100) == 0x08000100) {
@@ -462,9 +461,9 @@ static int debugEffectConfig(void)
 
 static int cur_5;
 
-extern const char D_004CBD08[];
+extern const char debugDbSelectFormat[];
 
-extern const char D_004CBD18[];
+extern const char effectSelectionText[];
 
 static int debugEffectSelect(void)
 {
@@ -473,8 +472,8 @@ static int debugEffectSelect(void)
 
     while (1) {
         xglRenderClearFrame();
-        sprintf(text, D_004CBD08, cur_5 / 10, cur_5 % 10, cur_5);
-        xglFontDebugPrintf(0x10, 0x10, D_004CBD18);
+        sprintf(text, debugDbSelectFormat, cur_5 / 10, cur_5 % 10, cur_5);
+        xglFontDebugPrintf(0x10, 0x10, effectSelectionText);
         xglFontDebugPrintf(0x10, 0x20, text);
         if ((PadData[0].buttons.packed & 0x08000100) == 0x08000100) {
             cur_5 = -1;
@@ -509,15 +508,15 @@ static int debugEnemySelect(void)
         if ((unsigned int) (cur_6 - 2900) < 99) {
             esd = srsGetEsdData2(cur_6 - 100);
             if (esd != 0 && *esd != 0) {
-                sprintf(text, D_004CBD28, esd, cur_6);
+                sprintf(text, enemyZSelectFormat, esd, cur_6);
             } else {
-                sprintf(text, D_004DBA28, esd, cur_6);
+                sprintf(text, enemySelectFormat, esd, cur_6);
             }
         } else {
             esd = srsGetEsdData2(cur_6);
-            sprintf(text, D_004DBA28, esd, cur_6);
+            sprintf(text, enemySelectFormat, esd, cur_6);
         }
-        xglFontDebugPrintf(0x10, 0x10, D_004CBD38);
+        xglFontDebugPrintf(0x10, 0x10, comboEnemyEffectSelectText);
         xglFontDebugPrintf(0x10, 0x20, text);
         if ((PadData[0].buttons.packed & 0x08000100) == 0x08000100) {
             cur_6 = -1;
@@ -559,8 +558,8 @@ static int debugCfSelect(void)
     for (;;) {
         esd = srsGetEsdData2(cur_7);
         xglRenderClearFrame();
-        sprintf(text, D_004DBA28, esd, cur_7);
-        xglFontDebugPrintf(0x10, 0x10, D_004CBD68);
+        sprintf(text, enemySelectFormat, esd, cur_7);
+        xglFontDebugPrintf(0x10, 0x10, cfEffectSelectText);
         xglFontDebugPrintf(0x10, 0x20, text);
         if ((PadData[0].buttons.packed & 0x08000100) == 0x08000100) {
             cur_7 = -1;
@@ -590,8 +589,8 @@ static void SCamTake(void)
     func_A31688();
     memset(params, 0, sizeof(params));
     params[0] = 0.0f;
-    params[4] = D_004D8298;
-    params[5] = D_004D829C;
+    params[4] = SCAM_TAKE_DEFAULT_RATE;
+    params[5] = SCAM_TAKE_DEFAULT_RANGE;
     params[6] = 5.0f;
     params[7] = 1.0f;
     func_A31920(0, params);
@@ -697,7 +696,7 @@ static void seffectDebugDb(void)
     while ((PadData[0].buttons.packed & 0x08000100) != 0x08000100) {
         xglRenderClearFrame();
         if (sefCheckLoad() == 0) {
-            xglFontDebugPrintf(8, 8, D_004CBD90);
+            xglFontDebugPrintf(8, 8, pressConfirmToStartText);
             if (PadData[0].buttons.halfwords.pressed & 0x20) {
                 sefCreateEffect(&prm_8);
             }
@@ -711,7 +710,7 @@ static void seffectDebugDb(void)
             dummyMapDraw();
             sdbExecEffect();
         } else {
-            xglFontDebugPrintf(0x10, 0x10, D_004CBDB8);
+            xglFontDebugPrintf(0x10, 0x10, nowLoadingText);
         }
         xglSleep();
     }
@@ -750,7 +749,7 @@ static void seffectDebugCf(void)
     while ((PadData[0].buttons.packed & 0x08000100) != 0x08000100) {
         xglRenderClearFrame();
         if (sefCheckLoad() == 0) {
-            xglFontDebugPrintf(8, 8, D_004CBD90);
+            xglFontDebugPrintf(8, 8, pressConfirmToStartText);
             if (PadData[0].buttons.halfwords.pressed & 0x20) {
                 handle_9 = (SetPathEffectPeer *)sefCreateEffectCf(
                     effect, (const Vector4 *)&point_10, (const Vector4 *)&angle_11);
@@ -776,7 +775,7 @@ static void seffectDebugCf(void)
             dummyMapDraw();
             sdbExecEffect();
         } else {
-            xglFontDebugPrintf(0x10, 0x10, D_004CBDB8);
+            xglFontDebugPrintf(0x10, 0x10, nowLoadingText);
         }
         xglSleep();
     }
@@ -788,21 +787,11 @@ static void seffectDebugCf(void)
 /* The effect request block sefCreateEffect reads: the debug viewers fill the
  * actor links with zero and select the effect and its variant. */
 
-static SetPathEffectParams prm_13;
-
-
-extern const char D_004CBDC8[];
-
-
+extern const char setPathLoadingText[];
 
 extern void SinitCamera(void);
 
 static int debugEnemySelect(void);
-
-
-
-
-
 
 extern int srsEftNo2WeaponID(int effect);
 
@@ -815,9 +804,6 @@ extern void sefSetupEnemy(int charaId);
 extern void sefSetupEffect(void);
 
 extern void sefHitEffect(void);
-
-
-
 
 static void seffectDebugBattle(void)
 {
@@ -857,7 +843,7 @@ static void seffectDebugBattle(void)
         sefSetupEffect();
         while (sefCheckLoad() != 0) {
             xglRenderClearFrame();
-            xglFontDebugPrintf(8, 8, D_004CBDC8);
+            xglFontDebugPrintf(8, 8, setPathLoadingText);
             xglSleep();
         }
     }
@@ -896,7 +882,7 @@ static void seffectDebugBattle(void)
         xglRenderClearFrame();
         _sdrawFloor = 1;
         if (sefCheckLoad() == 0) {
-            xglFontDebugPrintf(8, 8, D_004CBD90);
+            xglFontDebugPrintf(8, 8, pressConfirmToStartText);
             if (PadData[0].buttons.halfwords.pressed & 0x20) {
                 sefCreateEffect(&prm_13);
             }
@@ -906,7 +892,7 @@ static void seffectDebugBattle(void)
             dummyMapDraw();
             sdbExecEffect();
         } else {
-            xglFontDebugPrintf(0x10, 0x10, D_004CBDB8);
+            xglFontDebugPrintf(0x10, 0x10, nowLoadingText);
         }
         xglSleep();
     }
@@ -920,10 +906,10 @@ static void dummyMapLoad(void)
     if (loaded == 0) {
         func_A2C3A0(10);
         func_A1D1C0(10);
-        srsFileLoad(gridlexTop, D_004DBA38, 1);
-        srsFileLoad(gridxtxTop, D_004DBA40, 1);
-        srsFileLoad(hamalexTop, D_004CBDD8, 1);
-        srsFileLoad(hamaxtxTop, D_004CBDE8, 1);
+        srsFileLoad(gridlexTop, senLexName, 1);
+        srsFileLoad(gridxtxTop, senXtxName, 1);
+        srsFileLoad(hamalexTop, hamaLexName, 1);
+        srsFileLoad(hamaxtxTop, hamaXtxName, 1);
         loaded = 1;
     }
 }
@@ -1027,99 +1013,19 @@ void SimajiriTest(void)
     }
 }
 
-static char *filelist;
-static char *gridlexTop;
-static char *gridxtxTop;
-static char *hamalexTop;
-static char *hamaxtxTop;
-static s16 loaded;
-static s16 mapdisp;
-static s16 casdisp;
-static s16 tgtdisp;
-extern s16 _debugPause;
-extern char D_004DBA08[8];
-extern char D_004DBA28[8];
-static int cur_7;
-extern char D_004DBA38[8];
-extern char D_004DBA40[8];
-static Vector4 pos_14;
-static Vector4 caspos_15;
-static Vector4 tgtpos_16;
-static Vector4 scale_17;
-extern const char D_004CBD68[40];
-extern const char D_004CBDD8[16];
-extern const char D_004CBDE8[24];
-
-
-
-extern const char D_004CBCD8[16];
-
-extern const char D_004CBCE8[16];
-
-extern const char D_004CBCF8[16];
-
-extern const char D_004CBD08[16];
-
-extern const char D_004CBD18[16];
-
-extern const char D_004CBD28[16];
-
-extern const char D_004CBD38[48];
-
-extern const char D_004CBD90[40];
-
-extern const char D_004CBDB8[16];
-
-extern const char D_004CBDC8[16];
-
-static char * cfScript;
-
-static int sftMode;
-
-extern s16 _sdrawFloor;
-
-static int cur_2;
-
-static int menumax_4;
-
-extern const char D_004DBA18[4];
-
-static int cur_5;
-
-static int cur_6;
-
-static SetPathEffectPeer * handle_9;
-
-
-
-static char basepath[23];
-
-
-
-
-
-static SetPathEffectParams prm_13;
-
-extern char D_004CBC80[16];
-extern char D_004CBCC8[16];
-extern char D_004CBCA0[16];
-extern char D_004CBCB0[24];
-extern char D_004CBC90[16];
-
-static char * menu_3[5] __attribute__((section(".data")));
-
-static Vector4 point_10 __attribute__((section(".data")));
-
-static Vector4 angle_11 __attribute__((section(".data")));
-
+extern char ColliTestTitleLabel[16];
+extern char ColliTestBattleLabel[16];
+extern char ColliTestCfDebugLabel[16];
+extern char ColliTestBattleDebugLabel[24];
+extern char ColliTestDebugLabel[16];
 
 static char basepath[23] = "host0:/home/xeno/work/";
 
-static char * menu_3[5] __attribute__((section(".data"))) = { D_004CBCC8, D_004CBCB0, D_004CBCA0, D_004CBC90, D_004CBC80 };
+static char * menu_3[5] = { ColliTestBattleLabel, ColliTestBattleDebugLabel, ColliTestCfDebugLabel, ColliTestDebugLabel, ColliTestTitleLabel };
 
-static Vector4 point_10 __attribute__((section(".data"))) = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
+static Vector4 point_10 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
 
-static Vector4 angle_11 __attribute__((section(".data"))) = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
+static Vector4 angle_11 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
 
 static Vector4 pos_14 = {0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -1129,43 +1035,45 @@ static Vector4 tgtpos_16 = {0.0f, 0.0f, -4.0f, 1.0f};
 
 static Vector4 scale_17 = {0.1f, 0.1f, 0.1f, 1.0f};
 
-const char D_004CBCD8[16] = "ver: %s %s";
+const char debugVersionFormat[16] = "ver: %s %s";
 
-const char D_004CBCE8[16] = "Sep  5 2002";
+const char buildDateText[16] = "Sep  5 2002";
 
-const char D_004CBCF8[16] = "12:51:35";
+const char buildTimeText[16] = "12:51:35";
 
-const char D_004CBD08[16] = "db%d%d : %d";
+const char debugDbSelectFormat[16] = "db%d%d : %d";
 
 /* JP: エフェクト選択\n
  * EN: Effect selection\n */
-const char D_004CBD18[16] = "\245\250\245\325\245\247\245\257\245\310\301\252\302\362\n";
+const char effectSelectionText[16] = "\245\250\245\325\245\247\245\257\245\310\301\252\302\362\n";
 
-const char D_004CBD28[16] = "%sz : %d";
+const char enemyZSelectFormat[16] = "%sz : %d";
 
 /* JP: コンボ＆雑魚敵領域テスト用のエフェクト選択
  * EN: Effect selection for combo and regular enemy region tests */
-const char D_004CBD38[48] = "\245\263\245\363\245\334\241\365\273\250\265\373\305\250\316\316\260\350\245\306\245\271\245\310\315\321\244\316\245\250\245\325\245\247\245\257\245\310\301\252\302\362";
+const char comboEnemyEffectSelectText[48] = "\245\263\245\363\245\334\241\365\273\250\265\373\305\250\316\316\260\350\245\306\245\271\245\310\315\321\244\316\245\250\245\325\245\247\245\257\245\310\301\252\302\362";
 
 /* JP: ＣＦ領域テスト用のエフェクト選択
  * EN: Effect selection for CF region tests */
-const char D_004CBD68[40] =
+const char cfEffectSelectText[40] =
     "\xA3\xC3\xA3\xC6\xCE\xCE\xB0\xE8\xA5\xC6\xA5\xB9\xA5\xC8\xCD\xD1"
     "\xA4\xCE\xA5\xA8\xA5\xD5\xA5\xA7\xA5\xAF\xA5\xC8\xC1\xAA\xC2\xF2";
 
 /* JP: 決定ボタンを押すとエフェクト起動\n
  * EN: Press the confirm button to start the effect.\n */
-const char D_004CBD90[40] = "\267\350\304\352\245\334\245\277\245\363\244\362\262\241\244\271\244\310\245\250\245\325\245\247\245\257\245\310\265\257\306\260\n";
+const char pressConfirmToStartText[40] = "\267\350\304\352\245\334\245\277\245\363\244\362\262\241\244\271\244\310\245\250\245\325\245\247\245\257\245\310\265\257\306\260\n";
 
-const char D_004CBDB8[16] = "Now Loading\241\304\n";
+/* JP: Now Loading…\n
+ * EN: Now Loading...\n */
+const char nowLoadingText[16] = "Now Loading\241\304\n";
 
 /* JP: ロード中\n
  * EN: Loading\n */
-const char D_004CBDC8[16] = "\245\355\241\274\245\311\303\346\n";
+const char setPathLoadingText[16] = "\245\355\241\274\245\311\303\346\n";
 
-const char D_004CBDD8[16] = "hama.lex";
+const char hamaLexName[16] = "hama.lex";
 
-const char D_004CBDE8[24] = "hama.xtx";
+const char hamaXtxName[24] = "hama.xtx";
 
 static char *filelist = 0;
 
@@ -1193,24 +1101,24 @@ s16 _sdrawFloor = 0;
 
 s16 _debugPause = 0;
 
-char D_004DBA08[8] = "PAUSE";
+char pauseText[8] = "PAUSE";
 
 static int cur_2 = 0;
 
 static int menumax_4 = 5;
 
-const char D_004DBA18[4] = ">";
+const char setPathDebugCursorText[4] = ">";
 
 static int cur_5 = 1;
 
 static int cur_6 = 1;
 
-char D_004DBA28[8] = "%s : %d";
+char enemySelectFormat[8] = "%s : %d";
 
 static int cur_7 = 0x259;
 
 static SetPathEffectPeer * handle_9 = 0;
 
-char D_004DBA38[8] = "sen.lex";
+char senLexName[8] = "sen.lex";
 
-char D_004DBA40[8] = "sen.xtx";
+char senXtxName[8] = "sen.xtx";

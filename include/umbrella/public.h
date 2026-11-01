@@ -40,6 +40,8 @@ void GameSnapShotCheck(void);
 int Get_Rnd(int min, int max);
 int Check_Angle(float angle, float rangeStart, float rangeEnd);
 
+extern short Times;
+
 int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
                       float radius, Vector4 *result);
 int HitCheckMapUnitPos(const Vector4 *position);
@@ -93,6 +95,7 @@ int MenuScenarioNoGet(void);
 int MenuEquipStealMaskCheck(void);
 const unsigned char *MenuSaveMapNameGet(int mapId);
 int MenuMainCharCheck(int charId);
+int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex);
 
 int MenuEtherWhoCheck(int etherId);
 
@@ -117,7 +120,7 @@ int nmlModelSetGlobalFogReset(void);
 void nmlModelSetFogCancel(void);
 void nmlModelFlush(void);
 
-extern const char D_004DC4D0[4];
+extern const char nmlEmptyName[4];
 void nmlPacketAddGsScissor(u64 scissor);
 
 int CheckPointLine(const Vector4 *first, const Vector4 *second,

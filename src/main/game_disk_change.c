@@ -85,12 +85,12 @@ extern void xglFontPrintDirectOT(int ot, const char *text);
 static u8 mes00_1[55];
 static u8 mes01_2[85];
 static u8 mes02_3[41];
-extern const char D_004C0790[24];
-extern const unsigned char D_004C07A8[16];
-extern const unsigned char D_004C07B8[16];
+extern const char diskChangeFormat[24];
+extern const unsigned char disk1And2Text[16];
+extern const unsigned char detectingText[16];
 static char *tbl_4[8];
-extern const unsigned char D_004C07C8[40];
-extern const char D_004D9F58[];
+extern const unsigned char pressStartForceContinueText[40];
+extern const char diskChangeEffectControl[];
 extern u8 GameDiskChangeT10K;
 extern PadPrefix PadData;
 
@@ -99,7 +99,7 @@ int GameDiskChange(int disk_number)
     int disk_check;
     int retry;
 
-    printf(D_004C0790, disk_number, GameDiskChangeT10K);
+    printf(diskChangeFormat, disk_number, GameDiskChangeT10K);
 
     if (disk_number < 1 || disk_number > 3) {
         return -1;
@@ -135,13 +135,13 @@ int GameDiskChange(int disk_number)
             retry = 1;
         }
         drawbg();
-        xglFontPrintDirectOT(0xFFFFFF, D_004D9F58);
+        xglFontPrintDirectOT(0xFFFFFF, diskChangeEffectControl);
         if (retry == 0) {
             xglFontPrint(0x40, 0x40, 0xFFFFFF, (const char *)mes00_1);
         } else {
             xglFontPrint(0x40, 0x40, 0xFFFFFF, tbl_4[disk_check + 3]);
         }
-        xglFontPrint(0x40, 0x100, 0xFFFFFF, D_004C07C8);
+        xglFontPrint(0x40, 0x100, 0xFFFFFF, pressStartForceContinueText);
         if (PadData.half_2a & 0x800) {
             break;
         }
@@ -174,16 +174,19 @@ static u8 mes01_2[85] = "\xA3\xC4\xA3\xC9\xA3\xD3\xA3\xC3\xA4\xAC\xB0\xE3\xA4\xA
 /* JP: ゼノサーガのＤＩＳＣ２を挿入して下さい。
  * EN: Please insert Xenosaga DISC 2. */
 static u8 mes02_3[41] = "\xA5\xBC\xA5\xCE\xA5\xB5\xA1\xBC\xA5\xAC\xA4\xCE\xA3\xC4\xA3\xC9\xA3\xD3\xA3\xC3\xA3\xB2\xA4\xF2\xC1\xDE\xC6\xFE\xA4\xB7\xA4\xC6\xB2\xBC\xA4\xB5\xA4\xA4\xA1\xA3";
-const char D_004C0790[24] = "GameDiskChange:%d %d\n";
-const unsigned char D_004C07A8[16] = "\xA3\xC4\xA3\xC9\xA3\xD3\xA3\xCB\xA3\xB1\xA1\xF5\xA3\xB2";
+const char diskChangeFormat[24] = "GameDiskChange:%d %d\n";
+/* JP: ＤＩＳＫ１＆２
+ * EN: DISK 1 & 2 */
+const unsigned char disk1And2Text[16] = "\xA3\xC4\xA3\xC9\xA3\xD3\xA3\xCB\xA3\xB1\xA1\xF5\xA3\xB2";
 /* JP: 認識中…
  * EN: Detecting... */
-const unsigned char D_004C07B8[16] = "\xC7\xA7\xBC\xB1\xC3\xE6\xA1\xC4";
-static char *tbl_4[8] = { (char *)D_004C07B8, (char *)mes02_3, (char *)mes01_2,
+const unsigned char detectingText[16] = "\xC7\xA7\xBC\xB1\xC3\xE6\xA1\xC4";
+static char *tbl_4[8] = { (char *)detectingText, (char *)mes02_3, (char *)mes01_2,
                    (char *)mes02_3, (char *)mes01_2, (char *)mes01_2,
-                   (char *)D_004C07A8, (char *)mes01_2 };
+                   (char *)disk1And2Text, (char *)mes01_2 };
 /* JP: ＳＴＡＲＴで強制続行
  * EN: Press START to force continuation */
-const unsigned char D_004C07C8[40] = "\x19\x01\xA3\xD3\xA3\xD4\xA3\xC1\xA3\xD2\xA3\xD4\x19\x00\xA4\xC7\xB6\xAF\xC0\xA9\xC2\xB3\xB9\xD4";
-const char D_004D9F58[4] = "\x0B\x0D\x03";
+const unsigned char pressStartForceContinueText[40] = "\x19\x01\xA3\xD3\xA3\xD4\xA3\xC1\xA3\xD2\xA3\xD4\x19\x00\xA4\xC7\xB6\xAF\xC0\xA9\xC2\xB3\xB9\xD4";
+/* Text: {reset}{effect 3} */
+const char diskChangeEffectControl[4] = "\x0B\x0D\x03";
 u8 GameDiskChangeT10K = 0;

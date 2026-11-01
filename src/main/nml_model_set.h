@@ -67,7 +67,7 @@ typedef struct NmlAlphaGroup {
     } owner;                       /* +0x0c */
 } NmlAlphaGroup;
 
-extern NmlAlphaGroup s_aAlphaGroup[];
+extern NmlAlphaGroup s_aAlphaGroup[512];
 
 extern float s_fSortOffset;
 
@@ -98,11 +98,11 @@ typedef union LayoutStore LayoutStore;
  *   - +0x14 "duration": fade length in frames; also read as a float divisor
  *   - +0x18 "skipRender": fade_render skips building its DMA packet when set
  *   - +0x24 "dispose": set to 1 by nmlModelSetFadeOutDispose/FadeInDispose
- *     (D_0095DB84/D_0095DBC4, a plain `sw 1`); fade_render tests it, and when
+ *     (fadeOutDisposeFlag/fadeInDisposeFlag, a plain `sw 1`); fade_render tests it, and when
  *     set resets frame to 0 instead of running the countdown, i.e. a dispose
  *     request rather than an "active" flag.
  *   - +0x28 "cancelFrames": written by nmlModelSetFadeOutCancel/FadeInCancel
- *     and nmlModelSetActiveFadeOutCancel/FadeInCancel (D_0095DB88/D_0095DBC8,
+ *     and nmlModelSetActiveFadeOutCancel/FadeInCancel (fadeOutCancelFrames/fadeInCancelFrames,
  *     the argument clamped to >= 0 with slti/movn); nmlModelFadeDoit
  *     decrements it once per tick while nonzero, and fade_render skips its
  *     DMA packet build while it is nonzero, i.e. a cancel countdown rather
@@ -110,7 +110,7 @@ typedef union LayoutStore LayoutStore;
  *   - +0x2c "startDelay": fade_set's last argument; fade_render tests it
  *     first and, while nonzero, only decrements it and returns, i.e. a
  *     start-delay frame count rather than a "repeatCount".
- *   - +0x30 "locked": set to 1 by nmlModelSetFadeOutLock (D_0095DB90, a
+ *   - +0x30 "locked": set to 1 by nmlModelSetFadeOutLock (fadeOutLockedFlag, a
  *     plain `sw 1`) and cleared by nmlModelSetFadeOutLockOff (`sw 0`);
  *     fade_render reads it once frame has counted down to 0 and, while set,
  *     holds frame at 0 instead of letting skipRender clear and the fade
@@ -192,25 +192,25 @@ extern int s_nNonAlphaGroup;
  * compiler cannot classify it as small and always emits the original's
  * standard lui %hi / lw|sw %lo pair instead. Both readers below (
  * nmlModelIsBackBufferRequest, nmlModelSendPacketChangeSignal for
- * D_0095BB3C; nmlModelSetMpeg2CrossFadeTime for D_0095BB44) are witnessed
+ * nmlModelBackBufferRequestFlags; nmlModelSetMpeg2CrossFadeTime for nmlModelMpeg2CrossFadeTime) are witnessed
  * doing exactly that in the original object -- never the gp-relative
  * single-symbol form the small-data statics of this TU use (compare
  * s_nPacketSignal/s_nFadeDoit) -- so declaring a plain `extern int` here
  * would let the compiler choose the wrong addressing and miss the gate.
  */
-extern int D_0095BB3C[];
-extern int D_0095BB44[];
+extern int nmlModelBackBufferRequestFlags[];
+extern int nmlModelMpeg2CrossFadeTime[];
 
 /*
  * The 40-byte back-buffer request record (main 0x0095bb20). CONSTRUCT_BACK_
  * BUFFER/INIT_BACK_BUFFER/FLUSH_BACK_BUFFER address every word of it through
  * one base register (lui %hi(s_inBackBuffer)/addiu %lo), including the two
- * words D_0095BB3C (+0x1c) and D_0095BB44 (+0x24) already declared above
+ * words nmlModelBackBufferRequestFlags (+0x1c) and nmlModelMpeg2CrossFadeTime (+0x24) already declared above
  * under those names for nmlModelIsBackBufferRequest/
  * nmlModelSendPacketChangeSignal/nmlModelSetMpeg2CrossFadeTime; this array
  * is a second declaration of the same asm-owned bytes for the three
  * functions that reach them from the s_inBackBuffer symbol instead, for the
- * same reason D_0095BB3C/D_0095BB44 stay unsized arrays: an incomplete type
+ * same reason nmlModelBackBufferRequestFlags/nmlModelMpeg2CrossFadeTime stay unsized arrays: an incomplete type
  * keeps GCC from routing it through gp-relative small-data addressing,
  * which the original object never uses for these words.
  */

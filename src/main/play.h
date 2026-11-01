@@ -56,7 +56,7 @@ typedef struct TCamera {
 
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 extern TCamera *TCAMERA_get(int camera_id);
-extern const float D_004D7D1C;
+extern const float playRuntimeFloat;
 
 /*
  * One registered playback observer (Play.observers, 32 entries of 12 bytes
@@ -90,10 +90,10 @@ typedef struct TCHParams {
 
 /*
  * The per-function .lit4 float constants of this TU (still scaffold-owned):
- * D_004D7D14/D_004D7D18 (10/3 and 1/30) are PLAY_setupDefault's defaults.
+ * playSetupDefaultRate/playSetupDefaultFrameTime (10/3 and 1/30) are PLAY_setupDefault's defaults.
  */
-extern const float D_004D7D14;
-extern const float D_004D7D18;
+extern const float playSetupDefaultRate;
+extern const float playSetupDefaultFrameTime;
 
 typedef struct FCV2Value FCV2Value;
 typedef struct PlayTCHCurveSet {
@@ -132,9 +132,9 @@ extern void TCAMERA_transMPack(StudioCamera *camera, PlaySource *source, float f
 extern void TCAMERA_transMPack2(StudioCamera *camera, PlaySource *source, float frame);
 extern void SCRIPT_test(SceneObject argument, SceneMethod *method);
 /* PLAY_ctrl loads each frame divisor once on its guarded path. */
-extern volatile const float D_004D7D20;
-extern volatile const float D_004D7D24;
-extern const char D_004C2308[];
+extern volatile const float playFrameDivisorPrimary;
+extern volatile const float playFrameDivisorSecondary;
+extern const char playFrameFormat[];
 
 /*
  * The remaining members PLAY_setupDefault evidences (PLAY_setup,

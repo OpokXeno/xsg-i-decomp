@@ -97,45 +97,45 @@ extern void xglSoundLoadEffect(const char *name, int address, int bank);
 
 extern void xglMakeSePacket(int command, int handle, int volume, ...);
 
-const char D_004C9BF0[];
+const char saveDataSizeFormat[];
 
-const char D_004C9C08[];
+const char actorSizeFormat[];
 
-const char D_004C9C20[];
+const char mapUnitSizeFormat[];
 
-const char D_004C9C38[];
+const char enepcSizeFormat[];
 
-const char D_004C9C50[];
+const char sefSchedulerSizeFormat[];
 
 /* EUC-JP circle, triangle and square font codes prefix these test labels. */
 
-const char D_004C9C68[];
+const char cfTestText[];
 
-const char D_004C9C78[];
+const char texTestText[];
 
-const char D_004C9C88[];
+const char sePacketTestText[];
 
-const char D_004C9CA0[];
+const char returnText[];
 
-const char D_004C9D08[];
+const char bufferAddressFormat[];
 
-const char D_004C9D18[];
+const char registCfEffectName[];
 
-const char D_004C9D28[];
+const char soVok05EffectName[];
 
 /* EUC-JP sound-packet test label with the font's line-start control byte. */
 
-const char D_004C9D38[];
+const char soundPacketTestText[];
 
-const char D_004C9D50[];
+const char soundIdFormat[];
 
-const char D_004C9D60[];
+const char soundPitchVolumePanFormat[];
 
 /* Font control byte followed by the EUC-JP title 唐鎌. */
 
-const char D_004DB6A8[];
+const char karakamaText[];
 
-const char D_004DB6B8[];
+const char envVokEffectName[];
 
 extern int printf(const char *format, ...);
 
@@ -244,9 +244,9 @@ extern void xglDmaDirectNormal(u32 channel, u32 address, u32 count);
 
 #include "main/xgl_cd.h"
 
-const char D_004C9D90[];
+const char chaHitTexturePath[];
 
-const char D_004C9DB0[];
+const char texDataNotFoundFormat[];
 
 typedef struct GifPackedColor {
     u32 red;
@@ -291,7 +291,7 @@ extern void TexTrans(TextureTransferHeader *texture);
 
 extern void CreateUwamono(int unit_id, float x, float y, float z, float rotation_y);
 
-const char D_004C9D80[];
+const char setMapUnitTestFormat[];
 
 void KarakamaTest(void)
 {
@@ -303,20 +303,20 @@ void KarakamaTest(void)
     ClearEnv.red = 0;
     ClearEnv.green = 0;
     ClearEnv.blue = 0;
-    printf(D_004C9BF0, 0x163B0);
-    printf(D_004C9C08, 0xA70);
-    printf(D_004C9C20, 0x300);
-    printf(D_004C9C38, 0x38B0);
-    printf(D_004C9C50, 0xAB0);
+    printf(saveDataSizeFormat, 0x163B0);
+    printf(actorSizeFormat, 0xA70);
+    printf(mapUnitSizeFormat, 0x300);
+    printf(enepcSizeFormat, 0x38B0);
+    printf(sefSchedulerSizeFormat, 0xAB0);
     pad = &PadData;
 
     for (;;) {
         xglSleep();
-        xglFontDebugPrintf(0, 0, D_004DB6A8);
-        xglFontDebugPrintf(0, 16, D_004C9C68);
-        xglFontDebugPrintf(0, 32, D_004C9C78);
-        xglFontDebugPrintf(0, 48, D_004C9C88);
-        xglFontDebugPrintf(0, 64, D_004C9CA0);
+        xglFontDebugPrintf(0, 0, karakamaText);
+        xglFontDebugPrintf(0, 16, cfTestText);
+        xglFontDebugPrintf(0, 32, texTestText);
+        xglFontDebugPrintf(0, 48, sePacketTestText);
+        xglFontDebugPrintf(0, 64, returnText);
 
         if ((pad->input.snapshot & exit_buttons) != exit_buttons) {
             if (pad->input.buttons.pressed & 0x20) {
@@ -361,15 +361,15 @@ extern double fptodp(float value);
 extern int MapNo;
 extern u8 UseTestPath;
 
-extern const char D_004C9CB0[];
+extern const char initCfCompleteFormat[];
 
-extern const char D_004C9CC8[];
+extern const char initCompleteFormat[];
 
-extern const char D_004C9CE8[];
+extern const char mapUndulationFormat[];
 
-extern const char D_004C9CF8[];
+extern const char actorPositionFormat[];
 
-extern const char D_004DB6B0[];
+extern const char nameFormat[];
 
 static void CfTest(void)
 {
@@ -388,7 +388,7 @@ static void CfTest(void)
     CfGameLoopState *game;
 
     InitCf();
-    printf(D_004C9CB0);
+    printf(initCfCompleteFormat);
     xglStudioGetCamera((CfCamera **)&camera, 0);
     camera->state = 3;
     camera->position_y = 5.0f;
@@ -422,7 +422,7 @@ static void CfTest(void)
     UseTestPath = scene_id;
     MapChange(19);
     SetMapUnitTest();
-    printf(D_004C9CC8);
+    printf(initCompleteFormat);
     while ((PadData.input.snapshot & 0x8000100ULL) != 0x8000100ULL) {
         held = PadData.input.buttons.held;
         actor = tActor;
@@ -462,9 +462,11 @@ static void CfTest(void)
         }
         GameCfPlayerMove();
         if (PadData.input.buttons.held & 0x20) {
+            /* JP: アイテム
+             * EN: Item */
             char name[12] = "\xA5\xA2\xA5\xA4\xA5\xC6\xA5\xE0";
 
-            xglFontDebugPrintf(8, 80, D_004DB6B0, name);
+            xglFontDebugPrintf(8, 80, nameFormat, name);
         }
         bits = tActor->collision_bits;
         acc = 0;
@@ -487,9 +489,9 @@ static void CfTest(void)
             }
         }
         map_no = MapNo;
-        xglFontDebugPrintf(8, 8, D_004C9CE8, map_no, fptodp(tActor->undulation));
+        xglFontDebugPrintf(8, 8, mapUndulationFormat, map_no, fptodp(tActor->undulation));
         position_actor = tActor;
-        xglFontDebugPrintf(8, 176, D_004C9CF8, fptodp(position_actor->x),
+        xglFontDebugPrintf(8, 176, actorPositionFormat, fptodp(position_actor->x),
                            fptodp(position_actor->y), fptodp(position_actor->z));
         xglStudioGetCamera(&camera_after, 0);
         if (camera_after->state == 4 && GameLoopState.camera_callback != 0) {
@@ -514,18 +516,18 @@ void SePacketTest(void)
     u16 held;
     int lower_volume;
 
-    printf(D_004C9D08, 0x1000000);
-    xglSoundLoadEffect(D_004C9D18, 0x1000000, 1);
-    xglSoundLoadEffect(D_004C9D28, 0x1000000, 2);
-    xglSoundLoadEffect(D_004DB6B8, 0x1000000, 3);
+    printf(bufferAddressFormat, 0x1000000);
+    xglSoundLoadEffect(registCfEffectName, 0x1000000, 1);
+    xglSoundLoadEffect(soVok05EffectName, 0x1000000, 2);
+    xglSoundLoadEffect(envVokEffectName, 0x1000000, 3);
     if ((PadData.input.snapshot & 0x8000100ULL) == 0x8000100ULL) {
         return;
     }
 
     do {
-        xglFontDebugPrintf(0, 0, D_004C9D38);
-        xglFontDebugPrintf(0, 16, D_004C9D50, sound_id);
-        xglFontDebugPrintf(0, 32, D_004C9D60, pitch, volume, pan);
+        xglFontDebugPrintf(0, 0, soundPacketTestText);
+        xglFontDebugPrintf(0, 16, soundIdFormat, sound_id);
+        xglFontDebugPrintf(0, 32, soundPitchVolumePanFormat, pitch, volume, pan);
         pressed = PadData.input.buttons.pressed;
         if (pressed & 0x20) {
             xglMakeSePacket(124,
@@ -608,7 +610,7 @@ void SetMapUnitTest(void)
 {
     float row_x;
 
-    printf(D_004C9D80);
+    printf(setMapUnitTestFormat);
     CreateUwamono(0x7101, 10.0f, 0.0f, -14.0f, 0.0f);
     row_x = 8.22f;
     CreateUwamono(0x7102, row_x, -1.0f, 38.41f, 0.0f);
@@ -680,9 +682,9 @@ static void TexTest(void)
     ClearEnv.green = 0;
     ClearEnv.blue = 0;
     ClearEnv.alpha = 0;
-    status = xglCdReadFile(D_004C9D90, texture, 0, 0);
+    status = xglCdReadFile(chaHitTexturePath, texture, 0, 0);
     if (status < 0) {
-        printf(D_004C9DB0, status);
+        printf(texDataNotFoundFormat, status);
         return;
     }
 
@@ -799,27 +801,37 @@ void TexTrans(TextureTransferHeader *texture)
     xglDmaDirectNormal(2, (u32)texture->payload, width / 4 + 1);
 }
 
-const char D_004C9BF0[] = "sizeof(sSaveData):%d\n";
-const char D_004C9C08[] = "sizeof(sActor):%d\n";
-const char D_004C9C20[] = "sizeof(sMapUnit):%d\n";
-const char D_004C9C38[] = "sizeof(sEnepc):%d\n";
-const char D_004C9C50[] = "sizeof(sefScheduler)%d\n";
-const char D_004C9C68[16] = "\xA1\xFB CF Test";
-const char D_004C9C78[16] = "\xA2\xA4 Tex Test";
-const char D_004C9C88[24] = "\xA2\xA2 SePacket Test";
-const char D_004C9CA0[] = "\xA1\xDF return\0\0\0\0\0\0";
-const char D_004C9D08[] = "buffer:%08x\n";
-const char D_004C9D18[] = "REGISTCF";
-const char D_004C9D28[] = "SO_VOK05";
+const char saveDataSizeFormat[] = "sizeof(sSaveData):%d\n";
+const char actorSizeFormat[] = "sizeof(sActor):%d\n";
+const char mapUnitSizeFormat[] = "sizeof(sMapUnit):%d\n";
+const char enepcSizeFormat[] = "sizeof(sEnepc):%d\n";
+const char sefSchedulerSizeFormat[] = "sizeof(sefScheduler)%d\n";
+/* JP: ○ CF Test
+ * EN: (Circle) CF Test */
+const char cfTestText[16] = "\xA1\xFB CF Test";
+/* JP: △ Tex Test
+ * EN: (Triangle) Tex Test */
+const char texTestText[16] = "\xA2\xA4 Tex Test";
+/* JP: □ SePacket Test
+ * EN: (Square) SePacket Test */
+const char sePacketTestText[24] = "\xA2\xA2 SePacket Test";
+/* JP: × return
+ * EN: (Cross) return */
+const char returnText[] = "\xA1\xDF return\0\0\0\0\0\0";
+const char bufferAddressFormat[] = "buffer:%08x\n";
+const char registCfEffectName[] = "REGISTCF";
+const char soVok05EffectName[] = "SO_VOK05";
 /* JP: サウンドパケットテスト
  * EN: Sound packet test */
-const char D_004C9D38[24] = "\x0B\xA5\xB5\xA5\xA6\xA5\xF3\xA5\xC9\xA5\xD1\xA5\xB1\xA5\xC3\xA5\xC8\xA5\xC6\xA5\xB9\xA5\xC8";
-const char D_004C9D50[] = "\x0BSE=%8x\n";
-const char D_004C9D60[] = "\x0BID=%8x vol=%3d pan=%3d\n";
+const char soundPacketTestText[24] = "\x0B\xA5\xB5\xA5\xA6\xA5\xF3\xA5\xC9\xA5\xD1\xA5\xB1\xA5\xC3\xA5\xC8\xA5\xC6\xA5\xB9\xA5\xC8";
+/* Text: {reset}SE=%8x\n */
+const char soundIdFormat[] = "\x0BSE=%8x\n";
+/* Text: {reset}ID=%8x vol=%3d pan=%3d\n */
+const char soundPitchVolumePanFormat[] = "\x0BID=%8x vol=%3d pan=%3d\n";
 /* JP: 唐鎌
  * EN: Karakama */
-const char D_004DB6A8[] = "\x0B\xC5\xE2\xB3\xF9";
-const char D_004DB6B8[] = "ENV_VOK";
+const char karakamaText[] = "\x0B\xC5\xE2\xB3\xF9";
+const char envVokEffectName[] = "ENV_VOK";
 static u64 rgba_0 = 0x0000FF00000000FFULL;
 signed char printflg = 0;
 signed char collflg = 0;
@@ -833,8 +845,8 @@ static TexTestPacket TestEnv_2_0036DE40 = {
         {0, 0x53}
     }
 };
-const char D_004C9D90[] = "data\\karakama\\cha_hit.xtx";
-const char D_004C9DB0[] = "tex data not found %d\n";
+const char chaHitTexturePath[] = "data\\karakama\\cha_hit.xtx";
+const char texDataNotFoundFormat[] = "tex data not found %d\n";
 static TexTestSprite TestEnv_1_0036DDB0 = {
     0x80AB400000008001ULL,
     0x0000000053531EEEULL,
@@ -847,5 +859,20 @@ static TexTestSprite TestEnv_1_0036DDB0 = {
     {0x1000, 0x1000, {0, 0}},
     {0x8FF8, 0x8DF8, 0x40000000, 0}
 };
-const char D_004C9D80[16] = "SetMapUnitTest\n";
+const char setMapUnitTestFormat[16] = "SetMapUnitTest\n";
 
+const char initCfCompleteFormat[24] = "InitCf complete\n";
+
+const char initCompleteFormat[16] = "Init Complete\n";
+
+const char mapUndulationFormat[16] = "MAP=%2d UNDU=%f";
+
+const char actorPositionFormat[16] = "SP = %f %f %f";
+
+const char nameFormat[8] = "%s ";
+
+int MapNo = 0;
+
+signed char dispflg = 0;
+
+signed char lineflg = 0;

@@ -217,7 +217,12 @@ def declaration_index(root, tus, include_closures=None):
                 if declarator:
                     typedefs[declarator[2]].add(clean_type(match[1] + ' ' + declarator[1]) +
                                               '_DATA_TYPE_NAME_' + declarator[3])
-        for body in DECL.findall(code):
+        # An array bound spelled with an object-like integer macro of this
+        # file is the same explicit constant (`#define N 0x80` ... `x[N]`).
+        macros = dict(re.findall(r'^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+(0[xX][0-9A-Fa-f]+|\d+)[ \t]*$', code, re.M))
+        bounded = re.sub(r'\[\s*([A-Za-z_]\w*)\s*\]',
+                         lambda m: '[' + macros[m[1]] + ']' if m[1] in macros else m[0], code) if macros else code
+        for body in DECL.findall(bounded):
             parts = body.split(',')
             first = re.fullmatch(r'\s*(.+?)\s+(' + POINTER_PREFIX + r'[A-Za-z_]\w*\s*(?:\[[^\]]*\]\s*)*)\s*', parts[0])
             if not first:
@@ -441,6 +446,24 @@ def scalar_type(ctype, aliases):
     return SCALARS[value]
 
 
+def array_typedef_width(ctype, aliases):
+    """Width of one object of a source array typedef of scalars
+    (`typedef float Matrix4[4][4];`), for NOBITS storage only."""
+    value = clean_type(re.sub(r'\b(?:const|volatile)\b', '', ctype))
+    if not IDENT.fullmatch(value) or len(aliases.get(value, ())) != 1:
+        return None
+    match = re.fullmatch(r'(.+?)\s*_DATA_TYPE_NAME_((?:\[\d+\])+)', clean_type(next(iter(aliases[value]))))
+    if not match or '*' in match[1]:
+        return None
+    scalar = scalar_type(match[1], aliases)
+    if not scalar:
+        return None
+    width = scalar[1]
+    for bound in re.findall(r'\[(\d+)\]', match[2]):
+        width *= int(bound)
+    return width
+
+
 def pointer_type(ctype, aliases):
     """An explicit pointer or a source function-pointer typedef has EE width four."""
     value = clean_type(re.sub(r'\b(?:const|volatile)\b', '', ctype))
@@ -540,33 +563,38 @@ def array_initializer(entries, suffix):
 
 
 def validate_vif_gif_packet(payload, evidence):
-    """Closed VIF DIRECTHL / one-loop GIF PACKED numeric descriptor grammar."""
+    """VIF DIRECTHL + one GIF PACKED tag (NLOOP >= 1) numeric descriptor grammar."""
     require(payload is not None and len(payload) == evidence['consumer_bytes'] and
             len(payload) >= 48 and len(payload) % 16 == 0, 'GS packet differs from actual C send extent')
     words = struct.unpack_from('<4I', payload)
     tag, descriptors = struct.unpack_from('<QQ', payload, 16)
-    nreg = (tag >> 60) & 15
-    require(nreg in (1, 2, 3, 5, 10) and len(payload) == 16 * (2 + nreg),
-            'GS packet extent is not the complete supported one-loop PACKED descriptor')
-    require(words[:3] == (0, 0, 0) and words[3] == 0x51000000 | (1 + nreg),
+    nreg = (tag >> 60) & 15 or 16
+    nloop = tag & 0x7fff
+    require(nloop >= 1 and len(payload) == 16 * (2 + nloop * nreg),
+            'GS packet extent is not the complete supported PACKED descriptor')
+    require(words[:3] == (0, 0, 0) and words[3] == 0x51000000 | (1 + nloop * nreg),
             'GS packet VIF DIRECTHL command/count differs')
-    require(tag & ((1 << 46) - 1) == 0x8001 and ((tag >> 58) & 3) == 0,
-            'GS packet GIF tag is not one-loop, EOP, PACKED with zero reserved bits')
-    require(descriptors >> (4 * nreg) == 0, 'GS packet has unused nonzero register descriptors')
-    ad_registers = {0x06, 0x08, 0x14, 0x3f, 0x42, 0x47, 0x4c, 0x4e}
+    # EOP may be clear: the packet then continues a GIF chain (user 2026-10-31:
+    # relax the GS packet grammar where the bytes are an ordinary GIF tag).
+    require(tag & ((1 << 46) - 1) & ~0x8000 == nloop and ((tag >> 58) & 3) == 0,
+            'GS packet GIF tag is not PACKED with zero reserved bits')
+    require(nreg == 16 or descriptors >> (4 * nreg) == 0, 'GS packet has unused nonzero register descriptors')
     decoded = []
-    for index in range(nreg):
-        descriptor = (descriptors >> (index * 4)) & 15
-        require(descriptor in (1, 3, 5, 14), 'GS packet contains an unsupported packed register descriptor')
-        if descriptor == 14:
-            value, register = struct.unpack_from('<QQ', payload, 32 + index * 16)
-            require(register in ad_registers, 'GS A+D packet register/address word is not supported')
-            decoded.append(dict(index=index, descriptor='A+D', register=f'0x{register:02x}',
-                                value=f'0x{value:016x}'))
-        else:
-            decoded.append(dict(index=index, descriptor={1:'RGBA', 3:'UV', 5:'XYZ2'}[descriptor]))
-    return dict(vif_command='DIRECTHL', direct_quadwords=1+nreg, gif_mode='PACKED',
-                loops=1, registers=nreg, descriptor=f'0x{descriptors:x}', entries=decoded)
+    names = {0:'PRIM', 1:'RGBA', 2:'STQ', 3:'UV', 4:'XYZF2', 5:'XYZ2', 6:'TEX0_1', 7:'TEX0_2', 8:'CLAMP_1',
+             9:'CLAMP_2', 10:'FOG', 12:'XYZF3', 13:'XYZ3', 14:'A+D', 15:'NOP'}
+    for loop in range(nloop):
+        for index in range(nreg):
+            descriptor = (descriptors >> (index * 4)) & 15
+            offset = 32 + (loop * nreg + index) * 16
+            if descriptor == 14:
+                value, register = struct.unpack_from('<QQ', payload, offset)
+                require(register < 0x80, 'GS A+D packet register/address word is not a GS register')
+                decoded.append(dict(index=loop * nreg + index, descriptor='A+D', register=f'0x{register:02x}',
+                                    value=f'0x{value:016x}'))
+            else:
+                decoded.append(dict(index=loop * nreg + index, descriptor=names.get(descriptor, hex(descriptor))))
+    return dict(vif_command='DIRECTHL', direct_quadwords=1 + nloop * nreg, gif_mode='PACKED',
+                loops=nloop, registers=nreg, descriptor=f'0x{descriptors:x}', entries=decoded)
 
 
 def callback_signature(prototype, direct=False):
@@ -707,7 +735,7 @@ def definition(row, block, original, declarations, aliases=None, records=None):
         source, macro = dt.sprite_uv_definition(prefix, payload)
         evidence = dict(provenance, probe_typedefs=[macro], source_prelude=[macro])
         return source, 'byte_records', evidence
-    if provenance.get('data_role') == 'font_character_stream':
+    if provenance.get('data_role') == 'font_character_stream' and row['section'] not in {'.bss', '.sbss'}:
         require(character and payload is not None and payload.endswith(b'\0'),
                 'font character stream lacks an original terminal zero')
         suffix, count = dimensions(decl, extent, 1)
@@ -729,8 +757,13 @@ def definition(row, block, original, declarations, aliases=None, records=None):
         provenance = dict(provenance, numeric_packet_proof=packet)
     if kinds <= {'space', 'zero'} and row['section'] in {'.bss', '.sbss'}:
         pointer = pointer_type(ctype, aliases or {})
-        require(scalar or pointer, 'uninitialized storage needs a scalar/array type and NOBITS section')
-        suffix, count = dimensions(decl, extent, 4 if pointer else scalar[1])
+        width = 4 if pointer else scalar[1] if scalar else array_typedef_width(ctype, aliases or {})
+        require(width, 'uninitialized storage needs a scalar/array type and NOBITS section')
+        if not (pointer or scalar):
+            alias = clean_type(re.sub(r'\b(?:const|volatile)\b', '', ctype))
+            text = 'typedef ' + clean_type(next(iter(aliases[alias]))).replace('_DATA_TYPE_NAME_', ' ' + alias).replace('  ', ' ') + ';'
+            provenance = dict(provenance, probe_typedefs=list(provenance.get('probe_typedefs', [])) + [text])
+        suffix, count = dimensions(decl, extent, width)
         return prefix + suffix + ';', 'storage', provenance
     if provenance.get('data_role') == 'character_array_views':
         count = provenance['consumer_count']
@@ -801,27 +834,36 @@ def definition(row, block, original, declarations, aliases=None, records=None):
     symbolic = any(re.search(r'\b[A-Za-z_]\w*\b', re.sub(r'0[xX][0-9A-Fa-f]+|[eE][+-]?\d+', '0', value))
                    for kind, value in values if kind in numeric_directives)
     if symbolic and packet is None:
-        require(scalar[1] == 4 and payload is not None and len(payload) % 4 == 0,
+        require(payload is not None and (scalar[1] in (1, 2, 8) or len(payload) % 4 == 0),
                 'symbolic words need a proven numeric layout')
-        words = struct.unpack('<' + 'I'*(len(payload)//4), payload)
-        require(not any(s.flags & 2 and s.addr <= w < s.addr+s.size
-                        for w in words for s in original.sections),
-                'numeric declaration contains original-image addresses needing a pointee hypothesis')
-        provenance = dict(provenance, disassembler_association='words are typed numbers outside every original allocated section')
+        # User 2026-10-31: the declared numeric C type decides; splat prints
+        # numbers that fall inside the image as labels. Refuse only a 32-bit
+        # element equal to the start of a named original DATA object (a real
+        # pointer needs a pointer type).
+        if scalar[1] == 4:
+            words = struct.unpack('<' + 'I'*(len(payload)//4), payload)
+            starts = {s.value for s in original.symbols if s.type == 1 and s.size > 0 and s.name}
+            require(not any(w in starts for w in words),
+                    'numeric declaration contains original-image addresses needing a pointee hypothesis')
+        provenance = dict(provenance, disassembler_association='numbers of the declared C type; splat label spellings ignored')
     fmt, width = scalar
     suffix, count = dimensions(decl, extent, width)
     byte_role = provenance.get('data_role') in {'numeric_byte_flags', 'numeric_byte_states', 'numeric_byte_indices', 'counted_xy_bytes'}
-    require(not suffix or width >= 2 or byte_role,
-            'numeric byte arrays are not automatically substituted for binary payloads')
     payload = dc.va_bytes(original, address, extent)
     require(payload is not None, 'numeric object is not in original initialized data')
+    plain_char = clean_type(re.sub(r'\b(?:const|volatile)\b', '', ctype)) == 'char' and '*' not in ctype
+    if (suffix and width == 1 and plain_char and len(re.findall(r'\[', suffix)) == 1 and
+            sum(32 <= v < 127 or v >= 0xa1 for v in payload.rstrip(b'\0')) * 2 >= len(payload.rstrip(b'\0')) > 0):
+        # A character array of text (font control bytes included): a string
+        # literal of the exact array size, zero tail implicit or exact fit.
+        return prefix + suffix + ' = ' + literal(payload.rstrip(b'\0')) + ';', 'string', provenance
     if provenance.get('data_role') == 'counted_xy_bytes':
         used = 2 + payload[0] * 2
         require(used <= len(payload) and len(payload) - used <= 3 and not any(payload[used:]),
                 'counted x/y pairs differ from the original extent or zero alignment')
     numbers = struct.unpack('<' + fmt * count, payload)
     entries = [numeric_literal(v, ctype, fmt) for v in numbers]
-    if packet is not None:
+    if packet is not None or (symbolic and fmt not in ('f', 'd') and width >= 4):
         entries = [f'0x{v & ((1 << (width * 8)) - 1):0{width * 2}x}' +
                    ('ULL' if width == 8 else 'U') for v in numbers]
     value = array_initializer(entries, suffix)
@@ -1150,6 +1192,41 @@ def scaffold_inventory(root, metadata, inputs):
                 counts=dict(all_scaffold=len(rows)))
 
 
+_SIZEOF = {}
+
+
+def compiler_sizeof(root, tu, ctype):
+    """sizeof(ctype) as compiled in TU's own source with its contract compiler."""
+    if (tu, ctype) in _SIZEOF:
+        return _SIZEOF[(tu, ctype)]
+    import tempfile, subprocess
+    size = None
+    try:
+        tus = {t['id']: t for t in read_json(root / 'config/tu-build.json')['tus']}
+        source = (root / tus[tu]['path']).resolve()
+        cc = root / '.work/toolchains/ee-gcc2.96-realconv-lp7-fsv12-v1/bin'
+        with tempfile.TemporaryDirectory() as folder:
+            probe = Path(folder) / ('sizeof_' + source.name)
+            probe.write_text(source.read_text(errors='surrogateescape') +
+                             f'\nint __data_recover_sizeof = sizeof({ctype});\n')
+            try:
+                out = Path(folder) / 'o.s'
+                result = subprocess.run(['timeout', '-k', '5', '30', str(cc / 'ee-gcc'), '-B' + str(cc) + '/',
+                                         '-nostdinc', '-fno-builtin', '-S', '-O2', '-G8', '-Iinclude', '-I.',
+                                         '-I' + str(source.parent), str(probe), '-o', str(out)],
+                                        cwd=root, capture_output=True, text=True)
+                if result.returncode == 0:
+                    text = out.read_text()
+                    found = re.search(r'^__data_recover_sizeof:\s*\n\s*\.word\s+(\d+)', text, re.M)
+                    size = int(found[1]) if found else None
+            finally:
+                probe.unlink(missing_ok=True)
+    except (OSError, KeyError, ValueError):
+        size = None
+    _SIZEOF[(tu, ctype)] = size
+    return size
+
+
 def grouped_storage(selected, indexes, aliases, pieces, root, inputs, binary):
     """Rejoin synthetic NOBITS labels within an explicitly declared C array."""
     by_key = {(r['unit'], dc.hx(r['address'])): r for r in selected}
@@ -1166,6 +1243,18 @@ def grouped_storage(selected, indexes, aliases, pieces, root, inputs, binary):
                 ctype, dims = next(iter(shapes))
                 bound = re.fullmatch(r'\[\s*(0[xX][0-9A-Fa-f]+|[0-9]+)\s*\]', dims)
                 scalar = scalar_type(ctype, aliases[row['tu']])
+                # An array of data pointers has the EE's four-byte element
+                # (2026-10-31, main/tu106 s_apBlock spans synthetic labels).
+                if scalar is None and re.fullmatch(r'[A-Za-z_][\w\s]*\*', clean_type(ctype)):
+                    scalar = ('pointer', 4)
+                # An array of a named record type: its element size is the
+                # contract compiler's sizeof in this TU (the carve and the
+                # whole-file gate verify the resulting storage).
+                record_type = clean_type(re.sub(r'\b(?:const|volatile)\b', '', ctype))
+                if scalar is None and bound and re.fullmatch(r'(?:(?:struct|union)\s+)?[A-Za-z_]\w*', record_type):
+                    size = compiler_sizeof(root, row['tu'], record_type)
+                    if size:
+                        scalar = ('record', size)
                 if bound and scalar:
                     start = key[1]
                     end = start + int(bound[1], 0) * scalar[1]
@@ -1617,14 +1706,56 @@ def prepare(plan, output, lease):
         declarations = [re.sub(r'^extern\b', 'static', d) if
                         any(re.search(r'\b'+re.escape(n)+r'\s*\[', d) for n in local) else d
                         for d in declarations]
-        prelude = '\n'.join(dict.fromkeys(typedefs)) + '\n' + '\n'.join(dict.fromkeys(declarations))
-        (folder / 'probe.c').write_text('#include "common.h"\n' + prelude + '\n' + additions)
+        # The probe is the complete candidate TU (2026-10-31): hand-typed rows
+        # use the TU's own types, headers and same-TU pointees, so an isolated
+        # common.h probe cannot compile them.  It is built the way
+        # data_integrate.publish appends definitions.
+        (folder / 'probe.c').write_text(full_candidate_source(base.read_text(), rows))
         results.append(dict(tu=tu_id, folder=str(folder), additions_sha256=sha(folder / 'additions.c'),
                             probe_sha256=sha(folder / 'probe.c'),
                             baseline_source=str(base), baseline_sha256=sha(base) if base.is_file() else None, locations=len(rows)))
     report = dict(schema='automatic-data-candidates/1', accepted=False, scope='source_candidates_only', plan_sha256=hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest(), candidates=results)
     lease.json(output / 'prepared.json', report)
     return report
+
+
+def full_candidate_source(text, rows):
+    """The TU source with `rows` applied as data_integrate.publish applies them."""
+    import header_harvest
+    for row in rows:
+        for r in row['type_evidence'].get('source_replacements', []):
+            require(text.count(r['old']) == 1, 'source type correction does not have one occurrence')
+            text = text.replace(r['old'], r['new'])
+    definitions = {}
+    for row in sorted(rows, key=lambda r: dc.hx(r['address'])):
+        d = row['definition']
+        if row['kind'] != 'storage' and row['section'] in ('.data', '.rodata'):
+            declaration, initializer = d.split('=', 1)
+            d = declaration.rstrip() + ' __attribute__((section("' + row['section'] + '"))) =' + initializer
+        definitions[row['names'][0]] = d
+    for name, d in definitions.items():
+        if not d.startswith('static '):
+            continue
+        declaration = d.split('=', 1)[0].strip().rstrip(';')
+        declaration = re.sub(r'\s*__attribute__\(\(section\("[^"]*"\)\)\)', '', declaration) + ';'
+        pattern = r'\b(?:static\s+)?extern\s+[^;{}\n]*\b' + re.escape(name) + r'\s*(?:\[[^\]]*\]\s*)*;'
+        view, _, _ = header_harvest.mask_source(text)
+        functions = [f for f in header_harvest.split_top_level(view) if f.has_body]
+        edits, forwards = [], []
+        for match in re.finditer(pattern, text):
+            enclosing = [f for f in functions if f.start <= match.start() < f.stop]
+            (forwards.append(enclosing[0].start) if enclosing else edits.append((match.start(), match.end(), declaration)))
+        if forwards and not any(a < min(forwards) for a, b, v in edits):
+            edits.append((min(forwards), min(forwards), declaration + '\n\n'))
+        for a, b, v in sorted(edits, reverse=True):
+            text = text[:a] + v + text[b:]
+    local = {n for n, d in definitions.items() if d.startswith('static ')}
+    declarations = list(dict.fromkeys(d for r in rows for d in r['type_evidence'].get('pointer_declarations', [])))
+    declarations = [re.sub(r'^extern\b', 'static', d) if any(re.search(r'\b' + re.escape(n) + r'\s*\[', d) for n in local)
+                    else d for d in declarations]
+    prelude = list(dict.fromkeys(p for r in rows for p in r['type_evidence'].get('source_prelude', [])))
+    return (text.rstrip() + '\n\n' + '\n'.join(prelude + declarations) + '\n\n' +
+            '\n\n'.join(definitions.values()) + '\n')
 
 
 def run(argv, cwd, log, timeout=120):
@@ -1671,7 +1802,13 @@ def check_compiler(plan, output, lease):
                 sha(assembler) == facts['contract']['assembler_sha256'], 'probe tools differ from the original TU contract')
         folder = output / tu_id.replace('/', '_')
         lease.check([folder / 'compile.log', folder / 'probe.o', folder / 'probe.i', folder / 'probe.s', folder / 'probe.o.asmsg'])
-        code = run(['env', 'XENO_EE_AS_OPTIONS=' + as_options, 'bash', root / 'tools/tu/cc_tu.sh', folder / 'probe.c', folder / 'probe.o', compiler, assembler, flags[-1], root / 'build' / facts['unit'], root], root / 'build' / facts['unit'], folder / 'compile.log')
+        # compile next to the TU source so its local includes resolve
+        source_copy = (root / facts['path']).with_name('.probe_' + str(os.getpid()) + '_' + Path(facts['path']).name)
+        source_copy.write_bytes((folder / 'probe.c').read_bytes())
+        try:
+            code = run(['env', 'XENO_EE_AS_OPTIONS=' + as_options, 'bash', root / 'tools/tu/cc_tu.sh', source_copy, folder / 'probe.o', compiler, assembler, flags[-1], root / 'build' / facts['unit'], root], root / 'build' / facts['unit'], folder / 'compile.log')
+        finally:
+            source_copy.unlink(missing_ok=True)
         report = dict(tu=tu_id, returncode=code, verified=[], requires_linked_gate=[], problems=[])
         if code == 0:
             elf = Elf((folder / 'probe.o').read_bytes())

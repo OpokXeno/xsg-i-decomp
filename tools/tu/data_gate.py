@@ -70,19 +70,19 @@ def current_storage_placement_alignment(root, unit_dir, tu_id, name, source_path
     """
     import tu_edit
     cases = {
-        ('main/tu179', 'D_004C9AB0'): dict(
+        ('main/tu179', 'etherTreeLineColorTable'): dict(
             source='src/main/ether_tree.c', address=0x4c9ab0, raw_size=32,
             source_sha256='75251883b8d1bdfe75f431e2e67ded8fe93cd21ecae05a703fc63e416fa39271',
             type='struct EtherTreeColorTable { unsigned char colors[4][4]; };',
-            declaration='const struct EtherTreeColorTable D_004C9AB0 __attribute__((aligned(16))) = '
+            declaration='const struct EtherTreeColorTable etherTreeLineColorTable __attribute__((aligned(16))) = '
                 '{ { { 0x00, 0x00, 0x00, 0x00 }, { 0x40, 0x40, 0x40, 0x60 }, '
                 '{ 0x80, 0x80, 0x80, 0x80 }, { 0xa0, 0xa0, 0x40, 0x80 } } };',
             payload='000000004040406080808080a0a04080'),
-        ('main/tu204', 'D_004CBB60'): dict(
+        ('main/tu204', 'windRotationAndScaleVector'): dict(
             source='src/main/wind_test.c', address=0x4cbb60, raw_size=122,
             source_sha256='57f106eabaf5427c34b59bb3bbe53a74fe21f2af0009ccbea93150d68daf8fac',
             type='typedef struct Vector4 { float x; float y; float z; float w; } Vector4;',
-            declaration='const Vector4 D_004CBB60 __attribute__((aligned(16))) = '
+            declaration='const Vector4 windRotationAndScaleVector __attribute__((aligned(16))) = '
                 '{ 0.0f, 1.5707963705062866f, 0.0f, 1.0f };',
             payload='00000000db0fc93f000000000000803f'),
     }
@@ -562,7 +562,9 @@ def source_storage_array_extent(text, owner_name, owner_size):
         return None
     clean = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
     c_type = r'((?:unsigned|signed)\s+(?:char|short(?:\s+int)?|int)|[A-Za-z_]\w*)'
-    declarations = set(re.findall(r'\bstatic\s+' + c_type + r'\s+' +
+    # An element may be one data pointer (`static void *name[N];`): the
+    # stride is still the compiler extent divided by the explicit count.
+    declarations = set(re.findall(r'\bstatic\s+' + c_type + r'(?:\s*\*\s*|\s+)' +
                               re.escape(owner_name) + r'\s*\[([^\]]+)\]\s*;', clean))
     if len(declarations) != 1:
         return None
@@ -668,9 +670,30 @@ def source_storage_member_extent(text, owner_name, owner_size, offset):
             type(offset) is not int or offset < 0):
         return None
     clean = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
+    # Inline member types (`union { ... } owner;`, GNU anonymous members) are
+    # hoisted to synthetic typedefs so the closed layout below can see them.
+    # This only names existing source layouts; it adds no storage or credit.
+    hoisted = []
+    inline_re = re.compile(r'(?<![\w])(?<!typedef )(struct|union)\s*\{([^{}]*)\}(\s*;|\s*[A-Za-z_])')
+    for _ in range(64):
+        match = inline_re.search(clean)
+        if not match:
+            break
+        # Content-derived name: identical inline layouts seen through several
+        # included texts stay one definition.
+        alias = '__gate_inline_' + hashlib.sha256((match[1] + ' '.join(match[2].split())).encode()).hexdigest()[:12]
+        if not any(alias + ';' in h for h in hoisted):
+            hoisted.append(f'typedef {match[1]} {{{match[2]}}} {alias};\n')
+        tail = match[3]
+        if tail.strip() == ';':
+            tail = f' {alias}_member{len(hoisted)};'
+        clean = clean[:match.start()] + alias + tail + clean[match.end():]
+    clean = ''.join(hoisted) + clean
     declarations = re.findall(r'\b(?:(static|extern)\s+)?((?!return\b)[A-Za-z_]\w*)\s+' +
                               re.escape(owner_name) + r'\s*((?:\[[^\]]+\]\s*)*)\s*;', clean)
-    definitions = [row for row in declarations if row[0] != 'extern']
+    # A tentative definition repeated identically (`static T x[N];` before
+    # and at the published definition) is still one definition.
+    definitions = sorted({row for row in declarations if row[0] != 'extern'})
     if len(definitions) != 1:
         return None
     _, typename, array_dimensions = definitions[0]
@@ -1140,6 +1163,10 @@ def linked_storage_proof(root, entry, record, packet, packet_tu, object_elf, ass
             # the frozen registered name; address equality alone is no identity.
             registered = [s for s in original_identities if s.name == owner_map_name]
             if not registered:
+                # GCC names a block-scope static `mm.73`; C spells it mm_73
+                registered = [s for s in original_identities
+                              if re.sub(r'[^A-Za-z0-9_]', '_', s.name) in (owner_map_name, owner_name)]
+            if not registered:
                 require('map_name' not in owner,
                         entry['tu'] + '/' + owner_name + ': explicit original storage map name is missing')
                 map_names = {name for item in owner_map for name in item.get('names', [])}
@@ -1448,6 +1475,24 @@ def current_allocation_scope(control_path, task, entry, record, ctx, original_el
                              set(names).intersection(item.get('labels', [item.get('name')]))]
                 if len(corrected) == 1:
                     map_items = corrected
+        if not map_items and root is not None and section not in ('.bss', '.sbss'):
+            # user 2026-10-31 (100% MAIN DATA): a typed object at an address
+            # splat never labelled (a string split out of a pointer block, a
+            # splat item cut by a false label).  Its identity is the exact
+            # registered C input span at this address; no original positive
+            # OBJECT of another name starts there, and the whole-file gate
+            # proves the bytes.
+            spans = [part for run in (data_carve.load_registry(root)['tus'].get(entry['tu']) or {}).get(section, [])
+                     if set(names) <= set(run.get('c_owned_symbols') or [])
+                     for part in run.get('c_input_spans', [])
+                     if data_carve.hx(part['range'][0]) == address]
+            foreign = [symbol for symbol in original_elf.symbols
+                       if symbol.value == address and symbol.type == 1 and symbol.size > 0
+                       and symbol.name not in names and 0 < symbol.shndx < len(original_elf.sections)
+                       and original_elf.sections[symbol.shndx].name == section]
+            if len(spans) == 1 and not foreign:
+                map_items = [dict(start=address, end=data_carve.hx(spans[0]['range'][1]), labels=list(names),
+                                  name=names[0])]
         if section not in ('.bss', '.sbss'):
             require(len(map_items) == 1,
                     entry['tu'] + ': current allocation identity is not one exact original mapped item')
@@ -3539,6 +3584,33 @@ def natural_function_static_owner_alias(root, entry, section, alias, owner,
                 identity_transport_only=True, grants_additional_credit=False)
 
 
+def _only_c_owned_data_words(root, ctx, name):
+    """True when every scaffold mention of NAME is a `.word NAME` inside a
+    registered C-generated DATA range (a numeric word splat printed as a label)."""
+    registry = json.loads((Path(root) / 'config/objects/data-carves.json').read_text())
+    generated = [(int(r['generated'][0], 16), int(r['generated'][1], 16))
+                 for secs in registry['tus'].values() for runs in secs.values() for r in runs
+                 if r.get('generated') and r['generated'][0] != r['generated'][1]]
+    seen = False
+    pattern = re.compile(r'\b' + re.escape(name) + r'\b')
+    code = [path for folder in ctx['fdirs'] if folder.is_dir() for path in folder.glob('*.s')]
+    if any(pattern.search(path.read_text(errors='surrogateescape')) for path in code):
+        return False  # a code consumer needs the ordinary witness
+    data = {folder.parent.parent / 'data' for folder in ctx['fdirs']}
+    for folder in sorted(data):
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.glob('*.s')):
+            for line in path.read_text(errors='surrogateescape').splitlines():
+                if not pattern.search(line) or re.match(r'\s*(?:nonmatching|dlabel|enddlabel|\.size|glabel)\b', line):
+                    continue
+                m = re.match(r'\s*/\*\s*[0-9A-Fa-f]+\s+([0-9A-Fa-f]{8})\s+[0-9A-Fa-f]+\s*\*/\s*\.word\s+' + re.escape(name) + r'\s*$', line)
+                if not m or not any(lo <= int(m[1], 16) < hi for lo, hi in generated):
+                    return False
+                seen = True
+    return seen
+
+
 def uncredited_linker_map_alias(root, entry, alias_section, alias, owner,
                                 packet_tu, storage_rows, original_elf,
                                 linked_elf, original_section_ranges, ctx,
@@ -3643,7 +3715,15 @@ def uncredited_linker_map_alias(root, entry, alias_section, alias, owner,
         array = source_storage_array_extent(text, owner['name'], owner_size)
         field = source_storage_member_extent(
             source_storage_layout_text(root, source), owner['name'], owner_size, va-owner_va)
-        if array and (va-owner_va) % array['element_stride'] == 0:
+        false_label = (array and (va-owner_va) % array['element_stride'] and
+                       _only_c_owned_data_words(root, ctx, name))
+        if false_label:
+            # A splat label at a non-element offset whose every original
+            # mention is a misdisassembled numeric word inside DATA that a C
+            # owner already reproduces: no consumer, no identity, no credit.
+            source_member = dict(array, kind='false_label_in_c_owned_numeric_data',
+                                 owner_offset=va-owner_va, size=1)
+        elif array and (va-owner_va) % array['element_stride'] == 0:
             source_member = dict(array, kind='local_fixed_array_element',
                                  element_index=(va-owner_va)//array['element_stride'],
                                  owner_offset=va-owner_va, size=array['element_stride'])
@@ -3671,7 +3751,7 @@ def uncredited_linker_map_alias(root, entry, alias_section, alias, owner,
                 consumer_relocations.extend(dict(ref, owner_offset=va-owner_va+ref['addend'], map_alias=name)
                                             for ref in storage_relocations(object_elf, target.index, None)
                                             if ref['addend'] == 0)
-        require(name not in original_references or consumer_relocations,
+        require(name not in original_references or consumer_relocations or false_label,
                 entry['tu']+'/'+name+': original alias consumer has no current relocation at the exact owner offset')
     linked_names=[s for s in linked_elf.symbols if s.name==name]
     ignored_foreign_locals = []
@@ -4597,6 +4677,15 @@ def main():
                             owners=[item for item in owner_corrected_items(root,unit,ctx,entry['tu'],section,va)
                                     if item['start']<=va<item['end'] and
                                     names.intersection(item.get('labels') or [])]
+                        if not owners:
+                            # user 2026-10-31: a string split out of a splat item at an
+                            # unlabelled address; bounded by the containing item and the
+                            # compiler-owned split piece (bytes: whole-file gate)
+                            containing=[item for item in items if item['start']<va<item['end']]
+                            if len(containing)==1 and not any(
+                                    s.value==va and s.type==1 and s.size>0 and s.name not in names and
+                                    s.shndx not in (0,0xfff1) for s in original_elf.symbols):
+                                owners=[dict(containing[0],start=va)]
                         require(len(owners)==1,entry['tu']+'/'+location['address']+
                                 ': no unique original scaffold item bounds the verified location')
                         item=owners[0]
@@ -5004,3 +5093,4 @@ if __name__=='__main__':
     try:raise SystemExit(main())
     except (ValueError,OSError) as error:
         print(str(error),file=sys.stderr);raise SystemExit(1)
+

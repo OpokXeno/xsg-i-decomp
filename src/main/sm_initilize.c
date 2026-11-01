@@ -37,7 +37,6 @@ static void smInitMemInfo(SmMemInfo *info)
     info->largestBlockBytes = pool_bytes;
 }
 
-extern unsigned int nMemCell;
 /* The six modeled statistics occupy the prefix of a 32-byte retail slot. */
 typedef union SmMemInfoStorage {
     SmMemInfo info;

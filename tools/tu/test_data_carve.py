@@ -22,7 +22,7 @@ LIT4 = [(0x004D8268, '6F12833A'), (0x004D826C, 'E4CB9640'), (0x004D8270, '9A99D9
         (0x004D828C, 'CDCCCC3D')]
 BALL = {'D_004D8268', 'jtbl_004CBC30'}
 INIT = {f'D_{va:08X}' for va, _ in LIT4[1:9]}
-COLLI = {'D_004D828C', 'D_004CBC58'}
+COLLI = {'D_004D828C', 'collisionHitLabel'}
 
 
 def data_file(path, section, rows):

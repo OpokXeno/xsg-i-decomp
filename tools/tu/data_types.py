@@ -486,9 +486,17 @@ def record_definition(row, block, original, declarations, records, aliases,
         type_name = re.sub(r'\b(?:const|volatile)\b', '', type_name).strip()
         type_name = ' '.join(type_name.split())
         if '*' in type_name:
-            if row['section'] not in ('.bss', '.sbss') or type_name.count('*') != 1:
+            if type_name.count('*') != 1:
                 raise RecordLayoutError('initialized pointer field requires a pointee hypothesis')
             target = type_name.replace('*', '').strip()
+            if row['section'] not in ('.bss', '.sbss'):
+                # Initialized: each word must name an existing C-declared
+                # original object (checked per value in decode()).
+                return dict(kind='pointer', size=4, alignment=4, target=target)
+            # NOBITS storage needs only the pointer width; a pointer to a
+            # tagged record is complete C without the pointee's definition.
+            if re.fullmatch(r'(?:struct|union)\s+[A-Za-z_]\w*', target) and target not in records:
+                return dict(kind='pointer', size=4, alignment=4)
             if target != 'void':
                 # Retain a genuine source forward alias or the existing full
                 # definition. Never introduce a tag for an anonymous type.
@@ -496,6 +504,10 @@ def record_definition(row, block, original, declarations, records, aliases,
                     layout(target)
                 elif target in aliases and len(aliases[target]) == 1:
                     base_type = next(iter(aliases[target]))
+                    if '_DATA_TYPE_NAME_' in base_type:
+                        # pointer to a source array typedef: only its spelling is needed
+                        append('typedef ' + base_type.replace('_DATA_TYPE_NAME_', ' ' + target) + ';')
+                        return dict(kind='pointer', size=4, alignment=4)
                     if not re.fullmatch(r'(?:struct|union)\s+[A-Za-z_]\w*', base_type):
                         layout(base_type)
                     append(f'typedef {base_type} {target};')
@@ -520,8 +532,18 @@ def record_definition(row, block, original, declarations, records, aliases,
                 return result
             alternatives = aliases.get(type_name, set())
             if len(alternatives) != 1:
-                raise RecordLayoutError('record field type has no unique explicit definition')
+                raise RecordLayoutError('record field type has no unique explicit definition: ' + type_name + (' ' + repr(sorted(alternatives)) if alternatives else ''))
             target = next(iter(alternatives))
+            array_alias = re.fullmatch(r'(.+?)\s*_DATA_TYPE_NAME_((?:\[\d+\])+)', target)
+            if array_alias and '*' not in target and '__attribute__' not in target:
+                # A source array typedef (`typedef T Name[N];`) as a field type.
+                item = layout(array_alias[1])
+                append(f'typedef {array_alias[1].strip()} {type_name}{array_alias[2]};')
+                for bound in reversed(re.findall(r'\[(\d+)\]', array_alias[2])):
+                    count = int(bound)
+                    item = dict(kind='array', element=item, count=count,
+                                size=item['size'] * count, alignment=item['alignment'])
+                return item
             if '*' in target or '__attribute__' in target:
                 raise RecordLayoutError('record field uses an unsupported pointer or ABI attribute')
             result = layout(target)
@@ -532,6 +554,12 @@ def record_definition(row, block, original, declarations, records, aliases,
         finally:
             active.remove(type_name)
     def field_layout(text):
+        callback = re.fullmatch(r'\s*(.+?)\(\s*\*\s*([A-Za-z_]\w*)\s*\)\s*\((.*)\)\s*', text, re.S)
+        if callback and row['section'] not in ('.bss', '.sbss') and ':' not in text and '__attribute__' not in text:
+            # One function-pointer member; each word must name a TU function
+            # of exactly this signature (checked in decode()).
+            return [dict(name=callback[2], layout=dict(kind='function', size=4, alignment=4,
+                                                         returns=callback[1], parameters=callback[3]))]
         if ':' in text or '__attribute__' in text or '(' in text:
             raise RecordLayoutError('record field needs a bitfield, function pointer, or attribute model')
         nested = re.match(r'(struct|union)\s*\{', text)
@@ -553,6 +581,12 @@ def record_definition(row, block, original, declarations, records, aliases,
             value = None
             declarators = ', '.join([match[2]] + declarator_parts[1:])
         fields = []
+        if nested and not declarators:
+            # GNU anonymous member: its storage belongs to the enclosing record.
+            # Only NOBITS storage (no initializer to spell) uses it.
+            if row['section'] not in ('.bss', '.sbss'):
+                raise RecordLayoutError('anonymous record member needs an initializer model')
+            return [dict(name='', layout=value)]
         for declarator in _record_split(declarators, ','):
             match = re.fullmatch(r'(\**\s*)([A-Za-z_]\w*)\s*((?:\[[^\]]+\]\s*)*)', declarator)
             if not match:
@@ -581,13 +615,89 @@ def record_definition(row, block, original, declarations, records, aliases,
         size = align(offset if kind == 'struct' else max(f['layout']['size'] for f in fields), alignment)
         if size > 65536:
             raise RecordLayoutError('record exceeds the bounded layout')
-        if kind == 'union' and fields[0]['layout']['size'] != size:
+        # Only an initializer is spelled through the first member; NOBITS
+        # storage needs just the union's size.
+        if kind == 'union' and fields[0]['layout']['size'] != size and row['section'] not in ('.bss', '.sbss'):
             raise RecordLayoutError('union first member does not cover its original storage')
         return dict(kind=kind, fields=fields, size=size, alignment=alignment)
-    def decode(item, payload):
+    tokens = {}
+    for line in block.get('lines', []) if isinstance(block, dict) else []:
+        found = re.match(r'\s*/\*\s*[0-9A-Fa-f]+\s+([0-9A-Fa-f]{8})\s+[0-9A-Fa-f]+\s*\*/\s*\.word\s+(.+?)\s*$', line)
+        if found:
+            tokens[int(found[1], 16)] = found[2]
+    pointees = []
+    def pointer_value(item, payload, at):
+        value = struct.unpack('<I', payload)[0]
+        if value == 0:
+            return '0'
+        token = tokens.get(at, '')
+        if not re.fullmatch(r'[A-Za-z_]\w*', token):
+            raise RecordLayoutError('initialized pointer field word is not a named original object')
+        targets = declarations.get(token, [])
+        if not targets:
+            # The pointee may be defined (not declared extern) by this TU.
+            found = set()
+            for code in getattr(records, 'source_texts', []):
+                for kind, dims in re.findall(
+                        r'^[ \t]*(?:static[ \t]+)?((?:const[ \t]+)?[A-Za-z_][\w \t]*?)[ \t]+' + re.escape(token) +
+                        r'[ \t]*((?:\[\d+\])*)[ \t]*(?:__attribute__[ \t]*\(\([^;=]*\)\))?[ \t]*[;=]', code, re.M):
+                    found.add((' '.join(kind.split()), dims))
+            targets = [dict(type=t, dimensions=d) for t, d in found]
+        # An unsized `extern T x[];` and the sized definition `T x[N]` are one object.
+        sized = {d['type'] for d in targets if d['dimensions'] not in ('', '[]')}
+        targets = [d for d in targets if not (d['dimensions'] == '[]' and d['type'] in sized)]
+        if not targets or len({(d['type'], d['dimensions']) for d in targets}) != 1:
+            raise RecordLayoutError('initialized pointer target lacks a unique C declaration')
+        target = targets[0]
+        if '(' in target['type'] or target.get('function_prototype'):
+            raise RecordLayoutError('initialized pointer target is a function')
+        want = re.sub(r'\b(?:const|volatile)\b', '', item['target']).split()
+        have = re.sub(r'\b(?:const|volatile)\b', '', target['type']).split()
+        if want != ['void'] and want != have:
+            raise RecordLayoutError('initialized pointer target type differs from the field pointee')
+        symbols = [s for s in original.symbols if s.name == token]
+        if symbols and all(s.value != value for s in symbols):
+            raise RecordLayoutError('initialized pointer word differs from its target address')
+        pointees.append(f"extern {target['type']} {token}{target['dimensions']};")
+        return token if target['dimensions'] else '&' + token
+    def signature(returns, parameters):
+        types = []
+        for parameter in parameters.split(','):
+            parameter = ' '.join(parameter.replace('*', ' * ').split())
+            words = parameter.split()
+            if len(words) > 1 and re.fullmatch(r'[A-Za-z_]\w*', words[-1]) and words[-1] not in (
+                    'int', 'char', 'short', 'long', 'float', 'double', 'void', 'unsigned', 'signed'):
+                words = words[:-1]
+            types.append(' '.join(words))
+        if types == ['void']:
+            types = []
+        return ' '.join(returns.replace('*', ' * ').split()), tuple(types)
+    def function_value(item, payload, at):
+        if struct.unpack('<I', payload)[0] == 0:
+            return '0'
+        token = tokens.get(at, '')
+        if not re.fullmatch(r'[A-Za-z_]\w*', token):
+            raise RecordLayoutError('function-pointer field word is not a named original function')
+        want = signature(item['returns'], item['parameters'])
+        found = set()
+        for code in getattr(records, 'source_texts', []):
+            for head, returns, parameters in re.findall(
+                    r'^((?:static[ \t]+)?([A-Za-z_][\w \t*]*?)[ \t*]*\b' + re.escape(token) + r'[ \t]*\(([^()]*)\))[ \t]*\n?[ \t]*[{;]',
+                    code, re.M):
+                stars = head[:head.index(token)].count('*') - returns.count('*')
+                found.add((' '.join(head.split()), signature(returns + ' *' * stars, parameters)))
+        if len({sig for head, sig in found}) != 1 or next(iter(found))[1] != want:
+            raise RecordLayoutError('function-pointer target lacks a unique source prototype of the field signature')
+        pointees.append(next(iter(found))[0] + ';')
+        return token
+    def decode(item, payload, at=0):
         if len(payload) != item['size']:
             raise RecordLayoutError('record decoder extent mismatch')
         kind = item['kind']
+        if kind == 'pointer':
+            return pointer_value(item, payload, at)
+        if kind == 'function':
+            return function_value(item, payload, at)
         if kind == 'scalar':
             value = struct.unpack('<' + item['fmt'], payload)[0]
             return numeric_literal(value, item['ctype'], item['fmt'])
@@ -598,7 +708,7 @@ def record_definition(row, block, original, declarations, records, aliases,
                 escapes = {9: '\\t', 10: '\\n', 13: '\\r', 34: '\\"', 63: '\\?', 92: '\\\\'}
                 return '"' + ''.join(escapes.get(v, chr(v) if 32 <= v < 127 else f'\\{v:03o}')
                                      for v in payload.rstrip(b'\0')) + '"'
-            return '{ ' + ', '.join(decode(item['element'], payload[i:i+stride])
+            return '{ ' + ', '.join(decode(item['element'], payload[i:i+stride], at + i)
                                     for i in range(0, len(payload), stride)) + ' }'
         fields = item['fields'][:1] if kind == 'union' else item['fields']
         entries, cursor = [], 0
@@ -606,7 +716,7 @@ def record_definition(row, block, original, declarations, records, aliases,
             offset, width = field['offset'], field['layout']['size']
             if any(payload[cursor:offset]):
                 raise RecordLayoutError('original record contains nonzero implicit ABI padding')
-            entries.append('.' + field['name'] + ' = ' + decode(field['layout'], payload[offset:offset+width]))
+            entries.append('.' + field['name'] + ' = ' + decode(field['layout'], payload[offset:offset+width], at + offset))
             cursor = offset + width
         if any(payload[cursor:]):
             raise RecordLayoutError('original record has unexplained trailing ABI padding')
@@ -682,4 +792,7 @@ def record_definition(row, block, original, declarations, records, aliases,
     payload = dc.va_bytes(original, dc.hx(row['address']), extent)
     if payload is None:
         raise RecordLayoutError('record is outside original initialized DATA')
-    return prefix + ' = ' + decode(item, payload) + ';', 'record_array', provenance
+    value = decode(item, payload, dc.hx(row['address']))
+    if pointees:
+        provenance = dict(provenance, pointer_declarations=list(dict.fromkeys(pointees)))
+    return prefix + ' = ' + value + ';', 'record_array', provenance

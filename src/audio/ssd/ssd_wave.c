@@ -1,4 +1,4 @@
-/* Original ssd_wave.c translation unit. Unrecovered data remains external. */
+/* Original ssd_wave.c translation unit. Shared data is defined by its owning FDR. */
 
 
 

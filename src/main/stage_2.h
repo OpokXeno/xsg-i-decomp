@@ -20,7 +20,7 @@ struct JThreadHandle;
  * The "peer" field name lookupClassField(classJava_xeno_Stage, ...) looks
  * up (main 0x004dc208, the string this data reference names).
  */
-extern const char D_004DC208[];
+extern const char stagePeerFieldName[];
 
 /*
  * The VM thread argument every Java_xeno_* native receives, already

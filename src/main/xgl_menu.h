@@ -69,9 +69,9 @@ typedef struct XglMenuParams {
 #define MENU_LIST_INDENT 8
 
 extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
-extern const char D_004DC2B8[];
-extern const char D_004DC2C0[];
-extern const char D_004DC2C8[];
+extern const char darkRedTextFormat[];
+extern const char dimTextFormat[];
+extern const char plainTextFormat[];
 
 /*
  * Partial view of one entry of the menutbl array (main 0x0021ce18/0x0021ce7c,

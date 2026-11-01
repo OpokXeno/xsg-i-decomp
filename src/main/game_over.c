@@ -10,8 +10,12 @@
 
 const char GameEndImagePath[24] = "data\\yajima\\end.jpg";
 
+/* JP: Save clear data? /  /  ○  Button: Yes /  /  ×  Button: No
+ * EN: Save clear data? / (O) Button: Yes / (X) Button: No */
 const char GameEndSaveQuestion[0x48] = "\013\031\003\r\000Save clear data?\n\n\014\200  \241\373\013\031\003\r\000 Button: Yes\n\n\014  \200\241\337\013\031\003\r\000 Button: No\000";
 
+/* JP: Are you sure you want to exit without saving? /  /  ○  Button: Yes /  /  ×  Button: No
+ * EN: Are you sure you want to exit without saving? / (O) Button: Yes / (X) Button: No */
 const char GameEndQuestion[0x68] = "\013\031\003\r\000Are you sure you want to exit without saving?\n\n\014\200  \241\373\013\031\003\r\000 Button: Yes\n\n\014  \200\241\337\013\031\003\r\000 Button: No\000\000\000\000";
 
 const char GameOverImagePath[24] = "data\\yajima\\gameov.jpg";
@@ -154,7 +158,7 @@ extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 /* The game-over screen: show the game-over image with its stream, then
  * fade picture and stream volume out together. */
 
-static const char D_004C0738[0x58] = {
+static const char gameOverSavePromptText[0x58] = {
     0x0b, 0x0e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x0d,
     0x03, 0x19, 0x03, 0x57, 0x6f, 0x75, 0x6c, 0x64,
     0x20, 0x79, 0x6f, 0x75, 0x20, 0x6c, 0x69, 0x6b,
@@ -170,13 +174,11 @@ static const char D_004C0738[0x58] = {
 
 static char name_6[0x15] = "data\\yajima\\im00.jpg";
 
-
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-
 
 #define INTERMISSION_LOAD_OFFSET 0x100000
 
@@ -473,7 +475,7 @@ void Intermission(int chapter)
 
     for (;;) {
         DrawImage((void *)framebuffer);
-        xglFontPrint(32, 32, -1, D_004C0738);
+        xglFontPrint(32, 32, -1, gameOverSavePromptText);
         buttons = PadData.half_2a;
         if (buttons & PAD_DECIDE) {
             redraw_frame((void *)framebuffer);

@@ -978,7 +978,7 @@
                       "source_sha256": "eda703143cf92c3a04da564e663a54d535e9aaa2e611ab5c54d893f45a20e89b"
                     },
                     "c_owned_symbols": [
-                      "D_004D4AA0"
+                      "rssdGetResultErrorMessage"
                     ],
                     "generated": [
                       "0x004d4aa0",
@@ -1033,7 +1033,7 @@
                     "SsdGetResultValue"
                   ],
                   "c_owned_symbols": [
-                    "D_004D4AA0"
+                    "rssdGetResultErrorMessage"
                   ],
                   "note": "only the listed run comes from the TU's C object; the rest of the piece stays scaffolding"
                 }
@@ -1416,7 +1416,7 @@
                           "SsdGetResultValue"
                         ],
                         "c_owned_symbols": [
-                          "D_004D4AA0"
+                          "rssdGetResultErrorMessage"
                         ],
                         "also_referenced_by_c": []
                       }
@@ -1461,7 +1461,7 @@
                         "SsdGetResultValue"
                       ],
                       "c_owned_symbols": [
-                        "D_004D4AA0"
+                        "rssdGetResultErrorMessage"
                       ],
                       "note": "only the listed run comes from the TU's C object; the rest of the piece stays scaffolding"
                     }
@@ -1802,7 +1802,7 @@
                       "source_sha256": "eda703143cf92c3a04da564e663a54d535e9aaa2e611ab5c54d893f45a20e89b"
                     },
                     "c_owned_symbols": [
-                      "D_004D4AA0"
+                      "rssdGetResultErrorMessage"
                     ],
                     "generated": [
                       "0x004d4aa0",
@@ -1857,7 +1857,7 @@
                     "SsdGetResultValue"
                   ],
                   "c_owned_symbols": [
-                    "D_004D4AA0"
+                    "rssdGetResultErrorMessage"
                   ],
                   "note": "only the listed run comes from the TU's C object; the rest of the piece stays scaffolding"
                 }
@@ -2278,7 +2278,7 @@
                           "SsdGetResultValue"
                         ],
                         "c_owned_symbols": [
-                          "D_004D4AA0"
+                          "rssdGetResultErrorMessage"
                         ],
                         "also_referenced_by_c": []
                       }
@@ -2323,7 +2323,7 @@
                         "SsdGetResultValue"
                       ],
                       "c_owned_symbols": [
-                        "D_004D4AA0"
+                        "rssdGetResultErrorMessage"
                       ],
                       "note": "only the listed run comes from the TU's C object; the rest of the piece stays scaffolding"
                     }
@@ -4681,7 +4681,7 @@
                     ],
                     "generated_by": [],
                     "c_owned_symbols": [
-                      "D_004DC4D0"
+                      "nmlEmptyName"
                     ],
                     "c_input_spans": [
                       {
@@ -4695,7 +4695,7 @@
                           "0x004dc4d4"
                         ],
                         "symbols": [
-                          "D_004DC4D0"
+                          "nmlEmptyName"
                         ],
                         "credit": "verified"
                       }
@@ -4815,7 +4815,7 @@
                     "s_inReflRotY",
                     "eye_name",
                     "lenz_name",
-                    "D_004DC4D0"
+                    "nmlEmptyName"
                   ],
                   "note": "only the listed runs come from the TU's C object; the rest of the piece stays scaffolding"
                 }
@@ -5381,7 +5381,7 @@
                             "SsdGetResultValue"
                           ],
                           "c_owned_symbols": [
-                            "D_004D4AA0"
+                            "rssdGetResultErrorMessage"
                           ],
                           "also_referenced_by_c": []
                         }
@@ -5426,7 +5426,7 @@
                           "SsdGetResultValue"
                         ],
                         "c_owned_symbols": [
-                          "D_004D4AA0"
+                          "rssdGetResultErrorMessage"
                         ],
                         "note": "only the listed run comes from the TU's C object; the rest of the piece stays scaffolding"
                       }
@@ -7945,7 +7945,7 @@
                       "record_sha256": "4246c5e966da4174abf75537bd40ce0436cb4239b2da089b65c9c55d511a27f4"
                     },
                     "c_owned_symbols": [
-                      "D_004D81C8",
+                      "getRandomFloat",
                       "kAbsBoundPi",
                       "kNegPi",
                       "kNegPiLimit",
@@ -8030,7 +8030,7 @@
                     "kFullCircleSub",
                     "k_negative_pi",
                     "k_positive_pi",
-                    "D_004D81C8",
+                    "getRandomFloat",
                     "kAbsBoundPi",
                     "kNegPi",
                     "kNegPiLimit",
@@ -8494,7 +8494,7 @@
                       "record_sha256": "4246c5e966da4174abf75537bd40ce0436cb4239b2da089b65c9c55d511a27f4"
                     },
                     "c_owned_symbols": [
-                      "D_004D81C8",
+                      "getRandomFloat",
                       "kAbsBoundPi",
                       "kNegPi",
                       "kNegPiLimit",
@@ -8579,7 +8579,7 @@
                     "kFullCircleSub",
                     "k_negative_pi",
                     "k_positive_pi",
-                    "D_004D81C8",
+                    "getRandomFloat",
                     "kAbsBoundPi",
                     "kNegPi",
                     "kNegPiLimit",
@@ -9211,9 +9211,9 @@
                       "D_004DC048"
                     ],
                     "also_referenced_by_c": [
-                      "D_004DC050",
-                      "D_004DC058",
-                      "D_004DC060"
+                      "primitiveArrayDescriptorFormat",
+                      "nestedArrayDescriptorFormat",
+                      "objectArrayDescriptorFormat"
                     ],
                     "basis": {
                       "kind": "derived",

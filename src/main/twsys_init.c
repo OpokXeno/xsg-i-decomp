@@ -3,7 +3,6 @@
 
 extern void xglSoundEffectNormalID(int soundEffectId, int pitch);
 
-
 /*
  * One slot of the fixed-size `tcomponent` table TWSYS_createComponent hands
  * out (still assembler in this TU). Only the header fields every component
@@ -51,7 +50,7 @@ static TComponent tcomponent[4];
 
 static unsigned char groupStatus[3];
 
-static unsigned char D_004DC593;
+static unsigned char groupByteState;
 
 void EW_init(unsigned char *freeSpace);
 
@@ -73,8 +72,9 @@ void TWIN_draw2(TComponent *component);
 
 void TWIN_drawScene2(TComponent *component);
 
-extern const char D_004DA420[];
-const char D_004DA420[8] = "\x0b";
+extern const char twsysResetControl[];
+/* Text: {reset} */
+const char twsysResetControl[8] = "\x0b";
 
 /* Defined by xgl_font.c; `text` is a font control-code string. */
 
@@ -86,8 +86,10 @@ extern void xglFontPrintDirectOT(int ot, const char *text);
  * scene window, differing only in the two counts at offsets 1 and 4.
  */
 
+/* Text: {effect 2}{effect params}{blend}{color #808080} */
 #define TWSYS_DRAW_WINDOW_FONT "\x0d\x02\x0e\x02\x03\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
 
+/* Text: {effect 3}{effect params}{blend}{color #808080} */
 #define TWSYS_DRAW_SCENE_FONT  "\x0d\x03\x0e\x02\x02\x18\x18\x18\x0f\x00\x00\x80\x0c\x80\x80\x80"
 
 /*
@@ -146,7 +148,6 @@ typedef struct TWindow {
     unsigned char line_count;      /* +0x187 */
     char *lineData[1];             /* +0x188; inline pointer and character buffers follow */
 } TWindow;
-
 
 /* Configures a field-conversation text window's line pitch, layout offset,
  * line count and on-screen size. */
@@ -217,8 +218,6 @@ typedef struct TMenu {
     char queryText[1];                /* +0x1A4: inline string workspace */
 } TMenu;
 
-
-
 int MSG_queuePush(int queue, int *message, int messageSize, int encoding);
 
 extern unsigned char radixTenUnits[100];
@@ -235,17 +234,14 @@ extern int MSG_copyln(char **destination, const char **source, int flags);
 
 typedef union EwRootView { EwContainerWidget container; EwWidget widget; } EwRootView;
 
-
 typedef union EwLabelBody {
     EwLabelWidget label;
     EwContainerWidget container;
 } EwLabelBody;
 
-
 typedef struct Matrix4Block {
     Matrix4 value;
 } Matrix4Block;
-
 
 typedef struct TransformParams {
     Matrix4 matrix;
@@ -254,7 +250,6 @@ typedef struct TransformParams {
     Vector4 screenOffset;
     Matrix4 *local;
 } TransformParams;
-
 
 void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
                      TransformParams *params);
@@ -268,9 +263,7 @@ typedef struct WindowOwnerPrefix {
     Vector4 position;
 } WindowOwnerPrefix;
 
-
 static Vector4 vSample = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-
 
 typedef struct EwSpriteState {
     short flags;
@@ -290,20 +283,16 @@ typedef struct EwSpriteWidget {
     unsigned char unmodeled_18[0x10];
 } EwSpriteWidget;
 
-
 void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell);
 
-extern const char D_004C1C48[];
+extern const char twinFontParamControl[];
 
-extern const char D_004DA428[];
-
-
+extern const char twinStyleControl[];
 
 typedef union WindowCoord {
     float value;
     int bits;
 } WindowCoord;
-
 
 typedef union EwLabelSlot {
     unsigned short *lineWidths;
@@ -313,8 +302,7 @@ typedef union EwLabelSlot {
     int bits;
 } EwLabelSlot;
 
-
-extern const unsigned char D_004C1C60[];
+extern const unsigned char twinLabelStyleControl[];
 
 void TWSYS_init(void)
 {
@@ -331,7 +319,7 @@ void TWSYS_init(void)
         component++;
     } while ((int)component < (int)end);
     count = 3;
-    groupByte = &D_004DC593;
+    groupByte = &groupByteState;
     do {
         count -= 1;
         *groupByte = 0;
@@ -422,7 +410,7 @@ void TWSYS_draw(void)
         group = (component->kindAndGroup >> 4) & 3;
         if (!(groupStatus[group] & 2)) {
             if (component->flags & 0x10) {
-                xglFontPrintDirectOT(0xFFFFFF, D_004DA420);
+                xglFontPrintDirectOT(0xFFFFFF, twsysResetControl);
                 kind = component->kindAndGroup & 0xF;
                 switch (kind) {
                 case 1:
@@ -1161,9 +1149,10 @@ void TWIN_update2(TComponent *component)
 }
 
 /* Font parameters installed before ordinary text and scene-window labels. */
-const char D_004C1C48[19] = "\r\002\016\002\003\030\030\030\017\000\000\200\014\200\200\200\031\003";
+const char twinFontParamControl[19] = "\r\002\016\002\003\030\030\030\017\000\000\200\014\200\200\200\031\003";
 
-const unsigned char D_004C1C60[26] = "\r\003\016\002\002\030\030\030\017\000\000\200\014\200\200\200\025\002\002\004\025\003\003\000\000";
+/* Text: {effect 3}{effect params}{blend}{color #808080}{char width 4}{spacing 0,0} */
+const unsigned char twinLabelStyleControl[26] = "\r\003\016\002\002\030\030\030\017\000\000\200\014\200\200\200\025\002\002\004\025\003\003\000\000";
 
 void TWIN_draw2(TComponent *component)
 {
@@ -1242,12 +1231,13 @@ void TWIN_draw2(TComponent *component)
     }
     x = (int)(window->x + 16.0f);
     y = (int)(window->y + 16.0f);
-    xglFontPrintDirectOT(0x00FFFFF0, D_004C1C48);
+    xglFontPrintDirectOT(0x00FFFFF0, twinFontParamControl);
     xglFontPrint(x, y, 0x00FFFFF0, window->textOutput);
-    xglFontPrintDirectOT(0x00FFFFF0, D_004DA428);
+    xglFontPrintDirectOT(0x00FFFFF0, twinStyleControl);
 }
 
-const char D_004DA428[3] = "\031\000";
+/* Text: {style 0} */
+const char twinStyleControl[3] = "\031\000";
 
 void TWIN_drawScene2(TComponent *component)
 {
@@ -1290,7 +1280,7 @@ void TWIN_drawScene2(TComponent *component)
             label->lineCount = window->line_count;
             ((EwLabelSlot *)&label->lineWidths)->lineWidths = window->lineWidths;
             label->linePitch = 26;
-            ((EwLabelSlot *)&label->textStyle)->textStyle = D_004C1C60;
+            ((EwLabelSlot *)&label->textStyle)->textStyle = twinLabelStyleControl;
             widget->flags |= 0x4000;
         }
 

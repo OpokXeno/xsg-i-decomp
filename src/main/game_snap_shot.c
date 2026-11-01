@@ -85,9 +85,9 @@ char GameMovieAlpha = 0;
 
 short GameMovieFrame = 0;
 
-const char D_004C01C8[] = "*** SnapShot:%s,%08x ***\n";
+const char snapShotLogFormat[] = "*** SnapShot:%s,%08x ***\n";
 
-const char D_004C01E8[24] = "%d,%d,%d\n";
+const char snapShotQualityFormat[24] = "%d,%d,%d\n";
 
 extern GameSnapShotDrawEnv DrawEnv;
 
@@ -148,7 +148,7 @@ void GameSnapShotExecute(int quality, int flags) {
     buffer_address = ((unsigned int) WorkEnd + SNAPSHOT_CACHE_LINE_SIZE - 1) &
                      ~(SNAPSHOT_CACHE_LINE_SIZE - 1);
     params.output_buffer = buffer_address;
-    printf(D_004C01C8, snapname, buffer_address);
+    printf(snapShotLogFormat, snapname, buffer_address);
 
     display_origin = DrawEnv.display_origin;
     source_x = display_origin & 0x1ff;
@@ -169,7 +169,7 @@ void GameSnapShotExecute(int quality, int flags) {
         params.quality.cr_quality = 0;
     }
 
-    printf(D_004C01E8, params.quality.luma_quality,
+    printf(snapShotQualityFormat, params.quality.luma_quality,
            params.quality.cb_quality, params.quality.cr_quality);
     xglJpegEncode(&params);
 
@@ -294,8 +294,8 @@ int GameSnapShotSave(int quality, unsigned char *image) {
         params.quality.cb_quality = quality;
         params.quality.cr_quality = 0;
     }
-    printf(D_004C01C8, snapname, params.output_buffer);
-    printf(D_004C01E8, params.quality.luma_quality, params.quality.cb_quality, params.quality.cr_quality);
+    printf(snapShotLogFormat, snapname, params.output_buffer);
+    printf(snapShotQualityFormat, params.quality.luma_quality, params.quality.cb_quality, params.quality.cr_quality);
     xglJpegEncode(&params);
     return thumbnail_size + params.output_size;
 }
@@ -331,7 +331,5 @@ int GameSnapShotSaveFile(int number, const void *data, int size) {
     snapnameno[3]++;
     return number;
 }
-
-
 
 static SnapshotDmaPacket TestPrim_0_00366EA0 = { .words = { 0x0000000000000000ULL, 0x5100000b00000000ULL, 0xa08b400000008001ULL, 0x000000e53531eeeeULL, 0x0000000000071001ULL, 0x0000000000000047ULL, 0x0000000000000060ULL, 0x0000000000000014ULL, 0x0000000000000000ULL, 0x000000000000004cULL, 0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000008000000080ULL, 0x0000000000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071f700006ff8ULL, 0x00000000ffffffffULL, 0x00001c0000002000ULL, 0x0000000000000000ULL, 0x000078f7000077f8ULL, 0x00000000ffffffffULL, 0x0000000000000000ULL, 0x000000000000003fULL } };

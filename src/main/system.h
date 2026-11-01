@@ -42,7 +42,7 @@ struct SceneString {
 
 extern char tmpString[];
 
-extern const char D_004DC090[];
+extern const char systemFloatFormat[];
 
 extern char *strncpy(char *destination, const char *source, unsigned int length);
 

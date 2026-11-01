@@ -118,7 +118,6 @@ void tskUmnManzaiWin(void *task);
 
 #endif /* SRC_OV02_UMN_PROCURATOR_H */
 
-
 extern PadPrefix PadData;
 extern int eMessageNextPage(void *page, int arg);
 extern void xglSoundEffectNormalID(int id, int arg);

@@ -3,13 +3,11 @@
 extern void sceSifRegisterRpc(void *server, int rpc_number, void *(*function)(),
                               void *buffer, void *(*cfunction)(), void *cbuffer, void *queue);
 
-
 #include "shared.h"
 
 #include "ssd_init.h"
 void RssdBusy(RssdRequest *request);
 void RssdSpuRead(RssdRequest *request);
-
 
 /*
  * libkernel syscall stub (main:0x00200550).
@@ -17,9 +15,9 @@ void RssdSpuRead(RssdRequest *request);
 
 void *RssdSifRpcServer(unsigned int command, void *data, int size);
 
-extern const char D_004D4A60[];
+extern const char rssdBindErrorFormat[];
 
-extern const char D_004D4A80[];
+extern const char rssdSifTransferSizeOverMessage[];
 
 extern int iSignalSema(int sema_id);
 
@@ -71,7 +69,7 @@ extern void SsdCopyMemory(void *dst, void *src, int size);
 
 extern int printf(const char *format, ...);
 
-extern const char D_004D4AA0[32];
+extern const char rssdGetResultErrorMessage[32];
 
 /*
  * libkernel syscall stub (main:0x00200550).
@@ -184,7 +182,7 @@ void RssdInitIop(void)
     while (sceSifCheckStatRpc(RssdWork.rpc_client) != 0)
         ;
     if (RssdWork.rpc_client_serve == 0) {
-        printf(D_004D4A60, 2304);
+        printf(rssdBindErrorFormat, 2304);
         return;
     }
     RssdWork.flags = 1;
@@ -328,7 +326,7 @@ int RssdCallFunc(int command, RssdRequest *request, void *data, int size)
     packet->data_size = size;
     total_size = ((size + 15) & -16) + sizeof(*packet);
     if (total_size > 0x10020) {
-        printf(D_004D4A80);
+        printf(rssdSifTransferSizeOverMessage);
         RssdWork.flags &= ~0x8;
         SignalSema(RssdWork.sema_id);
         return -1;
@@ -401,7 +399,7 @@ int SsdGetResultValue(int *value)
             *value = RssdWork.response.value;
     } else {
         result = -3;
-        printf(D_004D4AA0);
+        printf(rssdGetResultErrorMessage);
     }
     return result;
 }
@@ -459,21 +457,8 @@ void SsdSuspend(void)
     RssdCallFunc(RSSD_CMD_SUSPEND, &request, 0, 0);
 }
 
+const char rssdSifTransferSizeOverMessage[32] = "Rssd sif transfer size over !!\n";
 
+const char rssdBindErrorFormat[32] = "Rssd(%04x) bind error !\n";
 
-extern const char D_004D4A60[32];
-
-const char D_004D4A80[32] = "Rssd sif transfer size over !!\n";
-
-static unsigned char MYthreadStack[16384];
-
-
-static unsigned char MYclientPtr[65600];
-
-static unsigned char MYserverPtr[65568];
-
-static unsigned char MYwaveTransThStack[16384];
-
-const char D_004D4A60[32] = "Rssd(%04x) bind error !\n";
-
-const char D_004D4AA0[32] = "Rssd get result error !\n";
+const char rssdGetResultErrorMessage[32] = "Rssd get result error !\n";

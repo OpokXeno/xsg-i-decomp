@@ -16,7 +16,9 @@ static u8 hddcheck[];
 
 static char commonname[];
 
-static char yoursaves[];static HddErrorPacket TestEnv_0_004A8A80[1];extern const unsigned char D_004D2628[];
+static char yoursaves[];
+static HddErrorPacket TestEnv_0_004A8A80[1];
+extern const unsigned char hddLoadErrorText[];
 
 extern const char cd_filename[16];
 
@@ -30,11 +32,11 @@ extern HddInstallCBParam *HddInstallCBparam;
 
 static u8 HddActive;
 
-extern char D_004DC378[];
+extern char pfs1RootPath[];
 
-extern char D_004DC380[];
+extern char currentDirEntryName[];
 
-extern char D_004DC388[];
+extern char parentDirEntryName[];
 
 extern int strcmp(const char *left, const char *right);
 
@@ -140,7 +142,7 @@ void xglHddErrorScreen(void)
     sRender.errorScreenActive = 1;
     for (;;) {
         xglDmaDirectNormal(2, TestEnv_0_004A8A80, 6);
-        xglFontPrint(48, 64, 0xffffff, D_004D2628);
+        xglFontPrint(48, 64, 0xffffff, hddLoadErrorText);
         if (waitFrames > 0) {
             waitFrames--;
         } else if (PadData.half_2a & 0x20) {
@@ -323,7 +325,7 @@ static int Judge_MakeNewFolder(void)
     char *entryName;
 
     directoryCount = 0;
-    result = sceDopen(D_004DC378);
+    result = sceDopen(pfs1RootPath);
     if (result < 0)
         return result;
     descriptor = result;
@@ -334,8 +336,8 @@ static int Judge_MakeNewFolder(void)
             break;
 
         entryName = entry.name;
-        if (strcmp(entryName, D_004DC380) != 0 &&
-            strcmp(entryName, D_004DC388) != 0 &&
+        if (strcmp(entryName, currentDirEntryName) != 0 &&
+            strcmp(entryName, parentDirEntryName) != 0 &&
             (entry.stat.mode & 0xF000) == 0x1000 &&
             entry.stat.privateData[0] == 0xFFFF &&
             entry.stat.privateData[1] == 0xFFFF) {
@@ -388,8 +390,8 @@ int Judge_MakeNewSavedata(int descriptor, int card)
             break;
 
         entryName = entry.name;
-        if (strcmp(entryName, D_004DC380) == 0 ||
-            strcmp(entryName, D_004DC388) == 0 ||
+        if (strcmp(entryName, currentDirEntryName) == 0 ||
+            strcmp(entryName, parentDirEntryName) == 0 ||
             strncmp(entryName, path, pathLength) == 0)
             continue;
 
@@ -534,7 +536,7 @@ struct HddSaveImage {
     unsigned char payloadStart; /* First byte; the transfer header gives size. */
 };
 
-static unsigned char tbl_1_004A8AE0[4] __attribute__((section(".data")));
+static unsigned char tbl_1_004A8AE0[] ;
 
 int xglHddMcCreate(struct HddCheckState *state)
 {
@@ -543,7 +545,7 @@ int xglHddMcCreate(struct HddCheckState *state)
                          unsigned int output_size);
     extern int sceMkdir(const char *path, int mode);
     extern void xglMcWriteMapName(char *icon_system, int card);
-    extern unsigned char D_004DC390[];
+    extern unsigned char mcPartitionSize1G[];
     extern unsigned char tbl_1_004A8AE0[];
     char *deviceName;
     char path[256];
@@ -582,7 +584,7 @@ int xglHddMcCreate(struct HddCheckState *state)
                 return -0x10;
 
             result = 0;
-            if (sceIoctl2(descriptor, 0x6801, D_004DC390, 3, 0, 0) < 0)
+            if (sceIoctl2(descriptor, 0x6801, mcPartitionSize1G, 3, 0, 0) < 0)
                 result = -0x11;
             if (sceClose(descriptor) < 0)
                 result = -0x12;
@@ -725,10 +727,10 @@ int xglHddInstall(int (*callback)(), int param)
     extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
                                  int (*progress)(int, int), int offset,
                                  int size);
-    extern char D_004D26C8[];
-    extern char D_004D26D8[];
-    extern char D_004DC3A0[];
-    extern char D_004DC3A8[];
+    extern char hddResourcePath[];
+    extern char partitionSpecFormat[];
+    extern char hddPartitionSize256M[];
+    extern char pfsDevicePath[];
     extern unsigned char dvdname_2[];
     struct HddInstallImage *image = (struct HddInstallImage *)0x1000000;
     HddInstallCBParam context;
@@ -753,7 +755,7 @@ int xglHddInstall(int (*callback)(), int param)
     context.status = 0;
     callback(0, 0, param);
 
-    if (xglCdReadFile(D_004D26C8, image, 0, 1) < 0) {
+    if (xglCdReadFile(hddResourcePath, image, 0, 1) < 0) {
         callback(-1, 0, param);
         return -1;
     }
@@ -763,7 +765,7 @@ int xglHddInstall(int (*callback)(), int param)
     size = (image->bodySize + image->tableSize + 511) & -512;
 
     callback(1, 0, param);
-    sprintf(path, D_004D26D8, partitionname);
+    sprintf(path, partitionSpecFormat, partitionname);
     partition = sceOpen(path, 0x203);
     if (partition < 0) {
         callback(-2, partition, param);
@@ -778,7 +780,7 @@ int xglHddInstall(int (*callback)(), int param)
 
     for (size = 0x80000, chunk = 1; size <= 0x37ffff; size += 0x80000) {
         callback(3, chunk++, param);
-        result = sceIoctl2(partition, 0x6801, D_004DC3A0, 5, 0, 0);
+        result = sceIoctl2(partition, 0x6801, hddPartitionSize256M, 5, 0, 0);
         if (result < 0) {
             callback(-4, result, param);
             xglHddUninstall();
@@ -792,7 +794,7 @@ int xglHddInstall(int (*callback)(), int param)
 
     callback(4, 0, param);
     formatSize = 0x2000;
-    if ((result = sceFormat(D_004DC3A8, partitionname, &formatSize, 4)) < 0) {
+    if ((result = sceFormat(pfsDevicePath, partitionname, &formatSize, 4)) < 0) {
         callback(-6, result, param);
         xglHddUninstall();
         return -1;
@@ -996,30 +998,15 @@ int xglHddMount(void)
     return 1;
 }
 
+extern const char hddResourcePath[16];
 
+extern const char partitionSpecFormat[16];
 
-static unsigned char dvdname_2[12];
+extern unsigned char mcPartitionSize1G[8];
 
-extern char D_004D26C8[16];
+extern char hddPartitionSize256M[8];
 
-extern char D_004D26D8[16];
-
-extern char D_004DC378[8];
-
-extern char D_004DC380[8];
-
-extern char D_004DC388[8];
-
-extern unsigned char D_004DC390[8];
-
-extern char D_004DC3A0[8];
-
-extern char D_004DC3A8[8];
-
-
-
-static unsigned char tbl_1_004A8AE0[4] __attribute__((section(".data")));
-
+extern char pfsDevicePath[8];
 
 static char partitionname[] = {
     'h' ^ 0x80, 'd' ^ 0x80, 'd' ^ 0x80, '0' ^ 0x80, ':' ^ 0x80,
@@ -1057,7 +1044,7 @@ static HddErrorPacket TestEnv_0_004A8A80[1] = {{
     },
 }};
 
-static unsigned char tbl_1_004A8AE0[4] __attribute__((section(".data"))) = { 14, 9, 13, 15 };
+static unsigned char tbl_1_004A8AE0[] = { 14, 9, 13, 15 };
 
 static unsigned char dvdname_2[12] = "xenosaga.00";
 
@@ -1067,7 +1054,7 @@ static unsigned char dvdname_2[12] = "xenosaga.00";
 
 /* JP: ハードディスクドライブにあるゼノサーガの\n\nアプリケーションデータが読み込めません。\n\nこれ以降はＤＶＤから読み込みを行います。\n\n\n\n○ボタン：続行
  * EN: Cannot load the Xenosaga\n\napplication data on the hard disk drive.\n\nData will be loaded from the DVD from now on.\n\n\n\nCircle button: Continue */
-const unsigned char D_004D2628[] =
+const unsigned char hddLoadErrorText[] =
     "\x0b\x0e\x01\x01\x00\x00\x00\x0d\x03\xa5\xcf\xa1\xbc\xa5\xc9\xa5\xc7\xa5\xa3\xa5"
     "\xb9\xa5\xaf\xa5\xc9\xa5\xe9\xa5\xa4\xa5\xd6\xa4\xcb\xa4\xa2\xa4\xeb\xa5\xbc\xa5"
     "\xce\xa5\xb5\xa1\xbc\xa5\xac\xa4\xce\x0a\x0a\xa5\xa2\xa5\xd7\xa5\xea\xa5\xb1\xa1"
@@ -1077,9 +1064,9 @@ const unsigned char D_004D2628[] =
     "\xdf\xa4\xf2\xb9\xd4\xa4\xa4\xa4\xde\xa4\xb9\xa1\xa3\x0a\x0a\x0a\x0a\x0c\x80\x20"
     "\x20\xa1\xfb\x0c\x80\x80\x80\xa5\xdc\xa5\xbf\xa5\xf3\xa1\xa7\xc2\xb3\xb9\xd4";
 
-char D_004D26C8[16] __attribute__((section(".rodata"))) = "data\\hdd.res";
+const char hddResourcePath[16] = "data\\hdd.res";
 
-char D_004D26D8[16] __attribute__((section(".rodata"))) = "%s,256M,PFS";
+const char partitionSpecFormat[16] = "%s,256M,PFS";
 
 const char cd_filename[16] = "xenosaga.00";
 
@@ -1087,18 +1074,18 @@ char xgl_hdd_device[] = "hdd0:";
 
 char hdd_mc_path[] = "pfs1:";
 
-char D_004DC378[8] = "pfs1:/";
+char pfs1RootPath[8] = "pfs1:/";
 
-char D_004DC380[8] = ".";
+char currentDirEntryName[8] = ".";
 
-char D_004DC388[8] = "..";
+char parentDirEntryName[8] = "..";
 
-unsigned char D_004DC390[8] = "1G";
+unsigned char mcPartitionSize1G[8] = "1G";
 
 u8 mount_device[] = "pfs0:";
 
-char D_004DC3A0[8] = "256M";
+char hddPartitionSize256M[8] = "256M";
 
-char D_004DC3A8[8] = "pfs:";
+char pfsDevicePath[8] = "pfs:";
 
 HddInstallCBParam *HddInstallCBparam = 0;

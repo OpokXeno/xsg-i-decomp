@@ -1,4 +1,4 @@
-/* Original ssd_out.c translation unit. Unrecovered data remains external. */
+/* Original ssd_out.c translation unit. Shared data is defined by its owning FDR. */
 
 
 

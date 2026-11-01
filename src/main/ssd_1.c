@@ -134,7 +134,6 @@ typedef struct RssdWorkFlags {
 /* RssdWorkFlags.flags bit 5: set/cleared around an RssdCallFunc call to report the RPC's outcome. */
 #define RSSD_FLAG_SUCCESS 0x20
 
-
 extern RssdWorkFlags RssdWork;
 
 /*
@@ -190,8 +189,6 @@ int RssdCallFunc(int command, RssdRequest *request, void *data, int size);
  * orders every earlier load/store, including the iSignalSema effects, before
  * `ei` re-enables interrupts on the way out.
  */
-
-
 
 extern void *sceSifGetNextRequest(void *queue);
 

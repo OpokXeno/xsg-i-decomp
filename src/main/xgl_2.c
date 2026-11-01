@@ -2,12 +2,7 @@
 
 #include "shared.h"
 
-
 #include "xgl_2.h"
-
-
-
-
 
 extern unsigned int D_004ADE80[];
 
@@ -21,7 +16,7 @@ extern char Vu0CallSin[];
 
 extern char Vu0CallCos[];
 
-extern const int D_004D27C8[3];
+extern const int nextAxisTable[3];
 
 float xglAtan2(float y, float x)
 {
@@ -1414,7 +1409,7 @@ void xglMatrix2Quaternion(float quaternion[4], const Matrix *matrix)
         quaternion[1] = (matrix->elements[8] - matrix->elements[2]) * scale;
         quaternion[2] = (matrix->elements[1] - matrix->elements[4]) * scale;
     } else {
-        __builtin_memcpy(nextAxes, D_004D27C8, sizeof(nextAxes));
+        __builtin_memcpy(nextAxes, nextAxisTable, sizeof(nextAxes));
         largestAxis = 0;
         if (diagonalX < diagonalY) largestAxis = 1;
         if (matrix->elements[5 * largestAxis] < diagonalZ) largestAxis = 2;
@@ -1635,6 +1630,5 @@ float xglCos(float angle)
     return result;
 }
 
-
 /* Defined after its consumer to retain the original runtime table copy. */
-const int D_004D27C8[3] = {1, 2, 0};
+const int nextAxisTable[3] = {1, 2, 0};

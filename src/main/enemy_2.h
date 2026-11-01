@@ -218,7 +218,7 @@ typedef struct EnemyActorView {
  * name rather than inventing another one for the object both files describe.
  * Enemy_Command_Freeze below is the only function of this TU that reads or
  * writes it, saving and restoring it across a freeze/thaw and slowing it to
- * D_004D8140 for a scripted deceleration. It is 0x28 bytes past the recovered
+ * ENEMY_FREEZE_SPEED for a scripted deceleration. It is 0x28 bytes past the recovered
  * type, with nothing in between recovered, so it stays a named offset
  * (docs/style.md rule 2) rather than a member of Actor. */
 #define ACTOR_SPEED_OFFSET 0x6f8
@@ -412,7 +412,7 @@ extern volatile const float sac_turn_two_pi_add;
 /* The scripted deceleration speed Enemy_Command_Freeze applies for its
  * "slow" command (lwc1 $gp,-31280 at 0x002d2f60, value 0.03333...). Not in
  * config/symbols/main.txt, so it keeps the splat default name. */
-extern float D_004D8140;
+extern float ENEMY_FREEZE_SPEED;
 
 /* Runs an enemy's pause behaviour, chosen by ENEMY_TYPE of its `enepc` entry
  * (lbu v0,0x4a(s1) at 0x002ccfc4). No caller uses a value from it or from

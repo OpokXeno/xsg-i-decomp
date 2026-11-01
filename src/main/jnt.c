@@ -47,20 +47,10 @@ typedef struct JntHairIdSource {
     int channel_offset;
 } JntHairIdSource;
 
-
-
-
-
-
 typedef struct JntChannelTag {
     int flag; /* 0x00 */
     int tag;  /* 0x04 */
 } JntChannelTag;
-
-
-
-
-
 
 typedef struct JntChannelWork {
     unsigned char unmodeled_000[0x28];
@@ -69,17 +59,7 @@ typedef struct JntChannelWork {
     struct JntChannelTag *tag;              /* 0x808 */
 } JntChannelWork;
 
-
-
-
-
-
 typedef struct JntInterruptElement JntInterruptElement;
-
-
-
-
-
 
 struct JntInterruptElement {
     float scale[3];
@@ -94,82 +74,37 @@ struct JntInterruptElement {
     unsigned char unmodeled_38[8];
 };
 
-
-
-
-
-
 typedef struct JntInterruptWork JntInterruptWork;
-
-
-
-
-
 
 struct JntInterruptWork {
     unsigned char unmodeled_000[0x818];
     JntInterruptElement *elements; /* 0x818 */
 };
 
-
-
-
-
-
 typedef struct JntChannelList JntChannelList;
-
-
-
-
-
 
 struct JntChannelList {
     int count;                 /* 0x00 */
     int channel_elements[8];   /* 0x04, indexed by channel */
 };
 
-
-
-
-
-
 typedef struct JntAccessoryRecord {
     unsigned short size;
     unsigned short type;
 } JntAccessoryRecord;
-
-
-
-
-
 
 typedef struct JntMoveResource {
     unsigned char unmodeled_00[0x10];
     int accessory_size;
 } JntMoveResource;
 
-
-
-
-
-
 typedef void (*JntFilterFn)(void *work, void *param, int flag);
-
-
-
-
-
 
 typedef struct JntFilterList {
     int count;
     int flags[8];
     JntFilterFn filters[8];
 } JntFilterList;
-
-
-
-
-
 
 /*
  * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
@@ -188,21 +123,12 @@ typedef struct JntFilterList {
 
 #define JNT_MATRIX_BUFFER_OFFSET 0x7A0
 
-
-
-
 #define JNT_MATRIX_SELECT_OFFSET 0x4BC
-
-
-
 
 typedef union JntRotationPayload {
     float values[3];
     int bits[3];
 } JntRotationPayload;
-
-
-
 
 struct JntStaticChannel {
     unsigned short type;           /* 0x00 */
@@ -217,9 +143,6 @@ struct JntStaticChannel {
     unsigned char unmodeled_3c[4];
 };
 
-
-
-
 typedef struct JntChainSlot {
     struct FcvPackAttribute *attribute; /* 0x00 */
     unsigned char unmodeled_04[0x0c];
@@ -228,16 +151,12 @@ typedef struct JntChainSlot {
     Vector4 rotation;              /* 0x30 */
 } JntChainSlot;
 
-
-
 typedef struct JntProductionOwner JntProductionOwner;
-
 
 typedef struct JntTransformRecord {
     Vector4 translation;
     Vector4 rotation;
 } JntTransformRecord;
-
 
 struct JntProducer {
     int count;              /* 0x00 */
@@ -317,21 +236,6 @@ typedef void *(*JntProductionConsumer)(JntWork *work,
                                       struct JntStaticChannel *channels,
                                       int argument);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #define JNT_MATRIX_BUFFER(scratch) (((JntWork *)(scratch))->matrix_buffer)
 
 #define JNT_MATRIX_SELECT(scratch) (((JntWork *)(scratch))->matrix_select)
@@ -353,11 +257,6 @@ typedef void *(*JntProductionConsumer)(JntWork *work,
  *     $3 = lw 0x7AC($17) -- 0x7AC is the table it reads, value_records.
  */
 
-
-
-
-
-
 /*
  * A joint element is a fixed-size record: JNT_getElement indexes an array of
  * them and JNT_nextElement advances by exactly one. The layout beyond that
@@ -369,11 +268,6 @@ typedef struct JntElement {
     unsigned char unmodeled_00[0x40];
 } JntElement;
 
-
-
-
-
-
 /*
  * The joint resource header JNT_getRootElement reads: 0x10 bytes not
  * recovered here, then a self-relative offset field whose own address plus
@@ -384,11 +278,6 @@ typedef struct JntElementHeader {
     unsigned char unmodeled_00[0x10];
     int root_element_offset;
 } JntElementHeader;
-
-
-
-
-
 
 /*
  * Another partial view of the same scratchpad work area as JntWork (it is
@@ -405,11 +294,6 @@ typedef struct JntFlagsWork {
     int flags;
 } JntFlagsWork;
 
-
-
-
-
-
 /*
  * A view of the same work area for two adjacent slots past the end of
  * JntWork:
@@ -425,17 +309,7 @@ typedef struct JntAnimWork {
     float clip_radius;
 } JntAnimWork;
 
-
-
-
-
-
 typedef unsigned int JntRootStorage __attribute__((mode(TI)));
-
-
-
-
-
 
 typedef union JntRootSlot {
     JntRootStorage storage;
@@ -447,22 +321,12 @@ typedef union JntRootSlot {
     } components;
 } JntRootSlot;
 
-
-
-
-
-
 typedef struct JntRootScratch {
     unsigned char unmodeled_00[0x40];
     JntRootSlot translation;
     JntRootSlot rotation;
     JntRootSlot scale;
 } JntRootScratch;
-
-
-
-
-
 
 /*
  * The matrix_print current-matrix API transfers native 64-byte matrices,
@@ -481,7 +345,6 @@ void CUR_MATRIX_Rzyx4s(const int *rotate);
 /* Static-value copying uses floating point, while the matrix API transports
  * these same angle representations as raw words into VU0. */
 
-
 /*
  * A joint static-value channel: JNT_getStaticVal2 reads its type (dispatch,
  * only types 1-5 apply a transform), its target joint slot and the
@@ -489,12 +352,6 @@ void CUR_MATRIX_Rzyx4s(const int *rotate);
  * returns the following channel (`channel + 1`), which fixes its size at
  * 0x40 bytes, the same stride as JntElement.
  */
-
-
-
-
-
-
 
 /*
  * Hair-smoothing toggle at VA 0x004DC248: JNT_computeMatrix reads it with
@@ -509,22 +366,12 @@ typedef struct JntMoveElement {
     unsigned char unmodeled_02[0x3E];
 } JntMoveElement;
 
-
-
-
-
-
 typedef struct JntMoveElementHeader {
     unsigned char unmodeled_00[0x08];
     unsigned short element_count;
     unsigned char unmodeled_0A[0x06];
     int element_offset;
 } JntMoveElementHeader;
-
-
-
-
-
 
 char *strncpy(char *destination, const char *source, unsigned int count);
 
@@ -540,11 +387,6 @@ struct FcvPackAttribute {
     unsigned short pivot_index;       /* 0x0A */
     unsigned short rotation_index;    /* 0x0C */
 };
-
-
-
-
-
 
 struct FcvPackAttribute *FCV2_getPackAttribute(unsigned short **cursor);
 
@@ -571,20 +413,10 @@ struct JntProductionOwner {
     JntMatrix *matrix_buffer; /* 0xA60 */
 };
 
-
-
-
-
-
 typedef struct JntRotationLimitHeader {
     unsigned short values_offset;
     unsigned short deferred_offset;
 } JntRotationLimitHeader;
-
-
-
-
-
 
 typedef struct JntRotationLimits {
     float minimum[3];
@@ -593,20 +425,10 @@ typedef struct JntRotationLimits {
     float maximum[3];
 } JntRotationLimits;
 
-
-
-
-
-
 typedef struct JntPreviousTransform {
     Vector4 translation;
     Vector4 rotation;
 } JntPreviousTransform;
-
-
-
-
-
 
 void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z);
 
@@ -615,8 +437,6 @@ void xglMatrix2Quaternion(float quaternion[4], const void *matrix);
 void xglQuaternion2Matrix(Matrix4 destination, const Vector4 *quaternion);
 
 void xglQuaternionInterpolateLinear(Vector4 *destination, const Vector4 *left, const Vector4 *right, float left_weight, float right_weight);
-
-
 
 JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float frame);
 
@@ -640,8 +460,6 @@ void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
 void xglMatrixUnit4s(Matrix4 destination);
 
 JntStaticChannel *JNT_interpolate(JntWork *work, JntStaticChannel *channel);
-
-
 
 JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel);
 
@@ -837,8 +655,6 @@ struct FcvPackAttribute *FCV_getAttrAndValue(float *values,
     }
     return attribute;
 }
-
-
 
 JntStaticChannel *JNT_getVal(JntWork *work, JntStaticChannel *channel,
                             float frame)
@@ -2899,10 +2715,6 @@ static inline void jntCopyTranslation(float destination[3],
     destination[2] = translation[2];
 }
 
-
-
-
-
 JntStaticChannel *JNT_interpolate(JntWork *work, JntStaticChannel *channel)
 {
     JntMatrix result_matrix;
@@ -3786,7 +3598,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
     int nmlModelCalcClip(Vector4 *position);
     typedef struct JntHairJoint JntHairJoint;
     void EXM_PresetHair(JntHairJoint *joint);
-    extern float D_004D8550;
+    extern float jointMovementFollowRate;
 
     owner = work->owner;
     if (channel == 0) {
@@ -3841,7 +3653,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             speed = 0.0f;
             distance = speed;
         }
-        owner->movement.y = (speed - owner->movement.w) * D_004D8550;
+        owner->movement.y = (speed - owner->movement.w) * jointMovementFollowRate;
         owner->movement.w = distance;
         owner->movement.x = owner->position.x;
         owner->movement.z = owner->position.z;
@@ -4146,3 +3958,5 @@ void JNT_offSmoothHair(void)
 {
     flagSmoothHair = 0;
 }
+
+float jointMovementFollowRate = 0.80000001192092896f;

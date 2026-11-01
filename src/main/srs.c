@@ -4,128 +4,128 @@
 
 #include "srs.h"
 
-extern char D_004CBFC0[];
-extern char D_004CBFD0[];
-extern char D_004CBFE0[];
-extern char D_004CBFF0[];
-extern char D_004CC000[];
-extern char D_004CC010[];
-extern char D_004CC020[];
-extern char D_004CC030[];
-extern char D_004CC040[];
-extern char D_004CC050[];
-extern char D_004CC060[];
-extern char D_004CC070[];
-extern char D_004CC080[];
-extern char D_004CC090[];
-extern char D_004CC0A0[];
-extern char D_004CC0B0[];
-extern char D_004CC0C0[];
-extern char D_004CC0D0[];
-extern char D_004CC0E0[];
-extern char D_004CC0F0[];
-extern char D_004CC100[];
-extern char D_004CC110[];
-extern char D_004CC120[];
-extern char D_004CC130[];
-extern char D_004CC140[];
-extern char D_004CC150[];
-extern char D_004CC160[];
-extern char D_004CC170[];
-extern char D_004CC180[];
-extern char D_004CC190[];
-extern char D_004CC1A0[];
-extern char D_004CC1B0[];
-extern char D_004CC1C0[];
-extern char D_004CC1D0[];
-extern char D_004CC1E0[];
-extern char D_004CC1F0[];
-extern char D_004CC200[];
-extern char D_004CC210[];
-extern char D_004CC220[];
-extern char D_004CC230[];
-extern char D_004CC240[];
-extern char D_004CC250[];
-extern char D_004CC260[];
-extern char D_004CC270[];
-extern char D_004CC280[];
-extern char D_004CC290[];
-extern char D_004CC2A0[];
-extern char D_004CC2B0[];
-extern char D_004CC2C0[];
-extern char D_004CC2D0[];
-extern char D_004CC2E0[];
-extern char D_004CC2F0[];
-extern char D_004CC300[];
-extern char D_004CC310[];
-extern char D_004CC320[];
-extern char D_004CC330[];
-extern char D_004CC340[];
-extern char D_004CC350[];
-extern char D_004CC360[];
-extern char D_004CC370[];
-extern char D_004CC380[];
-extern char D_004CC390[];
-extern char D_004CC3A0[];
-extern char D_004CC3B0[];
-extern char D_004CC3C0[];
-extern char D_004CC3D0[];
-extern char D_004CC3E0[];
-extern char D_004CC3F0[];
-extern char D_004CC400[];
-extern char D_004CC410[];
-extern char D_004CC420[];
-extern char D_004CC430[];
-extern char D_004CC440[];
-extern char D_004CC450[];
-extern char D_004CC460[];
-extern char D_004CC470[];
-extern char D_004CC480[];
-extern char D_004CC490[];
-extern char D_004CC4A0[];
-extern char D_004CC4B0[];
-extern char D_004CC4C0[];
-extern char D_004CC4D0[];
-extern char D_004CC4E0[];
-extern char D_004CC4F0[];
-extern char D_004CC500[];
-extern char D_004CC510[];
-extern char D_004CC520[];
-extern char D_004CC530[];
-extern char D_004CC540[];
-extern char D_004CC550[];
-extern char D_004CC560[];
-extern char D_004CC570[];
-extern char D_004CC580[];
-extern char D_004CC590[];
-extern char D_004CC5A0[];
-extern char D_004CC5B0[];
-extern char D_004CC5C0[];
-extern char D_004CC5D0[];
-extern char D_004CC5E0[];
-extern char D_004CC5F0[];
-extern char D_004CC600[];
-extern char D_004CC610[];
-extern char D_004CC620[];
-extern char D_004CC630[];
-extern char D_004CC640[];
-extern char D_004CC650[];
-extern char D_004CC660[];
-extern char D_004CC670[];
-extern char D_004DBAB0[];
-extern char D_004DBAA0[];
-extern char D_004DBB10[];
-extern char D_004DBB08[];
-extern char D_004DBB00[];
-extern char D_004DBAF8[];
-extern char D_004DBAF0[];
-extern char D_004DBAE8[];
-extern char D_004DBAE0[];
-extern char D_004DBAD8[];
-extern char D_004DBAD0[];
-extern char D_004DBAC8[];
-extern char D_004DBAC0[];
-extern char D_004DBAB8[];
+extern char sefBoss033Name[];
+extern char sefBoss032Name[];
+extern char sefBoss031Name[];
+extern char sefBoss030Name[];
+extern char sefBoss029Name[];
+extern char sefBoss028Name[];
+extern char sefBoss027Name[];
+extern char sefBoss026Name[];
+extern char sefBoss025Name[];
+extern char sefBoss024Name[];
+extern char sefBoss023Name[];
+extern char sefBoss022Name[];
+extern char sefBoss021Name[];
+extern char sefBoss020Name[];
+extern char sefBoss019Name[];
+extern char sefBoss018Name[];
+extern char sefBoss017Name[];
+extern char sefBoss016Name[];
+extern char sefBoss015Name[];
+extern char sefBoss014Name[];
+extern char sefBoss013Name[];
+extern char sefBoss012Name[];
+extern char sefBoss011Name[];
+extern char sefBoss010Name[];
+extern char sefBoss009Name[];
+extern char sefBoss008Name[];
+extern char sefBoss007Name[];
+extern char sefBoss006Name[];
+extern char sefBoss005Name[];
+extern char sefBoss004Name[];
+extern char sefBoss003Name[];
+extern char sefBoss002Name[];
+extern char sefBoss001Name[];
+extern char sefUtso007Name[];
+extern char sefUtso006Name[];
+extern char sefUtso005Name[];
+extern char sefUtso004Name[];
+extern char sefUtso003Name[];
+extern char sefUtso002Name[];
+extern char sefUtso001Name[];
+extern char sefUtro007Name[];
+extern char sefUtro006Name[];
+extern char sefUtro005Name[];
+extern char sefUtro004Name[];
+extern char sefUtro003Name[];
+extern char sefUtro002Name[];
+extern char sefUtro001Name[];
+extern char sefUtre006Name[];
+extern char sefUtre005Name[];
+extern char sefUtre004Name[];
+extern char sefUtre003Name[];
+extern char sefUtre002Name[];
+extern char sefUtre001Name[];
+extern char sefUtma014Name[];
+extern char sefUtma013Name[];
+extern char sefUtma012Name[];
+extern char sefUtma011Name[];
+extern char sefUtma010Name[];
+extern char sefUtma009Name[];
+extern char sefUtma008Name[];
+extern char sefUtma007Name[];
+extern char sefUtma006Name[];
+extern char sefUtma005Name[];
+extern char sefUtma004Name[];
+extern char sefUtma003Name[];
+extern char sefUtma002Name[];
+extern char sefUtma001Name[];
+extern char sefFeso004Name[];
+extern char sefFeso003Name[];
+extern char sefFeso002Name[];
+extern char sefFeso001Name[];
+extern char sefFero001Name[];
+extern char sefFere003Name[];
+extern char sefFere002Name[];
+extern char sefFere001Name[];
+extern char sefFema006Name[];
+extern char sefFema005Name[];
+extern char sefFema004Name[];
+extern char sefFema003Name[];
+extern char sefFema002Name[];
+extern char sefFema001Name[];
+extern char sefGuno114Name[];
+extern char sefGuno025Name[];
+extern char sefGuno024Name[];
+extern char sefGuno023Name[];
+extern char sefGuno022Name[];
+extern char sefGuno021Name[];
+extern char sefGuno020Name[];
+extern char sefGuno019Name[];
+extern char sefGuno018Name[];
+extern char sefGuno017Name[];
+extern char sefGuno016Name[];
+extern char sefGuno015Name[];
+extern char sefGuno014Name[];
+extern char sefGuno013Name[];
+extern char sefGuno012Name[];
+extern char sefGuno011Name[];
+extern char sefGuno010Name[];
+extern char sefGuno009Name[];
+extern char sefGuno008Name[];
+extern char sefGuno007Name[];
+extern char sefGuno006Name[];
+extern char sefGuno005Name[];
+extern char sefGuno004Name[];
+extern char sefGuno003Name[];
+extern char sefGuno002Name[];
+extern char sefGuno001Name[];
+extern char sefCatherinName[];
+extern char cfDefaultEffectName[];
+extern char defaultEffectName[];
+extern char chaosEffectName[];
+extern char kosmosEffectName[];
+extern char shionEffectName[];
+extern char shitanEffectName[];
+extern char ziggyEffectName[];
+extern char momoEffectName[];
+extern char jrEffectName[];
+extern char ceciliaEffectName[];
+extern char virgilEffectName[];
+extern char maryEffectName[];
+extern char shelleyEffectName[];
+extern char emptyEffectName[];
 
 extern char _loadEsdData[0xC800];
 
@@ -146,11 +146,11 @@ typedef struct SrsChrEfTbl3Entry {
     unsigned char unmodeled_04[2];
 } SrsChrEfTbl3Entry;
 
-static SrsChrEfTbl3Entry _srsChrEfTbl3[36];static unsigned char srsViewPath[256];
+static SrsChrEfTbl3Entry _srsChrEfTbl3[36];
+static unsigned char srsViewPath[256];
 
-extern unsigned char *strcpy(unsigned char *destination, const unsigned char *source);extern char *_loadComboData[195];
-
-
+extern unsigned char *strcpy(unsigned char *destination, const unsigned char *source);
+extern char *_loadComboData[195];
 
 extern int srsGetWeaponEffectIdx(int effectNo);
 
@@ -168,10 +168,6 @@ typedef struct WeaponTblEntry {
 } WeaponTblEntry;
 
 static WeaponTblEntry _weaponTbl[45];
-
-
-
-
 
 extern void sresDataMapping(void);
 
@@ -192,33 +188,8 @@ extern void sresFreeReloaderMemory(int reload_bgm);
 
 extern int strcmp(const char *s1, const char *s2);
 
-extern char D_004DBAA0[8];
-
-extern char D_004DBAB8[8];
-
-extern char D_004DBAC0[8];
-
-extern char D_004DBAC8[8];
-
-extern char D_004DBAD0[8];
-
-extern char D_004DBAD8[8];
-
-extern char D_004DBAE0[8];
-
-extern char D_004DBAE8[8];
-
-extern char D_004DBAF0[8];
-
-extern char D_004DBAF8[8];
-
-extern char D_004DBB00[8];
-
-extern char D_004DBB08[8];
-
-extern char D_004DBB10[8];
-
-extern SrsMemRes _srsMemRes;static signed char _srsEffect2IndexTbl[117];
+extern SrsMemRes _srsMemRes;
+static signed char _srsEffect2IndexTbl[117];
 
 /*
  * One _srsChrEfTbl row (18 bytes; the 0xD8-byte symbol holds 12 rows): a
@@ -286,48 +257,45 @@ extern void tracePrint(const char *format, ...);
 
 /* JP: #### ＣＦエフェクトメモリが足りません!!
  * EN: #### Not enough CF effect memory!! */
-static const char D_004CC720[40] = "#### \243\303\243\306\245\250\245\325\245\247\245\257\245\310\245\341\245\342\245\352\244\254\302\255\244\352\244\336\244\273\244\363!!";
+static const char srsCfMemoryFullText[40] = "#### \243\303\243\306\245\250\245\325\245\247\245\257\245\310\245\341\245\342\245\352\244\254\302\255\244\352\244\336\244\273\244\363!!";
 
-static const char D_004CC748[32] = "-- err category(%d) eft(%d)";
+static const char srsErrorCategoryFormat[32] = "-- err category(%d) eft(%d)";
 
-static const char D_004CC768[40] = "-- err : eftNo is not cf load";
+static const char srsEffectNotLoadedText[40] = "-- err : eftNo is not cf load";
 
 extern void *memcpy(void *destination, const void *source, unsigned int count);
 
-extern char D_004DBAA0[8];
-extern char D_004DBAB0[8];
+const void *_loadCommonData[1] = { defaultEffectName };
 
-const void *_loadCommonData[1] = { D_004DBAA0 };
+char defaultEffectName[8] = "default";
 
-char D_004DBAA0[8] = "default";
+char *_loadCfCommonData = cfDefaultEffectName;
 
-char *_loadCfCommonData = D_004DBAB0;
+char cfDefaultEffectName[8] = "cf_def";
 
-char D_004DBAB0[8] = "cf_def";
+char emptyEffectName[8] = "";
 
-char D_004DBAB8[8] = "";
+char shelleyEffectName[8] = "shelley";
 
-char D_004DBAC0[8] = "shelley";
+char maryEffectName[8] = "mary";
 
-char D_004DBAC8[8] = "mary";
+char virgilEffectName[8] = "virgil";
 
-char D_004DBAD0[8] = "virgil";
+char ceciliaEffectName[8] = "cecilia";
 
-char D_004DBAD8[8] = "cecilia";
+char jrEffectName[8] = "jr";
 
-char D_004DBAE0[8] = "jr";
+char momoEffectName[8] = "momo";
 
-char D_004DBAE8[8] = "momo";
+char ziggyEffectName[8] = "ziggy";
 
-char D_004DBAF0[8] = "ziggy";
+char shitanEffectName[8] = "shitan";
 
-char D_004DBAF8[8] = "shitan";
+char shionEffectName[8] = "shion";
 
-char D_004DBB00[8] = "shion";
+char kosmosEffectName[8] = "kosmos";
 
-char D_004DBB08[8] = "kosmos";
-
-char D_004DBB10[8] = "chaos";
+char chaosEffectName[8] = "chaos";
 
 int srsGetEffect2Idx(int effectNo)
 {
@@ -568,7 +536,6 @@ static int fileLoad(void *buffer, const char *name, int mode)
     int descriptor;
     int size;
     int result;
-
 
     size = 0;
     if (srsMakeFileName(path, name) == 0) {
@@ -1132,7 +1099,7 @@ int srsFileLoadCf(int cfId, int effectNo)
                 buffer = smAlloc(size);
                 _srsMemRes.effectData[i] = buffer;
                 if (buffer == 0) {
-                    tracePrint(D_004CC720);
+                    tracePrint(srsCfMemoryFullText);
                     return -1;
                 }
                 size = srsFileLoad(buffer, name, 0);
@@ -1146,9 +1113,9 @@ int srsFileLoadCf(int cfId, int effectNo)
             }
         }
     } else {
-        tracePrint(D_004CC748, effectType, effectNo);
+        tracePrint(srsErrorCategoryFormat, effectType, effectNo);
     }
-    tracePrint(D_004CC768);
+    tracePrint(srsEffectNotLoadedText);
     return -1;
 }
 
@@ -1177,7 +1144,7 @@ int srsMemoryLoadCf(void *data, int effectNo, int size)
                 buffer = smAlloc(size);
                 _srsMemRes.effectData[i] = buffer;
                 if (buffer == 0) {
-                    tracePrint(D_004CC720);
+                    tracePrint(srsCfMemoryFullText);
                     return -1;
                 }
                 memcpy(buffer, data, size);
@@ -1188,9 +1155,9 @@ int srsMemoryLoadCf(void *data, int effectNo, int size)
             }
         }
     } else {
-        tracePrint(D_004CC748, effectType, effectNo);
+        tracePrint(srsErrorCategoryFormat, effectType, effectNo);
     }
-    tracePrint(D_004CC768);
+    tracePrint(srsEffectNotLoadedText);
     return -1;
 }
 
@@ -1211,13 +1178,6 @@ int srsEffectNameToID(char *effectName)
     return 0;
 }
 
-
-
-extern char D_004DBAB0[8];
-
-extern char D_004DBAA0[8];extern const void *_loadCommonData[1];
-
-
 /*
  * The original srs prefix is retained; its historical expansion is not
  * established by the available evidence. The mode word is local to this TU.
@@ -1230,45 +1190,45 @@ static unsigned char srsViewPath[256] = {0};
  */
 
 char *_loadComboData[195] = {
-    D_004DBAA0, D_004DBB10, D_004DBB08, D_004DBB00, D_004DBAF8,
-    D_004DBAF0, D_004DBAE8, D_004DBAE0, D_004DBAD8, D_004CC670,
-    D_004DBAD0, D_004DBAC8, D_004DBAC0, 0, 0,
+    defaultEffectName, chaosEffectName, kosmosEffectName, shionEffectName, shitanEffectName,
+    ziggyEffectName, momoEffectName, jrEffectName, ceciliaEffectName, sefCatherinName,
+    virgilEffectName, maryEffectName, shelleyEffectName, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
-    0, 0, 0, D_004CC660, D_004CC660,
-    D_004CC650, D_004CC640, D_004CC630, D_004CC620, D_004CC610,
-    D_004CC600, D_004CC5F0, D_004CC5E0, D_004CC5D0, D_004CC5C0,
-    D_004CC5B0, D_004CC5A0, D_004CC590, D_004CC580, D_004CC570,
-    D_004CC560, D_004CC550, D_004CC540, D_004CC530, D_004CC520,
-    D_004CC510, D_004CC500, D_004CC4F0, D_004CC4E0, D_004CC660,
-    D_004CC650, D_004CC640, D_004CC4D0, D_004CC4C0, D_004CC4B0,
-    D_004CC4A0, D_004CC490, D_004CC480, D_004CC470, D_004CC460,
-    D_004CC450, D_004CC440, D_004CC430, D_004CC420, D_004CC410,
-    D_004CC400, D_004CC3F0, D_004CC3E0, D_004CC3D0, D_004CC3C0,
-    D_004CC3B0, D_004CC3A0, D_004CC390, D_004CC380, D_004CC370,
-    D_004CC360, D_004CC350, D_004CC340, D_004CC330, D_004CC320,
-    D_004CC310, D_004CC300, D_004CC2F0, D_004CC2E0, D_004CC2D0,
-    D_004CC2C0, D_004CC2B0, D_004CC2A0, D_004CC290, D_004CC280,
-    D_004CC270, D_004CC260, D_004CC250, D_004CC240, D_004CC230,
-    D_004CC220, D_004CC210, D_004CC200, D_004CC1F0, D_004CC1E0,
-    D_004CC1D0, D_004CC3D0, D_004CC3D0, D_004CC390, D_004CC610,
-    D_004CC4C0, D_004CC420, D_004CC410, 0, 0,
+    0, 0, 0, sefGuno001Name, sefGuno001Name,
+    sefGuno002Name, sefGuno003Name, sefGuno004Name, sefGuno005Name, sefGuno006Name,
+    sefGuno007Name, sefGuno008Name, sefGuno009Name, sefGuno010Name, sefGuno011Name,
+    sefGuno012Name, sefGuno013Name, sefGuno014Name, sefGuno015Name, sefGuno016Name,
+    sefGuno017Name, sefGuno018Name, sefGuno019Name, sefGuno020Name, sefGuno021Name,
+    sefGuno022Name, sefGuno023Name, sefGuno024Name, sefGuno025Name, sefGuno001Name,
+    sefGuno002Name, sefGuno003Name, sefGuno114Name, sefFema001Name, sefFema002Name,
+    sefFema003Name, sefFema004Name, sefFema005Name, sefFema006Name, sefFere001Name,
+    sefFere002Name, sefFere003Name, sefFero001Name, sefFeso001Name, sefFeso002Name,
+    sefFeso003Name, sefFeso004Name, sefUtma001Name, sefUtma002Name, sefUtma003Name,
+    sefUtma004Name, sefUtma005Name, sefUtma006Name, sefUtma007Name, sefUtma008Name,
+    sefUtma009Name, sefUtma010Name, sefUtma011Name, sefUtma012Name, sefUtma013Name,
+    sefUtma014Name, sefUtre001Name, sefUtre002Name, sefUtre003Name, sefUtre004Name,
+    sefUtre005Name, sefUtre006Name, sefUtro001Name, sefUtro002Name, sefUtro003Name,
+    sefUtro004Name, sefUtro005Name, sefUtro006Name, sefUtro007Name, sefUtso001Name,
+    sefUtso002Name, sefUtso003Name, sefUtso004Name, sefUtso005Name, sefUtso006Name,
+    sefUtso007Name, sefUtma002Name, sefUtma002Name, sefUtma006Name, sefGuno006Name,
+    sefFema001Name, sefFeso001Name, sefFeso002Name, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
-    0, D_004CC420, D_004CC420, D_004CC420, D_004CC420,
-    D_004CC420, D_004CC1C0, D_004CC1B0, D_004CC1A0, D_004CC190,
-    D_004CC180, D_004CC170, D_004CC160, D_004CC150, D_004CC140,
-    D_004CC130, D_004CC120, D_004CC110, D_004CC100, D_004CC0F0,
-    D_004CC0E0, D_004CC0D0, D_004CC0C0, D_004CC0B0, D_004CC0A0,
-    D_004CC090, D_004CC080, D_004CC070, D_004CC060, D_004CC050,
-    D_004CC040, D_004CC030, D_004CC020, D_004CC010, D_004CC000,
-    D_004CBFF0, D_004CBFE0, D_004CBFD0, D_004CBFC0, D_004CC1A0,
-    D_004CC190, D_004CC090, D_004DBAB8, D_004DBAB8, D_004DBAB8,
-    D_004DBAB8, D_004DBAB8, D_004DBAB8, D_004DBAB8, D_004DBAB8,
+    0, sefFeso001Name, sefFeso001Name, sefFeso001Name, sefFeso001Name,
+    sefFeso001Name, sefBoss001Name, sefBoss002Name, sefBoss003Name, sefBoss004Name,
+    sefBoss005Name, sefBoss006Name, sefBoss007Name, sefBoss008Name, sefBoss009Name,
+    sefBoss010Name, sefBoss011Name, sefBoss012Name, sefBoss013Name, sefBoss014Name,
+    sefBoss015Name, sefBoss016Name, sefBoss017Name, sefBoss018Name, sefBoss019Name,
+    sefBoss020Name, sefBoss021Name, sefBoss022Name, sefBoss023Name, sefBoss024Name,
+    sefBoss025Name, sefBoss026Name, sefBoss027Name, sefBoss028Name, sefBoss029Name,
+    sefBoss030Name, sefBoss031Name, sefBoss032Name, sefBoss033Name, sefBoss003Name,
+    sefBoss004Name, sefBoss020Name, emptyEffectName, emptyEffectName, emptyEffectName,
+    emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName, emptyEffectName,
 };
 
 /* 0xC800-byte effect-name table. */

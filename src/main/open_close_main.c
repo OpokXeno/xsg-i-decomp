@@ -40,15 +40,15 @@ static void CloseSubType00(OpenCloseController *);
 
 /* Four original function pointers: open subtype 00/01, close 00/00. */
 
-const OpenCloseCallbacks D_004C2FD0 = {
+const OpenCloseCallbacks openCloseHandlers = {
     { OpenSubType00, OpenSubType01, CloseSubType00, CloseSubType00 }
 };
 
-const char D_004C31B0[24] = "data\\endou\\menu02.xtx";
+const char OpenCloseMenu02Path[24] = "data\\endou\\menu02.xtx";
 
-const char D_004C31C8[24] = "data\\endou\\menu01.xtx";
+const char OpenCloseMenu01Path[24] = "data\\endou\\menu01.xtx";
 
-const char D_004C31E0[32] = "data\\endou\\cfwin.xtx";
+const char OpenCloseCfwinPath[32] = "data\\endou\\cfwin.xtx";
 
 /*
  * Partial view of the object eWindowSet initialises. eWindowMain (still
@@ -99,7 +99,6 @@ typedef struct ECursolSprite {
     signed char frame;
     signed char flags;
 } ECursolSprite;
-
 
 /* Main updates the render descriptor that follows each setter's partial
  * object layout. State and visibility bytes are read without sign extension. */
@@ -377,7 +376,7 @@ void OpenCloseMain(OpenCloseController *controller)
         controller->phase = 1;
     }
 
-    callbacks = D_004C2FD0;
+    callbacks = openCloseHandlers;
     callbacks.entry[(controller->subtype >> 4) * 2 +
                     (controller->subtype & 15)](controller);
 }
@@ -591,5 +590,4 @@ void eCursolSet(ECursol *cursol, int width)
     cursol->active = 0;
     cursol->width = width;
 }
-
 

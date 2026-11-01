@@ -13,7 +13,6 @@ extern void endSpriteSet(struct PrintSpriteInfo *sprite, int flags);
  * No function claimed here reads a record, so the record type stays opaque.
  */
 
-
 typedef struct EtherTreeObjectData EtherTreeObjectData;
 
 typedef struct PrintSpriteInfo EtherTreeSprite;
@@ -29,7 +28,7 @@ typedef struct EtherTreeLineDrawMethods {
     void (*byChildCount[4])(EtherTreeLineData *line);
 } EtherTreeLineDrawMethods;
 
-extern const EtherTreeLineDrawMethods D_004C9AD0;
+extern const EtherTreeLineDrawMethods lineDrawHandlers;
 
 typedef struct EtherTreeGeometrySegment {
     EtherTreePosition from;
@@ -45,7 +44,6 @@ typedef struct EtherTreeLineGeometry {
     unsigned char unmodeled_04[12];
     EtherTreeGeometrySegment segments[6];
 } EtherTreeLineGeometry;
-
 
 EtherTreeObjectData *EtherTreeObject = 0;
 
@@ -128,7 +126,7 @@ struct EtherTreeColorTable {
     unsigned char colors[4][4];
 };
 
-const struct EtherTreeColorTable D_004C9AB0 __attribute__((aligned(16))) = {
+const struct EtherTreeColorTable etherTreeLineColorTable __attribute__((aligned(16))) = {
     { { 0x00, 0x00, 0x00, 0x00 },
       { 0x40, 0x40, 0x40, 0x60 },
       { 0x80, 0x80, 0x80, 0x80 },
@@ -294,7 +292,7 @@ extern int func_A19578(unsigned short firstDataIndex, unsigned int objectId);
 extern signed char MenuEtherTypeGet(int etherId);
 
 /* Only a .lit4 literal in the original (0x004D7E7C); no storage object. */
-#define D_004D7E7C 65535.0f
+#define ETHER_TREE_NODE_Z 65535.0f
 
 struct EtherTreeLine2Data;
 
@@ -394,7 +392,7 @@ EtherTreeObjectData *EtherTreeObjectGet(int id)
 
 void EtherTreeLineColorGet(unsigned char *color, int colorIndex)
 {
-    struct EtherTreeColorTable colors = D_004C9AB0;
+    struct EtherTreeColorTable colors = etherTreeLineColorTable;
     int i;
 
     for (i = 0; i < 4; i++)
@@ -724,7 +722,7 @@ void EtherTreeObjectSet(int firstDataIndex)
     EtherTreeLineSet();
     firstDataIds = EtherTreeFirstDataGet();
     EtherTreeTargetChange(firstDataIds[0], 1);
-    EtherTreeSystem->node.z = D_004D7E7C;
+    EtherTreeSystem->node.z = ETHER_TREE_NODE_Z;
     EtherTreeSystem->node.scale = 1.0f;
 }
 
@@ -1527,7 +1525,7 @@ void subTreeLineDraw_type_3(void *context)
 void EtherTreeLineDraw(void)
 {
     EtherTreeLineData *records = EtherTreeLine;
-    EtherTreeLineDrawMethods methods = D_004C9AD0;
+    EtherTreeLineDrawMethods methods = lineDrawHandlers;
     int remaining = 15;
     EtherTreeLineData *line = records;
 
@@ -1743,3 +1741,5 @@ void EtherTreeMain(void)
     EtherTreeBlackMain();
     EtherTreeDraw();
 }
+
+const EtherTreeLineDrawMethods lineDrawHandlers = { { (void (*)(EtherTreeLineData *))subTreeLineDraw_type_0, (void (*)(EtherTreeLineData *))subTreeLineDraw_type_1, (void (*)(EtherTreeLineData *))subTreeLineDraw_type_2, (void (*)(EtherTreeLineData *))subTreeLineDraw_type_3 } };

@@ -57,7 +57,8 @@ typedef struct {
     ActorModelParam model;
 } ActorHead;
 
-extern ActorHead actor[ACTOR_COUNT];static char * pnum;
+extern ActorHead actor[ACTOR_COUNT];
+static char * pnum;
 
 /* Defined in src/main/act_3.c (main/tu265). */
 
@@ -169,8 +170,6 @@ static char * pext;
 static TyaCaptureCallback cascade;
 
 static void * TmpBuffer;
-
-
 
 /* The scene's active capture layer: compared against a per-array base
  * (0x200 for the actor array here, 0x300 for MapUnit below) plus the slot
@@ -768,18 +767,3 @@ void tyaCaptureEnd(void)
     GameLoopState.flags &= 0xFAFFFFFF;
 }
 
-
-
-static u16 zpicf;
-
-static int alpha;
-
-static int transparency;
-
-static char * pnum;
-
-static char * pext;
-
-static TyaCaptureCallback cascade;
-
-static void * TmpBuffer;

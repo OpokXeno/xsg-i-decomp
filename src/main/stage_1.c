@@ -33,13 +33,13 @@ typedef struct StageClassField {
 
 /* Twenty-four halfwords occupy the stage peer block returned by STAGE_create. */
 
-const char D_004C2420[12] = "xeno/Camera";
+const char cameraClassName[12] = "xeno/Camera";
 
-const char D_004DA628[8] = "cam0";
+const char cameraInstanceName[8] = "cam0";
 
-const char D_004DA630[8] = "init";
+const char initMethodName[8] = "init";
 
-const char D_004DA638[8] = "()V";
+const char initMethodSignature[8] = "()V";
 
 void *STAGE_create(u16 stage_id)
 {
@@ -76,9 +76,9 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
     /* The camera field shares `field` with the walk below; its word four is
      * the tagged location that resolveInstanceField set to an offset. */
     field = (SceneField *)lookupClassField(
-        classJava_xeno_Stage, loadConstString(D_004DA628, -1), 0);
+        classJava_xeno_Stage, loadConstString(cameraInstanceName, -1), 0);
     if (field != 0) {
-        camera_class = loadClass(loadConstString(D_004C2420, -1), 0);
+        camera_class = loadClass(loadConstString(cameraClassName, -1), 0);
         ((StageCameraPrefix *)tcamera)->class_ref = camera_class->instance_class_ref;
         *(SceneObject *)(stage_object + ((StageClassField *)field)->location.offset) = tcamera;
     }
@@ -100,10 +100,10 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
             SceneMethod *init_method;
             SceneObject child;
 
-            method_name = loadConstString(D_004DA630, -1);
+            method_name = loadConstString(initMethodName, -1);
             init_method = findMethod((SceneClass *)field->type_or_descriptor,
                                      method_name,
-                                     loadConstString(D_004DA638, -1));
+                                     loadConstString(initMethodSignature, -1));
             if (init_method != 0) {
                 SceneClass *child_class;
 
@@ -133,9 +133,9 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
     }
 
     stage_class = ((SceneObjectHeader *)parent_object)->class_ref->scene_class;
-    method_name = loadConstString(D_004DA630, -1);
+    method_name = loadConstString(initMethodName, -1);
     method = findMethod(stage_class, method_name,
-                        loadConstString(D_004DA638, -1));
+                        loadConstString(initMethodSignature, -1));
     if (method != 0) {
         arguments[0] = stage_object;
         JNI_initThread(vm);

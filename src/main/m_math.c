@@ -6,7 +6,6 @@
 
 #include "m_math.h"
 
-
 extern float srsAtan2(float deltaX, float deltaZ);
 extern const Vector4 McMathUnitVector;
 

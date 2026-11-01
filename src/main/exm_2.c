@@ -126,17 +126,16 @@ MapUnitRecord MapUnit[64] = { 0 };
 
 UnitSequenceEntry unitSequence[64] = { 0 };
 
-/* D_004D8774/D_004D8778 are the two clamp values, +/- 2*pi. */
+/* SHAKE_ANGLE_MAX/SHAKE_ANGLE_MIN are the two clamp values, +/- 2*pi. */
 
-#define D_004D8774 6.2831855f
+#define SHAKE_ANGLE_MAX 6.2831855f
 
-#define D_004D8778 -6.2831855f
+#define SHAKE_ANGLE_MIN -6.2831855f
 
 typedef union EXM_WindVectorStorage {
     Vector4 vector;
     u64 pair[2];
 } EXM_WindVectorStorage;
-
 
 typedef struct EXM_WindFrame {
     unsigned char unmodeled_00[0x54];
@@ -271,10 +270,10 @@ void EXM_SetShakePower(float power)
 
 void EXM_SetShakeTime(float time)
 {
-    if (time > D_004D8774) {
-        time = D_004D8774;
-    } else if (time < D_004D8778) {
-        time = D_004D8778;
+    if (time > SHAKE_ANGLE_MAX) {
+        time = SHAKE_ANGLE_MAX;
+    } else if (time < SHAKE_ANGLE_MIN) {
+        time = SHAKE_ANGLE_MIN;
     }
     wind->shake_time = time;
 }
@@ -319,17 +318,17 @@ void EXM_StepShakeWind(void)
 {
     if (wind != 0) {
         wind->shake_rad += wind->shake_time;
-        if (wind->shake_rad > D_004D8774) {
-            wind->shake_rad -= D_004D8774;
+        if (wind->shake_rad > SHAKE_ANGLE_MAX) {
+            wind->shake_rad -= SHAKE_ANGLE_MAX;
         } else if (wind->shake_rad < 0.0f) {
-            wind->shake_rad += D_004D8774;
+            wind->shake_rad += SHAKE_ANGLE_MAX;
         }
     }
     waverad += 0.5f;
-    if (waverad > D_004D8774) {
-        waverad -= D_004D8774;
+    if (waverad > SHAKE_ANGLE_MAX) {
+        waverad -= SHAKE_ANGLE_MAX;
     } else if (waverad < 0.0f) {
-        waverad += D_004D8774;
+        waverad += SHAKE_ANGLE_MAX;
     }
 }
 

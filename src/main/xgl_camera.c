@@ -682,8 +682,6 @@ void xglCameraClipRangeDefault(StudioCamera *camera)
     camera->farClip = 99000.0f;
 }
 
-
-
 static Vector4 sClipRange_0 = { .x = 0.0099999997764825821f, .y = 99000.0f, .z = 0.0f, .w = 0.0f };
 
 static Vector4 sPortEffect_1 = { .x = 1.0f, .y = 1.0f, .z = 1.0f, .w = 100.0f };

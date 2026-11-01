@@ -2,7 +2,7 @@
 
 #include "shared.h"
 
-const char D_004DC328[];
+const char errorMessageFormat[];
 
 /*
  * xglMpeg2InfoInit2's own body is still INCLUDE_ASM below, but its tail at
@@ -249,7 +249,7 @@ extern int sceIpuInit(void);
 
 typedef XglMovieWork MoviePlaybackWork;
 
-extern const char D_004D2580[];
+extern const char frameDropMessage[];
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -326,8 +326,6 @@ extern void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
 
 extern void nmlModelDirectSend(int mode, u8 *data, int count);
 
-
-
 extern int xglCdStreamRewind(struct CdStreamParam *stream);
 
 static int checkdma(XglMovieWork *info);
@@ -335,12 +333,12 @@ static int checkdma(XglMovieWork *info);
 /*
  * errorCallback (main:0x00222158) is registered as the MPEG movie decoder's
  * error handler. The original bytes read a pointer at arg1+0x04 and pass it
- * as the "%s\n" argument of D_004DC328's printf, then read, increment and
+ * as the "%s\n" argument of errorMessageFormat's printf, then read, increment and
  * store back an unsigned byte at arg2+0x98 and clear a byte at arg2+0x99
  * right after it (lbu/sb at those fixed offsets).
  */
 
-const char D_004D2590[];
+const char mpegGetPictureFailedMessage[];
 
 static int myDmaDirectFromIPU(u32 address, u32 count)
 {
@@ -572,7 +570,7 @@ int xglMoviePlay(XglMovieWork *info)
     }
     if (info->streamOpen) {
         if (checkdma(info) != 0) {
-            printf(D_004D2580);
+            printf(frameDropMessage);
             return -1;
         }
     }
@@ -954,7 +952,7 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
 
 static int errorCallback(int event, MpegErrorInfo *error, MpegCallbackState *state)
 {
-    printf(D_004DC328, error->message);
+    printf(errorMessageFormat, error->message);
     state->errorCount++;
     state->errorFlag = 0;
     return 1;
@@ -1050,7 +1048,7 @@ int xglMpeg2Play(XglMpeg2Work *info)
         return info->missCount ? -1 : 1;
     }
     if (sceMpegGetPicture(&info->mpeg, info->videoBuffer, 896) < 0) {
-        printf(D_004D2590);
+        printf(mpegGetPictureFailedMessage);
         return -1;
     }
     info->missCount = 0;
@@ -1161,11 +1159,8 @@ int xglMovieInit(void)
     return sceIpuInit();
 }
 
-const char D_004DC328[] = "%s\n";
-extern const char D_004D2590[];
+const char errorMessageFormat[] = "%s\n";
 
-extern const char D_004D2580[16];
+const char frameDropMessage[16] = "frame drop\n";
 
-const char D_004D2580[16] = "frame drop\n";
-
-const char D_004D2590[] = {'s', 'c', 'e', 'M', 'p', 'e', 'g', 'G', 'e', 't', 'P', 'i', 'c', 't', 'u', 'r', 'e', ' ', 'f', 'a', 'i', 'l', 'e', 'd', 10, 0};
+const char mpegGetPictureFailedMessage[] = {'s', 'c', 'e', 'M', 'p', 'e', 'g', 'G', 'e', 't', 'P', 'i', 'c', 't', 'u', 'r', 'e', ' ', 'f', 'a', 'i', 'l', 'e', 'd', 10, 0};

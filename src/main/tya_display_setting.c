@@ -143,7 +143,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
         u8 *image_source;
 
         image_source = framebuffer_or_mode + 0x100000;
-        xglCdReadFile(D_004C15E8, image_source, 0, 1);
+        xglCdReadFile(displaySettingImagePath, image_source, 0, 1);
         {
             TyaJpegRequest jpeg_request;
 
@@ -220,7 +220,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
                         } else if (input_event & 0x40) {
                             xglSoundEffectNormalDirect(2);
                         } else {
-                            xglFontDebugPrintf(8, 8, D_004C1600,
+                            xglFontDebugPrintf(8, 8, displayHalfwordFormat,
                                 DispEnv.display.dx,
                                 DispEnv.display.dy,
                                 ((TyaSaveDataRecord *)SaveData)->horizontal_display_offset,
@@ -238,6 +238,6 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
     xglSleep();
 }
 
-const char D_004C15E8[24] = "data\\yajima\\mnt_set.jpg";
+const char displaySettingImagePath[24] = "data\\yajima\\mnt_set.jpg";
 
-const char D_004C1600[20] = "%04x %04x\n%04x %04x";
+const char displayHalfwordFormat[20] = "%04x %04x\n%04x %04x";

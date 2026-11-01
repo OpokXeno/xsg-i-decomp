@@ -66,48 +66,48 @@ static char hdd_device_name[];
 
 static char pfs_device_name[];
 
-static char hdd_common_device[];
+static const char hdd_common_device[];
 
-static char hdd_format_start_message[];
+static const char hdd_format_start_message[];
 
-static char hdd_format_result_format[];
+static const char hdd_format_result_format[];
 
-static char hdd_pfs_format_result_format[];
+static const char hdd_pfs_format_result_format[];
 
-static char hdd_shutdown_message[];
+static const char hdd_shutdown_message[];
 
-static char hdd_full_path[];
+static const char hdd_full_path[];
 
-static char hdd_create_partition_format[];
+static const char hdd_create_partition_format[];
 
 static char hdd_partition_size[];
 
-static char hdd_subcommand_format[];
+static const char hdd_subcommand_format[];
 
-static char hdd_close_result_format[];
+static const char hdd_close_result_format[];
 
 /* "pfs1:" (0x004DA2F0): HddTestMakeYourSaves' record calls it pfs_mount_point,
  * the mount/unmount records hdd_mount_point; one object, one name here. */
 
 static char hdd_mount_point[];
 
-static char hdd_mount_result_format[];
+static const char hdd_mount_result_format[];
 
-static char hdd_unmount_result_format[];
+static const char hdd_unmount_result_format[];
 
-static char hdd_your_saves_directory[];
+static const char hdd_your_saves_directory[];
 
 /* "make YourSaves:%d\n" (0x004C0B70). */
 
-static char hdd_mkdir_result_format[];
+static const char hdd_mkdir_result_format[];
 
-static char hdd_zone_size_format[];
+static const char hdd_zone_size_format[];
 
-static char hdd_zone_free_format[];
+static const char hdd_zone_free_format[];
 
 static char hdd_1024_directory_name[];
 
-static char hdd_chstat_failure_format[];
+static const char hdd_chstat_failure_format[];
 
 static char hdd_dummy_folder_name[];
 
@@ -119,30 +119,30 @@ static void HddTestDummyFolder(void);
 static void HddTestDummySave(void);
 static void HddTestMakeYS(void);
 
-extern char D_004DA308[8];
-extern char D_004C0C68[16];
-extern char D_004C0C58[16];
-extern char D_004C0C48[16];
-extern char D_004C0C38[16];
-extern char D_004C0C28[16];
-extern char D_004C0C18[16];
-extern char D_004C0CF8[16];
-extern char D_004C0CE8[16];
-extern char D_004DA320[8];
+extern char hddFormatLabel[8];
+extern const char shutdownLabel[16];
+extern const char hddFullLabel[16];
+extern const char save1024Label[16];
+extern const char dummyFolderLabel[16];
+extern const char commonFullLabel[16];
+extern const char makeYourSavesLabel[16];
+extern const char port1Label[16];
+extern const char port2Label[16];
+extern char hddText[8];
 
 static HddTestMenuEntry hdd_test_menu[];
 
-static char hdd_status_format[];
+static const char hdd_status_format[];
 
-static char hdd_status_error_format[];
+static const char hdd_status_error_format[];
 
-static char hdd_free_format[];
+static const char hdd_free_format[];
 
-static char hdd_test_title[];
+static const char hdd_test_title[];
 
 static char hdd_use_title[];
 
-static char hdd_no_use_title[];
+static const char hdd_no_use_title[];
 
 static char menu_cursor[];
 
@@ -156,9 +156,9 @@ static char *name_47[];
  * the splat label of its data piece.
  */
 
-static char D_004DA2F8[];
+static char fileLineFormat[];
 
-#define hdd_mkdir_status_format D_004DA2F8
+#define hdd_mkdir_status_format fileLineFormat
 
 /*
  * PadData (0xd0-byte object at 0x490d90) through HddTest's raw view: it reads
@@ -209,16 +209,15 @@ extern int sceGsSetDefStoreImage(void *image, short address, short width, short 
 
 extern int sceGsExecStoreImage(void *image, void *destination);
 
+extern const char xtxListPathFormat[];
 
-extern char D_004C13D8[];
+extern const char xtxReadFormat[];
 
-extern char D_004C13E8[];
+extern const char xtxFilePathFormat[];
 
-extern char D_004C13F8[];
+extern const char xtxTbwFormat[];
 
-extern char D_004C1408[];
-
-extern char D_004C1418[];
+extern const char xtxEntryFormat[];
 
 typedef struct XtxHeader {
     int magic[2]; /* +0x0 */
@@ -234,7 +233,6 @@ typedef struct XtxImageEntry {
     unsigned char unmodeled_0c[4];
     unsigned int data_offset;
 } XtxImageEntry;
-
 
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 
@@ -262,29 +260,29 @@ static TestLineVertex TestEnv_34[];
 
 extern int sceWrite(int descriptor, void *buffer, unsigned int size);
 
-static char D_004C0BB8[];
+static const char zoneStatusFormat[];
 
-static char D_004C0BC8[];
+static const char chunkStepFormat[];
 
-static char D_004C0BD8[];
+static const char dummySaveFolderPath[];
 
-static char D_004C0BE8[];
+static const char mkdirStatusFormat[];
 
-static char D_004C0BF8[];
+static const char dummySaveFilePath[];
 
-static char D_004C0C08[];
+static const char openHandleFormat[];
 
-static char D_004DA300[];
+static char counterWroteFormat[];
 
-static char D_004C14B8[];
+static const char xtxDecodeText[];
 
 extern int main_param_argc;
 
 extern int main_param_argv;
 
-static char D_004C14C8[];
+static const char specifyFileNameText[];
 
-static char D_004C14F8[];
+static const char xtxFinishedText[];
 
 extern void xglRenderClearFrame(void);
 
@@ -317,41 +315,22 @@ static void XenoMovieCheck(void);
 static void HddTest(void);
 static void XtxDecode(void);
 
-char D_004DA308[];
-
-char D_004C0C68[];
-
-char D_004C0C58[];
-
-char D_004C0C48[];
-
-char D_004C0C38[];
-
-char D_004C0C28[];
-
-char D_004C0C18[];
-
-char D_004C0CF8[];
-
-char D_004C0CE8[];
-
-char D_004DA320[];
-
 static void (*func_51[7])(void);
 
-static char D_004DA3A0[];
+static char selectText[];
 
-static char D_004C1518[];extern const char D_004C0948[16];
+static const char clockDateTimeFormat[];
+extern const char databaseLabel[16];
 
-extern const char D_004C1508[16];
+extern const char xtxDecodeLabel[16];
 
-const char D_004DA378[];
+const char movieLabel[];
 
-const char D_004DA380[];
+const char memcardLabel[];
 
-const char D_004DA390[];
+const char umlDispLabel[];
 
-const char D_004DA398[];
+const char fontLabel[];
 
 #include "main/xgl_menu.h"
 
@@ -359,7 +338,7 @@ const char D_004DA398[];
 
 #define XGL_MENU_ACTION(id) ((XglMenuNode *)(id))
 
-const char D_004DA388[];
+const char hddLabel[];
 
 static XglMenuRow i1_52[];
 
@@ -369,11 +348,11 @@ static void FontTestSub(void);
 
 extern int xglCdGetFileSize(const char *name);
 
-extern const char D_004C07F0[];
+extern const char nisuiFontPath[];
 
-extern char D_004C0808[];
+extern const char scenarioTextPath[];
 
-extern char D_004C0828[];
+extern const char nisuiHostPath[];
 
 extern int xglFontLoad(int font, int mode);
 
@@ -403,15 +382,15 @@ extern int xglFontGetProportionalSize(int character);
 
 static int width_35;
 
-extern char D_004D9F78[];
+extern char fontTestWidthFormat[];
 
 static char test_36[6];
 
-extern char D_004D9F88[];
+extern char fontTestSpacingControl[];
 
-extern char D_004C08D0[];
+extern const char fontTestEffectControl[];
 
-extern char D_004C08E0[];
+extern const char characterSizeFormat[];
 
 static char test0_37[40];
 
@@ -439,13 +418,13 @@ static int rate_8;
 
 static int dir_9;
 
-extern char D_004C0838[];
+extern const char smallCharacterTestText[];
 
-extern char D_004C0888[];
+extern const char test000Text[];
 
-extern char D_004C08A0[];
+extern const char test001Text[];
 
-extern char D_004C08B0[];
+extern const char hesitationText[];
 
 static unsigned char test_1[22];
 
@@ -546,17 +525,17 @@ extern int xglFontGetSPcodeSize(int code, const char *text);
 
 extern void tyaUmlDispMain(UmlDispParam *param);
 
-extern char D_004C08F0[];
+extern const char umlDispFormat[];
 
-extern char D_004C0900[];
+extern const char umnHeaderPath[];
 
-extern char D_004C0918[];
+extern const char umnRecordFormat[];
 
-extern char D_004C0928[];
+extern const char fileSelectFormat[];
 
-extern char D_004C0938[];
+extern const char scrollPositionFormat[];
 
-extern char D_004D9F90[];
+extern char umlBitsFormat[];
 
 typedef struct UmlHeaderRecord {
     int size;
@@ -585,9 +564,9 @@ extern int tyaUmlDispParamReset(UmlDispParam *param, int mode);
 
 extern int tyaUmlDatabaseMain(UmlDatabaseParam *param);
 
-extern char D_004D9F98[];
+extern char umnModeSoundName[];
 
-extern char D_004D9FA0[];
+extern char databaseIndexFormat[];
 
 typedef struct UmlDispRect {
     unsigned char unmodeled_00[8];
@@ -598,9 +577,9 @@ typedef struct UmlDispRect {
     long depth;
 } UmlDispRect;
 
-extern char D_004C0978[];
+extern const char moviePlaybackHelpText[];
 
-extern char D_004C0A68[];
+extern const char movieFilePathFormat[];
 
 static char * name_43[103];
 
@@ -835,154 +814,109 @@ extern int xglHddMcSave(HddMcRequestParam *request);
 
 static unsigned char tbl_49[4];
 
-
-
-extern const char D_004C07F0[24];
-extern char D_004C0808[32];
-extern char D_004C0828[16];
-extern char D_004C0838[80];
-extern char D_004C0888[24];
-extern char D_004C08A0[16];
-extern char D_004C08B0[32];
-extern char D_004C08D0[16];
-extern char D_004C08E0[16];
-extern char D_004C08F0[16];
-extern char D_004C0900[24];
-extern char D_004C0918[16];
-extern char D_004C0928[16];
-extern char D_004C0938[16];
-extern const char D_004C0948[16];
-extern const char D_004C0958[16];
-extern const char D_004C0968[16];
-extern char D_004C0978[240];
-extern char D_004C0A68[24];
-extern char D_004C0C18[16];
-extern char D_004C0C28[16];
-extern char D_004C0C38[16];
-extern char D_004C0C48[16];
-extern char D_004C0C58[16];
-extern char D_004C0C68[16];
-extern char D_004C0CE8[16];
-extern char D_004C0CF8[16];
-extern char D_004D9F78[8];
-extern char D_004D9F88[8];
-extern char D_004D9F90[8];
-extern char D_004D9F98[8];
-extern char D_004D9FA0[8];
-extern const char D_004D9FA8[8];
-extern const char D_004D9FB0[8];
-extern const char D_004D9FB8[8];
-extern const char D_004D9FC0[8];
-extern const char D_004D9FC8[8];
-extern const char D_004D9FD0[8];
-extern const char D_004D9FD8[8];
-extern const char D_004D9FE0[8];
-extern const char D_004D9FE8[8];
-extern const char D_004D9FF0[8];
-extern const char D_004D9FF8[8];
-extern const char D_004DA000[8];
-extern const char D_004DA008[8];
-extern const char D_004DA010[8];
-extern const char D_004DA018[8];
-extern const char D_004DA020[8];
-extern const char D_004DA028[8];
-extern const char D_004DA030[8];
-extern const char D_004DA038[8];
-extern const char D_004DA040[8];
-extern const char D_004DA048[8];
-extern const char D_004DA050[8];
-extern const char D_004DA058[8];
-extern const char D_004DA060[8];
-extern const char D_004DA068[8];
-extern const char D_004DA070[8];
-extern const char D_004DA078[8];
-extern const char D_004DA080[8];
-extern const char D_004DA088[8];
-extern const char D_004DA090[8];
-extern const char D_004DA098[8];
-extern const char D_004DA0A0[8];
-extern const char D_004DA0A8[8];
-extern const char D_004DA0B0[8];
-extern const char D_004DA0B8[8];
-extern const char D_004DA0C0[8];
-extern const char D_004DA0C8[8];
-extern const char D_004DA0D0[8];
-extern const char D_004DA0D8[8];
-extern const char D_004DA0E0[8];
-extern const char D_004DA0E8[8];
-extern const char D_004DA0F0[8];
-extern const char D_004DA0F8[8];
-extern const char D_004DA100[8];
-extern const char D_004DA108[8];
-extern const char D_004DA110[8];
-extern const char D_004DA118[8];
-extern const char D_004DA120[8];
-extern const char D_004DA128[8];
-extern const char D_004DA130[8];
-extern const char D_004DA138[8];
-extern const char D_004DA140[8];
-extern const char D_004DA148[8];
-extern const char D_004DA150[8];
-extern const char D_004DA158[8];
-extern const char D_004DA160[8];
-extern const char D_004DA168[8];
-extern const char D_004DA170[8];
-extern const char D_004DA178[8];
-extern const char D_004DA180[8];
-extern const char D_004DA188[8];
-extern const char D_004DA190[8];
-extern const char D_004DA198[8];
-extern const char D_004DA1A0[8];
-extern const char D_004DA1A8[8];
-extern const char D_004DA1B0[8];
-extern const char D_004DA1B8[8];
-extern const char D_004DA1C0[8];
-extern const char D_004DA1C8[8];
-extern const char D_004DA1D0[8];
-extern const char D_004DA1D8[8];
-extern const char D_004DA1E0[8];
-extern const char D_004DA1E8[8];
-extern const char D_004DA1F0[8];
-extern const char D_004DA1F8[8];
-extern const char D_004DA200[8];
-extern const char D_004DA208[8];
-extern const char D_004DA210[8];
-extern const char D_004DA218[8];
-extern const char D_004DA220[8];
-extern const char D_004DA228[8];
-extern const char D_004DA230[8];
-extern const char D_004DA238[8];
-extern const char D_004DA240[8];
-extern const char D_004DA248[8];
-extern const char D_004DA250[8];
-extern const char D_004DA258[8];
-extern const char D_004DA260[8];
-extern const char D_004DA268[8];
-extern const char D_004DA270[8];
-extern const char D_004DA278[8];
-extern const char D_004DA280[8];
-extern const char D_004DA288[8];
-extern const char D_004DA290[8];
-extern const char D_004DA298[8];
-extern const char D_004DA2A0[8];
-extern const char D_004DA2A8[8];
-extern const char D_004DA2B0[8];
-extern const char D_004DA2B8[8];
-extern const char D_004DA2C0[8];
-extern const char D_004DA2C8[8];
-extern char D_004DA308[8];
-extern char D_004DA320[8];
-extern char D_004C13D8[16];
-extern char D_004C13E8[16];
-extern char D_004C13F8[16];
-extern char D_004C1408[16];
-extern char D_004C1418[40];
-extern const char D_004DA378[8];
-extern const char D_004DA380[8];
-extern const char D_004DA388[8];
-extern const char D_004DA390[8];
-extern const char D_004DA398[8];
-extern const char D_004C1508[16];
+extern const char movie3050C1_9Name[16];
+extern const char prologueMovieName[16];
+extern const char movie3058DName[8];
+extern const char movie3058BName[8];
+extern const char movie3058AName[8];
+extern const char movie3056CName[8];
+extern const char movie3056BName[8];
+extern const char movie3056AName[8];
+extern const char movie3055_1Name[8];
+extern const char movie3054B2Name[8];
+extern const char movie3052Name[8];
+extern const char movie3050C2Name[8];
+extern const char movie3048Name[8];
+extern const char movie3047DName[8];
+extern const char movie3047CName[8];
+extern const char movie3047BName[8];
+extern const char movie3046BName[8];
+extern const char movie3046AName[8];
+extern const char movie3045Name[8];
+extern const char movie3042Name[8];
+extern const char movie3040Name[8];
+extern const char movie3039CName[8];
+extern const char movie3039B_1Name[8];
+extern const char movie3039AName[8];
+extern const char movie3037Name[8];
+extern const char movie3036IName[8];
+extern const char movie3035Name[8];
+extern const char movie3028BName[8];
+extern const char movie3027_1Name[8];
+extern const char movie3026AName[8];
+extern const char movie3022Name[8];
+extern const char movie3021_1Name[8];
+extern const char movie3020Name[8];
+extern const char movie3017_1Name[8];
+extern const char movie3016_1Name[8];
+extern const char movie3015Name[8];
+extern const char movie3014_1Name[8];
+extern const char movie3011Name[8];
+extern const char movie3010Name[8];
+extern const char movie3009DName[8];
+extern const char movie3008BName[8];
+extern const char movie3008AName[8];
+extern const char movie3007Name[8];
+extern const char movie3003EName[8];
+extern const char movie3003AName[8];
+extern const char movie3000Name[8];
+extern const char movie2064_2Name[8];
+extern const char movie2064_1Name[8];
+extern const char movie2058AName[8];
+extern const char movie2057Name[8];
+extern const char movie2056AName[8];
+extern const char movie2055Name[8];
+extern const char movie2053Name[8];
+extern const char movie2051Name[8];
+extern const char movie2048Name[8];
+extern const char movie2046Name[8];
+extern const char movie2044AName[8];
+extern const char movie2034Name[8];
+extern const char movie2033BName[8];
+extern const char movie2033AName[8];
+extern const char movie2032Name[8];
+extern const char movie2031_2Name[8];
+extern const char movie2031_1Name[8];
+extern const char movie2018Name[8];
+extern const char movie2017Name[8];
+extern const char movie2015Name[8];
+extern const char movie2012BName[8];
+extern const char movie2010Name[8];
+extern const char movie2007C_2Name[8];
+extern const char movie2007C_1Name[8];
+extern const char movie2007BName[8];
+extern const char movie2007Name[8];
+extern const char movie2006_1Name[8];
+extern const char movie2004D_2Name[8];
+extern const char movie2004C_1Name[8];
+extern const char movie2002B_1Name[8];
+extern const char movie2001A_1Name[8];
+extern const char movie2000_1Name[8];
+extern const char movie1044BName[8];
+extern const char movie1043_1Name[8];
+extern const char movie1041_1Name[8];
+extern const char movie1040Name[8];
+extern const char movie1039BName[8];
+extern const char movie1039Name[8];
+extern const char resource1038BName[8];
+extern const char resource1035Name[8];
+extern const char resource1033Name[8];
+extern const char resource1032Name[8];
+extern const char resource1028Name[8];
+extern const char resource1022Name[8];
+extern const char resource1020AltName[8];
+extern const char resource1019AltName[8];
+extern const char resource1017Name[8];
+extern const char resource1011AltName[8];
+extern const char resource1010AltName[8];
+extern const char resource1008AltName[8];
+extern const char resource1006Name[8];
+extern const char resource1005Name[8];
+extern const char resource1004AltName[8];
+extern const char resource1003B2Name[8];
+extern const char resource10B01AltName[8];
+extern const char resource1001AltName[8];
+extern const char resource10OpName[8];
 
 static unsigned char TestEnv_0_0036A030[0x90] = {
     0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x8B, 0x80, 0xEE, 0x1E, 0x53, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0xB8, 0x42, 0xA9, 0x06, 0x00, 0x07, 0x20, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7A, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8A, 0x00, 0x00, 0x00, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
@@ -1008,6 +942,7 @@ static char test1_6[33] = "\r\003\030\001\245\353\245\323\244\316\245\306\245\27
  * EN: Comparison with kanji */
 static char test2_7[15] = "\r\003\264\301\273\372\244\310\244\316\302\320\310\346";
 
+/* Text: {effect 0}{effect params}{blend} */
 static char test_10[13] = "\r\000\016\000\000\000\000\000\017D\000\200";
 
 /* JP: 文字テスト
@@ -1022,44 +957,63 @@ static unsigned char xy7_14[52] = { 25, 0, 3, 0, 2, 1, 3, 1, 4, 1, 1, 2, 2, 2, 3
 
 static unsigned char xy9_15[84] = { 41, 0, 4, 0, 3, 1, 4, 1, 5, 1, 2, 2, 3, 2, 4, 2, 5, 2, 6, 2, 1, 3, 2, 3, 3, 3, 4, 3, 5, 3, 6, 3, 7, 3, 0, 4, 1, 4, 2, 4, 3, 4, 4, 4, 5, 4, 6, 4, 7, 4, 8, 4, 1, 5, 2, 5, 3, 5, 4, 5, 5, 5, 6, 5, 7, 5, 2, 6, 3, 6, 4, 6, 5, 6, 6, 6, 3, 7, 4, 7, 5, 7, 4, 8 };
 
+/* JP: Ｎｏｒｍａｌ．０１２３
+ * EN: Normal.0123 */
 static char test_16[25] = "\031\000\243\316\243\357\243\362\243\355\243\341\243\354\241\245\243\260\243\261\243\262\243\263";
 
+/* JP: Ｐｒｏｐｏｒｔｉｏｎａｌ．０１２３АВЕ
+ * EN: Proportional.0123ABE */
 static char test_17[43] = "\031\001\243\320\243\362\243\357\243\360\243\357\243\362\243\364\243\351\243\357\243\356\243\341\243\354\241\245\243\260\243\261\243\262\243\263\247\241\247\243\247\246";
 
 /* JP: テストテスト漢字テスト漢字
  * EN: Test; test kanji; test kanji */
 static char test_18[40] = "\r\000\245\306\245\271\245\310\r\004\245\306\245\271\245\310\264\301\273\372\r\003\016\001\001\200\200\200\245\306\245\271\245\310\264\301\273\372\013";
 
+/* JP: ωАБВЯабвя─│┌╂\xAD\xA1\xAD\xA2
+ * EN: Glyph test: Greek, Cyrillic and box-drawing characters */
 static char test_19[31] = "\246\330\247\241\247\242\247\243\247\301\247\321\247\322\247\323\247\361\250\241\250\242\250\243\250\300\255\241\255\242";
 
+/* Text: {effect 3}{effect params}{color #808080} */
 static char init_20[13] = "\r\003\016\002\002\030\030\030\014\200\200\200";
 
+/* Text: {proportional 0}{style 3}{char width 8}Half-width iiiiii test */
 static char test_21[33] = "\025\002\004\000\031\003\025\002\002\010Half-width iiiiii test";
 
 /* JP: 全角文字列と一緒に…
  * EN: Together with a full-width character string... */
 static char test_22[21] = "\301\264\263\321\312\270\273\372\316\363\244\310\260\354\275\357\244\313\241\304";
 
+/* Text: {proportional 1}{style 3}{char width 8}Half-width iiiiii test */
 static char test_23[33] = "\025\002\004\001\031\003\025\002\002\010Half-width iiiiii test";
 
+/* Text: {style 3}{char width 8}{shift 6}Itaric Text TEST{shift 0} */
 static char test_24[31] = "\031\003\025\002\002\010\025\002\005\006Itaric Text TEST\025\002\005";
 
+/* Text: {style 3}{char width 8}{shift 10}More Itaric{shift 0} */
 static char test_25[26] = "\031\003\025\002\002\010\025\002\005\nMore Itaric\025\002\005";
 
+/* Text: {style 2}#00#01#02#03#04#05#06#07#08#09#0a#0b#0c#0d#0e#0f */
 static char test00_26[51] = "\031\002#00#01#02#03#04#05#06#07#08#09#0a#0b#0c#0d#0e#0f";
 
+/* Text: {style 2}#10#11#12#13#14#15#16#17#18#19#1a#1b#1c#1d#1e#1f */
 static char test01_27[51] = "\031\002#10#11#12#13#14#15#16#17#18#19#1a#1b#1c#1d#1e#1f";
 
+/* Text: {style 2}#20#21#22#23#24#25#26#27#28#29#2a#2b#2c#2d#2e#2f */
 static char test02_28[51] = "\031\002#20#21#22#23#24#25#26#27#28#29#2a#2b#2c#2d#2e#2f";
 
+/* Text: {style 2}#30#31#32#33#34#35#36#37#38#39#3a#3b#3c#3d#3e#3f */
 static char test03_29[51] = "\031\002#30#31#32#33#34#35#36#37#38#39#3a#3b#3c#3d#3e#3f";
 
+/* Text: {style 2}#40#41#42#43#44#45#46#47#48#49#4a#4b#4c#4d#4e#4f */
 static char test04_30[51] = "\031\002#40#41#42#43#44#45#46#47#48#49#4a#4b#4c#4d#4e#4f";
 
+/* Text: {style 2}#50#51#52#53#54#55#56#57#58#59#5a#5b#5c#5d#5e#5f */
 static char test05_31[51] = "\031\002#50#51#52#53#54#55#56#57#58#59#5a#5b#5c#5d#5e#5f";
 
+/* Text: {style 2}#60#61#62#63#64#65#66#67#68#69#6a#6b#6c#6d#6e#6f */
 static char test06_32[51] = "\031\002#60#61#62#63#64#65#66#67#68#69#6a#6b#6c#6d#6e#6f";
 
+/* Text: {style 2}#70#71#72#73#74#75#76#77#78#79#7a#7b#7c#7d#7e#7f###00 */
 static char test07_33[56] = "\031\002#70#71#72#73#74#75#76#77#78#79#7a#7b#7c#7d#7e#7f###00";
 
 static TestLineVertex TestEnv_34[6] = {
@@ -1071,36 +1025,41 @@ static TestLineVertex TestEnv_34[6] = {
     { 0, 0, { 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00 } }
 };
 
+/* Text: {style 3}Proportional font auto linefeed test\n */
 static char test0_37[40] = "\031\003Proportional font auto linefeed test\n";
 
+/* Text: {style 3}!"#$%&'()*+,-./\n */
 static char test1_38[19] = "\031\003!\"#$%&'()*+,-./\n";
 
+/* Text: {style 3}0123456789:;<=>?\n */
 static char test2_39[20] = "\031\0030123456789:;<=>\?\n";
 
+/* Text: {style 3}@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_\n */
 static char test3_40[36] = "\031\003@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\n";
 
+/* Text: {style 3}`abcdefghijklmnopqrstuvwxyz{|}~\n */
 static char test4_41[35] = "\031\003`abcdefghijklmnopqrstuvwxyz{|}~\n";
 
 static UmlDispVertex TestEnv_42[6] __attribute__((aligned(16))) = { { .x = 32769, .y = 1342390272, .z = 348654, .w = 0 }, { .x = 458752, .y = 0, .z = 71, .w = 0 }, { .x = 68, .y = 0, .z = 66, .w = 0 }, { .x = 0, .y = 0, .z = 0, .w = 0 }, { .x = 0, .y = 0, .z = 0, .w = 0 }, { .x = 0, .y = 0, .z = 0, .w = 0 } };
 
-static char * name_43[103] = { (char *)D_004C0968, (char *)D_004DA2C8, (char *)D_004DA2C0, (char *)D_004DA2B8, (char *)D_004DA2B0, (char *)D_004DA2A8, (char *)D_004DA2A0, (char *)D_004DA298, (char *)D_004DA290, (char *)D_004DA288, (char *)D_004DA280, (char *)D_004DA278, (char *)D_004DA270, (char *)D_004DA268, (char *)D_004DA260, (char *)D_004DA258, (char *)D_004DA250, (char *)D_004DA248, (char *)D_004DA240, (char *)D_004DA238, (char *)D_004DA230, (char *)D_004DA228, (char *)D_004DA220, (char *)D_004DA218, (char *)D_004DA210, (char *)D_004DA208, (char *)D_004DA200, (char *)D_004DA1F8, (char *)D_004DA1F0, (char *)D_004DA1E8, (char *)D_004DA1E0, (char *)D_004DA1D8, (char *)D_004DA1D0, (char *)D_004DA1C8, (char *)D_004DA1C0, (char *)D_004DA1B8, (char *)D_004DA1B0, (char *)D_004DA1A8, (char *)D_004DA1A0, (char *)D_004DA198, (char *)D_004DA190, (char *)D_004DA188, (char *)D_004DA180, (char *)D_004DA178, (char *)D_004DA170, (char *)D_004DA168, (char *)D_004DA160, (char *)D_004DA158, (char *)D_004DA150, (char *)D_004DA148, (char *)D_004DA140, (char *)D_004DA138, (char *)D_004DA130, (char *)D_004DA128, (char *)D_004DA120, (char *)D_004DA118, (char *)D_004DA110, (char *)D_004DA108, (char *)D_004DA100, (char *)D_004DA0F8, (char *)D_004DA0F0, (char *)D_004DA0E8, (char *)D_004DA0E0, (char *)D_004DA0D8, (char *)D_004DA0D0, (char *)D_004DA0C8, (char *)D_004DA0C0, (char *)D_004DA0B8, (char *)D_004DA0B0, (char *)D_004DA0A8, (char *)D_004DA0A0, (char *)D_004DA098, (char *)D_004DA090, (char *)D_004DA088, (char *)D_004DA080, (char *)D_004DA078, (char *)D_004DA070, (char *)D_004DA068, (char *)D_004DA060, (char *)D_004DA058, (char *)D_004DA050, (char *)D_004DA048, (char *)D_004DA040, (char *)D_004DA038, (char *)D_004DA030, (char *)D_004DA028, (char *)D_004DA020, (char *)D_004DA018, (char *)D_004DA010, (char *)D_004DA008, (char *)D_004DA000, (char *)D_004D9FF8, (char *)D_004C0958, (char *)D_004D9FF0, (char *)D_004D9FE8, (char *)D_004D9FE0, (char *)D_004D9FD8, (char *)D_004D9FD0, (char *)D_004D9FC8, (char *)D_004D9FC0, (char *)D_004D9FB8, (char *)D_004D9FB0, (char *)D_004D9FA8 };
+static char * name_43[103] = { (char *)prologueMovieName, (char *)resource10OpName, (char *)resource1001AltName, (char *)resource10B01AltName, (char *)resource1003B2Name, (char *)resource1004AltName, (char *)resource1005Name, (char *)resource1006Name, (char *)resource1008AltName, (char *)resource1010AltName, (char *)resource1011AltName, (char *)resource1017Name, (char *)resource1019AltName, (char *)resource1020AltName, (char *)resource1022Name, (char *)resource1028Name, (char *)resource1032Name, (char *)resource1033Name, (char *)resource1035Name, (char *)resource1038BName, (char *)movie1039Name, (char *)movie1039BName, (char *)movie1040Name, (char *)movie1041_1Name, (char *)movie1043_1Name, (char *)movie1044BName, (char *)movie2000_1Name, (char *)movie2001A_1Name, (char *)movie2002B_1Name, (char *)movie2004C_1Name, (char *)movie2004D_2Name, (char *)movie2006_1Name, (char *)movie2007Name, (char *)movie2007BName, (char *)movie2007C_1Name, (char *)movie2007C_2Name, (char *)movie2010Name, (char *)movie2012BName, (char *)movie2015Name, (char *)movie2017Name, (char *)movie2018Name, (char *)movie2031_1Name, (char *)movie2031_2Name, (char *)movie2032Name, (char *)movie2033AName, (char *)movie2033BName, (char *)movie2034Name, (char *)movie2044AName, (char *)movie2046Name, (char *)movie2048Name, (char *)movie2051Name, (char *)movie2053Name, (char *)movie2055Name, (char *)movie2056AName, (char *)movie2057Name, (char *)movie2058AName, (char *)movie2064_1Name, (char *)movie2064_2Name, (char *)movie3000Name, (char *)movie3003AName, (char *)movie3003EName, (char *)movie3007Name, (char *)movie3008AName, (char *)movie3008BName, (char *)movie3009DName, (char *)movie3010Name, (char *)movie3011Name, (char *)movie3014_1Name, (char *)movie3015Name, (char *)movie3016_1Name, (char *)movie3017_1Name, (char *)movie3020Name, (char *)movie3021_1Name, (char *)movie3022Name, (char *)movie3026AName, (char *)movie3027_1Name, (char *)movie3028BName, (char *)movie3035Name, (char *)movie3036IName, (char *)movie3037Name, (char *)movie3039AName, (char *)movie3039B_1Name, (char *)movie3039CName, (char *)movie3040Name, (char *)movie3042Name, (char *)movie3045Name, (char *)movie3046AName, (char *)movie3046BName, (char *)movie3047BName, (char *)movie3047CName, (char *)movie3047DName, (char *)movie3048Name, (char *)movie3050C1_9Name, (char *)movie3050C2Name, (char *)movie3052Name, (char *)movie3054B2Name, (char *)movie3055_1Name, (char *)movie3056AName, (char *)movie3056BName, (char *)movie3056CName, (char *)movie3058AName, (char *)movie3058BName, (char *)movie3058DName };
 
 static char hdd_1024_directory_name[22] = "pfs1:/Your Saves/0000";
 
 static char hdd_dummy_folder_name[10] = "pfs1:/000";
 
 static HddTestMenuEntry hdd_test_menu[8] = {
-    { D_004DA308, HddTestFormat },
-    { D_004C0C68, HddTestShutdown },
-    { D_004C0C58, HddTestHddFull },
-    { D_004C0C48, HddTest1024Save },
-    { D_004C0C38, HddTestDummyFolder },
-    { D_004C0C28, HddTestDummySave },
-    { D_004C0C18, HddTestMakeYS },
+    { hddFormatLabel, HddTestFormat },
+    { shutdownLabel, HddTestShutdown },
+    { hddFullLabel, HddTestHddFull },
+    { save1024Label, HddTest1024Save },
+    { dummyFolderLabel, HddTestDummyFolder },
+    { commonFullLabel, HddTestDummySave },
+    { makeYourSavesLabel, HddTestMakeYS },
     { 0, 0 },
 };
 
-static char *name_47[3] = { D_004C0CF8, D_004C0CE8, D_004DA320 };
+static char *name_47[3] = { port1Label, port2Label, hddText };
 
 static void (*func_51[7])(void) = {
     FontTest, UmlDispTest, HddTest, MemcardTest,
@@ -1108,13 +1067,13 @@ static void (*func_51[7])(void) = {
 };
 
 static XglMenuRow i1_52[7] = {
-    { D_004DA398, XGL_MENU_ACTION(1) },
-    { D_004DA390, XGL_MENU_ACTION(2) },
-    { D_004DA388, XGL_MENU_ACTION(3) },
-    { D_004DA380, XGL_MENU_ACTION(4) },
-    { D_004C0948, XGL_MENU_ACTION(5) },
-    { D_004DA378, XGL_MENU_ACTION(6) },
-    { D_004C1508, XGL_MENU_ACTION(7) }
+    { fontLabel, XGL_MENU_ACTION(1) },
+    { umlDispLabel, XGL_MENU_ACTION(2) },
+    { hddLabel, XGL_MENU_ACTION(3) },
+    { memcardLabel, XGL_MENU_ACTION(4) },
+    { databaseLabel, XGL_MENU_ACTION(5) },
+    { movieLabel, XGL_MENU_ACTION(6) },
+    { xtxDecodeLabel, XGL_MENU_ACTION(7) }
 };
 
 static XglMenuNode l1_53 = { 7, { 255, 1, 8 }, 0, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, i1_52 };
@@ -1125,132 +1084,133 @@ static YajimaMenuState m_54 = {
     0
 };
 
-const char D_004C07F0[24] __attribute__((section(".rodata"))) = "data\\yajima\\nisui.euc";
+const char nisuiFontPath[24] = "data\\yajima\\nisui.euc";
 
-char D_004C0808[32] __attribute__((section(".rodata"))) = "data\\yajima\\scenario.txt";
+const char scenarioTextPath[32] = "data\\yajima\\scenario.txt";
 
-char D_004C0828[16] __attribute__((section(".rodata"))) = "host0:nisui.txt";
+const char nisuiHostPath[16] = "host0:nisui.txt";
 
 /* JP: 縮小文字のテストっす拡大菩薩魔法嵐闘\n\n菩薩魔法嵐闘\n改行テスト
  * EN: Small character test; enlarge; bodhisattva, magic, storm, battle\n\nbodhisattva, magic, storm, battle\nLine break test */
-char D_004C0838[80] __attribute__((section(".rodata"))) = "\r\003\022\014\014\275\314\276\256\312\270\273\372\244\316\245\306\245\271\245\310\244\303\244\271\022  \263\310\302\347\022\014\014\312\356\273\247\313\342\313\241\315\362\306\256\022\n\n\312\356\273\247\313\342\313\241\315\362\306\256\n\262\376\271\324\245\306\245\271\245\310";
+const char smallCharacterTestText[80] = "\r\003\022\014\014\275\314\276\256\312\270\273\372\244\316\245\306\245\271\245\310\244\303\244\271\022  \263\310\302\347\022\014\014\312\356\273\247\313\342\313\241\315\362\306\256\022\n\n\312\356\273\247\313\342\313\241\315\362\306\256\n\262\376\271\324\245\306\245\271\245\310";
 
 /* JP: テスト（０）
  * EN: Test (0) */
-char D_004C0888[24] __attribute__((section(".rodata"))) = "\r\002\016\004\004\000\000\000\245\306\245\271\245\310\241\312\243\260\241\313";
+const char test000Text[24] = "\r\002\016\004\004\000\000\000\245\306\245\271\245\310\241\312\243\260\241\313";
 
 /* JP: テスト（１）
  * EN: Test (1) */
-char D_004C08A0[16] __attribute__((section(".rodata"))) = "\r\001\245\306\245\271\245\310\241\312\243\261\241\313";
+const char test001Text[16] = "\r\001\245\306\245\271\245\310\241\312\243\261\241\313";
 
 /* JP: ええと──　ああ　マークⅡ㌢
  * EN: Um... ah... mark II, centi */
-char D_004C08B0[32] __attribute__((section(".rodata"))) = "\244\250\244\250\244\310\250\241\250\241\241\241\244\242\244\242\241\241\245\336\241\274\245\257\255\266\255\302";
+const char hesitationText[32] = "\244\250\244\250\244\310\250\241\250\241\241\241\244\242\244\242\241\241\245\336\241\274\245\257\255\266\255\302";
 
-char D_004C08D0[16] __attribute__((section(".rodata"))) = "\013\r\002\025\002\001\014\025\002\002\010";
+/* Text: {reset}{effect 2}{line height 12}{char width 8} */
+const char fontTestEffectControl[16] = "\013\r\002\025\002\001\014\025\002\002\010";
 
-char D_004C08E0[16] __attribute__((section(".rodata"))) = "%3d:%04x\n";
+const char characterSizeFormat[16] = "%3d:%04x\n";
 
-char D_004C08F0[16] __attribute__((section(".rodata"))) = "UMLDISP %4x";
+const char umlDispFormat[16] = "UMLDISP %4x";
 
-char D_004C0900[24] __attribute__((section(".rodata"))) = "data\\umn\\header.lst";
+const char umnHeaderPath[24] = "data\\umn\\header.lst";
 
-char D_004C0918[16] __attribute__((section(".rodata"))) = "%04d[%s][%s]\n";
+const char umnRecordFormat[16] = "%04d[%s][%s]\n";
 
-char D_004C0928[16] __attribute__((section(".rodata"))) = "FILE SELECT\n%4d";
+const char fileSelectFormat[16] = "FILE SELECT\n%4d";
 
-char D_004C0938[16] __attribute__((section(".rodata"))) = "%4d,%4d,%3d,%6x";
+const char scrollPositionFormat[16] = "%4d,%4d,%3d,%6x";
 
-const char D_004C0948[16] = "DATABASE";
+const char databaseLabel[16] = "DATABASE";
 
-const char D_004C0958[16] = "3050C1_9";
+const char movie3050C1_9Name[16] = "3050C1_9";
 
-const char D_004C0968[16] = "prologue";
+const char prologueMovieName[16] = "prologue";
 
 /* JP: ムービープレーヤー\n\n\n%s\n\n上下で選択。\n\n○ボタンを押すと黒画面で待機します。\n\nその状態でさらに○ボタンで再生開始。\n\n再生中はゲーム中と同じ操作が可能。\n\n再生が終了するとまた黒画面で待機。\n\nそこで○ボタンを押すとこの画面に戻ります。
  * EN: Movie player\n\n\n%s\n\nUse up/down to select.\n\nPress the circle button to wait on a black screen.\n\nPress the circle button again to start playback.\n\nThe usual in-game controls are available during playback.\n\nAfter playback ends, wait on a black screen again.\n\nPress the circle button there to return to this screen. */
-char D_004C0978[240] __attribute__((section(".rodata"))) = "\013\025\002\001\010\245\340\241\274\245\323\241\274\245\327\245\354\241\274\245\344\241\274\n\n\n%s\n\n\276\345\262\274\244\307\301\252\302\362\241\243\n\n\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\271\365\262\350\314\314\244\307\302\324\265\241\244\267\244\336\244\271\241\243\n\n\244\275\244\316\276\365\302\326\244\307\244\265\244\351\244\313\241\373\245\334\245\277\245\363\244\307\272\306\300\270\263\253\273\317\241\243\n\n\272\306\300\270\303\346\244\317\245\262\241\274\245\340\303\346\244\310\306\261\244\270\301\340\272\356\244\254\262\304\307\275\241\243\n\n\272\306\300\270\244\254\275\252\316\273\244\271\244\353\244\310\244\336\244\277\271\365\262\350\314\314\244\307\302\324\265\241\241\243\n\n\244\275\244\263\244\307\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\244\263\244\316\262\350\314\314\244\313\314\341\244\352\244\336\244\271\241\243";
+const char moviePlaybackHelpText[240] = "\013\025\002\001\010\245\340\241\274\245\323\241\274\245\327\245\354\241\274\245\344\241\274\n\n\n%s\n\n\276\345\262\274\244\307\301\252\302\362\241\243\n\n\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\271\365\262\350\314\314\244\307\302\324\265\241\244\267\244\336\244\271\241\243\n\n\244\275\244\316\276\365\302\326\244\307\244\265\244\351\244\313\241\373\245\334\245\277\245\363\244\307\272\306\300\270\263\253\273\317\241\243\n\n\272\306\300\270\303\346\244\317\245\262\241\274\245\340\303\346\244\310\306\261\244\270\301\340\272\356\244\254\262\304\307\275\241\243\n\n\272\306\300\270\244\254\275\252\316\273\244\271\244\353\244\310\244\336\244\277\271\365\262\350\314\314\244\307\302\324\265\241\241\243\n\n\244\275\244\263\244\307\241\373\245\334\245\277\245\363\244\362\262\241\244\271\244\310\244\263\244\316\262\350\314\314\244\313\314\341\244\352\244\336\244\271\241\243";
 
-char D_004C0A68[24] __attribute__((section(".rodata"))) = "data\\movie\\mpeg2\\%s.pss";
+const char movieFilePathFormat[24] = "data\\movie\\mpeg2\\%s.pss";
 
-static char hdd_format_start_message[16] __attribute__((section(".rodata"))) = "format HDD\n";
+static const char hdd_format_start_message[16] = "format HDD\n";
 
-static char hdd_format_result_format[16] __attribute__((section(".rodata"))) = " result:%d\n";
+static const char hdd_format_result_format[16] = " result:%d\n";
 
-static char hdd_common_device[16] __attribute__((section(".rodata"))) = "hdd0:__common";
+static const char hdd_common_device[16] = "hdd0:__common";
 
-static char hdd_pfs_format_result_format[24] __attribute__((section(".rodata"))) = " format __common:%d\n";
+static const char hdd_pfs_format_result_format[24] = " format __common:%d\n";
 
-static char hdd_shutdown_message[16] __attribute__((section(".rodata"))) = "shutdown hdd\n";
+static const char hdd_shutdown_message[16] = "shutdown hdd\n";
 
-static char hdd_full_path[40] __attribute__((section(".rodata"))) = "hdd0:PP.SLPS-99999.DUMMY.DUMMY,,,1G,PFS";
+static const char hdd_full_path[40] = "hdd0:PP.SLPS-99999.DUMMY.DUMMY,,,1G,PFS";
 
-static char hdd_create_partition_format[24] __attribute__((section(".rodata"))) = "create partition:%d\n";
+static const char hdd_create_partition_format[24] = "create partition:%d\n";
 
-static char hdd_subcommand_format[16] __attribute__((section(".rodata"))) = "sub%d:%d\n";
+static const char hdd_subcommand_format[16] = "sub%d:%d\n";
 
-static char hdd_close_result_format[16] __attribute__((section(".rodata"))) = "close:%d\n";
+static const char hdd_close_result_format[16] = "close:%d\n";
 
-static char hdd_mount_result_format[16] __attribute__((section(".rodata"))) = "mount:%d\n";
+static const char hdd_mount_result_format[16] = "mount:%d\n";
 
-static char hdd_unmount_result_format[16] __attribute__((section(".rodata"))) = "umount:%d\n";
+static const char hdd_unmount_result_format[16] = "umount:%d\n";
 
-static char hdd_your_saves_directory[24] __attribute__((section(".rodata"))) = "pfs1:/Your Saves";
+static const char hdd_your_saves_directory[24] = "pfs1:/Your Saves";
 
-static char hdd_mkdir_result_format[24] __attribute__((section(".rodata"))) = "make YourSaves:%d\n";
+static const char hdd_mkdir_result_format[24] = "make YourSaves:%d\n";
 
-static char hdd_zone_size_format[16] __attribute__((section(".rodata"))) = "zonesz:%d\n";
+static const char hdd_zone_size_format[16] = "zonesz:%d\n";
 
-static char hdd_zone_free_format[16] __attribute__((section(".rodata"))) = "zonefree:%d\n";
+static const char hdd_zone_free_format[16] = "zonefree:%d\n";
 
-static char hdd_chstat_failure_format[16] __attribute__((section(".rodata"))) = "chstat:%d\n";
+static const char hdd_chstat_failure_format[16] = "chstat:%d\n";
 
-static char D_004C0BB8[16] __attribute__((section(".rodata"))) = "zone:%d,%d\n";
+static const char zoneStatusFormat[16] = "zone:%d,%d\n";
 
-static char D_004C0BC8[16] __attribute__((section(".rodata"))) = "step:%d\n";
+static const char chunkStepFormat[16] = "step:%d\n";
 
-static char D_004C0BD8[16] __attribute__((section(".rodata"))) = "pfs1:/999";
+static const char dummySaveFolderPath[16] = "pfs1:/999";
 
-static char D_004C0BE8[16] __attribute__((section(".rodata"))) = "mkdir:%d\n";
+static const char mkdirStatusFormat[16] = "mkdir:%d\n";
 
-static char D_004C0BF8[16] __attribute__((section(".rodata"))) = "pfs1:/999/dummy";
+static const char dummySaveFilePath[16] = "pfs1:/999/dummy";
 
-static char D_004C0C08[16] __attribute__((section(".rodata"))) = "open:%d\n";
+static const char openHandleFormat[16] = "open:%d\n";
 
-char D_004C0C18[16] __attribute__((section(".rodata"))) = "MAKE YOURSAVES";
+const char makeYourSavesLabel[16] = "MAKE YOURSAVES";
 
-char D_004C0C28[16] __attribute__((section(".rodata"))) = "COMMON FULL";
+const char commonFullLabel[16] = "COMMON FULL";
 
-char D_004C0C38[16] __attribute__((section(".rodata"))) = "DUMMY FOLDER";
+const char dummyFolderLabel[16] = "DUMMY FOLDER";
 
-char D_004C0C48[16] __attribute__((section(".rodata"))) = "1024 SAVE";
+const char save1024Label[16] = "1024 SAVE";
 
-char D_004C0C58[16] __attribute__((section(".rodata"))) = "HDD FULL";
+const char hddFullLabel[16] = "HDD FULL";
 
-char D_004C0C68[16] __attribute__((section(".rodata"))) = "SHUTDOWN";
+const char shutdownLabel[16] = "SHUTDOWN";
 
-static char hdd_status_format[24] __attribute__((section(".rodata"))) = "HDIOC_STATUS:%d\n";
+static const char hdd_status_format[24] = "HDIOC_STATUS:%d\n";
 
 /* JP: HDDデバイスが存在しません:%d\n
  * EN: HDD device does not exist: %d\n */
-static char hdd_status_error_format[32] __attribute__((section(".rodata"))) =
+static const char hdd_status_error_format[32] =
     "HDD\xA5\xC7\xA5\xD0\xA5\xA4\xA5\xB9\xA4\xAC\xC2\xB8\xBA\xDF\xA4\xB7\xA4\xDE\xA4\xBB\xA4\xF3:%d\n";
 
-static char hdd_free_format[24] __attribute__((section(".rodata"))) = "xglHddMcGetFree:%d\n";
+static const char hdd_free_format[24] = "xglHddMcGetFree:%d\n";
 
 /* JP: ＨＤＤテスト
  * EN: HDD test */
-static char hdd_test_title[16] __attribute__((section(".rodata"))) = "\x0B\xA3\xC8\xA3\xC4\xA3\xC4\xA5\xC6\xA5\xB9\xA5\xC8";
+static const char hdd_test_title[16] = "\x0B\xA3\xC8\xA3\xC4\xA3\xC4\xA5\xC6\xA5\xB9\xA5\xC8";
 
-static char hdd_no_use_title[16] __attribute__((section(".rodata"))) = "HDD NoUse";
+static const char hdd_no_use_title[16] = "HDD NoUse";
 
 /* JP: ポート２
  * EN: Port 2 */
-char D_004C0CE8[16] __attribute__((section(".rodata"))) = "\245\335\241\274\245\310\243\262";
+const char port2Label[16] = "\245\335\241\274\245\310\243\262";
 
 /* JP: ポート１
  * EN: Port 1 */
-char D_004C0CF8[16] __attribute__((section(".rodata"))) = "\245\335\241\274\245\310\243\261";
+const char port1Label[16] = "\245\335\241\274\245\310\243\261";
 
 static int rate_2_004D9F60 = 128;
 
@@ -1262,219 +1222,221 @@ static int dir_9 = -1;
 
 static int width_35 = 256;
 
-char D_004D9F78[8] = "%3d";
+char fontTestWidthFormat[8] = "%3d";
 
+/* Text: {spacing 1,0} */
 static char test_36[6] = "\025\003\003\001";
 
-char D_004D9F88[8] = "\025\003\003";
+/* Text: {spacing 0,0} */
+char fontTestSpacingControl[8] = "\025\003\003";
 
-char D_004D9F90[8] = "%1x %1x";
+char umlBitsFormat[8] = "%1x %1x";
 
-char D_004D9F98[8] = "Umnmode";
+char umnModeSoundName[8] = "Umnmode";
 
-char D_004D9FA0[8] = "%3d/%3d";
+char databaseIndexFormat[8] = "%3d/%3d";
 
-const char D_004D9FA8[8] = "3058D";
+const char movie3058DName[8] = "3058D";
 
-const char D_004D9FB0[8] = "3058B";
+const char movie3058BName[8] = "3058B";
 
-const char D_004D9FB8[8] = "3058A";
+const char movie3058AName[8] = "3058A";
 
-const char D_004D9FC0[8] = "3056C";
+const char movie3056CName[8] = "3056C";
 
-const char D_004D9FC8[8] = "3056B";
+const char movie3056BName[8] = "3056B";
 
-const char D_004D9FD0[8] = "3056A";
+const char movie3056AName[8] = "3056A";
 
-const char D_004D9FD8[8] = "3055_1";
+const char movie3055_1Name[8] = "3055_1";
 
-const char D_004D9FE0[8] = "3054B2";
+const char movie3054B2Name[8] = "3054B2";
 
-const char D_004D9FE8[8] = "3052";
+const char movie3052Name[8] = "3052";
 
-const char D_004D9FF0[8] = "3050C2";
+const char movie3050C2Name[8] = "3050C2";
 
-const char D_004D9FF8[8] = "3048";
+const char movie3048Name[8] = "3048";
 
-const char D_004DA000[8] = "3047D";
+const char movie3047DName[8] = "3047D";
 
-const char D_004DA008[8] = "3047C";
+const char movie3047CName[8] = "3047C";
 
-const char D_004DA010[8] = "3047B";
+const char movie3047BName[8] = "3047B";
 
-const char D_004DA018[8] = "3046B";
+const char movie3046BName[8] = "3046B";
 
-const char D_004DA020[8] = "3046A";
+const char movie3046AName[8] = "3046A";
 
-const char D_004DA028[8] = "3045";
+const char movie3045Name[8] = "3045";
 
-const char D_004DA030[8] = "3042";
+const char movie3042Name[8] = "3042";
 
-const char D_004DA038[8] = "3040";
+const char movie3040Name[8] = "3040";
 
-const char D_004DA040[8] = "3039C";
+const char movie3039CName[8] = "3039C";
 
-const char D_004DA048[8] = "3039B_1";
+const char movie3039B_1Name[8] = "3039B_1";
 
-const char D_004DA050[8] = "3039A";
+const char movie3039AName[8] = "3039A";
 
-const char D_004DA058[8] = "3037";
+const char movie3037Name[8] = "3037";
 
-const char D_004DA060[8] = "3036I";
+const char movie3036IName[8] = "3036I";
 
-const char D_004DA068[8] = "3035";
+const char movie3035Name[8] = "3035";
 
-const char D_004DA070[8] = "3028B";
+const char movie3028BName[8] = "3028B";
 
-const char D_004DA078[8] = "3027_1";
+const char movie3027_1Name[8] = "3027_1";
 
-const char D_004DA080[8] = "3026A";
+const char movie3026AName[8] = "3026A";
 
-const char D_004DA088[8] = "3022";
+const char movie3022Name[8] = "3022";
 
-const char D_004DA090[8] = "3021_1";
+const char movie3021_1Name[8] = "3021_1";
 
-const char D_004DA098[8] = "3020";
+const char movie3020Name[8] = "3020";
 
-const char D_004DA0A0[8] = "3017_1";
+const char movie3017_1Name[8] = "3017_1";
 
-const char D_004DA0A8[8] = "3016_1";
+const char movie3016_1Name[8] = "3016_1";
 
-const char D_004DA0B0[8] = "3015";
+const char movie3015Name[8] = "3015";
 
-const char D_004DA0B8[8] = "3014_1";
+const char movie3014_1Name[8] = "3014_1";
 
-const char D_004DA0C0[8] = "3011";
+const char movie3011Name[8] = "3011";
 
-const char D_004DA0C8[8] = "3010";
+const char movie3010Name[8] = "3010";
 
-const char D_004DA0D0[8] = "3009D";
+const char movie3009DName[8] = "3009D";
 
-const char D_004DA0D8[8] = "3008B";
+const char movie3008BName[8] = "3008B";
 
-const char D_004DA0E0[8] = "3008A";
+const char movie3008AName[8] = "3008A";
 
-const char D_004DA0E8[8] = "3007";
+const char movie3007Name[8] = "3007";
 
-const char D_004DA0F0[8] = "3003E";
+const char movie3003EName[8] = "3003E";
 
-const char D_004DA0F8[8] = "3003A";
+const char movie3003AName[8] = "3003A";
 
-const char D_004DA100[8] = "3000";
+const char movie3000Name[8] = "3000";
 
-const char D_004DA108[8] = "2064_2";
+const char movie2064_2Name[8] = "2064_2";
 
-const char D_004DA110[8] = "2064_1";
+const char movie2064_1Name[8] = "2064_1";
 
-const char D_004DA118[8] = "2058A";
+const char movie2058AName[8] = "2058A";
 
-const char D_004DA120[8] = "2057";
+const char movie2057Name[8] = "2057";
 
-const char D_004DA128[8] = "2056A";
+const char movie2056AName[8] = "2056A";
 
-const char D_004DA130[8] = "2055";
+const char movie2055Name[8] = "2055";
 
-const char D_004DA138[8] = "2053";
+const char movie2053Name[8] = "2053";
 
-const char D_004DA140[8] = "2051";
+const char movie2051Name[8] = "2051";
 
-const char D_004DA148[8] = "2048";
+const char movie2048Name[8] = "2048";
 
-const char D_004DA150[8] = "2046";
+const char movie2046Name[8] = "2046";
 
-const char D_004DA158[8] = "2044A";
+const char movie2044AName[8] = "2044A";
 
-const char D_004DA160[8] = "2034";
+const char movie2034Name[8] = "2034";
 
-const char D_004DA168[8] = "2033B";
+const char movie2033BName[8] = "2033B";
 
-const char D_004DA170[8] = "2033A";
+const char movie2033AName[8] = "2033A";
 
-const char D_004DA178[8] = "2032";
+const char movie2032Name[8] = "2032";
 
-const char D_004DA180[8] = "2031_2";
+const char movie2031_2Name[8] = "2031_2";
 
-const char D_004DA188[8] = "2031_1";
+const char movie2031_1Name[8] = "2031_1";
 
-const char D_004DA190[8] = "2018";
+const char movie2018Name[8] = "2018";
 
-const char D_004DA198[8] = "2017";
+const char movie2017Name[8] = "2017";
 
-const char D_004DA1A0[8] = "2015";
+const char movie2015Name[8] = "2015";
 
-const char D_004DA1A8[8] = "2012B";
+const char movie2012BName[8] = "2012B";
 
-const char D_004DA1B0[8] = "2010";
+const char movie2010Name[8] = "2010";
 
-const char D_004DA1B8[8] = "2007C_2";
+const char movie2007C_2Name[8] = "2007C_2";
 
-const char D_004DA1C0[8] = "2007C_1";
+const char movie2007C_1Name[8] = "2007C_1";
 
-const char D_004DA1C8[8] = "2007B";
+const char movie2007BName[8] = "2007B";
 
-const char D_004DA1D0[8] = "2007";
+const char movie2007Name[8] = "2007";
 
-const char D_004DA1D8[8] = "2006_1";
+const char movie2006_1Name[8] = "2006_1";
 
-const char D_004DA1E0[8] = "2004D_2";
+const char movie2004D_2Name[8] = "2004D_2";
 
-const char D_004DA1E8[8] = "2004C_1";
+const char movie2004C_1Name[8] = "2004C_1";
 
-const char D_004DA1F0[8] = "2002B_1";
+const char movie2002B_1Name[8] = "2002B_1";
 
-const char D_004DA1F8[8] = "2001A_1";
+const char movie2001A_1Name[8] = "2001A_1";
 
-const char D_004DA200[8] = "2000_1";
+const char movie2000_1Name[8] = "2000_1";
 
-const char D_004DA208[8] = "1044B";
+const char movie1044BName[8] = "1044B";
 
-const char D_004DA210[8] = "1043_1";
+const char movie1043_1Name[8] = "1043_1";
 
-const char D_004DA218[8] = "1041_1";
+const char movie1041_1Name[8] = "1041_1";
 
-const char D_004DA220[8] = "1040";
+const char movie1040Name[8] = "1040";
 
-const char D_004DA228[8] = "1039B";
+const char movie1039BName[8] = "1039B";
 
-const char D_004DA230[8] = "1039";
+const char movie1039Name[8] = "1039";
 
-const char D_004DA238[8] = "1038B";
+const char resource1038BName[8] = "1038B";
 
-const char D_004DA240[8] = "1035";
+const char resource1035Name[8] = "1035";
 
-const char D_004DA248[8] = "1033";
+const char resource1033Name[8] = "1033";
 
-const char D_004DA250[8] = "1032";
+const char resource1032Name[8] = "1032";
 
-const char D_004DA258[8] = "1028";
+const char resource1028Name[8] = "1028";
 
-const char D_004DA260[8] = "1022";
+const char resource1022Name[8] = "1022";
 
-const char D_004DA268[8] = "1020_1";
+const char resource1020AltName[8] = "1020_1";
 
-const char D_004DA270[8] = "1019_1";
+const char resource1019AltName[8] = "1019_1";
 
-const char D_004DA278[8] = "1017";
+const char resource1017Name[8] = "1017";
 
-const char D_004DA280[8] = "1011_2";
+const char resource1011AltName[8] = "1011_2";
 
-const char D_004DA288[8] = "1010_1";
+const char resource1010AltName[8] = "1010_1";
 
-const char D_004DA290[8] = "1008_2";
+const char resource1008AltName[8] = "1008_2";
 
-const char D_004DA298[8] = "1006";
+const char resource1006Name[8] = "1006";
 
-const char D_004DA2A0[8] = "1005";
+const char resource1005Name[8] = "1005";
 
-const char D_004DA2A8[8] = "1004_1";
+const char resource1004AltName[8] = "1004_1";
 
-const char D_004DA2B0[8] = "1003B2";
+const char resource1003B2Name[8] = "1003B2";
 
-const char D_004DA2B8[8] = "10B01_1";
+const char resource10B01AltName[8] = "10B01_1";
 
-const char D_004DA2C0[8] = "1001_1";
+const char resource1001AltName[8] = "1001_1";
 
-const char D_004DA2C8[8] = "10OP";
+const char resource10OpName[8] = "10OP";
 
 static char hdd_device[8] = "hdd0:";
 
@@ -1486,17 +1448,19 @@ static char hdd_partition_size[8] = "1G";
 
 static char hdd_mount_point[8] = "pfs1:";
 
-static char D_004DA2F8[8] = "%s:%d\n";
+static char fileLineFormat[8] = "%s:%d\n";
 
-static char D_004DA300[8] = "%d:%d\n";
+static char counterWroteFormat[8] = "%d:%d\n";
 
-char D_004DA308[8] = "FORMAT";
+char hddFormatLabel[8] = "FORMAT";
 
 static char hdd_use_title[8] = "HDD Use";
 
 static char menu_cursor[8] = ">";
 
-char D_004DA320[8] = "\243\310\243\304\243\304";
+/* JP: ＨＤＤ
+ * EN: HDD */
+char hddText[8] = "\243\310\243\304\243\304";
 
 static void testfunc(XglPacket **packet) {
     sceVif1PkAddDirectDataN(*packet, TestEnv_0_0036A030, 9);
@@ -1512,10 +1476,10 @@ static void FontTestSub(void)
     int size;
     int handle;
 
-    if (xglCdReadFile(D_004C07F0, table, 0, 0) > 0) {
+    if (xglCdReadFile(nisuiFontPath, table, 0, 0) > 0) {
         text = (unsigned char *)0x01000100;
-        size = xglCdGetFileSize(D_004C0808);
-        xglCdReadFile(D_004C0808, text, 0, 0);
+        size = xglCdGetFileSize(scenarioTextPath);
+        xglCdReadFile(scenarioTextPath, text, 0, 0);
         text[size] = 0;
         text[size + 1] = 0;
         while (*text != 0) {
@@ -1539,7 +1503,7 @@ static void FontTestSub(void)
         entry = table;
         while (*entry != 0)
             ++entry;
-        handle = sceOpen(D_004C0828, 0x602);
+        handle = sceOpen(nisuiHostPath, 0x602);
         sceWrite(handle, table, entry - table);
         sceClose(handle);
     }
@@ -1560,9 +1524,9 @@ static void FontTestP0(void)
     if (PAD_U16_AT(42) & 0x10) {
         FontTestSub();
     }
-    xglFontDebugPrintf(16, 16, D_004C0838);
-    xglFontDebugPrintf(16, 32, D_004C0888);
-    xglFontDebugPrintf(16, 48, D_004C08A0);
+    xglFontDebugPrintf(16, 16, smallCharacterTestText);
+    xglFontDebugPrintf(16, 32, test000Text);
+    xglFontDebugPrintf(16, 48, test001Text);
     rate_2_004D9F60 += dir_3;
     if (rate_2_004D9F60 <= 0) {
         dir_3 = 1;
@@ -1625,7 +1589,7 @@ static void FontTestP0(void)
     xglFontDebugPrintf(96, 64, test_18);
     xglFontDebugPrintf(96, 80, test_19);
     xglFontPrint(0, 0, 0x10000, init_20);
-    xglFontPrint(192, 192, 0x10000, D_004C08B0);
+    xglFontPrint(192, 192, 0x10000, hesitationText);
     xglFontDebugPrintf(96, 112, test_21);
     xglFontDebugPrintf(96, 128, test_22);
     xglFontDebugPrintf(96, 144, test_23);
@@ -1673,14 +1637,14 @@ static void FontTestP2(void)
 {
     int character;
 
-    xglFontDebugPrintf(8, 8, D_004D9F78, width_35);
+    xglFontDebugPrintf(8, 8, fontTestWidthFormat, width_35);
     if (PAD_U16_AT(148) & 0x2000) {
         width_35++;
     }
     if (PAD_U16_AT(148) & 0x8000) {
         width_35--;
     }
-    xglFontPrint(64, 96, 0xFFFFFF, D_004C08D0);
+    xglFontPrint(64, 96, 0xFFFFFF, fontTestEffectControl);
     test_36[3] = width_35 >> 8;
     test_36[4] = width_35;
     xglFontPrintDirect(test_36);
@@ -1695,10 +1659,10 @@ static void FontTestP2(void)
     FontTestLine(64, 320, xglFontGetStringWidth(test3_40));
     xglFontPrint(64, 352, 0xFFFFFF, test4_41);
     FontTestLine(64, 352, xglFontGetStringWidth(test4_41));
-    xglFontPrint(64, 96, 0xFFFFFF, D_004D9F88);
+    xglFontPrint(64, 96, 0xFFFFFF, fontTestSpacingControl);
     if (PAD_U16_AT(42) & 0x20) {
         for (character = 0; character < 64; character++) {
-            printf(D_004C08E0, character, xglFontGetProportionalSize(character));
+            printf(characterSizeFormat, character, xglFontGetProportionalSize(character));
         }
     }
 }
@@ -1785,11 +1749,11 @@ static void UmlDispTest(void)
     xglSleep();
     while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
         save = (SaveDataDebug *)SaveData;
-        xglFontDebugPrintf(0, 0, D_004C08F0, number);
+        xglFontDebugPrintf(0, 0, umlDispFormat, number);
         if (detail == 0) {
             if (PAD_U16_AT(42) & 0x10) {
                 record = (UmlHeaderRecord *)0x1000000;
-                xglCdReadFile(D_004C0900, record, 0, 0);
+                xglCdReadFile(umnHeaderPath, record, 0, 0);
                 size = record->size;
                 if (size != 0) {
                     do {
@@ -1801,7 +1765,7 @@ static void UmlDispTest(void)
                             }
                             text++;
                         }
-                        printf(D_004C0918, id, record->text, text + 1);
+                        printf(umnRecordFormat, id, record->text, text + 1);
                         record = (UmlHeaderRecord *)((char *)record + size + 4);
                         size = record->size;
                     } while (size != 0);
@@ -1813,9 +1777,9 @@ static void UmlDispTest(void)
             if (PAD_U16_AT(42) & 0x2) {
                 save->umn_flags ^= 0x20;
             }
-            xglFontDebugPrintf(16, 40, D_004D9F90, (save->umn_flags >> 4) & 1,
+            xglFontDebugPrintf(16, 40, umlBitsFormat, (save->umn_flags >> 4) & 1,
                                (save->umn_flags >> 5) & 1);
-            xglFontDebugPrintf(16, 16, D_004C0928, number);
+            xglFontDebugPrintf(16, 16, fileSelectFormat, number);
             delta = 0;
             if (PAD_U16_AT(44) & 0x1000) {
                 delta = -1;
@@ -1871,7 +1835,7 @@ static void UmlDispTest(void)
                     }
                 }
             }
-            xglFontDebugPrintf(0, 8, D_004C0938, param.scroll_x, param.scroll_y,
+            xglFontDebugPrintf(0, 8, scrollPositionFormat, param.scroll_x, param.scroll_y,
                                param.file_number, param.flags);
             tyaUmlDispMain(&param);
         }
@@ -1913,14 +1877,14 @@ static void DatabaseTest(void)
             xglFlagsSet(flag, 1, 1);
         }
     }
-    xglSoundLoadRequestSmd(D_004D9F98, (void *)0x1000000);
+    xglSoundLoadRequestSmd(umnModeSoundName, (void *)0x1000000);
     xglSleep();
     while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
-        xglFontDebugPrintf(0, 0, D_004C0948);
+        xglFontDebugPrintf(0, 0, databaseLabel);
         if (tyaUmlDatabaseMain(&param) != 0) {
             break;
         }
-        xglFontDebugPrintf(80, 0, D_004D9FA0, param.index, param.total);
+        xglFontDebugPrintf(80, 0, databaseIndexFormat, param.index, param.total);
         endPrintExtFunc(0, 100, 0);
         xglSleep();
     }
@@ -1935,7 +1899,7 @@ static void XenoMovieCheck(void)
     GameResourceInit(0x1000000, 0x1000000);
     xglFontLoad(0, 0);
     while ((PAD_U64_AT(40) & 0x08000100ULL) != 0x08000100ULL) {
-        xglFontDebugPrintf(0, 0, D_004C0978, name_43[index]);
+        xglFontDebugPrintf(0, 0, moviePlaybackHelpText, name_43[index]);
         if (PAD_U16_AT(44) & 0x1000) {
             --index;
         }
@@ -1953,7 +1917,7 @@ static void XenoMovieCheck(void)
             do {
                 xglSleep();
             } while (!(PAD_U16_AT(42) & 0x20));
-            sprintf(path, D_004C0A68, name_43[index]);
+            sprintf(path, movieFilePathFormat, name_43[index]);
             GameMpeg2Play(path, 0);
             xglRenderClearFrame();
             do {
@@ -2112,12 +2076,12 @@ static void HddTestDummySave(void)
     zone_size = sceDevctl(hdd_mount_point, 0x5001, 0, 0, 0, 0);
     remaining = sceDevctl(hdd_mount_point, 0x5002, 0, 0, 0, 0) - 3;
     chunk_size = 0x1000000 / zone_size;
-    printf(D_004C0BB8, remaining, zone_size);
-    printf(D_004C0BC8, chunk_size);
-    mkdir_status = sceMkdir(D_004C0BD8, 0x1ff);
-    printf(D_004C0BE8, mkdir_status);
-    handle = sceOpen(D_004C0BF8, 0x602, 0x1ff);
-    printf(D_004C0C08, handle);
+    printf(zoneStatusFormat, remaining, zone_size);
+    printf(chunkStepFormat, chunk_size);
+    mkdir_status = sceMkdir(dummySaveFolderPath, 0x1ff);
+    printf(mkdirStatusFormat, mkdir_status);
+    handle = sceOpen(dummySaveFilePath, 0x602, 0x1ff);
+    printf(openHandleFormat, handle);
 
     counter = 0;
     for (;;) {
@@ -2132,7 +2096,7 @@ static void HddTestDummySave(void)
             remaining = 0;
         }
         wrote = sceWrite(handle, (void *) 0x1000000, write_size);
-        printf(D_004DA300, counter, wrote);
+        printf(counterWroteFormat, counter, wrote);
         counter++;
         if (wrote < 0) {
             break;
@@ -2283,18 +2247,21 @@ static void MemcardTest(void)
             if (port_status[0] == 1) {
                 xglFontDebugPrintf(16, 48, "%s", name);
             } else {
+                /* Text: {color #202020}%s */
                 xglFontDebugPrintf(16, 48, "\x0C   %s", name);
             }
             name = mt_GetPortName(1);
             if (port_status[1] == 1) {
                 xglFontDebugPrintf(16, 64, "%s", name);
             } else {
+                /* Text: {color #202020}%s */
                 xglFontDebugPrintf(16, 64, "\x0C   %s", name);
             }
             name = mt_GetPortName(2);
             if (hdd == 0) {
                 xglFontDebugPrintf(16, 80, "%s", name);
             } else {
+                /* Text: {color #202020}%s */
                 xglFontDebugPrintf(16, 80, "\x0C   %s", name);
             }
             if (port_status[0] == 1 || port_status[1] == 1 || hdd == 0) {
@@ -2737,33 +2704,31 @@ static void MemcardTest(void)
     }
 }
 
-char D_004C13D8[16] __attribute__((section(".rodata"))) = "host0:%s.lst";
+const char xtxListPathFormat[16] = "host0:%s.lst";
 
-char D_004C13E8[16] __attribute__((section(".rodata"))) = "%d[%s]%d\n";
+const char xtxReadFormat[16] = "%d[%s]%d\n";
 
-char D_004C13F8[16] __attribute__((section(".rodata"))) = "host0:%s.xtx";
+const char xtxFilePathFormat[16] = "host0:%s.xtx";
 
-char D_004C1408[16] __attribute__((section(".rodata"))) = "tbw:%d:%08x\n";
+const char xtxTbwFormat[16] = "tbw:%d:%08x\n";
 
-char D_004C1418[40] __attribute__((section(".rodata"))) = "[%s],%d,(%d,%d)-(%d,%d),(%d,%d)\n";
+const char xtxEntryFormat[40] = "[%s],%d,(%d,%d)-(%d,%d),(%d,%d)\n";
 
 static unsigned char tbl_49[4] = { 112, 128, 0, 0 };
 
 static char h_50[7] = "host0:";
 
-const char D_004DA378[8] = "MOVIE";
+const char movieLabel[8] = "MOVIE";
 
-const char D_004DA380[8] = "MEMCARD";
+const char memcardLabel[8] = "MEMCARD";
 
-const char D_004DA388[8] = "HDD";
+const char hddLabel[8] = "HDD";
 
-const char D_004DA390[8] = "UMLDISP";
+const char umlDispLabel[8] = "UMLDISP";
 
-const char D_004DA398[8] = "FONT";
+const char fontLabel[8] = "FONT";
 
-static char D_004DA3A0[8] = "SELECT";
-
-
+static char selectText[8] = "SELECT";
 
 static char *xtxdec_nextline(char *text)
 {
@@ -2838,11 +2803,11 @@ static int xtxdec_sub(char *filename)
 
     tbw = 64;
     bmp = (unsigned char *)0x01410000;
-    sprintf(path, D_004C13D8, filename);
+    sprintf(path, xtxListPathFormat, filename);
     memset((void *)0x01000000, 0, 0x10000);
     fd = sceOpen(path, 1);
     read_size = sceRead(fd, (void *)0x01000000, 0x10000);
-    printf(D_004C13E8, fd, path, read_size);
+    printf(xtxReadFormat, fd, path, read_size);
     sceClose(fd);
     if (((XtxHeader *)0x01000000)->magic[0] != 0x58455423 ||
         ((XtxHeader *)0x01000000)->magic[1] != 0x314C5455)
@@ -2853,12 +2818,12 @@ static int xtxdec_sub(char *filename)
     line = xtxdec_nextline(line);
     if (line == 0)
         return -1;
-    sprintf(path, D_004C13F8, filename);
+    sprintf(path, xtxFilePathFormat, filename);
     memset((void *)0x01010000, 0, 256);
     fd = sceOpen(path, 1);
     count = 0;
     read_size = sceRead(fd, (void *)0x01010000, 0x400000);
-    printf(D_004C13E8, fd, path, read_size);
+    printf(xtxReadFormat, fd, path, read_size);
     sceClose(fd);
     xglSleep();
     sceGsSyncPath(0, 0);
@@ -2871,7 +2836,7 @@ static int xtxdec_sub(char *filename)
             tbw = (pixel_width + 63) >> 6;
         else
             tbw = dimensions >> 16;
-        printf(D_004C1408, tbw, entry->vram_address);
+        printf(xtxTbwFormat, tbw, entry->vram_address);
         sceGsSetDefLoadImage(load_image, (entry->vram_address + 0xE0000) >> 6, tbw, 0, 0, 0,
                              pixel_width, entry->height);
         FlushCache(0);
@@ -2905,7 +2870,7 @@ static int xtxdec_sub(char *filename)
         line = xtxdec_getdec(line, 0);
         line = xtxdec_getdec(line, &origin_x);
         line = xtxdec_getdec(line, &origin_y);
-        printf(D_004C1418, path, bits_per_pixel, left, top, width, height, origin_x, origin_y);
+        printf(xtxEntryFormat, path, bits_per_pixel, left, top, width, height, origin_x, origin_y);
         switch (bits_per_pixel) {
         default:
             palette_size = 0;
@@ -2989,7 +2954,7 @@ static int xtxdec_sleep(void)
     if ((PAD_U64_AT(40) & 0x08000100ULL) == 0x08000100ULL) {
         return 1;
     }
-    xglFontDebugPrintf(0, 0, D_004C14B8);
+    xglFontDebugPrintf(0, 0, xtxDecodeText);
     xglSleep();
     return 0;
 }
@@ -3012,7 +2977,7 @@ static void XtxDecode(void)
     int status;
 
     if (main_param_argc < 2) {
-        xtxdec_error(16, D_004C14C8);
+        xtxdec_error(16, specifyFileNameText);
         return;
     }
 
@@ -3037,7 +3002,7 @@ static void XtxDecode(void)
         }
         i++;
     }
-    xtxdec_error(y, D_004C14F8);
+    xtxdec_error(y, xtxFinishedText);
 }
 
 static void Dummy(void)
@@ -3066,10 +3031,10 @@ void YajimaTest(void)
         selection = 0;
         xglMenuOpen(-1, &m_54);
         while (selection == 0) {
-            xglFontDebugPrintf(0, 0, D_004DA3A0);
+            xglFontDebugPrintf(0, 0, selectText);
             xglMenuDraw();
             xglClockRead(&clock);
-            xglFontDebugPrintf(0x80, 0x10, D_004C1518, clock.year, clock.month,
+            xglFontDebugPrintf(0x80, 0x10, clockDateTimeFormat, clock.year, clock.month,
                                 clock.day, clock.hour, clock.minute, clock.second);
             xglFRand();
             xglSleep();
@@ -3083,534 +3048,18 @@ void YajimaTest(void)
     xglRenderClearDepth();
 }
 
-static char hdd_device[8];
-static char hdd_device_name[8];
-static char pfs_device_name[8];
-static char hdd_common_device[16] __attribute__((section(".rodata")));
-static char hdd_format_start_message[16] __attribute__((section(".rodata")));
-static char hdd_format_result_format[16] __attribute__((section(".rodata")));
-static char hdd_pfs_format_result_format[24] __attribute__((section(".rodata")));
-static char hdd_shutdown_message[16] __attribute__((section(".rodata")));
-static char hdd_full_path[40] __attribute__((section(".rodata")));
-static char hdd_create_partition_format[24] __attribute__((section(".rodata")));
-static char hdd_partition_size[8];
-static char hdd_subcommand_format[16] __attribute__((section(".rodata")));
-static char hdd_close_result_format[16] __attribute__((section(".rodata")));
-static char hdd_mount_point[8];
-static char hdd_mount_result_format[16] __attribute__((section(".rodata")));
-static char hdd_unmount_result_format[16] __attribute__((section(".rodata")));
-static char hdd_your_saves_directory[24] __attribute__((section(".rodata")));
-static char hdd_mkdir_result_format[24] __attribute__((section(".rodata")));
-static char hdd_zone_size_format[16] __attribute__((section(".rodata")));
-static char hdd_zone_free_format[16] __attribute__((section(".rodata")));
-
-static char hdd_chstat_failure_format[16] __attribute__((section(".rodata")));
-
-
-static char hdd_status_format[24] __attribute__((section(".rodata")));
-static char hdd_status_error_format[32] __attribute__((section(".rodata")));
-static char hdd_free_format[24] __attribute__((section(".rodata")));
-static char hdd_test_title[16] __attribute__((section(".rodata")));
-static char hdd_use_title[8];
-static char hdd_no_use_title[16] __attribute__((section(".rodata")));
-static char menu_cursor[8];
-static char *name_47[3];
-static char D_004DA2F8[8];
-static unsigned char TestEnv_0_0036A030[0x90];
-static TestLineVertex TestEnv_34[6];
-static char D_004C0BB8[16] __attribute__((section(".rodata")));
-static char D_004C0BC8[16] __attribute__((section(".rodata")));
-static char D_004C0BD8[16] __attribute__((section(".rodata")));
-static char D_004C0BE8[16] __attribute__((section(".rodata")));
-static char D_004C0BF8[16] __attribute__((section(".rodata")));
-static char D_004C0C08[16] __attribute__((section(".rodata")));
-static char D_004DA300[8];
-static char D_004C14B8[16] __attribute__((section(".rodata")));
-static char D_004C14C8[48] __attribute__((section(".rodata")));
-static char D_004C14F8[16] __attribute__((section(".rodata")));
-static YajimaMenuState m_54;
-extern char D_004DA308[8];
-extern char D_004C0C68[16];
-extern char D_004C0C58[16];
-extern char D_004C0C48[16];
-extern char D_004C0C38[16];
-extern char D_004C0C28[16];
-extern char D_004C0C18[16];
-extern char D_004C0CF8[16];
-extern char D_004C0CE8[16];
-extern char D_004DA320[8];
-static char D_004DA3A0[8];
-static char D_004C1518[24] __attribute__((section(".rodata")));
-extern const char D_004DA378[8];
-extern const char D_004DA380[8];
-extern const char D_004DA390[8];
-extern const char D_004DA398[8];
-extern const char D_004DA388[8];
-static XglMenuRow i1_52[7];
-static XglMenuNode l1_53;
-
-extern const char D_004DA088[];
-extern const char D_004DA110[];
-extern const char D_004DA258[];
-extern const char D_004DA1E0[];
-extern const char D_004DA1D0[];
-extern const char D_004DA020[];
-extern const char D_004DA250[];
-extern const char D_004DA2B0[];
-extern const char D_004DA220[];
-extern const char D_004DA210[];
-extern const char D_004DA168[];
-extern const char D_004D9FF0[];
-extern const char D_004DA208[];
-extern const char D_004DA0E8[];
-extern const char D_004D9FE8[];
-extern const char D_004DA268[];
-extern const char D_004DA038[];
-extern const char D_004DA148[];
-extern const char D_004DA160[];
-extern const char D_004DA008[];
-extern const char D_004D9FC0[];
-extern const char D_004DA018[];
-extern const char D_004D9FC8[];
-extern const char D_004DA1E8[];
-extern const char D_004DA190[];
-extern const char D_004DA0D8[];
-extern const char D_004DA080[];
-extern const char D_004DA1F8[];
-extern const char D_004DA150[];
-extern const char D_004DA098[];
-extern const char D_004DA2A8[];
-extern const char D_004DA1F0[];
-extern const char D_004D9FA8[];
-extern const char D_004DA128[];
-extern const char D_004DA280[];
-extern const char D_004DA058[];
-extern const char D_004DA260[];
-extern const char D_004DA108[];
-extern const char D_004DA230[];
-extern const char D_004DA170[];
-extern const char D_004DA0F8[];
-extern const char D_004DA158[];
-extern const char D_004DA1C8[];
-extern const char D_004DA070[];
-extern const char D_004DA048[];
-extern const char D_004DA090[];
-extern const char D_004DA1B0[];
-extern const char D_004DA2C0[];
-extern const char D_004DA188[];
-extern const char D_004DA000[];
-extern const char D_004D9FF8[];
-extern const char D_004DA0A8[];
-extern const char D_004DA120[];
-extern const char D_004DA218[];
-extern const char D_004DA228[];
-extern const char D_004DA2C8[];
-extern const char D_004DA238[];
-extern const char D_004DA1C0[];
-extern const char D_004DA2B8[];
-extern const char D_004DA200[];
-extern const char D_004DA140[];
-extern const char D_004DA1A0[];
-extern const char D_004D9FD0[];
-extern const char D_004DA028[];
-extern const char D_004DA288[];
-extern const char D_004DA298[];
-extern const char D_004DA180[];
-extern const char D_004DA1A8[];
-extern const char D_004DA290[];
-extern const char D_004DA178[];
-extern const char D_004DA270[];
-extern const char D_004DA078[];
-extern const char D_004DA030[];
-extern const char D_004DA0F0[];
-extern const char D_004D9FE0[];
-extern const char D_004DA240[];
-extern const char D_004DA2A0[];
-extern const char D_004DA1B8[];
-extern const char D_004DA050[];
-extern const char D_004C0958[];
-extern const char D_004DA130[];
-extern const char D_004DA060[];
-extern const char D_004D9FB0[];
-extern const char D_004DA138[];
-extern const char D_004DA0C0[];
-extern const char D_004DA198[];
-extern const char D_004DA0E0[];
-extern const char D_004C0968[];
-extern const char D_004DA040[];
-extern const char D_004DA0A0[];
-extern const char D_004DA278[];
-extern const char D_004DA0D0[];
-extern const char D_004DA0B0[];
-extern const char D_004D9FD8[];
-extern const char D_004DA0B8[];
-extern const char D_004DA0C8[];
-extern const char D_004DA118[];
-extern const char D_004DA068[];
-extern const char D_004DA100[];
-extern const char D_004DA248[];
-extern const char D_004DA010[];
-extern const char D_004DA1D8[];
-extern const char D_004D9FB8[];
-
-static char test_21[33];
-
-static char test_22[21];
-
-static char test_23[33];
-
-static char test_24[31];
-
-static char test00_26[51];
-
-static char test01_27[51];
-
-static char test02_28[51];
-
-static char test03_29[51];
-
-static char test04_30[51];
-
-static char test05_31[51];
-
-static char test06_32[51];
-
-static char test07_33[56];
-
-static char test0_37[40];
-
-static char test1_38[19];
-
-static char test2_39[20];
-
-static char test3_40[36];
-
-static char test4_41[35];
-
-static char * name_43[103];
-
-extern const char D_004C07F0[24];
-
-extern char D_004C0808[32];
-
-extern char D_004C0828[16];
-
-extern char D_004C08E0[16];
-
-extern char D_004C08F0[16];
-
-extern char D_004C0900[24];
-
-extern char D_004C0918[16];
-
-extern char D_004C0928[16];
-
-extern char D_004C0938[16];
-
-extern const char D_004C0958[16];
-
-extern const char D_004C0968[16];
-
-extern char D_004C0A68[24];
-
-extern char D_004C13D8[16];
-
-extern char D_004C13E8[16];
-
-extern char D_004C13F8[16];
-
-extern char D_004C1408[16];
-
-extern char D_004C1418[40];
-
-static int rate_2_004D9F60;
-
-static int dir_3;
-
-static int rate_8;
-
-static int dir_9;
-
-static int width_35;
-
-extern char D_004D9F78[8];
-
-extern char D_004D9F90[8];
-
-extern char D_004D9F98[8];
-
-extern char D_004D9FA0[8];
-
-extern const char D_004D9FA8[8];
-
-extern const char D_004D9FB0[8];
-
-extern const char D_004D9FB8[8];
-
-extern const char D_004D9FC0[8];
-
-extern const char D_004D9FC8[8];
-
-extern const char D_004D9FD0[8];
-
-extern const char D_004D9FD8[8];
-
-extern const char D_004D9FE0[8];
-
-extern const char D_004D9FE8[8];
-
-extern const char D_004D9FF0[8];
-
-extern const char D_004D9FF8[8];
-
-extern const char D_004DA000[8];
-
-extern const char D_004DA008[8];
-
-extern const char D_004DA010[8];
-
-extern const char D_004DA018[8];
-
-extern const char D_004DA020[8];
-
-extern const char D_004DA028[8];
-
-extern const char D_004DA030[8];
-
-extern const char D_004DA038[8];
-
-extern const char D_004DA040[8];
-
-extern const char D_004DA048[8];
-
-extern const char D_004DA050[8];
-
-extern const char D_004DA058[8];
-
-extern const char D_004DA060[8];
-
-extern const char D_004DA068[8];
-
-extern const char D_004DA070[8];
-
-extern const char D_004DA078[8];
-
-extern const char D_004DA080[8];
-
-extern const char D_004DA088[8];
-
-extern const char D_004DA090[8];
-
-extern const char D_004DA098[8];
-
-extern const char D_004DA0A0[8];
-
-extern const char D_004DA0A8[8];
-
-extern const char D_004DA0B0[8];
-
-extern const char D_004DA0B8[8];
-
-extern const char D_004DA0C0[8];
-
-extern const char D_004DA0C8[8];
-
-extern const char D_004DA0D0[8];
-
-extern const char D_004DA0D8[8];
-
-extern const char D_004DA0E0[8];
-
-extern const char D_004DA0E8[8];
-
-extern const char D_004DA0F0[8];
-
-extern const char D_004DA0F8[8];
-
-extern const char D_004DA100[8];
-
-extern const char D_004DA108[8];
-
-extern const char D_004DA110[8];
-
-extern const char D_004DA118[8];
-
-extern const char D_004DA120[8];
-
-extern const char D_004DA128[8];
-
-extern const char D_004DA130[8];
-
-extern const char D_004DA138[8];
-
-extern const char D_004DA140[8];
-
-extern const char D_004DA148[8];
-
-extern const char D_004DA150[8];
-
-extern const char D_004DA158[8];
-
-extern const char D_004DA160[8];
-
-extern const char D_004DA168[8];
-
-extern const char D_004DA170[8];
-
-extern const char D_004DA178[8];
-
-extern const char D_004DA180[8];
-
-extern const char D_004DA188[8];
-
-extern const char D_004DA190[8];
-
-extern const char D_004DA198[8];
-
-extern const char D_004DA1A0[8];
-
-extern const char D_004DA1A8[8];
-
-extern const char D_004DA1B0[8];
-
-extern const char D_004DA1B8[8];
-
-extern const char D_004DA1C0[8];
-
-extern const char D_004DA1C8[8];
-
-extern const char D_004DA1D0[8];
-
-extern const char D_004DA1D8[8];
-
-extern const char D_004DA1E0[8];
-
-extern const char D_004DA1E8[8];
-
-extern const char D_004DA1F0[8];
-
-extern const char D_004DA1F8[8];
-
-extern const char D_004DA200[8];
-
-extern const char D_004DA208[8];
-
-extern const char D_004DA210[8];
-
-extern const char D_004DA218[8];
-
-extern const char D_004DA220[8];
-
-extern const char D_004DA228[8];
-
-extern const char D_004DA230[8];
-
-extern const char D_004DA238[8];
-
-extern const char D_004DA240[8];
-
-extern const char D_004DA248[8];
-
-extern const char D_004DA250[8];
-
-extern const char D_004DA258[8];
-
-extern const char D_004DA260[8];
-
-extern const char D_004DA268[8];
-
-extern const char D_004DA270[8];
-
-extern const char D_004DA278[8];
-
-extern const char D_004DA280[8];
-
-extern const char D_004DA288[8];
-
-extern const char D_004DA290[8];
-
-extern const char D_004DA298[8];
-
-extern const char D_004DA2A0[8];
-
-extern const char D_004DA2A8[8];
-
-extern const char D_004DA2B0[8];
-
-extern const char D_004DA2B8[8];
-
-extern const char D_004DA2C0[8];
-
-extern const char D_004DA2C8[8];
-
-static unsigned char test_1[22];
-
-static char test_4[16];
-
-static char test_5[16];
-
-static char test1_6[33];
-
-static char test2_7[15];
-
-static char test_10[13];
-
-static unsigned char txt_11[15];
-
-static unsigned char xy3_12[12];
-
-static unsigned char xy5_13[28];
-
-static unsigned char xy7_14[52];
-
-static unsigned char xy9_15[84];
-
-static char test_16[25];
-
-static char test_17[43];
-
-static char test_18[40];
-
-static char test_19[31];
-
-static char init_20[13];
-
-static char test_25[26];
-
-static UmlDispVertex TestEnv_42[6];
-
-extern char D_004C0838[80];
-
-extern char D_004C0888[24];
-
-extern char D_004C08A0[16];
-
-extern char D_004C08B0[32];
-
-extern char D_004C08D0[16];
-
-extern char D_004C0978[240];
-
-extern char D_004D9F88[8];
-
-static char h_50[7];
-
-static char test_36[6];
-
-static unsigned char tbl_49[4];
-
 /* JP: ＸＴＸデコード
  * EN: XTX decode */
-static char D_004C14B8[16] __attribute__((section(".rodata"))) = "\x0B\xA3\xD8\xA3\xD4\xA3\xD8\xA5\xC7\xA5\xB3\xA1\xBC\xA5\xC9";
+static const char xtxDecodeText[16] = "\x0B\xA3\xD8\xA3\xD4\xA3\xD8\xA5\xC7\xA5\xB3\xA1\xBC\xA5\xC9";
 
 /* JP: 起動時オプションでファイル名を指定してください
  * EN: Please specify a filename in the startup options. */
-static char D_004C14C8[48] __attribute__((section(".rodata"))) = "\x0B\xB5\xAF\xC6\xB0\xBB\xFE\xA5\xAA\xA5\xD7\xA5\xB7\xA5\xE7\xA5\xF3\xA4\xC7\xA5\xD5\xA5\xA1\xA5\xA4\xA5\xEB\xCC\xBE\xA4\xF2\xBB\xD8\xC4\xEA\xA4\xB7\xA4\xC6\xA4\xAF\xA4\xC0\xA4\xB5\xA4\xA4";
+static const char specifyFileNameText[48] = "\x0B\xB5\xAF\xC6\xB0\xBB\xFE\xA5\xAA\xA5\xD7\xA5\xB7\xA5\xE7\xA5\xF3\xA4\xC7\xA5\xD5\xA5\xA1\xA5\xA4\xA5\xEB\xCC\xBE\xA4\xF2\xBB\xD8\xC4\xEA\xA4\xB7\xA4\xC6\xA4\xAF\xA4\xC0\xA4\xB5\xA4\xA4";
 
 /* JP: 終了しました
  * EN: Finished */
-static char D_004C14F8[16] __attribute__((section(".rodata"))) = "\xBD\xAA\xCE\xBB\xA4\xB7\xA4\xDE\xA4\xB7\xA4\xBF";
+static const char xtxFinishedText[16] = "\xBD\xAA\xCE\xBB\xA4\xB7\xA4\xDE\xA4\xB7\xA4\xBF";
 
-const char D_004C1508[16] = "XTX DECODE";
+const char xtxDecodeLabel[16] = "XTX DECODE";
 
-static char D_004C1518[24] __attribute__((section(".rodata"))) = "%4d.%2d.%2d\n%2d.%2d.%2d";
+static const char clockDateTimeFormat[24] = "%4d.%2d.%2d\n%2d.%2d.%2d";

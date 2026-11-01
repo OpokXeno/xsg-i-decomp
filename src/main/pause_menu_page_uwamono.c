@@ -2,17 +2,17 @@
 
 #include "shared.h"
 
-#define D_004D7F88 (0.3926991f)
+#define PILLAR_SEGMENT_ANGLE (0.3926991f)
 
-#define D_004D7F8C (0.3926991f)
+#define PILLAR_CORNER_ANGLE (0.3926991f)
 
 extern float xglSin(float angle);
 
 extern float xglCos(float angle);
 
-#define D_004D7F80 (0.3f)
+#define COLL_POSITION_W (0.3f)
 
-#define D_004D7F84 (0.1f)
+#define COLL_CORNER_W (0.1f)
 
 typedef struct ItemBoxEntry {
     signed char category;
@@ -107,13 +107,13 @@ extern UwamonoGameStatePrefix GameLoopState;
 
 extern UwamonoDebugUnit MapUnit[64];
 
-extern const char D_004CA680[];
+extern const char PauseMenuFieldObjectLabel[];
 
-char D_004DB798[];
+char pauseMenuPageUwamonoCursorMarkerText[];
 
-const char D_004DB7A0[];
+const char eventItemNameFormat[];
 
-char D_004DB7D8[];
+char treasureChestText[];
 
 extern void UnlockMapUnit(void);
 
@@ -139,83 +139,83 @@ static int debmode;
 
 static int page_2;
 
-const char D_004CA698[];
+const char shotTrajectoryOnText[];
 
-const char D_004CA6B0[];
+const char shotTrajectoryOffText[];
 
-const char D_004CA6C8[];
+const char fieldObjectInfoOnText[];
 
-const char D_004CA6E0[];
+const char fieldObjectInfoOffText[];
 
-const char D_004CA6F8[];
+const char fieldObjectOutputOnText[];
 
-const char D_004CA710[];
+const char fieldObjectOutputOffText[];
 
-const char D_004CA728[];
+const char collisionDisplayOnText[];
 
-const char D_004CA740[];
+const char collisionDisplayOffText[];
 
-const char D_004CA758[];
+const char shootingFlagOnText[];
 
-const char D_004CA770[];
+const char shootingFlagOffText[];
 
-const char D_004CA788[];
+const char eventItemListText[];
 
-const char D_004CA7A0[];
+const char treasureChestListText[];
 
-const char D_004CA7E8[];
+const char pressCrossToReturnText[];
 
-const char D_004CA7F8[];
+const char eventItemRowFormat[];
 
 static int debmode = 0;
 
 /* JP: 射撃軌跡表示　　オン
  * EN: Shot trajectory display: On */
-const char D_004CA698[24] = "\xBC\xCD\xB7\xE2\xB5\xB0\xC0\xD7\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
+const char shotTrajectoryOnText[24] = "\xBC\xCD\xB7\xE2\xB5\xB0\xC0\xD7\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
 
 /* JP: 射撃軌跡表示　　オフ
  * EN: Shot trajectory display: Off */
-const char D_004CA6B0[24] = "\xBC\xCD\xB7\xE2\xB5\xB0\xC0\xD7\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
+const char shotTrajectoryOffText[24] = "\xBC\xCD\xB7\xE2\xB5\xB0\xC0\xD7\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
 
 /* JP: 上物情報表示　　オン
  * EN: Field object information display: On */
-const char D_004CA6C8[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
+const char fieldObjectInfoOnText[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
 
 /* JP: 上物情報表示　　オフ
  * EN: Field object information display: Off */
-const char D_004CA6E0[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
+const char fieldObjectInfoOffText[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
 
 /* JP: 上物情報出力　　オン
  * EN: Field object information output: On */
-const char D_004CA6F8[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xBD\xD0\xCE\xCF\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
+const char fieldObjectOutputOnText[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xBD\xD0\xCE\xCF\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
 
 /* JP: 上物情報出力　　オフ
  * EN: Field object information output: Off */
-const char D_004CA710[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xBD\xD0\xCE\xCF\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
+const char fieldObjectOutputOffText[24] = "\xBE\xE5\xCA\xAA\xBE\xF0\xCA\xF3\xBD\xD0\xCE\xCF\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
 
 /* JP: コリジョン表示　オン
  * EN: Collision display: On */
-const char D_004CA728[24] = "\xA5\xB3\xA5\xEA\xA5\xB8\xA5\xE7\xA5\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA5\xAA\xA5\xF3";
+const char collisionDisplayOnText[24] = "\xA5\xB3\xA5\xEA\xA5\xB8\xA5\xE7\xA5\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA5\xAA\xA5\xF3";
 
 /* JP: コリジョン表示　オフ
  * EN: Collision display: Off */
-const char D_004CA740[24] = "\xA5\xB3\xA5\xEA\xA5\xB8\xA5\xE7\xA5\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA5\xAA\xA5\xD5";
+const char collisionDisplayOffText[24] = "\xA5\xB3\xA5\xEA\xA5\xB8\xA5\xE7\xA5\xF3\xC9\xBD\xBC\xA8\xA1\xA1\xA5\xAA\xA5\xD5";
 
 /* JP: 射撃フラグ　　　オン
  * EN: Shooting flag: On */
-const char D_004CA758[24] = "\xBC\xCD\xB7\xE2\xA5\xD5\xA5\xE9\xA5\xB0\xA1\xA1\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
+const char shootingFlagOnText[24] = "\xBC\xCD\xB7\xE2\xA5\xD5\xA5\xE9\xA5\xB0\xA1\xA1\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xF3";
 
 /* JP: 射撃フラグ　　　オフ
  * EN: Shooting flag: Off */
-const char D_004CA770[24] = "\xBC\xCD\xB7\xE2\xA5\xD5\xA5\xE9\xA5\xB0\xA1\xA1\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
+const char shootingFlagOffText[24] = "\xBC\xCD\xB7\xE2\xA5\xD5\xA5\xE9\xA5\xB0\xA1\xA1\xA1\xA1\xA1\xA1\xA5\xAA\xA5\xD5";
 
 /* JP: イベントアイテム一覧
  * EN: Event item list */
-const char D_004CA788[24] = "\xA5\xA4\xA5\xD9\xA5\xF3\xA5\xC8\xA5\xA2\xA5\xA4\xA5\xC6\xA5\xE0\xB0\xEC\xCD\xF7";
+const char eventItemListText[24] = "\xA5\xA4\xA5\xD9\xA5\xF3\xA5\xC8\xA5\xA2\xA5\xA4\xA5\xC6\xA5\xE0\xB0\xEC\xCD\xF7";
 
 /* JP: 宝箱中身一覧
  * EN: Treasure chest contents list */
-const char D_004CA7A0[16] = "\xCA\xF5\xC8\xA2\xC3\xE6\xBF\xC8\xB0\xEC\xCD\xF7";
+const char treasureChestListText[16] = "\xCA\xF5\xC8\xA2\xC3\xE6\xBF\xC8\xB0\xEC\xCD\xF7";
 
 void PauseMenuPageUwamono(void)
 {
@@ -228,20 +228,20 @@ void PauseMenuPageUwamono(void)
         DebDispItemBox();
         return;
     }
-    xglFontDebugPrintf(16, 16, D_004CA680);
-    xglFontDebugPrintf(48, cursol * 16 + 32, D_004DB798);
-    if (lineflg != 0) xglFontDebugPrintf(64, 32, D_004CA698);
-    else xglFontDebugPrintf(64, 32, D_004CA6B0);
-    if (dispflg != 0) xglFontDebugPrintf(64, 48, D_004CA6C8);
-    else xglFontDebugPrintf(64, 48, D_004CA6E0);
-    if (printflg != 0) xglFontDebugPrintf(64, 64, D_004CA6F8);
-    else xglFontDebugPrintf(64, 64, D_004CA710);
-    if (collflg != 0) xglFontDebugPrintf(64, 80, D_004CA728);
-    else xglFontDebugPrintf(64, 80, D_004CA740);
-    if (GameLoopState.flags & 1) xglFontDebugPrintf(64, 96, D_004CA758);
-    else xglFontDebugPrintf(64, 96, D_004CA770);
-    xglFontDebugPrintf(64, 112, D_004CA788);
-    xglFontDebugPrintf(64, 128, D_004CA7A0);
+    xglFontDebugPrintf(16, 16, PauseMenuFieldObjectLabel);
+    xglFontDebugPrintf(48, cursol * 16 + 32, pauseMenuPageUwamonoCursorMarkerText);
+    if (lineflg != 0) xglFontDebugPrintf(64, 32, shotTrajectoryOnText);
+    else xglFontDebugPrintf(64, 32, shotTrajectoryOffText);
+    if (dispflg != 0) xglFontDebugPrintf(64, 48, fieldObjectInfoOnText);
+    else xglFontDebugPrintf(64, 48, fieldObjectInfoOffText);
+    if (printflg != 0) xglFontDebugPrintf(64, 64, fieldObjectOutputOnText);
+    else xglFontDebugPrintf(64, 64, fieldObjectOutputOffText);
+    if (collflg != 0) xglFontDebugPrintf(64, 80, collisionDisplayOnText);
+    else xglFontDebugPrintf(64, 80, collisionDisplayOffText);
+    if (GameLoopState.flags & 1) xglFontDebugPrintf(64, 96, shootingFlagOnText);
+    else xglFontDebugPrintf(64, 96, shootingFlagOffText);
+    xglFontDebugPrintf(64, 112, eventItemListText);
+    xglFontDebugPrintf(64, 128, treasureChestListText);
     if (PadData[0].pressed & 0x1000) {
         cursol--;
         if (cursol < 0) cursol = 6;
@@ -275,13 +275,15 @@ void PauseMenuPageUwamono(void)
     }
 }
 
-char D_004DB798[4] = "\xA1\xE4";
+/* JP: ＞
+ * EN: > */
+char pauseMenuPageUwamonoCursorMarkerText[4] = "\xA1\xE4";
 
 /* JP: ×ボタンで戻る
  * EN: Press the cross button to return */
-const char D_004CA7E8[16] = "\xA1\xDF\xA5\xDC\xA5\xBF\xA5\xF3\xA4\xC7\xCC\xE1\xA4\xEB";
+const char pressCrossToReturnText[16] = "\xA1\xDF\xA5\xDC\xA5\xBF\xA5\xF3\xA4\xC7\xCC\xE1\xA4\xEB";
 
-const char D_004CA7F8[16] = "%3d %s %c";
+const char eventItemRowFormat[16] = "%3d %s %c";
 
 void DebDispEvtItem(void)
 {
@@ -290,19 +292,19 @@ void DebDispEvtItem(void)
     int item_index;
     unsigned char *event_item;
 
-    xglFontDebugPrintf(16, 16, D_004CA788);
-    xglFontDebugPrintf(16, 32, D_004CA7E8);
+    xglFontDebugPrintf(16, 16, eventItemListText);
+    xglFontDebugPrintf(16, 32, pressCrossToReturnText);
     for (row = 0; row < 4; row++) {
         item_index = row + page * 4;
         if (item_index >= 255) {
             break;
         }
         event_item = &EvtItemTbl[item_index * 0x80];
-        xglFontDebugPrintf(4, 60 + row * 34, D_004CA7F8,
+        xglFontDebugPrintf(4, 60 + row * 34, eventItemRowFormat,
                            item_index + 1, event_item, (signed char)event_item[0]);
         while (*event_item++ != 0) {
         }
-        xglFontDebugPrintf(16, 72 + row * 34, D_004DB7A0, event_item);
+        xglFontDebugPrintf(16, 72 + row * 34, eventItemNameFormat, event_item);
     }
     if (PadData[0].repeat & 0x1000) {
         page--;
@@ -316,7 +318,7 @@ void DebDispEvtItem(void)
     debmode = (PadData[0].pressed & 0x40) ? 0 : debmode;
 }
 
-const char D_004DB7A0[4] = "%s";
+const char eventItemNameFormat[4] = "%s";
 
 static int page_2 = 0;
 
@@ -325,8 +327,8 @@ void DebDispItemBox(void)
     int row;
     int y = 60;
 
-    xglFontDebugPrintf(16, 16, D_004CA7A0);
-    xglFontDebugPrintf(16, 32, D_004CA7E8);
+    xglFontDebugPrintf(16, 16, treasureChestListText);
+    xglFontDebugPrintf(16, 32, pressCrossToReturnText);
     for (row = 0; row < 8; row++) {
         char amount_text[16];
         char chance_text[16];
@@ -494,7 +496,7 @@ void DispDebugUwamono(void)
                 xglFontDebugPrintf(x, y + 36, "\015\000\305\250\262\365 \241\337");
             break;
         case UWAMONO_TREASURE:
-            xglFontDebugPrintf(x, y + 12, D_004DB7D8);
+            xglFontDebugPrintf(x, y + 12, treasureChestText);
             {
                 int item = info->item;
 
@@ -572,8 +574,8 @@ void DispCollUwamono(void)
     colors[5] = 0;
     colors[6] = 0;
     colors[7] = 128;
-    position_w = D_004D7F80;
-    corner_w = D_004D7F84;
+    position_w = COLL_POSITION_W;
+    corner_w = COLL_CORNER_W;
     for (i = 0; i < 64; i++) {
         UwamonoInfo *info = &MapUnit[i].info;
         UwamonoDebugUnit *unit;
@@ -657,11 +659,11 @@ void DispPillar(Vector4 *base, Vector4 *step, const int *colors)
         /* Compute four local corners for each angular segment. */
         corners[0].vector = *base;
         corners[1].vector = *base;
-        angle = D_004D7F88;
+        angle = PILLAR_SEGMENT_ANGLE;
         angle *= (float)segment;
         corners[0].vector.x += xglSin(angle) * step->x;
         corners[0].vector.z += xglCos(angle) * step->x;
-        angle = D_004D7F8C;
+        angle = PILLAR_CORNER_ANGLE;
         angle *= (float)(segment + 1);
         corners[1].vector.x += xglSin(angle) * step->x;
         corners[1].vector.z += xglCos(angle) * step->x;
@@ -673,24 +675,6 @@ void DispPillar(Vector4 *base, Vector4 *step, const int *colors)
     } while (segment < 17);
 }
 
-char D_004DB798[4];
-const char D_004DB7A0[4];
 /* JP: 宝箱
  * EN: Treasure chest */
-char D_004DB7D8[8] = "\015\000\312\365\310\242";
-static int debmode;
-static int page_2;
-const char D_004CA698[24];
-const char D_004CA6B0[24];
-const char D_004CA6C8[24];
-const char D_004CA6E0[24];
-const char D_004CA6F8[24];
-const char D_004CA710[24];
-const char D_004CA728[24];
-const char D_004CA740[24];
-const char D_004CA758[24];
-const char D_004CA770[24];
-const char D_004CA788[24];
-const char D_004CA7A0[16];
-const char D_004CA7E8[16];
-const char D_004CA7F8[16];
+char treasureChestText[8] = "\015\000\312\365\310\242";

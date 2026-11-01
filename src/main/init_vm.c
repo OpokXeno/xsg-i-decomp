@@ -3,18 +3,17 @@
 
 extern JavaClass _dummyClass;
 
-
-const char D_004CD0C0[16] = "<clinit>";
-const char D_004CD0D0[16] = "SourceFile";
-const char D_004CD0E0[16] = "InnerClasses";
-const char D_004CD0F0[16] = "Exceotions";
-const char D_004CD100[16] = "LineNumberTable";
-const char D_004CD110[16] = "ConstantValue";
-const char D_004CD120[32] = "LocalVariableTable";
-const char D_004DBFE0[8] = "<init>";
-const char D_004DBFE8[8] = "()V";
-const char D_004DBFF0[8] = "(I)V";
-const char D_004DBFF8[8] = "Code";
+const char clinitName[16] = "<clinit>";
+const char sourceFileAttrName[16] = "SourceFile";
+const char innerClassesAttrName[16] = "InnerClasses";
+const char exceptionsAttrName[16] = "Exceotions";
+const char lineNumberTableAttrName[16] = "LineNumberTable";
+const char constantValueAttrName[16] = "ConstantValue";
+const char localVariableTableAttrName[32] = "LocalVariableTable";
+const char initVmConstructorName[8] = "<init>";
+const char voidMethodDescriptor[8] = "()V";
+const char intVoidMethodDescriptor[8] = "(I)V";
+const char codeAttrName[8] = "Code";
 /*
  * initBaseClasses and initPrimitiveTypes are file-local (LOCAL in the
  * original symbol table); initPrimitiveTypes stays asm, so both are
@@ -29,18 +28,18 @@ void initVM(void) {
     xheap_init(1, 0, 0);
     classEntryPool = 0;
     constStringTable = 0;
-    NAME_Init = loadConstString(D_004CD0C0, -1);
-    NAME_Constructor = loadConstString(D_004DBFE0, -1);
-    TYPE_Chr_talk = loadConstString(D_004DBFE8, -1);
-    TYPE_Stage_entered = loadConstString(D_004DBFF0, -1);
-    TYPE_Void = loadConstString(D_004DBFE8, -1);
-    ATTR_SourceFile = loadConstString(D_004CD0D0, -1);
-    ATTR_InnerClasses = loadConstString(D_004CD0E0, -1);
-    ATTR_Code = loadConstString(D_004DBFF8, -1);
-    ATTR_Exceptions = loadConstString(D_004CD0F0, -1);
-    ATTR_LineNumberTable = loadConstString(D_004CD100, -1);
-    ATTR_ConstantValue = loadConstString(D_004CD110, -1);
-    ATTR_LocalVariableTable = loadConstString(D_004CD120, -1);
+    NAME_Init = loadConstString(clinitName, -1);
+    NAME_Constructor = loadConstString(initVmConstructorName, -1);
+    TYPE_Chr_talk = loadConstString(voidMethodDescriptor, -1);
+    TYPE_Stage_entered = loadConstString(intVoidMethodDescriptor, -1);
+    TYPE_Void = loadConstString(voidMethodDescriptor, -1);
+    ATTR_SourceFile = loadConstString(sourceFileAttrName, -1);
+    ATTR_InnerClasses = loadConstString(innerClassesAttrName, -1);
+    ATTR_Code = loadConstString(codeAttrName, -1);
+    ATTR_Exceptions = loadConstString(exceptionsAttrName, -1);
+    ATTR_LineNumberTable = loadConstString(lineNumberTableAttrName, -1);
+    ATTR_ConstantValue = loadConstString(constantValueAttrName, -1);
+    ATTR_LocalVariableTable = loadConstString(localVariableTableAttrName, -1);
     jthreadResetFunc = 0;
     jthreadTop = 0;
     initVMThread = JNI_createThread(0, 8, 0x40);
@@ -198,7 +197,6 @@ enum {
 #define VM_ACC_STATIC 0x8
 #define VM_ACC_NATIVE 0x100
 
-
 typedef struct VMSlots {
     short top;
     unsigned short size;
@@ -276,7 +274,6 @@ typedef struct VMFieldRef {
     VMField *field;
     unsigned char unmodeled_08[8];
 } VMFieldRef;
-
 
 extern void resolveNativeMethod(VMMethod *method);
 extern void JNI_callMethod(VMThread *thread, VMMethod *method, VMSlot *arguments, VMSlot *result);
@@ -1361,15 +1358,15 @@ void virtualMachine(SceneVm *vm, VMMethod *method, VMSlot *arguments, VMSlot *re
 }
 
 /* These class names follow virtualMachine's generated opcode dispatch tables. */
-const char D_004CD628[24] = "java/lang/Object";
-const char D_004CD640[24] = "java/lang/StringBuffer";
-const char D_004CD658[24] = "java/lang/String";
+const char objectClassName[24] = "java/lang/Object";
+const char stringBufferClassName[24] = "java/lang/StringBuffer";
+const char stringClassName[24] = "java/lang/String";
 
 static void initBaseClasses(void) {
     initPrimitiveTypes();
-    loadStaticClass(&classObject, D_004CD628);
-    loadStaticClass(&classStringBuffer, D_004CD640);
-    loadStaticClass(&classString, D_004CD658);
+    loadStaticClass(&classObject, objectClassName);
+    loadStaticClass(&classStringBuffer, stringBufferClassName);
+    loadStaticClass(&classString, stringClassName);
 }
 
 extern VMClass *classBoolean;
@@ -1380,27 +1377,27 @@ extern VMClass *classInt;
 extern VMClass *classLong;
 extern VMClass *classFloat;
 extern VMClass *classDouble;
-extern const char D_004DC000[];
-extern const char D_004DC008[];
-extern const char D_004DC010[];
-extern const char D_004DC018[];
-extern const char D_004DC020[];
-extern const char D_004DC028[];
-extern const char D_004DC030[];
-extern const char D_004DC038[];
+extern const char booleanTypeName[];
+extern const char byteTypeName[];
+extern const char charTypeName[];
+extern const char shortTypeName[];
+extern const char intTypeName[];
+extern const char longTypeName[];
+extern const char floatTypeName[];
+extern const char doubleTypeName[];
 
 static void initWrapperClass(VMClass **class_slot, const char *name,
                               signed char type_code, int element_size);
 
 static void initPrimitiveTypes(void) {
-    initWrapperClass(&classBoolean, D_004DC000, 'Z', 1);
-    initWrapperClass(&classByte, D_004DC008, 'B', 1);
-    initWrapperClass(&classChar, D_004DC010, 'C', 2);
-    initWrapperClass(&classShort, D_004DC018, 'S', 2);
-    initWrapperClass(&classInt, D_004DC020, 'I', 4);
-    initWrapperClass(&classLong, D_004DC028, 'J', 8);
-    initWrapperClass(&classFloat, D_004DC030, 'F', 4);
-    initWrapperClass(&classDouble, D_004DC038, 'D', 8);
+    initWrapperClass(&classBoolean, booleanTypeName, 'Z', 1);
+    initWrapperClass(&classByte, byteTypeName, 'B', 1);
+    initWrapperClass(&classChar, charTypeName, 'C', 2);
+    initWrapperClass(&classShort, shortTypeName, 'S', 2);
+    initWrapperClass(&classInt, intTypeName, 'I', 4);
+    initWrapperClass(&classLong, longTypeName, 'J', 8);
+    initWrapperClass(&classFloat, floatTypeName, 'F', 4);
+    initWrapperClass(&classDouble, doubleTypeName, 'D', 8);
 
     primitiveClassTable[4] = classBoolean;
     primitiveClassTable[8] = classByte;
@@ -1430,14 +1427,14 @@ static void initWrapperClass(VMClass **class_slot, const char *name,
 }
 
 /* Keep these small-data definitions after their original external uses. */
-const char D_004DC000[8] = "boolean";
-const char D_004DC008[8] = "byte";
-const char D_004DC010[8] = "char";
-const char D_004DC018[8] = "short";
-const char D_004DC020[8] = "int";
-const char D_004DC028[8] = "long";
-const char D_004DC030[8] = "float";
-const char D_004DC038[8] = "double";
+const char booleanTypeName[8] = "boolean";
+const char byteTypeName[8] = "byte";
+const char charTypeName[8] = "char";
+const char shortTypeName[8] = "short";
+const char intTypeName[8] = "int";
+const char longTypeName[8] = "long";
+const char floatTypeName[8] = "float";
+const char doubleTypeName[8] = "double";
 
 /* Keep the pointer's original zero-initialized storage after its extern uses. */
 VMClass *classBoolean = 0;
@@ -1462,6 +1459,7 @@ SceneString *TYPE_Stage_entered;
 void *jthreadTop;
 VMClass *classByte;
 VMClass *classChar;
+VMClass *classVoid;
 VMClass *classShort;
 void (*jthreadResetFunc)(void);
 void *initVMThread;
@@ -1473,3 +1471,7 @@ VMClass *classLong;
 SceneClass *classString;
 VMClass *classInt;
 VMClass *primitiveClassTable[16];
+
+/* 0x0099D510, 0x400 bytes of COMMON storage allocated after primitiveClassTable;
+   no MAIN function reads it. */
+float key_value[256];

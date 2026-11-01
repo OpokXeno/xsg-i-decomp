@@ -224,9 +224,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 return;
             }
             case 'D': {
-                float size = D_004D8614;
+                float size = exmHairAnDSize;
                 float unitSize = 1.0f;
-                float footRadius = D_004D8618;
+                float footRadius = exmHairAnDFootRadius;
                 collibuf[0] = humancol;
                 skirtColliSizeB = skirtColliSize = size;
                 skirtColliSizeS = unitSize;
@@ -245,7 +245,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
             }
             break;
         case 'B': {
-            float footRadius = D_004D861C;
+            float footRadius = exmHairAbFootRadius;
             collibuf[0] = abelcol;
             skirtColliSizeS = skirtColliSizeB = skirtColliSize = 1.0f;
             skirtColliFootRad = footRadius;
@@ -262,8 +262,8 @@ void EXM_PresetHair(ExMotionJointWork *work)
         }
         case 'S': {
             float unitSize = 1.0f;
-            float backSize = D_004D8620;
-            float footRadius = D_004D8624;
+            float backSize = exmHairAsBackSize;
+            float footRadius = exmHairAsFootRadius;
             skirtColliSizeB = backSize;
             skirtColliSizeS = skirtColliSize = unitSize;
             skirtColliFootRad = footRadius;
@@ -280,9 +280,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
         switch (name[1]) {
         case 'R':
             if (lastLetter == 'D') {
-                skirtColliSize = D_004D8628;
+                skirtColliSize = exmHairBrDSkirtColliSize;
                 skirtColliSizeS = skirtColliSizeB = 1.0f;
-                skirtColliFootRad = D_004D862C;
+                skirtColliFootRad = exmHairBrDSkirtColliFootRad;
                 htypebuf[0].flags = 0x10c00;
                 htypebuf[0].kind = 16;
                 break;
@@ -299,10 +299,10 @@ void EXM_PresetHair(ExMotionJointWork *work)
         case 'O':
             switch (name[5]) {
             case '2':
-                skirtColliSize = D_004D8630;
+                skirtColliSize = exmHairBo2SkirtColliSize;
                 startjnt = 136;
                 skirtColliSizeS = skirtColliSizeB = 1.0f;
-                skirtColliFootRad = D_004D8634;
+                skirtColliFootRad = exmHairBo2SkirtColliFootRad;
                 htypebuf[0].flags = 0x1480;
                 htypebuf[1].flags = 0x2480;
                 htypebuf[2].flags = 0x4480;
@@ -359,9 +359,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
             }
             break;
         case 'L': {
-            float size = D_004D8638;
+            float size = exmHairClSize;
             float unitSize = 1.0f;
-            float footRadius = D_004D863C;
+            float footRadius = exmHairClFootRadius;
             skirtColliSizeB = skirtColliSize = size;
             skirtColliSizeS = unitSize;
             skirtColliFootRad = footRadius;
@@ -373,9 +373,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
         }
         break;
     case 'E': {
-        float size = D_004D8640;
+        float size = exmHairESize;
         float unitSize = 1.0f;
-        float footRadius = D_004D8644;
+        float footRadius = exmHairEFootRadius;
         collibuf[0] = ellycol;
         skirtColliSizeB = skirtColliSize = size;
         skirtColliSizeS = unitSize;
@@ -401,10 +401,10 @@ void EXM_PresetHair(ExMotionJointWork *work)
             htypebuf[0].kind = htypebuf[1].kind = 5;
             break;
         case 'E':
-            skirtColliSize = D_004D8648;
-            skirtColliSizeB = D_004D864C;
+            skirtColliSize = exmHairFrSkirtColliSize;
+            skirtColliSizeB = exmHairFrSkirtColliSizeB;
             skirtColliSizeS = 1.0f;
-            skirtColliFootRad = D_004D8650;
+            skirtColliFootRad = exmHairFrSkirtColliFootRad;
             htypebuf[0].flags = 0x5400;
             htypebuf[1].flags = 0x6400;
             htypebuf[2].flags = 0x11c00;
@@ -431,9 +431,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
             htypebuf[5].kind = 8;
             break;
         case 'I':
-            skirtColliSize = D_004D8654;
+            skirtColliSize = exmHairGiSkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
-            skirtColliFootRad = D_004D8658;
+            skirtColliFootRad = exmHairGiSkirtColliFootRad;
             htypebuf[0].flags = 0x25400;
             htypebuf[1].flags = 0x26400;
             htypebuf[2].flags = 0x11c00;
@@ -450,10 +450,10 @@ void EXM_PresetHair(ExMotionJointWork *work)
             break;
         case 'E':
             collibuf[0] = helmercol;
-            skirtColliSize = D_004D865C;
-            skirtColliSizeB = D_004D8660;
+            skirtColliSize = exmHairHeSkirtColliSize;
+            skirtColliSizeB = exmHairHeSkirtColliSizeB;
             skirtColliSizeS = 1.0f;
-            skirtColliFootRad = D_004D8664;
+            skirtColliFootRad = exmHairHeSkirtColliFootRad;
             htypebuf[0].flags = 0x5400;
             htypebuf[1].flags = 0x6400;
             htypebuf[2].flags = 0x11c00;
@@ -478,10 +478,10 @@ void EXM_PresetHair(ExMotionJointWork *work)
         }
         break;
     case 'I':
-        skirtColliSize = D_004D8668;
-        skirtColliSizeB = D_004D866C;
+        skirtColliSize = exmHairISkirtColliSize;
+        skirtColliSizeB = exmHairISkirtColliSizeB;
         skirtColliSizeS = 1.0f;
-        skirtColliFootRad = D_004D8670;
+        skirtColliFootRad = exmHairISkirtColliFootRad;
         htypebuf[0].flags = 0x25400;
         htypebuf[1].flags = 0x26400;
         htypebuf[2].flags = 0x11c00;
@@ -496,9 +496,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 htypebuf[0].flags = 0;
                 return;
             }
-            skirtColliSize = D_004D8674;
+            skirtColliSize = exmHairJr1SkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
-            skirtColliFootRad = D_004D8678;
+            skirtColliFootRad = exmHairJr1SkirtColliFootRad;
             htypebuf[0].flags = 0x4400;
             htypebuf[1].flags = 0x1400;
             htypebuf[2].flags = 0x2400;
@@ -558,9 +558,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                 collibuf[0] = defaultPalette;
                 if (lastLetter == 'N') {
                     skirtColliSize = 2.0f;
-                    skirtColliSizeB = D_004D867C;
-                    skirtColliSizeS = D_004D8680;
-                    skirtColliFootRad = D_004D8684;
+                    skirtColliSizeB = exmHairKeNSkirtColliSizeB;
+                    skirtColliSizeS = exmHairKeNSkirtColliSizeS;
+                    skirtColliFootRad = exmHairKeNSkirtColliFootRad;
                     htypebuf[0].flags = 0x4400;
                     htypebuf[1].flags = 0x9400;
                     htypebuf[2].flags = 0xa400;
@@ -604,9 +604,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                     htypebuf[10].kind = 8;
                     return;
                 }
-                skirtColliSize = D_004D8688;
+                skirtColliSize = exmHairMoHmSkirtColliSize;
                 skirtColliSizeS = skirtColliSizeB = 1.0f;
-                skirtColliFootRad = D_004D868C;
+                skirtColliFootRad = exmHairMoHmSkirtColliFootRad;
                 htypebuf[0].flags = 0x4400;
                 htypebuf[1].flags = 0xc00;
                 htypebuf[1].kind = htypebuf[0].kind = 16;
@@ -682,9 +682,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
     case 'O':
         switch (name[1]) {
         case 'B':
-            skirtColliSize = D_004D869C;
+            skirtColliSize = exmHairObSkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
-            skirtColliFootRad = D_004D86A0;
+            skirtColliFootRad = exmHairObSkirtColliFootRad;
             htypebuf[0].flags = 0x5400;
             htypebuf[1].flags = 0x6400;
             htypebuf[2].flags = 0x1c00;
@@ -735,9 +735,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
                     if (lastLetter == 'H') {
                         if (name[6] == 'C') {
                             collibuf[0] = shionchcol;
-                            skirtColliSize = D_004D86AC;
+                            skirtColliSize = exmHairShioCSkirtColliSize;
                             skirtColliSizeS = skirtColliSizeB = 1.0f;
-                            skirtColliFootRad = D_004D86B0;
+                            skirtColliFootRad = exmHairShioCSkirtColliFootRad;
                             htypebuf[0].flags = 0x5400;
                             htypebuf[1].flags = 0x6400;
                             htypebuf[2].flags = 0x11c00;
@@ -813,9 +813,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
             }
             break;
         case 'E':
-            skirtColliSize = D_004D86B4;
+            skirtColliSize = exmHairSeSkirtColliSize;
             skirtColliSizeS = skirtColliSizeB = 1.0f;
-            skirtColliFootRad = D_004D86B8;
+            skirtColliFootRad = exmHairSeSkirtColliFootRad;
             htypebuf[0].flags = 0x5400;
             htypebuf[1].flags = 0x6400;
             htypebuf[2].flags = 0x1c00;
@@ -849,9 +849,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
         break;
     case 'V':
         skirtColliSize = 2.0f;
-        skirtColliSizeB = D_004D86BC;
-        skirtColliSizeS = D_004D86C0;
-        skirtColliFootRad = D_004D86C4;
+        skirtColliSizeB = exmHairVSkirtColliSizeB;
+        skirtColliSizeS = exmHairVSkirtColliSizeS;
+        skirtColliFootRad = exmHairVSkirtColliFootRad;
         htypebuf[0].flags = 0x4400;
         htypebuf[1].flags = 0x9400;
         htypebuf[2].flags = 0xa400;
@@ -862,9 +862,9 @@ void EXM_PresetHair(ExMotionJointWork *work)
         break;
     case 'W':
         skirtColliSize = 1.5f;
-        skirtColliSizeB = D_004D86C8;
+        skirtColliSizeB = exmHairWSkirtColliSizeB;
         skirtColliSizeS = 1.0f;
-        skirtColliFootRad = D_004D86CC;
+        skirtColliFootRad = exmHairWSkirtColliFootRad;
         htypebuf[0].flags = 0x5400;
         htypebuf[1].flags = 0x6400;
         htypebuf[2].flags = 0x11c00;
@@ -873,7 +873,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
         break;
     case 'Y':
         skirtColliSizeS = skirtColliSizeB = skirtColliSize = 1.0f;
-        skirtColliFootRad = D_004D86D0;
+        skirtColliFootRad = exmHairYSkirtColliFootRad;
         htypebuf[0].flags = 0x5400;
         htypebuf[1].flags = 0x6400;
         htypebuf[2].flags = 0x1c00;
@@ -2095,7 +2095,6 @@ void EXM_SetDelayMovedHair(Actor *actor, float delay)
     }
 }
 
-
 static ExCollisionPrimitive shioncol[5] = {
     { .joint = 48, .kind = 1, .start = { 0.029999999329447746f, -0.10000000149011612f, 0.0f, 0.10999999940395355f } },
     { .joint = 51, .kind = 2, .start = { -0.05000000074505806f, 0.0099999997764825821f, 0.0099999997764825821f, 0.075000002980232239f }, .end = { 0.14000000059604645f, -0.0099999997764825821f, -0.0099999997764825821f, 0.059999998658895493f } },
@@ -2232,97 +2231,95 @@ static ExCollisionPrimitive robotcol[2] = {
     { 0 }
 };
 
+static ExHairParameters hairpara[22] = { { .gravity = 0.019999999552965164f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 1.0f, 1.0f, 1.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 100.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.019999999552965164f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.029999999329447746f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.69999998807907104f, 0.69999998807907104f, 0.69999998807907104f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.60000002384185791f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.019999999552965164f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.30000001192092896f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 1.0f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.69999998807907104f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 1.0f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.2000000476837158f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.5f, 0.5f, 0.5f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 2.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.5f, 0.5f, 0.5f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.7000000476837158f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.029999999329447746f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 2.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.0f, 0.0f, 0.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.20000000298023224f, 0.20000000298023224f, 0.20000000298023224f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.039999999105930328f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.69999998807907104f, 0.69999998807907104f, 0.69999998807907104f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.20000000298023224f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.5f, 0.5f, 0.5f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.10000000149011612f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.5f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.20000000298023224f, 0.20000000298023224f, 0.20000000298023224f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.30000001192092896f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.75f, 0.75f, 0.75f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.94999998807907104f, 0.94999998807907104f, 0.94999998807907104f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 2.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 0.10000000149011612f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.0f, 0.0f, 0.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.0099999997764825821f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.0f, 0.0f, 0.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } };
 
+static float JR_coatAdjust[3] = { 0.098499998450279236f, 0.12849999964237213f, 0.19850000739097595f };
 
-static ExHairParameters hairpara[22] __attribute__((section(".data"))) = { { .gravity = 0.019999999552965164f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 1.0f, 1.0f, 1.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 100.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.019999999552965164f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.029999999329447746f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.69999998807907104f, 0.69999998807907104f, 0.69999998807907104f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.60000002384185791f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.019999999552965164f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.30000001192092896f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 1.0f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.69999998807907104f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 1.0f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.2000000476837158f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.5f, 0.5f, 0.5f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 2.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.5f, 0.5f, 0.5f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.80000001192092896f, 0.80000001192092896f, 0.80000001192092896f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.7000000476837158f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.029999999329447746f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 2.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.0f, 0.0f, 0.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.20000000298023224f, 0.20000000298023224f, 0.20000000298023224f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.039999999105930328f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.69999998807907104f, 0.69999998807907104f, 0.69999998807907104f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.20000000298023224f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.5f, 0.5f, 0.5f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.10000000149011612f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.5f, .length_response = 1.0f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0099999997764825821f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.20000000298023224f, 0.20000000298023224f, 0.20000000298023224f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 1.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.89999997615814209f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.89999997615814209f, 0.89999997615814209f, 0.89999997615814209f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.30000001192092896f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.75f, 0.75f, 0.75f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.80000001192092896f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.94999998807907104f, 0.94999998807907104f, 0.94999998807907104f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 2.0f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.05000000074505806f, .length_response = 0.10000000149011612f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.0f, 0.0f, 0.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, { .gravity = 0.0f, .length_response = 0.0099999997764825821f, .unmodeled_008 = { 0, 0, 0, 0, 0, 0, 0, 0 }, .response = { 0.0f, 0.0f, 0.0f }, .unmodeled_01c = { 0, 0, 0, 0 }, .chain_response = 0.5f, .unmodeled_024 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } };
+const float exmHairAnDSize = 1.1000000238418579f;
 
-static float JR_coatAdjust[3] __attribute__((section(".data"))) = { 0.098499998450279236f, 0.12849999964237213f, 0.19850000739097595f };
+const float exmHairAnDFootRadius = 0.05000000074505806f;
 
-const float D_004D8614 = 1.1000000238418579f;
+const float exmHairAbFootRadius = 0.05000000074505806f;
 
-const float D_004D8618 = 0.05000000074505806f;
+const float exmHairAsBackSize = 0.80000001192092896f;
 
-const float D_004D861C = 0.05000000074505806f;
+const float exmHairAsFootRadius = 0.05000000074505806f;
 
-const float D_004D8620 = 0.80000001192092896f;
+const float exmHairBrDSkirtColliSize = 1.2999999523162842f;
 
-const float D_004D8624 = 0.05000000074505806f;
+const float exmHairBrDSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D8628 = 1.2999999523162842f;
+const float exmHairBo2SkirtColliSize = 1.3999999761581421f;
 
-const float D_004D862C = 0.05000000074505806f;
+const float exmHairBo2SkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D8630 = 1.3999999761581421f;
+const float exmHairClSize = 1.1000000238418579f;
 
-const float D_004D8634 = 0.05000000074505806f;
+const float exmHairClFootRadius = 0.070000000298023224f;
 
-const float D_004D8638 = 1.1000000238418579f;
+const float exmHairESize = 1.1000000238418579f;
 
-const float D_004D863C = 0.070000000298023224f;
+const float exmHairEFootRadius = 0.070000000298023224f;
 
-const float D_004D8640 = 1.1000000238418579f;
+const float exmHairFrSkirtColliSize = 1.3999999761581421f;
 
-const float D_004D8644 = 0.070000000298023224f;
+const float exmHairFrSkirtColliSizeB = 1.1000000238418579f;
 
-const float D_004D8648 = 1.3999999761581421f;
+const float exmHairFrSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D864C = 1.1000000238418579f;
+const float exmHairGiSkirtColliSize = 1.3999999761581421f;
 
-const float D_004D8650 = 0.05000000074505806f;
+const float exmHairGiSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D8654 = 1.3999999761581421f;
+const float exmHairHeSkirtColliSize = 1.7000000476837158f;
 
-const float D_004D8658 = 0.05000000074505806f;
+const float exmHairHeSkirtColliSizeB = 1.1000000238418579f;
 
-const float D_004D865C = 1.7000000476837158f;
+const float exmHairHeSkirtColliFootRad = 0.10000000149011612f;
 
-const float D_004D8660 = 1.1000000238418579f;
+const float exmHairISkirtColliSize = 1.3999999761581421f;
 
-const float D_004D8664 = 0.10000000149011612f;
+const float exmHairISkirtColliSizeB = 0.80000001192092896f;
 
-const float D_004D8668 = 1.3999999761581421f;
+const float exmHairISkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D866C = 0.80000001192092896f;
+const float exmHairJr1SkirtColliSize = 1.3999999761581421f;
 
-const float D_004D8670 = 0.05000000074505806f;
+const float exmHairJr1SkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D8674 = 1.3999999761581421f;
+const float exmHairKeNSkirtColliSizeB = 0.40000000596046448f;
 
-const float D_004D8678 = 0.05000000074505806f;
+const float exmHairKeNSkirtColliSizeS = 0.60000002384185791f;
 
-const float D_004D867C = 0.40000000596046448f;
+const float exmHairKeNSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D8680 = 0.60000002384185791f;
+const float exmHairMoHmSkirtColliSize = 1.1000000238418579f;
 
-const float D_004D8684 = 0.05000000074505806f;
+const float exmHairMoHmSkirtColliFootRad = 0.059999998658895493f;
 
-const float D_004D8688 = 1.1000000238418579f;
+const float exmHairObSkirtColliSize = 1.2999999523162842f;
 
-const float D_004D868C = 0.059999998658895493f;
+const float exmHairObSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D869C = 1.2999999523162842f;
+const float exmHairShioCSkirtColliSize = 1.2999999523162842f;
 
-const float D_004D86A0 = 0.05000000074505806f;
+const float exmHairShioCSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D86AC = 1.2999999523162842f;
+const float exmHairSeSkirtColliSize = 1.3999999761581421f;
 
-const float D_004D86B0 = 0.05000000074505806f;
+const float exmHairSeSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D86B4 = 1.3999999761581421f;
+const float exmHairVSkirtColliSizeB = 0.40000000596046448f;
 
-const float D_004D86B8 = 0.05000000074505806f;
+const float exmHairVSkirtColliSizeS = 0.60000002384185791f;
 
-const float D_004D86BC = 0.40000000596046448f;
+const float exmHairVSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D86C0 = 0.60000002384185791f;
+const float exmHairWSkirtColliSizeB = 0.80000001192092896f;
 
-const float D_004D86C4 = 0.05000000074505806f;
+const float exmHairWSkirtColliFootRad = 0.05000000074505806f;
 
-const float D_004D86C8 = 0.80000001192092896f;
-
-const float D_004D86CC = 0.05000000074505806f;
-
-const float D_004D86D0 = 0.05000000074505806f;
+const float exmHairYSkirtColliFootRad = 0.05000000074505806f;
 
 static void * collibuf[1] = { 0 };
 

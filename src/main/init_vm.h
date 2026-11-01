@@ -99,21 +99,21 @@ extern void *jthreadTop;
  * a time; no instruction in initVM reads any of it back. */
 extern unsigned short XTK_peerGroup[4];
 
-extern const char D_004CD0C0[]; /* "<clinit>" */
-extern const char D_004CD0D0[]; /* "SourceFile" */
-extern const char D_004CD0E0[]; /* "InnerClasses" */
-extern const char D_004CD0F0[]; /* "Exceotions" */
-extern const char D_004CD100[]; /* "LineNumberTable" */
-extern const char D_004CD110[]; /* "ConstantValue" */
-extern const char D_004CD120[]; /* "LocalVariableTable" */
-extern const char D_004DBFE0[]; /* "<init>" */
-extern const char D_004DBFE8[]; /* "()V" */
-extern const char D_004DBFF0[]; /* "(I)V" */
-extern const char D_004DBFF8[]; /* "Code" */
+extern const char clinitName[]; /* "<clinit>" */
+extern const char sourceFileAttrName[]; /* "SourceFile" */
+extern const char innerClassesAttrName[]; /* "InnerClasses" */
+extern const char exceptionsAttrName[]; /* "Exceotions" */
+extern const char lineNumberTableAttrName[]; /* "LineNumberTable" */
+extern const char constantValueAttrName[]; /* "ConstantValue" */
+extern const char localVariableTableAttrName[]; /* "LocalVariableTable" */
+extern const char initVmConstructorName[]; /* "<init>" */
+extern const char voidMethodDescriptor[]; /* "()V" */
+extern const char intVoidMethodDescriptor[]; /* "(I)V" */
+extern const char codeAttrName[]; /* "Code" */
 
 
-extern const char D_004CD628[]; /* "java/lang/Object" */
-extern const char D_004CD640[]; /* "java/lang/StringBuffer" */
-extern const char D_004CD658[]; /* "java/lang/String" */
+extern const char objectClassName[]; /* "java/lang/Object" */
+extern const char stringBufferClassName[]; /* "java/lang/StringBuffer" */
+extern const char stringClassName[]; /* "java/lang/String" */
 
 #endif /* INIT_VM_RECOVERY_PRIVATE_H */
