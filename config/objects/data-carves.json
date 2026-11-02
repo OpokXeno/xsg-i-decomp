@@ -264437,8 +264437,8 @@
             {
               "section": ".data",
               "object_range": [
-                880,
-                922
+                1408,
+                1450
               ],
               "range": [
                 "0x00a09230",
@@ -264468,8 +264468,8 @@
             {
               "section": ".data",
               "object_range": [
-                928,
-                970
+                1456,
+                1498
               ],
               "range": [
                 "0x00a09260",
@@ -264499,8 +264499,8 @@
             {
               "section": ".data",
               "object_range": [
-                976,
-                1018
+                1504,
+                1546
               ],
               "range": [
                 "0x00a09290",
@@ -264530,8 +264530,8 @@
             {
               "section": ".data",
               "object_range": [
-                1024,
-                1066
+                1552,
+                1594
               ],
               "range": [
                 "0x00a092c0",
@@ -264561,8 +264561,8 @@
             {
               "section": ".data",
               "object_range": [
-                1072,
-                1114
+                1600,
+                1642
               ],
               "range": [
                 "0x00a092f0",
@@ -264592,8 +264592,8 @@
             {
               "section": ".data",
               "object_range": [
-                1120,
-                1162
+                1648,
+                1690
               ],
               "range": [
                 "0x00a09320",
@@ -264623,8 +264623,8 @@
             {
               "section": ".data",
               "object_range": [
-                1168,
-                1210
+                1696,
+                1738
               ],
               "range": [
                 "0x00a09350",
@@ -264654,8 +264654,8 @@
             {
               "section": ".data",
               "object_range": [
-                1216,
-                1258
+                1744,
+                1786
               ],
               "range": [
                 "0x00a09380",
@@ -264685,8 +264685,8 @@
             {
               "section": ".data",
               "object_range": [
-                1264,
-                1306
+                1792,
+                1834
               ],
               "range": [
                 "0x00a093b0",
@@ -264716,8 +264716,8 @@
             {
               "section": ".data",
               "object_range": [
-                1312,
-                1354
+                1840,
+                1882
               ],
               "range": [
                 "0x00a093e0",
@@ -264747,8 +264747,8 @@
             {
               "section": ".data",
               "object_range": [
-                1360,
-                1402
+                1888,
+                1930
               ],
               "range": [
                 "0x00a09410",
@@ -264778,8 +264778,8 @@
             {
               "section": ".data",
               "object_range": [
-                1408,
-                1450
+                1936,
+                1978
               ],
               "range": [
                 "0x00a09440",
@@ -264809,8 +264809,8 @@
             {
               "section": ".data",
               "object_range": [
-                1456,
-                1498
+                1984,
+                2026
               ],
               "range": [
                 "0x00a09470",
@@ -264840,8 +264840,8 @@
             {
               "section": ".data",
               "object_range": [
-                1504,
-                1546
+                2032,
+                2074
               ],
               "range": [
                 "0x00a094a0",
@@ -264871,8 +264871,8 @@
             {
               "section": ".data",
               "object_range": [
-                1552,
-                1594
+                2080,
+                2122
               ],
               "range": [
                 "0x00a094d0",
@@ -264902,8 +264902,8 @@
             {
               "section": ".data",
               "object_range": [
-                1600,
-                1642
+                2128,
+                2170
               ],
               "range": [
                 "0x00a09500",
@@ -264933,8 +264933,8 @@
             {
               "section": ".data",
               "object_range": [
-                1648,
-                1690
+                2176,
+                2218
               ],
               "range": [
                 "0x00a09530",
@@ -264964,8 +264964,8 @@
             {
               "section": ".data",
               "object_range": [
-                1696,
-                1738
+                2224,
+                2266
               ],
               "range": [
                 "0x00a09560",
@@ -265104,6 +265104,96 @@
         },
         {
           "range": [
+            "0x00a09f10",
+            "0x00a0a028"
+          ],
+          "generated": [
+            "0x00a09f10",
+            "0x00a0a028"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "GuidPtTex"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a09f10",
+                "0x00a0a028"
+              ],
+              "object_range": [
+                224,
+                504
+              ],
+              "symbols": [
+                "GuidPtTex"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0a028",
+            "0x00a0a0b8"
+          ],
+          "generated": [
+            "0x00a0a028",
+            "0x00a0a0b8"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "point_rect_20"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a0a028",
+                "0x00a0a0b8"
+              ],
+              "object_range": [
+                504,
+                648
+              ],
+              "symbols": [
+                "point_rect_20"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0a0b8",
+            "0x00a0a0bc"
+          ],
+          "generated": [
+            "0x00a0a0b8",
+            "0x00a0a0bc"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "seq_21"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a0a0b8",
+                "0x00a0a0bc"
+              ],
+              "object_range": [
+                648,
+                652
+              ],
+              "symbols": [
+                "seq_21"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
             "0x00a0a0c0",
             "0x00a0a0dc"
           ],
@@ -265119,8 +265209,8 @@
             {
               "section": ".data",
               "object_range": [
-                224,
-                252
+                656,
+                684
               ],
               "range": [
                 "0x00a0a0c0",
@@ -265150,8 +265240,8 @@
             {
               "section": ".data",
               "object_range": [
-                256,
-                272
+                688,
+                704
               ],
               "range": [
                 "0x00a0a0e0",
@@ -265181,8 +265271,8 @@
             {
               "section": ".data",
               "object_range": [
-                272,
-                300
+                704,
+                732
               ],
               "range": [
                 "0x00a0a2a0",
@@ -265212,8 +265302,8 @@
             {
               "section": ".data",
               "object_range": [
-                304,
-                320
+                736,
+                752
               ],
               "range": [
                 "0x00a0a2c0",
@@ -265223,6 +265313,66 @@
                 "NineGameBG_Rect_44"
               ],
               "credit": "verified"
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0a2d0",
+            "0x00a0a2d4"
+          ],
+          "generated": [
+            "0x00a0a2d0",
+            "0x00a0a2d4"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "seq_45"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a0a2d0",
+                "0x00a0a2d4"
+              ],
+              "object_range": [
+                752,
+                756
+              ],
+              "symbols": [
+                "seq_45"
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0a2d8",
+            "0x00a0a330"
+          ],
+          "generated": [
+            "0x00a0a2d8",
+            "0x00a0a330"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "GuidPt_46"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".data",
+              "range": [
+                "0x00a0a2d8",
+                "0x00a0a330"
+              ],
+              "object_range": [
+                760,
+                848
+              ],
+              "symbols": [
+                "GuidPt_46"
+              ]
             }
           ]
         },
@@ -265243,8 +265393,8 @@
             {
               "section": ".data",
               "object_range": [
-                320,
-                348
+                848,
+                876
               ],
               "range": [
                 "0x00a0ab98",
@@ -265274,8 +265424,8 @@
             {
               "section": ".data",
               "object_range": [
-                352,
-                368
+                880,
+                896
               ],
               "range": [
                 "0x00a0abb8",
@@ -265305,8 +265455,8 @@
             {
               "section": ".data",
               "object_range": [
-                368,
-                396
+                896,
+                924
               ],
               "range": [
                 "0x00a0ae30",
@@ -265336,8 +265486,8 @@
             {
               "section": ".data",
               "object_range": [
-                400,
-                416
+                928,
+                944
               ],
               "range": [
                 "0x00a0ae50",
@@ -265367,8 +265517,8 @@
             {
               "section": ".data",
               "object_range": [
-                416,
-                560
+                944,
+                1088
               ],
               "range": [
                 "0x00a0b038",
@@ -265398,8 +265548,8 @@
             {
               "section": ".data",
               "object_range": [
-                560,
-                588
+                1088,
+                1116
               ],
               "range": [
                 "0x00a0b0c8",
@@ -265429,8 +265579,8 @@
             {
               "section": ".data",
               "object_range": [
-                592,
-                620
+                1120,
+                1148
               ],
               "range": [
                 "0x00a0b158",
@@ -265460,8 +265610,8 @@
             {
               "section": ".data",
               "object_range": [
-                624,
-                736
+                1152,
+                1264
               ],
               "range": [
                 "0x00a0b178",
@@ -265491,8 +265641,8 @@
             {
               "section": ".data",
               "object_range": [
-                736,
-                820
+                1264,
+                1348
               ],
               "range": [
                 "0x00a0b1e8",
@@ -265522,8 +265672,8 @@
             {
               "section": ".data",
               "object_range": [
-                824,
-                852
+                1352,
+                1380
               ],
               "range": [
                 "0x00a0b370",
@@ -265553,8 +265703,8 @@
             {
               "section": ".data",
               "object_range": [
-                856,
-                872
+                1384,
+                1400
               ],
               "range": [
                 "0x00a0b390",
@@ -265584,8 +265734,8 @@
             {
               "section": ".data",
               "object_range": [
-                872,
-                876
+                1400,
+                1404
               ],
               "range": [
                 "0x00a0b3a0",
@@ -265698,13 +265848,14 @@
             "0x00a0bcf0",
             "0x00a0bd10"
           ],
+          "generated": [
+            "0x00a0bcf0",
+            "0x00a0bd10"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "jtbl_00A0BCF0"
           ],
-          "generated_by": [
-            "SlPrizeCheck"
-          ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -265727,13 +265878,14 @@
             "0x00a0bda0",
             "0x00a0bdb4"
           ],
+          "generated": [
+            "0x00a0bda0",
+            "0x00a0bdb4"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "jtbl_00A0BDA0"
           ],
-          "generated_by": [
-            "SlChangeRealEffect"
-          ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -265756,13 +265908,14 @@
             "0x00a0bdc0",
             "0x00a0bddc"
           ],
+          "generated": [
+            "0x00a0bdc0",
+            "0x00a0bddc"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "jtbl_00A0BDC0"
           ],
-          "generated_by": [
-            "SlEvent"
-          ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -265877,6 +266030,36 @@
         },
         {
           "range": [
+            "0x00a0bf40",
+            "0x00a0bf60"
+          ],
+          "generated": [
+            "0x00a0bf40",
+            "0x00a0bf60"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A0BF40"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0bf40",
+                "0x00a0bf60"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                368,
+                400
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
             "0x00a0bf60",
             "0x00a0c030"
           ],
@@ -265896,8 +266079,8 @@
                 "0x00a0c030"
               ],
               "object_range": [
-                368,
-                576
+                400,
+                608
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -265926,8 +266109,8 @@
                 "0x00a0c078"
               ],
               "object_range": [
-                576,
-                600
+                608,
+                632
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -265958,8 +266141,8 @@
                 "0x00a0c088"
               ],
               "object_range": [
-                600,
-                616
+                632,
+                648
               ],
               "symbols": [
                 "D_00A0C078"
@@ -265972,8 +266155,8 @@
                 "0x00a0c098"
               ],
               "object_range": [
-                616,
-                632
+                648,
+                664
               ],
               "symbols": [
                 "D_00A0C088"
@@ -265986,8 +266169,8 @@
                 "0x00a0c0a8"
               ],
               "object_range": [
-                632,
-                648
+                664,
+                680
               ],
               "symbols": [
                 "D_00A0C098"
@@ -266021,8 +266204,8 @@
                 "0x00a0c0c8"
               ],
               "object_range": [
-                648,
-                664
+                680,
+                696
               ],
               "symbols": [
                 "D_00A0C0B8"
@@ -266035,8 +266218,8 @@
                 "0x00a0c0d8"
               ],
               "object_range": [
-                664,
-                680
+                696,
+                712
               ],
               "symbols": [
                 "D_00A0C0C8"
@@ -266049,8 +266232,8 @@
                 "0x00a0c0e8"
               ],
               "object_range": [
-                680,
-                696
+                712,
+                728
               ],
               "symbols": [
                 "D_00A0C0D8"
@@ -266063,8 +266246,8 @@
                 "0x00a0c100"
               ],
               "object_range": [
-                696,
-                720
+                728,
+                752
               ],
               "symbols": [
                 "D_00A0C0E8"
@@ -266077,8 +266260,8 @@
                 "0x00a0c120"
               ],
               "object_range": [
-                720,
-                752
+                752,
+                784
               ],
               "symbols": [
                 "D_00A0C100"
@@ -266091,8 +266274,8 @@
                 "0x00a0c130"
               ],
               "object_range": [
-                752,
-                768
+                784,
+                800
               ],
               "symbols": [
                 "D_00A0C120"
@@ -266118,8 +266301,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1280,
-                1312
+                1728,
+                1760
               ],
               "range": [
                 "0x00a0c130",
@@ -266149,8 +266332,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1312,
-                1344
+                1760,
+                1792
               ],
               "range": [
                 "0x00a0c150",
@@ -266180,8 +266363,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1344,
-                1376
+                1792,
+                1824
               ],
               "range": [
                 "0x00a0c170",
@@ -266211,8 +266394,8 @@
             {
               "section": ".rodata",
               "object_range": [
-                1376,
-                1416
+                1824,
+                1864
               ],
               "range": [
                 "0x00a0c190",
@@ -266246,8 +266429,8 @@
                 "0x00a0c1c8"
               ],
               "object_range": [
-                768,
-                784
+                800,
+                816
               ],
               "symbols": [
                 "D_00A0C1B8"
@@ -266276,8 +266459,8 @@
                 "0x00a0c1d8"
               ],
               "object_range": [
-                784,
-                800
+                816,
+                832
               ],
               "symbols": [
                 "D_00A0C1C8"
@@ -266290,13 +266473,14 @@
             "0x00a0c220",
             "0x00a0c26c"
           ],
+          "generated": [
+            "0x00a0c220",
+            "0x00a0c26c"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "jtbl_00A0C220"
           ],
-          "generated_by": [
-            "PokerMain"
-          ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -266305,8 +266489,8 @@
                 "0x00a0c26c"
               ],
               "object_range": [
-                800,
-                876
+                832,
+                908
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -266340,8 +266524,8 @@
                 "0x00a0c288"
               ],
               "object_range": [
-                880,
-                904
+                912,
+                936
               ],
               "symbols": [
                 "D_00A0C270"
@@ -266355,8 +266539,8 @@
                 "0x00a0c2a0"
               ],
               "object_range": [
-                904,
-                928
+                936,
+                960
               ],
               "symbols": [
                 "D_00A0C288"
@@ -266370,8 +266554,8 @@
                 "0x00a0c2b8"
               ],
               "object_range": [
-                928,
-                952
+                960,
+                984
               ],
               "symbols": [
                 "D_00A0C2A0"
@@ -266385,8 +266569,8 @@
                 "0x00a0c2d0"
               ],
               "object_range": [
-                952,
-                976
+                984,
+                1008
               ],
               "symbols": [
                 "D_00A0C2B8"
@@ -266400,8 +266584,8 @@
                 "0x00a0c2e8"
               ],
               "object_range": [
-                976,
-                1000
+                1008,
+                1032
               ],
               "symbols": [
                 "D_00A0C2D0"
@@ -266414,8 +266598,8 @@
                 "0x00a0c300"
               ],
               "object_range": [
-                1000,
-                1024
+                1032,
+                1056
               ],
               "symbols": [
                 "D_00A0C2E8"
@@ -266428,13 +266612,14 @@
             "0x00a0c300",
             "0x00a0c31c"
           ],
+          "generated": [
+            "0x00a0c300",
+            "0x00a0c31c"
+          ],
+          "generated_by": [],
           "c_owned_symbols": [
             "jtbl_00A0C300"
           ],
-          "generated_by": [
-            "GameModeChange"
-          ],
-          "also_referenced_by_c": [],
           "c_input_spans": [
             {
               "section": ".rodata",
@@ -266443,8 +266628,8 @@
                 "0x00a0c31c"
               ],
               "object_range": [
-                1024,
-                1052
+                1056,
+                1084
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -266474,8 +266659,8 @@
                 "0x00a0c338"
               ],
               "object_range": [
-                1056,
-                1080
+                1088,
+                1112
               ],
               "symbols": [
                 "D_00A0C320"
@@ -266489,8 +266674,8 @@
                 "0x00a0c350"
               ],
               "object_range": [
-                1080,
-                1104
+                1112,
+                1136
               ],
               "symbols": [
                 "D_00A0C338"
@@ -266521,8 +266706,8 @@
                 "0x00a0c3b0"
               ],
               "object_range": [
-                1104,
-                1136
+                1136,
+                1168
               ],
               "symbols": [
                 "D_00A0C390"
@@ -266536,13 +266721,73 @@
                 "0x00a0c3d0"
               ],
               "object_range": [
-                1136,
-                1168
+                1168,
+                1200
               ],
               "symbols": [
                 "D_00A0C3B0"
               ],
               "zero_padding_tail": 6
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0c3d0",
+            "0x00a0c4a0"
+          ],
+          "generated": [
+            "0x00a0c3d0",
+            "0x00a0c4a0"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A0C3D0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0c3d0",
+                "0x00a0c4a0"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1200,
+                1408
+              ]
+            }
+          ]
+        },
+        {
+          "range": [
+            "0x00a0c4c0",
+            "0x00a0c590"
+          ],
+          "generated": [
+            "0x00a0c4c0",
+            "0x00a0c590"
+          ],
+          "generated_by": [],
+          "c_owned_symbols": [
+            "jtbl_00A0C4C0"
+          ],
+          "c_input_spans": [
+            {
+              "section": ".rodata",
+              "range": [
+                "0x00a0c4c0",
+                "0x00a0c590"
+              ],
+              "symbols": [],
+              "anonymous_emission": true,
+              "credit": "verified",
+              "object_range": [
+                1408,
+                1616
+              ]
             }
           ]
         },
@@ -266568,8 +266813,8 @@
                 "0x00a0c5b0"
               ],
               "object_range": [
-                1168,
-                1200
+                1616,
+                1648
               ],
               "symbols": [
                 "D_00A0C590"
@@ -266583,8 +266828,8 @@
                 "0x00a0c5c8"
               ],
               "object_range": [
-                1200,
-                1224
+                1648,
+                1672
               ],
               "symbols": [
                 "D_00A0C5B0"
@@ -266614,8 +266859,8 @@
                 "0x00a0c6e0"
               ],
               "object_range": [
-                1224,
-                1240
+                1672,
+                1688
               ],
               "symbols": [
                 "D_00A0C6D0"
@@ -266644,8 +266889,8 @@
                 "0x00a0c720"
               ],
               "object_range": [
-                1248,
-                1280
+                1696,
+                1728
               ],
               "symbols": [],
               "anonymous_emission": true,
@@ -267263,7 +267508,7 @@
             "0x00a4f5e4"
           ],
           "generated_by": [
-      "_AnaAutoHoming",
+            "_AnaAutoHoming",
             "_ResetAnaAutoHoming"
           ],
           "range": [
@@ -267271,51 +267516,51 @@
             "0x00a4f5e4"
           ]
         }
-   ],
-   ".rodata": [
-    {
-     "also_referenced_by_c": [
-      "D_00A51E68",
-      "D_00A51E78",
-      "D_00A51E98",
-      "D_00A51EE0",
-      "D_00A51EF0",
-      "D_00A51EF8",
-      "D_00A51F00",
-      "D_00A51F08"
-     ],
-     "c_owned_symbols": [
-      "D_00A51E90"
-     ],
-     "generated": [
-      "0x00a51e90",
-      "0x00a51e98"
-     ],
-     "generated_by": [
-      "InitRgRobotSpec"
-     ],
-     "range": [
-      "0x00a51e90",
-      "0x00a51e98"
-     ]
-    },
-    {
-     "also_referenced_by_c": [],
-     "c_owned_symbols": [
-      "D_00A51F28"
-     ],
-     "generated": [
-      "0x00a51f28",
-      "0x00a51f30"
-     ],
-     "generated_by": [
-      "_AnaAutoHoming"
-     ],
-     "range": [
-      "0x00a51f28",
-      "0x00a51f30"
-     ]
-    }
+      ],
+      ".rodata": [
+        {
+          "also_referenced_by_c": [
+            "D_00A51E68",
+            "D_00A51E78",
+            "D_00A51E98",
+            "D_00A51EE0",
+            "D_00A51EF0",
+            "D_00A51EF8",
+            "D_00A51F00",
+            "D_00A51F08"
+          ],
+          "c_owned_symbols": [
+            "D_00A51E90"
+          ],
+          "generated": [
+            "0x00a51e90",
+            "0x00a51e98"
+          ],
+          "generated_by": [
+            "InitRgRobotSpec"
+          ],
+          "range": [
+            "0x00a51e90",
+            "0x00a51e98"
+          ]
+        },
+        {
+          "also_referenced_by_c": [],
+          "c_owned_symbols": [
+            "D_00A51F28"
+          ],
+          "generated": [
+            "0x00a51f28",
+            "0x00a51f30"
+          ],
+          "generated_by": [
+            "_AnaAutoHoming"
+          ],
+          "range": [
+            "0x00a51f28",
+            "0x00a51f30"
+          ]
+        }
       ]
     },
     "ov12/tu009": {
@@ -267499,14 +267744,14 @@
           "also_referenced_by_c": [],
           "c_owned_symbols": [
             "D_00A52460",
-      "D_00A52470",
-      "D_00A52490",
-      "D_00A524C0",
-      "D_00A524E0"
+            "D_00A52470",
+            "D_00A52490",
+            "D_00A524C0",
+            "D_00A524E0"
           ],
           "generated": [
             "0x00a52460",
-      "0x00a524f0"
+            "0x00a524f0"
           ],
           "generated_by": [
             "InstanceOfRgMotionInfoDB",
@@ -267517,7 +267762,7 @@
             "RgMotionInfoGetActionInTime",
             "RgMotionInfoIsAfter",
             "RgMotionInfoIsBefore",
-      "_AddActionRgMotion",
+            "_AddActionRgMotion",
             "_DestructDB",
             "_InitDB_00A0F828",
             "_InitRgMotionShotInfo",
@@ -278594,6 +278839,169 @@
             "object_sha256": "e4e87793efc8a231e8ddd3925bfaff59311e40d5ccc188dbe4d1314751de2928",
             "assembly_sha256": "cd0955f114272e74126674d451798ed453c7e3270addb886639ea2bb8764273e"
           }
+        }
+      ]
+    },
+    "ov11/tu002": {
+      ".rodata": [
+        {
+          "range": [
+            "0x00a0c720",
+            "0x00a0dc28"
+          ],
+          "generated": [
+            "0x00a0c720",
+            "0x00a0dc24"
+          ],
+          "generated_by": [
+            "Cajino_GetInfo",
+            "Cajino_GetTitle"
+          ],
+          "c_owned_symbols": [
+            "D_00A0C720",
+            "D_00A0C7A0",
+            "D_00A0C7B0",
+            "D_00A0C860",
+            "D_00A0C870",
+            "D_00A0C930",
+            "D_00A0C940",
+            "D_00A0C9F8",
+            "D_00A0CA08",
+            "D_00A0CA80",
+            "D_00A0CA90",
+            "D_00A0CB58",
+            "D_00A0CB68",
+            "D_00A0CC20",
+            "D_00A0CC30",
+            "D_00A0CCE8",
+            "D_00A0CCF8",
+            "D_00A0CDC0",
+            "D_00A0CDD0",
+            "D_00A0CE98",
+            "D_00A0CEA8",
+            "D_00A0CF00",
+            "D_00A0CF10",
+            "D_00A0CF80",
+            "D_00A0CF90",
+            "D_00A0D028",
+            "D_00A0D038",
+            "D_00A0D0D8",
+            "D_00A0D0E8",
+            "D_00A0D188",
+            "D_00A0D198",
+            "D_00A0D248",
+            "D_00A0D258",
+            "D_00A0D2F8",
+            "D_00A0D308",
+            "D_00A0D3C0",
+            "D_00A0D3D0",
+            "D_00A0D498",
+            "D_00A0D4A8",
+            "D_00A0D560",
+            "D_00A0D570",
+            "D_00A0D5C0",
+            "D_00A0D5D0",
+            "D_00A0D698",
+            "D_00A0D6A8",
+            "D_00A0D758",
+            "D_00A0D768",
+            "D_00A0D7D0",
+            "D_00A0D7E0",
+            "D_00A0D8A0",
+            "D_00A0D8B0",
+            "D_00A0D970",
+            "D_00A0D980",
+            "D_00A0D9E0",
+            "D_00A0D9F0",
+            "D_00A0DAB0",
+            "D_00A0DAC0",
+            "D_00A0DB60",
+            "D_00A0DB70",
+            "D_00A0DC18"
+          ],
+          "also_referenced_by_c": [],
+          "reached_through": {
+            "D_00A0C720": "ViewerText",
+            "D_00A0C7A0": "ViewerText",
+            "D_00A0C7B0": "ViewerText",
+            "D_00A0C860": "ViewerText",
+            "D_00A0C870": "ViewerText",
+            "D_00A0C930": "ViewerText",
+            "D_00A0C940": "ViewerText",
+            "D_00A0C9F8": "ViewerText",
+            "D_00A0CA08": "ViewerText",
+            "D_00A0CA80": "ViewerText",
+            "D_00A0CA90": "ViewerText",
+            "D_00A0CB58": "ViewerText",
+            "D_00A0CB68": "ViewerText",
+            "D_00A0CC20": "ViewerText",
+            "D_00A0CC30": "ViewerText",
+            "D_00A0CCE8": "ViewerText",
+            "D_00A0CCF8": "ViewerText",
+            "D_00A0CDC0": "ViewerText",
+            "D_00A0CDD0": "ViewerText",
+            "D_00A0CE98": "ViewerText",
+            "D_00A0CEA8": "ViewerText",
+            "D_00A0CF00": "ViewerText",
+            "D_00A0CF10": "ViewerText",
+            "D_00A0CF80": "ViewerText",
+            "D_00A0CF90": "ViewerText",
+            "D_00A0D028": "ViewerText",
+            "D_00A0D038": "ViewerText",
+            "D_00A0D0D8": "ViewerText",
+            "D_00A0D0E8": "ViewerText",
+            "D_00A0D188": "ViewerText",
+            "D_00A0D198": "ViewerText",
+            "D_00A0D248": "ViewerText",
+            "D_00A0D258": "ViewerText",
+            "D_00A0D2F8": "ViewerText",
+            "D_00A0D308": "ViewerText",
+            "D_00A0D3C0": "ViewerText",
+            "D_00A0D3D0": "ViewerText",
+            "D_00A0D498": "ViewerText",
+            "D_00A0D4A8": "ViewerText",
+            "D_00A0D560": "ViewerText",
+            "D_00A0D570": "ViewerText",
+            "D_00A0D5C0": "ViewerText",
+            "D_00A0D5D0": "ViewerText",
+            "D_00A0D698": "ViewerText",
+            "D_00A0D6A8": "ViewerText",
+            "D_00A0D758": "ViewerText",
+            "D_00A0D768": "ViewerText",
+            "D_00A0D7D0": "ViewerText",
+            "D_00A0D7E0": "ViewerText",
+            "D_00A0D8A0": "ViewerText",
+            "D_00A0D8B0": "ViewerText",
+            "D_00A0D970": "ViewerText",
+            "D_00A0D980": "ViewerText",
+            "D_00A0D9E0": "ViewerText",
+            "D_00A0D9F0": "ViewerText",
+            "D_00A0DAB0": "ViewerText",
+            "D_00A0DAC0": "ViewerText",
+            "D_00A0DB60": "ViewerText",
+            "D_00A0DB70": "ViewerText",
+            "D_00A0DC18": "ViewerText"
+          }
+        }
+      ],
+      ".data": [
+        {
+          "range": [
+            "0x00a0ba20",
+            "0x00a0bb10"
+          ],
+          "generated": [
+            "0x00a0ba20",
+            "0x00a0bb10"
+          ],
+          "generated_by": [
+            "Cajino_GetInfo",
+            "Cajino_GetTitle"
+          ],
+          "c_owned_symbols": [
+            "ViewerText"
+          ],
+          "also_referenced_by_c": []
         }
       ]
     }
